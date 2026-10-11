@@ -139,3 +139,28 @@ def test_real_fal_nsfw_response_passes_a_clean_image(monkeypatch, tmp_path):
     image = tmp_path / "a.png"
     image.write_bytes(b"png")
     moderation._check_nsfw([image])
+
+
+def test_busy_output_check_retries_in_place_then_fails_for_good(monkeypatch, tmp_path):
+    """The media is already paid for: a busy check must not make the worker generate it again."""
+    calls = {"n": 0}
+
+    def busy_then_clean(_images):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise ProviderError(moderation.UNCHECKED, retryable=True)
+
+    waits: list[float] = []
+    monkeypatch.setattr(moderation, "_sleep", waits.append)
+    monkeypatch.setattr(moderation, "check_images", busy_then_clean)
+    monkeypatch.setattr(moderation, "ready", lambda: True)
+    image = tmp_path / "a.png"
+    image.write_bytes(b"png")
+    model = get_model("fal-nano-banana")
+    moderation.check_output(model, {"prompt": "x"}, image)
+    assert calls["n"] == 3 and waits == [2.0, 5.0]
+
+    monkeypatch.setattr(moderation, "check_images", lambda _images: (_ for _ in ()).throw(ProviderError(moderation.UNCHECKED, retryable=True)))
+    with pytest.raises(ProviderError) as info:
+        moderation.check_output(model, {"prompt": "x"}, image)
+    assert info.value.retryable is False
