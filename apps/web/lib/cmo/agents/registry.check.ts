@@ -16,7 +16,7 @@ assert.equal(planner.provider, "anthropic");
 assert.equal(planner.model, "claude-opus-5-5");
 assert.equal(planner.apiKey, "a-shared");
 assert.equal(planner.source, "default");
-assert.equal(resolveAgent("checker", base).model, "claude-haiku-4-5");
+assert.equal(resolveAgent("checker", base).model, "claude-haiku-5-5");
 
 // Per-agent override: model and key; other agents are unaffected.
 const env = { ...base, CMO_AGENT_X_WRITER_MODEL: "claude-sonnet-5-5", CMO_AGENT_X_WRITER_API_KEY: "a-writer" } as unknown as NodeJS.ProcessEnv;

@@ -65,12 +65,17 @@ def _select_with_anthropic(prompt: str, cfg: Config) -> _Selection:
     client = anthropic.Anthropic(
         api_key=cfg.anthropic_api_key, timeout=_LLM_TIMEOUT_S, max_retries=2,
     )
+    model = cfg.resolved_select_model
+    # Haiku 5.5 thinks by default (effort medium); picking moments runs at low to stay inside the
+    # 3-minute budget, and thinking shares max_tokens with the answer. Haiku 4.5 rejects `effort`.
+    effort = {"output_config": {"effort": "low"}} if model.startswith("claude-haiku-5") else {}
     response = client.messages.parse(
-        model=cfg.resolved_select_model,
-        max_tokens=4096,
+        model=model,
+        max_tokens=8000,
         system=_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
         output_format=_Selection,
+        **effort,
     )
     return response.parsed_output
 

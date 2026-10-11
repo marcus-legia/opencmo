@@ -49,16 +49,16 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
   const agent = resolveAgent(opts.agent);
   if (!agent.apiKey) throw new LlmError("The AI CMO is not set up on this server yet.");
   const client = new Anthropic({ apiKey: agent.apiKey });
-  // Haiku 4.5 không có `effort` và không có fallback phía server; Opus thì có.
+  // Opus has server-side fallback; Haiku has none. Haiku 5.5 thinks by default (effort medium):
+  // a check runs at low. Haiku 4.5 rejects `effort`.
   const isOpus = agent.model.startsWith("claude-opus");
+  const effort = isOpus ? "medium" : agent.model.startsWith("claude-haiku-5") ? "low" : undefined;
   let response;
   try {
     response = await client.beta.messages.parse({
       model: agent.model,
       max_tokens: opts.maxTokens ?? 8000,
-      output_config: isOpus
-        ? { effort: "medium", format: betaZodOutputFormat(opts.schema) }
-        : { format: betaZodOutputFormat(opts.schema) },
+      output_config: effort ? { effort, format: betaZodOutputFormat(opts.schema) } : { format: betaZodOutputFormat(opts.schema) },
       ...(isOpus ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       system: opts.system,
       messages: [{ role: "user", content: opts.prompt }],

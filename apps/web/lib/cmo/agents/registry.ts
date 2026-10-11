@@ -43,7 +43,7 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];
 
-const defaultModel = (tier: AgentSpec["tier"]): string => (tier === "check" ? "claude-haiku-4-5" : "claude-opus-5-5");
+const defaultModel = (tier: AgentSpec["tier"]): string => (tier === "check" ? "claude-haiku-5-5" : "claude-opus-5-5");
 
 const sharedKey = (env: NodeJS.ProcessEnv): string => env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
 

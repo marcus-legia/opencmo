@@ -122,7 +122,7 @@ class Config:
 
     @property
     def resolved_select_model(self) -> str:
-        return self.select_model or "claude-haiku-4-5"
+        return self.select_model or "claude-haiku-5-5"
 
 
 def fresh_proxy_session(proxy: str | None) -> str | None:
