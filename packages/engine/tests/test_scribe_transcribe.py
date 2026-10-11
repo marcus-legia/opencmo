@@ -76,3 +76,27 @@ def test_missing_key_fails_clearly(tmp_path):
     audio.write_bytes(b"audio")
     with pytest.raises(RuntimeError, match="ELEVENLABS_API_KEY"):
         transcribe.transcribe_audio(audio, Config(elevenlabs_api_key=""))
+
+
+def test_real_scribe_response_becomes_sentence_segments(monkeypatch, tmp_path):
+    """`fixtures/live/elevenlabs-scribe.json` is a real Scribe answer (synthetic speech), 2026-10-11."""
+    import json
+    from pathlib import Path
+
+    body = json.loads((Path(__file__).parent / "fixtures" / "live" / "elevenlabs-scribe.json").read_text())
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return body
+
+    monkeypatch.setattr(transcribe.httpx, "post", lambda *_a, **_k: Response())
+    audio = tmp_path / "a.m4a"
+    audio.write_bytes(b"x")
+    result = transcribe.transcribe_audio(audio, Config(elevenlabs_api_key="k"))
+    assert result.language == "en" and result.source == "scribe"
+    assert [segment.text for segment in result.segments][:2] == ["Hello there.", "This is a short test of speech-to-text."]
+    assert all(segment.words for segment in result.segments), "every segment keeps its word timings"
+    assert " " not in [word.text for segment in result.segments for word in segment.words or []]

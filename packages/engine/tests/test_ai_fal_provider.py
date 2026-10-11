@@ -202,3 +202,27 @@ def test_result_still_busy_after_retries_fails_for_good(tmp_path):
     with pytest.raises(ProviderError) as info:
         provider.fetch(ref, tmp_path)
     assert info.value.retryable is False, "a retry would submit the paid job again"
+
+
+def test_video_input_is_uploaded_to_fal_storage_not_sent_as_a_data_url(tmp_path):
+    clip = tmp_path / "source.mp4"
+    clip.write_bytes(b"mp4-bytes")
+    seen: list[tuple[str, str]] = []
+
+    def api(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url)))
+        if "storage/auth/token" in str(request.url):
+            return httpx.Response(200, json={"token": "t", "token_type": "Bearer", "base_url": "https://v3b.fal.media", "expires_at": "x"})
+        if str(request.url) == "https://v3b.fal.media/files/upload":
+            assert request.headers["Authorization"] == "Bearer t" and request.content == b"mp4-bytes"
+            assert "expiration_duration_seconds" in request.headers["X-Fal-Object-Lifecycle"]
+            return httpx.Response(200, json={"access_url": "https://v3b.fal.media/files/b/x/source.mp4", "uploaded": True})
+        assert json.loads(request.content)["video_url"] == "https://v3b.fal.media/files/b/x/source.mp4"
+        return httpx.Response(200, json={"status_url": "https://queue.fal.run/x/status", "response_url": "https://queue.fal.run/x"})
+
+    provider = FalProvider("k", client=httpx.Client(transport=httpx.MockTransport(api)))
+    spec = {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 2, "sourceVideo": str(clip), "sourceStart": 0}
+    ref = json.loads(provider.submit(get_model("fal-veed-cutout"), spec, tmp_path))
+    assert ref["cutout"] is True
+    assert [method for method, _url in seen] == ["POST", "POST", "POST"]
+    assert seen[-1][1] == "https://queue.fal.run/veed/video-background-removal"

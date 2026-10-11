@@ -126,3 +126,16 @@ def test_skipped_without_keys(monkeypatch, image):
     monkeypatch.setattr(moderation.httpx, "post", lambda *_a, **_k: pytest.fail("no call without keys"))
     moderation.check_output(get_model("fal-nano-banana"), {"prompt": "x"}, image)
     assert not moderation.ready()
+
+
+def test_real_fal_nsfw_response_passes_a_clean_image(monkeypatch, tmp_path):
+    """`fixtures/live/fal-nsfw.json` is the real answer for one clean image, 2026-10-11."""
+    import json
+    from pathlib import Path
+
+    body = json.loads((Path(__file__).parent / "fixtures" / "live" / "fal-nsfw.json").read_text())
+    assert body == {"has_nsfw_concepts": [False]}
+    _nsfw(monkeypatch, flags=tuple(body["has_nsfw_concepts"]))
+    image = tmp_path / "a.png"
+    image.write_bytes(b"png")
+    moderation._check_nsfw([image])
