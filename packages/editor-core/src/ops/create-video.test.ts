@@ -49,6 +49,17 @@ describe('create_video', () => {
 		expect(() => validate(document)).not.toThrow();
 	});
 
+	it('plays one music generation again past its length, trimmed and crossfaded', async () => {
+		const long = { ...video, seconds: 90, shots: Array.from({ length: 9 }, (_, index) => shot(index * 10, 10)).map((item) => ({ ...item, duration: 10 })), music: { ...video.music, duration: 60 } };
+		const { document } = await applyOps(blank, [long], ctx);
+		const music = flat((document.stage.children[0] as unknown as Node).children!).filter((node) => node.src?.generate === 'audio');
+		expect(music.map((node) => [node.start ?? 0, node.end])).toEqual([[0, 60], [60, 90]]);
+		expect(new Set(music.map((node) => JSON.stringify(node.src))).size).toBe(1);
+		expect(music[0]!.animations).toMatchObject([{ type: 'gain', phase: 'out', duration: 1 }]);
+		expect(music[1]!.animations).toMatchObject([{ type: 'gain', phase: 'in', duration: 1 }]);
+		expect(() => validate(document)).not.toThrow();
+	});
+
 	it('refuses shots that leave a gap or do not cover the video', async () => {
 		await expect(applyOps(blank, [{ ...video, shots: [shot(0, 5), shot(6, 4), shot(10, 2)] }], ctx)).rejects.toThrow(/should start at 5s/);
 		await expect(applyOps(blank, [{ ...video, seconds: 20 }], ctx)).rejects.toThrow(/cover 12s/);
