@@ -544,10 +544,13 @@ def _frame_rgba(path, at=0.5):
 
     probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout)
     width, height = probe["streams"][0]["width"], probe["streams"][0]["height"]
+    # Seeking into a 1 s test clip sometimes decodes no frame at all; at=0 reads the first one.
+    seek = ["-ss", str(at)] if at else []
     raw = subprocess.run(
-        ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        ["ffmpeg", "-v", "error", *seek, "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         capture_output=True, check=True,
     ).stdout
+    assert len(raw) == width * height * 3, f"no frame decoded from {path.name}"
     return raw, width, height
 
 
@@ -639,7 +642,7 @@ def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
         check=True,
     )
     out = stack_matte(picture, "mov", matte, "mov", tmp_path / "stacked.mp4")
-    raw, width, height = _frame_rgba(out)
+    raw, width, height = _frame_rgba(out, at=0)
     assert (width, height) == (320, 480)
     assert raw[(10 * width + 10) * 3] > 200, "top half is the red picture"
     assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30, "bottom half is the matte, scaled to the picture"
@@ -651,7 +654,7 @@ def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
         check=True,
     )
     out = stack_embedded(webm, "matroska", tmp_path / "stacked2.mp4")
-    raw, width, height = _frame_rgba(out)
+    raw, width, height = _frame_rgba(out, at=0)
     assert (width, height) == (320, 480)
     assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30
 
