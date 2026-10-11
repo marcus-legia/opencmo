@@ -516,15 +516,16 @@ def cleanup() -> None:
 
 
 @app.local_entrypoint()
-def main(url: str, clips: int = 3) -> None:
+def main(url: str, clips: int = 3, transcribe: bool = False) -> None:
     """Chạy thử một video mà không cần database.
 
         modal run modal_app.py --url "https://youtube.com/watch?v=..."
+        modal run modal_app.py --url "..." --clips 5 --transcribe   # budget: speech-to-text, not subtitles
 
     Dùng để kiểm chứng ngày 11/9: engine chạy được trên hạ tầng Modal chưa, và
     YouTube có chặn IP của Modal không.
     """
-    frame = probe.remote(url, clips)
+    frame = probe.remote(url, clips, transcribe)
     if frame:
         # Thư mục tạm trong container bị xoá khi hàm trả về, nên đây là cách duy
         # nhất để NHÌN clip render trên cloud — xem mục "Kiểm chứng" ở CLAUDE.md.
@@ -533,7 +534,7 @@ def main(url: str, clips: int = 3) -> None:
 
 
 @app.function(secrets=[secret, proxy_secret, voice_secret], timeout=1800, cpu=4, memory=4096)
-def probe(url: str, clips: int) -> bytes | None:
+def probe(url: str, clips: int, transcribe: bool = False) -> bytes | None:
     """Chạy pipeline, in thời gian từng bước, trả về một frame của clip đầu."""
     import subprocess
 
@@ -542,7 +543,7 @@ def probe(url: str, clips: int) -> bytes | None:
 
     print(f"proxy      : {'CÓ' if os.environ.get('OPENCMO_PROXY') else 'KHÔNG'}")
     with tempfile.TemporaryDirectory() as out:
-        result = run_pipeline(url, Config(out_dir=Path(out)), clip_count=clips)
+        result = run_pipeline(url, Config(out_dir=Path(out), force_transcribe=transcribe), clip_count=clips)
         t = result.timings
         print(f"nguồn      : {result.source.title} ({result.source.duration:.0f}s)")
         print(f"transcript : {t.transcript:.1f}s (nguồn: {result.transcript_source})")

@@ -86,6 +86,9 @@ def clip(
     no_preview: bool = typer.Option(False, "--no-preview", help="Không xuất bản preview nhẹ"),
     watermark: str = typer.Option(None, "--watermark", help="Chữ burn vào đáy clip (bản free)"),
     keep_work: Path = typer.Option(None, "--keep-work", help="Giữ file tạm ở thư mục này"),
+    force_transcribe: bool = typer.Option(
+        False, "--transcribe", help="Ignore existing subtitles and run speech-to-text (paid)",
+    ),
     json_out: bool = typer.Option(False, "--json", help="In kết quả dạng JSON"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -105,6 +108,7 @@ def clip(
             face_tracking=not no_face,
             make_preview=not no_preview,
             watermark=watermark,
+            force_transcribe=force_transcribe,
         )
     except ValueError as exc:
         console.print(f"[red]Lỗi:[/red] {exc}")

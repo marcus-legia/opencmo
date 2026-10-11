@@ -26,6 +26,8 @@ class Config:
     # Speech-to-text (ElevenLabs Scribe) for videos without subtitles.
     elevenlabs_api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
     scribe_model: str = field(default_factory=lambda: os.getenv("OPENCMO_SCRIBE_MODEL", "scribe_v1"))
+    # Skip free subtitles and always run speech-to-text (budget measurements, `--transcribe`).
+    force_transcribe: bool = False
     # Moment selection runs on Claude.
     anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
     # Empty -> Claude Haiku. A 45-minute transcript is ~12k input tokens.

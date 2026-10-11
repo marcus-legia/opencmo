@@ -222,7 +222,7 @@ def run_pipeline(
             # 2. Transcript. Thử phụ đề sẵn có trước: nhanh hơn và miễn phí.
             progress("transcribe")
             t0 = time.monotonic()
-            transcript = src.fetch_subtitles(url, cfg, work_dir)
+            transcript = None if cfg.force_transcribe else src.fetch_subtitles(url, cfg, work_dir)
             if transcript is None:
                 log.info("Không có phụ đề sẵn — tải audio để transcribe.")
                 audio = src.download_audio(url, cfg, work_dir)

@@ -39,6 +39,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from math import ceil, floor
 from pathlib import Path
+from typing import TypeVar
 
 from ..media.ffmpeg import try_run
 
@@ -242,8 +243,8 @@ def _detect_faces(frames: list[Path]) -> list[Face]:
         for idx, frame_path in enumerate(frames):
             image = mp.Image.create_from_file(str(frame_path))
             result = detector.detect(image)
-            for det in result.detections:
-                box = det.bounding_box
+            found = [(det.bounding_box, det.categories[0].score if det.categories else 1.0) for det in result.detections]
+            for box, _score in confident(found):
                 faces.append(
                     Face(
                         frame=idx,
@@ -256,6 +257,26 @@ def _detect_faces(frames: list[Path]) -> list[Face]:
         detector.close()
 
     return faces
+
+
+T = TypeVar("T")
+
+#: A detection this sure is a face; next to one, a weak detection is noise.
+SURE_FACE = 0.6
+WEAK_FACE = 0.5
+
+
+def confident(found: list[tuple[T, float]]) -> list[tuple[T, float]]:
+    """Drops weak detections in a frame that already has a sure face.
+
+    The low threshold keeps small faces in wide shots, but it also lets dark bookshelves and
+    lamps through at ~0.3. Their boxes can be bigger than the real face, and `_choose_center`
+    keeps the most face area, so one of them pulled the whole crop off the speaker (54-min
+    interview, 11/10: real face 0.70-0.95, shelf 0.31-0.34, crop centred on the shelf).
+    """
+    if any(score >= SURE_FACE for _box, score in found):
+        return [(box, score) for box, score in found if score >= WEAK_FACE]
+    return found
 
 
 def _tam_hop_le(face: Face, window: float) -> tuple[float, float]:
