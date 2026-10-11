@@ -139,3 +139,26 @@ def test_chunk_starts_and_merge():
     assert transcribe.chunk_starts(1250.0) == [0.0, 600.0, 1200.0]
     merged = transcribe.merge_parts([(0.0, [Word(599.5, 599.9, "a"), Word(600.5, 601.0, "dup")]), (600.0, [Word(0.5, 1.0, "b")])])
     assert [(w.text, w.start) for w in merged] == [("a", 599.5), ("b", 600.5)]
+
+
+def test_audio_longer_than_the_part_cap_is_refused_before_any_call(monkeypatch, tmp_path):
+    audio = tmp_path / "a.m4a"
+    audio.write_bytes(b"x")
+    monkeypatch.setattr(transcribe, "_duration", lambda _p: transcribe.CHUNK_SECONDS * (transcribe.MAX_PARTS + 1))
+    monkeypatch.setattr(transcribe.httpx, "post", lambda *_a, **_k: pytest.fail("no paid call"))
+    with pytest.raises(RuntimeError, match="^Audio is too large to transcribe"):
+        transcribe.transcribe_audio(audio, Config(elevenlabs_api_key="k"))
+
+
+def test_part_cutting_and_probe_use_the_demuxer_allowlist(monkeypatch, tmp_path):
+    from opencmo.media.ffmpeg import USER_INPUT
+
+    seen: list[list[str]] = []
+
+    def fake_run(args, **_kwargs):
+        seen.append(args)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(transcribe, "run", fake_run)
+    assert transcribe._duration(tmp_path / "a.m4a") is None
+    assert all(flag in seen[0] for flag in USER_INPUT)

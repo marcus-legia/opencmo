@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 
 from ..config import Config
-from ..media.ffmpeg import run
+from ..media.ffmpeg import USER_INPUT, run
 from ..models import Transcript, TranscriptSegment, Word
 
 log = logging.getLogger(__name__)
@@ -39,6 +39,9 @@ _MAX_SEGMENT_SECONDS = 12.0
 CHUNK_SECONDS = 600.0
 _CHUNK_OVERLAP = 2.0
 _MAX_PARALLEL_PARTS = 6
+#: 3 hours. The byte cap alone does not bound the duration (a low bitrate stretches 24 MB), and
+#: every part is a paid call: longer audio is refused like an oversized file.
+MAX_PARTS = 18
 _MIME = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".webm": "audio/webm", ".mp3": "audio/mpeg"}
 
 # Scribe answers ISO 639-3; the rest of the engine uses two-letter codes like subtitles do.
@@ -113,7 +116,8 @@ def _post(audio_path: Path, cfg: Config) -> dict:
 def _duration(path: Path) -> float | None:
     """Seconds of audio, or None when ffprobe cannot read it (then it is sent in one part)."""
     try:
-        proc = run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
+        # The audio comes from the user's file or a link: never let ffprobe follow a playlist.
+        proc = run(["ffprobe", "-v", "error", *USER_INPUT, "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
         return float(json.loads(proc.stdout)["format"]["duration"])
     except Exception:  # noqa: BLE001 - an unreadable duration only turns chunking off
         return None
@@ -148,6 +152,8 @@ def transcribe_audio(audio_path: Path, cfg: Config) -> Transcript:
 
     duration = _duration(audio_path)
     starts = chunk_starts(duration) if duration else [0.0]
+    if len(starts) > MAX_PARTS:
+        raise RuntimeError(f"Audio is too large to transcribe: {duration:.0f} seconds.")
     if len(starts) == 1:
         payload = _post(audio_path, cfg)
         words = _words(payload)
@@ -159,7 +165,7 @@ def transcribe_audio(audio_path: Path, cfg: Config) -> Transcript:
                 part = Path(tmp) / f"part{index}{audio_path.suffix}"
                 # Stream copy, `-ss` before `-i`: cutting a 54-minute file costs a second.
                 run([
-                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}",
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *USER_INPUT, "-ss", f"{start:.3f}",
                     "-i", str(audio_path), "-t", f"{CHUNK_SECONDS + _CHUNK_OVERLAP:.3f}",
                     "-vn", "-c", "copy", str(part),
                 ], timeout=120)
