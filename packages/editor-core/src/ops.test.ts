@@ -402,6 +402,35 @@ describe("applyOps", () => {
     await expect(applyOps(again.document, [{ op: "regenerate", element_id: plain, seed: 1 }], ctx)).rejects.toThrow(/Only AI-generated media/);
   });
 
+  it("add_generated keeps image variants in a mark; pick_variant swaps them and regenerate leaves them", async () => {
+    const ctx = memoryContext();
+    const image = await applyOps(
+      SOURCE,
+      [{ op: "add_generated", kind: "image", model: "fake-image", prompt: "a fox", seed: 7, aspect_ratio: "16:9", variant_seeds: [8, 9] }],
+      ctx,
+    );
+    const shown = (doc: ClipDocument) => find(doc, "rect") as { id: string; paints: { src: { seed: number } }[]; marks?: { variants?: { seed: number; prompt: string }[] } };
+    expect(shown(image.document).paints[0]!.src.seed).toBe(7);
+    expect(shown(image.document).marks?.variants?.map((variant) => [variant.seed, variant.prompt])).toEqual([[8, "a fox"], [9, "a fox"]]);
+    const id = shown(image.document).id;
+    const picked = await applyOps(image.document, [{ op: "pick_variant", element_id: id, seed: 9 }], ctx);
+    expect(shown(picked.document).paints[0]!.src.seed).toBe(9);
+    expect(shown(picked.document).marks?.variants?.map((variant) => variant.seed)).toEqual([8, 7]);
+    await expect(applyOps(picked.document, [{ op: "pick_variant", element_id: id, seed: 9 }], ctx)).rejects.toThrow(/no longer available/);
+    const again = await applyOps(picked.document, [{ op: "regenerate", element_id: id, seed: 42 }], ctx);
+    expect(shown(again.document).marks?.variants?.map((variant) => variant.seed)).toEqual([8, 7]);
+  });
+
+  it("add_generated rejects variants on video and duplicate variant seeds", async () => {
+    const ctx = memoryContext();
+    await expect(
+      applyOps(SOURCE, [{ op: "add_generated", kind: "video", model: "fake-video", prompt: "x", seed: 1, variant_seeds: [2] }], ctx),
+    ).rejects.toThrow(/Only AI images/);
+    await expect(
+      applyOps(SOURCE, [{ op: "add_generated", kind: "image", model: "fake-image", prompt: "x", seed: 1, variant_seeds: [1] }], ctx),
+    ).rejects.toThrow(/its own seed/);
+  });
+
   it("enhance_generated nâng độ phân giải, giữ seed + frame; không hạ, không vượt model", async () => {
     const ctx = memoryContext();
     const draft = await applyOps(

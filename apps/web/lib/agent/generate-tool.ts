@@ -85,6 +85,13 @@ export const generateInput = z
       .describe("Image/video: seconds it stays on the clip (B-roll: 1.5-4). A video is still generated and paid for its full duration."),
     muted: z.boolean().optional().describe("Video: mute its own sound (always for B-roll)."),
     fit: z.boolean().optional().describe("Video: speed it up so the WHOLE generated video plays within length — for an AI transition that must reach its end_image."),
+    variants: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe("Image only: how many versions of this still to make (B-roll: 3). Each costs the full price; one is shown and the user picks another in the Inspector."),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "image" || value.kind === "video") {
@@ -134,6 +141,8 @@ export type PreparedGeneration = {
   credits: number;
   /** Câu người nói mà ảnh/video minh hoạ — hiện trên thẻ duyệt. */
   quote?: string;
+  /** Specs of the extra image variants: same as `spec` but another seed, each its own generation. */
+  variants?: GenerationSpec[];
 };
 
 /** Tìm mốc CLIP của câu trích; ném lỗi đọc được khi không có trong clip. */
@@ -168,6 +177,13 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
   const ratios = model.limits.aspectRatios ?? [];
   const aspectRatio = request.aspect_ratio ?? (ratios.includes("9:16") ? "9:16" : ratios[0]);
   const seed = randomInt(0, 2_147_483_647);
+  const count = request.variants ?? 1;
+  if (count > 1 && request.kind !== "image") return "variants: only AI images can have variants.";
+  const variantSeeds: number[] = [];
+  while (variantSeeds.length < count - 1) {
+    const candidate = randomInt(0, 2_147_483_647);
+    if (candidate !== seed && !variantSeeds.includes(candidate)) variantSeeds.push(candidate);
+  }
   let prompt = request.prompt ?? "";
   let start = request.start;
   if (request.kind === "image" || request.kind === "video") {
@@ -230,8 +246,10 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
   }
 
   let spec: GenerationSpec;
+  let variants: GenerationSpec[];
   try {
     spec = normalizeSpec(model, raw);
+    variants = variantSeeds.map((variantSeed) => normalizeSpec(model, { ...raw, seed: variantSeed }));
   } catch (err) {
     return err instanceof ApiError ? err.message : "Invalid input.";
   }
@@ -251,8 +269,16 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
     ...((request.kind === "image" || request.kind === "video") && request.length ? { length: request.length } : {}),
     ...(request.kind === "video" && request.muted ? { muted: true } : {}),
     ...(request.kind === "video" && request.fit ? { fit: true } : {}),
+    ...(variantSeeds.length ? { variant_seeds: variantSeeds } : {}),
   } as Op;
-  return { model, spec, op, credits: priceOf(model, spec), ...(request.quote ? { quote: request.quote } : {}) };
+  return {
+    model,
+    spec,
+    op,
+    credits: priceOf(model, spec) * count,
+    ...(variants.length ? { variants } : {}),
+    ...(request.quote ? { quote: request.quote } : {}),
+  };
 }
 
 export function generateCard(prepared: PreparedGeneration, clipId: string) {
@@ -261,7 +287,7 @@ export function generateCard(prepared: PreparedGeneration, clipId: string) {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       // Giọng phải có tên trên thẻ: "with ElevenLabs voice" không cho biết đang duyệt giọng nào.
-      `${describeOp(prepared.op)} with ${typeof prepared.spec.voice === "string" ? `the voice ${prepared.spec.voice}` : prepared.model.name} · ${credits}`,
+      `${describeOp(prepared.op)} with ${typeof prepared.spec.voice === "string" ? `the voice ${prepared.spec.voice}` : prepared.model.name}${prepared.variants?.length ? ` × ${prepared.variants.length + 1} variants` : ""} · ${credits}`,
       ...(prepared.quote ? [`For the line: “${prepared.quote}”`] : []),
       ...(prepared.model.kind === "image" || prepared.model.kind === "video" ? [`Prompt: ${prepared.spec.prompt}`] : []),
     ],
@@ -434,20 +460,27 @@ type GenerateEnv = {
 
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
 export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string }> {
-  let generation: { id: string; credits_reserved: number };
-  try {
-    ({ generation } = await createGeneration(env.supabase, {
-      jobId: env.jobId,
-      clipId: env.clipId,
-      model: prepared.model.id,
-      spec: prepared.spec,
-      requestId: randomUUID(),
-    }));
-  } catch (err) {
-    const message = err instanceof ApiError && err.status < 500 ? err.message : "The generation could not be started.";
-    if (!(err instanceof ApiError)) console.error("[agent] generate_media lỗi", err);
-    return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
+  // Every variant is its own generation and credit hold; all of them start or none do.
+  const started: { id: string; credits_reserved: number }[] = [];
+  const cancelAll = () => Promise.all(started.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
+  for (const spec of [prepared.spec, ...(prepared.variants ?? [])]) {
+    try {
+      const { generation } = await createGeneration(env.supabase, {
+        jobId: env.jobId,
+        clipId: env.clipId,
+        model: prepared.model.id,
+        spec,
+        requestId: randomUUID(),
+      });
+      started.push(generation);
+    } catch (err) {
+      await cancelAll();
+      const message = err instanceof ApiError && err.status < 500 ? err.message : "The generation could not be started.";
+      if (!(err instanceof ApiError)) console.error("[agent] generate_media failed", err);
+      return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
+    }
   }
+  const generation = { id: started[0]!.id, credits_reserved: started.reduce((sum, item) => sum + item.credits_reserved, 0) };
 
   // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
   // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
@@ -455,7 +488,7 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   if (!applied.ok) {
     // Không đặt được lên clip (vd clip vừa đổi ở tab khác): huỷ lượt sinh để
     // hoàn credit, thay vì để nó chạy ra một file không ai thấy.
-    await rpcOrThrow(env.supabase, "cancel_generation", { p_id: generation.id }).catch(() => undefined);
+    await cancelAll();
     return { outcome: applied };
   }
   const credits = `${generation.credits_reserved} ${generation.credits_reserved === 1 ? "credit" : "credits"}`;
@@ -467,7 +500,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         ok: true,
         generation_id: generation.id,
         credits: generation.credits_reserved,
-        note: "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
+        ...(started.length > 1 ? { variants: started.length } : {}),
+        note:
+          started.length > 1
+            ? `${started.length} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
+            : "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
       }),
       summary: `Started ${NOUN[prepared.model.kind]} (${credits})`,
       version: applied.version,

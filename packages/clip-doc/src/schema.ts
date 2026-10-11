@@ -577,6 +577,8 @@ export const MarksSchema = z
     visual: z.object({ op: z.string().min(1), input: z.unknown() }).strict().optional(),
     /** Câu nói mà cảnh 3D neo vào. */
     studio3d: z.object({ quote: z.string() }).strict().optional(),
+    /** Seed variants of the shown AI media that are not on screen; `pick_variant` swaps one in. */
+    variants: z.array(AssetDeclarationSchema).min(1).max(2).optional(),
   })
   .strict();
 

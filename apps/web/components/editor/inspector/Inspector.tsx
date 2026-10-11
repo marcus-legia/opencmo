@@ -28,6 +28,7 @@ import { ArrangeSection } from "./layouts";
 import { TextStyleSection } from "./textstyle";
 import { GenerateCaptionsSection, mediaOf, TranslateCaptionsRow, VoiceoverCaptionsSection } from "./captions-ai";
 import { AnimationsSection, EffectsSection, FillsSection, MasksSection, ShadowsSection, StrokesSection } from "./parts";
+import { VariantsSection } from "./variants";
 import {
   BLEND_OPTIONS,
   diamond,
@@ -184,6 +185,7 @@ function NodeSections({ ctx, parent, tab, onTab }: { ctx: InspectorContext; pare
       {mediaOf(node) && ctx.clipId ? <GenerateCaptionsSection ctx={ctx} parent={parent} clipId={ctx.clipId} /> : null}
       {kind === "audio" ? <VoiceoverCaptionsSection ctx={ctx} /> : null}
       {has(kind, "src") && kind !== "captions" ? <SourceSection ctx={ctx} /> : null}
+      <VariantsSection ctx={ctx} />
       {parent?.kind === "sequence" && has(kind, "transition") ? <TransitionSection ctx={ctx} /> : null}
       {advancedSections.length ? (
         <>

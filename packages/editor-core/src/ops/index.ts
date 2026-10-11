@@ -24,7 +24,7 @@ import {
 	splitLine,
 } from './captions';
 import { OpError, OpFailure, type OpContext } from './context';
-import { addGenerated, addText, deleteElement, enhanceGenerated, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
+import { addGenerated, addText, deleteElement, enhanceGenerated, pickVariant, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
 import { moveElements, moveKeyframe, moveLayer, setWorkarea, splitElements, trimElement } from './timeline';
 import { addPart, copySettings, movePart, setKeyframe, setProps } from './inspector';
 import { cleanAudio, makeRoom, rippleDelete, setAudioRoll, setCaptionBreaks, setFade, slipElement } from './edit';
@@ -137,6 +137,7 @@ const REGISTRY = [
 	insertCaptions,
 	captionVoiceover,
 	addIntro,
+	pickVariant,
 ] as const;
 
 type Definition = {

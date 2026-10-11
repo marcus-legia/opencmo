@@ -23,7 +23,7 @@
  *   "side by side with" → list_library → insert_asset → apply_layout side_by_side: người nói trái, B-roll phải (E5)
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
  *   "intro"            → plan_video intro (the Video agent team; storyboard card)
- *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script)
+ *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
  *   "3d visual"        → update_plan + preview_3d (cảnh code: cột nhân đôi, neo "growing") → add_3d_scene
@@ -279,6 +279,7 @@ function script(history: StoredMessage[]): unknown[] {
           setting: "a bright home office",
           style: "photo",
           length: 2.5,
+          variants: 3,
         }),
       ),
     ];
@@ -299,6 +300,7 @@ function script(history: StoredMessage[]): unknown[] {
         style: "cinematic",
         start: Number(at[1]),
         length: 3,
+        ...(/variants/.test(ask) ? { variants: 3 } : {}),
       }),
     ];
   }

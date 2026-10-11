@@ -469,7 +469,9 @@ export const TASKS: EvalTask[] = [
         }),
         "each shot should stay 1.5-4 s",
       );
-      return { pass: several && noVideo && grounded && distinct && offHook && short && sane(outcome, notes), notes };
+      // B-roll pack: every still comes with variants for the user to pick from.
+      const packed = check(notes, stills.every((item) => (item.variants?.length ?? 0) >= 1), "stills without variants");
+      return { pass: several && noVideo && grounded && distinct && offHook && short && packed && sane(outcome, notes), notes };
     },
   },
   {

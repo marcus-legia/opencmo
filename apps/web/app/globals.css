@@ -4882,6 +4882,29 @@ span.ed2-asst-model {
   align-items: center;
   gap: 6px;
 }
+.ed2-variants {
+  display: flex;
+  gap: 4px;
+}
+.ed2-variant {
+  min-width: 32px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--ds-muted);
+  cursor: pointer;
+}
+.ed2-variant[aria-pressed="true"] {
+  background: var(--ds-raised);
+  color: var(--ds-text);
+  cursor: default;
+}
+.ed2-variant:disabled:not([aria-pressed="true"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .ed2-align {
   display: flex;
   flex-wrap: wrap;

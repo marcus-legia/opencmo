@@ -299,6 +299,7 @@ type AddGenerated = {
   kind: 'image' | 'video' | 'voice' | 'audio';
   model: string;
   prompt: string;
+  variant_seeds?: number[];
   seed: number;
   aspect_ratio?: string;
   duration?: number;
@@ -373,6 +374,8 @@ export const addGenerated = {
     source_start: z.number().finite().min(0).optional(),
     /** Âm thanh (G3): âm lượng dB của phần tử — nhạc nền đặt thấp dưới giọng nói. */
     volume: z.number().finite().min(-60).max(12).optional(),
+    /** Image only: other seeds generated alongside, kept in `marks.variants` for `pick_variant`. */
+    variant_seeds: z.array(z.number().int().min(0).max(2_147_483_647)).min(1).max(2).optional(),
   }),
   describe: (input: AddGenerated) =>
     `Generate ${KIND_NOUNS[input.kind]}: "${input.prompt.length > 40 ? `${input.prompt.slice(0, 40)}…` : input.prompt}"`,
@@ -416,6 +419,10 @@ export const addGenerated = {
         src = { generate: 'audio', prompt: input.prompt, model: input.model, duration: input.duration ?? 5, seed: input.seed };
         break;
     }
+    if (input.variant_seeds && input.kind !== 'image') throw new OpFailure('Only AI images can have variants.');
+    if (input.variant_seeds && new Set([input.seed, ...input.variant_seeds]).size !== input.variant_seeds.length + 1) {
+      throw new OpFailure('Each variant needs its own seed.');
+    }
     const start = input.start ? { start: round(input.start) } : {};
     // Video/tiếng sinh ra dài đúng `duration` đã trả tiền. Không ghi `end` thì
     // layer rơi về 16 giây mặc định trong lúc chờ (UAT production 29/09: Veo 4s
@@ -457,6 +464,7 @@ export const addGenerated = {
       ...(input.kind === 'video' && input.muted ? { muted: true } : {}),
       ...(input.kind === 'video' && input.fit && length !== null && length < paid ? { playbackRate: round(paid / length) } : {}),
       paints: [{ type: input.kind, src }],
+      ...(input.variant_seeds ? { marks: { variants: input.variant_seeds.map((seed) => ({ ...src, seed })) } } : {}),
     } as ClipNode, ctx);
   },
 };
@@ -523,6 +531,36 @@ export const enhanceGenerated = {
       if (to < 0 || to <= from) throw new OpFailure(`This video cannot be enhanced to ${input.resolution}.`);
       declaration.resolution = input.resolution;
     }
+    return next;
+  },
+};
+
+type PickVariant = { op: 'pick_variant'; element_id: string; seed: number };
+
+/**
+ * Shows another variant of an AI image: the chosen declaration and the shown one trade places, so
+ * nothing is generated or charged and the previous pick stays one click away. Not an agent op:
+ * choosing a variant is the user's call.
+ */
+export const pickVariant = {
+  name: 'pick_variant',
+  agent: false,
+  input: z.object({
+    op: z.literal('pick_variant'),
+    element_id: z.string().min(1),
+    seed: z.number().int().min(0).max(2_147_483_647),
+  }),
+  describe: () => 'Use another variant',
+  async apply(document: ClipDocument, input: PickVariant) {
+    const next = clone(document);
+    const found = byId(next, input.element_id);
+    if (!found) throw new OpFailure('That element is no longer in the project.');
+    const variants = (found.entity.marks as { variants?: Entity[] } | undefined)?.variants ?? [];
+    const index = variants.findIndex((variant) => variant.seed === input.seed);
+    if (index < 0) throw new OpFailure('That variant is no longer available.');
+    const paint = ((found.entity.paints as Entity[] | undefined) ?? []).find((item) => (item.src as Entity | undefined)?.generate === 'image');
+    if (!paint) throw new OpFailure('Only AI images have variants.');
+    [paint.src, variants[index]] = [variants[index], paint.src as Entity];
     return next;
   },
 };
