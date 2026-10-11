@@ -1477,6 +1477,49 @@ async function main(): Promise<void> {
     assert.deepEqual([holder?.start, holder?.end], [2, 5], "placed at 2s for 3s");
   });
 
+  await check("B-roll pack: an AI image with 3 variants on one card; Approve holds every variant, places one element", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant b-roll pack" });
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const packClip = (created.body as { clip_id: string }).clip_id;
+    const packJob = ((await admin.from("clips").select("job_id").eq("id", packClip).single()).data as { job_id: string }).job_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${packClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: packClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "Create an AI image at 2s with variants" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => event.event))}`);
+    const card = request!.data.card as { changes: string[]; credits: number };
+    assert.match(card.changes[0]!, / × 3 variants · \d+ credits$/, card.changes[0]);
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"));
+    const { data: made } = await admin.from("generations").select("id, credits_reserved").eq("clip_id", packClip);
+    assert.equal(made?.length, 3, "one generation per variant");
+    const held = (made ?? []).reduce((sum, item) => sum + (item as { credits_reserved: number }).credits_reserved, 0);
+    assert.ok((made ?? []).every((item) => (item as { credits_reserved: number }).credits_reserved > 0), "every variant is held");
+    assert.equal(held, card.credits, "the card shows what is held");
+
+    const packs = everything(await documentOf(a, packClip)).filter((node) => (node.marks as { variants?: unknown[] } | undefined)?.variants);
+    assert.equal(packs.length, 1, "one element, not one per variant");
+    const variants = (packs[0]!.marks as { variants: { prompt: string; seed: number; model: string; aspectRatio: string }[] }).variants;
+    const shown = (packs[0]!.paints as { src: { seed: number } }[])[0]!.src.seed;
+    assert.equal(new Set([shown, ...variants.map((variant) => variant.seed)]).size, 3, "three distinct seeds");
+
+    // The editor resolves a kept variant like any declaration: same spec → the generation the agent made.
+    const afterTurn = await balance(a.userId);
+    const variant = variants[0]!;
+    const resolved = await callApi(a, "/generations", {
+      method: "POST",
+      body: JSON.stringify({
+        job_id: packJob, clip_id: packClip, model: variant.model, request_id: crypto.randomUUID(),
+        spec: { prompt: variant.prompt, aspectRatio: variant.aspectRatio, seed: variant.seed },
+      }),
+    });
+    assert.equal((resolved.body as { reused: boolean }).reused, true, JSON.stringify(resolved.body));
+    assert.equal(await balance(a.userId), afterTurn, "no second charge");
+    // No worker runs here: cancel them so later checks stay under the running-generations limit.
+    for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
+  });
+
   await check("Video agent team: intro storyboard card, Approve adds one intro group", async () => {
     const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
     const introClip = (created.body as { clip_id: string }).clip_id;

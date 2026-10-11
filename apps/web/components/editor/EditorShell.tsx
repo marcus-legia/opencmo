@@ -38,6 +38,7 @@ import { ApplyBrandDialog, ApplyStyleDialog, HistoryDialog, ShortcutsDialog } fr
 import { TopBar, type ExportState } from "./TopBar";
 
 import { Inspector } from "./inspector/Inspector";
+import { variantsOf } from "./inspector/variants";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
@@ -1067,6 +1068,7 @@ function Workspace({
     manifest: library.latest(),
     enabled: enabledModels,
     regenerate: (id) => void run([{ op: "regenerate", element_id: id, seed: Math.floor(Math.random() * 2_147_483_647) }]),
+    pickVariant: (id, seed) => void run([{ op: "pick_variant", element_id: id, seed }]),
     enhance: (id, resolution) => void run([{ op: "enhance_generated", element_id: id, resolution }]),
     animate: (path) => {
       setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "video", firstFrame: path }));
@@ -1577,6 +1579,7 @@ function aiMenuItems({
   manifest,
   enabled,
   regenerate,
+  pickVariant,
   enhance,
   animate,
   extend,
@@ -1588,6 +1591,7 @@ function aiMenuItems({
   manifest: Manifest;
   enabled: Set<string> | null;
   regenerate: (id: string) => void;
+  pickVariant: (id: string, seed: number) => void;
   enhance: (id: string, resolution: string) => void;
   animate: (path: string) => void;
   extend: (plan: ExtendPlan) => void;
@@ -1614,6 +1618,12 @@ function aiMenuItems({
       const price = priced.reduce<number>((sum, value) => sum + value!, 0);
       items.push({ label: `Regenerate · ${price} ${price === 1 ? "credit" : "credits"}`, onSelect: () => regenerate(String(found.id)), testid: "ai-regenerate" });
     }
+    // Same numbering as the Inspector's Variants row, so "variant 2" means one thing.
+    const variants = variantsOf(found);
+    variants?.all.forEach((declaration, index) => {
+      if (declaration === variants.shown) return;
+      items.push({ label: `Show variant ${index + 1}`, onSelect: () => pickVariant(String(found.id), Number(declaration.seed)), testid: `ai-variant-${declaration.seed}` });
+    });
     // Nháp → bản đẹp (G4): video AI còn độ phân giải cao hơn để nâng; cùng prompt, seed, frame.
     const video = declarations.find((declaration) => declaration.generate === "video");
     const videoModel = video ? liveModel(String(video.model)) : undefined;
