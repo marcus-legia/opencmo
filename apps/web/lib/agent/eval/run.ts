@@ -26,6 +26,7 @@ import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
+import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
@@ -116,7 +117,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null)];
+  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -177,6 +178,19 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         const shots = "images" in answer ? (answer.images as string[]) : [];
         const images: Image[] | undefined = shots.length ? shots.map((data) => ({ data, mimeType: "image/jpeg" as const })) : undefined;
         results.push({ id: call.id, name: call.name, ok: true, content: JSON.stringify({ ok: true, ...(answer.data as object) }), images });
+        continue;
+      }
+      if (call.name === "plan_video") {
+        // Same team and builder as the app; the storyboard card is approved at once.
+        const snapshot = workspace.snapshot();
+        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext: about }, async () => undefined);
+        if (typeof planned === "string") {
+          results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: planned }) });
+          continue;
+        }
+        const applied = await applyOpTool(planned.prepared.op as never, env);
+        if (applied.version !== undefined) wrote = true;
+        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.content });
         continue;
       }
       if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover") {
@@ -240,6 +254,8 @@ async function main() {
     return;
   }
 
+  // The fake model drives the fake Video agent team too, so the eval stays offline and free.
+  if (options.provider === "fake") process.env.OPENCMO_AGENT_FAKE ??= "1";
   const provider = providerFor(options.provider);
   mkdirSync(options.out, { recursive: true });
   const rows = [];

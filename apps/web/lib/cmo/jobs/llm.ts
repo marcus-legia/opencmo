@@ -37,7 +37,13 @@ type Options<S extends z.ZodType> = {
   label: string;
   /** Câu báo lỗi chung cho người dùng (tiếng Anh). */
   failure: string;
+  /** Request time limit; the SDK default is ten minutes. */
+  timeoutMs?: number;
+  /** Token usage of the call, for callers that charge it (the editor's Video agent team). */
+  onUsage?: (usage: LlmUsage) => void | Promise<void>;
 };
+
+export type LlmUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
 
 export async function structured<S extends z.ZodType>(opts: Options<S>): Promise<z.infer<S>> {
   const agent = resolveAgent(opts.agent);
@@ -56,13 +62,20 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
       ...(isOpus ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       system: opts.system,
       messages: [{ role: "user", content: opts.prompt }],
-    });
+    }, opts.timeoutMs ? { timeout: opts.timeoutMs, maxRetries: 1 } : undefined);
   } catch (error) {
     if (error instanceof Anthropic.RateLimitError) throw new LlmError("Our AI is busy right now. Try again in a minute.");
     if (error instanceof Anthropic.APIError) console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): lỗi API`, error.status, error.message);
     else console.error(`[cmo] ${opts.label}: parse/khác`, error);
     throw new LlmError(opts.failure);
   }
+  await opts.onUsage?.({
+    model: response.model,
+    input: response.usage.input_tokens,
+    output: response.usage.output_tokens,
+    cacheRead: response.usage.cache_read_input_tokens ?? 0,
+    cacheWrite: response.usage.cache_creation_input_tokens ?? 0,
+  });
   if (response.stop_reason === "refusal") throw new LlmError(opts.failure);
   if (response.stop_reason === "max_tokens" || !response.parsed_output) throw new LlmError(opts.failure);
   return response.parsed_output as z.infer<S>;

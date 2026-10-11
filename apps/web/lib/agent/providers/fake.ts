@@ -22,6 +22,7 @@
  *   "cinematic"        → get_project_state → apply_color look ấm cho mọi video (E3)
  *   "side by side with" → list_library → insert_asset → apply_layout side_by_side: người nói trái, B-roll phải (E5)
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
+ *   "intro"            → plan_video intro (the Video agent team; storyboard card)
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script)
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -140,6 +141,9 @@ function script(history: StoredMessage[]): unknown[] {
       }
       const broll = found.find((node) => node.kind === "rect" && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
       return broll ? [use("add_captions", { element_id: broll.id })] : [text("There is no B-roll video to caption.")];
+    }
+    if (previous.includes("plan_video")) {
+      return [text(results.some((block) => block.is_error) || /"declined"|"INVALID_INPUT"/.test(raw0) ? "The intro was not added." : "Done: the intro is on the clip. You can undo it in one click.")];
     }
     if (previous.includes("add_captions") || previous.includes("translate_captions")) {
       return [text(results.some((block) => block.is_error) || /"declined"|"error"|"pending"/.test(raw0) ? "The captions were not added." : "Done: the new captions layer is on the timeline.")];
@@ -278,6 +282,9 @@ function script(history: StoredMessage[]): unknown[] {
         }),
       ),
     ];
+  }
+  if (/\bintro\b/.test(ask)) {
+    return [text("I'll have the video team plan an intro."), use("plan_video", { recipe: "intro", brief: "confident, clean, brand colours" })];
   }
   const at = /ai image at (\d+(?:\.\d+)?)\s*s/.exec(ask);
   if (at) {

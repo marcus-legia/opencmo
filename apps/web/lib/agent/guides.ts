@@ -285,6 +285,16 @@ Nothing is spoken, so there are no quotes to anchor to: every piece of media is 
 6. Music: generate_media kind "audio" (instrumental, mood, genre, tempo), start 0, duration = the video length up to the model's limit, then set_props volume -18 when there is a voice.
 7. Capture a frame in the middle of every beat: nothing empty, nothing off-screen, text readable.`,
 
+  intro: `# Intro (plan_video)
+
+The Video agent team builds intros: do not assemble them with add_text and keyframes.
+
+1. read_skill "motion-profile" when <your_skills> lists it: it holds the personality and colours the user liked last time. Add it to the brief.
+2. plan_video {recipe: "intro", brief: the user's words}. Pass title only when the user gave the exact words, seconds only when they asked for a length.
+3. The user approves a storyboard (beats with times). If they cancel, ask what to change and call plan_video again with a better brief.
+4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
+5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no lottie").`,
+
   document: "",
 } as const;
 

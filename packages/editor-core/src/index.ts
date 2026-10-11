@@ -24,3 +24,4 @@ export { LAYOUT_MODES, panelRegionAt, readLayout, speakerBandAt, type LayoutMode
 export { anchorPoint, LAYOUT_ANCHOR_NAMES, LAYOUT_LABEL, layoutSlots, layoutsFor, slotBox, VIDEO_LAYOUTS, type LayoutSlot, type VideoLayout } from './layouts';
 export { clipScript, clipTranscript, clipWords, findQuote, formatScript, quoteTiming, type QuoteHit, type ScriptLine } from './script';
 export { quoteRange } from './ops/visuals';
+export { buildIntro, INTRO_ELEMENTS, INTRO_MOTIONS, introSpecSchema, MAX_MOVING, PERSONALITIES, PERSONALITY, READ_SECONDS, reviewIntro, type IntroSpec, type Personality } from './motion/intro';

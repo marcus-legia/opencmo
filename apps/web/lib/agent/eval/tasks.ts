@@ -410,6 +410,23 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "intro",
+    prompt: "Make an intro for this clip.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const intro = all(outcome.document).find((item) => item.tag === "group" && (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "intro");
+      if (!check(notes, Boolean(intro), "no intro group from plan_video")) return { pass: false, notes };
+      const used = check(notes, outcome.tools.includes("plan_video"), "the intro was not built by the video team");
+      const start = check(notes, intro!.entity.start === 0, `intro starts at ${String(intro!.entity.start)}s`);
+      const animated = check(
+        notes,
+        ((intro!.entity.children as Entity[] | undefined) ?? []).filter((child) => child.tracks || child.animations).length >= 2,
+        "fewer than two animated elements",
+      );
+      return { pass: used && start && animated && sane(outcome, notes), notes };
+    },
+  },
+  {
     id: "blankgen",
     prompt: "Create an AI image at 2s of our booking app on a laptop.",
     // A blank "New edit": no speaker, no captions, nothing to quote.

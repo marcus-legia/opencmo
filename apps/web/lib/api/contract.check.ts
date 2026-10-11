@@ -1477,6 +1477,27 @@ async function main(): Promise<void> {
     assert.deepEqual([holder?.start, holder?.end], [2, 5], "placed at 2s for 3s");
   });
 
+  await check("Video agent team: intro storyboard card, Approve adds one intro group", async () => {
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const introClip = (created.body as { clip_id: string }).clip_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${introClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: introClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "Make an intro for this clip" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no storyboard card: ${JSON.stringify(first.events.map((event) => event.event))}`);
+    const card = (request!.data as { card: { storyboard?: { seconds: number; beats: { label: string }[] } } }).card;
+    assert.ok(card.storyboard && card.storyboard.beats.length >= 2, "the card carries the storyboard");
+    const before = everything(await documentOf(a, introClip)).length;
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.filter((event) => event.event === "tool_result" || event.event === "done")));
+    const after = everything(await documentOf(a, introClip));
+    const intro = after.find((node) => (node.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "intro");
+    assert.ok(intro, "an intro group is on the edit");
+    assert.deepEqual([intro!.start, intro!.end], [0, card.storyboard!.seconds]);
+    assert.ok(after.length > before + 2, "the group holds its layers");
+  });
+
   await check("Assistant + voiceover: repurpose = thẻ giá, Approve đặt giọng mới, tắt tiếng video gốc", async () => {
     const first = await callSse(a, `/agent/sessions/${agentSession}/turns`, { prompt: "Repurpose this clip with a new script" });
     const request = first.events.find((event) => event.event === "approval_request");
