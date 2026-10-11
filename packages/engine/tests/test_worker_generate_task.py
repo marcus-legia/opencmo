@@ -357,7 +357,7 @@ def test_fake_video_dung_frame_dau_cuoi_va_anh_tham_chieu(tmp_path):
     assert corner[2] > 180 and corner[0] < 80
 
 
-def _edit_store(tmp_path, spec, uid):
+def _edit_store(tmp_path, spec, uid, model="fal-kling-edit"):
     """Store giả cho model sửa video: `sign_object_url` trả một video 640×360, 12 s trên đĩa."""
     import subprocess
 
@@ -367,7 +367,7 @@ def _edit_store(tmp_path, spec, uid):
          "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", str(source)],
         check=True,
     )
-    store = FakeStore(_generation(model="fal-kling-edit", spec=spec, spec_hash=generate_task.spec_hash("fal-kling-edit", spec), user_id=uid))
+    store = FakeStore(_generation(model=model, spec=spec, spec_hash=generate_task.spec_hash(model, spec), user_id=uid))
     store.signed = []
 
     def sign_object_url(bucket, path, expires_in=3600):
@@ -533,3 +533,142 @@ def test_catalog_db_de_gia_gioi_han_va_tat_model(monkeypatch):
     store.get_ai_model = lambda _id: {"price": {"unit": "generation", "credits": 1}, "limits": {}, "enabled": False}
     generate_task.process(store, _task())
     assert store.failed == ["This model is not available."] and store.uploaded == []
+
+
+# ------------------------------------------------------------------ background removal
+
+
+def _frame_rgba(path, at=0.5):
+    """First decoded frame of `path` as raw RGB24 bytes plus its size."""
+    import subprocess
+
+    probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout)
+    width, height = probe["streams"][0]["width"], probe["streams"][0]["height"]
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return raw, width, height
+
+
+def _luma(raw, width, x, y):
+    i = (y * width + x) * 3
+    return (raw[i] * 77 + raw[i + 1] * 150 + raw[i + 2] * 29) >> 8
+
+
+def test_cutout_reads_the_clips_own_video_from_renders_at_1080(monkeypatch, tmp_path):
+    """Background removal may read the clip's own master (renders bucket) and keeps a 1080 short edge."""
+    import subprocess
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height", "-of", "json", spec["sourceVideo"]],
+                capture_output=True, text=True, check=True,
+            )
+            seen["probe"] = json.loads(probe.stdout)
+            return super().run(model, spec, workdir, alive=alive)
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: Recording())
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    ref = f"{uid}/clip-1/master/attempt-1.mp4"
+    spec = {"prompt": "Remove background", "aspectRatio": "16:9", "duration": 3, "sourceVideo": f"renders:{ref}", "sourceStart": 2}
+    store = _edit_store(tmp_path, spec, uid, model="fake-cutout")
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == [], store.failed
+    assert store.signed == [("renders", ref)]
+    video = next(s for s in seen["probe"]["streams"] if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1920, 1080)
+
+
+def test_cutout_of_someone_elses_master_is_refused_before_signing(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    other = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    spec = {"prompt": "Remove background", "aspectRatio": "16:9", "duration": 3, "sourceVideo": f"renders:{other}/clip/master/a.mp4", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid, model="fake-cutout")
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.signed == [] and adapter.spec is None
+
+
+def test_edit_models_cannot_read_the_clips_own_video(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    spec = {"prompt": "x", "aspectRatio": "16:9", "duration": 4, "sourceVideo": f"renders:{uid}/clip/master/a.mp4", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid)
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == ["Choose a video from your library to edit."]
+    assert adapter.spec is None
+
+
+def test_fal_cutout_asks_for_h264_picture_and_matte(tmp_path):
+    from opencmo.ai.providers.fal import build_payload, endpoint_for
+
+    clip = tmp_path / "source.mp4"
+    clip.write_bytes(b"mp4")
+    model = get_model("fal-veed-cutout")
+    spec = {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 4, "sourceVideo": str(clip), "sourceStart": 0}
+    assert build_payload(model, spec) == {"video_url": f"data:video/mp4;base64,{__import__('base64').b64encode(b'mp4').decode()}", "output_codec": "h264"}
+    assert endpoint_for(model, spec) == "veed/video-background-removal"
+
+
+def test_fal_cutout_finds_picture_and_matte_in_either_response_shape():
+    from opencmo.ai.providers.fal import cutout_urls
+
+    assert cutout_urls({"video": {"url": "rgb"}, "alpha_video": {"url": "a"}}) == ("rgb", "a")
+    assert cutout_urls({"rgb_video": {"url": "rgb"}, "mask_video": {"url": "a"}}) == ("rgb", "a")
+    assert cutout_urls({"video": {"url": "vp9"}}) == ("vp9", None)
+
+
+def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
+    """Picture + matte (fal h264) and picture with alpha (fal vp9) both become one stacked H.264 file."""
+    import subprocess
+
+    from opencmo.ai.cutout import stack_embedded, stack_matte
+
+    picture = tmp_path / "rgb.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=320x240:d=1", "-pix_fmt", "yuv420p", str(picture)], check=True)
+    matte = tmp_path / "alpha.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=black:s=160x120:d=1", "-vf", "drawbox=x=0:y=0:w=80:h=120:color=white:t=fill", "-pix_fmt", "yuv420p", str(matte)],
+        check=True,
+    )
+    out = stack_matte(picture, "mov", matte, "mov", tmp_path / "stacked.mp4")
+    raw, width, height = _frame_rgba(out)
+    assert (width, height) == (320, 480)
+    assert raw[(10 * width + 10) * 3] > 200, "top half is the red picture"
+    assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30, "bottom half is the matte, scaled to the picture"
+
+    webm = tmp_path / "alpha.webm"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=320x240:d=1,format=rgba,geq=r=255:g=0:b=0:a='if(lt(X,160),255,0)'",
+         "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", str(webm)],
+        check=True,
+    )
+    out = stack_embedded(webm, "matroska", tmp_path / "stacked2.mp4")
+    raw, width, height = _frame_rgba(out)
+    assert (width, height) == (320, 480)
+    assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30
+
+
+def test_fake_cutout_keeps_an_ellipse_of_the_source(tmp_path):
+    import subprocess
+
+    source = tmp_path / "src.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=360x640:r=30:d=3", "-pix_fmt", "yuv420p", str(source)], check=True)
+    out = tmp_path / "o"
+    out.mkdir()
+    result = FakeProvider().run(
+        get_model("fake-cutout"),
+        {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 2, "sourceVideo": str(source), "sourceStart": 0},
+        out,
+    )
+    raw, width, height = _frame_rgba(result.path)
+    assert (width, height) == (360, 1280), "picture on top of the matte"
+    assert _luma(raw, width, 180, 640 + 352) > 200, "subject in the middle is opaque"
+    assert _luma(raw, width, 5, 640 + 5) < 30, "corner is transparent"

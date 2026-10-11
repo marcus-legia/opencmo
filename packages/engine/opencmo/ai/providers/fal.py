@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from opencmo.ai.catalog import AiModel
+from opencmo.ai.cutout import demuxer, stack_embedded, stack_matte
 from opencmo.ai.providers.base import Poll, ProviderAdapter, ProviderError, Result
 from opencmo.ai.providers.elevenlabs import words_from_alignment
 from opencmo.media.ffmpeg import run
@@ -84,6 +85,9 @@ def build_payload(model: AiModel, spec: dict[str, Any]) -> dict[str, Any]:
             "upscale_mode": "target",
             "target_resolution": spec.get("resolution") or "1080p",
         }
+    if model.limits.get("removeBackground"):
+        # H.264 comes back as a picture video plus an alpha matte video; the worker stacks them.
+        return {"video_url": data_url(Path(spec["sourceVideo"])), "output_codec": "h264"}
     if model.limits.get("sourceVideo"):
         # Sửa video (Kling O1 Edit): chỉ prompt + video + ảnh tham chiếu; khung hình và độ dài
         # theo chính video nguồn, giữ tiếng gốc (người dùng sửa hình, không sửa lời nói).
@@ -130,6 +134,22 @@ def result_url(body: dict[str, Any]) -> str:
     raise ProviderError(FAILED)
 
 
+def cutout_urls(body: dict[str, Any]) -> tuple[str, str | None]:
+    """(picture, matte) of a background-removal result; matte is None when the picture has its own alpha."""
+    picture: str | None = None
+    matte: str | None = None
+    for key, item in body.items():
+        if not isinstance(item, dict) or not item.get("url"):
+            continue
+        if any(word in key for word in ("alpha", "mask", "matte")):
+            matte = matte or str(item["url"])
+        elif picture is None or key == "video":
+            picture = str(item["url"])
+    if not picture:
+        raise ProviderError(FAILED)
+    return picture, matte
+
+
 class FalProvider(ProviderAdapter):
     poll_seconds = 5.0
     timeout_seconds = 900.0
@@ -158,6 +178,8 @@ class FalProvider(ProviderAdapter):
         if model.kind == "audio":
             # The model can return a little more than was paid for; fetch trims to this.
             ref["seconds"] = int(spec["duration"])
+        if model.limits.get("removeBackground"):
+            ref["cutout"] = True
         return json.dumps(ref)
 
     def poll(self, ref: str) -> Poll:
@@ -173,11 +195,8 @@ class FalProvider(ProviderAdapter):
             return Poll("running")
         return Poll("failed", FAILED)
 
-    def fetch(self, ref: str, dest_dir: Path) -> Result:
-        urls = json.loads(ref)
-        body = self._check(self._client.get(urls["response_url"]))
-        url = result_url(body)
-        raw = dest_dir / "fal-result"
+    def _get(self, url: str, raw: Path) -> str:
+        """Streams a result file to `raw` under the size cap; returns its content type."""
         written = 0
         with self._download.stream("GET", url) as resp:
             if resp.status_code >= 400:
@@ -189,6 +208,38 @@ class FalProvider(ProviderAdapter):
                     if written > MAX_BYTES:
                         raise ProviderError(FAILED)
                     fh.write(chunk)
+        return content_type
+
+    def _fetch_cutout(self, body: dict[str, Any], dest_dir: Path) -> Result:
+        picture_url, matte_url = cutout_urls(body)
+        picture = dest_dir / "fal-picture"
+        picture_format = demuxer(self._get(picture_url, picture))
+        if not picture_format:
+            raise ProviderError(FAILED)
+        out = dest_dir / "result.mp4"
+        try:
+            if matte_url:
+                matte = dest_dir / "fal-matte"
+                matte_format = demuxer(self._get(matte_url, matte))
+                if not matte_format:
+                    raise ProviderError(FAILED)
+                stack_matte(picture, picture_format, matte, matte_format, out)
+            else:
+                stack_embedded(picture, picture_format, out)
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(FAILED) from exc
+        return Result(out, "video/mp4", "mp4")
+
+    def fetch(self, ref: str, dest_dir: Path) -> Result:
+        urls = json.loads(ref)
+        body = self._check(self._client.get(urls["response_url"]))
+        if urls.get("cutout"):
+            return self._fetch_cutout(body, dest_dir)
+        url = result_url(body)
+        raw = dest_dir / "fal-result"
+        content_type = self._get(url, raw)
         result = _normalize(raw, content_type, dest_dir, seconds=urls.get("seconds"))
         words = speech_words(body)
         return Result(result.path, result.content_type, result.extension, words=words) if words else result

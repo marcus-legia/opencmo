@@ -211,6 +211,8 @@ export const CAPTION_PRESETS = ['classic', 'whisper', 'cascade', 'spotlight', 'p
 const objectFit = z.enum(['cover', 'contain', 'fill']);
 /** Điểm neo khi media bị cắt (cover) hoặc thừa chỗ (contain): [x, y] 0…1, vắng = giữa (E5, học Palmier anchor). */
 const objectPosition = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]);
+/** `stacked`: the file holds the picture in its top half and the alpha matte (luma) in its bottom half. */
+const alpha = z.literal('stacked').optional();
 const fontWeight = z.union([num, z.enum(['normal', 'bold'])]);
 const fontStyle = z.enum(['normal', 'italic', 'oblique']);
 const textCase = z.enum(['original', 'upper', 'lower']);
@@ -346,6 +348,7 @@ export const PaintSchema = z.discriminatedUnion('type', [
       objectFit: objectFit.optional(),
       objectPosition: objectPosition.optional(),
       frameRate: num.optional(),
+      alpha,
       ...paintCommon,
     })
     .strict(),
@@ -647,6 +650,7 @@ const media = {
   objectFit: objectFit.optional(),
   objectPosition: objectPosition.optional(),
   frameRate: num.optional(),
+  alpha,
 };
 // `denoise` (học Palmier §C7): 0…1, khử ồn giọng nói lúc EXPORT (ffmpeg highpass + afftdn).
 // Preview không nghe được — Web Audio không có bộ khử ồn tương đương; UI nói rõ điều đó.

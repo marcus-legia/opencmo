@@ -125,7 +125,7 @@ export function GeneratePanel({
   // Model sửa video chỉ mở từ menu "Edit with AI" (cần video nguồn); khi đó CHỈ hiện chúng.
   const editing = initial?.edit;
   const models = useMemo(
-    () => liveModels().filter((model) => enabled.has(model.id) && !model.limits.scene && !model.limits.upscale && !model.limits.sourceVideo === !editing),
+    () => liveModels().filter((model) => enabled.has(model.id) && !model.limits.scene && !model.limits.upscale && !model.limits.removeBackground && !model.limits.sourceVideo === !editing),
     [enabled, editing],
   );
   const kinds = KINDS.filter((entry) => models.some((model) => model.kind === (entry.kind === "voiceover" ? "voice" : entry.kind)));

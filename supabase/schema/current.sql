@@ -1066,9 +1066,12 @@ begin
       or (p_spec ? 'endImage' and not public.ai_media_ref_ok(p_spec->'endImage')) then
     raise exception 'That image was not found in your library.' using errcode = '22023';
   end if;
-  -- Model sửa video (G2): video nguồn bắt buộc, của chính người gọi, cùng luật với ảnh.
+  -- Video-to-video: the source is required and the caller's own. Background removal may also
+  -- read the clip's own video (`renders:` / `sources:`); other edit models only library files.
   if v_source then
-    if not (p_spec ? 'sourceVideo') or not public.ai_media_ref_ok(p_spec->'sourceVideo') then
+    if not (p_spec ? 'sourceVideo') or not (
+        public.ai_media_ref_ok(p_spec->'sourceVideo')
+        or (coalesce((p_model.limits->>'removeBackground')::boolean, false) and public.ai_clip_video_ref_ok(p_spec->'sourceVideo'))) then
       raise exception 'Choose a video from your library to edit.' using errcode = '22023';
     end if;
     if jsonb_typeof(p_spec->'sourceStart') is distinct from 'number' or (p_spec->>'sourceStart')::numeric < 0 then
@@ -1109,6 +1112,25 @@ begin
       using errcode = '22023';
   end if;
 end;
+$$;
+
+
+--
+-- Name: ai_clip_video_ref_ok(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ai_clip_video_ref_ok(p_ref jsonb) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select jsonb_typeof(p_ref) = 'string'
+     and length(p_ref #>> '{}') <= 520
+     and (p_ref #>> '{}') ~ '^(renders|sources):'
+     and split_part(p_ref #>> '{}', ':', 2) like auth.uid()::text || '/%'
+     and (p_ref #>> '{}') !~ '\.\.'
+     and exists (select 1 from storage.objects o
+                 where o.bucket_id = split_part(p_ref #>> '{}', ':', 1)
+                   and o.name = substr(p_ref #>> '{}', length(split_part(p_ref #>> '{}', ':', 1)) + 2));
 $$;
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from opencmo.ai.catalog import AiModel
+from opencmo.ai.cutout import fake_cutout
 from opencmo.ai.providers.base import Poll, ProviderAdapter, Result
 from opencmo.media.ffmpeg import run
 
@@ -130,6 +131,8 @@ class FakeProvider(ProviderAdapter):
                 "-vf", f"{_cover(width, height)},{_text_filter(textfile, _font_size(width, height))}",
                 "-frames:v", "1", str(out),
             ], timeout=60)
+        elif kind == "video" and spec.get("sourceVideo") and model.limits.get("removeBackground"):
+            out = fake_cutout(Path(spec["sourceVideo"]), seconds, workdir / "result.mp4")
         elif kind == "video" and spec.get("sourceVideo") and model.limits.get("upscale"):
             # Upscale giả: phóng cạnh ngắn lên đích (1080/2160), giữ tỉ lệ và độ dài nguồn.
             target = 2160 if spec.get("resolution") == "2160p" else 1080

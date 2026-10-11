@@ -22,6 +22,7 @@ from opencmo.ai.catalog import (
     VIDEO_NOT_FOUND,
     SpecError,
     get_model,
+    split_video_ref,
     validate_spec,
     with_row,
 )
@@ -129,6 +130,8 @@ def _prepare_inputs(store: Any, task: Task, model: Any, spec: dict[str, Any], wo
 
 #: Cạnh ngắn của đoạn gửi model sửa video: Kling O1 Edit nhận 720–2160 px.
 SOURCE_EDGE = 720
+#: A cut-out is laid over the full-size frame, so it keeps more detail than an edit.
+CUTOUT_EDGE = 1080
 
 
 def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workdir: Path) -> str:
@@ -137,11 +140,12 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
     ffmpeg đọc thẳng URL đã ký với `-ss` TRƯỚC `-i` (luật engine 3–4): chỉ kéo đúng đoạn cần,
     không tải nguyên file. Cạnh ngắn đưa về 720 px, H.264 + AAC — dạng mọi provider nhận.
     """
-    ref = str(spec["sourceVideo"])
+    bucket, ref = split_video_ref(str(spec["sourceVideo"]))
     if not ref.startswith(f"{task.user_id}/"):
         raise SpecError(VIDEO_NOT_FOUND)
+    edge = CUTOUT_EDGE if model.limits.get("removeBackground") else SOURCE_EDGE
     try:
-        url = store.sign_object_url("media", ref, expires_in=900)
+        url = store.sign_object_url(bucket, ref, expires_in=900)
     except Exception as exc:
         raise SpecError(VIDEO_NOT_FOUND) from exc
     out = workdir / "source.mp4"
@@ -153,7 +157,7 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
             "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", protocols, "-f", "mov",
             "-ss", f"{float(spec.get('sourceStart') or 0):.3f}", "-i", url,
             "-t", str(int(spec["duration"])),
-            "-vf", f"scale='if(lte(iw,ih),{SOURCE_EDGE},-2)':'if(lte(iw,ih),-2,{SOURCE_EDGE})',fps=30",
+            "-vf", f"scale='if(lte(iw,ih),{edge},-2)':'if(lte(iw,ih),-2,{edge})',fps=30",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out),
         ], timeout=300)

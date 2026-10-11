@@ -40,10 +40,12 @@ import { addVoiceover, captionVoiceover, syncVoiceover, syncVoiceovers } from '.
 import { insertCaptions, insertToRow, moveToRow } from './rows';
 import { laneOf } from '../tracks';
 import { addIntro } from '../motion/intro';
+import { replaceBackground } from './background';
 import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, stagger, updateVisual } from './visuals';
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
+export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
 export { loadCaptions, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
@@ -138,6 +140,7 @@ const REGISTRY = [
 	captionVoiceover,
 	addIntro,
 	pickVariant,
+	replaceBackground,
 ] as const;
 
 type Definition = {

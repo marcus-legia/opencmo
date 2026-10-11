@@ -427,6 +427,24 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "bgswap",
+    prompt: "Replace the background behind me with a bright office.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const swap = all(outcome.document).find((item) => item.tag === "group" && (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "replace_background");
+      if (!check(notes, Boolean(swap), "no background swap group")) return { pass: false, notes };
+      const [background, cutout] = (swap!.entity.children as Entity[] | undefined) ?? [];
+      const paint = ((cutout?.paints as { alpha?: string; src?: { sourceVideo?: string } }[] | undefined) ?? [])[0];
+      const keyed = check(notes, paint?.alpha === "stacked" && paint.src?.sourceVideo === "assets/master.mp4", "the speaker is not a stacked-alpha cut-out of the clip's own video");
+      const behind = check(notes, Boolean(background) && background!.name === "New background", "no new background under the cut-out");
+      const gen = outcome.generations?.find((item) => item.model.limits.removeBackground);
+      const priced = check(notes, Boolean(gen) && (gen!.extra?.length ?? 0) === 1, "the card does not hold the cut-out and the background together");
+      const prompt = String(gen?.extra?.[0]?.spec.prompt ?? "");
+      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(prompt), `background prompt has people: ${prompt}`);
+      return { pass: keyed && behind && priced && noPeople && sane(outcome, notes), notes };
+    },
+  },
+  {
     id: "blankgen",
     prompt: "Create an AI image at 2s of our booking app on a laptop.",
     // A blank "New edit": no speaker, no captions, nothing to quote.

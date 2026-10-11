@@ -4882,6 +4882,16 @@ span.ed2-asst-model {
   align-items: center;
   gap: 6px;
 }
+.ed2-bg-time {
+  width: 60px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--ds-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--ds-text);
+  font: inherit;
+}
 .ed2-variants {
   display: flex;
   gap: 4px;

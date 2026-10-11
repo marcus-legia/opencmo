@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isPartial, joinPath, uniquePath, type LibraryRecord, type Manifest, type PartialRecord } from "@opencmo/clip-assets";
 import type { ClipDocument } from "@opencmo/clip-doc";
 import { AI_MODELS } from "@opencmo/editor-core/generate";
+import { MASTER_SRC } from "@opencmo/editor-core";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -157,7 +158,8 @@ async function serverSpec(spec: Record<string, unknown>, latest: () => Manifest,
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(spec)) {
     if (key in INPUT_KEYS) out[INPUT_KEYS[key as keyof typeof INPUT_KEYS]] = await mediaId(value);
-    else if (key === "sourceVideo") out.sourceVideo = await mediaId(value);
+    // The clip's own video is not a library file: the server maps it to its storage object.
+    else if (key === "sourceVideo") out.sourceVideo = value === MASTER_SRC ? value : await mediaId(value);
     else if (key === "refs" && Array.isArray(value)) out.references = await Promise.all(value.map(mediaId));
     else out[key] = value;
   }
