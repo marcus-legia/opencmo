@@ -286,3 +286,41 @@ describe('cache chỉnh màu theo khung', () => {
     expect(bright).toBeGreaterThan(dark + 100);
   });
 });
+
+describe('stacked alpha', () => {
+  it('shows the top half and takes alpha from the bottom half, so the scene shows through the cut-out', () => {
+    // 100×200 file: red picture on top; matte below is white on the left half, black on the right.
+    const file = createCanvas(100, 200);
+    const fctx = file.getContext('2d');
+    fctx.fillStyle = '#ff0000';
+    fctx.fillRect(0, 0, 100, 100);
+    fctx.fillStyle = '#000000';
+    fctx.fillRect(0, 100, 100, 100);
+    fctx.fillStyle = '#ffffff';
+    fctx.fillRect(0, 100, 50, 100);
+    const document = validate({
+      version: 1,
+      stage: {
+        children: [
+          {
+            kind: 'scene',
+            name: 'S',
+            width: 100,
+            height: 100,
+            fill: '#0000ff',
+            active: true,
+            children: [{ kind: 'image', width: 100, height: 100, src: 'cut.png', alpha: 'stacked' }],
+          },
+        ],
+      },
+    });
+    const renderer = createRenderer(document, { image: () => file as never, video: () => null, duration: () => null, canvas: (w, h) => createCanvas(w, h) });
+    const canvas = createCanvas(100, 100);
+    renderer.render(canvas.getContext('2d') as never, renderer.exportFrame(0));
+    const at = (x: number, y: number) => [...canvas.getContext('2d').getImageData(x, y, 1, 1).data].slice(0, 3);
+    expect(at(25, 50)).toEqual([255, 0, 0]);
+    expect(at(75, 50)).toEqual([0, 0, 255]);
+    // The matte half is never drawn: the bottom of the node is still the picture or the scene.
+    expect(at(25, 95)).toEqual([255, 0, 0]);
+  });
+});

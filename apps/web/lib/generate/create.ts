@@ -5,6 +5,7 @@
  * dịch), đánh thức worker.
  */
 
+import { MASTER_SRC } from "@opencmo/editor-core";
 import { specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
 
 import { ApiError } from "@/lib/api/errors";
@@ -65,6 +66,22 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
   return out;
 }
 
+/**
+ * The document names the clip's own video `assets/master.mp4`; background removal reads it from
+ * storage as `<bucket>:<object>` (master in `renders`, or the 540p proxy in `sources`). Read under RLS,
+ * so another user's clip resolves to nothing. SQL checks the owner and the object again.
+ */
+async function resolveClipVideo(supabase: SupabaseClient, request: CreateRequest, spec: unknown): Promise<unknown> {
+  const input = spec as Record<string, unknown> | null;
+  if (!input || input.sourceVideo !== MASTER_SRC) return spec;
+  if (!request.clipId) throw new ApiError(422, "Choose a video from your library to edit.");
+  const job = await supabase.from("jobs").select("media_manifest").eq("id", request.jobId).maybeSingle<{ media_manifest: unknown }>();
+  const manifest = (job.data?.media_manifest ?? {}) as { masters?: Record<string, { bucket?: string; object?: string }>; proxies?: Record<string, { bucket?: string; object?: string }> };
+  const entry = manifest.masters?.[request.clipId] ?? manifest.proxies?.[request.clipId];
+  if (!entry?.bucket || !entry.object) throw new ApiError(422, "This clip has no editable source yet. Process the video again to edit it.");
+  return { ...input, sourceVideo: `${entry.bucket}:${entry.object}` };
+}
+
 export async function createGeneration(
   supabase: SupabaseClient,
   request: CreateRequest,
@@ -72,7 +89,7 @@ export async function createGeneration(
   await loadCatalog(supabase);
   const model = availableModel(request.model);
   if (!model) throw new ApiError(422, "This model is not available.");
-  const spec = normalizeSpec(model, await resolveMediaRefs(supabase, request.jobId, request.spec));
+  const spec = normalizeSpec(model, await resolveClipVideo(supabase, request, await resolveMediaRefs(supabase, request.jobId, request.spec)));
   // Kiểm lời TRƯỚC khi đặt credit: bị chặn thì không tốn gì, không có task nào.
   await moderateText(specText(spec).join("\n"));
   const result = await rpcOrThrow<{ generation: GenerationRow & { task_id?: string }; reused: boolean }>(

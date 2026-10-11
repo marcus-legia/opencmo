@@ -143,6 +143,10 @@ export type PreparedGeneration = {
   quote?: string;
   /** Specs of the extra image variants: same as `spec` but another seed, each its own generation. */
   variants?: GenerationSpec[];
+  /** Other generations the same op places (e.g. the background behind a cut-out), each on its own model. */
+  extra?: { model: AiModel; spec: GenerationSpec }[];
+  /** Card lines that replace the generic "Generate …" summary. */
+  lines?: string[];
 };
 
 /** Tìm mốc CLIP của câu trích; ném lỗi đọc được khi không có trong clip. */
@@ -283,6 +287,7 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
 
 export function generateCard(prepared: PreparedGeneration, clipId: string) {
   const credits = `${prepared.credits} ${prepared.credits === 1 ? "credit" : "credits"}`;
+  if (prepared.lines) return { clips: [{ id: clipId, label: "This clip" }], changes: prepared.lines, credits: prepared.credits };
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
@@ -463,12 +468,16 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // Every variant is its own generation and credit hold; all of them start or none do.
   const started: { id: string; credits_reserved: number }[] = [];
   const cancelAll = () => Promise.all(started.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
-  for (const spec of [prepared.spec, ...(prepared.variants ?? [])]) {
+  const runs = [
+    ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
+    ...(prepared.extra ?? []),
+  ];
+  for (const { model, spec } of runs) {
     try {
       const { generation } = await createGeneration(env.supabase, {
         jobId: env.jobId,
         clipId: env.clipId,
-        model: prepared.model.id,
+        model: model.id,
         spec,
         requestId: randomUUID(),
       });

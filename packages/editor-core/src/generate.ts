@@ -52,6 +52,11 @@ export type AiModel = {
 		sourceVideo?: boolean;
 		/** Upscale (G4): model `sourceVideo` không cần lời — provider gửi độ phân giải đích. */
 		upscale?: boolean;
+		/**
+		 * Background removal: a `sourceVideo` model whose result is a stacked-alpha cut-out. Only these
+		 * models may read the clip's own video (`renders:` / `sources:` refs), not just library files.
+		 */
+		removeBackground?: boolean;
 		/** Tên tham số kích thước phía provider (chỉ worker dùng). */
 		sizeParam?: string;
 	};
@@ -93,6 +98,9 @@ const mediaRef = z
  * (`strict`), để hai spec khác nhau không bao giờ băm ra cùng một hash chỉ vì
  * một field lạ bị bỏ qua ở lớp dưới.
  */
+/** The clip's own video, or a library video: `<bucket>:<owner>/…` for the first, `<owner>/…` for the second. */
+const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
+
 export function specSchema(model: AiModel) {
 	const { limits } = model;
 	const prompt = z.string().trim().min(1, 'Write a prompt first.').max(limits.maxPromptChars, `Keep the prompt under ${limits.maxPromptChars} characters.`);
@@ -124,7 +132,11 @@ export function specSchema(model: AiModel) {
 				...(limits.audio ? { audio: z.boolean().optional() } : {}),
 				...(limits.sourceVideo
 					? {
-							sourceVideo: z.string().max(500).regex(/^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.').refine((value) => !value.includes('..'), 'Choose the video to edit.'),
+							sourceVideo: z
+								.string()
+								.max(500)
+								.regex(limits.removeBackground ? CLIP_VIDEO_REF : /^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.')
+								.refine((value) => !value.includes('..'), 'Choose the video to edit.'),
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),

@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import type { ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -39,6 +39,7 @@ import { TopBar, type ExportState } from "./TopBar";
 
 import { Inspector } from "./inspector/Inspector";
 import { variantsOf } from "./inspector/variants";
+import { BackgroundPanel } from "./generate/BackgroundPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
@@ -432,6 +433,7 @@ function Workspace({
   useVoiceovers({ document: state.document, library, run, notify: setNotice });
   const enabledModels = useEnabledModels();
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [backgroundRange, setBackgroundRange] = useState<{ start: number; end: number } | null>(null);
   // Gieo sẵn ô Generate từ menu chuột phải; `key` mount lại panel để nó nhận giá trị mới.
   const [generateInitial, setGenerateInitial] = useState<{ key: number; kind: "video"; firstFrame?: string; edit?: EditSource } | null>(null);
   const [visualsOpen, setVisualsOpen] = useState(false);
@@ -1069,6 +1071,10 @@ function Workspace({
     enabled: enabledModels,
     regenerate: (id) => void run([{ op: "regenerate", element_id: id, seed: Math.floor(Math.random() * 2_147_483_647) }]),
     pickVariant: (id, seed) => void run([{ op: "pick_variant", element_id: id, seed }]),
+    replaceBackground: () => {
+      const at = Math.round((playback.frame / 30) * 100) / 100;
+      setBackgroundRange({ start: at, end: at + 5 });
+    },
     enhance: (id, resolution) => void run([{ op: "enhance_generated", element_id: id, resolution }]),
     animate: (path) => {
       setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "video", firstFrame: path }));
@@ -1429,6 +1435,16 @@ function Workspace({
             initial={generateInitial ?? undefined}
           />
         ) : null}
+        {backgroundRange ? (
+          <BackgroundPanel
+            enabled={enabledModels}
+            range={backgroundRange}
+            aspect={frameAspect(Number(activeScene(session.current).width), Number(activeScene(session.current).height))}
+            busy={busy}
+            onApply={(ops) => void generate(ops)}
+            onClose={() => setBackgroundRange(null)}
+          />
+        ) : null}
         <div className="ed2-tools" role="toolbar" aria-label="Tools">
           <button
             type="button"
@@ -1580,6 +1596,7 @@ function aiMenuItems({
   enabled,
   regenerate,
   pickVariant,
+  replaceBackground,
   enhance,
   animate,
   extend,
@@ -1592,6 +1609,7 @@ function aiMenuItems({
   enabled: Set<string> | null;
   regenerate: (id: string) => void;
   pickVariant: (id: string, seed: number) => void;
+  replaceBackground: () => void;
   enhance: (id: string, resolution: string) => void;
   animate: (path: string) => void;
   extend: (plan: ExtendPlan) => void;
@@ -1642,7 +1660,7 @@ function aiMenuItems({
   if (path && storedImages(manifest).some((image) => image.path === path)) {
     items.push({ label: "Animate this image", onSelect: () => animate(path), testid: "ai-animate" });
   }
-  const editModel = liveModels().find((model) => model.limits.sourceVideo && !model.limits.upscale && enabled?.has(model.id));
+  const editModel = liveModels().find((model) => model.limits.sourceVideo && !model.limits.upscale && !model.limits.removeBackground && enabled?.has(model.id));
   const edit = editModel ? videoSourceOf(found, manifest, editModel) : null;
   if (edit) items.push({ label: "Edit with AI…", onSelect: () => editVideo(edit), testid: "ai-edit-video" });
   const upscaleModel = liveModels().find((model) => model.limits.upscale && enabled?.has(model.id));
@@ -1656,6 +1674,10 @@ function aiMenuItems({
         testid: `ai-upscale-${resolution}`,
       });
     }
+  }
+  // The speaker's own video: cut them out with AI and put a new place behind them.
+  if (found.kind === "video" && found.src === MASTER_SRC && liveModels().some((model) => model.limits.removeBackground && enabled?.has(model.id))) {
+    items.push({ label: "Replace background…", onSelect: replaceBackground, testid: "ai-replace-background" });
   }
   const plan = extendPlanOf(found, document, enabled);
   if (plan) {

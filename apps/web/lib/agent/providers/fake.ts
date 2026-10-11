@@ -23,6 +23,7 @@
  *   "side by side with" → list_library → insert_asset → apply_layout side_by_side: người nói trái, B-roll phải (E5)
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
  *   "intro"            → plan_video intro (the Video agent team; storyboard card)
+ *   "replace the background" → replace_background 2–6 s (cut-out + new background, one card)
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -283,6 +284,9 @@ function script(history: StoredMessage[]): unknown[] {
         }),
       ),
     ];
+  }
+  if (/replace the background/.test(ask)) {
+    return [text("I'll swap the room behind you for a bright office."), use("replace_background", { start: 2, end: 6, background: "a bright modern office with plants, soft morning light" })];
   }
   if (/\bintro\b/.test(ask)) {
     return [text("I'll have the video team plan an intro."), use("plan_video", { recipe: "intro", brief: "confident, clean, brand colours" })];

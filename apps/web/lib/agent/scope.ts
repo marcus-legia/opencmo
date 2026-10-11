@@ -51,6 +51,7 @@ import {
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
+import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -60,7 +61,7 @@ import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runChec
  */
 async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
   try {
-    await moderateText(specText(prepared.spec).join("\n"));
+    await moderateText([prepared.spec, ...(prepared.extra ?? []).map((item) => item.spec)].flatMap((spec) => specText(spec)).join("\n"));
     return null;
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
@@ -70,7 +71,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
 // add_3d_studio (4 khuôn) không còn cho agent: 3D của agent là code (add_3d_scene, spec code-scenes).
-const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -130,10 +131,11 @@ export function clipScope(
   });
   const env = { workspace };
   const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
+  const background = backgroundToolSpec();
   return {
     kind: "clip",
     // Tool mới thêm ở CUỐI: thứ tự tool là phần đầu của prompt cache.
-    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL],
+    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : [])],
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -238,6 +240,16 @@ export function clipScope(
         );
         if (typeof prepared === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the 3D scene" };
+        }
+        const blocked = await screen(prepared);
+        if (blocked) return blocked;
+        return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
+      }
+      if (call.name === "replace_background") {
+        const snapshot = await workspace.read();
+        const prepared = prepareBackground(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
+        if (typeof prepared === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the new background" };
         }
         const blocked = await screen(prepared);
         if (blocked) return blocked;
