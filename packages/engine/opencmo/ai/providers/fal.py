@@ -18,8 +18,10 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
@@ -33,6 +35,11 @@ QUEUE = "https://queue.fal.run"
 FAILED = "Generation failed. Your credits were refunded."
 BUSY = "The generator is busy. Please try again in a minute."
 MAX_BYTES = 1024 * 1024 * 1024
+#: Waits between tries once a job was submitted. A retryable error after submit would make the
+#: worker run the task again and submit (and pay for) the same job twice, so fetch retries here.
+FETCH_BACKOFF = (2.0, 5.0, 10.0)
+
+T = TypeVar("T")
 
 #: Model dùng `image_size` thay cho `aspect_ratio` (catalog `limits.sizeParam`).
 IMAGE_SIZES = {
@@ -154,7 +161,15 @@ class FalProvider(ProviderAdapter):
     poll_seconds = 5.0
     timeout_seconds = 900.0
 
-    def __init__(self, key: str, *, client: httpx.Client | None = None, download: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        key: str,
+        *,
+        client: httpx.Client | None = None,
+        download: httpx.Client | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._sleep = sleep
         self._client = client or httpx.Client(timeout=60, headers={"Authorization": f"Key {key}"})
         # Client tải file KHÔNG mang khoá: link kết quả là host CDN, khoá chỉ đi tới API hàng đợi.
         self._download = download or httpx.Client(timeout=300, follow_redirects=True)
@@ -188,6 +203,12 @@ class FalProvider(ProviderAdapter):
             body = self._check(self._client.get(urls["status_url"]))
         except httpx.HTTPError:
             return Poll("running")
+        except ProviderError as exc:
+            # 429/5xx on the status URL: the job is still queued at fal. Keep polling (run() caps
+            # the wait) instead of failing the task, which would submit it again.
+            if exc.retryable:
+                return Poll("running")
+            raise
         status = str(body.get("status") or "")
         if status == "COMPLETED":
             return Poll("done")
@@ -199,6 +220,8 @@ class FalProvider(ProviderAdapter):
         """Streams a result file to `raw` under the size cap; returns its content type."""
         written = 0
         with self._download.stream("GET", url) as resp:
+            if resp.status_code == 429 or resp.status_code >= 500:
+                raise ProviderError(BUSY, retryable=True)
             if resp.status_code >= 400:
                 raise ProviderError(FAILED)
             content_type = resp.headers.get("content-type", "").split(";")[0].strip()
@@ -213,14 +236,14 @@ class FalProvider(ProviderAdapter):
     def _fetch_cutout(self, body: dict[str, Any], dest_dir: Path) -> Result:
         picture_url, matte_url = cutout_urls(body)
         picture = dest_dir / "fal-picture"
-        picture_format = demuxer(self._get(picture_url, picture))
+        picture_format = demuxer(self._after_submit(lambda: self._get(picture_url, picture)))
         if not picture_format:
             raise ProviderError(FAILED)
         out = dest_dir / "result.mp4"
         try:
             if matte_url:
                 matte = dest_dir / "fal-matte"
-                matte_format = demuxer(self._get(matte_url, matte))
+                matte_format = demuxer(self._after_submit(lambda: self._get(matte_url, matte)))
                 if not matte_format:
                     raise ProviderError(FAILED)
                 stack_matte(picture, picture_format, matte, matte_format, out)
@@ -232,14 +255,30 @@ class FalProvider(ProviderAdapter):
             raise ProviderError(FAILED) from exc
         return Result(out, "video/mp4", "mp4")
 
+    def _after_submit(self, call: Callable[[], T]) -> T:
+        """Runs `call`, retrying 429/5xx and network errors; then fails for good (refund), never
+        with a retryable error that would make the worker submit the paid job again."""
+        for wait in (*FETCH_BACKOFF, None):
+            try:
+                return call()
+            except httpx.HTTPError:
+                pass
+            except ProviderError as exc:
+                if not exc.retryable:
+                    raise
+            if wait is None:
+                raise ProviderError(FAILED)
+            self._sleep(wait)
+        raise ProviderError(FAILED)
+
     def fetch(self, ref: str, dest_dir: Path) -> Result:
         urls = json.loads(ref)
-        body = self._check(self._client.get(urls["response_url"]))
+        body = self._after_submit(lambda: self._check(self._client.get(urls["response_url"])))
         if urls.get("cutout"):
             return self._fetch_cutout(body, dest_dir)
         url = result_url(body)
         raw = dest_dir / "fal-result"
-        content_type = self._get(url, raw)
+        content_type = self._after_submit(lambda: self._get(url, raw))
         result = _normalize(raw, content_type, dest_dir, seconds=urls.get("seconds"))
         words = speech_words(body)
         return Result(result.path, result.content_type, result.extension, words=words) if words else result

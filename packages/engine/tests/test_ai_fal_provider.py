@@ -160,3 +160,45 @@ def test_sound_is_trimmed_to_the_seconds_paid_for(tmp_path):
     )
     assert float(json.loads(probe.stdout)["format"]["duration"]) <= 2.1
     assert result.words is None
+
+
+def test_429_or_5xx_after_submit_never_submits_the_paid_job_again(tmp_path):
+    """A busy status or result URL keeps waiting; the job is submitted once."""
+    png = _png(tmp_path / "out.png").read_bytes()
+    calls = {"POST": 0, "status": 0, "result": 0, "cdn": 0}
+
+    def api(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            calls["POST"] += 1
+            return httpx.Response(200, json={"status_url": "https://queue.fal.run/x/requests/r1/status", "response_url": "https://queue.fal.run/x/requests/r1"})
+        if request.url.path.endswith("/status"):
+            calls["status"] += 1
+            return httpx.Response(429 if calls["status"] == 1 else 200, json={"status": "COMPLETED"})
+        calls["result"] += 1
+        return httpx.Response(503 if calls["result"] == 1 else 200, json={"images": [{"url": "https://v3.fal.media/files/out.png"}]})
+
+    def cdn(_request: httpx.Request) -> httpx.Response:
+        calls["cdn"] += 1
+        return httpx.Response(502 if calls["cdn"] == 1 else 200, content=png, headers={"content-type": "image/png"})
+
+    waits: list[float] = []
+    provider = FalProvider(
+        "k",
+        client=httpx.Client(transport=httpx.MockTransport(api)),
+        download=httpx.Client(transport=httpx.MockTransport(cdn)),
+        sleep=waits.append,
+    )
+    result = provider.run(get_model("fal-nano-banana"), {"prompt": "a fox", "aspectRatio": "1:1"}, tmp_path, sleep=lambda _s: None)
+    assert result is not None and result.path.exists()
+    assert calls["POST"] == 1, "never resubmitted"
+    assert waits == [2.0, 2.0]
+
+
+def test_result_still_busy_after_retries_fails_for_good(tmp_path):
+    from opencmo.ai.providers.base import ProviderError
+
+    provider = FalProvider("k", client=httpx.Client(transport=httpx.MockTransport(lambda _r: httpx.Response(503, json={}))), sleep=lambda _s: None)
+    ref = json.dumps({"status_url": "https://queue.fal.run/x/status", "response_url": "https://queue.fal.run/x"})
+    with pytest.raises(ProviderError) as info:
+        provider.fetch(ref, tmp_path)
+    assert info.value.retryable is False, "a retry would submit the paid job again"
