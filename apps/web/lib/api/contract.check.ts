@@ -1560,6 +1560,56 @@ async function main(): Promise<void> {
     for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
   });
 
+  await check("/video on a blank edit: storyboard card, Approve starts every shot, the voice and the music at once", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 40, reason: "contract check grant video" });
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const videoClip = (created.body as { clip_id: string }).clip_id;
+    const videoJob = ((await admin.from("clips").select("job_id").eq("id", videoClip).single()).data as { job_id: string }).job_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${videoClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: videoClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "/video a 15 second video about our hotel booking app" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
+    assert.equal(request!.data.name, "create_video");
+    const card = request!.data.card as { changes: string[]; credits: number; storyboard: { beats: unknown[]; columns: string[] } };
+    assert.match(card.changes[0]!, /^Create a 15s 9:16 video: 3 AI shots, voice-over, music · \d+ credits/, card.changes[0]);
+    assert.equal(card.storyboard.beats.length, 3);
+    assert.deepEqual(card.storyboard.columns, ["Shot", "Voice"]);
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.map((event) => [event.event, event.data])));
+    const { data: made } = await admin.from("generations").select("id, model, spec, credits_reserved").eq("clip_id", videoClip);
+    assert.equal(made?.length, 5, "3 shots, the voice and the music, all at once");
+    assert.equal((made ?? []).reduce((sum, item) => sum + (item as { credits_reserved: number }).credits_reserved, 0), card.credits);
+
+    const nodes = everything(await documentOf(a, videoClip));
+    const shots = nodes.filter((node) => JSON.stringify(node.paints ?? []).includes('"generate":"video"'));
+    assert.deepEqual(shots.map((node) => [node.start ?? 0, node.end]), [[0, 5], [5, 10], [10, 15]]);
+    // The editor resolves a shot like any declaration: same spec → the generation already made.
+    const shot = (shots[1]!.paints as { src: { model: string; prompt: string; aspectRatio: string; duration: number; seed: number } }[])[0]!.src;
+    const resolved = await callApi(a, "/generations", {
+      method: "POST",
+      body: JSON.stringify({
+        job_id: videoJob, clip_id: videoClip, model: shot.model, request_id: crypto.randomUUID(),
+        spec: { prompt: shot.prompt, aspectRatio: shot.aspectRatio, duration: shot.duration, seed: shot.seed },
+      }),
+    });
+    assert.equal((resolved.body as { reused: boolean }).reused, true, JSON.stringify(resolved.body));
+    for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
+  });
+
+  await check("/image goes straight to generate_media", async () => {
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const imageClip = (created.body as { clip_id: string }).clip_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${imageClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: imageClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "/image a fox in the snow" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.equal(request?.data.name, "generate_media", JSON.stringify(first.events.map((event) => event.event)));
+    await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: false }] });
+  });
+
   await check("Video agent team: intro storyboard card, Approve adds one intro group", async () => {
     const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
     const introClip = (created.body as { clip_id: string }).clip_id;

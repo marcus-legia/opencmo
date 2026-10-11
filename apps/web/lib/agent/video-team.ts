@@ -39,7 +39,15 @@ export type PreparedVideo = { recipe: "intro"; spec: IntroSpec; op: { op: "add_i
 
 export type VideoCard = { clips: { id: string; label: string }[]; changes: string[]; credits: number; storyboard: Storyboard };
 
-export type Storyboard = { seconds: number; personality: string; beats: { at: number; dur: number; label: string; motion: string }[] };
+export type Storyboard = {
+  seconds: number;
+  personality: string;
+  beats: { at: number; dur: number; label: string; motion: string }[];
+  /** Column titles after Time; an intro's beats are "Element" / "Motion". */
+  columns?: [string, string];
+  /** Last row's text; null hides it (a full video has no exit beat). */
+  closing?: string | null;
+};
 
 const writerSchema = z.object({ title: z.string().min(1).max(40), tagline: z.string().max(60).optional() });
 

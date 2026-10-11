@@ -50,7 +50,8 @@
           6,
           8
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 60
       }
     },
     {
@@ -226,7 +227,8 @@
           "720p"
         ],
         "firstFrame": true,
-        "lastFrame": true
+        "lastFrame": true,
+        "typicalSeconds": 10
       }
     },
     {
@@ -466,7 +468,8 @@
           "720p"
         ],
         "firstFrame": true,
-        "lastFrame": true
+        "lastFrame": true,
+        "typicalSeconds": 45
       }
     },
     {
@@ -494,7 +497,8 @@
           5,
           10
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 180
       }
     },
     {
@@ -522,7 +526,8 @@
           6,
           10
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 120
       }
     },
     {

@@ -3911,6 +3911,41 @@ span.ed2-asst-model {
   padding: 10px 12px 12px;
   border-top: 1px solid var(--ds-line);
 }
+.ed2-asst-slash {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 4px;
+  border: 1px solid var(--ds-line);
+  border-radius: 12px;
+  background: var(--ds-raised);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.ed2-asst-slash button {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ds-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed2-asst-slash button .ed2-muted {
+  grid-column: 2;
+  font-size: 12px;
+}
+.ed2-asst-slash li[aria-selected="true"] button,
+.ed2-asst-slash button:hover {
+  background: var(--ds-selected-soft, rgba(127, 127, 127, 0.15));
+}
+.ed2-asst-slash-name {
+  font-weight: 600;
+}
 .ed2-asst-compose {
   position: relative;
   display: flex;

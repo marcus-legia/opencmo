@@ -14,7 +14,7 @@ import "server-only";
  * reasoning, and a separate context keeps the checker from being persuaded by the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions" | "writer" | "motion";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions" | "writer" | "motion" | "director";
 export type ProviderKind = "anthropic";
 
 export type AgentSpec = {
@@ -38,6 +38,7 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   captions: { id: "captions", label: "Captions", role: "Translates captions in the editor.", tier: "check" },
   writer: { id: "writer", label: "Writer", role: "Writes the on-screen words of an intro or title card for a clip.", tier: "draft" },
   motion: { id: "motion", label: "Motion director", role: "Plans the beats, timing and easing of an animated intro.", tier: "draft" },
+  director: { id: "director", label: "Director", role: "Writes the script and shot list of an AI video from a prompt.", tier: "draft" },
 };
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];

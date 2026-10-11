@@ -24,6 +24,7 @@
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
  *   "intro"            → plan_video intro (the Video agent team; storyboard card)
  *   "replace the background" → replace_background 2–6 s (cut-out + new background, one card)
+ *   "/video …" (slash directive) → create_video 15 s · "/image …" → generate_media image at 0 s
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -207,6 +208,17 @@ function script(history: StoredMessage[]): unknown[] {
   const lines = [...original.matchAll(/\[[\d.]+–[\d.]+\] ([^\n<]+)/g)].map((match) => match[1]!.trim());
   const lineWith = (word: string) => lines.find((line) => line.toLowerCase().includes(word)) ?? lines[1] ?? lines[0] ?? "";
   const quoted = /'([^']{4,})'/.exec(original.split(/<clip_context>|<project_state>/)[0]!)?.[1];
+  // Slash commands: the directive names the tool; the words after the command are the request.
+  const words = (original.split(/<command|<clip_context>|<project_state>/)[0] ?? "").replace(/^\s*\/[a-z]+\s*/i, "").trim();
+  if (/<command name="\/video">/.test(ask)) {
+    return [text("I'll have the director plan the video."), use("create_video", { prompt: words || "a short product video", seconds: 15 })];
+  }
+  if (/<command name="\/image">/.test(ask)) {
+    return [
+      text("I'll create that image."),
+      use("generate_media", { kind: "image", idea: words || "the product at work", subject: "a laptop on a hotel desk", setting: "a bright lobby", style: "photo", start: 0, length: 3 }),
+    ];
+  }
   // Trước "square": "export it, also as a square copy" là một lượt export, không phải đổi khung.
   if (/\bexport/.test(ask)) {
     return [text("Exporting it, with a square copy for the feed."), use("request_export", { frames: ["9:16", "1:1"] })];

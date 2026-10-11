@@ -52,6 +52,7 @@ import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport 
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
+import { createVideoToolSpec, prepareCreateVideo } from "./create-video";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -71,7 +72,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
 // add_3d_studio (4 khuôn) không còn cho agent: 3D của agent là code (add_3d_scene, spec code-scenes).
-const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -132,10 +133,11 @@ export function clipScope(
   const env = { workspace };
   const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
+  const video = createVideoToolSpec();
   return {
     kind: "clip",
     // Tool mới thêm ở CUỐI: thứ tự tool là phần đầu của prompt cache.
-    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : [])],
+    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : [])],
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -244,6 +246,26 @@ export function clipScope(
         const blocked = await screen(prepared);
         if (blocked) return blocked;
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
+      }
+      if (call.name === "create_video") {
+        // The director plans here, before the card; its model calls are charged on this turn.
+        const snapshot = await workspace.read();
+        const planned = await prepareCreateVideo(call.input, { document: snapshot.document }, async (usage) => {
+          await rpcOrThrow<number>(supabase, "agent_record_usage", {
+            p_turn_id: turn.id,
+            p_model: usage.model,
+            p_input: usage.input,
+            p_output: usage.output,
+            p_cache_read: usage.cacheRead,
+            p_cache_write: usage.cacheWrite,
+          });
+        });
+        if (typeof planned === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the video" };
+        }
+        const blocked = await screen(planned.prepared);
+        if (blocked) return blocked;
+        return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
       }
       if (call.name === "replace_background") {
         const snapshot = await workspace.read();

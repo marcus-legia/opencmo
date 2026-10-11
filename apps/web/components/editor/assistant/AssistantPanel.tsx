@@ -35,6 +35,8 @@ import { api } from "@/components/clipping/api";
 import type { RenderTask } from "@/lib/api/tasks";
 
 import type { ToolAnswer } from "./capture";
+import { SLASH_COMMANDS } from "@/lib/agent/slash";
+
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
 
@@ -101,6 +103,14 @@ export function AssistantPanel({
   const liveRef = useRef<LiveTurn | null>(null);
   const [imagesByTool, setImagesByTool] = useState<Record<string, string[]>>({});
   const [draft, setDraft] = useState("");
+  const [slashIndex, setSlashIndex] = useState(0);
+  // "/vi" → the commands that start with it; gone once a space follows the command.
+  const slashMatches = /^\/[a-z]*$/.test(draft) ? SLASH_COMMANDS.filter((command) => command.name.startsWith(draft.slice(1))) : [];
+  const pickSlash = (name: string) => {
+    setDraft(`/${name} `);
+    setSlashIndex(0);
+    input.current?.focus();
+  };
   const [attach, setAttach] = useState({ frame: false, playhead: false, selection: false });
   // Giọng chọn ở ô chat: GIỮ qua các lượt (người dùng chọn một giọng cho cả clip).
   const [voice, setVoice] = useState<string | null>(null);
@@ -521,20 +531,46 @@ export function AssistantPanel({
             />
           ) : null}
         </div>
+        {slashMatches.length ? (
+          <ul className="ed2-asst-slash" role="listbox" aria-label="Commands" data-testid="assistant-slash">
+            {slashMatches.map((command, index) => (
+              <li key={command.name} role="option" aria-selected={index === Math.min(slashIndex, slashMatches.length - 1)}>
+                <button type="button" data-testid={`slash-${command.name}`} onMouseDown={(event) => event.preventDefault()} onClick={() => pickSlash(command.name)}>
+                  <span className="ed2-asst-slash-name">/{command.name}</span>
+                  <span>{command.label}</span>
+                  <span className="ed2-muted">{command.hint}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="ed2-asst-compose">
           <textarea
             ref={input}
             className="ed2-asst-input"
-            placeholder="Ask for an edit, e.g. “cut the pauses, add a hook and B-roll”"
+            placeholder="Ask for an edit, or type / for commands like /video"
             value={draft}
             rows={2}
             maxLength={4000}
             disabled={busy}
             aria-label="Message the assistant"
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setSlashIndex(0);
+            }}
             onKeyDown={(event) => {
               // Phím trong ô chat là của ô chat, không phải phím tắt của canvas.
               event.stopPropagation();
+              if (slashMatches.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                event.preventDefault();
+                setSlashIndex((index) => (index + (event.key === "ArrowDown" ? 1 : slashMatches.length - 1)) % slashMatches.length);
+                return;
+              }
+              if (slashMatches.length && (event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+                event.preventDefault();
+                pickSlash(slashMatches[Math.min(slashIndex, slashMatches.length - 1)]!.name);
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void send(draft);
@@ -937,8 +973,8 @@ function StoryboardTable({ storyboard }: { storyboard: Storyboard }) {
       <thead>
         <tr>
           <th>Time</th>
-          <th>Element</th>
-          <th>Motion</th>
+          <th>{storyboard.columns?.[0] ?? "Element"}</th>
+          <th>{storyboard.columns?.[1] ?? "Motion"}</th>
         </tr>
       </thead>
       <tbody>
@@ -951,11 +987,13 @@ function StoryboardTable({ storyboard }: { storyboard: Storyboard }) {
             <td>{beat.motion}</td>
           </tr>
         ))}
-        <tr>
-          <td>until {storyboard.seconds.toFixed(1)}s</td>
-          <td>everything</td>
-          <td>fades out to the clip</td>
-        </tr>
+        {storyboard.closing === null ? null : (
+          <tr>
+            <td>until {storyboard.seconds.toFixed(1)}s</td>
+            <td>everything</td>
+            <td>{storyboard.closing ?? "fades out to the clip"}</td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
