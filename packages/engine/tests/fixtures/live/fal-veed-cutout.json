@@ -1,0 +1,16 @@
+{
+  "video": [
+    {
+      "url": "https://v3b.fal.media/files/b/example/result_color.mp4",
+      "content_type": "application/octet-stream",
+      "file_name": "color.mp4",
+      "file_size": 396902
+    },
+    {
+      "url": "https://v3b.fal.media/files/b/example/result_alpha.mp4",
+      "content_type": "application/octet-stream",
+      "file_name": "alpha.mp4",
+      "file_size": 108059
+    }
+  ]
+}

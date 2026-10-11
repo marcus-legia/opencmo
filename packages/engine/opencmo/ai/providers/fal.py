@@ -18,8 +18,10 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
@@ -30,9 +32,19 @@ from opencmo.ai.providers.elevenlabs import words_from_alignment
 from opencmo.media.ffmpeg import run
 
 QUEUE = "https://queue.fal.run"
+#: fal storage: a short-lived token, then raw bytes to the CDN (what fal_client.upload_file does).
+STORAGE_TOKEN = "https://rest.fal.ai/storage/auth/token?storage_type=fal-cdn-v3"
+CDN = "https://v3.fal.media"
+#: The user's video stays on fal's CDN only as long as a job needs it.
+UPLOAD_LIFECYCLE = json.dumps({"expiration_duration_seconds": 86400})
 FAILED = "Generation failed. Your credits were refunded."
 BUSY = "The generator is busy. Please try again in a minute."
 MAX_BYTES = 1024 * 1024 * 1024
+#: Waits between tries once a job was submitted. A retryable error after submit would make the
+#: worker run the task again and submit (and pay for) the same job twice, so fetch retries here.
+FETCH_BACKOFF = (2.0, 5.0, 10.0)
+
+T = TypeVar("T")
 
 #: Model dùng `image_size` thay cho `aspect_ratio` (catalog `limits.sizeParam`).
 IMAGE_SIZES = {
@@ -74,24 +86,28 @@ def speech_payload(model: AiModel, spec: dict[str, Any]) -> dict[str, Any]:
     return {"text": str(spec["prompt"]), "duration_seconds": seconds, "prompt_influence": 0.3}
 
 
-def build_payload(model: AiModel, spec: dict[str, Any]) -> dict[str, Any]:
-    """Tham số chung của các endpoint fal; chỉ gửi thứ spec có (catalog đã kiểm khả năng)."""
+def build_payload(model: AiModel, spec: dict[str, Any], video_url: Callable[[Path], str] = data_url) -> dict[str, Any]:
+    """Tham số chung của các endpoint fal; chỉ gửi thứ spec có (catalog đã kiểm khả năng).
+
+    `video_url` turns the source video into a URL. Video endpoints reject data URLs (VEED: "URL
+    should have at most 2083 characters", checked live 2026-10-11), so the provider uploads it.
+    """
     if model.kind in ("voice", "audio"):
         return speech_payload(model, spec)
     if model.limits.get("upscale"):
         # Upscale (G4, SeedVR2): chỉ video + độ phân giải đích; prompt không có nghĩa với model này.
         return {
-            "video_url": data_url(Path(spec["sourceVideo"])),
+            "video_url": video_url(Path(spec["sourceVideo"])),
             "upscale_mode": "target",
             "target_resolution": spec.get("resolution") or "1080p",
         }
     if model.limits.get("removeBackground"):
         # H.264 comes back as a picture video plus an alpha matte video; the worker stacks them.
-        return {"video_url": data_url(Path(spec["sourceVideo"])), "output_codec": "h264"}
+        return {"video_url": video_url(Path(spec["sourceVideo"])), "output_codec": "h264"}
     if model.limits.get("sourceVideo"):
         # Sửa video (Kling O1 Edit): chỉ prompt + video + ảnh tham chiếu; khung hình và độ dài
         # theo chính video nguồn, giữ tiếng gốc (người dùng sửa hình, không sửa lời nói).
-        edit: dict[str, Any] = {"prompt": spec["prompt"], "video_url": data_url(Path(spec["sourceVideo"])), "keep_audio": True}
+        edit: dict[str, Any] = {"prompt": spec["prompt"], "video_url": video_url(Path(spec["sourceVideo"])), "keep_audio": True}
         if spec.get("references"):
             edit["image_urls"] = [data_url(Path(ref)) for ref in spec["references"]]
         return edit
@@ -135,16 +151,22 @@ def result_url(body: dict[str, Any]) -> str:
 
 
 def cutout_urls(body: dict[str, Any]) -> tuple[str, str | None]:
-    """(picture, matte) of a background-removal result; matte is None when the picture has its own alpha."""
+    """(picture, matte) of a background-removal result; matte is None when the picture has its own alpha.
+
+    VEED on fal answers `{"video": [{"file_name": "color.mp4", …}, {"file_name": "alpha.mp4", …}]}`
+    (checked live 2026-10-11); single objects per key are accepted too.
+    """
     picture: str | None = None
     matte: str | None = None
-    for key, item in body.items():
-        if not isinstance(item, dict) or not item.get("url"):
-            continue
-        if any(word in key for word in ("alpha", "mask", "matte")):
-            matte = matte or str(item["url"])
-        elif picture is None or key == "video":
-            picture = str(item["url"])
+    for key, value in body.items():
+        for item in value if isinstance(value, list) else [value]:
+            if not isinstance(item, dict) or not item.get("url"):
+                continue
+            name = f"{key} {item.get('file_name') or ''} {item['url'].rsplit('/', 1)[-1]}".lower()
+            if any(word in name for word in ("alpha", "mask", "matte")):
+                matte = matte or str(item["url"])
+            elif picture is None or "color" in name:
+                picture = str(item["url"])
     if not picture:
         raise ProviderError(FAILED)
     return picture, matte
@@ -154,7 +176,15 @@ class FalProvider(ProviderAdapter):
     poll_seconds = 5.0
     timeout_seconds = 900.0
 
-    def __init__(self, key: str, *, client: httpx.Client | None = None, download: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        key: str,
+        *,
+        client: httpx.Client | None = None,
+        download: httpx.Client | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._sleep = sleep
         self._client = client or httpx.Client(timeout=60, headers={"Authorization": f"Key {key}"})
         # Client tải file KHÔNG mang khoá: link kết quả là host CDN, khoá chỉ đi tới API hàng đợi.
         self._download = download or httpx.Client(timeout=300, follow_redirects=True)
@@ -167,9 +197,35 @@ class FalProvider(ProviderAdapter):
             raise ProviderError(FAILED)
         return response.json()
 
+    def _upload(self, path: Path) -> str:
+        """Puts a local file on fal's CDN and returns its URL (video inputs cannot go as data URLs)."""
+        try:
+            token = self._check(self._client.post(STORAGE_TOKEN, json={}, headers={"Accept": "application/json"}))
+            mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            with path.open("rb") as fh:
+                response = self._client.post(
+                    f"{token.get('base_url') or CDN}/files/upload",
+                    content=fh.read(),
+                    headers={
+                        "Authorization": f"{token['token_type']} {token['token']}",
+                        "Content-Type": mime,
+                        "X-Fal-File-Name": path.name,
+                        "X-Fal-Object-Lifecycle": UPLOAD_LIFECYCLE,
+                        "X-Fal-Object-Lifecycle-Preference": UPLOAD_LIFECYCLE,
+                    },
+                )
+            url = self._check(response).get("access_url")
+        except httpx.HTTPError as exc:
+            raise ProviderError(BUSY, retryable=True) from exc
+        except KeyError as exc:
+            raise ProviderError(FAILED) from exc
+        if not url:
+            raise ProviderError(FAILED)
+        return str(url)
+
     def submit(self, model: AiModel, spec: dict[str, Any], workdir: Path) -> str:
         try:
-            body = self._check(self._client.post(f"{QUEUE}/{endpoint_for(model, spec)}", json=build_payload(model, spec)))
+            body = self._check(self._client.post(f"{QUEUE}/{endpoint_for(model, spec)}", json=build_payload(model, spec, self._upload)))
         except httpx.HTTPError as exc:
             raise ProviderError(BUSY, retryable=True) from exc
         if not body.get("status_url") or not body.get("response_url"):
@@ -188,6 +244,12 @@ class FalProvider(ProviderAdapter):
             body = self._check(self._client.get(urls["status_url"]))
         except httpx.HTTPError:
             return Poll("running")
+        except ProviderError as exc:
+            # 429/5xx on the status URL: the job is still queued at fal. Keep polling (run() caps
+            # the wait) instead of failing the task, which would submit it again.
+            if exc.retryable:
+                return Poll("running")
+            raise
         status = str(body.get("status") or "")
         if status == "COMPLETED":
             return Poll("done")
@@ -199,6 +261,8 @@ class FalProvider(ProviderAdapter):
         """Streams a result file to `raw` under the size cap; returns its content type."""
         written = 0
         with self._download.stream("GET", url) as resp:
+            if resp.status_code == 429 or resp.status_code >= 500:
+                raise ProviderError(BUSY, retryable=True)
             if resp.status_code >= 400:
                 raise ProviderError(FAILED)
             content_type = resp.headers.get("content-type", "").split(";")[0].strip()
@@ -213,14 +277,14 @@ class FalProvider(ProviderAdapter):
     def _fetch_cutout(self, body: dict[str, Any], dest_dir: Path) -> Result:
         picture_url, matte_url = cutout_urls(body)
         picture = dest_dir / "fal-picture"
-        picture_format = demuxer(self._get(picture_url, picture))
+        picture_format = demuxer(self._after_submit(lambda: self._get(picture_url, picture)), picture_url)
         if not picture_format:
             raise ProviderError(FAILED)
         out = dest_dir / "result.mp4"
         try:
             if matte_url:
                 matte = dest_dir / "fal-matte"
-                matte_format = demuxer(self._get(matte_url, matte))
+                matte_format = demuxer(self._after_submit(lambda: self._get(matte_url, matte)), matte_url)
                 if not matte_format:
                     raise ProviderError(FAILED)
                 stack_matte(picture, picture_format, matte, matte_format, out)
@@ -232,14 +296,30 @@ class FalProvider(ProviderAdapter):
             raise ProviderError(FAILED) from exc
         return Result(out, "video/mp4", "mp4")
 
+    def _after_submit(self, call: Callable[[], T]) -> T:
+        """Runs `call`, retrying 429/5xx and network errors; then fails for good (refund), never
+        with a retryable error that would make the worker submit the paid job again."""
+        for wait in (*FETCH_BACKOFF, None):
+            try:
+                return call()
+            except httpx.HTTPError:
+                pass
+            except ProviderError as exc:
+                if not exc.retryable:
+                    raise
+            if wait is None:
+                raise ProviderError(FAILED)
+            self._sleep(wait)
+        raise ProviderError(FAILED)
+
     def fetch(self, ref: str, dest_dir: Path) -> Result:
         urls = json.loads(ref)
-        body = self._check(self._client.get(urls["response_url"]))
+        body = self._after_submit(lambda: self._check(self._client.get(urls["response_url"])))
         if urls.get("cutout"):
             return self._fetch_cutout(body, dest_dir)
         url = result_url(body)
         raw = dest_dir / "fal-result"
-        content_type = self._get(url, raw)
+        content_type = self._after_submit(lambda: self._get(url, raw))
         result = _normalize(raw, content_type, dest_dir, seconds=urls.get("seconds"))
         words = speech_words(body)
         return Result(result.path, result.content_type, result.extension, words=words) if words else result

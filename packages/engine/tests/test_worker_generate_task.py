@@ -544,10 +544,13 @@ def _frame_rgba(path, at=0.5):
 
     probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout)
     width, height = probe["streams"][0]["width"], probe["streams"][0]["height"]
+    # Seeking into a 1 s test clip sometimes decodes no frame at all; at=0 reads the first one.
+    seek = ["-ss", str(at)] if at else []
     raw = subprocess.run(
-        ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        ["ffmpeg", "-v", "error", *seek, "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         capture_output=True, check=True,
     ).stdout
+    assert len(raw) == width * height * 3, f"no frame decoded from {path.name}"
     return raw, width, height
 
 
@@ -613,7 +616,8 @@ def test_fal_cutout_asks_for_h264_picture_and_matte(tmp_path):
     clip.write_bytes(b"mp4")
     model = get_model("fal-veed-cutout")
     spec = {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 4, "sourceVideo": str(clip), "sourceStart": 0}
-    assert build_payload(model, spec) == {"video_url": f"data:video/mp4;base64,{__import__('base64').b64encode(b'mp4').decode()}", "output_codec": "h264"}
+    # Video endpoints reject data URLs; the provider uploads the clip and passes its URL.
+    assert build_payload(model, spec, lambda path: f"https://cdn/{path.name}") == {"video_url": "https://cdn/source.mp4", "output_codec": "h264"}
     assert endpoint_for(model, spec) == "veed/video-background-removal"
 
 
@@ -639,7 +643,7 @@ def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
         check=True,
     )
     out = stack_matte(picture, "mov", matte, "mov", tmp_path / "stacked.mp4")
-    raw, width, height = _frame_rgba(out)
+    raw, width, height = _frame_rgba(out, at=0)
     assert (width, height) == (320, 480)
     assert raw[(10 * width + 10) * 3] > 200, "top half is the red picture"
     assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30, "bottom half is the matte, scaled to the picture"
@@ -651,7 +655,7 @@ def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
         check=True,
     )
     out = stack_embedded(webm, "matroska", tmp_path / "stacked2.mp4")
-    raw, width, height = _frame_rgba(out)
+    raw, width, height = _frame_rgba(out, at=0)
     assert (width, height) == (320, 480)
     assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30
 
@@ -672,3 +676,19 @@ def test_fake_cutout_keeps_an_ellipse_of_the_source(tmp_path):
     assert (width, height) == (360, 1280), "picture on top of the matte"
     assert _luma(raw, width, 180, 640 + 352) > 200, "subject in the middle is opaque"
     assert _luma(raw, width, 5, 640 + 5) < 30, "corner is transparent"
+
+
+LIVE = Path(__file__).parent / "fixtures" / "live"
+
+
+def test_fal_cutout_parses_the_real_veed_response():
+    """`fixtures/live/fal-veed-cutout.json` is a real response (URLs replaced), 2026-10-11."""
+    from opencmo.ai.cutout import demuxer
+    from opencmo.ai.providers.fal import cutout_urls
+
+    body = json.loads((LIVE / "fal-veed-cutout.json").read_text())
+    picture, matte = cutout_urls(body)
+    assert picture.endswith("_color.mp4") and matte and matte.endswith("_alpha.mp4")
+    # fal serves both as application/octet-stream: the extension picks the demuxer.
+    assert demuxer("application/octet-stream", picture) == "mov"
+    assert demuxer("application/octet-stream", "https://x/out.bin") is None

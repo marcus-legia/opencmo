@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import type { ClipDocument } from '@opencmo/clip-doc';
 
+import { walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
 import { addGenerated, addText, setFrame } from './project';
 import { setWorkarea } from './timeline';
@@ -48,11 +49,14 @@ export const createVideoInput = z.object({
 		.min(1)
 		.max(MAX_SHOTS),
 	voice: z.object({ text: z.string().trim().min(1).max(5000), voice: z.string().min(1).max(100), seed }).optional(),
-	music: z.object({ model: z.string().min(1).max(100), prompt: z.string().trim().min(1).max(2000), seed, duration: z.number().int().min(1).max(600) }).optional(),
+	/** One music generation; a video longer than it plays it again (paid once), see `apply`. */
+	music: z.object({ model: z.string().min(1).max(100), prompt: z.string().trim().min(1).max(2000), seed, duration: z.number().int().min(1).max(60) }).optional(),
 });
 export type CreateVideo = z.infer<typeof createVideoInput>;
 
 const TOLERANCE = 0.05;
+/** Seconds of gain fade on each side of a seam where the music starts again. */
+const SEAM = 1;
 
 /** Shots must play back to back from 0 to the end of the video, with no gap or overlap. */
 export function checkShots(input: Pick<CreateVideo, 'seconds' | 'shots'>): string | null {
@@ -108,11 +112,32 @@ export const createVideo = {
 			);
 		}
 		if (input.music) {
-			next = await addGenerated.apply(
-				next,
-				{ op: 'add_generated', kind: 'audio', model: input.music.model, prompt: input.music.prompt, seed: input.music.seed, duration: input.music.duration, start: 0, volume: -18 } as never,
-				ctx,
-			);
+			// Music models stop at 60 s and audio has no loop: the same declaration plays again from
+			// where it ends (one generation, paid once), the last copy is trimmed to the video, and
+			// each seam crossfades in gain.
+			const music = input.music;
+			for (let start = 0; start < input.seconds - 0.05; start += music.duration) {
+				next = await addGenerated.apply(
+					next,
+					{ op: 'add_generated', kind: 'audio', model: music.model, prompt: music.prompt, seed: music.seed, duration: music.duration, start, volume: -18 } as never,
+					ctx,
+				);
+			}
+			const copies: Entity[] = [];
+			walk(next, ({ entity }) => {
+				const src = entity.src as { generate?: string; seed?: number } | undefined;
+				if (entity.kind === 'audio' && src?.generate === 'audio' && src.seed === music.seed) copies.push(entity);
+			});
+			copies.sort((a, b) => Number(a.start ?? 0) - Number(b.start ?? 0));
+			copies.forEach((copy, index) => {
+				const last = index === copies.length - 1;
+				if (last) copy.end = Math.min(Number(copy.end), input.seconds);
+				if (copies.length === 1) return;
+				copy.animations = [
+					...(index > 0 ? [{ type: 'gain', phase: 'in', duration: SEAM }] : []),
+					...(last ? [] : [{ type: 'gain', phase: 'out', duration: SEAM }]),
+				];
+			});
 		}
 		return next;
 	},

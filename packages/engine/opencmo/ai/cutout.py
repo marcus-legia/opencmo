@@ -17,8 +17,17 @@ _DEMUXERS = {"video/mp4": "mov", "video/quicktime": "mov", "video/webm": "matros
 _ENCODE = ["-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
 
 
-def demuxer(content_type: str) -> str | None:
-    return _DEMUXERS.get(content_type)
+_BY_EXTENSION = {".mp4": "mov", ".mov": "mov", ".webm": "matroska"}
+
+
+def demuxer(content_type: str, url: str = "") -> str | None:
+    """Demuxer for a result file. fal serves VEED results as `application/octet-stream`, so the
+    file extension of the URL decides then (still an allowlist, never ffmpeg's sniffing)."""
+    known = _DEMUXERS.get(content_type)
+    if known:
+        return known
+    path = url.split("?", 1)[0].lower()
+    return next((fmt for ext, fmt in _BY_EXTENSION.items() if path.endswith(ext)), None)
 
 
 def stack_matte(picture: Path, picture_format: str, matte: Path, matte_format: str, out: Path) -> Path:

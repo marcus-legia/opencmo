@@ -53,6 +53,7 @@ import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo } from "./create-video";
+import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -270,8 +271,18 @@ export function clipScope(
           const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, or ask for a shorter video.`;
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
         }
-        const blocked = await screen(planned.prepared);
-        if (blocked) return blocked;
+        const shotCount = planned.storyboard.beats.length;
+        const pieces = [planned.prepared.spec, ...(planned.prepared.extra ?? []).map((item) => item.spec)].map((spec, index) => ({
+          label:
+            index < shotCount
+              ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
+              : (planned.prepared.extra ?? [])[index - 1]?.model.kind === "voice"
+                ? "The voice-over script"
+                : "The music",
+          spec,
+        }));
+        const blocked = await screenPieces(pieces);
+        if (blocked) return { kind: "invalid", ...blocked };
         return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
       }
       if (call.name === "replace_background") {

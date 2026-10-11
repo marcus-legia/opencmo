@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import httpx
@@ -120,7 +121,27 @@ def check_output(model: AiModel, spec: dict, path: Path) -> None:
         images = [path] if model.kind == "image" else _frames(path, Path(tmp))
         if not images:
             raise ProviderError(BLOCKED)
-        check_images(images)
+        _after_generation(lambda: check_images(images))
+
+
+#: Waits between tries of an output check. The media is already made and paid for: a retryable error
+#: here would make the worker run the task again and generate (and pay for) it a second time.
+OUTPUT_CHECK_BACKOFF = (2.0, 5.0, 10.0)
+_sleep = time.sleep
+
+
+def _after_generation(check) -> None:
+    for wait in (*OUTPUT_CHECK_BACKOFF, None):
+        try:
+            return check()
+        except ProviderError as exc:
+            if not exc.retryable:
+                raise
+            if wait is None:
+                # Never delivered unchecked; fail for good so the trigger refunds the user.
+                raise ProviderError(UNCHECKED) from exc
+            log.warning("Output check busy, trying again in %ss", wait)
+            _sleep(wait)
 
 
 def check_images(images: list[Path]) -> None:
