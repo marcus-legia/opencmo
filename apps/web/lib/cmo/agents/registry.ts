@@ -8,12 +8,13 @@ import "server-only";
  *   CMO_AGENT_<ID>_MODEL    = Claude model id
  *   CMO_AGENT_<ID>_API_KEY  = the agent's own key; defaults to ANTHROPIC_API_KEY
  *
- * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, VIDEO, CHECKER, CAPTIONS.
+ * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, VIDEO, CHECKER, CAPTIONS,
+ * WRITER, MOTION (the editor's Video agent team).
  * Two tiers: drafting agents use Opus, checking agents use Haiku — a check does not need deep
  * reasoning, and a separate context keeps the checker from being persuaded by the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions" | "writer" | "motion";
 export type ProviderKind = "anthropic";
 
 export type AgentSpec = {
@@ -35,6 +36,8 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   video: { id: "video", label: "Video", role: "Writes captions for clips cut from the founder's own videos.", tier: "draft" },
   checker: { id: "checker", label: "Checker", role: "Reviews drafts and scores threads in a separate context.", tier: "check" },
   captions: { id: "captions", label: "Captions", role: "Translates captions in the editor.", tier: "check" },
+  writer: { id: "writer", label: "Writer", role: "Writes the on-screen words of an intro or title card for a clip.", tier: "draft" },
+  motion: { id: "motion", label: "Motion director", role: "Plans the beats, timing and easing of an animated intro.", tier: "draft" },
 };
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];

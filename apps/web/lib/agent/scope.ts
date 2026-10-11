@@ -51,6 +51,7 @@ import {
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
+import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
@@ -75,7 +76,7 @@ const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover"]
 export type Plan =
   | { kind: "run" }
   | { kind: "browser"; input: unknown }
-  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> }
+  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
 
@@ -132,7 +133,7 @@ export function clipScope(
   return {
     kind: "clip",
     // Tool mới thêm ở CUỐI: thứ tự tool là phần đầu của prompt cache.
-    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC],
+    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL],
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -170,6 +171,26 @@ export function clipScope(
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the captions" };
         }
         return { kind: "approval", input: prepared, card: captionsCard(prepared, clipId) };
+      }
+      if (call.name === "plan_video") {
+        // The team plans here, before the card: the user approves the exact storyboard that is
+        // applied. Its model calls are charged on this turn like the Assistant's own steps.
+        const snapshot = await workspace.read();
+        const clipContext = await clipContextBlock(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest)).catch(() => "");
+        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext }, async (usage) => {
+          await rpcOrThrow<number>(supabase, "agent_record_usage", {
+            p_turn_id: turn.id,
+            p_model: usage.model,
+            p_input: usage.input,
+            p_output: usage.output,
+            p_cache_read: usage.cacheRead,
+            p_cache_write: usage.cacheWrite,
+          });
+        });
+        if (typeof planned === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the intro" };
+        }
+        return { kind: "approval", input: planned.prepared, card: { ...planned.card, clips: [{ id: clipId, label: "This clip" }] } };
       }
       if (call.name === "request_export") {
         const prepared = await prepareExport(supabase, clipId, call.input);
@@ -253,6 +274,18 @@ export function clipScope(
             ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
             : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
+      if (call.name === "plan_video") {
+        if (!approved) {
+          return {
+            outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined the storyboard. Nothing was added." }), summary: "Declined" },
+            extra: {},
+            wrote: false,
+          };
+        }
+        const prepared = input as PreparedVideo;
+        const outcome = await applyOpTool(prepared.op as never, env);
+        return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
+      }
       if (call.name === "request_export") {
         if (!approved) {
           return {
@@ -291,7 +324,7 @@ export function clipScope(
       );
       return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };
     },
-    isWrite: (name) => name === "undo" || name === "apply_brand_kit" || CAPTION_TOOLS.has(name) || isWriteTool(name),
+    isWrite: (name) => name === "undo" || name === "apply_brand_kit" || name === "plan_video" || CAPTION_TOOLS.has(name) || isWriteTool(name),
   };
 }
 

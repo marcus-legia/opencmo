@@ -12,6 +12,7 @@ live next to the files.
 | OpenCMO starter Lottie animations | `packages/clip-media/lottie/` | CC0-1.0 |
 | Lucide icons | `packages/clip-icons/data/`, `apps/web/components/icons/` | ISC (`LUCIDE-LICENSE`, `LICENSE-lucide.txt`) |
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
+| Motion design skill by LottieFiles (adapted) | `apps/web/lib/agent/motion-guide.ts`, `packages/editor-core/src/motion/intro.ts` | MIT (`apps/web/lib/agent/LICENSE-motion-design.md`) |
 
 Voice previews in `apps/web/public/voices/` and demo clips in `apps/web/public/demos/` were
 produced with OpenCMO and its configured providers for use in the product UI.

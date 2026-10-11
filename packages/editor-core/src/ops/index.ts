@@ -39,6 +39,7 @@ import { applyLayout } from './layouts';
 import { addVoiceover, captionVoiceover, syncVoiceover, syncVoiceovers } from './voiceover';
 import { insertCaptions, insertToRow, moveToRow } from './rows';
 import { laneOf } from '../tracks';
+import { addIntro } from '../motion/intro';
 import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, stagger, updateVisual } from './visuals';
 
 export { OpError, OpFailure, type OpContext } from './context';
@@ -135,6 +136,7 @@ const REGISTRY = [
 	moveToRow,
 	insertCaptions,
 	captionVoiceover,
+	addIntro,
 ] as const;
 
 type Definition = {

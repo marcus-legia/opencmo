@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Action,
   ApprovalCard,
+  Storyboard,
   AssistantClient,
   AssistantEvent,
   Attachments,
@@ -634,6 +635,9 @@ function Turn({
             {approvals.flatMap((request) => (request.card as ApprovalCard).changes).map((change, index) => (
               <p key={index}>{change}</p>
             ))}
+            {approvals.map((request) => (request.card as ApprovalCard).storyboard).map((storyboard, index) =>
+              storyboard ? <StoryboardTable key={`storyboard-${index}`} storyboard={storyboard} /> : null,
+            )}
           </div>
           {approvals.length > 1 && approvals.some((request) => (request.card as ApprovalCard).credits) ? (
             <p className="ed2-asst-total" data-testid="assistant-approval-total">
@@ -923,5 +927,36 @@ function WorkingBar({ turn, live, onStop }: { turn: LiveTurn; live: boolean; onS
         Stop
       </button>
     </div>
+  );
+}
+
+/** The storyboard the Video agent team planned: one row per beat, in time order. */
+function StoryboardTable({ storyboard }: { storyboard: Storyboard }) {
+  return (
+    <table className="ed2-asst-storyboard" data-testid="assistant-storyboard">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Element</th>
+          <th>Motion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {storyboard.beats.map((beat, index) => (
+          <tr key={index}>
+            <td>
+              {beat.at.toFixed(1)}–{(beat.at + beat.dur).toFixed(1)}s
+            </td>
+            <td>{beat.label}</td>
+            <td>{beat.motion}</td>
+          </tr>
+        ))}
+        <tr>
+          <td>until {storyboard.seconds.toFixed(1)}s</td>
+          <td>everything</td>
+          <td>fades out to the clip</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
