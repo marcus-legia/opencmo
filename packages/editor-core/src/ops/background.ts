@@ -51,6 +51,19 @@ export function frameAspect(width: number, height: number): '9:16' | '16:9' | '1
 /** `offset`: seconds into the master node's own timeline where the range starts (its keyframes' clock). */
 type Master = { node: Entity; owner: Entity; sourceStart: number; offset: number };
 
+const MOVING = ['x', 'y', 'offsetX', 'offsetY', 'scale', 'scaleX', 'scaleY', 'rotation'];
+
+/** A parent that moves, scales or rotates its children, statically or with keyframes (apply_layout animates them). */
+function movesChildren(entity: Entity): boolean {
+	const set = MOVING.some((key) => {
+		const value = entity[key];
+		if (value === undefined) return false;
+		return key.startsWith('scale') ? value !== 1 : value !== 0;
+	});
+	const tracks = (entity.tracks as { property?: string }[] | undefined) ?? [];
+	return set || tracks.some((track) => MOVING.includes(String(track.property)));
+}
+
 /** The master piece that plays the whole range, and the scene child that holds it. */
 function masterFor(document: ClipDocument, start: number, end: number, ctx?: Pick<OpContext, 'media'>): Master {
 	const scene = sceneOf(document);
@@ -68,7 +81,7 @@ function masterFor(document: ClipDocument, start: number, end: number, ctx?: Pic
 				if (transformed) throw new OpFailure('Turn off the layout on this part of the clip first.');
 				return { node: entity, owner, sourceStart: round(((from - t.origin) * t.rate) / FPS), offset: round((from - t.start) / FPS) };
 			}
-			const moved = transformed || (!isMaster(entity as unknown as ClipNode) && ['x', 'y', 'scale', 'rotation'].some((key) => entity[key] !== undefined && entity[key] !== 0 && !(key === 'scale' && entity[key] === 1)));
+			const moved = transformed || (!isMaster(entity as unknown as ClipNode) && movesChildren(entity));
 			for (const child of (entity.children as Entity[] | undefined) ?? []) stack.push({ entity: child, transformed: moved });
 		}
 	}
