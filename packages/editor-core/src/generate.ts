@@ -57,6 +57,8 @@ export type AiModel = {
 		 * models may read the clip's own video (`renders:` / `sources:` refs), not just library files.
 		 */
 		removeBackground?: boolean;
+		/** About how many seconds one generation takes (provider's published speed); shown on cards. */
+		typicalSeconds?: number;
 		/** Tên tham số kích thước phía provider (chỉ worker dùng). */
 		sizeParam?: string;
 	};

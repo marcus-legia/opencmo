@@ -17,6 +17,7 @@ import { loadCatalog } from "@/lib/generate/models";
 
 import { clipScope, cmoScope, projectScope, type Scope } from "./scope";
 import { sseResponse } from "./sse";
+import { slashDirective } from "./slash";
 
 export type SessionRow = { id: string; scope: "clip" | "project" | "cmo"; clip_id: string | null; job_id: string | null; model: string };
 
@@ -83,7 +84,7 @@ export async function startTurn(supabase: SupabaseClient, sessionId: string | un
   const turn = await rpcOrThrow<Turn>(supabase, "agent_begin_turn", {
     p_session_id: session.id,
     p_prompt: prompt,
-    p_content: provider.userTurn(prompt, `${attachmentText(attachments)}${state}`, images),
+    p_content: provider.userTurn(prompt, `${slashDirective(prompt)}${attachmentText(attachments)}${state}`, images),
   });
   const scope = await scopeFor(supabase, session, turn);
   return sseResponse(async (emit) => {

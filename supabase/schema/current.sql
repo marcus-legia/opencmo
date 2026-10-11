@@ -4579,7 +4579,7 @@ CREATE FUNCTION public.full_edit_max_seconds() RETURNS integer
 CREATE FUNCTION public.generation_active_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select 6 $$;
+    AS $$ select 24 $$;
 
 
 --

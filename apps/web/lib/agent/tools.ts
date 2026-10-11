@@ -450,7 +450,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 ];
 
 // `generate_media`/`add_3d_scene`/`add_voiceover` ghi lên clip (khai báo `generate.*`) sau thẻ duyệt.
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "generate_media", "add_3d_scene", "add_voiceover", "replace_background"]);
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };

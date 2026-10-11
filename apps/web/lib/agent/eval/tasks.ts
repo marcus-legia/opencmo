@@ -445,6 +445,28 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "videocreate",
+    prompt: "/video a 15 second video introducing our hotel booking app",
+    // A blank "New edit".
+    setup(document) {
+      const scene = document.stage.children[0] as unknown as Entity;
+      scene.children = [];
+      scene.workarea = [0, 10];
+    },
+    grade(outcome) {
+      const notes: string[] = [];
+      const gen = outcome.generations?.find((item) => (item.op as { op?: string }).op === "create_video");
+      if (!check(notes, Boolean(gen), "no create_video from /video")) return { pass: false, notes };
+      const shots = all(outcome.document).filter((item) => ((item.entity.paints as { src?: { generate?: string } }[] | undefined) ?? []).some((paint) => paint.src?.generate === "video"));
+      const covered = check(notes, shots.length >= 2, `${shots.length} video shots placed`);
+      const parallel = check(notes, (gen!.extra?.length ?? 0) >= shots.length - 1, "not every shot, voice and music start together");
+      const voice = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "voice"), "no voice-over");
+      const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
+      const length = check(notes, workarea?.[1] === 15, `work area ${JSON.stringify(workarea)}`);
+      return { pass: covered && parallel && voice && length && sane(outcome, notes), notes };
+    },
+  },
+  {
     id: "blankgen",
     prompt: "Create an AI image at 2s of our booking app on a laptop.",
     // A blank "New edit": no speaker, no captions, nothing to quote.

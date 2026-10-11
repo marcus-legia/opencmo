@@ -113,7 +113,7 @@ const nameOf = (text: string): string => {
  * Lớp phụ đề của một voiceover: cùng kiểu VÀ cùng chỗ với phụ đề của video (hay
  * kit): preset, màu, vị trí, cỡ. Chưa có `src` tới khi giọng về.
  */
-function voiceCaptions(document: ClipDocument, key: string, start: number, mode: VoiceoverMark['mode'], hidden: boolean): ClipNode {
+function voiceCaptions(document: ClipDocument, key: string, start: number, end: number, mode: VoiceoverMark['mode'], hidden: boolean): ClipNode {
 	const root = sceneOf(document)!;
 	const style = readCaptionStyle(document);
 	const video = nodes(document).find((node) => node.kind === 'captions' && !markOf(node as never)) as Entity | undefined;
@@ -132,6 +132,8 @@ function voiceCaptions(document: ClipDocument, key: string, start: number, mode:
 		...placement,
 		...(hidden ? { hidden: true } : {}),
 		start,
+		// Until the voice arrives there is no transcript to size the layer; end with the voice, not 16 s later.
+		end,
 		marks: { [VOICEOVER_MARK]: { key } },
 	} as ClipNode;
 }
@@ -151,7 +153,7 @@ export const addVoiceover = {
 		children.push({ kind: 'audio', name: nameOf(input.text), src: plan.src, start: plan.start, end: plan.end, marks: { [VOICEOVER_MARK]: mark } } as ClipNode);
 		// Phụ đề của giọng LUÔN có; người dùng không muốn thì nó nằm ẩn — bật mắt
 		// trên timeline (hay "Show captions" ở inspector) là có ngay, không phải sinh lại.
-		children.push(voiceCaptions(next, key, plan.start, input.mode, !(input.captions ?? true)));
+		children.push(voiceCaptions(next, key, plan.start, plan.end, input.mode, !(input.captions ?? true)));
 		root.children = children;
 		return checked(next, 'That voiceover cannot be added');
 	},
@@ -221,6 +223,7 @@ export const syncVoiceover = {
 			for (const entity of captions) {
 				entity.src = src;
 				entity.start = start;
+				entity.end = node.end;
 			}
 		}
 		return checked(next, 'That voiceover cannot be attached');
@@ -269,7 +272,8 @@ export const captionVoiceover = {
 			return checked(next, 'Those captions cannot be added');
 		}
 		if (!input.words?.length) throw new OpFailure('The voiceover is still being generated. Try again when it plays.');
-		const layer = voiceCaptions(next, input.key, start, (markOf(node as never)?.mode ?? 'overlay'), false) as unknown as Entity;
+		const end = typeof node.end === 'number' ? node.end : start + estimateSeconds(String((node.src as { prompt?: string } | undefined)?.prompt ?? ''));
+		const layer = voiceCaptions(next, input.key, start, end, (markOf(node as never)?.mode ?? 'overlay'), false) as unknown as Entity;
 		layer.src = await ctx.saveTranscript(voiceTranscript(input.words));
 		// Thẳng dưới scene (`captionsOnTop` đưa lên trên cùng), dù voiceover nằm trong một hàng âm thanh.
 		const scene = sceneOf(next) as unknown as Entity;
