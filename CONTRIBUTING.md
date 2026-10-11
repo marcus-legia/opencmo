@@ -26,6 +26,9 @@ with incompatible licenses.
 Follow [Getting started](README.md#getting-started). In short: `npm ci`, a Python 3.12 venv
 for the engine, `cp apps/web/.env.example apps/web/.env.local`, then `npm run dev`.
 
+New accounts start with 0 credits. To try AI media locally, sign up at http://127.0.0.1:3000,
+then `cd apps/web && npm run dev:credits -- you@example.com` (local Supabase only; +1000 by default).
+
 Two engine tests (`test_worker_e2e_local`, `test_web_sql_concurrency`) claim tasks on the
 local Supabase stack; stop `npm run dev` before running them or the dev worker takes the task
 first.

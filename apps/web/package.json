@@ -8,6 +8,7 @@
     "sandbox:3d": "tsx ../../packages/clip-three/scripts/build-sandbox.mts public/sandbox/three.html",
     "predev": "npm run media:sync && npm run sandbox:3d",
     "dev": "next dev",
+    "dev:credits": "tsx scripts/dev-credits.mts",
     "prebuild": "npm run media:sync && npm run sandbox:3d",
     "build": "next build",
     "start": "next start",
