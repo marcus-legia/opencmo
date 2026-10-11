@@ -100,3 +100,42 @@ def test_real_scribe_response_becomes_sentence_segments(monkeypatch, tmp_path):
     assert [segment.text for segment in result.segments][:2] == ["Hello there.", "This is a short test of speech-to-text."]
     assert all(segment.words for segment in result.segments), "every segment keeps its word timings"
     assert " " not in [word.text for segment in result.segments for word in segment.words or []]
+
+
+def test_long_audio_is_sent_in_parallel_parts_and_merged_in_source_time(monkeypatch, tmp_path):
+    import subprocess
+
+    audio = tmp_path / "audio.m4a"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "25", "-c:a", "aac", "-b:a", "32k", str(audio)], check=True)
+    monkeypatch.setattr(transcribe, "CHUNK_SECONDS", 10.0)
+    sent: list[str] = []
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, name):
+            self.name = name
+
+        def json(self):
+            index = int(self.name.removeprefix("part").split(".")[0])
+            # Each part hears "word<index>" at 1 s and a word inside the overlap at 10.5 s.
+            tail = [_word(f"tail{index}", 10.5, 10.8)] if index < 2 else []  # the last part ends with the audio
+            return {"language_code": "eng", "words": [_word(f"w{index}.", 1.0, 1.4), *tail]}
+
+    def post(_url, *, files, **_kwargs):
+        name = files["file"][0]
+        sent.append(name)
+        return Response(name)
+
+    monkeypatch.setattr(transcribe.httpx, "post", post)
+    result = transcribe.transcribe_audio(audio, Config(elevenlabs_api_key="k"))
+    assert sorted(sent) == ["part0.m4a", "part1.m4a", "part2.m4a"]
+    words = [(word.text, round(word.start, 1)) for segment in result.segments for word in segment.words or []]
+    assert words == [("w0.", 1.0), ("w1.", 11.0), ("w2.", 21.0)], "overlap words dropped, times shifted"
+
+
+def test_chunk_starts_and_merge():
+    assert transcribe.chunk_starts(5.0) == [0.0]
+    assert transcribe.chunk_starts(1250.0) == [0.0, 600.0, 1200.0]
+    merged = transcribe.merge_parts([(0.0, [Word(599.5, 599.9, "a"), Word(600.5, 601.0, "dup")]), (600.0, [Word(0.5, 1.0, "b")])])
+    assert [(w.text, w.start) for w in merged] == [("a", 599.5), ("b", 600.5)]

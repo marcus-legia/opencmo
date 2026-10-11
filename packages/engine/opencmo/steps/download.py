@@ -275,7 +275,13 @@ def download_audio(url: str, cfg: Config, workdir: Path) -> Path:
 
     opts = {
         **_base_opts(cfg),
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        # Speech-to-text needs little: YouTube's ~48 kbps m4a or ~50-70 kbps opus keeps 54 minutes
+        # under the upload cap, so there is no re-encode and 2-3x less to pull through the proxy.
+        # `protocol^=https` for the same reason as SECTION_FORMAT (HLS can come back empty).
+        "format": (
+            "bestaudio[ext=m4a][abr<=64][protocol^=https]/bestaudio[ext=webm][abr<=80][protocol^=https]"
+            "/bestaudio[ext=m4a]/bestaudio/best"
+        ),
         "outtmpl": str(workdir / "audio_src.%(ext)s"),
     }
 
@@ -288,7 +294,7 @@ def download_audio(url: str, cfg: Config, workdir: Path) -> Path:
     raw = candidates[0]
     # Luồng gốc đã lọt trần thì gửi thẳng: hạ về mono tốn ~23s cho 54 phút
     # (đo trên sandbox 4 lõi), không đáng trả cho video ngắn.
-    if raw.suffix == ".m4a" and raw.stat().st_size <= TRANSCRIBE_MAX_BYTES:
+    if raw.suffix in (".m4a", ".webm") and raw.stat().st_size <= TRANSCRIBE_MAX_BYTES:
         return raw
     try:
         return extract_audio(raw, workdir / "audio.m4a")
