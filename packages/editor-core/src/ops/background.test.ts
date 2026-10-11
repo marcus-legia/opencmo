@@ -86,6 +86,19 @@ describe('replace_background', () => {
 		await expect(applyOps(doc([SPEAKER]), [{ ...swap, start: 0, end: 16 }], ctx)).rejects.toThrow(/up to 15 seconds/);
 		const moved = doc([{ kind: 'group', id: 'g', name: 'Speaker', x: 100, start: 0, end: 30, children: [{ ...SPEAKER, start: 0 }] }]);
 		await expect(applyOps(moved, [swap], ctx)).rejects.toThrow(/layout/);
+		// apply_layout moves the Speaker group with keyframes, not static props.
+		const animated = doc([
+			{
+				kind: 'group',
+				id: 'g',
+				name: 'Speaker',
+				start: 0,
+				end: 30,
+				tracks: [{ property: 'offsetY', keyframes: [{ time: 0, value: 0 }, { time: 1, value: -400 }] }],
+				children: [{ ...SPEAKER, start: 0 }],
+			},
+		]);
+		await expect(applyOps(animated, [swap], ctx)).rejects.toThrow(/layout/);
 	});
 
 	it('takes a library file as the background', async () => {

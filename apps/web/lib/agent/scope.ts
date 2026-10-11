@@ -52,7 +52,7 @@ import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport 
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
-import { createVideoToolSpec, prepareCreateVideo } from "./create-video";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo } from "./create-video";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -262,6 +262,13 @@ export function clipScope(
         });
         if (typeof planned === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the video" };
+        }
+        // Every piece starts on Approve: check the in-flight cap now, not after the user has approved.
+        const needed = 1 + (planned.prepared.extra?.length ?? 0);
+        const { count: running } = await supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
+        if ((running ?? 0) + needed > GENERATION_ACTIVE_LIMIT) {
+          const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, or ask for a shorter video.`;
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
         }
         const blocked = await screen(planned.prepared);
         if (blocked) return blocked;

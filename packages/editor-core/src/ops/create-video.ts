@@ -21,7 +21,8 @@ export const VIDEO_FRAMES: Record<(typeof VIDEO_ASPECTS)[number], { width: numbe
 	'16:9': { width: 1920, height: 1080 },
 	'1:1': { width: 1080, height: 1080 },
 };
-export const MAX_SHOTS = 24;
+/** 18 shots + voice + music = 20 generations, under the 24 a user may have in flight (`generation_active_limit`). */
+export const MAX_SHOTS = 18;
 
 const seed = z.number().int().min(0).max(2_147_483_647);
 const seconds = z.number().finite().min(0).max(600);

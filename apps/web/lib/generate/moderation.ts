@@ -61,6 +61,9 @@ export function specText(value: unknown, key = ""): string[] {
 
 type Client = Pick<Anthropic, "beta">;
 
+/** The user's text can hold `</prompt>` and fake instructions after it; escaped, it stays inside the data block. */
+const asData = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 /** One classification. Throws 503 when the check could not run; a refusal counts as blocked. */
 export async function classify(client: Client, input: string): Promise<Verdict> {
   let response;
@@ -70,7 +73,7 @@ export async function classify(client: Client, input: string): Promise<Verdict> 
       max_tokens: 1024,
       output_config: { effort: "low", format: betaZodOutputFormat(verdictSchema) },
       system: POLICY,
-      messages: [{ role: "user", content: `<prompt>\n${input}\n</prompt>` }],
+      messages: [{ role: "user", content: `<prompt>\n${asData(input)}\n</prompt>` }],
     });
   } catch (error) {
     console.error("[moderation] check failed", error instanceof Anthropic.APIError ? error.status : "", error instanceof Error ? error.message : error);
