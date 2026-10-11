@@ -131,9 +131,12 @@ def test_long_audio_is_sent_in_parallel_parts_and_merged_in_source_time(monkeypa
 
         def json(self):
             index = int(self.name.removeprefix("part").split(".")[0])
-            # Each part hears "word<index>" at 1 s and a word inside the overlap at 10.5 s.
-            tail = [_word(f"tail{index}", 10.5, 10.8)] if index < 2 else []  # the last part ends with the audio
-            return {"language_code": "eng", "words": [_word(f"w{index}.", 1.0, 1.4), *tail]}
+            # Parts 1 and 2 are cut 2 s before their window: they also hear the end of the previous
+            # window (1 s in) and their own word 3 s in. Parts 0 and 1 hear past their window's end.
+            if index == 0:
+                return {"language_code": "eng", "words": [_word("w0.", 1.0, 1.4), _word("tail0", 10.5, 10.8)]}
+            tail = [_word(f"tail{index}", 12.5, 12.8)] if index < 2 else []  # the last part ends with the audio
+            return {"language_code": "eng", "words": [_word(f"lead{index}", 1.0, 1.3), _word(f"w{index}.", 3.0, 3.4), *tail]}
 
     def post(_url, *, files, **_kwargs):
         name = files["file"][0]
@@ -150,8 +153,38 @@ def test_long_audio_is_sent_in_parallel_parts_and_merged_in_source_time(monkeypa
 def test_chunk_starts_and_merge():
     assert transcribe.chunk_starts(5.0) == [0.0]
     assert transcribe.chunk_starts(1250.0) == [0.0, 600.0, 1200.0]
-    merged = transcribe.merge_parts([(0.0, [Word(599.5, 599.9, "a"), Word(600.5, 601.0, "dup")]), (600.0, [Word(0.5, 1.0, "b")])])
-    assert [(w.text, w.start) for w in merged] == [("a", 599.5), ("b", 600.5)]
+    assert transcribe.cut_start(0.0) == 0.0 and transcribe.cut_start(600.0) == 598.0
+    merged = transcribe.merge_parts([
+        (0.0, 0.0, [Word(599.5, 599.7, "a"), Word(599.8, 600.4, "marketing"), Word(600.5, 601.0, "dup")]),
+        # Part 1 is cut at 598 s: it hears "marketing" whole at 1.8 s and "b" at 2.5 s.
+        (600.0, 598.0, [Word(1.8, 2.4, "marketing"), Word(2.5, 3.0, "b")]),
+    ])
+    assert [(w.text, w.start) for w in merged] == [("a", 599.5), ("marketing", 599.8), ("b", 600.5)]
+
+
+def test_a_word_on_the_cut_is_kept_once_even_when_the_next_part_hears_a_fragment():
+    """A part cut mid-word hears a fragment at its very start; it falls before the part's window."""
+    merged = transcribe.merge_parts([
+        (0.0, 0.0, [Word(599.8, 600.4, "marketing")]),
+        (600.0, 598.0, [Word(0.0, 0.3, "ting"), Word(1.8, 2.4, "marketing"), Word(2.6, 3.0, "works.")]),
+    ])
+    assert [w.text for w in merged] == ["marketing", "works."]
+
+
+def test_words_are_shifted_by_where_the_copy_really_starts():
+    """A stream copy of a WebM cut at 598 s starts at the cluster before it (595 s here)."""
+    merged = transcribe.merge_parts([(0.0, 0.0, []), (600.0, 594.994, [Word(8.008, 8.1, "beep")])])
+    assert [round(w.start, 3) for w in merged] == [603.002]
+
+
+def test_a_webm_part_reports_its_real_first_second(tmp_path):
+    import subprocess
+
+    source = tmp_path / "a.webm"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=440:d=40", "-c:a", "libopus", "-b:a", "32k", str(source)], check=True)
+    part, first = transcribe._cut_part(source, 20.0, tmp_path, 1)
+    assert first <= 18.0 + 0.05, "never later than the requested cut"
+    assert abs(transcribe._first_packet(part)) < 0.05, "the part itself starts at 0"
 
 
 def test_audio_longer_than_the_part_cap_is_refused_before_any_call(monkeypatch, tmp_path):

@@ -63,7 +63,12 @@ import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runChec
  */
 async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
   try {
-    await moderateText([prepared.spec, ...(prepared.extra ?? []).map((item) => item.spec)].flatMap((spec) => specText(spec)).join("\n"));
+    // Each model kind has its own policy, so each spec is judged on its own (variants share the prompt).
+    await Promise.all(
+      [{ model: prepared.model, spec: prepared.spec }, ...(prepared.extra ?? [])].map((item) =>
+        moderateText(specText(item.spec).join("\n"), { kind: item.model.kind }),
+      ),
+    );
     return null;
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
@@ -272,14 +277,16 @@ export function clipScope(
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
         }
         const shotCount = planned.storyboard.beats.length;
-        const pieces = [planned.prepared.spec, ...(planned.prepared.extra ?? []).map((item) => item.spec)].map((spec, index) => ({
+        const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
+        const pieces = runs.map(({ model, spec }, index) => ({
           label:
             index < shotCount
               ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
-              : (planned.prepared.extra ?? [])[index - 1]?.model.kind === "voice"
+              : model.kind === "voice"
                 ? "The voice-over script"
                 : "The music",
           spec,
+          kind: model.kind,
         }));
         const blocked = await screenPieces(pieces);
         if (blocked) return { kind: "invalid", ...blocked };

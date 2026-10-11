@@ -9,11 +9,12 @@ import type { GenerationSpec } from "@opencmo/editor-core/generate";
 import { ApiError } from "@/lib/api/errors";
 import { moderateText, specText } from "@/lib/generate/moderation";
 
-export type Piece = { label: string; spec: GenerationSpec };
+/** `kind` is the model kind the piece goes to: a voice script is judged as audio. */
+export type Piece = { label: string; spec: GenerationSpec; kind?: string };
 
 /** null when every piece passes; otherwise the tool result for the model and a short summary. */
 export async function screenPieces(pieces: Piece[]): Promise<{ content: string; summary: string } | null> {
-  const results = await Promise.allSettled(pieces.map((piece) => moderateText(specText(piece.spec).join("\n"))));
+  const results = await Promise.allSettled(pieces.map((piece) => moderateText(specText(piece.spec).join("\n"), { kind: piece.kind })));
   const blocked = pieces.filter((_piece, index) => {
     const result = results[index]!;
     return result.status === "rejected" && result.reason instanceof ApiError && result.reason.status === 422;

@@ -28,7 +28,7 @@ import { priceOf, type AiModel, type GenerationKind, type GenerationSpec } from 
 
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { createGeneration, normalizeSpec } from "@/lib/generate/create";
+import { checkGeneration, normalizeSpec, startGeneration, type PreparedCreate } from "@/lib/generate/create";
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
@@ -472,21 +472,29 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
     ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
     ...(prepared.extra ?? []),
   ];
-  for (const { model, spec } of runs) {
+  const failed = async (err: unknown) => {
+    await cancelAll();
+    const message = err instanceof ApiError && err.status < 500 ? err.message : "The generation could not be started.";
+    if (!(err instanceof ApiError)) console.error("[agent] generate_media failed", err);
+    return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
+  };
+  // Checks and moderation for every piece run at once (a /video has up to 20); nothing is held yet.
+  let ready: PreparedCreate[];
+  try {
+    ready = await Promise.all(
+      runs.map(({ model, spec }) =>
+        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() }),
+      ),
+    );
+  } catch (err) {
+    return failed(err);
+  }
+  // Credits are held one by one, so a failure cancels exactly the holds made so far.
+  for (const item of ready) {
     try {
-      const { generation } = await createGeneration(env.supabase, {
-        jobId: env.jobId,
-        clipId: env.clipId,
-        model: model.id,
-        spec,
-        requestId: randomUUID(),
-      });
-      started.push(generation);
+      started.push((await startGeneration(env.supabase, item)).generation);
     } catch (err) {
-      await cancelAll();
-      const message = err instanceof ApiError && err.status < 500 ? err.message : "The generation could not be started.";
-      if (!(err instanceof ApiError)) console.error("[agent] generate_media failed", err);
-      return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
+      return failed(err);
     }
   }
   const generation = { id: started[0]!.id, credits_reserved: started.reduce((sum, item) => sum + item.credits_reserved, 0) };

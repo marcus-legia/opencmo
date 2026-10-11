@@ -88,6 +88,8 @@ def _run(ctx: TaskContext) -> None:
     except RuntimeError as exc:
         if str(exc).startswith("Audio is too large"):
             raise _UserError(TOO_LONG) from exc
+        if str(exc).startswith("Could not read the audio"):
+            raise _UserError(NO_AUDIO) from exc
         raise
     segments = shift_segments(transcript.segments, start)
     if not segments:

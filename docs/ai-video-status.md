@@ -1,6 +1,6 @@
 # AI video on the editor — status and next steps
 
-Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12.
+Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12 (review fixes).
 
 ## What is on the branch
 
@@ -17,6 +17,7 @@ Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12.
 | `d5baad5` | Cut-out stacking probes the picture size instead of `scale2ref` (ffmpeg 7.1 aborted now and then). |
 | `ab944a5` | Long audio is transcribed in parallel ~10-minute parts; links pull ~48–70 kbps audio so no re-encode is needed. |
 | `7e0eb6b`, `ed9653b` | Security review: speech-to-text audio is read through the demuxer allowlist, capped at 18 parts (3 hours), and refused when its length cannot be read. |
+| Review fixes | Transcript parts: a stream copy starts at the container's seek point before `-ss` (a WebM cluster, up to 5 s early), so each part's real first second is read back (`-copyts`) and its words are shifted by that, not by the nominal cut; parts also start 2 s before their window, so a word on a cut is kept once; parts are cut inside the pool. Output moderation runs Haiku 5.5 at low effort and retries a verdict cut off by `max_tokens` instead of blocking it. Cut-outs of the user's own footage skip the "identifiable real person" rule; voice and audio scripts get their own text policy (names and brands allowed, voice cloning still blocked). Background removal reuses a live generation when the clip's master changed under the same declaration (no second charge). `/video` moderates every piece at once before holding credits. `--transcribe` also applies to picked moments; unreadable library audio says so; `keep_alignable` removed. |
 
 ## Budget measurements (54-minute interview, 5 clips)
 
@@ -25,11 +26,15 @@ Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12.
 | Local, h264_vaapi | file, Scribe in one call | 48–58 s | 4–11 s | 0 s | 34–46 s | 87–112 s | 244 MB |
 | Modal, libx264 | YouTube link, Scribe in one call | 107 s | 11 s | 118.5 s | 39 s | **286 s (over)** | — |
 
-Not yet measured after `ab944a5` (parallel parts, lighter link audio). Locally, extracting the audio of 54 minutes takes 14–19 s and Scribe answers in ~40 s in one call; the link route on Modal also pays the proxy for both the audio and the sections.
+Not yet measured end to end after `ab944a5` (parallel parts, lighter link audio). Locally, extracting the audio of 54 minutes takes 14–19 s and Scribe answers in ~40 s in one call; the link route on Modal also pays the proxy for both the audio and the sections.
+
+Cutting the parts alone (54 minutes, 6 parts, 4 vCPU, no Scribe call), measured 2026-10-12 in a cloud container: one copy per part, serial (`ab944a5`) 3.1–3.4 s; copy + offset read-back + remux, in the pool (review fixes) 2.2–2.6 s; re-encoding to Opus 32 kbps was 7–9 s and was dropped. Peak RSS per ffmpeg 50–54 MB. On a 25-minute beep track cut at 600 s and 1200 s, every beep lands within 10 ms of its source time, none twice.
 
 ## Plan
 
 ### A. Budget: 45-minute video → 5 clips in under 3 minutes, peak RAM < 2 GB
+
+Still open: needs the bench interview, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY` and Modal, none of which the review-fix session had.
 
 1. Re-measure locally with `--transcribe` (run twice, keep the second):
    `/usr/bin/time -v .venv312/bin/opencmo clip clips/bench/interview.mp4 --clips 5 --out clips/bench/out --transcribe --verbose`

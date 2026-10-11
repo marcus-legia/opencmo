@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 
 from ..config import Config
-from ..media.ffmpeg import USER_INPUT, run
+from ..media.ffmpeg import USER_INPUT, FFmpegError, run
 from ..models import Transcript, TranscriptSegment, Word
 
 log = logging.getLogger(__name__)
@@ -34,8 +34,10 @@ _PAUSE_SECONDS = 0.8
 _MAX_SEGMENT_SECONDS = 12.0
 
 # Scribe takes about 40 s for 54 minutes in one call (measured 11/10). Parts of this length are
-# sent at once, so the transcript waits for one part. Each part runs a little past the next
-# start and words are kept by start time, so a word on a cut is neither lost nor doubled.
+# sent at once, so the transcript waits for one part. Each part is cut a little before its own
+# start and runs a little past the next one, so a word on a cut is heard whole by both parts;
+# it is kept only by the part whose window holds its start, so it is neither lost nor doubled.
+# A part that began mid-word hears only a fragment, and that fragment falls before its window.
 CHUNK_SECONDS = 600.0
 _CHUNK_OVERLAP = 2.0
 _MAX_PARALLEL_PARTS = 6
@@ -130,15 +132,59 @@ def chunk_starts(duration: float, chunk: float | None = None) -> list[float]:
     return [index * chunk for index in range(count)]
 
 
-def merge_parts(parts: list[tuple[float, list[Word]]]) -> list[Word]:
-    """Shifts each part's words to source time and keeps a word in the part where it starts."""
+def cut_start(start: float) -> float:
+    """Where the part whose window begins at `start` is cut: one overlap earlier."""
+    return max(0.0, start - _CHUNK_OVERLAP)
+
+
+def _first_packet(path: Path) -> float:
+    proc = run([
+        "ffprobe", "-v", "error", *USER_INPUT, "-select_streams", "a:0", "-read_intervals", "%+#1",
+        "-show_entries", "packet=pts_time", "-of", "csv=p=0", str(path),
+    ], timeout=60)
+    return float(proc.stdout.split()[0].strip(","))
+
+
+def _cut_part(audio_path: Path, start: float, workdir: Path, index: int) -> tuple[Path, float]:
+    """The part for the window at `start`, and the source second its first sample is at.
+
+    Stream copy, `-ss` before `-i`: a part costs a fraction of a second, where re-encoding six
+    10-minute parts took 6-9 s. A copy starts at the container's seek point at or before `-ss`
+    (a WebM cluster, up to seconds early), so the real start is read back from the packets
+    (`-copyts` keeps source time), then the part is remuxed to start at 0 so Scribe's times and
+    the file agree whether a decoder honours timestamps or counts samples.
+    """
+    cut = cut_start(start)
+    raw = workdir / f"raw{index}{audio_path.suffix}"
+    part = workdir / f"part{index}{audio_path.suffix}"
+    run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *USER_INPUT, "-ss", f"{cut:.3f}",
+        # With `-copyts` output times are source times: the end is `-to`, not a `-t` length.
+        "-i", str(audio_path), "-to", f"{start + CHUNK_SECONDS + _CHUNK_OVERLAP:.3f}",
+        "-vn", "-c", "copy", "-copyts", str(raw),
+    ], timeout=120)
+    try:
+        first = _first_packet(raw)
+    except (FFmpegError, ValueError, IndexError) as exc:
+        raise RuntimeError("Could not read the audio to transcribe.") from exc
+    run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *USER_INPUT, "-i", str(raw),
+        "-c", "copy", "-avoid_negative_ts", "make_zero", str(part),
+    ], timeout=120)
+    return part, first
+
+
+def merge_parts(parts: list[tuple[float, float, list[Word]]]) -> list[Word]:
+    """`(window start, source second of the part's first sample, words)` per part: shifts the
+    words to source time and keeps a word in the part whose window `[start, next start)` holds
+    its start."""
     merged: list[Word] = []
-    for index, (start, words) in enumerate(parts):
+    for index, (start, offset, words) in enumerate(parts):
         end = parts[index + 1][0] if index + 1 < len(parts) else float("inf")
         for word in words:
-            at = word.start + start
+            at = word.start + offset
             if start <= at < end:
-                merged.append(Word(start=at, end=word.end + start, text=word.text))
+                merged.append(Word(start=at, end=word.end + offset, text=word.text))
     return merged
 
 
@@ -164,19 +210,18 @@ def transcribe_audio(audio_path: Path, cfg: Config) -> Transcript:
         languages = [payload.get("language_code")]
     else:
         with tempfile.TemporaryDirectory(prefix="opencmo-scribe-") as tmp:
-            paths = []
-            for index, start in enumerate(starts):
-                part = Path(tmp) / f"part{index}{audio_path.suffix}"
-                # Stream copy, `-ss` before `-i`: cutting a 54-minute file costs a second.
-                run([
-                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *USER_INPUT, "-ss", f"{start:.3f}",
-                    "-i", str(audio_path), "-t", f"{CHUNK_SECONDS + _CHUNK_OVERLAP:.3f}",
-                    "-vn", "-c", "copy", str(part),
-                ], timeout=120)
-                paths.append(part)
-            with ThreadPoolExecutor(max_workers=min(_MAX_PARALLEL_PARTS, len(paths))) as pool:
-                payloads = list(pool.map(lambda path: _post(path, cfg), paths))
-        words = merge_parts([(start, _words(payload)) for start, payload in zip(starts, payloads, strict=True)])
+
+            def cut_and_post(index: int, start: float) -> tuple[float, dict]:
+                # Cut inside the pool: each part is sent as soon as it is ready.
+                part, offset = _cut_part(audio_path, start, Path(tmp), index)
+                return offset, _post(part, cfg)
+
+            with ThreadPoolExecutor(max_workers=min(_MAX_PARALLEL_PARTS, len(starts))) as pool:
+                results = list(pool.map(cut_and_post, range(len(starts)), starts))
+        payloads = [payload for _offset, payload in results]
+        words = merge_parts([
+            (start, offset, _words(payload)) for start, (offset, payload) in zip(starts, results, strict=True)
+        ])
         languages = [payload.get("language_code") for payload in payloads]
         log.info("Transcribed %d parts of %.0f s in parallel", len(starts), CHUNK_SECONDS)
 
