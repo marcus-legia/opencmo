@@ -295,6 +295,16 @@ The Video agent team builds intros: do not assemble them with add_text and keyfr
 4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
 5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no lottie").`,
 
+  video: `# A whole AI video (create_video, /video)
+
+create_video makes a new video from a prompt: a director writes the voice-over and the shot list, the user approves one storyboard card, then every shot, the voice and the music are generated at once.
+
+1. Use it on a blank "New edit" only. On a clip of the user's own footage, add AI shots with B-roll (read_guide "broll") or generate_media instead: create_video would reframe and cover their video, and it refuses to run there.
+2. Pass the user's words as prompt. Pass seconds, aspect, voice or model only when the user asked for them. Shots come out at the model's shot lengths, so the video can end up a second shorter or longer than asked; say so if it matters.
+3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again.
+4. After approval the shots fill in as they finish (about one shot's wait). list_library until no shot is "still generating", then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
+5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.`,
+
   document: "",
 } as const;
 
