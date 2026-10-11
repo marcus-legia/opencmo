@@ -130,6 +130,7 @@ def test_music_with_empty_speech_to_text_result_is_a_valid_empty_transcript(monk
             return {"words": [], "language_code": "eng", "text": ""}
 
     monkeypatch.setattr(transcribe.httpx, "post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(transcribe, "_duration", lambda _path: 5.0)
     audio = tmp_path / "music.m4a"
     audio.write_bytes(b"audio")
 

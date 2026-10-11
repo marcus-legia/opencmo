@@ -8,6 +8,19 @@ from opencmo.config import Config
 from opencmo.models import Word
 from opencmo.steps import transcribe
 
+_REAL_DURATION = {
+    "test_long_audio_is_sent_in_parallel_parts_and_merged_in_source_time",
+    "test_part_cutting_and_probe_use_the_demuxer_allowlist",
+    "test_unreadable_audio_is_refused_before_any_call",
+}
+
+
+@pytest.fixture(autouse=True)
+def _short_audio(monkeypatch, request):
+    """Most cases send a few bytes as "audio": give them a readable 5 s length."""
+    if request.node.name not in _REAL_DURATION:
+        monkeypatch.setattr(transcribe, "_duration", lambda _path: 5.0)
+
 
 def _word(text: str, start: float, end: float) -> dict:
     return {"text": text, "start": start, "end": end, "type": "word"}
@@ -162,3 +175,11 @@ def test_part_cutting_and_probe_use_the_demuxer_allowlist(monkeypatch, tmp_path)
     monkeypatch.setattr(transcribe, "run", fake_run)
     assert transcribe._duration(tmp_path / "a.m4a") is None
     assert all(flag in seen[0] for flag in USER_INPUT)
+
+
+def test_unreadable_audio_is_refused_before_any_call(monkeypatch, tmp_path):
+    audio = tmp_path / "a.m4a"
+    audio.write_bytes(b"not audio")
+    monkeypatch.setattr(transcribe.httpx, "post", lambda *_a, **_k: pytest.fail("no paid call"))
+    with pytest.raises(RuntimeError, match="^Could not read the audio"):
+        transcribe.transcribe_audio(audio, Config(elevenlabs_api_key="k"))

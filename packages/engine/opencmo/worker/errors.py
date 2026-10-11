@@ -122,7 +122,7 @@ def processing_error(exc: Exception, stage: str = "") -> str:
             "audio is too large to transcribe:", "speech-to-text returned 413:",
         )):
             return _TOO_LONG
-        if message.startswith("no video stream found in "):
+        if message.startswith(("no video stream found in ", "could not read the audio to transcribe.")):
             return _SOURCE
     if isinstance(exc, ValidationError) and stage == "select":
         return "We could not select clips this time. Try again or select a time range yourself."

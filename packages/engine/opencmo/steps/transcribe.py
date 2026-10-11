@@ -151,7 +151,11 @@ def transcribe_audio(audio_path: Path, cfg: Config) -> Transcript:
         raise RuntimeError(f"Audio is too large to transcribe: {size} bytes.")
 
     duration = _duration(audio_path)
-    starts = chunk_starts(duration) if duration else [0.0]
+    if not duration:
+        # Fail closed: without a length the part cap cannot hold, and audio ffprobe cannot read
+        # is not worth a paid call. Fixed prefix: `worker/errors.py` maps it.
+        raise RuntimeError("Could not read the audio to transcribe.")
+    starts = chunk_starts(duration)
     if len(starts) > MAX_PARTS:
         raise RuntimeError(f"Audio is too large to transcribe: {duration:.0f} seconds.")
     if len(starts) == 1:
