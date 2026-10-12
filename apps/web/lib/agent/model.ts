@@ -63,5 +63,5 @@ export function providerForModel(model: string): Provider | null {
 /** Models the panel can offer (only those the server has a key for), default first. */
 export function availableModels(): { id: string; label: string }[] {
   if (fakeAllowed()) return [{ id: "fake", label: "Test model" }];
-  return hasAnthropicKey() ? [{ id: ANTHROPIC_MODEL, label: "Claude Opus 5" }] : [];
+  return hasAnthropicKey() ? [{ id: ANTHROPIC_MODEL, label: "Claude Sonnet 5.5" }] : [];
 }

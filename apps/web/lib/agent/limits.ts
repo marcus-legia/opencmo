@@ -4,7 +4,7 @@
  */
 
 /** Model mặc định cho agent (spec AI Studio §6.3, spec agent-editor §3.6). */
-export const AGENT_MODEL = "claude-opus-5";
+export const AGENT_MODEL = "claude-sonnet-5-5";
 
 /** Giữ trước mỗi lượt — phải TRÙNG `agent_hold_credits()` trong SQL. */
 export const AGENT_HOLD_CREDITS = 5;
