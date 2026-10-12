@@ -22,6 +22,7 @@ from opencmo.ai.catalog import (
     VIDEO_NOT_FOUND,
     SpecError,
     get_model,
+    split_video_ref,
     validate_spec,
     with_row,
 )
@@ -81,9 +82,58 @@ def _file_name(prompt: str, extension: str) -> str:
 #: Ảnh đầu vào tối đa trước khi thu nhỏ; ảnh gửi provider có cạnh dài ≤ 1100 px (như Palmier).
 INPUT_MAX_BYTES = 30 * 1024 * 1024
 INPUT_EDGE = 1100
+#: A shot that continues another downloads the parent's file: a short generated video.
+PARENT_MAX_BYTES = 200 * 1024 * 1024
+SHOT_BEFORE = "The shot before this one is not ready. Your credits were refunded."
 
 
-def _prepare_inputs(store: Any, task: Task, model: Any, spec: dict[str, Any], workdir: Path) -> dict[str, Any]:
+def _continuation_frame(store: Any, task: Task, generation: dict[str, Any], model: Any, workdir: Path) -> str:
+    """The last frame of the shot this one continues (`after`), checked like any input image.
+
+    The parent is looked up by `after_id` and must belong to the same user and project, be done,
+    and still hash to `after`, so a row edited by hand cannot borrow someone else's video.
+    """
+    spec = generation.get("spec") or {}
+    parent_id = str(generation.get("after_id") or "")
+    parent = store.get_generation(parent_id) if parent_id else None
+    if (
+        not parent
+        or parent.get("user_id") != task.user_id
+        or parent.get("job_id") != task.job_id
+        or parent.get("status") != "done"
+        or parent.get("spec_hash") != spec.get("after")
+        or not parent.get("media_asset_id")
+    ):
+        raise SpecError(SHOT_BEFORE)
+    asset = store.get_media_asset(str(parent["media_asset_id"]))
+    path = str((asset or {}).get("storage_path") or "")
+    if not path.startswith(f"media/{task.user_id}/"):
+        raise SpecError(SHOT_BEFORE)
+    source = workdir / "parent.mp4"
+    try:
+        store.download_object("media", path[len("media/"):], source, max_bytes=PARENT_MAX_BYTES)
+    except Exception as exc:
+        raise SpecError(SHOT_BEFORE) from exc
+    frame = workdir / "continue-from.jpg"
+    try:
+        run([
+            # A provider's file is untrusted media: force the MP4 demuxer and local files only (rule 7).
+            # `-sseof` seeks from the end; `-update 1` keeps overwriting, so the last frame stays.
+            "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "file", "-f", "mov", "-sseof", "-0.5", "-i", str(source),
+            "-vf", f"scale='min({INPUT_EDGE},iw)':'min({INPUT_EDGE},ih)':force_original_aspect_ratio=decrease",
+            "-update", "1", "-q:v", "2", str(frame),
+        ], timeout=120)
+    except Exception as exc:
+        raise SpecError(SHOT_BEFORE) from exc
+    if not frame.exists() or frame.stat().st_size == 0:
+        raise SpecError(SHOT_BEFORE)
+    check_input(model, frame)
+    return str(frame)
+
+
+def _prepare_inputs(
+    store: Any, task: Task, model: Any, spec: dict[str, Any], workdir: Path, generation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Ảnh của người dùng (frame đầu/cuối, tham chiếu) → file đã thu nhỏ + đã kiểm duyệt.
 
     SQL đã kiểm chủ sở hữu theo người gọi; ở đây kiểm lại theo CHỦ TASK (lớp thứ ba):
@@ -124,11 +174,17 @@ def _prepare_inputs(store: Any, task: Task, model: Any, spec: dict[str, Any], wo
         prepared["references"] = refs
     if isinstance(spec.get("sourceVideo"), str):
         prepared["sourceVideo"] = _source_clip(store, task, model, spec, workdir)
+    if "after" in spec:
+        # Providers know nothing of chains: they get the parent's last frame as the first frame.
+        prepared.pop("after")
+        prepared["startImage"] = _continuation_frame(store, task, generation or {}, model, workdir)
     return prepared
 
 
 #: Cạnh ngắn của đoạn gửi model sửa video: Kling O1 Edit nhận 720–2160 px.
 SOURCE_EDGE = 720
+#: A cut-out is laid over the full-size frame, so it keeps more detail than an edit.
+CUTOUT_EDGE = 1080
 
 
 def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workdir: Path) -> str:
@@ -137,11 +193,12 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
     ffmpeg đọc thẳng URL đã ký với `-ss` TRƯỚC `-i` (luật engine 3–4): chỉ kéo đúng đoạn cần,
     không tải nguyên file. Cạnh ngắn đưa về 720 px, H.264 + AAC — dạng mọi provider nhận.
     """
-    ref = str(spec["sourceVideo"])
+    bucket, ref = split_video_ref(str(spec["sourceVideo"]))
     if not ref.startswith(f"{task.user_id}/"):
         raise SpecError(VIDEO_NOT_FOUND)
+    edge = CUTOUT_EDGE if model.limits.get("removeBackground") else SOURCE_EDGE
     try:
-        url = store.sign_object_url("media", ref, expires_in=900)
+        url = store.sign_object_url(bucket, ref, expires_in=900)
     except Exception as exc:
         raise SpecError(VIDEO_NOT_FOUND) from exc
     out = workdir / "source.mp4"
@@ -153,7 +210,7 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
             "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", protocols, "-f", "mov",
             "-ss", f"{float(spec.get('sourceStart') or 0):.3f}", "-i", url,
             "-t", str(int(spec["duration"])),
-            "-vf", f"scale='if(lte(iw,ih),{SOURCE_EDGE},-2)':'if(lte(iw,ih),-2,{SOURCE_EDGE})',fps=30",
+            "-vf", f"scale='if(lte(iw,ih),{edge},-2)':'if(lte(iw,ih),-2,{edge})',fps=30",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out),
         ], timeout=300)
@@ -161,7 +218,7 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
         raise SpecError(VIDEO_NOT_FOUND) from exc
     if not out.exists() or out.stat().st_size == 0:
         raise SpecError(VIDEO_NOT_FOUND)
-    check_input_video(model, out, workdir)
+    check_input_video(model, out, workdir, spec)
     return str(out)
 
 
@@ -205,7 +262,7 @@ def process(store: Any, task: Task) -> None:
     with task_workspace(store, task, "generate") as (heartbeat, root):
         try:
             try:
-                inputs = _prepare_inputs(store, task, model, spec, root)
+                inputs = _prepare_inputs(store, task, model, spec, root, generation)
             except SpecError as exc:
                 store.fail_task(task.id, task.attempt_id, str(exc))
                 return

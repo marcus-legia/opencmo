@@ -357,7 +357,7 @@ def test_fake_video_dung_frame_dau_cuoi_va_anh_tham_chieu(tmp_path):
     assert corner[2] > 180 and corner[0] < 80
 
 
-def _edit_store(tmp_path, spec, uid):
+def _edit_store(tmp_path, spec, uid, model="fal-kling-edit"):
     """Store giả cho model sửa video: `sign_object_url` trả một video 640×360, 12 s trên đĩa."""
     import subprocess
 
@@ -367,7 +367,7 @@ def _edit_store(tmp_path, spec, uid):
          "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", str(source)],
         check=True,
     )
-    store = FakeStore(_generation(model="fal-kling-edit", spec=spec, spec_hash=generate_task.spec_hash("fal-kling-edit", spec), user_id=uid))
+    store = FakeStore(_generation(model=model, spec=spec, spec_hash=generate_task.spec_hash(model, spec), user_id=uid))
     store.signed = []
 
     def sign_object_url(bucket, path, expires_in=3600):
@@ -533,3 +533,293 @@ def test_catalog_db_de_gia_gioi_han_va_tat_model(monkeypatch):
     store.get_ai_model = lambda _id: {"price": {"unit": "generation", "credits": 1}, "limits": {}, "enabled": False}
     generate_task.process(store, _task())
     assert store.failed == ["This model is not available."] and store.uploaded == []
+
+
+# ------------------------------------------------------------------ background removal
+
+
+def _frame_rgba(path, at=0.5):
+    """First decoded frame of `path` as raw RGB24 bytes plus its size."""
+    import subprocess
+
+    probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout)
+    width, height = probe["streams"][0]["width"], probe["streams"][0]["height"]
+    # Seeking into a 1 s test clip sometimes decodes no frame at all; at=0 reads the first one.
+    seek = ["-ss", str(at)] if at else []
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", *seek, "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    assert len(raw) == width * height * 3, f"no frame decoded from {path.name}"
+    return raw, width, height
+
+
+def _luma(raw, width, x, y):
+    i = (y * width + x) * 3
+    return (raw[i] * 77 + raw[i + 1] * 150 + raw[i + 2] * 29) >> 8
+
+
+def test_cutout_reads_the_clips_own_video_from_renders_at_1080(monkeypatch, tmp_path):
+    """Background removal may read the clip's own master (renders bucket) and keeps a 1080 short edge."""
+    import subprocess
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height", "-of", "json", spec["sourceVideo"]],
+                capture_output=True, text=True, check=True,
+            )
+            seen["probe"] = json.loads(probe.stdout)
+            return super().run(model, spec, workdir, alive=alive)
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: Recording())
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    ref = f"{uid}/clip-1/master/attempt-1.mp4"
+    spec = {"prompt": "Remove background", "aspectRatio": "16:9", "duration": 3, "sourceVideo": f"renders:{ref}", "sourceStart": 2}
+    store = _edit_store(tmp_path, spec, uid, model="fake-cutout")
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == [], store.failed
+    assert store.signed == [("renders", ref)]
+    video = next(s for s in seen["probe"]["streams"] if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1920, 1080)
+
+
+def test_cutout_of_someone_elses_master_is_refused_before_signing(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    other = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    spec = {"prompt": "Remove background", "aspectRatio": "16:9", "duration": 3, "sourceVideo": f"renders:{other}/clip/master/a.mp4", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid, model="fake-cutout")
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.signed == [] and adapter.spec is None
+
+
+def test_edit_models_read_the_clips_own_video_at_the_edit_size(monkeypatch, tmp_path):
+    """`edit_video`: Kling edit (`clipVideo`) may read the clip's own master, at a 720 short edge."""
+    import subprocess
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height", "-of", "json", spec["sourceVideo"]],
+                capture_output=True, text=True, check=True,
+            )
+            seen["probe"] = json.loads(probe.stdout)
+            return super().run(model, spec, workdir, alive=alive)
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: Recording())
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    ref = f"{uid}/clip-1/master/attempt-1.mp4"
+    spec = {"prompt": "make it night", "aspectRatio": "16:9", "duration": 4, "sourceVideo": f"renders:{ref}", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid)
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == [], store.failed
+    assert store.signed == [("renders", ref)]
+    video = next(s for s in seen["probe"]["streams"] if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1280, 720)
+
+
+def test_upscale_cannot_read_the_clips_own_video(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    spec = {"prompt": "Upscale", "aspectRatio": "16:9", "duration": 4, "resolution": "1080p", "sourceVideo": f"renders:{uid}/clip/master/a.mp4", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid, model="fal-seedvr-upscale")
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == ["Choose a video from your library to edit."]
+    assert adapter.spec is None
+
+
+def test_fal_cutout_asks_for_h264_picture_and_matte(tmp_path):
+    from opencmo.ai.providers.fal import build_payload, endpoint_for
+
+    clip = tmp_path / "source.mp4"
+    clip.write_bytes(b"mp4")
+    model = get_model("fal-veed-cutout")
+    spec = {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 4, "sourceVideo": str(clip), "sourceStart": 0}
+    # Video endpoints reject data URLs; the provider uploads the clip and passes its URL.
+    assert build_payload(model, spec, lambda path: f"https://cdn/{path.name}") == {"video_url": "https://cdn/source.mp4", "output_codec": "h264"}
+    assert endpoint_for(model, spec) == "veed/video-background-removal"
+
+
+def test_fal_cutout_finds_picture_and_matte_in_either_response_shape():
+    from opencmo.ai.providers.fal import cutout_urls
+
+    assert cutout_urls({"video": {"url": "rgb"}, "alpha_video": {"url": "a"}}) == ("rgb", "a")
+    assert cutout_urls({"rgb_video": {"url": "rgb"}, "mask_video": {"url": "a"}}) == ("rgb", "a")
+    assert cutout_urls({"video": {"url": "vp9"}}) == ("vp9", None)
+
+
+def test_stacked_cutout_puts_the_picture_on_top_and_the_matte_below(tmp_path):
+    """Picture + matte (fal h264) and picture with alpha (fal vp9) both become one stacked H.264 file."""
+    import subprocess
+
+    from opencmo.ai.cutout import stack_embedded, stack_matte
+
+    picture = tmp_path / "rgb.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=320x240:d=1", "-pix_fmt", "yuv420p", str(picture)], check=True)
+    matte = tmp_path / "alpha.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=black:s=160x120:d=1", "-vf", "drawbox=x=0:y=0:w=80:h=120:color=white:t=fill", "-pix_fmt", "yuv420p", str(matte)],
+        check=True,
+    )
+    out = stack_matte(picture, "mov", matte, "mov", tmp_path / "stacked.mp4")
+    raw, width, height = _frame_rgba(out, at=0)
+    assert (width, height) == (320, 480)
+    assert raw[(10 * width + 10) * 3] > 200, "top half is the red picture"
+    assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30, "bottom half is the matte, scaled to the picture"
+
+    webm = tmp_path / "alpha.webm"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=320x240:d=1,format=rgba,geq=r=255:g=0:b=0:a='if(lt(X,160),255,0)'",
+         "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", str(webm)],
+        check=True,
+    )
+    out = stack_embedded(webm, "matroska", tmp_path / "stacked2.mp4")
+    raw, width, height = _frame_rgba(out, at=0)
+    assert (width, height) == (320, 480)
+    assert _luma(raw, width, 40, 360) > 200 and _luma(raw, width, 280, 360) < 30
+
+
+def test_fake_cutout_keeps_an_ellipse_of_the_source(tmp_path):
+    import subprocess
+
+    source = tmp_path / "src.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=360x640:r=30:d=3", "-pix_fmt", "yuv420p", str(source)], check=True)
+    out = tmp_path / "o"
+    out.mkdir()
+    result = FakeProvider().run(
+        get_model("fake-cutout"),
+        {"prompt": "Remove background", "aspectRatio": "9:16", "duration": 2, "sourceVideo": str(source), "sourceStart": 0},
+        out,
+    )
+    raw, width, height = _frame_rgba(result.path)
+    assert (width, height) == (360, 1280), "picture on top of the matte"
+    assert _luma(raw, width, 180, 640 + 352) > 200, "subject in the middle is opaque"
+    assert _luma(raw, width, 5, 640 + 5) < 30, "corner is transparent"
+
+
+LIVE = Path(__file__).parent / "fixtures" / "live"
+
+
+def test_fal_cutout_parses_the_real_veed_response():
+    """`fixtures/live/fal-veed-cutout.json` is a real response (URLs replaced), 2026-10-11."""
+    from opencmo.ai.cutout import demuxer
+    from opencmo.ai.providers.fal import cutout_urls
+
+    body = json.loads((LIVE / "fal-veed-cutout.json").read_text())
+    picture, matte = cutout_urls(body)
+    assert picture.endswith("_color.mp4") and matte and matte.endswith("_alpha.mp4")
+    # fal serves both as application/octet-stream: the extension picks the demuxer.
+    assert demuxer("application/octet-stream", picture) == "mov"
+    assert demuxer("application/octet-stream", "https://x/out.bin") is None
+
+
+# ------------------------------------------------------------------- chained shots (/video)
+
+PARENT_ID = "99999999-2222-4333-8444-555555555555"
+
+
+def _chain_store(tmp_path, *, parent_overrides=None, parent_file=None):
+    """A continuing shot (`after`) whose parent finished as a red→blue clip in the media bucket."""
+    import subprocess
+
+    parent_spec = {"prompt": "a desk", "aspectRatio": "9:16", "duration": 5, "seed": 1}
+    parent_hash = generate_task.spec_hash("fal-seedance", parent_spec)
+    spec = {"prompt": "the screen lights up", "aspectRatio": "9:16", "duration": 5, "seed": 2, "after": parent_hash}
+    child = _generation(model="fal-seedance", spec=spec, spec_hash=generate_task.spec_hash("fal-seedance", spec), after_id=PARENT_ID)
+    parent = {
+        "id": PARENT_ID, "user_id": "user-1", "job_id": "job-1", "status": "done", "model": "fal-seedance",
+        "spec": parent_spec, "spec_hash": parent_hash, "media_asset_id": "asset-1", **(parent_overrides or {}),
+    }
+    clip = tmp_path / "parent.mp4"
+    if parent_file is None:
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=360x640:r=30:d=1",
+            "-f", "lavfi", "-i", "color=blue:s=360x640:r=30:d=1", "-filter_complex", "[0][1]concat=n=2:v=1",
+            "-pix_fmt", "yuv420p", str(clip),
+        ], check=True)
+    else:
+        clip.write_bytes(parent_file)
+
+    store = FakeStore(child)
+    store.get_generation = lambda gen_id: {GEN_ID: child, PARENT_ID: parent}.get(gen_id)
+    store.get_media_asset = lambda _id: {"id": "asset-1", "storage_path": "media/user-1/job-1/gen-parent.mp4"}
+    store.downloads = []
+
+    def download_object(bucket, path, dest, *, max_bytes=None):
+        store.downloads.append((bucket, path, max_bytes))
+        dest.write_bytes(clip.read_bytes())
+        return dest
+
+    store.download_object = download_object
+    return store
+
+
+def test_a_continuing_shot_starts_from_the_parents_last_frame(monkeypatch, tmp_path):
+    import subprocess
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            # The average colour of the start frame, as one RGB pixel.
+            pixel = subprocess.run(
+                ["ffmpeg", "-v", "error", "-i", spec["startImage"], "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                capture_output=True, check=True,
+            ).stdout
+            seen["color"] = tuple(pixel[:3])
+            return super().run(model, spec, workdir, alive=alive)
+
+    adapter = Recording()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _chain_store(tmp_path)
+    generate_task.process(store, _task())
+    assert store.failed == [], store.failed
+    assert store.downloads == [("media", "user-1/job-1/gen-parent.mp4", generate_task.PARENT_MAX_BYTES)]
+    red, _green, blue = seen["color"]
+    assert blue > 200 and red < 60, f"the last frame of a red→blue clip is blue, got {seen['color']}"
+    assert "after" not in adapter.spec, "providers never see the chain"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"user_id": "user-2"},
+    {"job_id": "job-2"},
+    {"status": "running"},
+    {"spec_hash": "f" * 64},
+])
+def test_a_parent_that_is_not_ready_or_not_ours_is_refused(monkeypatch, tmp_path, overrides):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _chain_store(tmp_path, parent_overrides=overrides)
+    generate_task.process(store, _task())
+    assert store.failed == [generate_task.SHOT_BEFORE]
+    assert adapter.spec is None
+
+
+def test_a_disguised_playlist_as_parent_is_refused(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    playlist = b"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile:///etc/passwd\n#EXT-X-ENDLIST\n"
+    store = _chain_store(tmp_path, parent_file=playlist)
+    generate_task.process(store, _task())
+    assert store.failed == [generate_task.SHOT_BEFORE]
+    assert adapter.spec is None
+
+
+def test_after_is_validated_like_sql():
+    model = get_model("fal-seedance")
+    base = {"prompt": "x", "aspectRatio": "9:16", "duration": 5}
+    validate_spec(model, {**base, "after": "a" * 64})
+    with pytest.raises(SpecError, match="Invalid generation request"):
+        validate_spec(model, {**base, "after": "nope"})
+    with pytest.raises(SpecError, match="cannot also start from an image"):
+        validate_spec(model, {**base, "after": "a" * 64, "startImage": "user-1/a.png"})
+    with pytest.raises(SpecError, match="does not take"):
+        validate_spec(get_model("fal-nano-banana"), {"prompt": "x", "aspectRatio": "1:1", "after": "a" * 64})

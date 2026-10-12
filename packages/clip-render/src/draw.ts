@@ -17,7 +17,7 @@ import { parsePath, pathLength, transformPath, trimPath, type AssetInput, type C
 
 import { css, hex } from './color.ts';
 import { hasTransition, partnerOf, subValue, transitionWindow } from './frame.ts';
-import { gradeFrame, gradeSteps, type CanvasFactory, type CubeLut, type PixelCanvas } from './grade.ts';
+import { gradeFrame, gradeSteps, unstackAlpha, type CanvasFactory, type CubeLut, type PixelCanvas } from './grade.ts';
 import { drawText } from './text.ts';
 import { drawScene3D } from './three/render.ts';
 import { toFrames, type Mat, type RNode } from './tree.ts';
@@ -157,7 +157,7 @@ function drawShape(scope: Scope, r: RNode): void {
     ctx.fill();
   }
   if ((node.kind === 'video' || node.kind === 'image') && node.src !== undefined) {
-    drawMedia(scope, r, node.kind, node.src, node.objectFit, (node as { objectPosition?: [number, number] }).objectPosition);
+    drawMedia(scope, r, node.kind, node.src, node.objectFit, (node as { objectPosition?: [number, number] }).objectPosition, (node as { alpha?: 'stacked' }).alpha);
   }
   for (const paint of node.paints ?? []) {
     if (paint.hidden) continue;
@@ -172,7 +172,7 @@ function drawShape(scope: Scope, r: RNode): void {
       ctx.fillStyle = gradient(ctx, r, paint);
       ctx.fill();
     } else if ('src' in paint) {
-      drawMedia(scope, r, paint.type, paint.src, paint.objectFit, paint.objectPosition);
+      drawMedia(scope, r, paint.type, paint.src, paint.objectFit, paint.objectPosition, paint.alpha);
     }
     ctx.globalCompositeOperation = savedComposite;
     ctx.globalAlpha = savedAlpha;
@@ -296,7 +296,7 @@ function drawPath(scope: Scope, r: RNode): void {
         ctx.fillStyle = gradient(ctx, r, paint);
         ctx.fill(rule);
       } else if ('src' in paint) {
-        drawMedia(scope, r, paint.type, paint.src, paint.objectFit, paint.objectPosition);
+        drawMedia(scope, r, paint.type, paint.src, paint.objectFit, paint.objectPosition, paint.alpha);
       }
       ctx.globalCompositeOperation = savedComposite;
       ctx.globalAlpha = savedAlpha;
@@ -470,10 +470,19 @@ function drawLottie(scope: Scope, r: RNode): void {
   if (shadow) ctx.restore();
 }
 
-function drawMedia(scope: Scope, r: RNode, kind: 'image' | 'video', src: AssetInput, fit: string | undefined, position?: [number, number]): void {
+function drawMedia(
+  scope: Scope,
+  r: RNode,
+  kind: 'image' | 'video',
+  src: AssetInput,
+  fit: string | undefined,
+  position?: [number, number],
+  alpha?: 'stacked',
+): void {
   const { ctx, media } = scope;
-  const frame = kind === 'image' ? media.image(src) : media.video(src, sourceSeconds(r));
-  if (frame === null) return;
+  const decoded = kind === 'image' ? media.image(src) : media.video(src, sourceSeconds(r));
+  if (decoded === null) return;
+  let frame = decoded;
   if (frame === 'failed') {
     // Ô đỏ báo file thiếu như DS — nhưng chỉ cho file thật. Khai báo `generate.*`
     // chưa có (đang sinh) hoặc sinh hỏng thì không vẽ gì: trước đây một lượt Veo
@@ -486,12 +495,22 @@ function drawMedia(scope: Scope, r: RNode, kind: 'image' | 'video', src: AssetIn
   const { width: w, height: h } = r.values;
   ctx.save();
   ctx.clip();
-  const [dx, dy, dw, dh] = fitBox(fit ?? 'cover', frame, w, h, position);
+  // A stacked-alpha file is twice as tall as the picture it shows.
+  const shape = alpha === 'stacked' ? { width: frame.width, height: frame.height / 2 } : frame;
+  const [dx, dy, dw, dh] = fitBox(fit ?? 'cover', shape as Drawable, w, h, position);
   // Khoá cache theo cả giây nguồn: decoder của export và thẻ <video> ở preview dùng
   // lại CÙNG một đối tượng cho mọi khung — khoá theo đối tượng thì khung đầu bị lặp mãi.
   // Thẻ <video> còn đang tua thì `currentTime` chưa tới: thêm nó vào khoá để lượt vẽ sau khi tua xong chỉnh lại.
   const shown = (frame as { currentTime?: number }).currentTime;
   const at = kind === 'video' ? `${sourceSeconds(r)}@${shown ?? ''}` : '';
+  if (alpha === 'stacked') {
+    const cut = unstacked(scope, r, frame, dw, dh, at);
+    if (!cut) {
+      ctx.restore();
+      return;
+    }
+    frame = cut;
+  }
   ctx.drawImage((graded(scope, r, frame, dw, dh, at) ?? frame) as never, dx, dy, dw, dh);
   ctx.restore();
 }
@@ -528,6 +547,27 @@ function drawFootageText(scope: Scope, r: RNode, draw: (target: Ctx2D) => void):
 }
 
 const gradeCache = new WeakMap<object, { key: string; canvas: Drawable }>();
+const unstackCache = new WeakMap<object, { key: string; canvas: Drawable }>();
+
+/** Cut-out of a stacked-alpha frame at min(source, shown pixels); null when there is no pixel canvas. */
+function unstacked(scope: Scope, r: RNode, frame: Drawable, dw: number, dh: number, at: string): Drawable | null {
+  const factory = canvasFactory(scope.media);
+  if (!factory) return null;
+  const zoom = Math.hypot(r.worldMatrix[0], r.worldMatrix[1]) || 1;
+  const width = Math.max(1, Math.round(Math.min(frame.width, dw * zoom)));
+  const height = Math.max(1, Math.round(Math.min(frame.height / 2, dh * zoom)));
+  const key = `${at}:${width}x${height}`;
+  const hit = unstackCache.get(frame);
+  if (hit?.key === key) return hit.canvas;
+  let canvas: Drawable | null = null;
+  try {
+    canvas = unstackAlpha(frame, width, height, factory);
+  } catch {
+    return null;
+  }
+  if (canvas) unstackCache.set(frame, { key, canvas });
+  return canvas;
+}
 
 /**
  * Khung đã chỉnh màu (E3) ở cỡ min(nguồn, số pixel đang hiện) — preview nhỏ thì tính

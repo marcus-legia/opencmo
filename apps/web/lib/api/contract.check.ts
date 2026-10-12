@@ -1458,6 +1458,228 @@ async function main(): Promise<void> {
     assert.equal(await balance(a.userId), afterTurn, "không trừ lần hai");
   });
 
+  await check("Assistant on a blank edit: AI image placed by time, no transcript needed", async () => {
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    const blankClip = (created.body as { clip_id: string }).clip_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${blankClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: blankClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "Create an AI image at 2s of our app" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => event.event))}`);
+    assert.match(JSON.stringify(request!.data), /Prompt: /);
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"));
+    const placed = everything(await documentOf(a, blankClip)).find((node) => node.generate === "image");
+    assert.ok(placed, "the image declaration is on the blank edit");
+    const holder = everything(await documentOf(a, blankClip)).find((node) => JSON.stringify(node.paints ?? []).includes('"generate":"image"'));
+    assert.deepEqual([holder?.start, holder?.end], [2, 5], "placed at 2s for 3s");
+  });
+
+  await check("B-roll pack: an AI image with 3 variants on one card; Approve holds every variant, places one element", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant b-roll pack" });
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const packClip = (created.body as { clip_id: string }).clip_id;
+    const packJob = ((await admin.from("clips").select("job_id").eq("id", packClip).single()).data as { job_id: string }).job_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${packClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: packClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "Create an AI image at 2s with variants" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => event.event))}`);
+    const card = request!.data.card as { changes: string[]; credits: number };
+    assert.match(card.changes[0]!, / × 3 variants · \d+ credits$/, card.changes[0]);
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"));
+    const { data: made } = await admin.from("generations").select("id, credits_reserved").eq("clip_id", packClip);
+    assert.equal(made?.length, 3, "one generation per variant");
+    const held = (made ?? []).reduce((sum, item) => sum + (item as { credits_reserved: number }).credits_reserved, 0);
+    assert.ok((made ?? []).every((item) => (item as { credits_reserved: number }).credits_reserved > 0), "every variant is held");
+    assert.equal(held, card.credits, "the card shows what is held");
+
+    const packs = everything(await documentOf(a, packClip)).filter((node) => (node.marks as { variants?: unknown[] } | undefined)?.variants);
+    assert.equal(packs.length, 1, "one element, not one per variant");
+    const variants = (packs[0]!.marks as { variants: { prompt: string; seed: number; model: string; aspectRatio: string }[] }).variants;
+    const shown = (packs[0]!.paints as { src: { seed: number } }[])[0]!.src.seed;
+    assert.equal(new Set([shown, ...variants.map((variant) => variant.seed)]).size, 3, "three distinct seeds");
+
+    // The editor resolves a kept variant like any declaration: same spec → the generation the agent made.
+    const afterTurn = await balance(a.userId);
+    const variant = variants[0]!;
+    const resolved = await callApi(a, "/generations", {
+      method: "POST",
+      body: JSON.stringify({
+        job_id: packJob, clip_id: packClip, model: variant.model, request_id: crypto.randomUUID(),
+        spec: { prompt: variant.prompt, aspectRatio: variant.aspectRatio, seed: variant.seed },
+      }),
+    });
+    assert.equal((resolved.body as { reused: boolean }).reused, true, JSON.stringify(resolved.body));
+    assert.equal(await balance(a.userId), afterTurn, "no second charge");
+    // No worker runs here: cancel them so later checks stay under the running-generations limit.
+    for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
+  });
+
+  await check("Replace background: one card prices the cut-out and the background; Approve reads the clip's own video", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant background" });
+    // A fresh project: earlier checks cut the shared clip down to about a second.
+    const fresh = await seedProject(a.userId);
+    const clipId = fresh.clipId;
+    const proxyPath = fresh.proxyPath;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${clipId}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: clipId }) });
+    const agentSession = (opened.body as { id: string }).id;
+    const { count: before } = await admin.from("generations").select("id", { count: "exact", head: true }).eq("clip_id", clipId);
+    const first = await callSse(a, `/agent/sessions/${agentSession}/turns`, { prompt: "Replace the background behind me with a bright office" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
+    const card = request!.data.card as { changes: string[]; credits: number };
+    assert.match(card.changes[0]!, /^Replace the background from 2s to 6s · \d+ credits$/, card.changes.join(" | "));
+    assert.equal(card.changes.length, 4, card.changes.join(" | "));
+    const res = await callSse(a, `/agent/sessions/${agentSession}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.map((event) => [event.event, event.data])));
+    const { data: made } = await admin
+      .from("generations")
+      .select("id, model, spec, credits_reserved")
+      .eq("clip_id", clipId)
+      .order("created_at", { ascending: false })
+      .limit(2);
+    const { count: after } = await admin.from("generations").select("id", { count: "exact", head: true }).eq("clip_id", clipId);
+    assert.equal((after ?? 0) - (before ?? 0), 2, "the cut-out and the background");
+    const cutout = (made ?? []).find((item) => (item as { model: string }).model === "fake-cutout") as { spec: { sourceVideo: string; sourceStart: number } } | undefined;
+    assert.equal(cutout?.spec.sourceVideo, `sources:${proxyPath}`, "the clip's own video, from storage");
+    assert.equal((made ?? []).reduce((sum, item) => sum + (item as { credits_reserved: number }).credits_reserved, 0), card.credits);
+
+    const group = everything(await documentOf(a, clipId)).find((node) => (node.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "replace_background");
+    assert.ok(group, "the swap group is on the clip");
+    const [background, speaker] = group!.children as { name: string; paints: { alpha?: string; src: { sourceVideo?: string } }[] }[];
+    assert.deepEqual([background?.name, speaker?.name], ["New background", "Speaker cut-out"]);
+    assert.equal(speaker!.paints[0]!.alpha, "stacked");
+    assert.equal(speaker!.paints[0]!.src.sourceVideo, "assets/master.mp4");
+    // No worker runs here: cancel them so later checks stay under the running-generations limit.
+    for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
+  });
+
+  await check("Edit your video: one card prices the edit; Approve places it over the speaker, reading the clip's own video", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant edit" });
+    const fresh = await seedProject(a.userId);
+    const clipId = fresh.clipId;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${clipId}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: clipId }) });
+    const agentSession = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${agentSession}/turns`, { prompt: "Make the part from 2 to 6 seconds look like night" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
+    const card = request!.data.card as { changes: string[]; credits: number };
+    assert.match(card.changes[0]!, /^Edit your video from 2s to 6s \(.+\) · \d+ credits$/, card.changes.join(" | "));
+    const res = await callSse(a, `/agent/sessions/${agentSession}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.map((event) => [event.event, event.data])));
+    const { data: made } = await admin.from("generations").select("id, model, spec, credits_reserved").eq("clip_id", clipId).eq("model", "fake-edit");
+    assert.equal((made ?? []).length, 1, "one edit");
+    const edit = made![0] as { id: string; spec: { sourceVideo: string; duration: number }; credits_reserved: number };
+    assert.equal(edit.spec.sourceVideo, `sources:${fresh.proxyPath}`, "the clip's own video, from storage");
+    assert.equal(edit.spec.duration, 4);
+    assert.equal(edit.credits_reserved, card.credits);
+    const layer = everything(await documentOf(a, clipId)).find((node) => (node.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "edit_video") as
+      | { name: string; muted?: boolean; paints: { src: { sourceVideo?: string } }[] }
+      | undefined;
+    assert.ok(layer, "the AI edit layer is on the clip");
+    assert.equal(layer!.name, "AI edit");
+    assert.equal(layer!.muted, true);
+    assert.equal(layer!.paints[0]!.src.sourceVideo, "assets/master.mp4");
+    await callApi(a, `/generations/${edit.id}/cancel`, { method: "POST" });
+  });
+
+  await check("/video on a blank edit: storyboard card, Approve starts every shot, the voice and the music at once", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 40, reason: "contract check grant video" });
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const videoClip = (created.body as { clip_id: string }).clip_id;
+    const videoJob = ((await admin.from("clips").select("job_id").eq("id", videoClip).single()).data as { job_id: string }).job_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${videoClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: videoClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "/video a 15 second video about our hotel booking app" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
+    assert.equal(request!.data.name, "create_video");
+    const card = request!.data.card as { changes: string[]; credits: number; storyboard: { beats: unknown[]; columns: string[] } };
+    assert.match(card.changes[0]!, /^Create a 15s 9:16 video: 3 AI shots, voice-over, music · \d+ credits/, card.changes[0]);
+    assert.equal(card.storyboard.beats.length, 3);
+    assert.deepEqual(card.storyboard.columns, ["Shot", "Voice"]);
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.map((event) => [event.event, event.data])));
+    const { data: made } = await admin.from("generations").select("id, model, spec, credits_reserved").eq("clip_id", videoClip);
+    assert.equal(made?.length, 5, "3 shots, the voice and the music, all at once");
+    assert.equal((made ?? []).reduce((sum, item) => sum + (item as { credits_reserved: number }).credits_reserved, 0), card.credits);
+
+    const nodes = everything(await documentOf(a, videoClip));
+    const shots = nodes.filter((node) => JSON.stringify(node.paints ?? []).includes('"generate":"video"'));
+    assert.deepEqual(shots.map((node) => [node.start ?? 0, node.end]), [[0, 5], [5, 10], [10, 15]]);
+    // The editor resolves a shot like any declaration: same spec → the generation already made.
+    const shot = (shots[1]!.paints as { src: { model: string; prompt: string; aspectRatio: string; duration: number; seed: number; after?: string } }[])[0]!.src;
+    const resolved = await callApi(a, "/generations", {
+      method: "POST",
+      body: JSON.stringify({
+        job_id: videoJob, clip_id: videoClip, model: shot.model, request_id: crypto.randomUUID(),
+        spec: { prompt: shot.prompt, aspectRatio: shot.aspectRatio, duration: shot.duration, seed: shot.seed, ...(shot.after ? { after: shot.after } : {}) },
+      }),
+    });
+    assert.equal((resolved.body as { reused: boolean }).reused, true, JSON.stringify(resolved.body));
+
+    // The fake director continues shot 1 with shot 2: it carries shot 1's hash and waits for it.
+    const { data: rows } = await admin.from("generations").select("id, spec, spec_hash, after_id, status, task_id, error").eq("clip_id", videoClip);
+    const byPrompt = (prompt: string) => (rows ?? []).find((row) => (row as { spec: { prompt: string } }).spec.prompt === prompt) as
+      | { id: string; spec_hash: string; after_id: string | null; status: string; task_id: string; error: string | null }
+      | undefined;
+    const firstShot = byPrompt((shots[0]!.paints as { src: { prompt: string } }[])[0]!.src.prompt)!;
+    const secondShot = byPrompt(shot.prompt)!;
+    assert.equal(shot.after, firstShot.spec_hash, "shot 2 continues shot 1");
+    assert.equal(secondShot.after_id, firstShot.id);
+    const waiting = await admin.from("tasks").select("status").eq("id", secondShot.task_id).single();
+    assert.equal((waiting.data as { status: string }).status, "awaiting_input", "shot 2 waits for shot 1");
+    const before = await balance(a.userId);
+    await callApi(a, `/generations/${firstShot.id}/cancel`, { method: "POST" });
+    const failed = await admin.from("generations").select("status, error, credits_reserved").eq("id", secondShot.id).single();
+    const child = failed.data as { status: string; error: string; credits_reserved: number };
+    assert.equal(child.status, "failed", "cancelling shot 1 fails the shot waiting on it");
+    assert.match(child.error, /The shot before this one did not finish/);
+    assert.ok((await balance(a.userId)) > before, "both are refunded");
+    for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
+  });
+
+  await check("/image goes straight to generate_media", async () => {
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const imageClip = (created.body as { clip_id: string }).clip_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${imageClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: imageClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "/image a fox in the snow" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.equal(request?.data.name, "generate_media", JSON.stringify(first.events.map((event) => event.event)));
+    await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: false }] });
+  });
+
+  await check("Video agent team: intro storyboard card, Approve adds one intro group", async () => {
+    const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    const introClip = (created.body as { clip_id: string }).clip_id;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${introClip}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: introClip }) });
+    const session = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "Make an intro for this clip" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no storyboard card: ${JSON.stringify(first.events.map((event) => event.event))}`);
+    const card = (request!.data as { card: { storyboard?: { seconds: number; beats: { label: string }[] } } }).card;
+    assert.ok(card.storyboard && card.storyboard.beats.length >= 2, "the card carries the storyboard");
+    const before = everything(await documentOf(a, introClip)).length;
+    const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.filter((event) => event.event === "tool_result" || event.event === "done")));
+    const after = everything(await documentOf(a, introClip));
+    const intro = after.find((node) => (node.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "intro");
+    assert.ok(intro, "an intro group is on the edit");
+    assert.deepEqual([intro!.start, intro!.end], [0, card.storyboard!.seconds]);
+    assert.ok(after.length > before + 2, "the group holds its layers");
+  });
+
   await check("Assistant + voiceover: repurpose = thẻ giá, Approve đặt giọng mới, tắt tiếng video gốc", async () => {
     const first = await callSse(a, `/agent/sessions/${agentSession}/turns`, { prompt: "Repurpose this clip with a new script" });
     const request = first.events.find((event) => event.event === "approval_request");

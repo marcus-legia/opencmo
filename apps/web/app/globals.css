@@ -3710,6 +3710,26 @@ span.ed2-asst-model {
   max-height: 260px;
   overflow-y: auto;
 }
+.ed2-asst-storyboard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ds-text-11);
+  font-variant-numeric: tabular-nums;
+}
+.ed2-asst-storyboard th,
+.ed2-asst-storyboard td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ds-gold-line);
+  text-align: left;
+  vertical-align: top;
+}
+.ed2-asst-storyboard th {
+  color: var(--ds-muted);
+  font-weight: 500;
+}
+.ed2-asst-storyboard td:first-child {
+  white-space: nowrap;
+}
 .ed2-asst-approval .ed2-asst-total {
   padding-top: 8px;
   border-top: 1px solid var(--ds-gold-line);
@@ -3890,6 +3910,41 @@ span.ed2-asst-model {
   gap: 8px;
   padding: 10px 12px 12px;
   border-top: 1px solid var(--ds-line);
+}
+.ed2-asst-slash {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 4px;
+  border: 1px solid var(--ds-line);
+  border-radius: 12px;
+  background: var(--ds-raised);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.ed2-asst-slash button {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ds-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed2-asst-slash button .ed2-muted {
+  grid-column: 2;
+  font-size: 12px;
+}
+.ed2-asst-slash li[aria-selected="true"] button,
+.ed2-asst-slash button:hover {
+  background: var(--ds-selected-soft, rgba(127, 127, 127, 0.15));
+}
+.ed2-asst-slash-name {
+  font-weight: 600;
 }
 .ed2-asst-compose {
   position: relative;
@@ -4861,6 +4916,39 @@ span.ed2-asst-model {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.ed2-bg-time {
+  width: 60px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--ds-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--ds-text);
+  font: inherit;
+}
+.ed2-variants {
+  display: flex;
+  gap: 4px;
+}
+.ed2-variant {
+  min-width: 32px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--ds-muted);
+  cursor: pointer;
+}
+.ed2-variant[aria-pressed="true"] {
+  background: var(--ds-raised);
+  color: var(--ds-text);
+  cursor: default;
+}
+.ed2-variant:disabled:not([aria-pressed="true"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ed2-align {
   display: flex;

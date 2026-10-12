@@ -1,4 +1,4 @@
-from opencmo.wordmatch import find_whole_word, keep_alignable, spans_in
+from opencmo.wordmatch import find_whole_word, spans_in
 
 
 def test_khong_khop_chuoi_con():
@@ -23,27 +23,3 @@ def test_spans_tra_none_khi_co_tu_khong_khop():
 
 def test_spans_dung_thu_tu():
     assert spans_in("a b a", ["a", "b", "a"]) == [(0, 1), (2, 3), (4, 5)]
-
-
-def test_keep_alignable_bo_qua_tu_lech_chu_khong_dung():
-    """Đây là hành vi quan trọng nhất của module.
-
-    Whisper trả chữ mức câu và chữ mức từ từ hai lượt giải mã khác nhau nên chúng
-    lệch: câu ghi "he sad", từ ghi "he's sad". Dừng ở token lệch đầu tiên sẽ làm
-    lệch pha rồi kẹt vĩnh viễn — đo thật trên video 8.7 phút khi còn dừng: chỉ
-    18/67 segment giữ được từ.
-    """
-    kept = keep_alignable(
-        "I think he sad about that day",
-        ["I", "think", "he's", "sad", "about", "that", "day"],
-    )
-    assert kept == [0, 1, 3, 4, 5, 6]  # bỏ "he's" (index 2), giữ phần còn lại
-
-
-def test_keep_alignable_giu_nguyen_khi_khop_het():
-    kept = keep_alignable("one two three", ["one", "two", "three"])
-    assert kept == [0, 1, 2]
-
-
-def test_keep_alignable_rong_khi_khong_gi_khop():
-    assert keep_alignable("one two", ["xxx", "yyy"]) == []

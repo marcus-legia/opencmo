@@ -28,7 +28,7 @@ import { priceOf, type AiModel, type GenerationKind, type GenerationSpec } from 
 
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { createGeneration, normalizeSpec } from "@/lib/generate/create";
+import { checkGeneration, normalizeSpec, startGeneration, type PreparedCreate } from "@/lib/generate/create";
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
@@ -56,7 +56,12 @@ export const generateInput = z
     aspect_ratio: z.string().max(10).optional(),
     duration: z.number().int().min(1).max(60).optional(),
     voice: z.string().max(100).optional(),
-    start: z.number().finite().min(0).optional().describe("Clip seconds. Omit for image/video: it starts on the quote."),
+    start: z
+      .number()
+      .finite()
+      .min(0)
+      .optional()
+      .describe("Clip seconds. Image/video on a clip with a script: omit it, the media starts on the quote. On a project without a script: required, it replaces the quote."),
     resolution: z.string().max(20).optional().describe("Video/image resolution, when the model lists resolutions. Higher costs more."),
     start_image: z
       .string()
@@ -80,11 +85,25 @@ export const generateInput = z
       .describe("Image/video: seconds it stays on the clip (B-roll: 1.5-4). A video is still generated and paid for its full duration."),
     muted: z.boolean().optional().describe("Video: mute its own sound (always for B-roll)."),
     fit: z.boolean().optional().describe("Video: speed it up so the WHOLE generated video plays within length — for an AI transition that must reach its end_image."),
+    variants: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe("Image only: how many versions of this still to make (B-roll: 3). Each costs the full price; one is shown and the user picks another in the Inspector."),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "image" || value.kind === "video") {
-      for (const key of ["quote", "idea", "subject"] as const) {
+      for (const key of ["idea", "subject"] as const) {
         if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required for an AI ${value.kind}: fill the brief from <clip_context>.` });
+      }
+      if (!value.quote && value.start === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["quote"],
+          message: `quote is required for an AI ${value.kind}: the words it illustrates. On a project without a script, pass start (seconds) instead.`,
+        });
       }
     } else if (!value.prompt) {
       ctx.addIssue({ code: "custom", path: ["prompt"], message: value.kind === "voice" ? "prompt: the exact words to speak." : "prompt: the sound to make." });
@@ -108,7 +127,7 @@ export function generateToolSpec(): ToolSpec | null {
   return {
     name: "generate_media",
     description:
-      `Create new media with AI and place it on the clip: an image or a short video of a concrete real-world scene, a voice-over (kind "voice", prompt = the exact text to speak) or a sound effect (kind "audio", prompt = the sound). It costs credits, so the user sees the price and must approve before anything is created. Only use it when the user asks for new media. For image/video fill the brief from <clip_context> (read_guide "script"): quote = the words it illustrates (it starts when they are spoken), idea, subject, action, setting, style, camera, mood, avoid; the server writes the final prompt. Never use it for diagrams, charts, numbers, text or "3D explanations": draw those with add_diagram/add_chart/add_graph, or write a 3D animation (add_3d_scene). The result appears on the clip when it is ready (seconds for images and voice, minutes for video). Available models: ${listing}.`,
+      `Create new media with AI and place it on the clip: an image or a short video of a concrete real-world scene, a voice-over (kind "voice", prompt = the exact text to speak) or a sound effect (kind "audio", prompt = the sound). It costs credits, so the user sees the price and must approve before anything is created. Only use it when the user asks for new media. For image/video fill the brief from <clip_context> (read_guide "script"): quote = the words it illustrates (it starts when they are spoken) — or, on a project without a script, start = the second it appears (read_guide "blank") — idea, subject, action, setting, style, camera, mood, avoid; the server writes the final prompt. Never use it for diagrams, charts, numbers, text or "3D explanations": draw those with add_diagram/add_chart/add_graph, or write a 3D animation (add_3d_scene). The result appears on the clip when it is ready (seconds for images and voice, minutes for video). Available models: ${listing}.`,
     schema: sanitize(z.toJSONSchema(generateInput, { io: "input" })).schema as Record<string, unknown>,
     strict: true,
     approval: true,
@@ -122,6 +141,12 @@ export type PreparedGeneration = {
   credits: number;
   /** Câu người nói mà ảnh/video minh hoạ — hiện trên thẻ duyệt. */
   quote?: string;
+  /** Specs of the extra image variants: same as `spec` but another seed, each its own generation. */
+  variants?: GenerationSpec[];
+  /** Other generations the same op places (e.g. the background behind a cut-out), each on its own model. */
+  extra?: { model: AiModel; spec: GenerationSpec }[];
+  /** Card lines that replace the generic "Generate …" summary. */
+  lines?: string[];
 };
 
 /** Tìm mốc CLIP của câu trích; ném lỗi đọc được khi không có trong clip. */
@@ -156,13 +181,22 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
   const ratios = model.limits.aspectRatios ?? [];
   const aspectRatio = request.aspect_ratio ?? (ratios.includes("9:16") ? "9:16" : ratios[0]);
   const seed = randomInt(0, 2_147_483_647);
+  const count = request.variants ?? 1;
+  if (count > 1 && request.kind !== "image") return "variants: only AI images can have variants.";
+  const variantSeeds: number[] = [];
+  while (variantSeeds.length < count - 1) {
+    const candidate = randomInt(0, 2_147_483_647);
+    if (candidate !== seed && !variantSeeds.includes(candidate)) variantSeeds.push(candidate);
+  }
   let prompt = request.prompt ?? "";
   let start = request.start;
   if (request.kind === "image" || request.kind === "video") {
     const brief = request as Brief & typeof request;
     const misuse = briefMisuse(brief);
     if (misuse) return misuse;
-    if (locate) {
+    // A given start wins: the quote is only needed to find the time, and a project without a
+    // script has nothing to find it in.
+    if (locate && start === undefined && brief.quote) {
       try {
         const found = await locate(brief.quote);
         start ??= found.start;
@@ -216,8 +250,10 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
   }
 
   let spec: GenerationSpec;
+  let variants: GenerationSpec[];
   try {
     spec = normalizeSpec(model, raw);
+    variants = variantSeeds.map((variantSeed) => normalizeSpec(model, { ...raw, seed: variantSeed }));
   } catch (err) {
     return err instanceof ApiError ? err.message : "Invalid input.";
   }
@@ -237,18 +273,28 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
     ...((request.kind === "image" || request.kind === "video") && request.length ? { length: request.length } : {}),
     ...(request.kind === "video" && request.muted ? { muted: true } : {}),
     ...(request.kind === "video" && request.fit ? { fit: true } : {}),
+    ...(variantSeeds.length ? { variant_seeds: variantSeeds } : {}),
   } as Op;
-  return { model, spec, op, credits: priceOf(model, spec), ...(request.quote ? { quote: request.quote } : {}) };
+  return {
+    model,
+    spec,
+    op,
+    credits: priceOf(model, spec) * count,
+    ...(variants.length ? { variants } : {}),
+    ...(request.quote ? { quote: request.quote } : {}),
+  };
 }
 
 export function generateCard(prepared: PreparedGeneration, clipId: string) {
   const credits = `${prepared.credits} ${prepared.credits === 1 ? "credit" : "credits"}`;
+  if (prepared.lines) return { clips: [{ id: clipId, label: "This clip" }], changes: prepared.lines, credits: prepared.credits };
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       // Giọng phải có tên trên thẻ: "with ElevenLabs voice" không cho biết đang duyệt giọng nào.
-      `${describeOp(prepared.op)} with ${typeof prepared.spec.voice === "string" ? `the voice ${prepared.spec.voice}` : prepared.model.name} · ${credits}`,
-      ...(prepared.quote ? [`For the line: “${prepared.quote}”`, `Prompt: ${prepared.spec.prompt}`] : []),
+      `${describeOp(prepared.op)} with ${typeof prepared.spec.voice === "string" ? `the voice ${prepared.spec.voice}` : prepared.model.name}${prepared.variants?.length ? ` × ${prepared.variants.length + 1} variants` : ""} · ${credits}`,
+      ...(prepared.quote ? [`For the line: “${prepared.quote}”`] : []),
+      ...(prepared.model.kind === "image" || prepared.model.kind === "video" ? [`Prompt: ${prepared.spec.prompt}`] : []),
     ],
     credits: prepared.credits,
   };
@@ -419,20 +465,39 @@ type GenerateEnv = {
 
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
 export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string }> {
-  let generation: { id: string; credits_reserved: number };
-  try {
-    ({ generation } = await createGeneration(env.supabase, {
-      jobId: env.jobId,
-      clipId: env.clipId,
-      model: prepared.model.id,
-      spec: prepared.spec,
-      requestId: randomUUID(),
-    }));
-  } catch (err) {
+  // Every variant is its own generation and credit hold; all of them start or none do.
+  const started: { id: string; credits_reserved: number }[] = [];
+  const cancelAll = () => Promise.all(started.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
+  const runs = [
+    ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
+    ...(prepared.extra ?? []),
+  ];
+  const failed = async (err: unknown) => {
+    await cancelAll();
     const message = err instanceof ApiError && err.status < 500 ? err.message : "The generation could not be started.";
-    if (!(err instanceof ApiError)) console.error("[agent] generate_media lỗi", err);
+    if (!(err instanceof ApiError)) console.error("[agent] generate_media failed", err);
     return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
+  };
+  // Checks and moderation for every piece run at once (a /video has up to 20); nothing is held yet.
+  let ready: PreparedCreate[];
+  try {
+    ready = await Promise.all(
+      runs.map(({ model, spec }) =>
+        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() }),
+      ),
+    );
+  } catch (err) {
+    return failed(err);
   }
+  // Credits are held one by one, so a failure cancels exactly the holds made so far.
+  for (const item of ready) {
+    try {
+      started.push((await startGeneration(env.supabase, item)).generation);
+    } catch (err) {
+      return failed(err);
+    }
+  }
+  const generation = { id: started[0]!.id, credits_reserved: started.reduce((sum, item) => sum + item.credits_reserved, 0) };
 
   // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
   // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
@@ -440,7 +505,7 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   if (!applied.ok) {
     // Không đặt được lên clip (vd clip vừa đổi ở tab khác): huỷ lượt sinh để
     // hoàn credit, thay vì để nó chạy ra một file không ai thấy.
-    await rpcOrThrow(env.supabase, "cancel_generation", { p_id: generation.id }).catch(() => undefined);
+    await cancelAll();
     return { outcome: applied };
   }
   const credits = `${generation.credits_reserved} ${generation.credits_reserved === 1 ? "credit" : "credits"}`;
@@ -452,7 +517,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         ok: true,
         generation_id: generation.id,
         credits: generation.credits_reserved,
-        note: "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
+        ...(started.length > 1 ? { variants: started.length } : {}),
+        note:
+          started.length > 1
+            ? `${started.length} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
+            : "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
       }),
       summary: `Started ${NOUN[prepared.model.kind]} (${credits})`,
       version: applied.version,

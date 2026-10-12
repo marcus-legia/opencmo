@@ -706,3 +706,30 @@ export function scopeStats(data: Uint8ClampedArray, step = 1): ScopeStats {
     histogram: histogram.map((value) => round3(value / count)),
   };
 }
+
+/**
+ * A "stacked alpha" frame (picture on top, alpha matte as luma below) at `width × height`: the top
+ * half's colour with the bottom half's luma as alpha. H.264 has no alpha channel; stacking keeps a
+ * cut-out video decodable by every browser and by the exporter's ffmpeg.
+ */
+export function unstackAlpha(frame: Drawable, width: number, height: number, factory: CanvasFactory): PixelCanvas | null {
+  const both = factory(width, height * 2);
+  const bctx = both.getContext('2d');
+  if (!bctx) return null;
+  bctx.drawImage(frame as never, 0, 0, width, height * 2);
+  const source = bctx.getImageData(0, 0, width, height * 2).data;
+  const out = factory(width, height);
+  const octx = out.getContext('2d');
+  if (!octx) return null;
+  const image = octx.createImageData(width, height);
+  const data = image.data;
+  const offset = width * height * 4;
+  for (let i = 0; i < offset; i += 4) {
+    data[i] = source[i]!;
+    data[i + 1] = source[i + 1]!;
+    data[i + 2] = source[i + 2]!;
+    data[i + 3] = (source[offset + i]! * 77 + source[offset + i + 1]! * 150 + source[offset + i + 2]! * 29) >> 8;
+  }
+  octx.putImageData(image, 0, 0);
+  return out;
+}

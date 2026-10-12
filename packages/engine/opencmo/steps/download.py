@@ -24,7 +24,7 @@ from ..config import Config, fresh_proxy_session
 from ..media.ffmpeg import extract_audio
 from ..media.probe import probe_file
 from ..models import Moment, SourceInfo, Transcript, TranscriptSegment, Word
-from .transcribe import GROQ_MAX_BYTES
+from .transcribe import TRANSCRIBE_MAX_BYTES
 
 log = logging.getLogger(__name__)
 
@@ -265,7 +265,7 @@ def fetch_subtitles(url: str, cfg: Config, workdir: Path, lang: str = "en") -> T
 
 
 def download_audio(url: str, cfg: Config, workdir: Path) -> Path:
-    """Tải luồng audio gốc; quá trần Groq thì hạ về mono 16kHz bằng `extract_audio`.
+    """Tải luồng audio gốc; quá trần upload thì hạ về mono 16kHz bằng `extract_audio`.
 
     Trước đây luồng m4a 128k stereo đi thẳng tới Groq: video 54 phút ra ~52MB,
     quá trần 25MB, và người dùng chỉ thấy lỗi chung. Hạ bằng cùng lệnh với nhánh
@@ -275,7 +275,13 @@ def download_audio(url: str, cfg: Config, workdir: Path) -> Path:
 
     opts = {
         **_base_opts(cfg),
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        # Speech-to-text needs little: YouTube's ~48 kbps m4a or ~50-70 kbps opus keeps 54 minutes
+        # under the upload cap, so there is no re-encode and 2-3x less to pull through the proxy.
+        # `protocol^=https` for the same reason as SECTION_FORMAT (HLS can come back empty).
+        "format": (
+            "bestaudio[ext=m4a][abr<=64][protocol^=https]/bestaudio[ext=webm][abr<=80][protocol^=https]"
+            "/bestaudio[ext=m4a]/bestaudio/best"
+        ),
         "outtmpl": str(workdir / "audio_src.%(ext)s"),
     }
 
@@ -288,7 +294,7 @@ def download_audio(url: str, cfg: Config, workdir: Path) -> Path:
     raw = candidates[0]
     # Luồng gốc đã lọt trần thì gửi thẳng: hạ về mono tốn ~23s cho 54 phút
     # (đo trên sandbox 4 lõi), không đáng trả cho video ngắn.
-    if raw.suffix == ".m4a" and raw.stat().st_size <= GROQ_MAX_BYTES:
+    if raw.suffix in (".m4a", ".webm") and raw.stat().st_size <= TRANSCRIBE_MAX_BYTES:
         return raw
     try:
         return extract_audio(raw, workdir / "audio.m4a")

@@ -73,8 +73,8 @@ def _stub_steps(monkeypatch, *, subtitles: Transcript | None = None) -> dict:
     return goi
 
 
-def _chay(tmp_path, **kwargs):
-    return pipeline.run_pipeline("https://youtu.be/x", Config(out_dir=tmp_path), **kwargs)
+def _chay(tmp_path, cfg: Config | None = None, **kwargs):
+    return pipeline.run_pipeline("https://youtu.be/x", cfg or Config(out_dir=tmp_path), **kwargs)
 
 
 def test_moments_nguoi_dung_thi_khong_goi_llm_va_khong_tai_audio_ca_video(
@@ -147,6 +147,17 @@ def test_phu_de_co_san_thi_khong_goi_whisper(monkeypatch, tmp_path):
 
     assert goi["subtitles"] == 1
     assert goi["audio_windows"] == []
+
+
+def test_force_transcribe_skips_subtitles_for_picked_moments(monkeypatch, tmp_path):
+    """`--transcribe` measures speech-to-text: subtitles must not stand in for it here either."""
+    co_san = Transcript(segments=[TranscriptSegment(600.0, 640.0, "co san")], source="subs")
+    goi = _stub_steps(monkeypatch, subtitles=co_san)
+
+    _chay(tmp_path, Config(out_dir=tmp_path, force_transcribe=True), moments=[Moment(600.0, 640.0, "Clip 1")])
+
+    assert goi["subtitles"] == 0
+    assert goi["audio_windows"] == [(1.0, 40.0)]
 
 
 def test_doan_khong_co_loi_noi_van_ra_clip(monkeypatch, tmp_path):

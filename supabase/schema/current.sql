@@ -1024,7 +1024,7 @@ begin
     if v_max_refs > 0 then v_allowed := v_allowed || array['references']; end if;
   end if;
   if p_model.kind = 'video' then
-    if coalesce((p_model.limits->>'firstFrame')::boolean, false) then v_allowed := v_allowed || array['startImage']; end if;
+    if coalesce((p_model.limits->>'firstFrame')::boolean, false) then v_allowed := v_allowed || array['startImage', 'after']; end if;
     if coalesce((p_model.limits->>'lastFrame')::boolean, false) then v_allowed := v_allowed || array['endImage']; end if;
     if coalesce((p_model.limits->>'audio')::boolean, false) then v_allowed := v_allowed || array['audio']; end if;
     if v_source then v_allowed := v_allowed || array['sourceVideo', 'sourceStart']; end if;
@@ -1062,13 +1062,28 @@ begin
   if p_spec ? 'audio' and jsonb_typeof(p_spec->'audio') is distinct from 'boolean' then
     raise exception 'Invalid generation request.' using errcode = '22023';
   end if;
+  -- A shot that continues the previous one (/video): `after` is the parent's spec hash; the
+  -- worker starts it from the parent's last frame, so it cannot also start from an image.
+  if p_spec ? 'after' and (jsonb_typeof(p_spec->'after') is distinct from 'string'
+      or p_spec->>'after' !~ '^[0-9a-f]{64}$') then
+    raise exception 'Invalid generation request.' using errcode = '22023';
+  end if;
+  if p_spec ? 'after' and p_spec ? 'startImage' then
+    raise exception 'A shot that continues the previous one cannot also start from an image.' using errcode = '22023';
+  end if;
   if (p_spec ? 'startImage' and not public.ai_media_ref_ok(p_spec->'startImage'))
       or (p_spec ? 'endImage' and not public.ai_media_ref_ok(p_spec->'endImage')) then
     raise exception 'That image was not found in your library.' using errcode = '22023';
   end if;
-  -- Model sửa video (G2): video nguồn bắt buộc, của chính người gọi, cùng luật với ảnh.
+  -- Video-to-video: the source is required and the caller's own. Background removal and the
+  -- edit models flagged `clipVideo` may also read the clip's own video (`renders:` / `sources:`);
+  -- upscale only library files.
   if v_source then
-    if not (p_spec ? 'sourceVideo') or not public.ai_media_ref_ok(p_spec->'sourceVideo') then
+    if not (p_spec ? 'sourceVideo') or not (
+        public.ai_media_ref_ok(p_spec->'sourceVideo')
+        or ((coalesce((p_model.limits->>'removeBackground')::boolean, false)
+             or coalesce((p_model.limits->>'clipVideo')::boolean, false))
+            and public.ai_clip_video_ref_ok(p_spec->'sourceVideo'))) then
       raise exception 'Choose a video from your library to edit.' using errcode = '22023';
     end if;
     if jsonb_typeof(p_spec->'sourceStart') is distinct from 'number' or (p_spec->>'sourceStart')::numeric < 0 then
@@ -1109,6 +1124,25 @@ begin
       using errcode = '22023';
   end if;
 end;
+$$;
+
+
+--
+-- Name: ai_clip_video_ref_ok(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ai_clip_video_ref_ok(p_ref jsonb) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select jsonb_typeof(p_ref) = 'string'
+     and length(p_ref #>> '{}') <= 520
+     and (p_ref #>> '{}') ~ '^(renders|sources):'
+     and split_part(p_ref #>> '{}', ':', 2) like auth.uid()::text || '/%'
+     and (p_ref #>> '{}') !~ '\.\.'
+     and exists (select 1 from storage.objects o
+                 where o.bucket_id = split_part(p_ref #>> '{}', ':', 1)
+                   and o.name = substr(p_ref #>> '{}', length(split_part(p_ref #>> '{}', ':', 1)) + 2));
 $$;
 
 
@@ -1276,7 +1310,7 @@ CREATE TABLE public.tasks (
     progress real,
     CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
-    CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
+    CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
 
 
@@ -1332,7 +1366,7 @@ begin
   if v_generation.status in ('queued', 'running') then
     update public.tasks
     set status = 'cancelled', error = 'Cancelled.', finished_at = now(), lease_until = null
-    where id = v_generation.task_id and status in ('queued', 'running');
+    where id = v_generation.task_id and status in ('awaiting_input', 'queued', 'running');
   end if;
   select * into v_generation from public.generations where id = p_id;
   return to_jsonb(v_generation);
@@ -3053,6 +3087,10 @@ begin
   set status = 'done', output = jsonb_build_object('media_asset_id', v_asset.id), error = null,
       finished_at = now(), lease_until = null
   where id = p_task_id;
+  -- Shots that continue this one can start now; the worker's sweep claims them.
+  update public.tasks set status = 'queued'
+  where status = 'awaiting_input'
+    and id in (select task_id from public.generations where after_id = v_generation.id);
   return true;
 end;
 $_$;
@@ -3643,6 +3681,7 @@ declare
   v_generation public.generations;
   v_task public.tasks;
   v_price int;
+  v_parent public.generations;
 begin
   if p_request_id is null then
     raise exception 'Missing request id.' using errcode = '22023';
@@ -3700,11 +3739,24 @@ begin
       v_price, public.credit_balance(v_user) using errcode = 'P0001';
   end if;
 
-  insert into public.generations (user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved)
-  values (v_user, p_job_id, p_clip_id, v_model.kind, v_model.id, p_spec, p_spec_hash, v_price)
+  -- A shot that continues another (`after`) waits for it: same project and owner, still live.
+  -- The row lock orders this against `complete_generation`, which releases waiting children.
+  if p_spec ? 'after' then
+    select * into v_parent from public.generations
+    where job_id = p_job_id and user_id = v_user and spec_hash = p_spec->>'after'
+      and status in ('queued', 'running', 'done')
+    for update;
+    if not found then
+      raise exception 'Start the shot before this one first.' using errcode = '22023';
+    end if;
+  end if;
+
+  insert into public.generations (user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved, after_id)
+  values (v_user, p_job_id, p_clip_id, v_model.kind, v_model.id, p_spec, p_spec_hash, v_price, v_parent.id)
   returning * into v_generation;
-  insert into public.tasks (user_id, kind, job_id, clip_id, payload, request_id)
-  values (v_user, 'generate', p_job_id, p_clip_id, jsonb_build_object('generation_id', v_generation.id), p_request_id)
+  insert into public.tasks (user_id, kind, job_id, clip_id, payload, request_id, status)
+  values (v_user, 'generate', p_job_id, p_clip_id, jsonb_build_object('generation_id', v_generation.id), p_request_id,
+          case when v_parent.id is not null and v_parent.status <> 'done' then 'awaiting_input' else 'queued' end)
   returning * into v_task;
   update public.generations set task_id = v_task.id where id = v_generation.id returning * into v_generation;
   if v_price > 0 then
@@ -4557,7 +4609,7 @@ CREATE FUNCTION public.full_edit_max_seconds() RETURNS integer
 CREATE FUNCTION public.generation_active_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select 6 $$;
+    AS $$ select 24 $$;
 
 
 --
@@ -7070,6 +7122,13 @@ begin
         finished_at = now()
     where id = v_generation.id;
     perform public.credit_refund(v_generation.user_id, 'generation', v_generation.id, 'Generate refund', v_generation.job_id);
+    -- Shots waiting to continue this one can never start: fail them too. Each runs this
+    -- trigger in turn, so they are refunded and their own children follow.
+    update public.tasks
+    set status = 'failed', error = 'The shot before this one did not finish. Your credits were refunded.',
+        finished_at = now()
+    where status = 'awaiting_input'
+      and id in (select task_id from public.generations where after_id = v_generation.id);
   end if;
   return new;
 end;
@@ -7359,6 +7418,7 @@ CREATE TABLE public.generations (
     error text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
+    after_id uuid,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
     CONSTRAINT generations_kind_check CHECK ((kind = ANY (ARRAY['image'::text, 'video'::text, 'voice'::text, 'audio'::text]))),
@@ -8357,6 +8417,13 @@ CREATE INDEX editor_revisions_clip_number_idx ON public.editor_revisions USING b
 
 
 --
+-- Name: generations_after_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_after_idx ON public.generations USING btree (after_id) WHERE (after_id IS NOT NULL);
+
+
+--
 -- Name: generations_live_hash_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8914,6 +8981,14 @@ ALTER TABLE ONLY public.editor_skills
 
 ALTER TABLE ONLY public.editor_transcripts
     ADD CONSTRAINT editor_transcripts_clip_id_fkey FOREIGN KEY (clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
+
+
+--
+-- Name: generations generations_after_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.generations
+    ADD CONSTRAINT generations_after_id_fkey FOREIGN KEY (after_id) REFERENCES public.generations(id) ON DELETE SET NULL;
 
 
 --

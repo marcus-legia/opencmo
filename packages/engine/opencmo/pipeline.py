@@ -116,17 +116,17 @@ def _transcript_for_moments(
     cfg: Config,
     work_dir: Path,
 ) -> Transcript:
-    """Transcript cho nhánh người dùng tự chọn đoạn.
+    """Transcript for the branch where the user picked the moments.
 
-    Thử phụ đề có sẵn TRƯỚC: vài KB, miễn phí, và đã theo gốc thời gian của
-    video nên dùng được ngay.
+    Ready-made subtitles first: a few KB, free, and already on the video's timeline, unless
+    `cfg.force_transcribe` asks for speech-to-text (to measure it).
 
-    Không có thì trích audio từ ĐOẠN ĐÃ TẢI VỀ chứ không tải lại audio của cả
-    video — 40 giây thay vì 45 phút, và đó là toàn bộ lý do nhánh này tồn tại.
-    `lead_in` là phần đệm ở đầu file section, nên cắt từ đó ra đúng cửa sổ người
-    dùng đã chọn, với cả nguồn yt-dlp lẫn nguồn local.
+    Otherwise the audio comes from the sections already downloaded, not from the whole video
+    again: 40 seconds instead of 45 minutes, which is the whole point of this branch. `lead_in`
+    is the padding at the start of each section file, so the cut starts there and spans exactly
+    the window the user picked, for both yt-dlp and local sources.
     """
-    subs = src.fetch_subtitles(url, cfg, work_dir)
+    subs = None if cfg.force_transcribe else src.fetch_subtitles(url, cfg, work_dir)
     if subs is not None:
         return subs
 
@@ -146,7 +146,7 @@ def _transcript_for_moments(
         language = part.language
         segments.extend(_shift(part.segments, moment.start))
 
-    return Transcript(segments=segments, language=language, source="whisper")
+    return Transcript(segments=segments, language=language, source="scribe")
 
 
 def run_pipeline(
@@ -222,7 +222,7 @@ def run_pipeline(
             # 2. Transcript. Thử phụ đề sẵn có trước: nhanh hơn và miễn phí.
             progress("transcribe")
             t0 = time.monotonic()
-            transcript = src.fetch_subtitles(url, cfg, work_dir)
+            transcript = None if cfg.force_transcribe else src.fetch_subtitles(url, cfg, work_dir)
             if transcript is None:
                 log.info("Không có phụ đề sẵn — tải audio để transcribe.")
                 audio = src.download_audio(url, cfg, work_dir)

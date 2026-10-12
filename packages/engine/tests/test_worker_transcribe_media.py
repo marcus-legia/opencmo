@@ -102,3 +102,13 @@ def test_khong_co_loi_noi_va_file_khong_con(tmp_path, monkeypatch):
     transcribe_media_task.process(other, _task())
     assert other.downloads == []
     assert other.failed[0][2] == transcribe_media_task.GONE
+
+
+def test_audio_whose_length_cannot_be_read_reports_no_audio(tmp_path, monkeypatch):
+    def unreadable(*_args):
+        raise RuntimeError("Could not read the audio to transcribe.")
+
+    monkeypatch.setattr(transcribe_media_task, "transcribe_audio", unreadable)
+    store = FakeStore(_media(tmp_path / "broll.mp4"))
+    transcribe_media_task.process(store, _task())
+    assert store.failed[0][2] == transcribe_media_task.NO_AUDIO

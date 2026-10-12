@@ -22,6 +22,11 @@
  *   "cinematic"        → get_project_state → apply_color look ấm cho mọi video (E3)
  *   "side by side with" → list_library → insert_asset → apply_layout side_by_side: người nói trái, B-roll phải (E5)
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
+ *   "intro"            → plan_video intro (the Video agent team; storyboard card)
+ *   "replace the background" → replace_background 2–6 s (cut-out + new background, one card)
+ *   "look like night"  → edit_video 2–6 s (the speaker's own video redrawn, one card)
+ *   "/video …" (slash directive) → create_video 15 s · "/image …" → generate_media image at 0 s
+ *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
  *   "3d visual"        → update_plan + preview_3d (cảnh code: cột nhân đôi, neo "growing") → add_3d_scene
@@ -140,6 +145,9 @@ function script(history: StoredMessage[]): unknown[] {
       const broll = found.find((node) => node.kind === "rect" && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
       return broll ? [use("add_captions", { element_id: broll.id })] : [text("There is no B-roll video to caption.")];
     }
+    if (previous.includes("plan_video")) {
+      return [text(results.some((block) => block.is_error) || /"declined"|"INVALID_INPUT"/.test(raw0) ? "The intro was not added." : "Done: the intro is on the clip. You can undo it in one click.")];
+    }
     if (previous.includes("add_captions") || previous.includes("translate_captions")) {
       return [text(results.some((block) => block.is_error) || /"declined"|"error"|"pending"/.test(raw0) ? "The captions were not added." : "Done: the new captions layer is on the timeline.")];
     }
@@ -201,6 +209,17 @@ function script(history: StoredMessage[]): unknown[] {
   const lines = [...original.matchAll(/\[[\d.]+–[\d.]+\] ([^\n<]+)/g)].map((match) => match[1]!.trim());
   const lineWith = (word: string) => lines.find((line) => line.toLowerCase().includes(word)) ?? lines[1] ?? lines[0] ?? "";
   const quoted = /'([^']{4,})'/.exec(original.split(/<clip_context>|<project_state>/)[0]!)?.[1];
+  // Slash commands: the directive names the tool; the words after the command are the request.
+  const words = (original.split(/<command|<clip_context>|<project_state>/)[0] ?? "").replace(/^\s*\/[a-z]+\s*/i, "").trim();
+  if (/<command name="\/video">/.test(ask)) {
+    return [text("I'll have the director plan the video."), use("create_video", { prompt: words || "a short product video", seconds: 15 })];
+  }
+  if (/<command name="\/image">/.test(ask)) {
+    return [
+      text("I'll create that image."),
+      use("generate_media", { kind: "image", idea: words || "the product at work", subject: "a laptop on a hotel desk", setting: "a bright lobby", style: "photo", start: 0, length: 3 }),
+    ];
+  }
   // Trước "square": "export it, also as a square copy" là một lượt export, không phải đổi khung.
   if (/\bexport/.test(ask)) {
     return [text("Exporting it, with a square copy for the feed."), use("request_export", { frames: ["9:16", "1:1"] })];
@@ -274,8 +293,35 @@ function script(history: StoredMessage[]): unknown[] {
           setting: "a bright home office",
           style: "photo",
           length: 2.5,
+          variants: 3,
         }),
       ),
+    ];
+  }
+  if (/look like night/.test(ask)) {
+    return [text("I'll turn that part of your video into a night scene."), use("edit_video", { start: 2, end: 6, prompt: "night time, warm desk lamp, city lights through the window" })];
+  }
+  if (/replace the background/.test(ask)) {
+    return [text("I'll swap the room behind you for a bright office."), use("replace_background", { start: 2, end: 6, background: "a bright modern office with plants, soft morning light" })];
+  }
+  if (/\bintro\b/.test(ask)) {
+    return [text("I'll have the video team plan an intro."), use("plan_video", { recipe: "intro", brief: "confident, clean, brand colours" })];
+  }
+  const at = /ai image at (\d+(?:\.\d+)?)\s*s/.exec(ask);
+  if (at) {
+    // A project without a script: the shot is placed by time, there is no line to quote.
+    return [
+      text(`I'll create an image at ${at[1]}s.`),
+      use("generate_media", {
+        kind: "image",
+        idea: "the product at work late at night",
+        subject: "a laptop with a booking dashboard on a hotel desk",
+        setting: "a dim hotel room",
+        style: "cinematic",
+        start: Number(at[1]),
+        length: 3,
+        ...(/variants/.test(ask) ? { variants: 3 } : {}),
+      }),
     ];
   }
   if (/generate|create an image|b-roll/.test(ask)) {

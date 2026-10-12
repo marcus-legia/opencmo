@@ -12,7 +12,17 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 
 import type { DocumentSession } from "@/lib/editor/session";
 
-export type ApprovalCard = { changes: string[]; credits?: number };
+/** The Video agent team's plan, shown as a beat table on the approval card. */
+export type Storyboard = {
+  seconds: number;
+  personality: string;
+  beats: { at: number; dur: number; label: string; motion: string }[];
+  /** Column titles after Time; an intro's beats are "Element" / "Motion". */
+  columns?: [string, string];
+  /** Last row's text; null hides it (a full video has no exit beat). */
+  closing?: string | null;
+};
+export type ApprovalCard = { changes: string[]; credits?: number; storyboard?: Storyboard };
 export type QuestionCard = { question: string; options: string[]; multi: boolean };
 export type ToolRequest = { id: string; name: string; input: unknown; card?: ApprovalCard | QuestionCard };
 

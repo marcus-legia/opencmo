@@ -2,7 +2,7 @@
 
 Tải file đã lên Storage (bucket `media`), rút audio mono 16 kHz CHỈ đoạn
 sourceIn…sourceOut mà phần tử đang dùng (không transcribe phần không chiếu, không trả
-tiền cho nó), Groq Whisper, rồi `complete_media_captions` ghi transcript vào
+tiền cho nó), ElevenLabs Scribe, rồi `complete_media_captions` ghi transcript vào
 `editor_transcripts`. Mốc được dời về giây của FILE — cùng thang với `sourceIn` của lớp
 `captions` — nên phụ đề khớp dù đoạn chọn không bắt đầu từ 0.
 
@@ -88,6 +88,8 @@ def _run(ctx: TaskContext) -> None:
     except RuntimeError as exc:
         if str(exc).startswith("Audio is too large"):
             raise _UserError(TOO_LONG) from exc
+        if str(exc).startswith("Could not read the audio"):
+            raise _UserError(NO_AUDIO) from exc
         raise
     segments = shift_segments(transcript.segments, start)
     if not segments:

@@ -85,7 +85,8 @@ def extract_audio(source: Path, target: Path, *, start: float = 0.0, duration: f
     `-ss` đặt TRƯỚC `-i` (input seeking). Đặt sau thì ffmpeg decode từ đầu file
     tới điểm cắt — xem ARCHITECTURE.md §4.
     """
-    args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    # The source is the user's upload or a downloaded link: demuxer allowlist, local files only.
+    args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *USER_INPUT]
     if start > 0:
         args += ["-ss", f"{start:.3f}"]
     args += ["-i", str(source)]

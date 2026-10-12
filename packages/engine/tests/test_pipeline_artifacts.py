@@ -142,3 +142,17 @@ def test_retry_uses_saved_transcript_without_provider_call(monkeypatch, tmp_path
         'https://youtu.be/x', Config(out_dir=tmp_path), moments=[Moment(10, 40, 'hook')],
         cached_transcript=saved,
     )
+
+
+def test_force_transcribe_skips_existing_subtitles(monkeypatch, tmp_path):
+    """`--transcribe`: the budget is measured through speech-to-text, not free subtitles."""
+    _stub_steps(monkeypatch)
+    monkeypatch.setattr(pipeline.download, "fetch_subtitles", lambda *_: pytest.fail("subtitles were read"))
+    audio = tmp_path / "audio.m4a"
+    audio.write_bytes(b"x")
+    monkeypatch.setattr(pipeline.download, "download_audio", lambda _url, _cfg, _w: audio)
+    heard = Transcript(segments=[TranscriptSegment(0.0, 60.0, "hello " * 50)], source="scribe")
+    monkeypatch.setattr(pipeline.transcribe, "transcribe_audio", lambda _a, _cfg: heard)
+
+    result = pipeline.run_pipeline("https://youtu.be/x", Config(out_dir=tmp_path, force_transcribe=True), clip_count=1)
+    assert result.transcript_source == "scribe"

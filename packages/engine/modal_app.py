@@ -2,11 +2,12 @@
 
 Deploy:
     modal secret create opencmo \
-        GROQ_API_KEY=... GEMINI_API_KEY=... \
+        ANTHROPIC_API_KEY=... \
         SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
         OPENCMO_WORKER_TOKEN=...   # cùng giá trị với biến của web app
         OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule + cleanup; same CRON_SECRET as Vercel
-    modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # cùng khoá với Vercel
+    modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # transcripts (Scribe); same key as Vercel
+    modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
     modal deploy modal_app.py
 
 Bản này CẦN toàn bộ migration D1/D2 đã áp trên database TRƯỚC khi deploy.
@@ -226,7 +227,7 @@ secret = modal.Secret.from_name("opencmo")
 
 # Proxy tách riêng một secret vì `modal secret create --force` THAY cả secret
 # chứ không thêm key — nhét chung vào `opencmo` thì mỗi lần đổi mật khẩu proxy
-# phải gõ lại toàn bộ khoá Supabase/Groq/Gemini.
+# phải gõ lại toàn bộ khoá Supabase/Anthropic.
 #
 #   modal secret create opencmo-proxy \
 #     OPENCMO_PROXY='http://USER:PASS_country-us_session-XXXXXXXX_lifetime-10m@geo.iproyal.com:12321'
@@ -242,7 +243,8 @@ proxy_secret = modal.Secret.from_name("opencmo-proxy")
 #
 #   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # cùng khoá với Vercel
 #
-# Chỉ `run_task` cần (task `generate` của voice).
+# `run_job` and `probe` need it for transcripts (ElevenLabs Scribe); `run_task` for captions of
+# library files.
 voice_secret = modal.Secret.from_name("opencmo-voice")
 
 # fal key, separate for the same reason. Every generated image, video, voice and sound goes
@@ -272,7 +274,7 @@ def _record_call(store, job, call) -> None:
 
 
 @app.function(
-    secrets=[secret, proxy_secret],
+    secrets=[secret, proxy_secret, voice_secret],
     timeout=1800,
     cpu=4,
     memory=4096,
@@ -514,15 +516,16 @@ def cleanup() -> None:
 
 
 @app.local_entrypoint()
-def main(url: str, clips: int = 3) -> None:
+def main(url: str, clips: int = 3, transcribe: bool = False) -> None:
     """Chạy thử một video mà không cần database.
 
         modal run modal_app.py --url "https://youtube.com/watch?v=..."
+        modal run modal_app.py --url "..." --clips 5 --transcribe   # budget: speech-to-text, not subtitles
 
     Dùng để kiểm chứng ngày 11/9: engine chạy được trên hạ tầng Modal chưa, và
     YouTube có chặn IP của Modal không.
     """
-    frame = probe.remote(url, clips)
+    frame = probe.remote(url, clips, transcribe)
     if frame:
         # Thư mục tạm trong container bị xoá khi hàm trả về, nên đây là cách duy
         # nhất để NHÌN clip render trên cloud — xem mục "Kiểm chứng" ở CLAUDE.md.
@@ -530,8 +533,8 @@ def main(url: str, clips: int = 3) -> None:
         print("frame clip đầu tiên (t=8s): modal-kiem.png — mở ra xem")
 
 
-@app.function(secrets=[secret, proxy_secret], timeout=1800, cpu=4, memory=4096)
-def probe(url: str, clips: int) -> bytes | None:
+@app.function(secrets=[secret, proxy_secret, voice_secret], timeout=1800, cpu=4, memory=4096)
+def probe(url: str, clips: int, transcribe: bool = False) -> bytes | None:
     """Chạy pipeline, in thời gian từng bước, trả về một frame của clip đầu."""
     import subprocess
 
@@ -540,7 +543,7 @@ def probe(url: str, clips: int) -> bytes | None:
 
     print(f"proxy      : {'CÓ' if os.environ.get('OPENCMO_PROXY') else 'KHÔNG'}")
     with tempfile.TemporaryDirectory() as out:
-        result = run_pipeline(url, Config(out_dir=Path(out)), clip_count=clips)
+        result = run_pipeline(url, Config(out_dir=Path(out), force_transcribe=transcribe), clip_count=clips)
         t = result.timings
         print(f"nguồn      : {result.source.title} ({result.source.duration:.0f}s)")
         print(f"transcript : {t.transcript:.1f}s (nguồn: {result.transcript_source})")

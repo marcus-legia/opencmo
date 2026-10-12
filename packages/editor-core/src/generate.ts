@@ -52,6 +52,15 @@ export type AiModel = {
 		sourceVideo?: boolean;
 		/** Upscale (G4): model `sourceVideo` không cần lời — provider gửi độ phân giải đích. */
 		upscale?: boolean;
+		/**
+		 * Background removal: a `sourceVideo` model whose result is a stacked-alpha cut-out. Only these
+		 * models may read the clip's own video (`renders:` / `sources:` refs), not just library files.
+		 */
+		removeBackground?: boolean;
+		/** An edit model that may also read the clip's own video (`edit_video`), not just library files. */
+		clipVideo?: boolean;
+		/** About how many seconds one generation takes (provider's published speed); shown on cards. */
+		typicalSeconds?: number;
 		/** Tên tham số kích thước phía provider (chỉ worker dùng). */
 		sizeParam?: string;
 	};
@@ -79,6 +88,8 @@ export type GenerationSpec = {
 	/** Video nguồn của model sửa video (tên object media) và giây bắt đầu cắt trong file đó. */
 	sourceVideo?: string;
 	sourceStart?: number;
+	/** /video: spec hash of the shot this one continues; the worker starts it from that shot's last frame. */
+	after?: string;
 };
 
 /** Tên object media của người dùng: kiểm hình dạng ở đây, chủ sở hữu + tồn tại ở SQL. */
@@ -93,6 +104,9 @@ const mediaRef = z
  * (`strict`), để hai spec khác nhau không bao giờ băm ra cùng một hash chỉ vì
  * một field lạ bị bỏ qua ở lớp dưới.
  */
+/** The clip's own video, or a library video: `<bucket>:<owner>/…` for the first, `<owner>/…` for the second. */
+const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
+
 export function specSchema(model: AiModel) {
 	const { limits } = model;
 	const prompt = z.string().trim().min(1, 'Write a prompt first.').max(limits.maxPromptChars, `Keep the prompt under ${limits.maxPromptChars} characters.`);
@@ -119,17 +133,23 @@ export function specSchema(model: AiModel) {
 				}),
 				...resolution,
 				...references,
-				...(limits.firstFrame ? { startImage: mediaRef.optional() } : {}),
+				...(limits.firstFrame ? { startImage: mediaRef.optional(), after: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid generation request.').optional() } : {}),
 				...(limits.lastFrame ? { endImage: mediaRef.optional() } : {}),
 				...(limits.audio ? { audio: z.boolean().optional() } : {}),
 				...(limits.sourceVideo
 					? {
-							sourceVideo: z.string().max(500).regex(/^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.').refine((value) => !value.includes('..'), 'Choose the video to edit.'),
+							sourceVideo: z
+								.string()
+								.max(500)
+								.regex(limits.removeBackground || limits.clipVideo ? CLIP_VIDEO_REF : /^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.')
+								.refine((value) => !value.includes('..'), 'Choose the video to edit.'),
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),
 				...(limits.scene ? { scene: SceneContentSchema } : {}),
 				seed,
+			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
+				message: 'A shot that continues the previous one cannot also start from an image.',
 			});
 		case 'voice':
 			return z.strictObject({

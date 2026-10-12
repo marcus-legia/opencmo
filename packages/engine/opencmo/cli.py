@@ -86,6 +86,9 @@ def clip(
     no_preview: bool = typer.Option(False, "--no-preview", help="Không xuất bản preview nhẹ"),
     watermark: str = typer.Option(None, "--watermark", help="Chữ burn vào đáy clip (bản free)"),
     keep_work: Path = typer.Option(None, "--keep-work", help="Giữ file tạm ở thư mục này"),
+    force_transcribe: bool = typer.Option(
+        False, "--transcribe", help="Ignore existing subtitles and run speech-to-text (paid)",
+    ),
     json_out: bool = typer.Option(False, "--json", help="In kết quả dạng JSON"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -105,6 +108,7 @@ def clip(
             face_tracking=not no_face,
             make_preview=not no_preview,
             watermark=watermark,
+            force_transcribe=force_transcribe,
         )
     except ValueError as exc:
         console.print(f"[red]Lỗi:[/red] {exc}")
@@ -179,21 +183,15 @@ def doctor() -> None:
                 "vẫn ra clip dùng được.[/dim]"
             )
 
-    if cfg.groq_api_key:
-        console.print("  [green]✓[/green] GROQ_API_KEY")
-    else:
-        console.print("  [red]✗[/red] thiếu GROQ_API_KEY")
-        ok = False
-
-    # Bước chọn khoảnh khắc cần Gemini HOẶC Anthropic.
-    if cfg.gemini_api_key or cfg.anthropic_api_key:
-        keys = " + ".join(
-            k for k, v in (("GEMINI_API_KEY", cfg.gemini_api_key), ("ANTHROPIC_API_KEY", cfg.anthropic_api_key)) if v
-        )
-        console.print(f"  [green]✓[/green] {keys}  [dim](chọn khoảnh khắc: {cfg.select_provider})[/dim]")
-    else:
-        console.print("  [red]✗[/red] thiếu GEMINI_API_KEY hoặc ANTHROPIC_API_KEY")
-        ok = False
+    for name, value in (
+        ("ELEVENLABS_API_KEY", cfg.elevenlabs_api_key),
+        ("ANTHROPIC_API_KEY", cfg.anthropic_api_key),
+    ):
+        if value:
+            console.print(f"  [green]✓[/green] {name}")
+        else:
+            console.print(f"  [red]✗[/red] missing {name}")
+            ok = False
 
     console.print(f"  [dim]song song tối đa: {cfg.max_parallel}[/dim]")
     console.print()

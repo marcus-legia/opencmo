@@ -126,11 +126,23 @@ def _check_scene(scene: Any) -> None:
 MEDIA_NOT_FOUND = "That image was not found in your library."
 VIDEO_NOT_FOUND = "Choose a video from your library to edit."
 _MEDIA_REF = re.compile(r"[0-9a-f-]{36}/.+")
+_CLIP_VIDEO_REF = re.compile(r"(?:renders|sources):[0-9a-f-]{36}/.+")
 
 
 def media_ref_ok(ref: Any) -> bool:
     """Hình dạng tên object media (`<uid>/…`); chủ sở hữu kiểm ở SQL và ở worker theo chủ task."""
     return isinstance(ref, str) and len(ref) <= 500 and bool(_MEDIA_REF.fullmatch(ref)) and ".." not in ref
+
+
+def clip_video_ref_ok(ref: Any) -> bool:
+    """`<bucket>:<uid>/…` of the clip's own video (background removal only), same shape as SQL."""
+    return isinstance(ref, str) and len(ref) <= 520 and bool(_CLIP_VIDEO_REF.fullmatch(ref)) and ".." not in ref
+
+
+def split_video_ref(ref: str) -> tuple[str, str]:
+    """(bucket, object) of a source video ref: library files live in `media`."""
+    bucket, sep, name = ref.partition(":")
+    return (bucket, name) if sep and bucket in ("renders", "sources") else ("media", ref)
 
 
 def capability_keys(model: AiModel) -> set[str]:
@@ -144,7 +156,8 @@ def capability_keys(model: AiModel) -> set[str]:
             keys.add("references")
     if model.kind == "video":
         if limits.get("firstFrame"):
-            keys.add("startImage")
+            # `after`: a /video shot that continues the previous one starts from its last frame.
+            keys |= {"startImage", "after"}
         if limits.get("lastFrame"):
             keys.add("endImage")
         if limits.get("audio"):
@@ -160,6 +173,12 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
     extra = set(spec) - allowed
     if extra:
         raise SpecError("This request has settings the model does not take.")
+    if "after" in spec:
+        after = spec["after"]
+        if not isinstance(after, str) or not re.fullmatch(r"[0-9a-f]{64}", after):
+            raise SpecError("Invalid generation request.")
+        if "startImage" in spec:
+            raise SpecError("A shot that continues the previous one cannot also start from an image.")
     prompt = spec.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         raise SpecError("Write a prompt first.")
@@ -182,7 +201,9 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
         if key in spec and not media_ref_ok(spec[key]):
             raise SpecError(MEDIA_NOT_FOUND)
     if model.limits.get("sourceVideo"):
-        if not media_ref_ok(spec.get("sourceVideo")):
+        source = spec.get("sourceVideo")
+        own_clip = model.limits.get("removeBackground") or model.limits.get("clipVideo")
+        if not (media_ref_ok(source) or (own_clip and clip_video_ref_ok(source))):
             raise SpecError(VIDEO_NOT_FOUND)
         start = spec.get("sourceStart")
         if isinstance(start, bool) or not isinstance(start, (int, float)) or start < 0:

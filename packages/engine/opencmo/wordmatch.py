@@ -57,34 +57,3 @@ def spans_in(text: str, tokens: list[str]) -> list[tuple[int, int]] | None:
         spans.append((found, found + len(needle)))
         pos = found + len(needle)
     return spans or None
-
-
-def keep_alignable(text: str, tokens: list[str]) -> list[int]:
-    """Chỉ số các token khớp được vào `text` theo thứ tự; token không khớp bị BỎ QUA.
-
-    Bỏ qua chứ không dừng, và đó là điểm mấu chốt. Whisper trả chữ ở mức câu và
-    chữ ở mức từ từ HAI lượt giải mã khác nhau, và chúng không trùng nhau:
-
-        seg  : 'I think he   sad about that day because that   my fault'
-        words: 'I think he's sad about that day because that's my ...'
-
-    Nên "danh sách từ là token của câu" là một giả định sai. Bất kỳ cách chia nào
-    dừng ở token đầu tiên không khớp sẽ lệch pha rồi kẹt vĩnh viễn — đo thật trên
-    video 8.7 phút: chỉ 18/67 segment giữ được từ, 211/972 từ được gắn.
-
-    Bỏ qua token lệch thì từ đó không được nhấn, còn cả câu vẫn chạy bình thường.
-    Xuống cấp từng từ, không phải từng segment.
-    """
-    low = text.lower()
-    pos = 0
-    kept: list[int] = []
-    for i, token in enumerate(tokens):
-        needle = token.strip().lower()
-        if not needle:
-            continue
-        found = find_whole_word(low, needle, pos)
-        if found < 0:
-            continue
-        kept.append(i)
-        pos = found + len(needle)
-    return kept

@@ -5,6 +5,7 @@
  * dịch), đánh thức worker.
  */
 
+import { MASTER_SRC } from "@opencmo/editor-core";
 import { specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
 
 import { ApiError } from "@/lib/api/errors";
@@ -65,16 +66,73 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
   return out;
 }
 
-export async function createGeneration(
-  supabase: SupabaseClient,
-  request: CreateRequest,
-): Promise<{ generation: GenerationRow & { task_id?: string }; reused: boolean }> {
+type StorageRef = { bucket?: string; object?: string };
+
+async function clipVideoRefs(supabase: SupabaseClient, request: CreateRequest): Promise<string[]> {
+  if (!request.clipId) throw new ApiError(422, "Choose a video from your library to edit.");
+  const job = await supabase.from("jobs").select("media_manifest").eq("id", request.jobId).maybeSingle<{ media_manifest: unknown }>();
+  const manifest = (job.data?.media_manifest ?? {}) as { masters?: Record<string, StorageRef>; proxies?: Record<string, StorageRef> };
+  return [manifest.masters?.[request.clipId], manifest.proxies?.[request.clipId]]
+    .filter((entry): entry is Required<StorageRef> => Boolean(entry?.bucket && entry.object))
+    .map((entry) => `${entry.bucket}:${entry.object}`);
+}
+
+/**
+ * The same declaration must keep the same hash, or the editor's re-POST pays again. The clip's
+ * video changes under it (the proxy first, a master once rendered, a new master after a re-render),
+ * so a live generation of the same model on this clip that used one of the clip's current refs and
+ * whose spec matches with that ref wins: the RPC then reuses it. The hash stays the hash of the
+ * stored spec, which the worker checks.
+ */
+async function pinClipVideo(supabase: SupabaseClient, request: CreateRequest, model: AiModel, spec: GenerationSpec, refs: string[]): Promise<GenerationSpec> {
+  const live = await supabase
+    .from("generations")
+    .select("spec, spec_hash")
+    .eq("job_id", request.jobId)
+    .eq("clip_id", request.clipId!)
+    .eq("model", model.id)
+    .in("status", ["queued", "running", "done"])
+    .returns<{ spec: { sourceVideo?: unknown } | null; spec_hash: string }[]>();
+  for (const row of live.data ?? []) {
+    const ref = row.spec?.sourceVideo;
+    if (typeof ref !== "string" || ref === spec.sourceVideo || !refs.includes(ref)) continue;
+    const pinned = { ...spec, sourceVideo: ref } as GenerationSpec;
+    if (specHash(model.id, pinned) === row.spec_hash) return pinned;
+  }
+  return spec;
+}
+
+export type PreparedCreate = { request: CreateRequest; model: AiModel; spec: GenerationSpec };
+
+/**
+ * Everything before money moves: catalog, refs, schema, the clip-video pin and text moderation.
+ * Several of these can run at once (`/video`); `startGeneration` then holds credits one by one.
+ */
+export async function checkGeneration(supabase: SupabaseClient, request: CreateRequest): Promise<PreparedCreate> {
   await loadCatalog(supabase);
   const model = availableModel(request.model);
   if (!model) throw new ApiError(422, "This model is not available.");
-  const spec = normalizeSpec(model, await resolveMediaRefs(supabase, request.jobId, request.spec));
-  // Kiểm lời TRƯỚC khi đặt credit: bị chặn thì không tốn gì, không có task nào.
-  await moderateText(specText(spec).join("\n"));
+  const input = (await resolveMediaRefs(supabase, request.jobId, request.spec)) as Record<string, unknown> | null;
+  let spec: GenerationSpec;
+  if (input && input.sourceVideo === MASTER_SRC) {
+    // The document names the clip's own video `assets/master.mp4`; background removal reads it from
+    // storage as `<bucket>:<object>` (master in `renders`, or the 540p proxy in `sources`). Read under
+    // RLS, so another user's clip resolves to nothing. SQL checks the owner and the object again.
+    const refs = await clipVideoRefs(supabase, request);
+    if (!refs.length) throw new ApiError(422, "This clip has no editable source yet. Process the video again to edit it.");
+    spec = await pinClipVideo(supabase, request, model, normalizeSpec(model, { ...input, sourceVideo: refs[0] }), refs);
+  } else {
+    spec = normalizeSpec(model, input);
+  }
+  // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
+  await moderateText(specText(spec).join("\n"), { kind: model.kind });
+  return { request, model, spec };
+}
+
+export async function startGeneration(
+  supabase: SupabaseClient,
+  { request, model, spec }: PreparedCreate,
+): Promise<{ generation: GenerationRow & { task_id?: string }; reused: boolean }> {
   const result = await rpcOrThrow<{ generation: GenerationRow & { task_id?: string }; reused: boolean }>(
     supabase,
     "create_generation",
@@ -89,4 +147,11 @@ export async function createGeneration(
   );
   if (!result.reused && result.generation.task_id) await wakeWorker({ task_id: result.generation.task_id });
   return result;
+}
+
+export async function createGeneration(
+  supabase: SupabaseClient,
+  request: CreateRequest,
+): Promise<{ generation: GenerationRow & { task_id?: string }; reused: boolean }> {
+  return startGeneration(supabase, await checkGeneration(supabase, request));
 }

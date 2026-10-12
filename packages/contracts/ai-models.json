@@ -50,7 +50,8 @@
           6,
           8
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 60
       }
     },
     {
@@ -226,7 +227,8 @@
           "720p"
         ],
         "firstFrame": true,
-        "lastFrame": true
+        "lastFrame": true,
+        "typicalSeconds": 10
       }
     },
     {
@@ -257,7 +259,8 @@
           10
         ],
         "maxReferences": 2,
-        "sourceVideo": true
+        "sourceVideo": true,
+        "clipVideo": true
       }
     },
     {
@@ -304,6 +307,44 @@
         ],
         "sourceVideo": true,
         "upscale": true
+      }
+    },
+    {
+      "id": "fake-cutout",
+      "kind": "video",
+      "provider": "fake",
+      "name": "Test background removal",
+      "description": "Keeps an ellipse of the source as the subject. Development only.",
+      "price": {
+        "unit": "second",
+        "credits": 1
+      },
+      "limits": {
+        "maxPromptChars": 200,
+        "aspectRatios": [
+          "9:16",
+          "16:9",
+          "1:1"
+        ],
+        "durations": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "sourceVideo": true,
+        "removeBackground": true
       }
     },
     {
@@ -428,7 +469,8 @@
           "720p"
         ],
         "firstFrame": true,
-        "lastFrame": true
+        "lastFrame": true,
+        "typicalSeconds": 45
       }
     },
     {
@@ -456,7 +498,8 @@
           5,
           10
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 180
       }
     },
     {
@@ -484,7 +527,8 @@
           6,
           10
         ],
-        "firstFrame": true
+        "firstFrame": true,
+        "typicalSeconds": 120
       }
     },
     {
@@ -516,7 +560,8 @@
           10
         ],
         "maxReferences": 4,
-        "sourceVideo": true
+        "sourceVideo": true,
+        "clipVideo": true
       }
     },
     {
@@ -564,6 +609,45 @@
         ],
         "sourceVideo": true,
         "upscale": true
+      }
+    },
+    {
+      "id": "fal-veed-cutout",
+      "kind": "video",
+      "provider": "fal",
+      "providerModel": "veed/video-background-removal",
+      "name": "Background removal",
+      "description": "Cuts the person out of 1 to 15 seconds of your video, with a real alpha matte.",
+      "price": {
+        "unit": "second",
+        "credits": 1
+      },
+      "limits": {
+        "maxPromptChars": 200,
+        "aspectRatios": [
+          "9:16",
+          "16:9",
+          "1:1"
+        ],
+        "durations": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "sourceVideo": true,
+        "removeBackground": true
       }
     }
   ]

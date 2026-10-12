@@ -209,3 +209,12 @@ def test_plan_crop_dung_lai_track_khong_lay_mau_lai(monkeypatch, tmp_path):
     # Chỉ đếm frame nằm trong cửa sổ hẹp: 1.0→4.0 ở 2 fps là 7 frame.
     assert plan.frames == 7
     assert plan.samples == 7
+
+
+def test_weak_detections_next_to_a_sure_face_are_dropped():
+    """54-min interview: a bookshelf at 0.31-0.34 next to the speaker at 0.70-0.95 moved the crop."""
+    from opencmo.steps.reframe import confident
+
+    assert confident([("face", 0.94), ("shelf", 0.33)]) == [("face", 0.94)]
+    assert confident([("a", 0.9), ("b", 0.55)]) == [("a", 0.9), ("b", 0.55)], "two real people stay"
+    assert confident([("small", 0.35), ("tiny", 0.32)]) == [("small", 0.35), ("tiny", 0.32)], "wide shots keep weak faces"

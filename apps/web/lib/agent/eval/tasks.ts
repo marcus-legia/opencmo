@@ -410,6 +410,99 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "intro",
+    prompt: "Make an intro for this clip.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const intro = all(outcome.document).find((item) => item.tag === "group" && (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "intro");
+      if (!check(notes, Boolean(intro), "no intro group from plan_video")) return { pass: false, notes };
+      const used = check(notes, outcome.tools.includes("plan_video"), "the intro was not built by the video team");
+      const start = check(notes, intro!.entity.start === 0, `intro starts at ${String(intro!.entity.start)}s`);
+      const animated = check(
+        notes,
+        ((intro!.entity.children as Entity[] | undefined) ?? []).filter((child) => child.tracks || child.animations).length >= 2,
+        "fewer than two animated elements",
+      );
+      return { pass: used && start && animated && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "videoedit",
+    prompt: "Make the part from 2 to 6 seconds look like night.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const layer = all(outcome.document).find((item) => (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "edit_video");
+      if (!check(notes, Boolean(layer), "no AI edit layer")) return { pass: false, notes };
+      const paint = ((layer!.entity.paints as { src?: { sourceVideo?: string; duration?: number } }[] | undefined) ?? [])[0];
+      const own = check(notes, paint?.src?.sourceVideo === "assets/master.mp4", "the edit does not read the clip's own video");
+      const range = check(notes, layer!.entity.start === 2 && layer!.entity.end === 6, `range is ${String(layer!.entity.start)}-${String(layer!.entity.end)}s`);
+      const muted = check(notes, layer!.entity.muted === true, "the edit plays its own sound over the speaker");
+      const gen = outcome.generations?.find((item) => item.model.limits.clipVideo);
+      const priced = check(notes, Boolean(gen), "no priced generation for the edit");
+      return { pass: own && range && muted && priced && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "bgswap",
+    prompt: "Replace the background behind me with a bright office.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const swap = all(outcome.document).find((item) => item.tag === "group" && (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "replace_background");
+      if (!check(notes, Boolean(swap), "no background swap group")) return { pass: false, notes };
+      const [background, cutout] = (swap!.entity.children as Entity[] | undefined) ?? [];
+      const paint = ((cutout?.paints as { alpha?: string; src?: { sourceVideo?: string } }[] | undefined) ?? [])[0];
+      const keyed = check(notes, paint?.alpha === "stacked" && paint.src?.sourceVideo === "assets/master.mp4", "the speaker is not a stacked-alpha cut-out of the clip's own video");
+      const behind = check(notes, Boolean(background) && background!.name === "New background", "no new background under the cut-out");
+      const gen = outcome.generations?.find((item) => item.model.limits.removeBackground);
+      const priced = check(notes, Boolean(gen) && (gen!.extra?.length ?? 0) === 1, "the card does not hold the cut-out and the background together");
+      const prompt = String(gen?.extra?.[0]?.spec.prompt ?? "");
+      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(prompt), `background prompt has people: ${prompt}`);
+      return { pass: keyed && behind && priced && noPeople && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "videocreate",
+    prompt: "/video a 15 second video introducing our hotel booking app",
+    // A blank "New edit".
+    setup(document) {
+      const scene = document.stage.children[0] as unknown as Entity;
+      scene.children = [];
+      scene.workarea = [0, 10];
+    },
+    grade(outcome) {
+      const notes: string[] = [];
+      const gen = outcome.generations?.find((item) => (item.op as { op?: string }).op === "create_video");
+      if (!check(notes, Boolean(gen), "no create_video from /video")) return { pass: false, notes };
+      const shots = all(outcome.document).filter((item) => ((item.entity.paints as { src?: { generate?: string } }[] | undefined) ?? []).some((paint) => paint.src?.generate === "video"));
+      const covered = check(notes, shots.length >= 2, `${shots.length} video shots placed`);
+      const parallel = check(notes, (gen!.extra?.length ?? 0) >= shots.length - 1, "not every shot, voice and music start together");
+      const voice = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "voice"), "no voice-over");
+      const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
+      const length = check(notes, workarea?.[1] === 15, `work area ${JSON.stringify(workarea)}`);
+      return { pass: covered && parallel && voice && length && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "blankgen",
+    prompt: "Create an AI image at 2s of our booking app on a laptop.",
+    // A blank "New edit": no speaker, no captions, nothing to quote.
+    setup(document) {
+      const scene = document.stage.children[0] as unknown as Entity;
+      scene.children = [];
+      scene.workarea = [0, 10];
+    },
+    grade(outcome) {
+      const notes: string[] = [];
+      const gen = outcome.generations?.find((item) => item.model.kind === "image");
+      if (!check(notes, Boolean(gen), "no AI image prepared")) return { pass: false, notes };
+      const op = gen!.op as { start?: number; length?: number };
+      const timed = check(notes, op.start === 2, `starts at ${op.start ?? 0}s, asked for 2s`);
+      const unquoted = check(notes, gen!.quote === undefined, `quoted "${gen!.quote}" on a project without a script`);
+      const placed = check(notes, JSON.stringify(outcome.document).includes('"generate":"image"'), "the image is not on the timeline");
+      return { pass: timed && unquoted && placed && Boolean(op.length), notes };
+    },
+  },
+  {
     id: "brollset",
     prompt: "Generate B-roll: AI shots for the lines that name something concrete",
     grade(outcome) {
@@ -432,7 +525,9 @@ export const TASKS: EvalTask[] = [
         }),
         "each shot should stay 1.5-4 s",
       );
-      return { pass: several && noVideo && grounded && distinct && offHook && short && sane(outcome, notes), notes };
+      // B-roll pack: every still comes with variants for the user to pick from.
+      const packed = check(notes, stills.every((item) => (item.variants?.length ?? 0) >= 1), "stills without variants");
+      return { pass: several && noVideo && grounded && distinct && offHook && short && packed && sane(outcome, notes), notes };
     },
   },
   {

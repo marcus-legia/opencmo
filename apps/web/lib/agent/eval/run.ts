@@ -3,14 +3,14 @@
  *
  *   npm run agent:eval -- --provider fake                 # CI: kiểm harness, không tốn tiền
  *   npm run agent:eval -- --provider anthropic --yes      # model thật: TỐN TIỀN API
- *   npm run agent:eval -- --provider gemini --task hook --yes
+ *   npm run agent:eval -- --provider anthropic --task hook --yes
  *
  * Mỗi bài: workspace trong bộ nhớ từ clip mẫu → cùng system prompt, cùng bộ
  * tool, cùng `runTool` với app; tool tab chạy bằng Node (`node-tools.ts`);
  * `ask_user` được trả lời bằng câu soạn sẵn của bài. Chấm bằng code
  * (`tasks.ts`), ghi báo cáo + contact sheet cuối vào `--out`.
  *
- * Model thật cần khoá trong env (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`) và
+ * Model thật cần khoá trong env (`ANTHROPIC_API_KEY`) và
  * `--yes`: không có `--yes` thì chỉ in ước lượng chi phí rồi thoát.
  */
 
@@ -25,8 +25,12 @@ import { KEEP_IMAGES } from "../limits";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
-import { geminiProvider } from "../providers/gemini";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
+import { backgroundToolSpec, prepareBackground } from "../background-tool";
+import { editToolSpec, prepareEdit } from "../edit-tool";
+import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
+import { slashDirective } from "../slash";
+import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
@@ -60,10 +64,9 @@ function args(): Args {
   };
 }
 
-/** Giá mỗi triệu token (USD) — trùng `agent_model_prices`; Gemini là giá TẠM. */
+/** Price per million tokens (USD), same as `agent_model_prices`. */
 const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
   anthropic: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  gemini: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 2.5 },
   fake: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 };
 
@@ -72,11 +75,6 @@ function providerFor(name: string): Provider {
   if (name === "anthropic") {
     if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_API_KEY chưa có trong env.");
     return anthropicProvider();
-  }
-  if (name === "gemini") {
-    const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    if (!key) throw new Error("GEMINI_API_KEY chưa có trong env.");
-    return geminiProvider(key);
   }
   throw new Error(`provider lạ: ${name}`);
 }
@@ -113,7 +111,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // Như session.ts: kịch bản clip gắn vào câu lệnh đầu, rồi mới tới trạng thái.
   const start = workspace.snapshot();
   const about = await clipContextBlock(start.document, await workspace.opContext(start.document, start.manifest), FIXTURE_ABOUT);
-  const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${about}${await state()}`) }];
+  const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt)}${about}${await state()}`) }];
   const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const tools: string[] = [];
   let steps = 0;
@@ -123,7 +121,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null)];
+  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -186,9 +184,37 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         results.push({ id: call.id, name: call.name, ok: true, content: JSON.stringify({ ok: true, ...(answer.data as object) }), images });
         continue;
       }
-      if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover") {
+      if (call.name === "plan_video") {
+        // Same team and builder as the app; the storyboard card is approved at once.
+        const snapshot = workspace.snapshot();
+        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext: about }, async () => undefined);
+        if (typeof planned === "string") {
+          results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: planned }) });
+          continue;
+        }
+        const applied = await applyOpTool(planned.prepared.op as never, env);
+        if (applied.version !== undefined) wrote = true;
+        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.content });
+        continue;
+      }
+      if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover" || call.name === "replace_background" || call.name === "create_video" || call.name === "edit_video") {
         const prepared =
-          call.name === "generate_media"
+          call.name === "create_video"
+            ? await (async () => {
+                const planned = await prepareCreateVideo(call.input, { document: workspace.snapshot().document }, async () => undefined);
+                return typeof planned === "string" ? planned : planned.prepared;
+              })()
+            : call.name === "edit_video"
+            ? await (async () => {
+                const snapshot = workspace.snapshot();
+                return prepareEdit(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
+              })()
+            : call.name === "replace_background"
+            ? await (async () => {
+                const snapshot = workspace.snapshot();
+                return prepareBackground(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
+              })()
+            : call.name === "generate_media"
             ? await prepareGeneration(call.input, async (quote) => {
                 const snapshot = workspace.snapshot();
                 return quoteRange(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest), quote, { min: 1.5, max: 5 });
@@ -247,6 +273,8 @@ async function main() {
     return;
   }
 
+  // The fake model drives the fake Video agent team too, so the eval stays offline and free.
+  if (options.provider === "fake") process.env.OPENCMO_AGENT_FAKE ??= "1";
   const provider = providerFor(options.provider);
   mkdirSync(options.out, { recursive: true });
   const rows = [];

@@ -17,6 +17,7 @@ import { loadCatalog } from "@/lib/generate/models";
 
 import { clipScope, cmoScope, projectScope, type Scope } from "./scope";
 import { sseResponse } from "./sse";
+import { slashDirective } from "./slash";
 
 export type SessionRow = { id: string; scope: "clip" | "project" | "cmo"; clip_id: string | null; job_id: string | null; model: string };
 
@@ -25,8 +26,8 @@ export async function loadSession(supabase: SupabaseClient, id: string | undefin
   const { data } = await supabase.from("agent_sessions").select("id, scope, clip_id, job_id, model").eq("id", id).maybeSingle();
   const session = data as SessionRow | null;
   if (!session) throw notFound("Assistant session not found.");
-  // CMO chat chạy theo cấu hình HIỆN TẠI của agent `cmo` (đổi env là phiên cũ chạy model mới):
-  // lịch sử chỉ đọc lại được khi cùng họ provider, nên khác họ thì coi như chưa sẵn sàng.
+  // A CMO chat runs on the `cmo` agent's CURRENT model; history only replays within the same
+  // provider family, so a chat from another family cannot continue.
   const provider =
     session.scope === "cmo"
       ? (() => {
@@ -34,6 +35,7 @@ export async function loadSession(supabase: SupabaseClient, id: string | undefin
           return current && current.kind === kindOf(session.model) ? current : null;
         })()
       : providerForModel(session.model);
+  if (!provider && kindOf(session.model) === "gemini") throw new ApiError(409, "This chat used a model that is no longer available. Start a new chat.");
   if (!provider) throw new ApiError(503, "The assistant is not available yet.");
   return { session, provider };
 }
@@ -82,7 +84,7 @@ export async function startTurn(supabase: SupabaseClient, sessionId: string | un
   const turn = await rpcOrThrow<Turn>(supabase, "agent_begin_turn", {
     p_session_id: session.id,
     p_prompt: prompt,
-    p_content: provider.userTurn(prompt, `${attachmentText(attachments)}${state}`, images),
+    p_content: provider.userTurn(prompt, `${slashDirective(prompt)}${attachmentText(attachments)}${state}`, images),
   });
   const scope = await scopeFor(supabase, session, turn);
   return sseResponse(async (emit) => {

@@ -211,6 +211,8 @@ export const CAPTION_PRESETS = ['classic', 'whisper', 'cascade', 'spotlight', 'p
 const objectFit = z.enum(['cover', 'contain', 'fill']);
 /** Điểm neo khi media bị cắt (cover) hoặc thừa chỗ (contain): [x, y] 0…1, vắng = giữa (E5, học Palmier anchor). */
 const objectPosition = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]);
+/** `stacked`: the file holds the picture in its top half and the alpha matte (luma) in its bottom half. */
+const alpha = z.literal('stacked').optional();
 const fontWeight = z.union([num, z.enum(['normal', 'bold'])]);
 const fontStyle = z.enum(['normal', 'italic', 'oblique']);
 const textCase = z.enum(['original', 'upper', 'lower']);
@@ -247,6 +249,8 @@ export type AssetDeclaration =
       /** Model sửa video (G2): video thư viện được sửa và giây bắt đầu cắt trong file đó. */
       sourceVideo?: AssetInput;
       sourceStart?: number;
+      /** /video: the spec hash of the shot this one continues (starts from its last frame). */
+      after?: string;
     }
   | { transform: (typeof TRANSFORM_KINDS)[number]; input: AssetInput };
 
@@ -270,6 +274,7 @@ export const AssetDeclarationSchema: z.ZodType<AssetDeclaration> = z.union([
       endFrame: assetInput.optional(),
       sourceVideo: assetInput.optional(),
       sourceStart: num.optional(),
+      after: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     })
     .strict(),
   z.object({ transform: z.enum(TRANSFORM_KINDS), input: assetInput }).strict(),
@@ -346,6 +351,7 @@ export const PaintSchema = z.discriminatedUnion('type', [
       objectFit: objectFit.optional(),
       objectPosition: objectPosition.optional(),
       frameRate: num.optional(),
+      alpha,
       ...paintCommon,
     })
     .strict(),
@@ -577,6 +583,8 @@ export const MarksSchema = z
     visual: z.object({ op: z.string().min(1), input: z.unknown() }).strict().optional(),
     /** Câu nói mà cảnh 3D neo vào. */
     studio3d: z.object({ quote: z.string() }).strict().optional(),
+    /** Seed variants of the shown AI media that are not on screen; `pick_variant` swaps one in. */
+    variants: z.array(AssetDeclarationSchema).min(1).max(2).optional(),
   })
   .strict();
 
@@ -645,6 +653,7 @@ const media = {
   objectFit: objectFit.optional(),
   objectPosition: objectPosition.optional(),
   frameRate: num.optional(),
+  alpha,
 };
 // `denoise` (học Palmier §C7): 0…1, khử ồn giọng nói lúc EXPORT (ffmpeg highpass + afftdn).
 // Preview không nghe được — Web Audio không có bộ khử ồn tương đương; UI nói rõ điều đó.

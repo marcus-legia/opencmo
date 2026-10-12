@@ -134,8 +134,8 @@ AI images and video (generate_media): fill the brief from the script. quote = th
 ## AI B-roll (when the user asks to generate B-roll and generate_media is available)
 
 1. Read <clip_context>. Pick 3-5 lines that name something concrete a picture can show (a place, an object, an action). Skip the hook, the last line and opinions. Write them to update_plan: "[12.4s] 'my first store' → a small shop front at dawn".
-2. Stills first: call generate_media kind "image" for EVERY shot in the same step (one call per shot, all in one message), so the user approves them on one card with the total price. Same style for every shot; aspect_ratio of the clip frame. length 2-3, so each still already works as a short cutaway.
-3. When they are approved, list_library until the images are no longer "still generating", capture a frame on each, then ask_user which ones to animate (options: "Animate all", "Keep as stills", or each shot by name). Animation costs much more than a still: say so in the question.
+2. Stills first: call generate_media kind "image" for EVERY shot in the same step (one call per shot, all in one message), so the user approves them on one card with the total price. Same style for every shot; aspect_ratio of the clip frame. length 2-3, so each still already works as a short cutaway. variants 3 on each still (a B-roll pack): the user sees three versions of every shot and keeps the best; say that each variant costs the full price.
+3. When they are approved, list_library until the images are no longer "still generating", capture a frame on each, tell the user they can pick another variant of any shot in the Inspector (Variants) or by right-clicking it, then ask_user which ones to animate (options: "Animate all", "Keep as stills", or each shot by name). Animation costs much more than a still: say so in the question.
 4. Animate the chosen ones: generate_media kind "video" with start_image = that still's library path, the same brief and quote, the shortest duration, length 1.5-4 and muted true — again all in one message, one card. Then delete the still it replaces (delete_element) so the two do not stack.
 5. Capture a frame in the middle of each shot; nothing covers the first or last line.
 
@@ -272,6 +272,48 @@ A new AI voice on the clip. It costs credits (the user approves the price) and a
 - Voices: pick one that fits the tone; say which one you picked.
 - The voice appears as a layer named "Voiceover: …"; deleting it restores the original audio and captions.
 - Do not claim that a new voice or new visuals make it fine to use someone else's video. If the user asks about rights, say that permission from the owner is still needed.`,
+
+  blank: `# Project without a script (blank "New edit", AI-only video)
+
+Nothing is spoken, so there are no quotes to anchor to: every piece of media is placed by time.
+
+1. Plan the video first with update_plan, one beat per line in seconds: "[0-3s] hook: a laptop glowing in a dark hotel room", "[3-7s] the dashboard fills with bookings". Keep each shot 2-5 seconds.
+2. work_area in <clip_context> is how long the video plays. When the plan is longer, set_workarea {start: 0, end: <plan length>} BEFORE adding media, or the shots past the end will not play.
+3. Stills first: generate_media kind "image" for every shot in ONE message (one card, one total price), each with idea, subject, action, setting, style, camera, mood, start = the beat's first second and length = the beat's seconds, and variants 3 so the user can keep the best version of each shot. No quote. One style and the frame's aspect ratio for every shot.
+4. After approval, list_library until they are ready, capture a frame on each, tell the user they can pick another variant in the Inspector (Variants), then ask_user which shots to animate (animation costs much more). Animate with generate_media kind "video": start_image = that still, the same brief, the same start, length = the beat, muted true. Delete the still each video replaces.
+5. Words: add_voiceover with mode "overlay" and start 0 (about 3 words per second of video), or add_text titles timed to the beats.
+6. Music: generate_media kind "audio" (instrumental, mood, genre, tempo), start 0, duration = the video length up to the model's limit, then set_props volume -18 when there is a voice.
+7. Capture a frame in the middle of every beat: nothing empty, nothing off-screen, text readable.`,
+
+  intro: `# Intro (plan_video)
+
+The Video agent team builds intros: do not assemble them with add_text and keyframes.
+
+1. read_skill "motion-profile" when <your_skills> lists it: it holds the personality and colours the user liked last time. Add it to the brief.
+2. plan_video {recipe: "intro", brief: the user's words}. Pass title only when the user gave the exact words, seconds only when they asked for a length.
+3. The user approves a storyboard (beats with times). If they cancel, ask what to change and call plan_video again with a better brief.
+4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
+5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no lottie").`,
+
+  video: `# A whole AI video (create_video, /video)
+
+create_video makes a new video from a prompt: a director writes the voice-over and the shot list, the user approves one storyboard card, then every shot, the voice and the music are generated at once.
+
+1. Use it on a blank "New edit" only. On a clip of the user's own footage, add AI shots with B-roll (read_guide "broll") or generate_media instead: create_video would reframe and cover their video, and it refuses to run there.
+2. Pass the user's words as prompt. Pass seconds, aspect, voice or model only when the user asked for them. Shots come out at the model's shot lengths, so the video can end up a second shorter or longer than asked; say so if it matters.
+3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again.
+4. After approval the shots fill in as they finish (about one shot's wait). list_library until no shot is "still generating", then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
+5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.
+6. A shot marked "continues" on the card starts from the last frame of the shot before it (no cut), so it fills in after that shot. If the shot before fails or is cancelled, the continuing shot fails too and its credits come back. Regenerating a continuing shot works while the shot before it is still there; after the shot before was regenerated, the chain is broken, so make the video again.`,
+
+  edit: `# Edit your own video with words (edit_video, /edit)
+
+edit_video redraws one range of the user's own video from a short instruction: light, setting, style, weather ("make it night", "a cosy studio behind me", "film look"). The speaker's motion and the camera stay; the original sound keeps playing.
+
+1. Pick a range of 3-10 s inside one shot (no cut, no split-screen layout on it). For a longer change, ask which moment matters most; each range is its own paid edit.
+2. Write the change, not the whole scene: "night, warm desk lamp, city lights in the window". No real people, celebrities or logos: those are refused.
+3. To change only what is behind the speaker, use replace_background instead: it keeps the speaker exactly as filmed.
+4. The user approves the price. After it is placed, list_library until it is no longer "still generating", then capture a frame in the middle of the range: the speaker is in the same place and the edit covers the whole range.`,
 
   document: "",
 } as const;

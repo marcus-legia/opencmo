@@ -51,6 +51,11 @@ import {
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
+import { backgroundToolSpec, prepareBackground } from "./background-tool";
+import { editToolSpec, prepareEdit } from "./edit-tool";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo } from "./create-video";
+import { screenPieces } from "./screen-pieces";
+import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
@@ -59,7 +64,12 @@ import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runChec
  */
 async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
   try {
-    await moderateText(specText(prepared.spec).join("\n"));
+    // Each model kind has its own policy, so each spec is judged on its own (variants share the prompt).
+    await Promise.all(
+      [{ model: prepared.model, spec: prepared.spec }, ...(prepared.extra ?? [])].map((item) =>
+        moderateText(specText(item.spec).join("\n"), { kind: item.model.kind }),
+      ),
+    );
     return null;
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
@@ -69,13 +79,13 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
 // add_3d_studio (4 khuôn) không còn cho agent: 3D của agent là code (add_3d_scene, spec code-scenes).
-const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
   | { kind: "run" }
   | { kind: "browser"; input: unknown }
-  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> }
+  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
 
@@ -129,10 +139,13 @@ export function clipScope(
   });
   const env = { workspace };
   const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
+  const background = backgroundToolSpec();
+  const video = createVideoToolSpec();
+  const editTool = editToolSpec();
   return {
     kind: "clip",
     // Tool mới thêm ở CUỐI: thứ tự tool là phần đầu của prompt cache.
-    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC],
+    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])],
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -170,6 +183,26 @@ export function clipScope(
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the captions" };
         }
         return { kind: "approval", input: prepared, card: captionsCard(prepared, clipId) };
+      }
+      if (call.name === "plan_video") {
+        // The team plans here, before the card: the user approves the exact storyboard that is
+        // applied. Its model calls are charged on this turn like the Assistant's own steps.
+        const snapshot = await workspace.read();
+        const clipContext = await clipContextBlock(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest)).catch(() => "");
+        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext }, async (usage) => {
+          await rpcOrThrow<number>(supabase, "agent_record_usage", {
+            p_turn_id: turn.id,
+            p_model: usage.model,
+            p_input: usage.input,
+            p_output: usage.output,
+            p_cache_read: usage.cacheRead,
+            p_cache_write: usage.cacheWrite,
+          });
+        });
+        if (typeof planned === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the intro" };
+        }
+        return { kind: "approval", input: planned.prepared, card: { ...planned.card, clips: [{ id: clipId, label: "This clip" }] } };
       }
       if (call.name === "request_export") {
         const prepared = await prepareExport(supabase, clipId, call.input);
@@ -222,6 +255,65 @@ export function clipScope(
         if (blocked) return blocked;
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
       }
+      if (call.name === "create_video") {
+        // The director plans here, before the card; its model calls are charged on this turn.
+        const snapshot = await workspace.read();
+        const planned = await prepareCreateVideo(call.input, { document: snapshot.document }, async (usage) => {
+          await rpcOrThrow<number>(supabase, "agent_record_usage", {
+            p_turn_id: turn.id,
+            p_model: usage.model,
+            p_input: usage.input,
+            p_output: usage.output,
+            p_cache_read: usage.cacheRead,
+            p_cache_write: usage.cacheWrite,
+          });
+        });
+        if (typeof planned === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the video" };
+        }
+        // Every piece starts on Approve: check the in-flight cap now, not after the user has approved.
+        const needed = 1 + (planned.prepared.extra?.length ?? 0);
+        const { count: running } = await supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
+        if ((running ?? 0) + needed > GENERATION_ACTIVE_LIMIT) {
+          const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, or ask for a shorter video.`;
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
+        }
+        const shotCount = planned.storyboard.beats.length;
+        const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
+        const pieces = runs.map(({ model, spec }, index) => ({
+          label:
+            index < shotCount
+              ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
+              : model.kind === "voice"
+                ? "The voice-over script"
+                : "The music",
+          spec,
+          kind: model.kind,
+        }));
+        const blocked = await screenPieces(pieces);
+        if (blocked) return { kind: "invalid", ...blocked };
+        return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
+      }
+      if (call.name === "replace_background") {
+        const snapshot = await workspace.read();
+        const prepared = prepareBackground(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
+        if (typeof prepared === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the new background" };
+        }
+        const blocked = await screen(prepared);
+        if (blocked) return blocked;
+        return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
+      }
+      if (call.name === "edit_video") {
+        const snapshot = await workspace.read();
+        const prepared = prepareEdit(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
+        if (typeof prepared === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the video edit" };
+        }
+        const blocked = await screen(prepared);
+        if (blocked) return blocked;
+        return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
+      }
       if (call.name === "add_voiceover") {
         const prepared = await prepareVoiceover(call.input, async (input) => {
           const snapshot = await workspace.read();
@@ -253,6 +345,18 @@ export function clipScope(
             ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
             : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
+      if (call.name === "plan_video") {
+        if (!approved) {
+          return {
+            outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined the storyboard. Nothing was added." }), summary: "Declined" },
+            extra: {},
+            wrote: false,
+          };
+        }
+        const prepared = input as PreparedVideo;
+        const outcome = await applyOpTool(prepared.op as never, env);
+        return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
+      }
       if (call.name === "request_export") {
         if (!approved) {
           return {
@@ -291,7 +395,7 @@ export function clipScope(
       );
       return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };
     },
-    isWrite: (name) => name === "undo" || name === "apply_brand_kit" || CAPTION_TOOLS.has(name) || isWriteTool(name),
+    isWrite: (name) => name === "undo" || name === "apply_brand_kit" || name === "plan_video" || CAPTION_TOOLS.has(name) || isWriteTool(name),
   };
 }
 

@@ -24,7 +24,7 @@ import {
 	splitLine,
 } from './captions';
 import { OpError, OpFailure, type OpContext } from './context';
-import { addGenerated, addText, deleteElement, enhanceGenerated, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
+import { addGenerated, addText, deleteElement, enhanceGenerated, pickVariant, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
 import { moveElements, moveKeyframe, moveLayer, setWorkarea, splitElements, trimElement } from './timeline';
 import { addPart, copySettings, movePart, setKeyframe, setProps } from './inspector';
 import { cleanAudio, makeRoom, rippleDelete, setAudioRoll, setCaptionBreaks, setFade, slipElement } from './edit';
@@ -39,10 +39,17 @@ import { applyLayout } from './layouts';
 import { addVoiceover, captionVoiceover, syncVoiceover, syncVoiceovers } from './voiceover';
 import { insertCaptions, insertToRow, moveToRow } from './rows';
 import { laneOf } from '../tracks';
+import { addIntro } from '../motion/intro';
+import { replaceBackground } from './background';
+import { editVideo } from './edit-video';
+import { createVideo } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, stagger, updateVisual } from './visuals';
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
+export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
+export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
+export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
 export { loadCaptions, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
@@ -135,6 +142,11 @@ const REGISTRY = [
 	moveToRow,
 	insertCaptions,
 	captionVoiceover,
+	addIntro,
+	pickVariant,
+	replaceBackground,
+	createVideo,
+	editVideo,
 ] as const;
 
 type Definition = {
