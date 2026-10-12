@@ -25,7 +25,8 @@
  *   "intro"            → plan_video intro (the Video agent team; storyboard card)
  *   "replace the background" → replace_background 2–6 s (cut-out + new background, one card)
  *   "look like night"  → edit_video 2–6 s (the speaker's own video redrawn, one card)
- *   "/video …" (slash directive) → create_video 15 s · "/image …" → generate_media image at 0 s
+ *   "/video …" (slash directive), or "make a … video" on a blank edit → create_video at the length and frame asked
+ *                        ("20-second", "square"; else 15 s and the edit's frame) · "/image …" → generate_media image at 0 s
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -198,6 +199,12 @@ function script(history: StoredMessage[]): unknown[] {
       return [text(images ? `I looked at ${images} ${images === 1 ? "frame" : "frames"}: the speaker is in frame.` : "I could not see the frames.")];
     }
     const failed = results.some((block) => block.is_error);
+    if (previous.includes("create_video")) {
+      if (/"declined":\s*true/.test(raw0)) return [text("No problem, nothing was spent. What should I change: the story, the length or the tone?")];
+      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The video is on its way: the shots, the voice-over and the music fill in on the timeline as they finish.")];
+      const reason = /"(?:INVALID_INPUT|error)"\s*:\s*"([^"]+)"/.exec(raw0)?.[1];
+      return [text(reason ? `I could not make that video: ${reason}` : "That did not work — nothing was changed.")];
+    }
     return [text(failed ? "That did not work — nothing was changed." : "Done. You can undo this in one click.")];
   }
 
@@ -211,8 +218,17 @@ function script(history: StoredMessage[]): unknown[] {
   const quoted = /'([^']{4,})'/.exec(original.split(/<clip_context>|<project_state>/)[0]!)?.[1];
   // Slash commands: the directive names the tool; the words after the command are the request.
   const words = (original.split(/<command|<clip_context>|<project_state>/)[0] ?? "").replace(/^\s*\/[a-z]+\s*/i, "").trim();
-  if (/<command name="\/video">/.test(ask)) {
-    return [text("I'll have the director plan the video."), use("create_video", { prompt: words || "a short product video", seconds: 15 })];
+  // A whole video: /video, or "make a … video" on a blank New edit (nothing spoken), as the system
+  // prompt tells a real model to route it.
+  const blankEdit = original.includes("no_script");
+  if (/<command name="\/video">/.test(ask) || (blankEdit && /\b(make|create)\b[^.]*\bvideo\b/.test(ask))) {
+    // The length and frame the user asked for, as a real model passes them; 15 s and the edit's frame otherwise.
+    const asked = /(\d{1,3})\s*-?\s*(?:seconds?|secs?|s)\b/i.exec(words)?.[1];
+    const aspect = /\bsquare\b|\b1:1\b/i.test(words) ? "1:1" : /\blandscape\b|\bhorizontal\b|\b16:9\b/i.test(words) ? "16:9" : undefined;
+    return [
+      text("I'll have the director plan the video."),
+      use("create_video", { prompt: words || "a short product video", seconds: asked ? Number(asked) : 15, ...(aspect ? { aspect } : {}) }),
+    ];
   }
   if (/<command name="\/image">/.test(ask)) {
     return [

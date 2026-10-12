@@ -4,6 +4,11 @@
  *   npm run agent:eval -- --provider fake                 # CI: kiểm harness, không tốn tiền
  *   npm run agent:eval -- --provider anthropic --yes      # model thật: TỐN TIỀN API
  *   npm run agent:eval -- --provider anthropic --task hook --yes
+ *   npm run agent:eval -- --provider anthropic --yes --until-card --task video-
+ *
+ * `--until-card` stops a task at the first price card (what the user would approve), so a real
+ * model costs only its own tokens and the director's, never media credits. `--task video-` runs
+ * every task whose id starts with "video-".
  *
  * Mỗi bài: workspace trong bộ nhớ từ clip mẫu → cùng system prompt, cùng bộ
  * tool, cùng `runTool` với app; tool tab chạy bằng Node (`node-tools.ts`);
@@ -31,7 +36,7 @@ import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
-import { generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
+import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
 import {
@@ -47,7 +52,7 @@ import {
 import { nodeCapture, nodeGrab, nodeInspectColor, nodePreview3d, nodeWaveform, type NodeMedia } from "./node-tools";
 import { TASKS, type EvalTask } from "./tasks";
 
-type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean };
+type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean; untilCard: boolean };
 
 function args(): Args {
   const argv = process.argv.slice(2);
@@ -61,6 +66,7 @@ function args(): Args {
     out: value("--out") ?? join(process.cwd(), ".agent-eval"),
     maxSteps: Number(value("--max-steps") ?? 60),
     yes: argv.includes("--yes"),
+    untilCard: argv.includes("--until-card"),
   };
 }
 
@@ -114,6 +120,8 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt)}${about}${await state()}`) }];
   const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const tools: string[] = [];
+  const calls: { name: string; input: unknown }[] = [];
+  const cards: { tool: string; changes: string[]; credits: number }[] = [];
   let steps = 0;
   let stopped = "done";
   const env = { workspace };
@@ -144,6 +152,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
     let wrote = false;
     for (const call of step.toolCalls) {
       tools.push(call.name);
+      calls.push({ name: call.name, input: call.input });
       if (call.name === "ask_user") {
         const content = task.answer
           ? JSON.stringify({ user_answer: { choices: [], text: task.answer } })
@@ -238,6 +247,12 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
           continue;
         }
         generations.push(prepared);
+        const card = generateCard(prepared, "eval");
+        cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
+        if (options.untilCard) {
+          stopped = "card";
+          break;
+        }
         const applied = await applyOpTool(prepared.op, env);
         if (applied.version !== undefined) wrote = true;
         results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });
@@ -247,21 +262,27 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
       if (outcome.version !== undefined) wrote = true;
       results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content });
     }
+    if (stopped === "card") break;
     const after = wrote && step.toolCalls.some((call) => isWriteTool(call.name)) ? await state() : undefined;
     history.push({ role: "user", content: provider.toolResults(results, after) });
   }
 
   const final = workspace.snapshot();
   const report = await runCheck(workspace);
-  const grade = task.grade({ document: final.document, report, tools, generations });
+  const reply = history
+    .filter((message) => message.role === "assistant")
+    .flatMap((message) => (message.content as { type?: string; text?: string }[]).filter((block) => block.type === "text").map((block) => block.text ?? ""))
+    .join("\n");
+  const grade = task.grade({ document: final.document, report, tools, generations, calls, cards, reply, untilCard: options.untilCard });
   await refreshTranscripts();
   const sheet = await nodeCapture(final.document, media(), { count: 8 }).catch(() => null);
-  return { task, grade, steps, usage, tools, stopped, sheet: sheet?.images[0] ?? null, document: final.document };
+  return { task, grade, steps, usage, tools, calls, cards, reply, stopped, sheet: sheet?.images[0] ?? null, document: final.document };
 }
 
 async function main() {
   const options = args();
-  const tasks = options.task ? TASKS.filter((task) => task.id === options.task) : TASKS;
+  // "video-" (ending in a dash) runs every task of that group.
+  const tasks = options.task ? TASKS.filter((task) => (options.task!.endsWith("-") ? task.id.startsWith(options.task!) : task.id === options.task)) : TASKS;
   if (!tasks.length) throw new Error(`không có bài ${options.task}`);
   const price = PRICES[options.provider] ?? PRICES.anthropic!;
 
@@ -283,7 +304,7 @@ async function main() {
     const result = await runTask(task, provider, options);
     const cost = (result.usage.input * price.input + result.usage.output * price.output + result.usage.cacheRead * price.cacheRead + result.usage.cacheWrite * price.cacheWrite) / 1e6;
     if (result.sheet) writeFileSync(join(options.out, `${task.id}.jpg`), Buffer.from(result.sheet, "base64"));
-    writeFileSync(join(options.out, `${task.id}.json`), JSON.stringify({ tools: result.tools, grade: result.grade, document: result.document }, null, 2));
+    writeFileSync(join(options.out, `${task.id}.json`), JSON.stringify({ tools: result.tools, calls: result.calls, cards: result.cards, reply: result.reply, grade: result.grade, document: result.document }, null, 2));
     const row = {
       task: task.id,
       pass: result.grade.pass,
@@ -295,11 +316,15 @@ async function main() {
     };
     rows.push(row);
     console.log(`${row.pass ? "PASS" : "FAIL"} ${row.task.padEnd(9)} ${String(row.steps).padStart(3)} bước  $${row.cost.toFixed(3)}  ${row.notes}`);
+    // What the user would see: the card they approve, or the Assistant's answer.
+    for (const card of result.cards) console.log(`     card (${card.tool}): ${card.changes[0] ?? ""}`);
+    if (!result.cards.length && result.reply) console.log(`     reply: ${result.reply.replace(/\s+/g, " ").slice(0, 300)}`);
   }
   const passed = rows.filter((row) => row.pass).length;
   const total = rows.reduce((sum, row) => sum + row.cost, 0);
   console.log(`\n${passed}/${rows.length} bài qua · $${total.toFixed(2)} · báo cáo ở ${options.out}`);
   writeFileSync(join(options.out, "report.json"), JSON.stringify({ provider: options.provider, rows, passed, cost: total }, null, 2));
+  if (passed < rows.length) process.exitCode = 1;
 }
 
 main().catch((error) => {
