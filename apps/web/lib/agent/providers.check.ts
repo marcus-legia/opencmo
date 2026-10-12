@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat } from "./providers/anthropic";
+import { anthropicFormat, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -22,6 +22,20 @@ for (const banned of ['"pattern"', '"minimum"', '"maxLength"', '"$schema"', '"pr
 }
 assert.equal(TOOL_SPECS.find((spec) => spec.name === "update_element")!.strict, false, "record không strict");
 assert.equal(TOOL_SPECS.find((spec) => spec.name === "set_frame")!.strict, true);
+
+// The API allows at most MAX_STRICT_TOOLS strict tools; credit-spending tools keep strict first.
+const optionalSchema = (count: number) => ({ type: "object", properties: Object.fromEntries(Array.from({ length: count }, (_, index) => [`p${index}`, {}])), required: [] });
+const pricedSpec = { name: "replace_background", description: "", schema: optionalSchema(2), strict: true, approval: true };
+const bigSpec = { name: "generate_media", description: "", schema: optionalSchema(23), strict: true, approval: true };
+const sent = strictTools([...TOOL_SPECS, bigSpec, pricedSpec]);
+assert.ok(TOOL_SPECS.filter((spec) => spec.strict).length > MAX_STRICT_TOOLS, "the clip scope has more eligible tools than the cap");
+assert.ok(sent.size <= MAX_STRICT_TOOLS, "strict tools capped");
+assert.ok(!sent.has("generate_media"), "one large priced schema does not crowd out the small ones");
+const optional = [...TOOL_SPECS, bigSpec, pricedSpec].filter((spec) => sent.has(spec.name)).reduce((sum, spec) => sum + optionalParams(spec.schema), 0);
+assert.ok(optional <= MAX_STRICT_OPTIONAL, `optional params over strict tools capped (${optional})`);
+assert.equal(optionalParams({ type: "object", properties: { a: {}, b: { type: "object", properties: { c: {} }, required: [] } }, required: ["a"] }), 2);
+assert.ok(sent.has("replace_background"), "priced tool stays strict even last in the list");
+assert.ok(!sent.has("update_element"), "non-eligible tool never strict");
 
 async function main(): Promise<void> {
 // ---------------------------------------------------------------- saved Gemini chats

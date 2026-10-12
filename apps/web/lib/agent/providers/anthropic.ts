@@ -94,14 +94,70 @@ export const anthropicFormat: Omit<Format, "kind"> = {
   },
 };
 
-const tools = (specs: ToolSpec[]): Anthropic.Beta.BetaTool[] =>
-  specs.map((spec) => ({
+/**
+ * Strict grammar limits: the API rejects a request with more strict tools than this, or with more
+ * optional parameters summed over all strict schemas (both are 400 invalid_request_error). A third
+ * limit, total grammar size, can't be computed here — `step` falls back to no strict for that.
+ */
+export const MAX_STRICT_TOOLS = 20;
+export const MAX_STRICT_OPTIONAL = 24;
+
+/** Tools that spend credits: a malformed call here costs the user money, so they get strict first. */
+const PRICED = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+
+/**
+ * Which strict-eligible tools are actually sent as strict. The clip scope has far more eligible
+ * tools than the API allows; the rest still have their input checked by zod before they run, so
+ * strict is a quality nicety, not the guard.
+ */
+export function strictTools(specs: ToolSpec[]): Set<string> {
+  const eligible = specs.filter((spec) => spec.strict);
+  // Smallest schemas first: one large schema (generate_media) can use up the whole budget.
+  const first = eligible
+    .filter((spec) => spec.approval || PRICED.has(spec.name))
+    .sort((a, b) => optionalParams(a.schema) - optionalParams(b.schema));
+  const rest = eligible.filter((spec) => !first.includes(spec));
+  const chosen = new Set<string>();
+  let optional = 0;
+  for (const spec of [...first, ...rest]) {
+    if (chosen.size >= MAX_STRICT_TOOLS) break;
+    const count = optionalParams(spec.schema);
+    if (optional + count > MAX_STRICT_OPTIONAL) continue;
+    optional += count;
+    chosen.add(spec.name);
+  }
+  return chosen;
+}
+
+/** Object properties not listed in `required`, at every depth of the schema. */
+export function optionalParams(schema: unknown): number {
+  if (Array.isArray(schema)) return schema.reduce((sum: number, item) => sum + optionalParams(item), 0);
+  if (!schema || typeof schema !== "object") return 0;
+  const node = schema as Record<string, unknown>;
+  let count = 0;
+  if (node.properties && typeof node.properties === "object") {
+    const required = new Set(Array.isArray(node.required) ? (node.required as string[]) : []);
+    count += Object.keys(node.properties).filter((name) => !required.has(name)).length;
+  }
+  for (const value of Object.values(node)) count += optionalParams(value);
+  return count;
+}
+
+const tools = (specs: ToolSpec[], useStrict: boolean): Anthropic.Beta.BetaTool[] => {
+  const strict = useStrict ? strictTools(specs) : new Set<string>();
+  return specs.map((spec) => ({
     name: spec.name,
     description: spec.description,
     input_schema: spec.schema as Anthropic.Beta.BetaTool["input_schema"],
-    ...(spec.strict ? { strict: true } : {}),
+    ...(strict.has(spec.name) ? { strict: true } : {}),
     eager_input_streaming: true,
   }));
+};
+
+/** 400s caused by the strict tool grammar, e.g. "Too many strict tools", "compiled grammar is too large". */
+function isStrictLimit(err: unknown): boolean {
+  return err instanceof Anthropic.BadRequestError && /strict|grammar|optional parameters/i.test(err.message);
+}
 
 function failureMessage(err: unknown): string {
   if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) {
@@ -123,6 +179,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
     failureMessage,
     async step({ history, tools: specs, system, signal }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
       let jsonRetries = 0;
+      let useStrict = true;
       for (;;) {
         const stream = client.beta.messages.stream({
           model,
@@ -131,7 +188,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
-          tools: tools(specs),
+          tools: tools(specs, useStrict),
           messages: history as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA],
           fallbacks: "default",
@@ -169,6 +226,13 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
         } catch (err) {
           // Eager input streaming: JSON tool input hỏng làm stream ném lúc khối
           // đóng. Chỉ trường hợp đó được gửi lại (tối đa 2 lần); lỗi API thì không.
+          if (useStrict && isStrictLimit(err)) {
+            // A schema change pushed the strict grammar over a limit: run the turn without strict
+            // (zod still checks every input) instead of failing it.
+            console.warn("[agent] strict tools rejected, retrying without strict", (err as Error).message);
+            useStrict = false;
+            continue;
+          }
           if (err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
         }
       }

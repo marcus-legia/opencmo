@@ -125,6 +125,15 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
   };
 }
 
+/** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
+export function clipToolSpecs(): ToolSpec[] {
+  const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
+  const background = backgroundToolSpec();
+  const video = createVideoToolSpec();
+  const editTool = editToolSpec();
+  return [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])];
+}
+
 export function clipScope(
   supabase: SupabaseClient,
   context: ClipContext,
@@ -138,14 +147,9 @@ export function clipScope(
     mark: checkpoint.mark,
   });
   const env = { workspace };
-  const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
-  const background = backgroundToolSpec();
-  const video = createVideoToolSpec();
-  const editTool = editToolSpec();
   return {
     kind: "clip",
-    // Tool mới thêm ở CUỐI: thứ tự tool là phần đầu của prompt cache.
-    tools: [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])],
+    tools: clipToolSpecs(),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
