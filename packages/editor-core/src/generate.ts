@@ -57,6 +57,8 @@ export type AiModel = {
 		 * models may read the clip's own video (`renders:` / `sources:` refs), not just library files.
 		 */
 		removeBackground?: boolean;
+		/** An edit model that may also read the clip's own video (`edit_video`), not just library files. */
+		clipVideo?: boolean;
 		/** About how many seconds one generation takes (provider's published speed); shown on cards. */
 		typicalSeconds?: number;
 		/** Tên tham số kích thước phía provider (chỉ worker dùng). */
@@ -137,7 +139,7 @@ export function specSchema(model: AiModel) {
 							sourceVideo: z
 								.string()
 								.max(500)
-								.regex(limits.removeBackground ? CLIP_VIDEO_REF : /^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.')
+								.regex(limits.removeBackground || limits.clipVideo ? CLIP_VIDEO_REF : /^[0-9a-f-]{36}\/[^]+$/, 'Choose the video to edit.')
 								.refine((value) => !value.includes('..'), 'Choose the video to edit.'),
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}

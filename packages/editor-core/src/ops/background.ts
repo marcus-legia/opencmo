@@ -49,7 +49,7 @@ export function frameAspect(width: number, height: number): '9:16' | '16:9' | '1
 }
 
 /** `offset`: seconds into the master node's own timeline where the range starts (its keyframes' clock). */
-type Master = { node: Entity; owner: Entity; sourceStart: number; offset: number };
+export type Master = { node: Entity; owner: Entity; sourceStart: number; offset: number };
 
 const MOVING = ['x', 'y', 'offsetX', 'offsetY', 'scale', 'scaleX', 'scaleY', 'rotation'];
 
@@ -65,7 +65,7 @@ function movesChildren(entity: Entity): boolean {
 }
 
 /** The master piece that plays the whole range, and the scene child that holds it. */
-function masterFor(document: ClipDocument, start: number, end: number, ctx?: Pick<OpContext, 'media'>): Master {
+export function masterFor(document: ClipDocument, start: number, end: number, ctx?: Pick<OpContext, 'media'>): Master {
 	const scene = sceneOf(document);
 	if (!scene) throw new OpFailure('This project has no scene.');
 	const times = timesOf(document, { media: ctx?.media });
@@ -88,10 +88,10 @@ function masterFor(document: ClipDocument, start: number, end: number, ctx?: Pic
 	throw new OpFailure('Pick a part of your own video with no cut in it.');
 }
 
-type Track = { property: string; keyframes: { time: number; value: number; easing?: string }[] };
+export type Track = { property: string; keyframes: { time: number; value: number; easing?: string }[] };
 
 /** A track re-timed to start `offset` seconds later; the value at the new zero is kept (linear between keys). */
-function shiftTrack(track: Track, offset: number): Track {
+export function shiftTrack(track: Track, offset: number): Track {
 	const keys = track.keyframes;
 	const after = keys.findIndex((key) => key.time >= offset);
 	const shifted = keys.filter((key) => key.time >= offset).map((key) => ({ ...key, time: round(key.time - offset) }));

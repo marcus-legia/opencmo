@@ -24,6 +24,7 @@
  *   "feedback"         → send_feedback (báo giới hạn, diễn đạt lại bằng tiếng Anh)
  *   "intro"            → plan_video intro (the Video agent team; storyboard card)
  *   "replace the background" → replace_background 2–6 s (cut-out + new background, one card)
+ *   "look like night"  → edit_video 2–6 s (the speaker's own video redrawn, one card)
  *   "/video …" (slash directive) → create_video 15 s · "/image …" → generate_media image at 0 s
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
@@ -296,6 +297,9 @@ function script(history: StoredMessage[]): unknown[] {
         }),
       ),
     ];
+  }
+  if (/look like night/.test(ask)) {
+    return [text("I'll turn that part of your video into a night scene."), use("edit_video", { start: 2, end: 6, prompt: "night time, warm desk lamp, city lights through the window" })];
   }
   if (/replace the background/.test(ask)) {
     return [text("I'll swap the room behind you for a bright office."), use("replace_background", { start: 2, end: 6, background: "a bright modern office with plants, soft morning light" })];

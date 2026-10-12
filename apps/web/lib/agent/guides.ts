@@ -305,6 +305,15 @@ create_video makes a new video from a prompt: a director writes the voice-over a
 4. After approval the shots fill in as they finish (about one shot's wait). list_library until no shot is "still generating", then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
 5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.`,
 
+  edit: `# Edit your own video with words (edit_video, /edit)
+
+edit_video redraws one range of the user's own video from a short instruction: light, setting, style, weather ("make it night", "a cosy studio behind me", "film look"). The speaker's motion and the camera stay; the original sound keeps playing.
+
+1. Pick a range of 3-10 s inside one shot (no cut, no split-screen layout on it). For a longer change, ask which moment matters most; each range is its own paid edit.
+2. Write the change, not the whole scene: "night, warm desk lamp, city lights in the window". No real people, celebrities or logos: those are refused.
+3. To change only what is behind the speaker, use replace_background instead: it keeps the speaker exactly as filmed.
+4. The user approves the price. After it is placed, list_library until it is no longer "still generating", then capture a frame in the middle of the range: the speaker is in the same place and the edit covers the whole range.`,
+
   document: "",
 } as const;
 

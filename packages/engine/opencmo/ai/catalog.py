@@ -195,7 +195,8 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
             raise SpecError(MEDIA_NOT_FOUND)
     if model.limits.get("sourceVideo"):
         source = spec.get("sourceVideo")
-        if not (media_ref_ok(source) or (model.limits.get("removeBackground") and clip_video_ref_ok(source))):
+        own_clip = model.limits.get("removeBackground") or model.limits.get("clipVideo")
+        if not (media_ref_ok(source) or (own_clip and clip_video_ref_ok(source))):
             raise SpecError(VIDEO_NOT_FOUND)
         start = spec.get("sourceStart")
         if isinstance(start, bool) or not isinstance(start, (int, float)) or start < 0:

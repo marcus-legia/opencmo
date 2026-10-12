@@ -53,4 +53,13 @@ describe('sửa video (G2, video-to-video)', () => {
 		// Model sinh thường không nhận video nguồn.
 		expect(specSchema(model('fal-kling')).safeParse({ prompt: 'x', aspectRatio: '9:16', duration: 5, sourceVideo: `${UID}/j/clip.mp4` }).success).toBe(false);
 	});
+
+	it("edit models may read the clip's own video (edit_video); upscale may not", () => {
+		const ok = { prompt: 'make it night', aspectRatio: '9:16', duration: 6, sourceVideo: `renders:${UID}/clip/master/1.mp4`, sourceStart: 0 };
+		expect(specSchema(model('fal-kling-edit')).safeParse(ok).success).toBe(true);
+		expect(specSchema(model('fal-kling-edit')).safeParse({ ...ok, sourceVideo: `sources:${UID}/j/proxy/1/c.mp4` }).success).toBe(true);
+		expect(specSchema(model('fal-kling-edit')).safeParse({ ...ok, sourceVideo: `media:${UID}/clip/master/1.mp4` }).success).toBe(false);
+		const upscale = model('fal-seedvr-upscale');
+		expect(specSchema(upscale).safeParse({ ...ok, prompt: 'Upscale', duration: 5, resolution: upscale.limits.resolutions![0] }).success).toBe(false);
+	});
 });

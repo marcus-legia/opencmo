@@ -12,6 +12,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "image", label: "Create an image", hint: "An AI image on the clip", directive: 'call generate_media with kind "image"' },
   { name: "animate", label: "Animate an image", hint: "Turn the selected image into a short video", directive: 'call generate_media with kind "video" and start_image = the selected AI or uploaded image (list_library if needed)' },
   { name: "background", label: "Replace the background", hint: "Keep yourself, change the room behind you", directive: "call replace_background" },
+  { name: "edit", label: "Edit your video", hint: "Change the look of a part of your video with words", directive: 'read_guide "edit", then call edit_video' },
   { name: "broll", label: "B-roll pack", hint: "AI B-roll stills with variants", directive: 'read_guide "broll" and follow its AI B-roll steps' },
   { name: "intro", label: "Intro", hint: "An animated intro for this clip", directive: "call plan_video with recipe \"intro\"" },
   { name: "voiceover", label: "Voice-over", hint: "A voice reading your text", directive: "call add_voiceover" },

@@ -1066,12 +1066,15 @@ begin
       or (p_spec ? 'endImage' and not public.ai_media_ref_ok(p_spec->'endImage')) then
     raise exception 'That image was not found in your library.' using errcode = '22023';
   end if;
-  -- Video-to-video: the source is required and the caller's own. Background removal may also
-  -- read the clip's own video (`renders:` / `sources:`); other edit models only library files.
+  -- Video-to-video: the source is required and the caller's own. Background removal and the
+  -- edit models flagged `clipVideo` may also read the clip's own video (`renders:` / `sources:`);
+  -- upscale only library files.
   if v_source then
     if not (p_spec ? 'sourceVideo') or not (
         public.ai_media_ref_ok(p_spec->'sourceVideo')
-        or (coalesce((p_model.limits->>'removeBackground')::boolean, false) and public.ai_clip_video_ref_ok(p_spec->'sourceVideo'))) then
+        or ((coalesce((p_model.limits->>'removeBackground')::boolean, false)
+             or coalesce((p_model.limits->>'clipVideo')::boolean, false))
+            and public.ai_clip_video_ref_ok(p_spec->'sourceVideo'))) then
       raise exception 'Choose a video from your library to edit.' using errcode = '22023';
     end if;
     if jsonb_typeof(p_spec->'sourceStart') is distinct from 'number' or (p_spec->>'sourceStart')::numeric < 0 then
