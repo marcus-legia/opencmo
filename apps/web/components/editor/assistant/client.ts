@@ -173,7 +173,8 @@ export class AssistantClient {
     const response = await fetch(`/api/v1/editor/document?clip_id=${encodeURIComponent(this.clipId)}`);
     if (!response.ok) return;
     const latest = (await response.json()) as { document: ClipDocument; version: number; document_hash?: string | null };
-    this.session.adopt(latest.document, latest.version, latest.document_hash ?? null);
+    // Not `adopt`: the tab's own library changes made during the turn still have to be saved.
+    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null);
   }
 
   /** POST rồi đọc stream tới hết. Lỗi trước khi stream mở (thiếu credit…) ném câu của server. */

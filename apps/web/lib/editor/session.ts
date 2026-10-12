@@ -69,6 +69,8 @@ export class DocumentSession {
   private redoStack: Snapshot[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inflight: Promise<void> | null = null;
+  /** Bumped by `rebase`: a save sent before it answers for a version the tab no longer holds. */
+  private epoch = 0;
   private listeners = new Set<() => void>();
   private snapshot: SessionState;
   conflictWith: { version: number; document: ClipDocument } | null = null;
@@ -184,6 +186,30 @@ export class DocumentSession {
     this.emit();
   }
 
+  /**
+   * Take a version the Assistant saved from this same tab. Its document replaces the tab's, but
+   * the library stays the tab's: the Assistant never writes the manifest, and a library change
+   * made meanwhile (a generation finishing, an upload) must still reach the server, now on top of
+   * the new version. `adopt` would mark it saved unsent, and Export would miss that media.
+   * A save already in flight was sent against the old version: a 409 from it is the Assistant's
+   * own write, not another tab, so it must not stop autosave.
+   */
+  rebase(document: ClipDocument, version: number, documentHash: string | null): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.epoch++;
+    this.document = document;
+    this.version = version;
+    this.savedJson = canonicalJson(document);
+    this.documentHash = documentHash;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.status = "saved";
+    this.error = null;
+    this.conflictWith = null;
+    this.changed();
+  }
+
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -219,19 +245,26 @@ export class DocumentSession {
     const manifest = this.manifest;
     const documentJson = canonicalJson(document);
     const manifestJson = json(manifest);
+    const epoch = this.epoch;
     this.status = "saving";
     this.emit();
     this.inflight = (async () => {
       try {
         const saved = await this.transport.save(this.version, document, manifest);
-        this.version = saved.version;
-        this.savedJson = documentJson;
+        // After a `rebase` the server still has this library (only this tab writes the manifest),
+        // but the document is the rebased one unless this save landed after it.
         this.savedManifest = manifestJson;
-        this.documentHash = saved.document_hash;
+        if (epoch === this.epoch || saved.version > this.version) {
+          this.version = saved.version;
+          this.savedJson = documentJson;
+          this.documentHash = saved.document_hash;
+        }
         this.status = this.dirty() ? "pending" : "saved";
         this.error = null;
       } catch (error) {
-        if (error instanceof SaveConflict) {
+        if (epoch !== this.epoch) {
+          this.status = this.dirty() ? "pending" : "saved";
+        } else if (error instanceof SaveConflict) {
           this.status = "conflict";
           this.conflictWith = error.current;
         } else {
