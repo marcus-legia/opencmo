@@ -480,7 +480,7 @@ type Tweak = { dx: number; dy: number; scale: number; alpha: number; color?: str
  * Biến đổi của từng từ ở khung này (E4, học Palmier TextAnimation theo từ):
  * - wordSlide: từ thứ i bắt đầu sau i × per khung, trượt lên từ dưới 0.6 chiều cao chữ và hiện dần;
  * - highlightPop: từ đang tới (t / per) phóng 1.15 quanh tâm, đổi màu nhấn;
- * - phụ đề `highlight: 'pop'`: từ đang nói phóng theo `caption.pop.scale`.
+ * - phụ đề `highlight: 'pop'`: từ đang nói phóng theo `caption.pop.scale`; the rest of its line moves aside.
  * Từ khoảng trắng không đếm.
  */
 function wordTweaks(r: RNode, layout: TextLayout): (word: Word) => Tweak | null {
@@ -490,8 +490,26 @@ function wordTweaks(r: RNode, layout: TextLayout): (word: Word) => Tweak | null 
   const index = new Map<Word, number>();
   let count = 0;
   for (const word of layout.words) if (word.chars.trim()) index.set(word, count++);
+  // The spoken word grows around its centre by more than a space is wide at caption sizes, so
+  // it ran into its neighbours ("hundredthousand"): the rest of its line moves aside as much.
+  const grow = new Map<number, { x0: number; x1: number; by: number }>();
+  if (pop && pop.scale > 1) {
+    for (const word of layout.words) {
+      if (!word.style.ranges.includes(pop.range) || !word.chars.trim()) continue;
+      const span = grow.get(word.y);
+      if (span) (span.x0 = Math.min(span.x0, word.x)), (span.x1 = Math.max(span.x1, word.x + word.width));
+      else grow.set(word.y, { x0: word.x, x1: word.x + word.width, by: 0 });
+    }
+    for (const span of grow.values()) span.by = ((pop.scale - 1) * (span.x1 - span.x0)) / 2;
+  }
   return (word) => {
-    if (pop) return word.style.ranges.includes(pop.range) ? { dx: 0, dy: 0, scale: pop.scale, alpha: 1 } : null;
+    if (pop) {
+      if (word.style.ranges.includes(pop.range)) return { dx: 0, dy: 0, scale: pop.scale, alpha: 1 };
+      const span = grow.get(word.y);
+      if (!span?.by) return null;
+      const dx = word.x + word.width <= span.x0 + 0.5 ? -span.by : word.x >= span.x1 - 0.5 ? span.by : 0;
+      return dx ? { dx, dy: 0, scale: 1, alpha: 1 } : null;
+    }
     const i = index.get(word);
     if (!fx || i === undefined) return null;
     if (fx.type === 'wordSlide') {
