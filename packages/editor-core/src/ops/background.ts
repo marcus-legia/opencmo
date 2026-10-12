@@ -110,6 +110,11 @@ export function masterFor(document: ClipDocument, start: number, end: number, ct
 
 export type Track = { property: string; keyframes: { time: number; value: number; easing?: string }[] };
 
+function withoutIds(track: Track): Track {
+	const { id: _id, ...rest } = track as Track & { id?: string };
+	return { ...rest, keyframes: rest.keyframes.map(({ id: _key, ...key }: Track['keyframes'][number] & { id?: string }) => key) } as Track;
+}
+
 /** A track re-timed to start `offset` seconds later; the value at the new zero is kept (linear between keys). */
 export function shiftTrack(track: Track, offset: number): Track {
 	const keys = track.keyframes;
@@ -159,8 +164,11 @@ export function planBackgroundSwap(document: ClipDocument, input: ReplaceBackgro
 	const geometry = Object.fromEntries(
 		['x', 'y', 'width', 'height'].filter((key) => node[key] !== undefined).map((key) => [key, node[key]]),
 	);
-	// Face tracking moves the speaker's box; the cut-out follows the same keyframes.
-	const tracks = ((node.tracks as Track[] | undefined) ?? []).filter((track) => ['x', 'y'].includes(track.property)).map((track) => shiftTrack(track, master.offset));
+	// Face tracking moves the speaker's box; the cut-out follows the same keyframes. A copy, without
+	// the ids: two elements with one id make the whole document unreadable. applyOps gives new ones.
+	const tracks = ((node.tracks as Track[] | undefined) ?? [])
+		.filter((track) => ['x', 'y'].includes(track.property))
+		.map((track) => withoutIds(shiftTrack(track, master.offset)));
 	const backgroundKind = 'path' in input.background ? (/\.(png|jpe?g|webp)$/i.test(input.background.path) ? 'image' : 'video') : input.background.kind;
 	const group = {
 		kind: 'group',
