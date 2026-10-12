@@ -1603,7 +1603,7 @@ async function main(): Promise<void> {
     assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
     assert.equal(request!.data.name, "create_video");
     const card = request!.data.card as { changes: string[]; credits: number; storyboard: { beats: unknown[]; columns: string[] } };
-    assert.match(card.changes[0]!, /^Create a 15s 9:16 video: 3 AI shots, voice-over, music · \d+ credits/, card.changes[0]);
+    assert.match(card.changes[0]!, /^Create a 15s 9:16 video: 3 AI shots, voice-over \(Test A\), music · \d+ credits/, card.changes[0]);
     assert.equal(card.storyboard.beats.length, 3);
     assert.deepEqual(card.storyboard.columns, ["Shot", "Voice"]);
     const res = await callSse(a, `/agent/sessions/${session}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });

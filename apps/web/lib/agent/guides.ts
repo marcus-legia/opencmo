@@ -277,6 +277,8 @@ A new AI voice on the clip. It costs credits (the user approves the price) and a
 
 Nothing is spoken, so there are no quotes to anchor to: every piece of media is placed by time.
 
+When the user describes a whole video ("a 20-second video about…", /video), call create_video (read_guide "video"): one card for every shot, the voice-over and the music. The steps below are for building it piece by piece, when the user asks for single shots or wants to pick stills first.
+
 1. Plan the video first with update_plan, one beat per line in seconds: "[0-3s] hook: a laptop glowing in a dark hotel room", "[3-7s] the dashboard fills with bookings". Keep each shot 2-5 seconds.
 2. work_area in <clip_context> is how long the video plays. When the plan is longer, set_workarea {start: 0, end: <plan length>} BEFORE adding media, or the shots past the end will not play.
 3. Stills first: generate_media kind "image" for every shot in ONE message (one card, one total price), each with idea, subject, action, setting, style, camera, mood, start = the beat's first second and length = the beat's seconds, and variants 3 so the user can keep the best version of each shot. No quote. One style and the frame's aspect ratio for every shot.

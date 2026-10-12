@@ -53,7 +53,7 @@ import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
-import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo } from "./create-video";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
@@ -282,19 +282,7 @@ export function clipScope(
           const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, or ask for a shorter video.`;
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
         }
-        const shotCount = planned.storyboard.beats.length;
-        const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
-        const pieces = runs.map(({ model, spec }, index) => ({
-          label:
-            index < shotCount
-              ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
-              : model.kind === "voice"
-                ? "The voice-over script"
-                : "The music",
-          spec,
-          kind: model.kind,
-        }));
-        const blocked = await screenPieces(pieces);
+        const blocked = await screenPieces(videoPieces(planned));
         if (blocked) return { kind: "invalid", ...blocked };
         return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
       }
