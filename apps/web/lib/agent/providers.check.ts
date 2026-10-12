@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { anthropicFormat, closeDanglingToolUses, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -58,6 +58,27 @@ const claude = anthropicFormat.toolResults(
 ) as { type: string; content?: { type: string }[] }[];
 assert.deepEqual(claude.map((block) => block.type), ["tool_result", "text"], "tool_result trước, chữ sau");
 assert.deepEqual(claude[0]!.content!.map((block) => block.type), ["text", "image"]);
+
+// ---------------------------------------------------------------- stopped turns
+// A stopped turn left two tool_use blocks unanswered and the next prompt followed straight after.
+const stopped = [
+  { role: "user" as const, content: [{ type: "text", text: "animate" }] },
+  { role: "assistant" as const, content: [{ type: "tool_use", id: "t1", name: "save_frame", input: {} }, { type: "tool_use", id: "t2", name: "save_frame", input: {} }] },
+  { role: "user" as const, content: [{ type: "text", text: "hello" }] },
+];
+const closed = closeDanglingToolUses(stopped);
+assert.equal(closed.length, 3, "answers go into the next user message");
+const answer = closed[2]!.content as { type: string; tool_use_id?: string; content?: string }[];
+assert.deepEqual(answer.map((block) => block.type), ["tool_result", "tool_result", "text"], "tool_result first, then the prompt");
+assert.deepEqual(answer.slice(0, 2).map((block) => [block.tool_use_id, block.content]), [["t1", NOT_COMPLETED], ["t2", NOT_COMPLETED]]);
+assert.equal((stopped[2]!.content as unknown[]).length, 1, "stored history not mutated");
+// Partly answered: only the missing one is added, after the existing answer.
+const partial = closeDanglingToolUses([stopped[0]!, stopped[1]!, { role: "user" as const, content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] }]);
+assert.deepEqual((partial[2]!.content as { tool_use_id: string }[]).map((block) => block.tool_use_id), ["t1", "t2"]);
+// Last message is the unanswered tool_use: a user message is added.
+assert.equal(closeDanglingToolUses(stopped.slice(0, 2)).at(-1)!.role, "user");
+// A clean history is passed through unchanged.
+assert.deepEqual(closeDanglingToolUses([stopped[0]!, { role: "assistant" as const, content: [{ type: "text", text: "hi" }] }]).length, 2);
 
 // ---------------------------------------------------------------- bớt ảnh cũ
 // Ba tin nhắn có ảnh: chỉ hai cái mới nhất giữ ảnh; đầu vào không bị sửa.
