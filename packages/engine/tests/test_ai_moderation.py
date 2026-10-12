@@ -110,14 +110,28 @@ def test_nsfw_flag_or_wrong_shape_blocks(monkeypatch, image, flags):
     assert not err.value.retryable
 
 
-def test_claude_block_or_refusal_blocks(monkeypatch, image):
+def test_claude_block_or_refusal_blocks(monkeypatch, image, caplog):
     _nsfw(monkeypatch)
     _claude(monkeypatch, allowed=False)
-    with pytest.raises(ProviderError, match="content policy"):
+    with caplog.at_level("WARNING", logger=moderation.log.name), pytest.raises(ProviderError, match="content policy"):
         moderation.check_images([image])
+    assert "policy check" in caplog.text and "real_person" in caplog.text, "the log says why"
     _claude(monkeypatch, stop="refusal")
     with pytest.raises(ProviderError, match="content policy"):
         moderation.check_images([image])
+
+
+def test_nsfw_block_is_logged(monkeypatch, image, caplog):
+    _nsfw(monkeypatch, flags=(True,))
+    _claude(monkeypatch)
+    with caplog.at_level("WARNING", logger=moderation.log.name), pytest.raises(ProviderError):
+        moderation.check_images([image])
+    assert "NSFW check" in caplog.text
+
+
+def test_policy_blocks_logos_not_plain_products():
+    assert "visible logo" in moderation.POLICY and "plain laptop" in moderation.POLICY
+    assert "branded product" not in moderation.POLICY
 
 
 def test_unreachable_checks_are_retryable_not_passed(monkeypatch, image):
