@@ -132,7 +132,12 @@ test("12. undo", async () => {
   await fresh();
   await ask(page, "Add a title 'Day 56' at the start.");
   const result = await ask(page, "Undo that, I don't want the title.");
-  report("undo", result, { export: await exportClip(page, "undo") });
+  // "Undo that" is a new request, and the `undo` tool only reverts the current one: check the
+  // clip, not just that the turn ended.
+  const { data } = await admin().from("editor_projects").select("document").eq("clip_id", clipId).single();
+  const titleLeft = JSON.stringify(data?.document ?? null).includes("Day 56");
+  report("undo", result, { titleLeft, export: await exportClip(page, "undo") });
+  expect.soft(titleLeft, "title removed").toBe(false);
 });
 
 test("13. faceless video from a prompt: /video on a New edit", async () => {
