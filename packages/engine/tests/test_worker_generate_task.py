@@ -719,3 +719,102 @@ def test_fal_cutout_parses_the_real_veed_response():
     # fal serves both as application/octet-stream: the extension picks the demuxer.
     assert demuxer("application/octet-stream", picture) == "mov"
     assert demuxer("application/octet-stream", "https://x/out.bin") is None
+
+
+# ------------------------------------------------------------------- chained shots (/video)
+
+PARENT_ID = "99999999-2222-4333-8444-555555555555"
+
+
+def _chain_store(tmp_path, *, parent_overrides=None, parent_file=None):
+    """A continuing shot (`after`) whose parent finished as a red→blue clip in the media bucket."""
+    import subprocess
+
+    parent_spec = {"prompt": "a desk", "aspectRatio": "9:16", "duration": 5, "seed": 1}
+    parent_hash = generate_task.spec_hash("fal-seedance", parent_spec)
+    spec = {"prompt": "the screen lights up", "aspectRatio": "9:16", "duration": 5, "seed": 2, "after": parent_hash}
+    child = _generation(model="fal-seedance", spec=spec, spec_hash=generate_task.spec_hash("fal-seedance", spec), after_id=PARENT_ID)
+    parent = {
+        "id": PARENT_ID, "user_id": "user-1", "job_id": "job-1", "status": "done", "model": "fal-seedance",
+        "spec": parent_spec, "spec_hash": parent_hash, "media_asset_id": "asset-1", **(parent_overrides or {}),
+    }
+    clip = tmp_path / "parent.mp4"
+    if parent_file is None:
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=360x640:r=30:d=1",
+            "-f", "lavfi", "-i", "color=blue:s=360x640:r=30:d=1", "-filter_complex", "[0][1]concat=n=2:v=1",
+            "-pix_fmt", "yuv420p", str(clip),
+        ], check=True)
+    else:
+        clip.write_bytes(parent_file)
+
+    store = FakeStore(child)
+    store.get_generation = lambda gen_id: {GEN_ID: child, PARENT_ID: parent}.get(gen_id)
+    store.get_media_asset = lambda _id: {"id": "asset-1", "storage_path": "media/user-1/job-1/gen-parent.mp4"}
+    store.downloads = []
+
+    def download_object(bucket, path, dest, *, max_bytes=None):
+        store.downloads.append((bucket, path, max_bytes))
+        dest.write_bytes(clip.read_bytes())
+        return dest
+
+    store.download_object = download_object
+    return store
+
+
+def test_a_continuing_shot_starts_from_the_parents_last_frame(monkeypatch, tmp_path):
+    from PIL import Image
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            seen["color"] = Image.open(spec["startImage"]).convert("RGB").resize((1, 1)).getpixel((0, 0))
+            return super().run(model, spec, workdir, alive=alive)
+
+    adapter = Recording()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _chain_store(tmp_path)
+    generate_task.process(store, _task())
+    assert store.failed == [], store.failed
+    assert store.downloads == [("media", "user-1/job-1/gen-parent.mp4", generate_task.PARENT_MAX_BYTES)]
+    red, _green, blue = seen["color"]
+    assert blue > 200 and red < 60, f"the last frame of a red→blue clip is blue, got {seen['color']}"
+    assert "after" not in adapter.spec, "providers never see the chain"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"user_id": "user-2"},
+    {"job_id": "job-2"},
+    {"status": "running"},
+    {"spec_hash": "f" * 64},
+])
+def test_a_parent_that_is_not_ready_or_not_ours_is_refused(monkeypatch, tmp_path, overrides):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _chain_store(tmp_path, parent_overrides=overrides)
+    generate_task.process(store, _task())
+    assert store.failed == [generate_task.SHOT_BEFORE]
+    assert adapter.spec is None
+
+
+def test_a_disguised_playlist_as_parent_is_refused(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    playlist = b"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile:///etc/passwd\n#EXT-X-ENDLIST\n"
+    store = _chain_store(tmp_path, parent_file=playlist)
+    generate_task.process(store, _task())
+    assert store.failed == [generate_task.SHOT_BEFORE]
+    assert adapter.spec is None
+
+
+def test_after_is_validated_like_sql():
+    model = get_model("fal-seedance")
+    base = {"prompt": "x", "aspectRatio": "9:16", "duration": 5}
+    validate_spec(model, {**base, "after": "a" * 64})
+    with pytest.raises(SpecError, match="Invalid generation request"):
+        validate_spec(model, {**base, "after": "nope"})
+    with pytest.raises(SpecError, match="cannot also start from an image"):
+        validate_spec(model, {**base, "after": "a" * 64, "startImage": "user-1/a.png"})
+    with pytest.raises(SpecError, match="does not take"):
+        validate_spec(get_model("fal-nano-banana"), {"prompt": "x", "aspectRatio": "1:1", "after": "a" * 64})

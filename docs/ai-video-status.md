@@ -18,6 +18,7 @@ Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12 (review fixes).
 | `ab944a5` | Long audio is transcribed in parallel ~10-minute parts; links pull ~48–70 kbps audio so no re-encode is needed. |
 | `7e0eb6b`, `ed9653b` | Security review: speech-to-text audio is read through the demuxer allowlist, capped at 18 parts (3 hours), and refused when its length cannot be read. |
 | `edit_video` (PR on `ai-edit-video`) | Plan B: the Assistant (`edit_video`, `/edit`, an `edit` guide) and the editor (right-click the speaker → "Edit with AI…") redraw 3–10 s of the user's own video from words with Kling O1 Edit. Catalog flag `clipVideo` on the edit models; SQL `ai_check_spec`, `catalog.py` and editor-core accept the clip's own `renders:`/`sources:` refs for them (upscale still library-only); the result is a muted layer over the speaker in the same box, following face tracking, one undo; moderation of the frames uses the own-footage policy when the source is the clip's own video. |
+| Chained shots (PR on `ai-chained-shots`) | Plan C: the `/video` Director may mark a shot `continues` (same scene, no cut). Its spec carries `after` = the previous shot's spec hash; SQL holds its task in `awaiting_input` until the parent is done, the worker starts it from the parent's last frame (`-f mov -sseof`), and a failed or cancelled parent fails and refunds its waiting children down the chain. One card, one total, one undo; the card's wait counts the longest chain. Migration `20261118090000` + pgTAP 148. |
 | Review fixes | Transcript parts: a stream copy starts at the container's seek point before `-ss` (a WebM cluster, up to 5 s early), so each part's real first second is read back (`-copyts`) and its words are shifted by that, not by the nominal cut; parts also start 2 s before their window, so a word on a cut is kept once; parts are cut inside the pool. Output moderation runs Haiku 5.5 at low effort and retries a verdict cut off by `max_tokens` instead of blocking it. Cut-outs of the user's own footage skip the "identifiable real person" rule; voice and audio scripts get their own text policy (names and brands allowed, voice cloning still blocked). Background removal reuses a live generation when the clip's master changed under the same declaration (no second charge). `/video` moderates every piece at once before holding credits. `--transcribe` also applies to picked moments; unreadable library audio says so; `keep_alignable` removed. |
 
 ## Budget measurements (54-minute interview, 5 clips)
@@ -55,7 +56,7 @@ The path mostly exists: `resolveClipVideo` maps `assets/master.mp4`, the worker 
 3. Agent tool `apps/web/lib/agent/edit-tool.ts` (template `background-tool.ts`), priced approval card, wired in `scope.ts` (`PRICED_TOOLS`, `isWriteTool`, moderation), `eval/run.ts`, slash `/edit`, an `edit` guide, a fake-agent branch, eval `videoedit`, a `check:api` case.
 4. Editor: "Edit with AI…" also on the speaker video (`EditorShell.tsx videoSourceOf` stops excluding `assets/master.mp4`).
 
-### C (5.1). Chained shots in `/video`
+### C (5.1). Chained shots in `/video` — done (see the table above)
 
 The Director may mark a shot as continuing the previous one (same scene, no cut). That shot starts from the previous shot's last frame; other shots still start in parallel. One card, one total, one undo.
 
@@ -70,6 +71,22 @@ The Director may mark a shot as continuing the previous one (same scene, no cut)
 - Credit prices (`agent_credits`, per-model prices) — owner decision.
 - Kling edit and SeedVR upscale with uploaded video have not been called live.
 - fal runs only a few requests at once on a new account (up to 40 as credits are bought); long `/video` runs can wait longer than the card's estimate.
+
+## Test on production
+
+Deploy order: migrations first (`supabase db push`), then the Modal app (`modal deploy`), then Vercel. Keys: `ANTHROPIC_API_KEY`, `FAL_KEY`, `ELEVENLABS_API_KEY` on Vercel and in the Modal `opencmo` secret.
+
+| Feature | Do this | Look for |
+|---|---|---|
+| Long upload → clips | Upload a 30+ minute talk, 5 clips | Captions match the voice in a clip cut after minute 10 (no doubled or late words) |
+| `/image`, B-roll | `/image a laptop on a hotel desk`; `/broll` on a speaker clip | Card price, image lands; 3 variants switch in the Inspector |
+| `/animate` | Select an image → `/animate` | A short video starting on that image |
+| `/video` | New edit → `/video a 30 second video about <your product>` | Storyboard card; shots, voice, music, captions fill in; a "↳ continues" shot follows the one before without a cut |
+| `/voiceover` | A script naming you and a partner product ("Hi, I'm Marcus, our app plugs into Shopify") | Not blocked; voice and captions placed |
+| `/music` | `/music calm piano bed` | Music under the voice |
+| `/background` | On your own clip: `/background a bright office` | You stay sharp in front of the new room, for the chosen range |
+| `/edit` | Right-click the speaker → "Edit with AI…", 4 s, "night, warm desk lamp" | The range is redrawn in your box, your voice still plays |
+| No double charge | After `/background`, re-render the clip, reopen the editor | Credits unchanged |
 
 ## Verify before merging #37
 

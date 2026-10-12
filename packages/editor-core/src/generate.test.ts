@@ -41,6 +41,16 @@ describe('trường theo khả năng model', () => {
 	});
 });
 
+describe('chained shots (/video)', () => {
+	it('a video model that starts from a frame takes after, but not with a start image', () => {
+		const ok = { prompt: 'x', aspectRatio: '9:16', duration: 5, after: 'a'.repeat(64) };
+		expect(specSchema(model('fal-seedance')).safeParse(ok).success).toBe(true);
+		expect(specSchema(model('fal-seedance')).safeParse({ ...ok, after: 'nope' }).success).toBe(false);
+		expect(specSchema(model('fal-seedance')).safeParse({ ...ok, startImage: `${UID}/a.png` }).success).toBe(false);
+		expect(specSchema(model('fal-nano-banana')).safeParse({ prompt: 'x', aspectRatio: '1:1', after: 'a'.repeat(64) }).success).toBe(false);
+	});
+});
+
 describe('sửa video (G2, video-to-video)', () => {
 	it('bắt buộc video nguồn + giây bắt đầu; giá theo số giây cắt', () => {
 		const edit = model('fal-kling-edit');

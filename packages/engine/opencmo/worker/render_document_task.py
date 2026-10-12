@@ -67,7 +67,7 @@ EDITED = re.compile(r"^assets/transcripts/([0-9a-f]{64})\.json$")
 # không ghi là mặc định mà editor tự chọn lúc sinh, không so.
 _SPEC_FIELDS = (
     "aspectRatio", "duration", "seed", "voice", "scene", "resolution", "audio", "startFrame", "endFrame", "refs",
-    "sourceVideo", "sourceStart",
+    "sourceVideo", "sourceStart", "after",
 )
 # Logo Brand Kit: bucket `brand`, cùng dạng đường dẫn với policy Storage + RPC.
 BRAND_PREFIX = "brand:"

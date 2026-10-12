@@ -88,6 +88,8 @@ export type GenerationSpec = {
 	/** Video nguồn của model sửa video (tên object media) và giây bắt đầu cắt trong file đó. */
 	sourceVideo?: string;
 	sourceStart?: number;
+	/** /video: spec hash of the shot this one continues; the worker starts it from that shot's last frame. */
+	after?: string;
 };
 
 /** Tên object media của người dùng: kiểm hình dạng ở đây, chủ sở hữu + tồn tại ở SQL. */
@@ -131,7 +133,7 @@ export function specSchema(model: AiModel) {
 				}),
 				...resolution,
 				...references,
-				...(limits.firstFrame ? { startImage: mediaRef.optional() } : {}),
+				...(limits.firstFrame ? { startImage: mediaRef.optional(), after: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid generation request.').optional() } : {}),
 				...(limits.lastFrame ? { endImage: mediaRef.optional() } : {}),
 				...(limits.audio ? { audio: z.boolean().optional() } : {}),
 				...(limits.sourceVideo
@@ -146,6 +148,8 @@ export function specSchema(model: AiModel) {
 					: {}),
 				...(limits.scene ? { scene: SceneContentSchema } : {}),
 				seed,
+			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
+				message: 'A shot that continues the previous one cannot also start from an image.',
 			});
 		case 'voice':
 			return z.strictObject({

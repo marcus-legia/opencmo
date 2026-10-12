@@ -249,6 +249,8 @@ export type AssetDeclaration =
       /** Model sửa video (G2): video thư viện được sửa và giây bắt đầu cắt trong file đó. */
       sourceVideo?: AssetInput;
       sourceStart?: number;
+      /** /video: the spec hash of the shot this one continues (starts from its last frame). */
+      after?: string;
     }
   | { transform: (typeof TRANSFORM_KINDS)[number]; input: AssetInput };
 
@@ -272,6 +274,7 @@ export const AssetDeclarationSchema: z.ZodType<AssetDeclaration> = z.union([
       endFrame: assetInput.optional(),
       sourceVideo: assetInput.optional(),
       sourceStart: num.optional(),
+      after: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     })
     .strict(),
   z.object({ transform: z.enum(TRANSFORM_KINDS), input: assetInput }).strict(),

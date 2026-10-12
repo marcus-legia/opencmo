@@ -1616,15 +1616,34 @@ async function main(): Promise<void> {
     const shots = nodes.filter((node) => JSON.stringify(node.paints ?? []).includes('"generate":"video"'));
     assert.deepEqual(shots.map((node) => [node.start ?? 0, node.end]), [[0, 5], [5, 10], [10, 15]]);
     // The editor resolves a shot like any declaration: same spec → the generation already made.
-    const shot = (shots[1]!.paints as { src: { model: string; prompt: string; aspectRatio: string; duration: number; seed: number } }[])[0]!.src;
+    const shot = (shots[1]!.paints as { src: { model: string; prompt: string; aspectRatio: string; duration: number; seed: number; after?: string } }[])[0]!.src;
     const resolved = await callApi(a, "/generations", {
       method: "POST",
       body: JSON.stringify({
         job_id: videoJob, clip_id: videoClip, model: shot.model, request_id: crypto.randomUUID(),
-        spec: { prompt: shot.prompt, aspectRatio: shot.aspectRatio, duration: shot.duration, seed: shot.seed },
+        spec: { prompt: shot.prompt, aspectRatio: shot.aspectRatio, duration: shot.duration, seed: shot.seed, ...(shot.after ? { after: shot.after } : {}) },
       }),
     });
     assert.equal((resolved.body as { reused: boolean }).reused, true, JSON.stringify(resolved.body));
+
+    // The fake director continues shot 1 with shot 2: it carries shot 1's hash and waits for it.
+    const { data: rows } = await admin.from("generations").select("id, spec, spec_hash, after_id, status, task_id, error").eq("clip_id", videoClip);
+    const byPrompt = (prompt: string) => (rows ?? []).find((row) => (row as { spec: { prompt: string } }).spec.prompt === prompt) as
+      | { id: string; spec_hash: string; after_id: string | null; status: string; task_id: string; error: string | null }
+      | undefined;
+    const firstShot = byPrompt((shots[0]!.paints as { src: { prompt: string } }[])[0]!.src.prompt)!;
+    const secondShot = byPrompt(shot.prompt)!;
+    assert.equal(shot.after, firstShot.spec_hash, "shot 2 continues shot 1");
+    assert.equal(secondShot.after_id, firstShot.id);
+    const waiting = await admin.from("tasks").select("status").eq("id", secondShot.task_id).single();
+    assert.equal((waiting.data as { status: string }).status, "awaiting_input", "shot 2 waits for shot 1");
+    const before = await balance(a.userId);
+    await callApi(a, `/generations/${firstShot.id}/cancel`, { method: "POST" });
+    const failed = await admin.from("generations").select("status, error, credits_reserved").eq("id", secondShot.id).single();
+    const child = failed.data as { status: string; error: string; credits_reserved: number };
+    assert.equal(child.status, "failed", "cancelling shot 1 fails the shot waiting on it");
+    assert.match(child.error, /The shot before this one did not finish/);
+    assert.ok((await balance(a.userId)) > before, "both are refunded");
     for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
   });
 

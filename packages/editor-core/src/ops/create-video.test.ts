@@ -65,4 +65,23 @@ describe('create_video', () => {
 		await expect(applyOps(blank, [{ ...video, seconds: 20 }], ctx)).rejects.toThrow(/cover 12s/);
 		await expect(applyOps(blank, [{ ...video, shots: [{ ...shot(0, 12), duration: 5 }] }], ctx)).rejects.toThrow(/only 5s are generated/);
 	});
+
+	it('writes a continuing shot with the hash of the shot it continues', async () => {
+		const after = 'a'.repeat(64);
+		const { document } = await applyOps(blank, [{ ...video, shots: [shot(0, 5), { ...shot(5, 4), after }, shot(9, 3)] }], ctx);
+		const sources = flat(document.stage.children as unknown as Node[])
+			.flatMap((node) => node.paints ?? [])
+			.map((paint) => paint.src)
+			.filter((src) => src && typeof src === 'object' && src.generate === 'video');
+		expect(sources.map((src) => src.after)).toEqual([undefined, after, undefined]);
+	});
+
+	it('refuses a chain that cannot be seamless', async () => {
+		const after = 'a'.repeat(64);
+		await expect(applyOps(blank, [{ ...video, shots: [{ ...shot(0, 5), after }, shot(5, 4), shot(9, 3)] }], ctx)).rejects.toThrow(/first shot cannot continue/);
+		// Shot 2 shows only 4 of its 5 s: shot 3 would start from a frame the viewer never saw.
+		await expect(applyOps(blank, [{ ...video, shots: [shot(0, 5), shot(5, 4), { ...shot(9, 3), after }] }], ctx)).rejects.toThrow(/Shot 2 must play all 5s/);
+		const chain = [shot(0, 5), { ...shot(5, 5), after }, { ...shot(10, 5), after }, { ...shot(15, 5), after }];
+		await expect(applyOps(blank, [{ ...video, seconds: 20, shots: chain }], ctx)).rejects.toThrow(/At most 3 shots/);
+	});
 });

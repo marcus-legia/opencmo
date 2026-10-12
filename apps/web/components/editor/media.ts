@@ -52,7 +52,7 @@ const MASTER = "assets/master.mp4";
 const TRANSCRIPT = "assets/transcript.json";
 const EDITED = /^assets\/transcripts\/([0-9a-f]{64})\.json$/;
 /** Cùng bộ trường với `_SPEC_FIELDS` của worker export: hai bên phải chọn cùng một file. */
-const SPEC_FIELDS = ["aspectRatio", "duration", "seed", "voice", "scene", "resolution", "audio", "startFrame", "endFrame", "refs", "sourceVideo", "sourceStart"] as const;
+const SPEC_FIELDS = ["aspectRatio", "duration", "seed", "voice", "scene", "resolution", "audio", "startFrame", "endFrame", "refs", "sourceVideo", "sourceStart", "after"] as const;
 
 /** So sâu, không phụ thuộc thứ tự khoá (`scene` là object) — như `==` của Python. */
 function sameValue(a: unknown, b: unknown): boolean {

@@ -47,7 +47,7 @@ import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, st
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
-export { checkShots, createVideoInput, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
+export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
