@@ -143,14 +143,16 @@ export function optionalParams(schema: unknown): number {
   return count;
 }
 
-const tools = (specs: ToolSpec[], useStrict: boolean): Anthropic.Beta.BetaTool[] => {
+export const toolDefinitions = (specs: ToolSpec[], useStrict: boolean): Anthropic.Beta.BetaTool[] => {
   const strict = useStrict ? strictTools(specs) : new Set<string>();
   return specs.map((spec) => ({
     name: spec.name,
     description: spec.description,
     input_schema: spec.schema as Anthropic.Beta.BetaTool["input_schema"],
-    ...(strict.has(spec.name) ? { strict: true } : {}),
-    eager_input_streaming: true,
+    // Eager streaming turns off the API's own JSON check of the input. Only strict tools keep it:
+    // their grammar guarantees valid JSON. A non-strict tool without it gets its input checked,
+    // instead of the model's broken JSON ("avoid": text, logos) failing the whole turn.
+    ...(strict.has(spec.name) ? { strict: true, eager_input_streaming: true } : {}),
   }));
 };
 
@@ -225,7 +227,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
-          tools: tools(specs, useStrict),
+          tools: toolDefinitions(specs, useStrict),
           messages: closeDanglingToolUses(history) as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA],
           fallbacks: "default",
