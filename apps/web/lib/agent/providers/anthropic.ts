@@ -23,7 +23,7 @@ const FALLBACK_BETA = "server-side-fallback-2026-07-01";
  */
 const THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01";
 
-export const ANTHROPIC_MODEL = "claude-opus-5";
+export const ANTHROPIC_MODEL = "claude-sonnet-5-5";
 
 /** Định dạng content block của Claude — dùng chung cho Claude giả. */
 export const anthropicFormat: Omit<Format, "kind"> = {

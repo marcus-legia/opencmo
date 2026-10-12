@@ -10,18 +10,18 @@ import { AGENT_IDS, agentTable, resolveAgent } from "./registry";
 
 const base = { ANTHROPIC_API_KEY: "a-shared" } as unknown as NodeJS.ProcessEnv;
 
-// Default: Opus for drafting agents, Haiku for checking agents, the shared key.
+// Default: Sonnet for drafting agents, Haiku for checking agents, the shared key.
 const planner = resolveAgent("planner", base);
 assert.equal(planner.provider, "anthropic");
-assert.equal(planner.model, "claude-opus-5-5");
+assert.equal(planner.model, "claude-sonnet-5-5");
 assert.equal(planner.apiKey, "a-shared");
 assert.equal(planner.source, "default");
 assert.equal(resolveAgent("checker", base).model, "claude-haiku-5-5");
 
 // Per-agent override: model and key; other agents are unaffected.
-const env = { ...base, CMO_AGENT_X_WRITER_MODEL: "claude-sonnet-5-5", CMO_AGENT_X_WRITER_API_KEY: "a-writer" } as unknown as NodeJS.ProcessEnv;
+const env = { ...base, CMO_AGENT_X_WRITER_MODEL: "claude-opus-5-5", CMO_AGENT_X_WRITER_API_KEY: "a-writer" } as unknown as NodeJS.ProcessEnv;
 const writer = resolveAgent("x_writer", env);
-assert.deepEqual([writer.model, writer.apiKey, writer.source], ["claude-sonnet-5-5", "a-writer", "env"]);
+assert.deepEqual([writer.model, writer.apiKey, writer.source], ["claude-opus-5-5", "a-writer", "env"]);
 assert.equal(resolveAgent("planner", env).apiKey, "a-shared");
 
 // No key: empty (the caller reports it in English).
