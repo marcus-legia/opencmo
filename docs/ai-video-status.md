@@ -17,6 +17,7 @@ Branch `AI-opencmo` (PR #37 → `main`). Updated 2026-10-12 (review fixes).
 | `d5baad5` | Cut-out stacking probes the picture size instead of `scale2ref` (ffmpeg 7.1 aborted now and then). |
 | `ab944a5` | Long audio is transcribed in parallel ~10-minute parts; links pull ~48–70 kbps audio so no re-encode is needed. |
 | `7e0eb6b`, `ed9653b` | Security review: speech-to-text audio is read through the demuxer allowlist, capped at 18 parts (3 hours), and refused when its length cannot be read. |
+| `edit_video` (PR on `ai-edit-video`) | Plan B: the Assistant (`edit_video`, `/edit`, an `edit` guide) and the editor (right-click the speaker → "Edit with AI…") redraw 3–10 s of the user's own video from words with Kling O1 Edit. Catalog flag `clipVideo` on the edit models; SQL `ai_check_spec`, `catalog.py` and editor-core accept the clip's own `renders:`/`sources:` refs for them (upscale still library-only); the result is a muted layer over the speaker in the same box, following face tracking, one undo; moderation of the frames uses the own-footage policy when the source is the clip's own video. |
 | Review fixes | Transcript parts: a stream copy starts at the container's seek point before `-ss` (a WebM cluster, up to 5 s early), so each part's real first second is read back (`-copyts`) and its words are shifted by that, not by the nominal cut; parts also start 2 s before their window, so a word on a cut is kept once; parts are cut inside the pool. Output moderation runs Haiku 5.5 at low effort and retries a verdict cut off by `max_tokens` instead of blocking it. Cut-outs of the user's own footage skip the "identifiable real person" rule; voice and audio scripts get their own text policy (names and brands allowed, voice cloning still blocked). Background removal reuses a live generation when the clip's master changed under the same declaration (no second charge). `/video` moderates every piece at once before holding credits. `--transcribe` also applies to picked moments; unreadable library audio says so; `keep_alignable` removed. |
 
 ## Budget measurements (54-minute interview, 5 clips)
@@ -45,7 +46,7 @@ Still open: needs the bench interview, `ELEVENLABS_API_KEY`, `ANTHROPIC_API_KEY`
 5. Look at a frame of each full-size clip (not `*.preview.mp4`): speaker in frame, captions on screen.
 6. Update "Last measurement" in `CLAUDE.md`.
 
-### B (5.2). `edit_video`: the Assistant edits video by prompt
+### B (5.2). `edit_video`: the Assistant edits video by prompt — done (see the table above)
 
 The path mostly exists: `resolveClipVideo` maps `assets/master.mp4`, the worker signs `renders:`/`sources:`, video inputs are uploaded to fal. Only three gates keep edit models off the clip's own video.
 

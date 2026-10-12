@@ -183,3 +183,14 @@ def test_busy_output_check_retries_in_place_then_fails_for_good(monkeypatch, tmp
     with pytest.raises(ProviderError) as info:
         moderation.check_output(model, {"prompt": "x"}, image)
     assert info.value.retryable is False
+
+
+def test_an_edit_of_the_clips_own_video_uses_the_own_footage_policy(monkeypatch, image):
+    _nsfw(monkeypatch)
+    claude = _claude(monkeypatch)
+    monkeypatch.setattr(moderation, "_frames", lambda _path, _workdir: [image])
+    edit = get_model("fal-kling-edit")
+    moderation.check_output(edit, {"prompt": "make it night", "sourceVideo": "renders:u/clip/master/1.mp4"}, image)
+    assert claude["system"] == moderation.OWN_FOOTAGE_POLICY
+    moderation.check_output(edit, {"prompt": "make it night", "sourceVideo": "u/library/a.mp4"}, image)
+    assert claude["system"] == moderation.POLICY, "a library file may show anyone"

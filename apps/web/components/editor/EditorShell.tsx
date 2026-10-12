@@ -40,6 +40,7 @@ import { TopBar, type ExportState } from "./TopBar";
 import { Inspector } from "./inspector/Inspector";
 import { variantsOf } from "./inspector/variants";
 import { BackgroundPanel } from "./generate/BackgroundPanel";
+import { EditVideoPanel } from "./generate/EditVideoPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
@@ -434,6 +435,7 @@ function Workspace({
   const enabledModels = useEnabledModels();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [backgroundRange, setBackgroundRange] = useState<{ start: number; end: number } | null>(null);
+  const [editRange, setEditRange] = useState<{ start: number; end: number } | null>(null);
   // Gieo sẵn ô Generate từ menu chuột phải; `key` mount lại panel để nó nhận giá trị mới.
   const [generateInitial, setGenerateInitial] = useState<{ key: number; kind: "video"; firstFrame?: string; edit?: EditSource } | null>(null);
   const [visualsOpen, setVisualsOpen] = useState(false);
@@ -1075,6 +1077,10 @@ function Workspace({
       const at = Math.round((playback.frame / 30) * 100) / 100;
       setBackgroundRange({ start: at, end: at + 5 });
     },
+    editOwnVideo: () => {
+      const at = Math.round((playback.frame / 30) * 100) / 100;
+      setEditRange({ start: at, end: at + 5 });
+    },
     enhance: (id, resolution) => void run([{ op: "enhance_generated", element_id: id, resolution }]),
     animate: (path) => {
       setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "video", firstFrame: path }));
@@ -1445,6 +1451,16 @@ function Workspace({
             onClose={() => setBackgroundRange(null)}
           />
         ) : null}
+        {editRange ? (
+          <EditVideoPanel
+            enabled={enabledModels}
+            range={editRange}
+            aspect={frameAspect(Number(activeScene(session.current).width), Number(activeScene(session.current).height))}
+            busy={busy}
+            onApply={(ops) => void generate(ops)}
+            onClose={() => setEditRange(null)}
+          />
+        ) : null}
         <div className="ed2-tools" role="toolbar" aria-label="Tools">
           <button
             type="button"
@@ -1597,6 +1613,7 @@ function aiMenuItems({
   regenerate,
   pickVariant,
   replaceBackground,
+  editOwnVideo,
   enhance,
   animate,
   extend,
@@ -1610,6 +1627,7 @@ function aiMenuItems({
   regenerate: (id: string) => void;
   pickVariant: (id: string, seed: number) => void;
   replaceBackground: () => void;
+  editOwnVideo: () => void;
   enhance: (id: string, resolution: string) => void;
   animate: (path: string) => void;
   extend: (plan: ExtendPlan) => void;
@@ -1678,6 +1696,10 @@ function aiMenuItems({
   // The speaker's own video: cut them out with AI and put a new place behind them.
   if (found.kind === "video" && found.src === MASTER_SRC && liveModels().some((model) => model.limits.removeBackground && enabled?.has(model.id))) {
     items.push({ label: "Replace background…", onSelect: replaceBackground, testid: "ai-replace-background" });
+  }
+  // The speaker's own video: redraw a range of it with words (`edit_video`).
+  if (found.kind === "video" && found.src === MASTER_SRC && liveModels().some((model) => model.limits.clipVideo && enabled?.has(model.id))) {
+    items.push({ label: "Edit with AI…", onSelect: editOwnVideo, testid: "ai-edit-own-video" });
   }
   const plan = extendPlanOf(found, document, enabled);
   if (plan) {

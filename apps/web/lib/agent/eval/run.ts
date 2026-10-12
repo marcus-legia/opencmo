@@ -27,6 +27,7 @@ import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
 import { backgroundToolSpec, prepareBackground } from "../background-tool";
+import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
@@ -120,7 +121,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec()].filter((spec) => spec !== null)];
+  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -196,12 +197,17 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.content });
         continue;
       }
-      if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover" || call.name === "replace_background" || call.name === "create_video") {
+      if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover" || call.name === "replace_background" || call.name === "create_video" || call.name === "edit_video") {
         const prepared =
           call.name === "create_video"
             ? await (async () => {
                 const planned = await prepareCreateVideo(call.input, { document: workspace.snapshot().document }, async () => undefined);
                 return typeof planned === "string" ? planned : planned.prepared;
+              })()
+            : call.name === "edit_video"
+            ? await (async () => {
+                const snapshot = workspace.snapshot();
+                return prepareEdit(call.input, snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest));
               })()
             : call.name === "replace_background"
             ? await (async () => {

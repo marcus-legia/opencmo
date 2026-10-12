@@ -1,4 +1,4 @@
--- 20261114090000: background removal may read the caller's own clip video; edit models may not.
+-- 20261114090000: background removal may read the caller's own clip video; upscale may not.
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -19,7 +19,7 @@ select is(public.ai_price((select m from public.ai_models m where id = 'fal-veed
 
 set local request.jwt.claims = '{"sub":"e1440000-0000-4000-8000-00000000000a"}';
 create temporary table cutout as select m from public.ai_models m where id = 'fake-cutout';
-create temporary table editor as select m from public.ai_models m where id = 'fake-edit';
+create temporary table upscaler as select m from public.ai_models m where id = 'fake-upscale';
 
 select lives_ok(
   $$ select public.ai_check_spec((select m from cutout), '{"prompt":"Remove background","aspectRatio":"9:16","duration":5,"sourceVideo":"renders:e1440000-0000-4000-8000-00000000000a/clip/master/1.mp4","sourceStart":2}') $$,
@@ -42,8 +42,8 @@ select throws_ok(
   '22023', 'Choose a video from your library to edit.', 'the object must exist'
 );
 select throws_ok(
-  $$ select public.ai_check_spec((select m from editor), '{"prompt":"x","aspectRatio":"9:16","duration":5,"sourceVideo":"renders:e1440000-0000-4000-8000-00000000000a/clip/master/1.mp4","sourceStart":0}') $$,
-  '22023', 'Choose a video from your library to edit.', 'edit models still take library files only'
+  $$ select public.ai_check_spec((select m from upscaler), '{"prompt":"Upscale","aspectRatio":"9:16","duration":5,"resolution":"1080p","sourceVideo":"renders:e1440000-0000-4000-8000-00000000000a/clip/master/1.mp4","sourceStart":0}') $$,
+  '22023', 'Choose a video from your library to edit.', 'upscale still takes library files only'
 );
 
 select * from finish();

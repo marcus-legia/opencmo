@@ -259,7 +259,8 @@
           10
         ],
         "maxReferences": 2,
-        "sourceVideo": true
+        "sourceVideo": true,
+        "clipVideo": true
       }
     },
     {
@@ -559,7 +560,8 @@
           10
         ],
         "maxReferences": 4,
-        "sourceVideo": true
+        "sourceVideo": true,
+        "clipVideo": true
       }
     },
     {

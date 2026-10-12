@@ -427,6 +427,22 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "videoedit",
+    prompt: "Make the part from 2 to 6 seconds look like night.",
+    grade(outcome) {
+      const notes: string[] = [];
+      const layer = all(outcome.document).find((item) => (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "edit_video");
+      if (!check(notes, Boolean(layer), "no AI edit layer")) return { pass: false, notes };
+      const paint = ((layer!.entity.paints as { src?: { sourceVideo?: string; duration?: number } }[] | undefined) ?? [])[0];
+      const own = check(notes, paint?.src?.sourceVideo === "assets/master.mp4", "the edit does not read the clip's own video");
+      const range = check(notes, layer!.entity.start === 2 && layer!.entity.end === 6, `range is ${String(layer!.entity.start)}-${String(layer!.entity.end)}s`);
+      const muted = check(notes, layer!.entity.muted === true, "the edit plays its own sound over the speaker");
+      const gen = outcome.generations?.find((item) => item.model.limits.clipVideo);
+      const priced = check(notes, Boolean(gen), "no priced generation for the edit");
+      return { pass: own && range && muted && priced && sane(outcome, notes), notes };
+    },
+  },
+  {
     id: "bgswap",
     prompt: "Replace the background behind me with a bright office.",
     grade(outcome) {

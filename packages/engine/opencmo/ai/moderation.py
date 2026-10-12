@@ -57,8 +57,12 @@ FAKE_MARK = "[[flag-output]]"
 SKIP_PROVIDERS = {"opencmo-3d"}
 
 
-def _policy_for(model: AiModel) -> str:
-    return OWN_FOOTAGE_POLICY if model.limits.get("removeBackground") else POLICY
+def _policy_for(model: AiModel, spec: dict | None = None) -> str:
+    """Background removal, and any edit of the clip's own video (`renders:` / `sources:`), works on
+    the user's own footage. The prompt was already checked with the strict policy on the web."""
+    source = str((spec or {}).get("sourceVideo") or "")
+    own = model.limits.get("removeBackground") or source.startswith(("renders:", "sources:"))
+    return OWN_FOOTAGE_POLICY if own else POLICY
 
 
 def needs_check(model: AiModel) -> bool:
@@ -109,14 +113,14 @@ def check_input(model: AiModel, path: Path) -> None:
     check_images([path])
 
 
-def check_input_video(model: AiModel, path: Path, workdir: Path) -> None:
+def check_input_video(model: AiModel, path: Path, workdir: Path, spec: dict | None = None) -> None:
     """A video the user hands to a video-edit model (G2): three frames, like output moderation."""
     if model.provider in ("fake", *SKIP_PROVIDERS) or not ready():
         return
     frames = _frames(path, workdir)
     if not frames:
         raise ProviderError(BLOCKED)
-    check_images(frames, _policy_for(model))
+    check_images(frames, _policy_for(model, spec))
 
 
 def check_output(model: AiModel, spec: dict, path: Path) -> None:
@@ -135,7 +139,7 @@ def check_output(model: AiModel, spec: dict, path: Path) -> None:
         images = [path] if model.kind == "image" else _frames(path, Path(tmp))
         if not images:
             raise ProviderError(BLOCKED)
-        _after_generation(lambda: check_images(images, _policy_for(model)))
+        _after_generation(lambda: check_images(images, _policy_for(model, spec)))
 
 
 #: Waits between tries of an output check. The media is already made and paid for: a retryable error

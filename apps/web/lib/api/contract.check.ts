@@ -1560,6 +1560,36 @@ async function main(): Promise<void> {
     for (const item of made ?? []) await callApi(a, `/generations/${(item as { id: string }).id}/cancel`, { method: "POST" });
   });
 
+  await check("Edit your video: one card prices the edit; Approve places it over the speaker, reading the clip's own video", async () => {
+    await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant edit" });
+    const fresh = await seedProject(a.userId);
+    const clipId = fresh.clipId;
+    assert.equal((await callApi(a, `/editor/project?clip_id=${clipId}`)).status, 200);
+    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ clip_id: clipId }) });
+    const agentSession = (opened.body as { id: string }).id;
+    const first = await callSse(a, `/agent/sessions/${agentSession}/turns`, { prompt: "Make the part from 2 to 6 seconds look like night" });
+    const request = first.events.find((event) => event.event === "approval_request");
+    assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
+    const card = request!.data.card as { changes: string[]; credits: number };
+    assert.match(card.changes[0]!, /^Edit your video from 2s to 6s \(.+\) · \d+ credits$/, card.changes.join(" | "));
+    const res = await callSse(a, `/agent/sessions/${agentSession}/approvals`, { decisions: [{ tool_use_id: request!.data.id, approved: true }] });
+    assert.ok(res.events.some((event) => event.event === "project_changed"), JSON.stringify(res.events.map((event) => [event.event, event.data])));
+    const { data: made } = await admin.from("generations").select("id, model, spec, credits_reserved").eq("clip_id", clipId).eq("model", "fake-edit");
+    assert.equal((made ?? []).length, 1, "one edit");
+    const edit = made![0] as { id: string; spec: { sourceVideo: string; duration: number }; credits_reserved: number };
+    assert.equal(edit.spec.sourceVideo, `sources:${fresh.proxyPath}`, "the clip's own video, from storage");
+    assert.equal(edit.spec.duration, 4);
+    assert.equal(edit.credits_reserved, card.credits);
+    const layer = everything(await documentOf(a, clipId)).find((node) => (node.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "edit_video") as
+      | { name: string; muted?: boolean; paints: { src: { sourceVideo?: string } }[] }
+      | undefined;
+    assert.ok(layer, "the AI edit layer is on the clip");
+    assert.equal(layer!.name, "AI edit");
+    assert.equal(layer!.muted, true);
+    assert.equal(layer!.paints[0]!.src.sourceVideo, "assets/master.mp4");
+    await callApi(a, `/generations/${edit.id}/cancel`, { method: "POST" });
+  });
+
   await check("/video on a blank edit: storyboard card, Approve starts every shot, the voice and the music at once", async () => {
     await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 40, reason: "contract check grant video" });
     const created = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });

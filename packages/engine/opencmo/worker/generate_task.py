@@ -165,7 +165,7 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
         raise SpecError(VIDEO_NOT_FOUND) from exc
     if not out.exists() or out.stat().st_size == 0:
         raise SpecError(VIDEO_NOT_FOUND)
-    check_input_video(model, out, workdir)
+    check_input_video(model, out, workdir, spec)
     return str(out)
 
 

@@ -598,12 +598,39 @@ def test_cutout_of_someone_elses_master_is_refused_before_signing(monkeypatch, t
     assert store.signed == [] and adapter.spec is None
 
 
-def test_edit_models_cannot_read_the_clips_own_video(monkeypatch, tmp_path):
+def test_edit_models_read_the_clips_own_video_at_the_edit_size(monkeypatch, tmp_path):
+    """`edit_video`: Kling edit (`clipVideo`) may read the clip's own master, at a 720 short edge."""
+    import subprocess
+
+    seen: dict = {}
+
+    class Recording(_RecordingAdapter):
+        def run(self, model, spec, workdir, *, alive=lambda: True):
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height", "-of", "json", spec["sourceVideo"]],
+                capture_output=True, text=True, check=True,
+            )
+            seen["probe"] = json.loads(probe.stdout)
+            return super().run(model, spec, workdir, alive=alive)
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: Recording())
+    uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    ref = f"{uid}/clip-1/master/attempt-1.mp4"
+    spec = {"prompt": "make it night", "aspectRatio": "16:9", "duration": 4, "sourceVideo": f"renders:{ref}", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid)
+    generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
+    assert store.failed == [], store.failed
+    assert store.signed == [("renders", ref)]
+    video = next(s for s in seen["probe"]["streams"] if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1280, 720)
+
+
+def test_upscale_cannot_read_the_clips_own_video(monkeypatch, tmp_path):
     adapter = _RecordingAdapter()
     monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
     uid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-    spec = {"prompt": "x", "aspectRatio": "16:9", "duration": 4, "sourceVideo": f"renders:{uid}/clip/master/a.mp4", "sourceStart": 0}
-    store = _edit_store(tmp_path, spec, uid)
+    spec = {"prompt": "Upscale", "aspectRatio": "16:9", "duration": 4, "resolution": "1080p", "sourceVideo": f"renders:{uid}/clip/master/a.mp4", "sourceStart": 0}
+    store = _edit_store(tmp_path, spec, uid, model="fal-seedvr-upscale")
     generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
     assert store.failed == ["Choose a video from your library to edit."]
     assert adapter.spec is None
