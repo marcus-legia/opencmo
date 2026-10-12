@@ -763,13 +763,18 @@ def _chain_store(tmp_path, *, parent_overrides=None, parent_file=None):
 
 
 def test_a_continuing_shot_starts_from_the_parents_last_frame(monkeypatch, tmp_path):
-    from PIL import Image
+    import subprocess
 
     seen: dict = {}
 
     class Recording(_RecordingAdapter):
         def run(self, model, spec, workdir, *, alive=lambda: True):
-            seen["color"] = Image.open(spec["startImage"]).convert("RGB").resize((1, 1)).getpixel((0, 0))
+            # The average colour of the start frame, as one RGB pixel.
+            pixel = subprocess.run(
+                ["ffmpeg", "-v", "error", "-i", spec["startImage"], "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                capture_output=True, check=True,
+            ).stdout
+            seen["color"] = tuple(pixel[:3])
             return super().run(model, spec, workdir, alive=alive)
 
     adapter = Recording()
