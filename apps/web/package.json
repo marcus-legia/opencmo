@@ -22,7 +22,8 @@
     "check:polar": "NODE_OPTIONS=--conditions=react-server tsx lib/polar.check.ts",
     "check:pricing": "NODE_OPTIONS=--conditions=react-server tsx lib/pricing.check.ts",
     "check:deploy": "tsx lib/deploy.check.ts",
-    "check:blog": "tsx lib/blog.check.ts"
+    "check:blog": "tsx lib/blog.check.ts",
+    "test:scenarios": "playwright test -c scenarios/playwright.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

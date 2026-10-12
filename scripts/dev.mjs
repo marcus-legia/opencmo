@@ -24,6 +24,9 @@ const ENGINE_KEYS = new Set([
   // Web đọc thẳng apps/web/.env.local nên bật model voice khi có khoá; worker
   // thiếu khoá thì mọi lượt voiceover chết "not set up" trên local.
   "ELEVENLABS_API_KEY", "OPENCMO_ELEVENLABS_VOICES", "OPENCMO_AI_MODELS",
+  // AI images/video/cut-outs and their output moderation run on fal: without the key the local
+  // worker cannot generate, and moderation silently skips.
+  "FAL_KEY", "OPENCMO_AI_FAKE",
 ]);
 /** `OPENCMO_AI_MODEL_<ID>` đổi providerModel — web và worker phải thấy cùng giá trị. */
 const ENGINE_PREFIXES = ["OPENCMO_AI_MODEL_"];
@@ -124,6 +127,11 @@ const children = [
       // MCP (G5) ký JWT ngắn hạn cho chủ khoá API.
       SUPABASE_JWT_SECRET: supabase.JWT_SECRET,
       NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://127.0.0.1:3000",
+      // apps/web/.env.local holds the PRODUCTION worker URL and token: local jobs must be picked up
+      // by the local worker, never sent to the production one. `@next/env` keeps a value that is
+      // already set, so empty strings win over the file.
+      MODAL_SUBMIT_URL: "",
+      OPENCMO_WORKER_TOKEN: "",
     },
   }),
   spawn(venv, ["-m", "opencmo.worker"], {
