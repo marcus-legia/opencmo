@@ -154,6 +154,43 @@ const tools = (specs: ToolSpec[], useStrict: boolean): Anthropic.Beta.BetaTool[]
   }));
 };
 
+/** Shown to the model for a tool call its turn never answered (stopped, or replaced by a new turn). */
+export const NOT_COMPLETED = "Not completed: the turn was stopped before this tool ran.";
+
+/**
+ * Every `tool_use` must be answered by a `tool_result` in the next message, or the API rejects the
+ * whole conversation. A turn that is stopped (or closed by a new prompt) while tools are pending
+ * leaves them unanswered in the stored history, and every later turn in that chat would fail.
+ * Answer them here as not completed; the stored history is left as it is.
+ */
+export function closeDanglingToolUses(history: StoredMessage[]): StoredMessage[] {
+  type Item = { type?: string; id?: string; tool_use_id?: string };
+  const out: StoredMessage[] = [];
+  for (let index = 0; index < history.length; index++) {
+    const message = history[index]!;
+    out.push(message);
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    const ids = (message.content as Item[]).filter((block) => block.type === "tool_use").map((block) => block.id!);
+    if (!ids.length) continue;
+    const next = history[index + 1];
+    const nextBlocks = next?.role === "user" && Array.isArray(next.content) ? (next.content as Item[]) : null;
+    const answered = new Set((nextBlocks ?? []).filter((block) => block.type === "tool_result").map((block) => block.tool_use_id));
+    const missing = ids.filter((id) => !answered.has(id));
+    if (!missing.length) continue;
+    const results = missing.map((id) => ({ type: "tool_result", tool_use_id: id, content: NOT_COMPLETED, is_error: true }));
+    if (nextBlocks) {
+      // tool_result blocks go first in the user message, before any text.
+      const existing = nextBlocks.filter((block) => block.type === "tool_result");
+      const rest = nextBlocks.filter((block) => block.type !== "tool_result");
+      out.push({ ...next!, content: [...existing, ...results, ...rest] });
+      index++;
+    } else {
+      out.push({ role: "user", content: results });
+    }
+  }
+  return out;
+}
+
 /** 400s caused by the strict tool grammar, e.g. "Too many strict tools", "compiled grammar is too large". */
 function isStrictLimit(err: unknown): boolean {
   return err instanceof Anthropic.BadRequestError && /strict|grammar|optional parameters/i.test(err.message);
@@ -189,7 +226,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
           tools: tools(specs, useStrict),
-          messages: history as Anthropic.Beta.Messages.BetaMessageParam[],
+          messages: closeDanglingToolUses(history) as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA],
           fallbacks: "default",
         }, { signal });
