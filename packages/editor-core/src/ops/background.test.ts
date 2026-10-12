@@ -101,6 +101,15 @@ describe('replace_background', () => {
 		await expect(applyOps(animated, [swap], ctx)).rejects.toThrow(/layout/);
 	});
 
+	it.each(['split-bottom', 'pip', 'side-by-side'])('swaps the full-frame part of a clip whose %s layout starts later', async (mode) => {
+		// The Speaker group apply_layout writes rests (offset 0, scale 1) until the layout starts.
+		const { document } = await applyOps(doc([SPEAKER]), [{ op: 'set_layout', mode, start: 12, end: 30 } as never], ctx);
+		await expect(applyOps(document, [swap], ctx)).resolves.toBeTruthy();
+		// A range that reaches into the layout is still refused, and so is one fully inside it.
+		await expect(applyOps(document, [{ ...swap, start: 9, end: 13 }], ctx)).rejects.toThrow(/layout/);
+		await expect(applyOps(document, [{ ...swap, start: 14, end: 20 }], ctx)).rejects.toThrow(/layout/);
+	});
+
 	it('takes a library file as the background', async () => {
 		const { document } = await applyOps(doc([SPEAKER]), [{ ...swap, background: { path: 'assets/office.mp4' } }], ctx);
 		const background = children(document)[1]!.children![0]!;
