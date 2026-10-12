@@ -315,6 +315,7 @@ type AddGenerated = {
   fit?: boolean;
   source_video?: string;
   source_start?: number;
+  after?: string;
   volume?: number;
 };
 
@@ -372,6 +373,8 @@ export const addGenerated = {
     /** Model sửa video (G2): đường dẫn thư viện của video nguồn + giây bắt đầu cắt trong file. */
     source_video: z.string().min(1).max(500).optional(),
     source_start: z.number().finite().min(0).optional(),
+    /** Video (/video): spec hash of the shot this one continues; it starts from that shot's last frame. */
+    after: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     /** Âm thanh (G3): âm lượng dB của phần tử — nhạc nền đặt thấp dưới giọng nói. */
     volume: z.number().finite().min(-60).max(12).optional(),
     /** Image only: other seeds generated alongside, kept in `marks.variants` for `pick_variant`. */
@@ -407,6 +410,7 @@ export const addGenerated = {
           ...(input.end_frame ? { endFrame: input.end_frame } : {}),
           ...(input.refs ? { refs: input.refs } : {}),
           ...(input.source_video ? { sourceVideo: input.source_video, sourceStart: round(input.source_start ?? 0) } : {}),
+          ...(input.after ? { after: input.after } : {}),
           seed: input.seed,
         };
         break;

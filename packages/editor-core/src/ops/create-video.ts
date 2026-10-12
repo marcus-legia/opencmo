@@ -44,6 +44,8 @@ export const createVideoInput = z.object({
 				duration: z.number().int().min(1).max(60),
 				resolution: z.string().min(1).max(20).optional(),
 				text: z.string().trim().min(1).max(80).optional(),
+				/** Continues the previous shot (no cut): spec hash of that shot, whose last frame this one starts from. */
+				after: z.string().regex(/^[0-9a-f]{64}$/).optional(),
 			}),
 		)
 		.min(1)
@@ -58,12 +60,26 @@ const TOLERANCE = 0.05;
 /** Seconds of gain fade on each side of a seam where the music starts again. */
 const SEAM = 1;
 
+/** Shots in a row that continue one another (the first plus two continuations). */
+export const MAX_CHAIN = 3;
+
 /** Shots must play back to back from 0 to the end of the video, with no gap or overlap. */
 export function checkShots(input: Pick<CreateVideo, 'seconds' | 'shots'>): string | null {
 	let at = 0;
+	let chain = 1;
 	for (const [index, shot] of input.shots.entries()) {
 		if (Math.abs(shot.start - at) > TOLERANCE) return `Shot ${index + 1} starts at ${shot.start}s; it should start at ${at}s, right after the previous one.`;
 		if (shot.length > shot.duration + TOLERANCE) return `Shot ${index + 1} shows ${shot.length}s but only ${shot.duration}s are generated.`;
+		if (shot.after) {
+			const previous = input.shots[index - 1];
+			if (!previous) return 'The first shot cannot continue another one.';
+			// It starts from the previous shot's LAST frame: showing less of that shot would jump at the seam.
+			if (Math.abs(previous.length - previous.duration) > TOLERANCE) return `Shot ${index} must play all ${previous.duration}s for shot ${index + 1} to continue it.`;
+			chain += 1;
+			if (chain > MAX_CHAIN) return `At most ${MAX_CHAIN} shots in a row can continue one another.`;
+		} else {
+			chain = 1;
+		}
 		at = Math.round((shot.start + shot.length) * 1000) / 1000;
 	}
 	if (Math.abs(at - input.seconds) > 0.5) return `The shots cover ${at}s; the video is ${input.seconds}s.`;
@@ -93,6 +109,7 @@ export const createVideo = {
 					aspect_ratio: input.aspect,
 					duration: shot.duration,
 					...(shot.resolution ? { resolution: shot.resolution } : {}),
+					...(shot.after ? { after: shot.after } : {}),
 					start: shot.start,
 					length: shot.length,
 					muted: true,

@@ -2151,6 +2151,10 @@
             },
             "sourceStart": {
               "$ref": "#/$defs/__schema2"
+            },
+            "after": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
             }
           },
           "required": [

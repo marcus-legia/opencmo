@@ -156,7 +156,8 @@ def capability_keys(model: AiModel) -> set[str]:
             keys.add("references")
     if model.kind == "video":
         if limits.get("firstFrame"):
-            keys.add("startImage")
+            # `after`: a /video shot that continues the previous one starts from its last frame.
+            keys |= {"startImage", "after"}
         if limits.get("lastFrame"):
             keys.add("endImage")
         if limits.get("audio"):
@@ -172,6 +173,12 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
     extra = set(spec) - allowed
     if extra:
         raise SpecError("This request has settings the model does not take.")
+    if "after" in spec:
+        after = spec["after"]
+        if not isinstance(after, str) or not re.fullmatch(r"[0-9a-f]{64}", after):
+            raise SpecError("Invalid generation request.")
+        if "startImage" in spec:
+            raise SpecError("A shot that continues the previous one cannot also start from an image.")
     prompt = spec.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         raise SpecError("Write a prompt first.")
