@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, imagesOver, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -126,6 +126,12 @@ assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(omitted), [0, 0, 0, 0, 3, 3, 5,
 const many = ["a", "b", "c", "d", "e"].map(withImage);
 assert.deepEqual(anthropicFormat.trimImages(many, 2, 2).map(imagesIn), [0, 0, 0, 1, 1]);
 assert.deepEqual(anthropicFormat.trimImages(many.slice(0, 4), 2, 2).map(imagesIn), [1, 1, 1, 1], "nothing cut before the window fills");
+
+// Context editing is off unless asked for; on, it never clears the guides, skills or plan.
+assert.equal(contextEditing({} as NodeJS.ProcessEnv), null);
+const editing = contextEditing({ OPENCMO_AGENT_CONTEXT_EDITING: "1" } as unknown as NodeJS.ProcessEnv)!;
+assert.equal(editing.beta, "context-management-2025-06-27");
+assert.deepEqual(editing.context_management.edits[0]!.exclude_tools, ["read_guide", "read_skill", "update_plan"]);
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.
 assert.deepEqual(

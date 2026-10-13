@@ -25,6 +25,34 @@ const THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01";
 
 export const ANTHROPIC_MODEL = "claude-sonnet-5-5";
 
+const CONTEXT_BETA = "context-management-2025-06-27";
+
+/**
+ * Server-side clearing of old tool results (context editing), behind OPENCMO_AGENT_CONTEXT_EDITING=1
+ * until a real-model eval shows it pays. Long sessions resend every transcript, document and
+ * library listing they ever read; past 80k input tokens the oldest results become a placeholder,
+ * the last six stay, and at least 20k go at once, because each clearing rewrites the cache from that
+ * point. Guides, skills and the plan are instructions the model keeps working from: never cleared.
+ * The stored history is untouched, and server-side edits never invalidate thinking blocks.
+ */
+export function contextEditing(env: NodeJS.ProcessEnv = process.env) {
+  if (env.OPENCMO_AGENT_CONTEXT_EDITING !== "1") return null;
+  return {
+    beta: CONTEXT_BETA,
+    context_management: {
+      edits: [
+        {
+          type: "clear_tool_uses_20250919" as const,
+          trigger: { type: "input_tokens" as const, value: 80_000 },
+          keep: { type: "tool_uses" as const, value: 6 },
+          clear_at_least: { type: "input_tokens" as const, value: 20_000 },
+          exclude_tools: ["read_guide", "read_skill", "update_plan"],
+        },
+      ],
+    },
+  };
+}
+
 /** Định dạng content block của Claude — dùng chung cho Claude giả. */
 export const anthropicFormat: Omit<Format, "kind"> = {
   userTurn: (prompt, state, images) => [
@@ -248,6 +276,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
     async step({ history, tools: specs, system, signal, ran }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
       let jsonRetries = 0;
       let useStrict = true;
+      const editing = contextEditing();
       for (;;) {
         const stream = client.beta.messages.stream({
           model,
@@ -258,8 +287,9 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           cache_control: { type: "ephemeral" },
           tools: toolDefinitions(specs, useStrict),
           messages: closeDanglingToolUses(history, ran) as Anthropic.Beta.Messages.BetaMessageParam[],
-          betas: [FALLBACK_BETA, THINKING_BINDING_BETA],
+          betas: [FALLBACK_BETA, THINKING_BINDING_BETA, ...(editing ? [editing.beta] : [])],
           fallbacks: "default",
+          ...(editing ? { context_management: editing.context_management } : {}),
         }, { signal });
         try {
           for await (const event of stream) {
