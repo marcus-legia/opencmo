@@ -129,6 +129,20 @@ async function main(): Promise<void> {
     void checkDocument;
   }
 
+  // 6. The verify gate fires on errors after a write, not on warnings or a clean check.
+  {
+    const { failingCheck } = await import("./tools");
+    const error = '<project_state>{}</project_state><check>{"ok":false,"issues":[{"severity":"error","code":"missing-source","node_id":"n1","message":"x"}]}</check>';
+    assert.match(failingCheck(error) ?? "", /"code":"missing-source","node_id":"n1"/);
+    assert.equal(failingCheck('<check>{"ok":true,"issues":[{"severity":"warning","code":"transparent","message":"x"}]}</check>'), null, "warnings alone do not block");
+    assert.equal(failingCheck("<check>ok</check>"), null);
+    assert.equal(failingCheck(undefined), null);
+    // Only errors the request introduced: one the clip already had does not hold the model back.
+    const { checkErrorKeys } = await import("./tools");
+    assert.equal(failingCheck(error, checkErrorKeys(error)), null);
+    assert.equal(checkErrorKeys(error).size, 1);
+  }
+
   console.log("agent-design.check: ok");
 }
 

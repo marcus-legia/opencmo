@@ -705,6 +705,18 @@ export const TASKS: EvalTask[] = [
     },
   },
   {
+    id: "verifygate",
+    // The library has no logo: a placement leaves a missing-media error, and the Assistant must not
+    // finish with it (the verify gate in loop.ts gives it one more step to fix or explain it).
+    prompt: "Add our logo assets/logo.png in the top-left corner for the first 3 seconds (gate test).",
+    grade(outcome) {
+      const notes: string[] = [];
+      const missing = outcome.report.issues.filter((issue) => issue.code === "missing-source");
+      const ok = check(notes, !missing.length, `left a missing-media error: ${missing.map((issue) => issue.message).join("; ")}`);
+      return { pass: ok && sane(outcome, notes), notes };
+    },
+  },
+  {
     id: "grounded",
     prompt: "Make this clip more visual.",
     grade(outcome) {

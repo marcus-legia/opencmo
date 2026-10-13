@@ -44,6 +44,7 @@
  *   "split the screen" → set_layout split-bottom 16–21s → add_diagram cùng khoảng (tự vào panel)
  *   "icon"             → find_icons → add_icon trending-up lúc "growing" (1.5–4s mẫu)
  *   "emoji"            → find_lotties → add_lottie emoji/scream neo quote "people lose viewers"
+ *   "gate test"        → insert_node an image missing from the library; the verify gate then makes it delete_element it
  *   còn lại            → trả lời bằng chữ
  * Sau tool_result: ảnh thì đếm và nói số ảnh đã xem; còn lại một câu kết.
  */
@@ -212,6 +213,16 @@ function script(history: StoredMessage[]): unknown[] {
   const prompt = original.toLowerCase();
   // Chỉ câu lệnh, không phải khối <clip_context>/<project_state> đi kèm.
   const ask = prompt.split(/<clip_context>|<project_state>/)[0]!;
+  // The verify gate (loop.ts): finishing with check errors open. Remove what each error names.
+  if (ask.startsWith("before you finish:")) {
+    const report = /<check>(\{.*\})<\/check>/s.exec(original)?.[1];
+    const ids = report ? (JSON.parse(report) as { issues: { severity: string; node_id?: string }[] }).issues.filter((issue) => issue.severity === "error" && issue.node_id).map((issue) => issue.node_id!) : [];
+    return ids.length ? [text("The check found a problem; removing it."), ...[...new Set(ids)].map((element_id) => use("delete_element", { element_id }))] : [text("I could not fix what the check reported.")];
+  }
+  if (/gate test/.test(ask)) {
+    // Places an image the library does not have: the check after it reports an error.
+    return [text("Adding the logo."), use("insert_node", { parent_id: "scene0", node: { kind: "image", src: "assets/logo.png", x: 40, y: 40, width: 200, height: 200, start: 0, end: 3 } })];
+  }
   // Dòng kịch bản trong <clip_context>: model thật đọc chúng để chọn câu trích.
   const lines = [...original.matchAll(/\[[\d.]+–[\d.]+\] ([^\n<]+)/g)].map((match) => match[1]!.trim());
   const lineWith = (word: string) => lines.find((line) => line.toLowerCase().includes(word)) ?? lines[1] ?? lines[0] ?? "";

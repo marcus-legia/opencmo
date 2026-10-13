@@ -494,6 +494,41 @@ export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "r
  */
 export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
 
+/**
+ * The verify gate: what the model is told when it tries to finish while the last <check> after its
+ * writes still lists errors. Once per request, so a check it cannot clear never loops.
+ */
+export const VERIFY_GATE =
+  "Before you finish: the check after your last change still lists errors (below). Fix each one, or tell the user plainly why it cannot be fixed, then finish.";
+
+type CheckIssueLike = { severity?: string; code?: string; node_id?: string };
+const issueKey = (issue: CheckIssueLike) => `${issue.code ?? ""}:${issue.node_id ?? ""}`;
+
+function checkIssues(state: string | undefined): CheckIssueLike[] | null {
+  const match = state?.match(/<check>(\{.*\})<\/check>/s);
+  if (!match) return null;
+  try {
+    return (JSON.parse(match[1]!) as { issues?: CheckIssueLike[] }).issues ?? [];
+  } catch {
+    return null;
+  }
+}
+
+/** The errors a state message's `<check>` reports, by code and element: the gate's baseline. */
+export function checkErrorKeys(state: string | undefined): Set<string> {
+  return new Set((checkIssues(state) ?? []).filter((issue) => issue.severity === "error").map(issueKey));
+}
+
+/**
+ * A `<check>` block of the errors in `state` that `before` did not have, else null. Errors the clip
+ * had when the request began (a blank edit's empty seconds, the user's own stray layer) are not the
+ * model's to fix before it may finish.
+ */
+export function failingCheck(state: string | undefined, before: Set<string> = new Set()): string | null {
+  const fresh = (checkIssues(state) ?? []).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
+  return fresh.length ? `<check>${JSON.stringify({ ok: false, issues: fresh })}</check>` : null;
+}
+
 /** The run of parallel-safe calls that starts at `index` (empty when that call is not one). */
 export function readGroup<T extends { name: string }>(calls: T[], index: number): T[] {
   const group: T[] = [];

@@ -31,7 +31,7 @@ import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS,
 import { danglingToolUses } from "./providers/anthropic";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
-import { captureInput, readGroup } from "./tools";
+import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
 
 export type Emit = (event: string, data: unknown) => void;
 
@@ -160,6 +160,11 @@ export async function runTurn(env: TurnEnv): Promise<void> {
   // The session's messages, read once per request: this loop is the only writer while the turn
   // runs, so each step appends here what it appends to the database.
   let past: StoredMessage[] | undefined;
+  // The check after this request's last write, while it lists errors; the gate runs once.
+  let openCheck: string | null = null;
+  let gated = false;
+  // Errors the clip already had before this request's first write.
+  let baseline: Set<string> | undefined;
 
   try {
     for (let step = 0; ; step++) {
@@ -243,6 +248,14 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         return;
       }
       if (!result.toolCalls.length) {
+        if (openCheck && !gated) {
+          // Finishing with errors the check reported: one more step to fix or explain them.
+          gated = true;
+          const nudge = provider.userTurn(VERIFY_GATE, openCheck);
+          await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: nudge });
+          past?.push({ role: "user", content: nudge });
+          continue;
+        }
         await finish(env, "done", null);
         return;
       }
@@ -258,6 +271,9 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
       let deferred = false;
+      if (!baseline && result.toolCalls.some((call) => scope.isWrite(call.name))) {
+        baseline = checkErrorKeys(await scope.state().catch(() => ""));
+      }
       // Read-only calls next to each other start together; a read after a write still sees it.
       const early = new Map<string, { plan: Awaited<ReturnType<Scope["plan"]>>; outcome?: Awaited<ReturnType<Scope["run"]>> }>();
       for (const [index, call] of result.toolCalls.entries()) {
@@ -347,6 +363,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
 
       // Tool ghi xong thì model thấy trạng thái mới + `check` ngay trong tin nhắn này.
       const state = wrote && result.toolCalls.some((call) => scope.isWrite(call.name)) ? await scope.state() : undefined;
+      if (state !== undefined) openCheck = failingCheck(state, baseline);
       const answer = provider.toolResults(results, state);
       await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
       past?.push({ role: "user", content: answer as unknown[] });
