@@ -29,6 +29,7 @@ import {
   diffDocuments,
   findLotties,
   findSilences,
+  guardProps,
   isRemoved,
   loadCaptions,
   quoteRange,
@@ -368,12 +369,14 @@ const OP_DESCRIPTIONS: Record<string, string> = {
   ripple_delete:
     "Delete one element and pull everything after it in the same container earlier to close the gap (e.g. a B-roll shot inside a sequence). Refused when that would move the clip's own video or captions.",
   set_props:
-    "Set any properties of one element (see read_guide 'document' for names), e.g. {opacity: 0.8}, {fontWeight: 800, textCase: 'upper'}, {scale: 1.1}, {transition: {type: 'dissolve', duration: 0.5}}. null removes a property.",
+    "Set any properties of one element (see read_guide 'document' for names), e.g. {opacity: 0.8}, {fontWeight: 800, textCase: 'upper'}, {scale: 1.1}, {transition: {type: 'dissolve', duration: 0.5}}, {start: 2, end: 6}; on a text element {text: '...'} replaces what it says. null removes a property.",
   set_keyframe:
     "Add, change or remove a keyframe for an animatable property (x, y, scale, rotation, opacity, width, height, volume, blur, ...). time is in the element's own seconds from its start. Use it for zoom-ins, pans and fades.",
   add_part:
     "Add a sub-part to an element: paints, strokes, shadows, effects, animations (e.g. {type: 'fade', phase: 'in', duration: 0.4}), ranges (text highlight), masks or gradient stops.",
   move_part: "Reorder a sub-part (paint, stroke, effect, ...) within its list.",
+  move_to_row:
+    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds.",
   copy_settings:
     "Make elements look like another one: copy groups of settings from from_id to to_ids — look (opacity, corners, blend), text (font, size, weight, color, case, stroke; text to text only), effects (filters, shadows), motion (animations, transition), audio (volume, mute). Never copies timing, position, wording or keyframes. Default: every group that fits each target.",
   duplicate_elements: "Duplicate elements in place.",
@@ -436,6 +439,15 @@ const INSERT_ASSET = spec(
 );
 
 /**
+ * Ops the Assistant is not offered, though they stay in editor-core (the editor's own buttons, and
+ * calls in older chats still run): each has a better tool for the model. update_element takes no
+ * objects, so the model's transitions and strokes failed there (production run 1); set_props takes
+ * everything it did. duplicate_elements covers paste_nodes; set_keyframe covers move_keyframe; scene
+ * and part reordering are editor gestures. Fewer near-twins, fewer wrong picks, a shorter prompt.
+ */
+export const NOT_OFFERED = new Set(["update_element", "paste_nodes", "insert_scene", "activate_scene", "move_part", "move_keyframe"]);
+
+/**
  * Danh sách tool, THỨ TỰ TẤT ĐỊNH: tools là phần đầu của prefix cache, một
  * thứ tự khác là cache hỏng cho mọi request.
  */
@@ -445,6 +457,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   ...BROWSER_TOOLS,
   INSERT_ASSET,
   ...Object.keys(AGENT_OP_INPUTS)
+    .filter((name) => !NOT_OFFERED.has(name))
     .sort()
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
@@ -455,6 +468,13 @@ export const TOOL_SPECS: ToolSpec[] = [
  * and they can run at the same time. Anything that writes, pauses or spends stays in order.
  */
 export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "read_skill", "list_clips", "get_clip"]);
+
+/**
+ * Tools that cut or read the clip's own video by its words. A blank New edit has no such video, so
+ * they could only fail there; leaving them out keeps ~6k characters of schema out of every request.
+ * A clip's kind never changes, so a session's tool list (the start of the prompt cache) holds.
+ */
+export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
 
 /** The run of parallel-safe calls that starts at `index` (empty when that call is not one). */
 export function readGroup<T extends { name: string }>(calls: T[], index: number): T[] {
@@ -683,7 +703,16 @@ function guard(op: Record<string, unknown>, document: ClipDocument): string | nu
     case "set_props":
     case "update_element": {
       const props = Object.keys((op.props as object | undefined) ?? {});
-      return touches(op.element_id) && props.some((prop) => TIMING_PROPS.includes(prop)) ? recut : null;
+      if (touches(op.element_id) && props.some((prop) => TIMING_PROPS.includes(prop))) return recut;
+      // The same rules as update_element's: no ids or children, no frame size, no captions source.
+      const found = typeof op.element_id === "string" ? byId(document, op.element_id) : null;
+      if (!found) return null;
+      try {
+        guardProps(found.tag, found.entity, props);
+      } catch (error) {
+        return error instanceof Error ? error.message : "That property cannot be changed.";
+      }
+      return null;
     }
     default:
       return null;

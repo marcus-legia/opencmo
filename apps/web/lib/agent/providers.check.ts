@@ -20,7 +20,7 @@ const text = JSON.stringify(TOOL_SPECS.map((spec) => spec.schema));
 for (const banned of ['"pattern"', '"minimum"', '"maxLength"', '"$schema"', '"propertyNames"']) {
   assert.ok(!text.includes(banned), `schema gửi API không còn ${banned}`);
 }
-assert.equal(TOOL_SPECS.find((spec) => spec.name === "update_element")!.strict, false, "record không strict");
+assert.equal(TOOL_SPECS.find((spec) => spec.name === "set_props")!.strict, false, "record không strict");
 assert.equal(TOOL_SPECS.find((spec) => spec.name === "set_frame")!.strict, true);
 
 // The API allows at most MAX_STRICT_TOOLS strict tools; credit-spending tools keep strict first.

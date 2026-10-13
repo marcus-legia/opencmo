@@ -56,7 +56,7 @@ import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, video
 import { turnStatus } from "./loop";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
-import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
+import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
  * Kiểm lời của lượt sinh LÚC BÁO GIÁ: lời bị chặn thì không hiện thẻ duyệt cho
@@ -126,12 +126,13 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 }
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
-export function clipToolSpecs(): ToolSpec[] {
+export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
-  return [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])];
+  const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
+  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])];
 }
 
 export function clipScope(
@@ -149,7 +150,7 @@ export function clipScope(
   const env = { workspace };
   return {
     kind: "clip",
-    tools: clipToolSpecs(),
+    tools: clipToolSpecs({ blank: context.clip.kind === "blank" }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();

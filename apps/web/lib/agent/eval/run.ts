@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { planStudio3d, planVoiceover, quoteRange, readCaptionState, summarizeProject, type Transcript } from "@opencmo/editor-core";
+import { MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readCaptionState, summarizeProject, type Transcript } from "@opencmo/editor-core";
 
 import { clipContextBlock } from "../clip-context";
 import { KEEP_IMAGES } from "../limits";
@@ -37,7 +37,7 @@ import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
-import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
+import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
 import {
   FIXTURE_ABOUT,
@@ -129,7 +129,9 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
+  // Same profile as the app: a blank New edit (no video of its own) has no cut-by-words tools.
+  const blank = !JSON.stringify((await workspace.read()).document).includes(`"${MASTER_SRC}"`);
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {

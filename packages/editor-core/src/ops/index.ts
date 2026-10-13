@@ -53,7 +53,7 @@ export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './ed
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
 export { loadCaptions, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
-export { CAPTION_PRESETS, FONTS } from './project';
+export { CAPTION_PRESETS, FONTS, guardProps } from './project';
 export { BRAND_SRC_PREFIX, LOGO_MARK, logoBox } from './brand';
 export {
 	DEFAULT_DUCK_DB,
