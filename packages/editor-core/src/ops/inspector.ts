@@ -15,7 +15,7 @@ import { z } from 'zod';
 
 import { TRACK_PROPERTIES, type ClipDocument } from '@opencmo/clip-doc';
 
-import { assign, byId, clone, type Entity } from '../doc';
+import { assign, byId, clone, copyOf, type Entity } from '../doc';
 import { OpFailure } from './context';
 import { checked } from './project';
 
@@ -154,8 +154,7 @@ export const addPart = {
     const { entity } = found(next, input.element_id);
     const list = ((entity[input.key] as Entity[] | undefined) ??= []);
     // Id do `applyOps` đặt: phần tử đầu vào không được mang id của ai khác.
-    const part = structuredClone(input.part) as Entity;
-    delete part.id;
+    const part = copyOf(input.part as Entity);
     list.splice(Math.min(input.index ?? list.length, list.length), 0, part);
     return checked(next, 'That cannot be added here');
   },

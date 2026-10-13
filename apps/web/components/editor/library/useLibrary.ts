@@ -33,6 +33,8 @@ import { activeScene, applyOps, walk, type OpContext } from "@opencmo/editor-cor
 
 import type { DocumentSession } from "@/lib/editor/session";
 
+import { elementsForGeneration } from "../generate/useGenerations";
+
 import { deleteRemote, describe, keepLocal, nodeFor, readLocal, removeLocal, uploadable, upload } from "./store";
 
 /** `device` = không lên Storage được (ảnh, âm thanh): khác `local` ở chỗ Retry vô ích. */
@@ -180,6 +182,19 @@ export function useLibrary({
   const remove = useCallback(
     (ids: string[]) =>
       void (async () => {
+        // A generated file leaves with the elements that declare it, in that order: a declaration
+        // without its record would be generated again, and charged, without an approval.
+        const keys = manifest.assets.filter((record) => ids.includes(record.id) && record.generation?.key).map((record) => record.generation!.key);
+        const uses = [...new Set(keys.flatMap((key) => elementsForGeneration(session.current, key)))];
+        if (uses.length) {
+          try {
+            const applied = await applyOps(session.current, uses.map((element_id) => ({ op: "delete_element", element_id })), context());
+            session.commit(applied.document);
+          } catch (error) {
+            notify((error as Error).message || "That file is still used on the timeline.");
+            return;
+          }
+        }
         let removed: LibraryRecord[] = [];
         let after: Manifest | null = null;
         await change((current) => {
@@ -190,7 +205,7 @@ export function useLibrary({
         });
         if (after) await forget(removed, after);
       })(),
-    [change, forget],
+    [change, context, forget, manifest, notify, session],
   );
 
   const insert = useCallback(

@@ -214,3 +214,54 @@ describe('set_audio_roll (J/L-cut)', async () => {
     await expect(run(cut(), [{ op: 'set_audio_roll', at: 12, seconds: 0.5 }])).rejects.toThrow(/no cut near 12s/);
   });
 });
+
+// An op that copies a subtree with its ids saves a document that no longer opens
+// ("This project could not be read"): every copy must come out with fresh ids.
+describe('copies get fresh ids', async () => {
+  const { validate } = await import('@opencmo/clip-doc');
+  const { writeCaptionState } = await import('./captions');
+  const { MASTER_SRC } = await import('./doc');
+  const group = {
+    kind: 'group',
+    id: 'g',
+    start: 0,
+    end: 3,
+    children: [{ kind: 'text', id: 'inner', text: 'Hi', tracks: [{ id: 'tr', property: 'opacity', keyframes: [{ time: 0, value: 0 }, { time: 1, value: 1 }] }] }],
+  };
+
+  it('insert_node of a copied group', async () => {
+    const out = await run(doc([group]), [{ op: 'insert_node', parent_id: 'sc', node: group }]);
+    expect(() => validate(out)).not.toThrow();
+  });
+
+  it('insert_to_row of a copied group', async () => {
+    const out = await run(doc([group]), [{ op: 'insert_to_row', node: group }]);
+    expect(() => validate(out)).not.toThrow();
+  });
+
+  it('add_part of a part carrying an id', async () => {
+    const out = await run(doc([{ kind: 'rect', id: 'r', width: 10, height: 10, paints: [{ id: 'p', type: 'solid', color: '#fff' }] }]), [
+      { op: 'add_part', element_id: 'r', key: 'paints', part: { id: 'p', type: 'solid', color: '#000' } },
+    ]);
+    expect(() => validate(out)).not.toThrow();
+  });
+
+  it('J/L-cut on a speaker with volume keyframes', async () => {
+    const cut = writeCaptionState(
+      doc([
+        {
+          kind: 'video',
+          id: 'm',
+          src: MASTER_SRC,
+          sourceIn: 0,
+          sourceOut: 20,
+          tracks: [{ id: 'vol', property: 'volume', keyframes: [{ time: 0, value: 0 }, { time: 10, value: -6 }] }],
+        },
+        { kind: 'captions', id: 'c', src: 'tr.json' },
+      ]),
+      { base: 'tr.json', removed: [{ start: 5, end: 8 }, { start: 12, end: 13 }] },
+    );
+    const out = await run(cut, [{ op: 'set_audio_roll', at: 5, seconds: 0.5 }]);
+    expect(() => validate(out)).not.toThrow();
+  });
+});

@@ -466,8 +466,11 @@ type GenerateEnv = {
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
 export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string }> {
   // Every variant is its own generation and credit hold; all of them start or none do.
-  const started: { id: string; credits_reserved: number }[] = [];
-  const cancelAll = () => Promise.all(started.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
+  const started: { id: string; credits_reserved: number; reused: boolean }[] = [];
+  // Only what this approval started: a reused generation belongs to an earlier placement (another
+  // card, an MCP retry), and cancelling it would take that media away too.
+  const cancelAll = () =>
+    Promise.all(started.filter((item) => !item.reused).map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
   const runs = [
     ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
     ...(prepared.extra ?? []),
@@ -492,7 +495,8 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // Credits are held one by one, so a failure cancels exactly the holds made so far.
   for (const item of ready) {
     try {
-      started.push((await startGeneration(env.supabase, item)).generation);
+      const { generation, reused } = await startGeneration(env.supabase, item);
+      started.push({ ...generation, reused });
     } catch (err) {
       return failed(err);
     }

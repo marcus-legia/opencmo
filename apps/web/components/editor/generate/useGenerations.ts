@@ -95,6 +95,27 @@ export function pendingGenerations(document: ClipDocument, manifest: Manifest): 
   return out;
 }
 
+/**
+ * Ids of the elements that declare the generation `key` (in their `src` or a paint). Removing that
+ * generation from the library must remove them too: a declaration left without its record is sent
+ * again — a new paid generation the user never approved.
+ */
+export function elementsForGeneration(document: ClipDocument, key: string): string[] {
+  const out: string[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (!value || typeof value !== "object") return;
+    const entity = value as Record<string, unknown>;
+    if (typeof entity.id === "string" && ownDeclarations(entity).some((declaration) => JSON.stringify(resolve(declaration)) === key)) {
+      out.push(entity.id);
+      return;
+    }
+    Object.values(entity).forEach(visit);
+  };
+  visit(document.stage);
+  return out;
+}
+
 export type AiState = { state: "pending"; label: string } | { state: "error"; message: string };
 
 /** Khai báo `{generate}` của CHÍNH phần tử: `src` của nó hoặc `src` của một paint (không xét con). */
@@ -218,10 +239,20 @@ async function keyId(key: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 16);
 }
 
+/**
+ * The wait broke, not the generation: the connection dropped, the server hiccuped, or it is just
+ * slow. The worker keeps going and the credits stay held, so the placeholder stays pending and the
+ * wait resumes — marking it failed would show a paid generation as lost, with no way back but Retry.
+ */
+class StillRunning extends Error {}
+/** How long before a broken wait resumes (the server reuses the running generation: no new charge). */
+const RESUME_MS = 30_000;
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/${path}`, { ...init, headers: init?.body ? { "content-type": "application/json" } : undefined }).catch(() => null);
-  if (!response) throw new Error("Connection lost. Check your internet and try again.");
+  if (!response) throw new StillRunning("Connection lost. Check your internet and try again.");
   const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+  if (response.status >= 500) throw new StillRunning("Something went wrong. Please try again.");
   if (!response.ok) throw new Error(typeof body?.detail === "string" ? body.detail : "Something went wrong. Please try again.");
   return body as T;
 }
@@ -367,7 +398,7 @@ export function useGenerations({
             await api(`generations/${encodeURIComponent(view.id)}/cancel`, { method: "POST" }).catch(() => undefined);
             return;
           }
-          if (Date.now() - started > WAIT_MS) throw new Error("This is taking longer than expected. It will appear in your library when it finishes.");
+          if (Date.now() - started > WAIT_MS) throw new StillRunning("This is taking longer than expected. It will appear in your library when it finishes.");
           view = await api<GenerationView>(`generations/${encodeURIComponent(view.id)}`);
         }
         if (view.status !== "done" || !view.asset) {
@@ -376,7 +407,7 @@ export function useGenerations({
           );
         }
         const download = await fetch(view.asset.url).catch(() => null);
-        if (!download?.ok) throw new Error("Could not download the generated file. Try again.");
+        if (!download?.ok) throw new StillRunning("Could not download the generated file. Trying again shortly.");
         const blob = await download.blob();
         const placed = recordFor(lib.latest(), key);
         if (!placed) return;
@@ -408,6 +439,11 @@ export function useGenerations({
         }));
       } catch (error) {
         const message = (error as Error).message;
+        if (error instanceof StillRunning) {
+          if (/longer than expected/.test(message)) notify(message);
+          setTimeout(() => setAttempt((value) => value + 1), RESUME_MS);
+          return;
+        }
         const kind = resolved.type === "voice" ? "Voice" : resolved.type[0]!.toUpperCase() + resolved.type.slice(1);
         // Lỗi của worker đã mở đầu bằng "Generation failed." — ghép thẳng ra
         // "Video generation failed. Generation failed. …" (UAT production 29/09).

@@ -22,7 +22,7 @@
 import type { CaptionsNode, ClipDocument, ClipNode, SequenceNode, TextCutMark, VideoNode } from '@opencmo/clip-doc';
 import { FPS } from '@opencmo/clip-render';
 
-import { activeView, assign, clone, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
+import { activeView, assign, clone, copyOf, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
 import { rebuildLayout } from './layout';
 import { keptDuration, keptRanges, round, type Range } from './transcript';
 
@@ -210,7 +210,8 @@ function soundSegment(template: VideoNode, range: Range, kept: Range[], index: n
     marks: { 'cut-audio': true },
   };
   for (const key of ['volume', 'denoise', 'playbackRate']) if (source[key] !== undefined) node[key] = source[key];
-  if (tracks.length) node.tracks = structuredClone(tracks);
+  // Every sound segment gets its own copy: the template's track ids would repeat once per segment.
+  if (tracks.length) node.tracks = tracks.map(copyOf);
   return node as unknown as ClipNode;
 }
 

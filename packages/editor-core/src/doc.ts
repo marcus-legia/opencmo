@@ -153,6 +153,21 @@ export function mergeView(document: ClipDocument, scene: SceneNode, view: ClipDo
 /** Bản sao sâu: op không bao giờ sửa document của người gọi. */
 export const clone = (document: ClipDocument): ClipDocument => structuredClone(document);
 
+/** Deep copy without ids (at any depth): `applyOps` gives every node new ones, so a copy never shares an id. */
+export function copyOf(entity: Entity): Entity {
+  const copy = structuredClone(entity);
+  const strip = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(strip);
+    else if (value && typeof value === 'object') {
+      delete (value as Entity).id;
+      delete (value as Entity).selected;
+      Object.values(value).forEach(strip);
+    }
+  };
+  strip(copy);
+  return copy;
+}
+
 /** Hai document như nhau về nội dung (bỏ qua thứ tự khoá). */
 export function same(a: unknown, b: unknown): boolean {
   if (a === b) return true;
