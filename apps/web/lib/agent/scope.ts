@@ -49,6 +49,7 @@ import {
 } from "./generate-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
+import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
@@ -132,7 +133,7 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
-  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])];
+  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC];
 }
 
 export function clipScope(
@@ -342,7 +343,9 @@ export function clipScope(
           ? runSkillTool(supabase, call)
           : TURN_TOOLS.has(call.name)
             ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
-            : runTool(call.name, call.input, env),
+            : call.name === WAIT_TOOL_SPEC.name
+              ? runWaitForMedia(call.input, { supabase, clipId })
+              : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
       if (call.name === "plan_video") {
         if (!approved) {

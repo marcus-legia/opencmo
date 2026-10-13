@@ -39,6 +39,7 @@ import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
+import { WAIT_TOOL_SPEC, waitReport } from "../wait-tool";
 import {
   FIXTURE_ABOUT,
   FIXTURE_DURATIONS,
@@ -131,7 +132,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   process.env.OPENCMO_AI_FAKE ??= "1";
   // Same profile as the app: a blank New edit (no video of its own) has no cut-by-words tools.
   const blank = !JSON.stringify((await workspace.read()).document).includes(`"${MASTER_SRC}"`);
-  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -155,6 +156,12 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
     for (const call of step.toolCalls) {
       tools.push(call.name);
       calls.push({ name: call.name, input: call.input });
+      if (call.name === WAIT_TOOL_SPEC.name) {
+        // No worker here: every approved piece counts as finished, as it would be after the wait.
+        const report = waitReport(generations.map((item) => ({ kind: item.model.kind, status: "done", error: null, spec: item.spec as { prompt?: unknown }, created_at: "" })));
+        results.push({ id: call.id, name: call.name, ok: true, content: report.content });
+        continue;
+      }
       if (call.name === "ask_user") {
         const content = task.answer
           ? JSON.stringify({ user_answer: { choices: [], text: task.answer } })
