@@ -40,6 +40,28 @@ export async function documentHash(document: ClipDocument): Promise<string> {
 }
 
 /**
+ * Size as the database checks it (`octet_length(document::text)`): Postgres prints jsonb with a space
+ * after every `:` and `,`, 10-15% more than `JSON.stringify`. Measured the short way, a document
+ * passed here and was then refused by the database with an unreadable error.
+ */
+export function storedBytes(document: unknown): number {
+  let spaces = 0;
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      const items = value.filter((item) => item !== undefined);
+      spaces += Math.max(0, items.length - 1);
+      items.forEach(visit);
+    } else if (value && typeof value === 'object') {
+      const entries = Object.values(value as Record<string, unknown>).filter((item) => item !== undefined && typeof item !== 'function');
+      spaces += entries.length + Math.max(0, entries.length - 1);
+      entries.forEach(visit);
+    }
+  };
+  visit(document);
+  return new TextEncoder().encode(JSON.stringify(document)).length + spaces;
+}
+
+/**
  * `migrate` + những luật schema zod không diễn đạt được: cỡ, và id không trùng.
  * Id trùng làm `update_element`/`delete_element` sửa nhầm node — lỗi im lặng.
  */
@@ -50,8 +72,7 @@ export function validate(input: unknown): ClipDocument {
   } catch (error) {
     throw new DocumentInvalidError(`document is not valid: ${firstIssue(error)}`);
   }
-  const bytes = new TextEncoder().encode(JSON.stringify(document)).length;
-  if (bytes >= MAX_DOCUMENT_BYTES) throw new DocumentInvalidError('project is too large to save');
+  if (storedBytes(document) >= MAX_DOCUMENT_BYTES) throw new DocumentInvalidError('project is too large to save');
   const seen = new Set<string>();
   const visit = (value: unknown) => {
     if (Array.isArray(value)) return value.forEach(visit);

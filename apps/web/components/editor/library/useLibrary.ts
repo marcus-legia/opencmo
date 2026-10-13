@@ -29,6 +29,7 @@ import {
   type Rename,
 } from "@opencmo/clip-assets";
 import type { ClipDocument } from "@opencmo/clip-doc";
+import { readTranscriptText } from "@opencmo/clip-render";
 import { activeScene, applyOps, walk, type OpContext } from "@opencmo/editor-core";
 
 import type { DocumentSession } from "@/lib/editor/session";
@@ -213,6 +214,21 @@ export function useLibrary({
       const scene = activeScene(session.current) as unknown as Record<string, unknown> & { id?: string };
       const node = nodeFor(record, scene, options);
       if (!node || !scene.id) return null;
+      // Imported subtitles (.srt/.vtt/.json) are saved as a transcript of the clip: the export runs on
+      // the server and reads only stored transcripts, so captions pointing at the device's file
+      // previewed fine and then failed Export.
+      if (record.type === "TRANSCRIPT" && !isPartial(record) && (node as { kind?: string }).kind === "captions") {
+        try {
+          const asset = record as AssetRecord;
+          const file = files.current.get(asset.id) ?? (await readLocal(clipId, asset.source));
+          if (file) {
+            const transcript = readTranscriptText(await file.text(), asset.mimeType || file.type || "application/json");
+            (node as { src?: unknown }).src = await context().saveTranscript(transcript as never);
+          }
+        } catch (error) {
+          notify(`These subtitles will show here but may not export. ${(error as Error).message}`);
+        }
+      }
       const ids = (document: ClipDocument) => {
         const out: string[] = [];
         walk(document, ({ entity, tag }) => {
@@ -230,7 +246,7 @@ export function useLibrary({
       const fresh = ids(applied.document).filter((id) => !before.has(id));
       return fresh[fresh.length - 1] ?? null;
     },
-    [context, session],
+    [clipId, context, notify, session],
   );
 
   const cloudOf = useCallback(
