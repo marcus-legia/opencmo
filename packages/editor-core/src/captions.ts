@@ -23,6 +23,7 @@ import type { CaptionsNode, ClipDocument, ClipNode, SequenceNode, TextCutMark, V
 import { FPS } from '@opencmo/clip-render';
 
 import { activeView, assign, clone, copyOf, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
+import { faceXTrack, type FaceFrame, type XKey } from './face-track';
 import { rebuildLayout } from './layout';
 import { keptDuration, keptRanges, round, type Range } from './transcript';
 
@@ -166,7 +167,7 @@ export function readCaptionState(document: ClipDocument): CaptionState | null {
  * bản id là hai phần tử cùng tên, và lượt sửa kế tiếp theo tên đó trượt lặng lẽ.
  * Lượt stamp sau đặt tên mới.
  */
-function segment(template: VideoNode, range: Range, start: number): VideoNode {
+function segment(template: VideoNode, range: Range, start: number, face: FaceFrame | null): VideoNode {
   const copy = structuredClone(template) as unknown as Entity;
   const strip = (value: unknown, key?: string): void => {
     if (key === 'src' || key === 'marks') return;
@@ -181,7 +182,23 @@ function segment(template: VideoNode, range: Range, start: number): VideoNode {
   // `sequence` không tự xếp các con nối đuôi: thiếu `start` thì mọi đoạn cùng
   // bắt đầu ở 0 và chỉ đoạn cuối còn thấy được.
   copy.start = round(start);
+  // The face-tracking track lives whole in the scene's `reframe` mark: a segment carries only the
+  // keys around its own range, or a long clip cut many times outgrows the save limit.
+  const track = face ? ((copy as unknown as VideoNode).tracks ?? []).find((item) => item.property === 'x') : undefined;
+  const box = Number(copy.width);
+  if (track && face && box > face.frameWidth) {
+    const keys = faceXTrack(track.keyframes as unknown as XKey[], face, range, box);
+    if (keys) track.keyframes = keys as typeof track.keyframes;
+  }
   return copy as unknown as VideoNode;
+}
+
+/** The scene's face track, when the frame slides over the video to follow it. */
+function faceFrame(document: ClipDocument): FaceFrame | null {
+  const scene = sceneOf(document);
+  const mark = scene?.marks?.reframe;
+  if (!scene || !mark || (mark.mode ?? 'fill') !== 'fill' || mark.track.length < 2 || typeof scene.width !== 'number') return null;
+  return { track: mark.track as [number, number][], frameWidth: scene.width };
 }
 
 const withoutMute = (video: VideoNode): VideoNode => {
@@ -351,7 +368,8 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
     const best = olds.reduce<VideoNode | null>((pick, video) => (overlap(video, range) > (pick ? overlap(pick, range) : 0) ? video : pick), null);
     return best ? unmute(best) : template;
   };
-  const videos = kept.map((range, index) => segment(templateFor(range), range, segmentStart(kept, index)));
+  const face = faceFrame(document);
+  const videos = kept.map((range, index) => segment(templateFor(range), range, segmentStart(kept, index), face));
   // Có J/L-cut: hình câm, tiếng đi bằng các đoạn `audio` cùng nguồn với điểm cắt đã dời.
   const sounds = rolls.size ? kept.map((range, index) => soundSegment(template, range, kept, index, rolls)) : [];
   if (rolls.size) for (const video of videos) (video as { muted?: boolean }).muted = true;
@@ -363,7 +381,7 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
         },
         children: [...videos, ...sounds],
       } satisfies SequenceNode)
-    : segment(template, window, 0);
+    : segment(template, window, 0, face);
   replaceNode(document, found.target, replacement);
   followCut(document, new Set([replacement]), keptRanges(window, found.mark?.removed ?? []), kept);
 

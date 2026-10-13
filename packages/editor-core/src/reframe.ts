@@ -225,16 +225,18 @@ export function writeFrame(input: ClipDocument, next: Frame, master: Size, viewp
 
   for (const video of videos) {
     const entity = video as unknown as Entity;
+    const oldBox = num(entity, 'width');
     entity.x = xForFocus(slides ? mark.focus : 0.5, boxWidth, next.width);
     entity.y = round((next.height - boxHeight) / 2);
     entity.width = boxWidth;
     entity.height = boxHeight;
     const frames = xKeyframes(video);
-    const values = frames.map((keyframe, index) => {
+    const values = frames.map((keyframe) => {
+      // A key at none of the mark's times is the user's own: keep the point it framed. (Looking
+      // the focus up by index was wrong once segments carry only part of the track.)
       const focus =
         mark.track.find(([time]) => Math.abs(time - (keyframe.time as number)) < 1e-3)?.[1] ??
-        mark.track[index]?.[1] ??
-        mark.focus;
+        (oldBox !== undefined && oldBox > oldWidth ? focusForX(keyframe.value as number, oldBox, oldWidth) : mark.focus);
       keyframe.value = xForFocus(slides ? focus : 0.5, boxWidth, next.width);
       return keyframe.value as number;
     });

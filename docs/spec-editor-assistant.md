@@ -192,7 +192,7 @@ Chi tiết ở `docs/pr45-viec-con-lai.md`.
 **PR sau:** `docs/ke-hoach-pr-sau.md`. Thứ tự: đo trước → export 60 fps → file project phình to → `capture` trên worker (nếu cần) → quyền RPC.
 
 **Giới hạn đã biết:**
-- mỗi đoạn cắt mang một bản copy track bám mặt;
+- mỗi đoạn cắt là một node video (~440 byte): document chạm giới hạn 256 KB ở khoảng 590 đoạn cắt;
 - `capture` phải vòng qua tab trình duyệt;
 - `save_editor_document` / `agent_record_tool` được grant cho `authenticated`.
 
