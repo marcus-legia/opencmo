@@ -7,19 +7,39 @@ import { gsap } from "./motion";
 
 const TABS: [DeptId, string][] = [["video", "Video"], ["post", "Post"], ["sales", "Sales"]];
 
-/** "See it work": ba video 5 giây dựng lại từ UI thật của Editor/Dashboard, chạy lặp, không tiếng. */
+/** "See it work": three silent 5-second loops rebuilt from the real Editor/Dashboard UI. */
 export function DemoSection() {
   const [tab, setTab] = useState<DeptId>("video");
+  // The section sits below the fold; attaching `src` only near the viewport keeps the
+  // MP4 out of the first page load. The poster covers the frame until then.
+  const [near, setNear] = useState(false);
+  const screenRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const barRef = useRef<HTMLSpanElement>(null);
   const first = useRef(true);
   const demo = DEMOS[tab];
 
   useEffect(() => {
+    const el = screenRef.current;
+    if (!el || near) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "400px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+
+  useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
-    // `key` đổi theo tab nên mỗi tab là một thẻ video mới; chỉ cần ép muted (một số
-    // trình duyệt bỏ qua thuộc tính lúc hydrate) rồi gọi play.
+    if (!v || !near) return;
+    // `key` follows the tab, so each tab is a fresh <video>; force `muted` (some browsers
+    // ignore the attribute during hydration) and call play.
     v.muted = true;
     v.play().catch(() => {});
     if (!first.current) gsap.fromTo(v, { opacity: 0 }, { opacity: 1, duration: 0.6 });
@@ -32,7 +52,7 @@ export function DemoSection() {
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [tab]);
+  }, [tab, near]);
 
   return (
     <section id="demo" aria-labelledby="demo-title" className="lv-panel-section lv-demo">
@@ -54,10 +74,19 @@ export function DemoSection() {
           </div>
         </div>
         <div data-rise="1" className="lv-demo-frame">
-          <div className="lv-demo-screen">
-            <video ref={videoRef} key={demo.src} autoPlay muted loop playsInline preload="auto" aria-label={demo.alt}>
-              <source src={demo.src} type="video/mp4" />
-            </video>
+          <div ref={screenRef} className="lv-demo-screen">
+            <video
+              ref={videoRef}
+              key={demo.src}
+              src={near ? demo.src : undefined}
+              poster={demo.poster}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload={near ? "auto" : "none"}
+              aria-label={demo.alt}
+            />
             <div className="lv-demo-bar">
               <span>{demo.label}</span>
               <span className="lv-demo-track"><span ref={barRef} /></span>

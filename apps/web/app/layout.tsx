@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "./globals.css";
 import "@/styles/design-system.css";
@@ -23,10 +24,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Script khởi động của /app (rail, theme) gắn `data-*` lên <html> trước khi
-    // React hydrate; chỉ bỏ qua lệch thuộc tính ở đúng thẻ này, không lan xuống con.
+    // The /app boot script (rail, theme) sets `data-*` on <html> before React hydrates;
+    // suppress the attribute mismatch on this tag only, not its children.
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        {/* Real-user Core Web Vitals; only reports on Vercel deployments with Speed Insights enabled. */}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
