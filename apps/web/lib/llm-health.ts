@@ -36,7 +36,7 @@ export function outage(error: unknown): Outage | null {
     return status === 429 || status >= 500 ? "busy" : null;
   }
   if (error instanceof ApiError) {
-    if (error.status === 401 || error.status === 403) return "account";
+    if (error.status === 401 || error.status === 402 || error.status === 403) return "account";
     if (error.status === 400 && /api key/i.test(error.message)) return "account";
     if (error.status === 429 && /per_day/i.test(error.message)) return "quota";
     return error.status === 429 || error.status >= 500 ? "busy" : null;

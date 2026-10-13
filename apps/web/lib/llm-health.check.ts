@@ -29,6 +29,7 @@ assert.equal(outage(new ApiError({ status: 503, message: "unavailable" })), "bus
 // The day's quota of one model is gone: a minute's wait will not bring it back.
 assert.equal(outage(new ApiError({ status: 429, message: "Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day, limit: 250" })), "quota");
 assert.equal(outage(new ApiError({ status: 403, message: "permission denied" })), "account");
+assert.equal(outage(new ApiError({ status: 402, message: "Your prepayment credits are depleted." })), "account", "Gemini out of prepaid credit");
 assert.equal(outage(new ApiError({ status: 400, message: "API key not valid. Please pass a valid API key." })), "account");
 assert.equal(outage(new ApiError({ status: 400, message: "Invalid JSON payload" })), null);
 assert.equal(outage(new Error("anything else")), null);
