@@ -265,3 +265,77 @@ describe('copies get fresh ids', async () => {
     expect(() => validate(out)).not.toThrow();
   });
 });
+
+// Cutting the speaker's words used to move only the speaker: b-roll, text and layout stayed at
+// their clip seconds and ended up over other words, or over a stretch that was cut.
+describe('a cut keeps the timeline in sync', async () => {
+  const { writeCaptionState } = await import('./captions');
+  const { MASTER_SRC } = await import('./doc');
+  const base = () => {
+    const document = doc([
+      { kind: 'video', id: 'm', src: MASTER_SRC, sourceIn: 0, sourceOut: 20 },
+      { kind: 'captions', id: 'c', src: 'tr.json' },
+      { kind: 'video', id: 'broll', src: 'b.mp4', start: 10, end: 12 },
+      { kind: 'text', id: 'inside', text: 'gone', start: 6, end: 7 },
+      { kind: 'text', id: 'across', text: 'shorter', start: 4, end: 9 },
+      { kind: 'sequence', id: 'row', name: 'B-roll 1', children: [{ kind: 'image', id: 'pic', src: 'p.png', start: 15, end: 16 }] },
+      { kind: 'audio', id: 'voice', src: 'v.m4a', start: 6.5, end: 9.5, marks: { voiceover: { key: 'k', mode: 'overlay', duck: -18 } } },
+      { kind: 'captions', id: 'voice-captions', src: 'v.json', start: 6.5, end: 9.5, marks: { voiceover: { key: 'k' } } },
+    ]);
+    (document.stage.children[0] as unknown as { marks: unknown }).marks = { layout: { ranges: [{ start: 10, end: 14, mode: 'split-bottom', ratio: 0.5 }] } };
+    return document;
+  };
+  const byId = (document: ClipDocument, id: string) => {
+    let found: Record<string, unknown> | undefined;
+    const visit = (list: Record<string, unknown>[]) => {
+      for (const item of list) {
+        if (item.id === id) found = item;
+        if (Array.isArray(item.children)) visit(item.children as Record<string, unknown>[]);
+      }
+    };
+    visit(kids(document));
+    return found;
+  };
+
+  it('what sits after a cut moves with its words; what was cut away goes', () => {
+    const out = writeCaptionState(base(), { base: 'tr.json', removed: [{ start: 5, end: 8 }] });
+    expect(byId(out, 'broll')).toMatchObject({ start: 7, end: 9 });
+    expect(byId(out, 'inside')).toBeUndefined();
+    expect(byId(out, 'across')).toMatchObject({ start: 4, end: 6 });
+    expect(byId(out, 'pic')).toMatchObject({ start: 12, end: 13 });
+    // A voice line starting inside the cut keeps its length and its captions stay with it.
+    expect(byId(out, 'voice')).toMatchObject({ start: 5, end: 8 });
+    expect(byId(out, 'voice-captions')).toMatchObject({ start: 5, end: 8 });
+    const ranges = ((out.stage.children[0] as unknown as { marks: { layout: { ranges: { start: number; end: number }[] } } }).marks.layout.ranges);
+    expect(ranges[0]).toMatchObject({ start: 7, end: 11 });
+  });
+
+  it('a second cut maps through the first; restoring brings positions back', () => {
+    const once = writeCaptionState(base(), { base: 'tr.json', removed: [{ start: 5, end: 8 }] });
+    const twice = writeCaptionState(once, { base: 'tr.json', removed: [{ start: 1, end: 2 }, { start: 5, end: 8 }] });
+    expect(byId(twice, 'broll')).toMatchObject({ start: 6, end: 8 });
+    const restored = writeCaptionState(twice, { base: 'tr.json', removed: [] });
+    expect(byId(restored, 'broll')).toMatchObject({ start: 10, end: 12 });
+  });
+
+  it("a zoom on one segment stays on that segment", () => {
+    // The speaker's cut sequence, wherever a layout put it.
+    const speaker = (document: ClipDocument) => {
+      let found: Record<string, unknown>[] = [];
+      const visit = (list: Record<string, unknown>[]) => {
+        for (const item of list) {
+          const children = item.children as Record<string, unknown>[] | undefined;
+          if (item.kind === 'sequence' && children?.some((child) => child.src === MASTER_SRC)) found = children.filter((child) => child.kind === 'video');
+          else if (children) visit(children);
+        }
+      };
+      visit(kids(document));
+      return found;
+    };
+    const cut = writeCaptionState(base(), { base: 'tr.json', removed: [{ start: 5, end: 8 }] });
+    speaker(cut)[1]!.scale = 1.2;
+    const again = writeCaptionState(cut, { base: 'tr.json', removed: [{ start: 5, end: 8 }, { start: 12, end: 13 }] });
+    const after = speaker(again);
+    expect(after.map((segment) => segment.scale)).toEqual([undefined, 1.2, 1.2]);
+  });
+});

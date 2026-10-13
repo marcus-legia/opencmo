@@ -215,6 +215,82 @@ function soundSegment(template: VideoNode, range: Range, kept: Range[], index: n
   return node as unknown as ClipNode;
 }
 
+/** Clip time → source time under `kept` (the clip as it was cut). */
+function sourceAt(time: number, kept: Range[]): number {
+  for (let index = 0; index < kept.length; index++) {
+    const range = kept[index]!;
+    const at = segmentStart(kept, index);
+    if (time < at + (range.end - range.start) || index === kept.length - 1) return Math.min(range.end, range.start + Math.max(0, time - at));
+  }
+  return 0;
+}
+
+/** Source time → clip time under `kept`, snapped to the next kept moment (`forward`) or the last one. */
+function clipAt(source: number, kept: Range[], forward: boolean): number | null {
+  const order = forward ? kept.map((_, index) => index) : kept.map((_, index) => kept.length - 1 - index);
+  for (const index of order) {
+    const range = kept[index]!;
+    const at = segmentStart(kept, index);
+    if (source >= range.start && source <= range.end) return round(at + source - range.start);
+    if (forward && source < range.start) return round(at);
+    if (!forward && source > range.end) return round(at + range.end - range.start);
+  }
+  return null;
+}
+
+/**
+ * Moves what sits on the clip timeline with the words under it when the cut changes: b-roll,
+ * text, AI media, voice-overs, animations and layout ranges were placed in clip seconds, and a cut
+ * earlier in the clip used to leave them over different words. Clip time is mapped back to source
+ * time under the old cut and forward under the new one; what is left with nothing kept is removed.
+ */
+function followCut(document: ClipDocument, skip: Set<unknown>, before: Range[], after: Range[]): void {
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  const move = (start: number, end: number | undefined): { start: number; end?: number } | null => {
+    const from = clipAt(sourceAt(start, before), after, true);
+    if (from === null) return null;
+    if (end === undefined) return { start: from };
+    const to = clipAt(sourceAt(Math.max(start, end - 1e-6), before), after, false);
+    if (to === null || to - from < 0.05) return null;
+    return { start: from, end: Math.max(from, to) };
+  };
+  const visit = (list: Entity[]): Entity[] =>
+    list.filter((entity) => {
+      if (skip.has(entity) || isMaster(entity as unknown as ClipNode)) return true;
+      // The speaker's captions are rebuilt from the cut transcript above.
+      if (entity.kind === 'captions' && !isVoiceoverCaptions(entity as unknown as ClipNode)) return true;
+      // A row (`B-roll 1`): its clips sit on the clip timeline themselves.
+      if (entity.kind === 'sequence' && !entity.start && Array.isArray(entity.children)) {
+        entity.children = visit(entity.children as Entity[]);
+        return (entity.children as Entity[]).length > 0;
+      }
+      if (typeof entity.start !== 'number') return true;
+      // Sound (a voice line, music) and a voice-over's captions keep their length and are never
+      // dropped: trimming them would cut a sentence off. They move with where they start.
+      if (entity.kind === 'audio' || entity.kind === 'captions') {
+        const at = move(entity.start, undefined) ?? { start: clipAt(sourceAt(entity.start, before), after, false) ?? 0 };
+        if (typeof entity.end === 'number') entity.end = round(at.start + (entity.end - entity.start));
+        entity.start = at.start;
+        return true;
+      }
+      const moved = move(entity.start, typeof entity.end === 'number' ? entity.end : undefined);
+      if (!moved) return false;
+      entity.start = moved.start;
+      if (moved.end !== undefined) entity.end = moved.end;
+      return true;
+    });
+  const scene = sceneOf(document) as Entity | undefined;
+  if (!scene) return;
+  scene.children = visit((scene.children as Entity[] | undefined) ?? []);
+  const layout = (scene.marks as { layout?: { ranges?: { start: number; end: number }[] } } | undefined)?.layout;
+  if (layout?.ranges) {
+    layout.ranges = layout.ranges.flatMap((range) => {
+      const moved = move(range.start, range.end);
+      return moved && moved.end !== undefined ? [{ ...range, start: moved.start, end: moved.end }] : [];
+    });
+  }
+}
+
 export type WriteCaptionState = {
   /** Transcript NGUỒN mà panel đang giữ (đường dẫn thư viện). */
   base: string | null;
@@ -263,8 +339,19 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
   const roll: AudioRoll = Object.fromEntries([...rolls].map(([index, value]) => [rollKey(kept[index]!.start), value]));
   // Lượt trước có J/L-cut thì video mẫu câm vì CHÍNH nó (không phải người dùng tắt
   // tiếng): dựng lại từ một mẫu không câm, rồi câm lại nếu J/L-cut vẫn còn.
-  const template = found.mark?.roll && Object.keys(found.mark.roll).length ? withoutMute(found.template) : found.template;
-  const videos = kept.map((range, index) => segment(template, range, segmentStart(kept, index)));
+  const unmute = (video: VideoNode) => (found.mark?.roll && Object.keys(found.mark.roll).length ? withoutMute(video) : video);
+  const template = unmute(found.template);
+  // Each new segment starts from the old segment that showed most of the same source: a zoom, an
+  // effect or a transition the user put on one segment stays on it instead of being replaced by
+  // the first segment's.
+  const olds = videosIn(found.target);
+  const overlap = (video: VideoNode, range: Range) =>
+    Math.min(range.end, Number(video.sourceOut ?? range.end)) - Math.max(range.start, Number(video.sourceIn ?? range.start));
+  const templateFor = (range: Range): VideoNode => {
+    const best = olds.reduce<VideoNode | null>((pick, video) => (overlap(video, range) > (pick ? overlap(pick, range) : 0) ? video : pick), null);
+    return best ? unmute(best) : template;
+  };
+  const videos = kept.map((range, index) => segment(templateFor(range), range, segmentStart(kept, index)));
   // Có J/L-cut: hình câm, tiếng đi bằng các đoạn `audio` cùng nguồn với điểm cắt đã dời.
   const sounds = rolls.size ? kept.map((range, index) => soundSegment(template, range, kept, index, rolls)) : [];
   if (rolls.size) for (const video of videos) (video as { muted?: boolean }).muted = true;
@@ -278,6 +365,7 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
       } satisfies SequenceNode)
     : segment(template, window, 0);
   replaceNode(document, found.target, replacement);
+  followCut(document, new Set([replacement]), keptRanges(window, found.mark?.removed ?? []), kept);
 
   // Sau khi cắt, phụ đề đọc transcript OUTPUT từ giây 0 tới hết phần giữ lại;
   // chưa cắt thì đọc transcript nguồn đúng cửa sổ của video.
