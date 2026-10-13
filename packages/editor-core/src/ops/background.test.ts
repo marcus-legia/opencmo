@@ -101,6 +101,25 @@ describe('replace_background', () => {
 		await expect(applyOps(animated, [swap], ctx)).rejects.toThrow(/layout/);
 	});
 
+	it.each(['split-bottom', 'pip', 'side-by-side'])('swaps the full-frame part of a clip whose %s layout starts later', async (mode) => {
+		// The Speaker group apply_layout writes rests (offset 0, scale 1) until the layout starts.
+		const { document } = await applyOps(doc([SPEAKER]), [{ op: 'set_layout', mode, start: 12, end: 30 } as never], ctx);
+		await expect(applyOps(document, [swap], ctx)).resolves.toBeTruthy();
+		// A range that reaches into the layout is still refused, and so is one fully inside it.
+		await expect(applyOps(document, [{ ...swap, start: 9, end: 13 }], ctx)).rejects.toThrow(/layout/);
+		await expect(applyOps(document, [{ ...swap, start: 14, end: 20 }], ctx)).rejects.toThrow(/layout/);
+	});
+
+	it('gives the cut-out its own ids for the face-tracking track it copies', async () => {
+		// Engine documents carry ids on tracks and keyframes; a copy that keeps them is invalid.
+		const tracked = { ...SPEAKER, tracks: [{ id: 'trk1', property: 'x', keyframes: [{ id: 'k1', time: 0, value: 0 }, { id: 'k2', time: 5, value: -40 }] }] };
+		const { document } = await applyOps(doc([tracked]), [{ ...swap, start: 0, end: 5 }], ctx);
+		expect(() => validate(document)).not.toThrow();
+		const cutout = children(document)[1]!.children![1]! as Node & { tracks: { id?: string; keyframes: { id?: string }[] }[] };
+		expect(cutout.tracks[0]!.id).not.toBe('trk1');
+		expect(cutout.tracks[0]!.keyframes.map((key) => key.id)).not.toContain('k1');
+	});
+
 	it('takes a library file as the background', async () => {
 		const { document } = await applyOps(doc([SPEAKER]), [{ ...swap, background: { path: 'assets/office.mp4' } }], ctx);
 		const background = children(document)[1]!.children![0]!;

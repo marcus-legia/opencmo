@@ -9,6 +9,7 @@
 import { z } from 'zod';
 
 import type { AssetDeclaration, ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { sampleTrack, type TimeNode } from '@opencmo/clip-render';
 
 import { clone, isMaster, MASTER_SRC, sceneOf, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
@@ -53,15 +54,34 @@ export type Master = { node: Entity; owner: Entity; sourceStart: number; offset:
 
 const MOVING = ['x', 'y', 'offsetX', 'offsetY', 'scale', 'scaleX', 'scaleY', 'rotation'];
 
-/** A parent that moves, scales or rotates its children, statically or with keyframes (apply_layout animates them). */
-function movesChildren(entity: Entity): boolean {
-	const set = MOVING.some((key) => {
-		const value = entity[key];
-		if (value === undefined) return false;
-		return key.startsWith('scale') ? value !== 1 : value !== 0;
+type MovingTrack = Parameters<typeof sampleTrack>[0];
+
+const isRest = (key: string, value: number) => Math.abs(value - (key.startsWith('scale') ? 1 : 0)) < 1e-6;
+
+/**
+ * A parent that moves, scales or rotates its children at any frame of [from, to] (scene frames),
+ * statically or with keyframes. apply_layout animates the Speaker group only where a split is on,
+ * so a clip with a split later on still has a full-frame part the swap can use. Without timing
+ * (`t`) any moving track counts.
+ */
+function movesChildren(entity: Entity, t: TimeNode | undefined, from: number, to: number): boolean {
+	const tracks = ((entity.tracks as MovingTrack[] | undefined) ?? []).filter((track) => MOVING.includes(String(track.property)));
+	return MOVING.some((key) => {
+		const track = tracks.find((item) => item.property === key && item.keyframes.length);
+		if (!track) {
+			const value = entity[key];
+			return typeof value === 'number' && !isRest(key, value);
+		}
+		if (!t) return true;
+		// Same clock as the renderer: the node's local frame, keyframe times in seconds.
+		const local = (frame: number) => Math.round((frame - t.origin) * t.rate);
+		const [a, b] = [local(from), local(to)];
+		const samples = [a, b, ...track.keyframes.map((keyframe) => keyframe.time * FPS).filter((frame) => frame > a && frame < b)];
+		return samples.some((frame) => {
+			const value = sampleTrack(track, frame);
+			return typeof value === 'number' && !isRest(key, value);
+		});
 	});
-	const tracks = (entity.tracks as { property?: string }[] | undefined) ?? [];
-	return set || tracks.some((track) => MOVING.includes(String(track.property)));
 }
 
 /** The master piece that plays the whole range, and the scene child that holds it. */
@@ -81,7 +101,7 @@ export function masterFor(document: ClipDocument, start: number, end: number, ct
 				if (transformed) throw new OpFailure('Turn off the layout on this part of the clip first.');
 				return { node: entity, owner, sourceStart: round(((from - t.origin) * t.rate) / FPS), offset: round((from - t.start) / FPS) };
 			}
-			const moved = transformed || (!isMaster(entity as unknown as ClipNode) && movesChildren(entity));
+			const moved = transformed || (!isMaster(entity as unknown as ClipNode) && movesChildren(entity, t, from, to));
 			for (const child of (entity.children as Entity[] | undefined) ?? []) stack.push({ entity: child, transformed: moved });
 		}
 	}
@@ -89,6 +109,11 @@ export function masterFor(document: ClipDocument, start: number, end: number, ct
 }
 
 export type Track = { property: string; keyframes: { time: number; value: number; easing?: string }[] };
+
+function withoutIds(track: Track): Track {
+	const { id: _id, ...rest } = track as Track & { id?: string };
+	return { ...rest, keyframes: rest.keyframes.map(({ id: _key, ...key }: Track['keyframes'][number] & { id?: string }) => key) } as Track;
+}
 
 /** A track re-timed to start `offset` seconds later; the value at the new zero is kept (linear between keys). */
 export function shiftTrack(track: Track, offset: number): Track {
@@ -139,8 +164,11 @@ export function planBackgroundSwap(document: ClipDocument, input: ReplaceBackgro
 	const geometry = Object.fromEntries(
 		['x', 'y', 'width', 'height'].filter((key) => node[key] !== undefined).map((key) => [key, node[key]]),
 	);
-	// Face tracking moves the speaker's box; the cut-out follows the same keyframes.
-	const tracks = ((node.tracks as Track[] | undefined) ?? []).filter((track) => ['x', 'y'].includes(track.property)).map((track) => shiftTrack(track, master.offset));
+	// Face tracking moves the speaker's box; the cut-out follows the same keyframes. A copy, without
+	// the ids: two elements with one id make the whole document unreadable. applyOps gives new ones.
+	const tracks = ((node.tracks as Track[] | undefined) ?? [])
+		.filter((track) => ['x', 'y'].includes(track.property))
+		.map((track) => withoutIds(shiftTrack(track, master.offset)));
 	const backgroundKind = 'path' in input.background ? (/\.(png|jpe?g|webp)$/i.test(input.background.path) ? 'image' : 'video') : input.background.kind;
 	const group = {
 		kind: 'group',

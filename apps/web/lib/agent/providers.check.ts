@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, danglingToolUses, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { anthropicFormat, closeDanglingToolUses, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -31,6 +31,13 @@ const sent = strictTools([...TOOL_SPECS, bigSpec, pricedSpec]);
 assert.ok(TOOL_SPECS.filter((spec) => spec.strict).length > MAX_STRICT_TOOLS, "the clip scope has more eligible tools than the cap");
 assert.ok(sent.size <= MAX_STRICT_TOOLS, "strict tools capped");
 assert.ok(!sent.has("generate_media"), "one large priced schema does not crowd out the small ones");
+// Eager streaming skips the API's JSON check: only strict tools (valid JSON by grammar) may use it.
+const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true);
+for (const tool of defined) {
+  const eager = (tool as { eager_input_streaming?: boolean }).eager_input_streaming === true;
+  assert.equal(eager, (tool as { strict?: boolean }).strict === true, `${tool.name}: eager streaming only with strict`);
+}
+assert.ok(!(defined.find((tool) => tool.name === "generate_media") as { eager_input_streaming?: boolean }).eager_input_streaming, "generate_media input is checked by the API");
 const optional = [...TOOL_SPECS, bigSpec, pricedSpec].filter((spec) => sent.has(spec.name)).reduce((sum, spec) => sum + optionalParams(spec.schema), 0);
 assert.ok(optional <= MAX_STRICT_OPTIONAL, `optional params over strict tools capped (${optional})`);
 assert.equal(optionalParams({ type: "object", properties: { a: {}, b: { type: "object", properties: { c: {} }, required: [] } }, required: ["a"] }), 2);
