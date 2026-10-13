@@ -29,7 +29,11 @@ MAX_LUT_BYTES = 12 * 1024 * 1024
 # Lottie: JSON có ảnh nhúng base64 có thể vài MB; trần 8 MB đủ mọi hoạt hình thật.
 MAX_LOTTIE_BYTES = 8 * 1024 * 1024
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
-BAD_MEDIA = "Choose a playable video, a PNG, JPEG or WebP image, a Lottie .json animation, or a 3D .cube LUT."
+# Music and sound effects the user adds: Export runs on the server and needs a stored copy (they
+# used to stay on the device that imported them, and Export failed with "only saved on the device").
+AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "ogg", "flac"}
+MAX_AUDIO_BYTES = 200 * 1024 * 1024
+BAD_MEDIA = "Choose a playable video, an MP3, WAV, M4A, AAC, OGG or FLAC sound, a PNG, JPEG or WebP image, a Lottie .json animation, or a 3D .cube LUT."
 
 
 def cube_size(text: str) -> int:
@@ -94,6 +98,9 @@ def process(store: Any, task: Task) -> None:
     if extension == "json":
         _probe_lottie(store, task, object_name)
         return
+    if extension in AUDIO_EXTENSIONS:
+        _probe_audio(store, task, object_name)
+        return
 
     with task_workspace(store, task, "probe") as (heartbeat, root):
         local = root / "media"
@@ -125,6 +132,40 @@ def process(store: Any, task: Task) -> None:
             won = store.complete_media_probe(
                 task.asset_id, task.attempt_id,
                 duration=None, width=None, height=None, ok=False, error=BAD_MEDIA,
+            )
+            if won:
+                store.remove_objects("media", [object_name])
+
+
+def _probe_audio(store: Any, task: Task, object_name: str) -> None:
+    """A sound the export can mix: an audio stream with a length, decoded for a second to be sure
+    (read with the demuxer allowlist like every user file). No picture, so no size."""
+    with task_workspace(store, task, "probe") as (heartbeat, root):
+        local = root / "media"
+        try:
+            store.download_object("media", object_name, local, max_bytes=MAX_AUDIO_BYTES)
+            proc = run(
+                ["ffprobe", "-v", "error", *USER_INPUT, "-print_format", "json", "-show_format", "-show_streams", str(local)],
+                timeout=60,
+            )
+            data = json.loads(proc.stdout)
+            if not any(stream.get("codec_type") == "audio" for stream in data.get("streams", [])):
+                raise ValueError("no audio stream")
+            duration = float(data.get("format", {}).get("duration") or 0)
+            if duration <= 0:
+                raise ValueError("no duration")
+            run(["ffmpeg", "-v", "error", *USER_INPUT, "-i", str(local), "-t", "1", "-vn", "-f", "null", "-"], timeout=60)
+            if heartbeat.lost.is_set():
+                return
+            store.complete_media_probe(
+                task.asset_id, task.attempt_id, duration=duration, width=None, height=None, ok=True, error=None
+            )
+        except TransientError:
+            raise
+        except Exception:
+            log.info("Audio asset %s could not be read", task.asset_id, exc_info=True)
+            won = store.complete_media_probe(
+                task.asset_id, task.attempt_id, duration=None, width=None, height=None, ok=False, error=BAD_MEDIA
             )
             if won:
                 store.remove_objects("media", [object_name])

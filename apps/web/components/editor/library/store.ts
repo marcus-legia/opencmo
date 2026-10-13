@@ -104,13 +104,11 @@ export async function describe(file: File, folder: string): Promise<AssetRecord>
 }
 
 /**
- * Video, ảnh, LUT `.cube` và Lottie `.json` lên Storage (`probe_media` nhận ảnh từ P2-b, LUT từ
- * E3-c, Lottie từ G4 — export trên server cần đọc chúng; Lottie trước đó chỉ nằm ở máy nên Export
- * báo "only saved on the device"). Ảnh làm
- * frame đầu/cuối hay tham chiếu cho Generate phải có bản trên server. Âm thanh vẫn chỉ
- * ở máy — probe từ chối, tải lên chỉ để nhận `rejected`.
+ * Everything the server export reads goes to Storage: video, images (also first/last frames and
+ * references for Generate), `.cube` LUTs, Lottie `.json` and sound (music, effects). A file that
+ * stays on the device fails Export with "only saved on the device"; `probe_media` checks each kind.
  */
-export const uploadable = (type: string) => type === "VIDEO" || type === "IMAGE" || type === "LUT" || type === "LOTTIE";
+export const uploadable = (type: string) => type === "VIDEO" || type === "IMAGE" || type === "LUT" || type === "LOTTIE" || type === "AUDIO";
 
 /** Ghi bytes vào OPFS theo `source` của record (sau khi `path` đã chốt). */
 export const keepLocal = (clipId: string, record: AssetRecord, file: File) => writeLocal(clipId, record.source, file);

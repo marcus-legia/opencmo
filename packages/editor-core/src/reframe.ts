@@ -174,6 +174,26 @@ export function writeFrame(input: ClipDocument, next: Frame, master: Size, viewp
     // frame covers the new one (an AI shot, a background, a full-frame b-roll).
     const left = x ?? 0;
     const top = y ?? 0;
+    // Media that fits itself into its box (cover/contain: layout cells, AI shots) keeps its place on
+    // the grid: the box scales per axis and the picture inside is fitted again, never stretched. A
+    // 3-up layout stays 3-up instead of leaving gaps and overlaps.
+    const fitted = [entity, ...(((entity.paints as Entity[] | undefined) ?? []).filter((paint) => paint.type === 'image' || paint.type === 'video'))].some(
+      (target) => target.objectFit === 'cover' || target.objectFit === 'contain',
+    );
+    if (fitted) {
+      entity.x = round(left * ratioW);
+      entity.y = round(top * ratioH);
+      entity.width = round(width * ratioW);
+      entity.height = round(height * ratioH);
+      for (const track of (entity.tracks as Entity[] | undefined) ?? []) {
+        const ratio = track.property === 'x' || track.property === 'width' ? ratioW : track.property === 'y' || track.property === 'height' ? ratioH : null;
+        if (ratio === null) continue;
+        for (const keyframe of (track.keyframes as { value: unknown }[] | undefined) ?? []) {
+          if (typeof keyframe.value === 'number') keyframe.value = round(keyframe.value * ratio);
+        }
+      }
+      return;
+    }
     const covered = left <= 0.5 && top <= 0.5 && left + width >= oldWidth - 0.5 && top + height >= oldHeight - 0.5;
     const factor = covered ? Math.max(ratioW, ratioH) : media;
     const placeX = (value: number, size: number) => round((value + size / 2) * ratioW - (size * factor) / 2);

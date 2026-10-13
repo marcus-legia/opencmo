@@ -279,6 +279,18 @@ describe("applyOps", () => {
     expect(small!.width).toBe(small!.height);
   });
 
+  it("set_frame keeps layout cells on their grid", async () => {
+    const cell = (id: string, y: number) => ({ kind: "rect", id, x: 0, y, width: 1080, height: 640, paints: [{ type: "image", src: `${id}.png`, objectFit: "cover" }] });
+    const blank = {
+      version: 1,
+      stage: { children: [{ kind: "scene", name: "Edit", width: 1080, height: 1920, active: true, children: [cell("a", 0), cell("b", 640), cell("c", 1280)] }] },
+    } as unknown as ClipDocument;
+    const { document } = await applyOps(blank, [{ op: "set_frame", width: 1920, height: 1080 }], { ...memoryContext(), master: null });
+    const cells = (sceneOf(document) as unknown as { children: { x: number; y: number; width: number; height: number }[] }).children;
+    // Still three full-width bands stacked edge to edge: no gaps, no overlaps.
+    expect(cells.map((item) => [item.x, item.y, item.width, item.height])).toEqual([[0, 0, 1920, 360], [0, 360, 1920, 360], [0, 720, 1920, 360]]);
+  });
+
   it("set_project_settings (E2-b): fps lưu trên scene, cỡ theo tỉ lệ/chất lượng, khung có video đi đường set_frame", async () => {
     const ctx = memoryContext();
     const fps = (await applyOps(SOURCE, [{ op: "set_project_settings", fps: 60 }], ctx)).document;
