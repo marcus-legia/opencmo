@@ -1,6 +1,6 @@
 /**
- * Read-only history format for Assistant chats saved while Gemini was a provider. New chats run on
- * Claude; these sessions can still be opened and read, but not continued.
+ * History format of Gemini sessions (native `parts`). Needs no key or SDK, so the panel can draw a
+ * Gemini chat even when the server has no Gemini key; the provider is in `gemini.ts`.
  */
 
 import { IMAGE_OMITTED, type Format, type StoredMessage, type ToolResult } from "./types";
@@ -14,7 +14,7 @@ type Part = {
   functionResponse?: { id?: string; name: string; response: Record<string, unknown>; parts?: Part[] };
 };
 
-const callId = (part: Part, index: number): string => part.functionCall?.id || `gc_${index}`;
+export const callId = (part: { functionCall?: { id?: string } }, index: number): string => part.functionCall?.id || `gc_${index}`;
 
 function parseContent(content: string): Record<string, unknown> {
   try {

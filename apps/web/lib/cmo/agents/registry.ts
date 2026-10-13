@@ -3,19 +3,22 @@ import "server-only";
 /**
  * The CMO agent registry (H1): EVERY job is an agent with its own model and key, so an agent can
  * be swapped per task without code changes. Configured with env on Vercel (no UI, keys stay out of
- * the database). Every agent runs on Claude:
+ * the database):
  *
- *   CMO_AGENT_<ID>_MODEL    = Claude model id
- *   CMO_AGENT_<ID>_API_KEY  = the agent's own key; defaults to ANTHROPIC_API_KEY
+ *   CMO_LLM_PROVIDER        = anthropic | gemini   (default for every agent; anthropic when unset)
+ *   CMO_AGENT_<ID>_PROVIDER = anthropic | gemini   (overrides the default for one agent)
+ *   CMO_AGENT_<ID>_MODEL    = a model id of that provider
+ *   CMO_AGENT_<ID>_API_KEY  = the agent's own key; defaults to the provider's shared key
+ *                             (ANTHROPIC_API_KEY / GEMINI_API_KEY)
  *
  * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, VIDEO, CHECKER, CAPTIONS,
  * WRITER, MOTION (the editor's Video agent team).
- * Two tiers: drafting agents use Opus, checking agents use Haiku — a check does not need deep
+ * Two tiers: drafting agents use Sonnet (Gemini Pro), checking agents use Haiku (Gemini Flash) — a check does not need deep
  * reasoning, and a separate context keeps the checker from being persuaded by the draft.
  */
 
 export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions" | "writer" | "motion" | "director";
-export type ProviderKind = "anthropic";
+export type ProviderKind = "anthropic" | "gemini";
 
 export type AgentSpec = {
   id: AgentId;
@@ -43,9 +46,13 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];
 
-const defaultModel = (tier: AgentSpec["tier"]): string => (tier === "check" ? "claude-haiku-5-5" : "claude-sonnet-5-5");
+function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"]): string {
+  if (provider === "gemini") return tier === "check" ? "gemini-flash-latest" : "gemini-pro-latest";
+  return tier === "check" ? "claude-haiku-5-5" : "claude-sonnet-5-5";
+}
 
-const sharedKey = (env: NodeJS.ProcessEnv): string => env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
+const sharedKey = (provider: ProviderKind, env: NodeJS.ProcessEnv): string =>
+  provider === "gemini" ? env.GEMINI_API_KEY || env.GOOGLE_API_KEY || "" : env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
 
 export type ResolvedAgent = AgentSpec & { provider: ProviderKind; model: string; apiKey: string; source: "env" | "default" };
 
@@ -56,10 +63,16 @@ export type ResolvedAgent = AgentSpec & { provider: ProviderKind; model: string;
 export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env): ResolvedAgent {
   const spec = AGENT_SPECS[id];
   const prefix = `CMO_AGENT_${id.toUpperCase()}_`;
-  const model = env[`${prefix}MODEL`]?.trim() || defaultModel(spec.tier);
-  const apiKey = env[`${prefix}API_KEY`]?.trim() || sharedKey(env);
-  const source = env[`${prefix}MODEL`] || env[`${prefix}API_KEY`] ? "env" : "default";
-  return { ...spec, provider: "anthropic", model, apiKey, source };
+  const own = env[`${prefix}PROVIDER`]?.trim().toLowerCase();
+  const wanted = own || env.CMO_LLM_PROVIDER?.trim().toLowerCase();
+  if (wanted && wanted !== "gemini" && wanted !== "anthropic") {
+    console.error(`[cmo] ${own ? `${prefix}PROVIDER` : "CMO_LLM_PROVIDER"}="${wanted}" is not a provider; using anthropic`);
+  }
+  const provider: ProviderKind = wanted === "gemini" ? "gemini" : "anthropic";
+  const model = env[`${prefix}MODEL`]?.trim() || defaultModel(provider, spec.tier);
+  const apiKey = env[`${prefix}API_KEY`]?.trim() || sharedKey(provider, env);
+  const source = wanted || env[`${prefix}MODEL`] || env[`${prefix}API_KEY`] ? "env" : "default";
+  return { ...spec, provider, model, apiKey, source };
 }
 
 /** Current configuration without keys — for the startup log and the internal diagnostics page. */

@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@google/genai": "^2.29.0",
     "@opencmo/clip-assets": "*",
     "@opencmo/clip-doc": "*",
     "@opencmo/clip-icons": "*",

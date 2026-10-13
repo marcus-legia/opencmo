@@ -8,9 +8,10 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { ApiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
-import { resolveAgent, type AgentId } from "@/lib/cmo/agents/registry";
+import { resolveAgent, type AgentId, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 
 import { LlmError } from "./llm-error";
 import { isProduction } from "@/lib/production";
@@ -46,9 +47,53 @@ type Options<S extends z.ZodType> = {
 
 export type LlmUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
 
+async function structuredGemini<S extends z.ZodType>(opts: Options<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
+  let response;
+  try {
+    response = await new GoogleGenAI({ apiKey: agent.apiKey }).models.generateContent({
+      model: agent.model,
+      contents: opts.prompt,
+      config: {
+        systemInstruction: opts.system,
+        responseMimeType: "application/json",
+        responseJsonSchema: z.toJSONSchema(opts.schema),
+        // Gemini's thinking tokens count against this cap: without the extra room the JSON is cut off.
+        maxOutputTokens: (opts.maxTokens ?? 8000) + 16_000,
+        ...(opts.timeoutMs ? { httpOptions: { timeout: opts.timeoutMs } } : {}),
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 429) throw new LlmError("Our AI is busy right now. Try again in a minute.");
+    console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): Gemini error`, error instanceof ApiError ? error.status : "", error instanceof Error ? error.message : error);
+    throw new LlmError(opts.failure);
+  }
+  const meta = response.usageMetadata;
+  const cached = meta?.cachedContentTokenCount ?? 0;
+  await opts.onUsage?.({
+    model: response.modelVersion ?? agent.model,
+    input: Math.max(0, (meta?.promptTokenCount ?? 0) - cached),
+    output: (meta?.candidatesTokenCount ?? 0) + (meta?.thoughtsTokenCount ?? 0),
+    cacheRead: cached,
+    cacheWrite: 0,
+  });
+  // Gemini's schema shapes the output but does not guarantee it: zod is still the gate.
+  let parsed;
+  try {
+    parsed = opts.schema.safeParse(JSON.parse(response.text ?? ""));
+  } catch {
+    throw new LlmError(opts.failure);
+  }
+  if (!parsed.success) {
+    console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): Gemini output does not match the schema`, parsed.error.issues.slice(0, 3));
+    throw new LlmError(opts.failure);
+  }
+  return parsed.data;
+}
+
 export async function structured<S extends z.ZodType>(opts: Options<S>): Promise<z.infer<S>> {
   const agent = resolveAgent(opts.agent);
   if (!agent.apiKey) throw new LlmError("The AI CMO is not set up on this server yet.");
+  if (agent.provider === "gemini") return structuredGemini(opts, agent);
   const client = new Anthropic({ apiKey: agent.apiKey });
   // Opus and Sonnet 5.5 have server-side fallback; Haiku has none. Haiku 5.5 thinks by default
   // (effort medium): a check runs at low. Haiku 4.5 rejects `effort`.

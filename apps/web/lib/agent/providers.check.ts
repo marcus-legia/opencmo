@@ -1,13 +1,17 @@
 /**
  * Assistant providers, offline: tool schemas build correctly, Claude history maps tool results and
- * images, and chats saved while Gemini was a provider still read back.
+ * images, and the Gemini provider maps history, tools, images and usage on a recorded response.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/providers.check.ts
  */
 import assert from "node:assert/strict";
 
 import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import type { GoogleGenAI } from "@google/genai";
+
+import { closeDanglingCalls, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
+import type { Delta } from "./providers/types";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
 // ---------------------------------------------------------------- tool
@@ -153,7 +157,93 @@ assert.deepEqual(
   ["text", "image", "text"],
 );
 
+await geminiChecks();
 console.log("agent providers: mọi kiểm tra xanh");
+}
+
+async function geminiChecks(): Promise<void> {
+  const chunks = [
+    { candidates: [{ content: { role: "model", parts: [{ text: "Planning the frame.", thought: true }] } }] },
+    { candidates: [{ content: { role: "model", parts: [{ text: "Switching to square." }] } }] },
+    {
+      candidates: [
+        {
+          content: {
+            role: "model",
+            parts: [
+              { functionCall: { name: "set_frame", args: { width: 1080, height: 1080 } }, thoughtSignature: "sig-A" },
+              { functionCall: { id: "call-xyz", name: "capture", args: { times: [1] } } },
+            ],
+          },
+          finishReason: "STOP",
+        },
+      ],
+      usageMetadata: { promptTokenCount: 5000, cachedContentTokenCount: 4000, candidatesTokenCount: 60, thoughtsTokenCount: 40 },
+      modelVersion: "gemini-9-pro-preview",
+    },
+  ];
+  let sent: { model?: string; contents?: { role: string; parts: Record<string, unknown>[] }[]; config?: Record<string, unknown> } = {};
+  const client = {
+    models: {
+      generateContentStream: async (params: typeof sent) => {
+        sent = params;
+        return (async function* () {
+          yield* chunks;
+        })();
+      },
+    },
+  } as unknown as Pick<GoogleGenAI, "models">;
+
+  const deltas: Delta[] = [];
+  const provider = geminiProvider("test", client);
+  const step = await provider.step(
+    { history: [{ role: "user", content: geminiFormat.userTurn("make it square", "<project_state>{}</project_state>") }], tools: TOOL_SPECS, system: "system prompt" },
+    (delta) => deltas.push(delta),
+  );
+  assert.equal(sent.config!.systemInstruction, "system prompt");
+  assert.deepEqual(sent.contents!.map((content) => content.role), ["user"]);
+  assert.equal((sent.config!.automaticFunctionCalling as { disable: boolean }).disable, true, "the SDK does not run tools itself");
+  assert.equal((sent.config!.tools as { functionDeclarations: unknown[] }[])[0]!.functionDeclarations.length, TOOL_SPECS.length);
+  assert.equal(step.stop, "tool");
+  assert.equal(step.model, "gemini-9-pro-preview", "usage is priced on the model that answered");
+  assert.deepEqual(step.usage, { input: 1000, output: 100, cacheRead: 4000, cacheWrite: 0 });
+  assert.deepEqual(step.toolCalls.map((call) => [call.id, call.name]), [["gc_2", "set_frame"], ["call-xyz", "capture"]]);
+  assert.equal((step.content as { thoughtSignature?: string }[])[2]!.thoughtSignature, "sig-A", "thoughtSignature kept");
+  assert.deepEqual(geminiFormat.callsIn(step.content), step.toolCalls, "a stored message reads back the same ids");
+  assert.equal(geminiFormat.replyText(step.content), "Switching to square.");
+  assert.deepEqual(deltas.map((delta) => delta.type), ["thinking", "text", "tool_start", "tool_start"]);
+
+  // A stopped turn left both calls unanswered: the next request answers them, with the stored
+  // result for the tool that ran and "not completed" for the other.
+  const dangling = [
+    { role: "user" as const, content: geminiFormat.userTurn("make it square", "state") },
+    { role: "assistant" as const, content: step.content },
+    { role: "user" as const, content: geminiFormat.userTurn("actually stop", "state") },
+  ];
+  const closed = closeDanglingCalls(dangling, new Map([["gc_2", { ok: true, content: '{"ok":true}' }]]));
+  const answers = closed[2]!.content as { functionResponse?: { name: string; response: Record<string, unknown> }; text?: string }[];
+  assert.deepEqual(answers.slice(0, 2).map((part) => part.functionResponse?.name), ["set_frame", "capture"], "responses first, in call order");
+  assert.deepEqual(answers[0]!.functionResponse!.response, { ok: true });
+  assert.ok(JSON.stringify(answers[1]!.functionResponse!.response).includes("Not completed"));
+  assert.equal(answers[2]!.text, "actually stop", "the new prompt follows");
+  assert.equal(closeDanglingCalls(closed).length, closed.length, "an answered history is left alone");
+  assert.equal(JSON.stringify(dangling[2]!.content).includes("functionResponse"), false, "input history not edited");
+  // Through the provider: the request carries the answers.
+  await provider.step({ history: dangling, tools: [], system: "" }, () => undefined);
+  assert.equal(sent.contents![2]!.parts.filter((part) => part.functionResponse).length, 2);
+
+  // Safety refusal → refusal; out of tokens → max_tokens.
+  for (const [finish, stop] of [["SAFETY", "refusal"], ["MAX_TOKENS", "max_tokens"]] as const) {
+    const blocked = geminiProvider("test", {
+      models: {
+        generateContentStream: async () =>
+          (async function* () {
+            yield { candidates: [{ content: { parts: [{ text: "…" }] }, finishReason: finish }] };
+          })(),
+      },
+    } as unknown as Pick<GoogleGenAI, "models">);
+    assert.equal((await blocked.step({ history: [], tools: [], system: "" }, () => undefined)).stop, stop);
+  }
 }
 
 void main().catch((err) => {
