@@ -44,6 +44,10 @@ export default async function setup(): Promise<void> {
     user = data.user;
   }
 
+  // Scenarios export after nearly every run: the free plan's five exports a day run out mid-run.
+  const { error: planError } = await admin.from("profiles").update({ plan: "creator" }).eq("id", user.id);
+  if (planError) throw planError;
+
   const { data: balance } = await admin.rpc("credit_balance", { p_user_id: user.id });
   if (Number(balance ?? 0) < CREDITS) {
     const { error } = await admin.from("credit_ledger").insert({ user_id: user.id, delta: CREDITS - Number(balance ?? 0), reason: "Scenario top-up" });

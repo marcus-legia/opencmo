@@ -166,9 +166,16 @@ test("15. not enough credits", async () => {
     const box = page.getByLabel("Message the assistant");
     await box.fill("/video a 20-second video about morning routines");
     await box.press("Enter");
-    const alert = page.getByRole("alert").or(page.getByTestId("assistant-turn").last());
-    await expect(alert).toContainText(/credit/i, { timeout: 60_000 });
-    record("low-credits", { problems: [], message: (await alert.innerText()).slice(0, 300) });
+    // Next.js keeps an empty role="alert" route announcer on every page: read the app's own alerts
+    // and the turn, not the first match.
+    const said = async () =>
+      [
+        ...(await page.locator('[role="alert"]:not(#__next-route-announcer__)').allInnerTexts()),
+        // The turn is gone once the start is refused: do not wait for it.
+        await page.getByTestId("assistant-turn").last().innerText({ timeout: 1_000 }).catch(() => ""),
+      ].join("\n");
+    await expect.poll(said, { timeout: 60_000 }).toMatch(/credit/i);
+    record("low-credits", { problems: [], message: (await said()).slice(0, 300) });
   } finally {
     await admin().from("credit_ledger").insert({ user_id: userId, delta: take, reason: "Scenario: restore balance" });
   }
