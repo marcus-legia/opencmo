@@ -85,21 +85,24 @@ export const INBOX_CARDS: InboxCard[] = [
   { id: "c3", dept: "Sales", when: "r/SaaS · 2h old", title: "Someone is asking for exactly what you built", body: "\"Data out without a CSV per project?\" A reply is drafted. You post it yourself." },
 ];
 
-export const DEMOS: Record<DeptId, { src: string; label: string; alt: string; caption: string }> = {
+export const DEMOS: Record<DeptId, { src: string; poster: string; label: string; alt: string; caption: string }> = {
   video: {
     src: "/demos/video.mp4",
+    poster: "/demos/video.webp",
     label: "Video department · 5s",
     alt: "The Video editor: the founder asks the agent to punch up the hook and add a 3D chart; captions and a voice-over are added",
     caption: "Ask the editor to make the hook punchier and add a 3D chart. The agent edits the clip, restyles the captions and records the voice-over.",
   },
   post: {
     src: "/demos/post.mp4",
+    poster: "/demos/post.webp",
     label: "Post department · 5s",
     alt: "The Post department turns this week's update into five platform drafts and schedules them after approval",
     caption: "One update from your week becomes a post for each platform, written in your voice, waiting for your approval.",
   },
   sales: {
     src: "/demos/sales.mp4",
+    poster: "/demos/sales.webp",
     label: "Sales department · 5s",
     alt: "The Sales department scans nine platforms and surfaces three conversations with a drafted reply",
     caption: "Sales searches public conversations on nine platforms and brings back the ones where people need what you built.",
