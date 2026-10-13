@@ -54,7 +54,8 @@ function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"]): string {
 const sharedKey = (provider: ProviderKind, env: NodeJS.ProcessEnv): string =>
   provider === "gemini" ? env.GEMINI_API_KEY || env.GOOGLE_API_KEY || "" : env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
 
-export type ResolvedAgent = AgentSpec & { provider: ProviderKind; model: string; apiKey: string; source: "env" | "default" };
+/** `ownKey`: the agent runs on a key of its own, not the provider's shared key. */
+export type ResolvedAgent = AgentSpec & { provider: ProviderKind; model: string; apiKey: string; ownKey: boolean; source: "env" | "default" };
 
 /**
  * An agent's real model and key. An empty `apiKey` means the agent is not set up (no key); the
@@ -65,7 +66,7 @@ export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env, 
   const prefix = `CMO_AGENT_${id.toUpperCase()}_`;
   // The agent as the OTHER provider would run it (failover): that provider's model of the same
   // tier and its shared key. The agent's own MODEL and API_KEY belong to its configured provider.
-  if (fallback) return { ...spec, provider: fallback, model: defaultModel(fallback, spec.tier), apiKey: sharedKey(fallback, env), source: "default" };
+  if (fallback) return { ...spec, provider: fallback, model: defaultModel(fallback, spec.tier), apiKey: sharedKey(fallback, env), ownKey: false, source: "default" };
   const own = env[`${prefix}PROVIDER`]?.trim().toLowerCase();
   const wanted = own || env.CMO_LLM_PROVIDER?.trim().toLowerCase();
   if (wanted && wanted !== "gemini" && wanted !== "anthropic") {
@@ -75,7 +76,7 @@ export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env, 
   const model = env[`${prefix}MODEL`]?.trim() || defaultModel(provider, spec.tier);
   const apiKey = env[`${prefix}API_KEY`]?.trim() || sharedKey(provider, env);
   const source = wanted || env[`${prefix}MODEL`] || env[`${prefix}API_KEY`] ? "env" : "default";
-  return { ...spec, provider, model, apiKey, source };
+  return { ...spec, provider, model, apiKey, ownKey: Boolean(env[`${prefix}API_KEY`]?.trim()), source };
 }
 
 /** Current configuration without keys — for the startup log and the internal diagnostics page. */

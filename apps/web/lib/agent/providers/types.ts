@@ -92,6 +92,8 @@ export interface Provider extends Format {
   /** Id model ghi vào `agent_sessions.model`. */
   model: string;
   step(request: StepRequest, onDelta: (delta: Delta) => void): Promise<Step>;
+  /** Runs on a key of its own (one CMO agent's): its failures say nothing about the server's key. */
+  ownKey?: boolean;
   /** Câu tiếng Anh cho người dùng khi một lỗi của provider làm hỏng lượt. */
   failureMessage(error: unknown): string;
 }

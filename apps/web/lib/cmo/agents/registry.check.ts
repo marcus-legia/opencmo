@@ -23,6 +23,7 @@ const env = { ...base, CMO_AGENT_X_WRITER_MODEL: "claude-opus-5-5", CMO_AGENT_X_
 const writer = resolveAgent("x_writer", env);
 assert.deepEqual([writer.model, writer.apiKey, writer.source], ["claude-opus-5-5", "a-writer", "env"]);
 assert.equal(resolveAgent("planner", env).apiKey, "a-shared");
+assert.deepEqual([writer.ownKey, resolveAgent("planner", env).ownKey], [true, false], "only the agent with its own key is marked");
 
 // Gemini: per tier, its own shared key; CMO_LLM_PROVIDER moves every agent, a per-agent setting wins.
 const both = { ...base, GEMINI_API_KEY: "g-shared" } as unknown as NodeJS.ProcessEnv;

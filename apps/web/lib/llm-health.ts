@@ -18,6 +18,9 @@ const SKIP_MS: Record<Outage, number> = { account: 10 * 60_000, busy: 60_000 };
 
 /** The kind of outage an SDK error means, or null when the provider answered and the request is at fault. */
 export function outage(error: unknown): Outage | null {
+  // A timeout belongs to the request, not to the provider: retrying it elsewhere would double its
+  // time and cost, and one slow request must not move every user off the provider.
+  if (error instanceof Anthropic.APIConnectionTimeoutError) return null;
   if (error instanceof Anthropic.APIConnectionError) return "busy";
   if (error instanceof Anthropic.APIError) {
     const status = error.status ?? 0;
@@ -56,8 +59,15 @@ export function healthyFirst<A extends { provider: LlmProvider }>(candidates: A[
  * Runs `call` on the first healthy candidate and moves to the next only when the provider itself
  * could not answer. Any other error is the caller's to report. When every candidate is out, the
  * first one's error is thrown: that is the provider the configuration asked for.
+ *
+ * `shared`: false for a candidate that runs on a key of its own (one agent's). Its failure says
+ * nothing about the server's key, so it is not remembered for everyone else.
  */
-export async function withFailover<A extends { provider: LlmProvider }, T>(candidates: A[], call: (candidate: A) => Promise<T>): Promise<T> {
+export async function withFailover<A extends { provider: LlmProvider }, T>(
+  candidates: A[],
+  call: (candidate: A) => Promise<T>,
+  shared: (candidate: A) => boolean = () => true,
+): Promise<T> {
   const order = healthyFirst(candidates);
   let first: unknown;
   for (const [index, candidate] of order.entries()) {
@@ -66,7 +76,7 @@ export async function withFailover<A extends { provider: LlmProvider }, T>(candi
     } catch (error) {
       const kind = outage(error);
       if (!kind) throw error;
-      markDown(candidate.provider, kind);
+      if (shared(candidate)) markDown(candidate.provider, kind);
       if (index === 0) first = error;
       if (kind === "account") console.error(`[llm] ${candidate.provider} cannot answer (key or credit)${index < order.length - 1 ? "; using the other provider" : ""}`);
     }

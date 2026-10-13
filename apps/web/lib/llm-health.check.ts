@@ -21,6 +21,9 @@ assert.equal(outage(anthropicError(429, "rate limited")), "busy");
 assert.equal(outage(anthropicError(529, "overloaded")), "busy");
 assert.equal(outage(new Anthropic.APIConnectionError({ message: "socket hang up" })), "busy");
 assert.equal(outage(anthropicError(400, "messages: text content blocks must be non-empty")), null, "a bad request is ours, not an outage");
+// A timeout belongs to the request (a long prompt, a short limit): running it again elsewhere
+// would double its time and cost, and one slow request must not move everyone off the provider.
+assert.equal(outage(new Anthropic.APIConnectionTimeoutError()), null);
 assert.equal(outage(new ApiError({ status: 429, message: "quota" })), "busy");
 assert.equal(outage(new ApiError({ status: 503, message: "unavailable" })), "busy");
 assert.equal(outage(new ApiError({ status: 403, message: "permission denied" })), "account");
@@ -75,6 +78,14 @@ async function main(): Promise<void> {
   tried = [];
   await withFailover(both, async (agent) => void tried.push(agent.provider));
   assert.deepEqual(tried, ["anthropic"]);
+
+  // A candidate running on its own key (one agent's, not the server's) still fails over, but its
+  // failure says nothing about the shared key: the provider is not marked down for everyone.
+  clearHealth();
+  type Keyed = Agent & { ownKey?: boolean };
+  const keyed: Keyed[] = [{ provider: "anthropic", ownKey: true }, { provider: "gemini" }];
+  assert.equal(await withFailover(keyed, async (agent) => { if (agent.provider === "anthropic") throw credit; return "ok"; }, (agent) => !agent.ownKey), "ok");
+  assert.equal(isDown("anthropic"), false);
 
   // One provider only: no failover, the error passes through.
   clearHealth();

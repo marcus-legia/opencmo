@@ -104,7 +104,11 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
   const candidates = [configured, other].filter((agent) => agent.apiKey);
   if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
   try {
-    return await withFailover(candidates, (agent) => (agent.provider === "gemini" ? structuredGemini(opts, agent) : structuredAnthropic(opts, agent)));
+    return await withFailover(
+      candidates,
+      (agent) => (agent.provider === "gemini" ? structuredGemini(opts, agent) : structuredAnthropic(opts, agent)),
+      (agent) => !agent.ownKey,
+    );
   } catch (error) {
     if (error instanceof LlmError) throw error;
     const kind = outage(error);

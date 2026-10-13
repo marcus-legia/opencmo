@@ -58,7 +58,8 @@ export function agentChatProvider(id: AgentId): Provider | null {
   if (fakeAllowed()) return fakeProvider;
   const agent = resolveAgent(id);
   if (!agent.apiKey) return null;
-  return agent.provider === "gemini" ? geminiProvider(agent.apiKey, undefined, agent.model) : anthropicProvider(agent.model, agent.apiKey);
+  const provider = agent.provider === "gemini" ? geminiProvider(agent.apiKey, undefined, agent.model) : anthropicProvider(agent.model, agent.apiKey);
+  return { ...provider, ownKey: agent.ownKey };
 }
 
 /** Provider family of a saved model id. */
