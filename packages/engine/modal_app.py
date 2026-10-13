@@ -10,6 +10,9 @@ Deploy:
     modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
     modal deploy modal_app.py
 
+Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
+cannot answer (no credit, an outage); without it such output is refunded, never delivered.
+
 Bản này CẦN toàn bộ migration D1/D2 đã áp trên database TRƯỚC khi deploy.
 Deploy ngược thứ tự khiến worker gọi RPC chưa tồn tại và mọi job/task đều lỗi.
 

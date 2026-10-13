@@ -4,7 +4,9 @@ The prompt was already checked on the web before credits were held
 (`apps/web/lib/generate/moderation.ts`); this checks what the model actually drew — a clean prompt
 can still produce an unsafe image. Two independent checks run on the image or on three video
 frames: fal's NSFW classifier, and Claude Haiku against the product rules (no identifiable real
-people, no other brands' logos, no sexual, violent or hateful content).
+people, no other brands' logos, no sexual, violent or hateful content). When Claude itself cannot
+answer (no credit, a bad key, rate limits, an outage) and the worker has a Gemini key, Gemini Flash
+applies the same policy; a verdict is final and is never retried on the other model.
 
 Blocked -> a non-retryable `ProviderError`: the worker fails the task, the trigger refunds the
 credits, and the file never reaches the bucket.
@@ -33,6 +35,8 @@ BLOCKED = "This result was blocked by our content policy. Your credits were refu
 UNCHECKED = "Could not check the result. Please try again."
 NSFW_ENDPOINT = "https://fal.run/fal-ai/x-ailab/nsfw"
 CLAUDE_MODEL = os.environ.get("OPENCMO_MODERATION_MODEL", "claude-haiku-5-5")
+GEMINI_MODEL = os.environ.get("OPENCMO_MODERATION_GEMINI_MODEL", "gemini-flash-latest")
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _REAL_PERSON = "an identifiable real person (a recognisable public figure or celebrity); "
 
 
@@ -117,6 +121,10 @@ def _anthropic_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ""
 
 
+def _gemini_key() -> str:
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+
+
 def check_input(model: AiModel, path: Path) -> None:
     """Images the user feeds in (first/last frame, references) are checked too: the model
     transforms its input, so an unsafe image in is an unsafe result out."""
@@ -187,7 +195,7 @@ def _after_generation(check) -> None:
 def check_images(images: list[Path], policy: str = POLICY) -> None:
     """Runs both checks; either one flagging blocks. A check that cannot answer never passes."""
     _check_nsfw(images)
-    _check_claude(images, policy)
+    _check_policy(images, policy)
 
 
 def _check_nsfw(images: list[Path]) -> None:
@@ -213,6 +221,72 @@ def _check_nsfw(images: list[Path]) -> None:
         raise ProviderError(BLOCKED)
 
 
+class _ClaudeOut(Exception):
+    """Claude itself could not answer. `retryable`: it may answer in a moment (busy), as opposed
+    to a key or credit problem someone has to fix."""
+
+    def __init__(self, retryable: bool):
+        super().__init__("claude cannot answer")
+        self.retryable = retryable
+
+
+def _check_policy(images: list[Path], policy: str) -> None:
+    """Claude's verdict; Gemini's when Claude cannot answer and the worker has a Gemini key."""
+    try:
+        _check_claude(images, policy)
+    except _ClaudeOut as out:
+        if _gemini_key():
+            log.warning("Claude could not check the output; asking %s", GEMINI_MODEL)
+            _check_gemini(images, policy)
+            return
+        # No standby: busy is retried in place, anything else is never delivered unchecked.
+        raise ProviderError(UNCHECKED, retryable=True) if out.retryable else ProviderError(BLOCKED) from out
+
+
+def _check_gemini(images: list[Path], policy: str) -> None:
+    parts: list[dict] = [{"inlineData": {"mimeType": _mime(image), "data": _b64(image)}} for image in images]
+    parts.append({"text": "Judge these images against the policy."})
+    body = {
+        "systemInstruction": {"parts": [{"text": policy}]},
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {"allowed": {"type": "BOOLEAN"}, "category": {"type": "STRING"}},
+                "required": ["allowed", "category"],
+            },
+            # Thinking tokens count against the cap.
+            "maxOutputTokens": 4096,
+        },
+    }
+    try:
+        response = httpx.post(
+            GEMINI_ENDPOINT.format(model=GEMINI_MODEL),
+            headers={"x-goog-api-key": _gemini_key()},
+            json=body,
+            timeout=60,
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(UNCHECKED, retryable=True) from exc
+    if response.status_code >= 500 or response.status_code == 429:
+        raise ProviderError(UNCHECKED, retryable=True)
+    if response.status_code >= 400:
+        log.error("Gemini moderation returned %s: %s", response.status_code, response.text[:300])
+        raise ProviderError(BLOCKED)
+    data = response.json()
+    try:
+        # A safety block has no candidates; an answer that is not the verdict is no answer.
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        verdict = _Verdict.model_validate_json(text, strict=True)
+    except (KeyError, IndexError, TypeError, ValueError):
+        log.warning("Output blocked: %s gave no verdict (%s)", GEMINI_MODEL, str(data.get("promptFeedback") or "")[:200])
+        raise ProviderError(BLOCKED) from None
+    if not verdict.allowed:
+        log.warning("Output blocked by the policy check (%s): %s", GEMINI_MODEL, verdict.category)
+        raise ProviderError(BLOCKED)
+
+
 def _check_claude(images: list[Path], policy: str) -> None:
     import anthropic
 
@@ -235,9 +309,13 @@ def _check_claude(images: list[Path], policy: str) -> None:
             **effort,
         )
     except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as exc:
-        raise ProviderError(UNCHECKED, retryable=True) from exc
+        raise _ClaudeOut(retryable=True) from exc
     except anthropic.APIStatusError as exc:
         log.error("Claude moderation returned %s: %s", exc.status_code, str(exc)[:300])
+        # Anthropic reports an empty balance as a 400; a bad or revoked key as 401/403.
+        unpaid = exc.status_code == 400 and "credit balance" in str(exc).lower()
+        if exc.status_code in (401, 402, 403) or unpaid:
+            raise _ClaudeOut(retryable=False) from exc
         raise ProviderError(BLOCKED) from exc
     verdict = response.parsed_output
     if response.stop_reason == "max_tokens":
