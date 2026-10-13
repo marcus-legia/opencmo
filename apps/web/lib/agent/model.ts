@@ -60,12 +60,18 @@ export function assistantDown(model: string): boolean {
 
 /**
  * Provider for a CMO agent that chats (H1): model and key come from the agent registry
- * (`CMO_AGENT_<ID>_*`), not from the editor Assistant. Null when the agent has no key.
+ * (`CMO_AGENT_<ID>_*`), not from the editor Assistant. A NEW chat (`family` unset) starts on the
+ * configured provider, or on the other one while the configured one cannot answer; an existing
+ * chat (`family` = its model's family) continues on that family, its history being native to it.
+ * Null when there is no key for it.
  */
-export function agentChatProvider(id: AgentId): Provider | null {
+export function agentChatProvider(id: AgentId, family?: LlmProvider): Provider | null {
   if (fakeAllowed()) return fakeProvider;
-  const agent = resolveAgent(id);
-  if (!agent.apiKey) return null;
+  const configured = resolveAgent(id);
+  const other = resolveAgent(id, process.env, configured.provider === "gemini" ? "anthropic" : "gemini");
+  const candidates = [configured, other].filter((agent) => agent.apiKey);
+  const agent = family ? candidates.find((item) => item.provider === family) : healthyFirst(candidates)[0];
+  if (!agent) return null;
   const provider = agent.provider === "gemini" ? geminiProvider(agent.apiKey, undefined, agent.model) : anthropicProvider(agent.model, agent.apiKey);
   return { ...provider, ownKey: agent.ownKey };
 }

@@ -50,7 +50,7 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 - `apps/web/lib/agent/session.ts`: bắt đầu và nối tiếp lượt;
 - `loop.ts`: vòng lặp;
 - `scope.ts`: tool, lập kế hoạch và quyết định cho từng loại phiên;
-- `providers/anthropic.ts`: gọi Claude (mặc định); `providers/gemini.ts`: gọi Gemini. Kiểm duyệt chỉ chạy trên Claude. Tool search, context editing và strict tool chỉ có ở Claude.
+- `providers/anthropic.ts`: gọi Claude (mặc định); `providers/gemini.ts`: gọi Gemini. Kiểm duyệt hỏi Claude trước ở mỗi lần; chỉ khi chính lần gọi đó Claude không trả lời được mới hỏi Gemini cùng policy. Tool search, context editing và strict tool chỉ có ở Claude.
 
 1. **Bắt đầu:** `startTurn` dựng scope **một lần** cho request. Tin nhắn đầu gồm câu lệnh, `<clip_context>` (kịch bản clip theo giây) và `<project_state>` (tóm tắt và `<check>`).
 2. **Mỗi bước trong `runTurn`:**

@@ -397,7 +397,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
     // The provider itself could not answer: remember it, so the next chat starts on the other one.
     const kind = outage(err);
     if (kind && provider.kind !== "fake" && !provider.ownKey) markDown(provider.kind, kind, provider.model);
-    const message = kind && canSwitchFrom(provider.kind) ? SWITCH_MODEL_MESSAGE : provider.failureMessage(err);
+    // Only when a new chat would really start elsewhere: an agent on a key of its own is not moved.
+    const message = kind && !provider.ownKey && canSwitchFrom(provider.kind) ? SWITCH_MODEL_MESSAGE : provider.failureMessage(err);
     try {
       await finish(env, "failed", message);
     } catch (closeErr) {

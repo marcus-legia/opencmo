@@ -26,15 +26,11 @@ export async function loadSession(supabase: SupabaseClient, id: string | undefin
   const { data } = await supabase.from("agent_sessions").select("id, scope, clip_id, job_id, model").eq("id", id).maybeSingle();
   const session = data as SessionRow | null;
   if (!session) throw notFound("Assistant session not found.");
-  // A CMO chat runs on the `cmo` agent's CURRENT model; history only replays within the same
-  // provider family, so a chat from another family cannot continue.
+  // A CMO chat runs on the `cmo` agent's current model of the chat's own provider family: history
+  // only replays within a family.
+  const family = kindOf(session.model);
   const provider =
-    session.scope === "cmo"
-      ? (() => {
-          const current = agentChatProvider("cmo");
-          return current && current.kind === kindOf(session.model) ? current : null;
-        })()
-      : providerForModel(session.model);
+    session.scope === "cmo" ? (family === "fake" ? agentChatProvider("cmo") : agentChatProvider("cmo", family)) : providerForModel(session.model);
   if (!provider && kindOf(session.model) === "gemini") throw new ApiError(409, "This chat used a model that is no longer available. Start a new chat.");
   if (!provider) throw new ApiError(503, "The assistant is not available yet.");
   return { session, provider };

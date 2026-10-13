@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 
 import { clearHealth, markDown } from "../llm-health";
-import { agentProvider, availableModels, canSwitchFrom, providerForModel } from "./model";
+import { agentChatProvider, agentProvider, availableModels, canSwitchFrom, providerForModel } from "./model";
 import { geminiFormat } from "./providers/gemini-history";
 
 const env = process.env as Record<string, string | undefined>;
@@ -52,6 +52,24 @@ delete env.GEMINI_API_KEY;
 markDown("anthropic", "account", "claude-sonnet-5-5");
 assert.equal(agentProvider()!.kind, "anthropic");
 assert.equal(canSwitchFrom("anthropic"), false);
+
+// The CMO chat: a new chat starts on the provider that answers, an existing chat continues on its
+// own family, and an agent on a key of its own is never moved by the shared key's health.
+clearHealth();
+env.ANTHROPIC_API_KEY = "a";
+env.GEMINI_API_KEY = "g";
+assert.equal(agentChatProvider("cmo")!.kind, "anthropic");
+markDown("anthropic", "account", "claude-sonnet-5-5");
+assert.equal(agentChatProvider("cmo")!.kind, "gemini", "new CMO chat while Claude is out");
+assert.equal(agentChatProvider("cmo", "anthropic")!.kind, "anthropic", "an existing Claude chat stays on Claude");
+clearHealth();
+assert.equal(agentChatProvider("cmo", "gemini")!.kind, "gemini", "a chat opened on the fallback continues there");
+assert.equal(agentChatProvider("cmo", "gemini")!.model, "gemini-pro-latest");
+env.CMO_AGENT_CMO_API_KEY = "own";
+assert.equal(agentChatProvider("cmo")!.ownKey, true);
+delete env.CMO_AGENT_CMO_API_KEY;
+delete env.GEMINI_API_KEY;
+assert.equal(agentChatProvider("cmo", "gemini"), null, "no Gemini key: a Gemini chat cannot continue");
 
 // Unanswered calls of a Gemini history: only ids Gemini set can name a stored result.
 const history = [
