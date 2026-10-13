@@ -27,7 +27,7 @@ delete env.OPENCMO_AGENT_PROVIDER;
 
 // Claude cannot answer (no credit): new chats start on Gemini, and a failed Claude chat can say so.
 clearHealth();
-markDown("anthropic", "account");
+markDown("anthropic", "account", "claude-sonnet-5-5");
 assert.equal(agentProvider()!.kind, "gemini");
 assert.equal(availableModels()[0]!.label, "Gemini Pro");
 assert.equal(canSwitchFrom("anthropic"), true);
@@ -35,15 +35,21 @@ assert.equal(canSwitchFrom("gemini"), false, "the other provider is down: nowher
 // A chat that exists stays on its own model: its history is in that provider's format.
 assert.equal(providerForModel("gemini-3.1-pro-preview")!.kind, "gemini");
 
+// A busy Haiku (the checking tier) says nothing about the Assistant's model.
+clearHealth();
+markDown("anthropic", "busy", "claude-haiku-5-5");
+assert.equal(agentProvider()!.kind, "anthropic");
+markDown("anthropic", "account", "claude-haiku-5-5");
+
 // Both down: the configured default is tried anyway.
-markDown("gemini", "busy");
+markDown("gemini", "busy", "gemini-pro-latest");
 assert.equal(agentProvider()!.kind, "anthropic");
 assert.equal(canSwitchFrom("anthropic"), false);
 
 // One key only: nothing to switch to.
 clearHealth();
 delete env.GEMINI_API_KEY;
-markDown("anthropic", "account");
+markDown("anthropic", "account", "claude-sonnet-5-5");
 assert.equal(agentProvider()!.kind, "anthropic");
 assert.equal(canSwitchFrom("anthropic"), false);
 

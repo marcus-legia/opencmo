@@ -18,7 +18,7 @@ import { ApiError as GeminiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
-import { outage, withFailover } from "@/lib/llm-health";
+import { outage } from "@/lib/llm-health";
 
 import { aiFakeEnabled } from "./models";
 import { isProduction } from "@/lib/production";
@@ -135,22 +135,27 @@ export async function moderateText(text: string, { kind, client, gemini }: { kin
     if (input.includes(FAKE_FLAG)) throw new ApiError(422, BLOCKED_MESSAGE);
     return;
   }
-  const checkers: { provider: "anthropic" | "gemini" }[] = [];
-  if (client || anthropicKey()) checkers.push({ provider: "anthropic" });
-  if (gemini || geminiKey()) checkers.push({ provider: "gemini" });
-  if (!checkers.length) {
+  const claude = Boolean(client || anthropicKey());
+  const standby = Boolean(gemini || geminiKey());
+  if (!claude && !standby) {
     // Live, a missing key must not mean "no checks": nothing is created until they can run.
     if (isProduction()) throw new ApiError(503, "Content checks are not set up on this server, so AI media cannot be created yet.");
     return;
   }
   const policy = policyFor(kind);
+  const askStandby = () => askGemini(gemini ?? new GoogleGenAI({ apiKey: geminiKey() }), input, policy);
   let verdict: Verdict;
   try {
-    verdict = await withFailover(checkers, ({ provider }) =>
-      provider === "gemini"
-        ? askGemini(gemini ?? new GoogleGenAI({ apiKey: geminiKey() }), input, policy)
-        : askClaude(client ?? new Anthropic({ apiKey: anthropicKey(), timeout: 15_000, maxRetries: 1 }), input, policy),
-    );
+    // Claude is asked EVERY time, whatever the rest of the app has seen of it: the provider memory
+    // in `lib/llm-health.ts` is fed by other features (and by users' traffic), and must not be able
+    // to move this check to the standby.
+    verdict = claude
+      ? await askClaude(client ?? new Anthropic({ apiKey: anthropicKey(), timeout: 15_000, maxRetries: 1 }), input, policy).catch((error: unknown) => {
+          if (!standby || !outage(error)) throw error;
+          console.error("[moderation] Claude could not answer; asking the standby checker", error instanceof Anthropic.APIError ? error.status : "");
+          return askStandby();
+        })
+      : await askStandby();
   } catch (error) {
     const status = error instanceof Anthropic.APIError || error instanceof GeminiError ? error.status : "";
     console.error("[moderation] check failed", outage(error) ?? "", status, error instanceof Error ? error.message : error);

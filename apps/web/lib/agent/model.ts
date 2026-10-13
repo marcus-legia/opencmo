@@ -20,7 +20,7 @@ import { fakeProvider } from "./providers/fake";
 import { GEMINI_MODEL, geminiKey, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
 import type { Format, Provider, ProviderKind } from "./providers/types";
-import { healthyFirst, isDown, type LlmProvider } from "@/lib/llm-health";
+import { healthyFirst, isDown, type Candidate, type LlmProvider } from "@/lib/llm-health";
 import { isProduction } from "@/lib/production";
 
 function fakeAllowed(): boolean {
@@ -29,10 +29,12 @@ function fakeAllowed(): boolean {
 
 const hasAnthropicKey = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
-/** Providers the server has a key for, the configured default first. */
-function configured(): LlmProvider[] {
+/** Providers the server has a key for with the Assistant's model on each, the configured default first. */
+function configured(): Candidate[] {
   const order: LlmProvider[] = process.env.OPENCMO_AGENT_PROVIDER?.trim().toLowerCase() === "gemini" ? ["gemini", "anthropic"] : ["anthropic", "gemini"];
-  return order.filter((kind) => (kind === "gemini" ? Boolean(geminiKey()) : hasAnthropicKey()));
+  return order
+    .filter((kind) => (kind === "gemini" ? Boolean(geminiKey()) : hasAnthropicKey()))
+    .map((provider) => ({ provider, model: provider === "gemini" ? GEMINI_MODEL : ANTHROPIC_MODEL }));
 }
 
 const build = (kind: LlmProvider): Provider => (kind === "gemini" ? geminiProvider(geminiKey()) : anthropicProvider());
@@ -40,14 +42,20 @@ const build = (kind: LlmProvider): Provider => (kind === "gemini" ? geminiProvid
 /** Provider for a NEW session, or null when the Assistant is not set up. */
 export function agentProvider(): Provider | null {
   if (fakeAllowed()) return fakeProvider;
-  const [first] = healthyFirst(configured().map((provider) => ({ provider })));
+  const [first] = healthyFirst(configured());
   return first ? build(first.provider) : null;
 }
 
 /** True when a chat on `kind` failed on an outage and a new chat would start on the other provider. */
 export function canSwitchFrom(kind: ProviderKind): boolean {
   if (kind === "fake" || fakeAllowed()) return false;
-  return configured().some((other) => other !== kind && !isDown(other));
+  return configured().some((other) => other.provider !== kind && !isDown(other.provider, other.model));
+}
+
+/** True while the Assistant's model on this provider is remembered as unable to answer. */
+export function assistantDown(model: string): boolean {
+  const kind = kindOf(model);
+  return kind !== "fake" && isDown(kind, kind === "gemini" ? GEMINI_MODEL : ANTHROPIC_MODEL);
 }
 
 /**

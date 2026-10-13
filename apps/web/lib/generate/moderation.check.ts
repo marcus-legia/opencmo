@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ApiError as GeminiError } from "@google/genai";
 
 import { ApiError } from "@/lib/api/errors";
-import { clearHealth } from "@/lib/llm-health";
+import { clearHealth, markDown } from "@/lib/llm-health";
 
 import { AUDIO_POLICY, moderateText, POLICY, specText } from "./moderation";
 
@@ -97,6 +97,21 @@ async function standbyChecks(): Promise<void> {
   // An error that is not an outage (our request was wrong) is not a reason to ask someone else.
   assert.deepEqual(await withStandby(new Error("bug in our request"), allowed), [503, 0]);
   assert.deepEqual(await withStandby({ stop_reason: "max_tokens", parsed_output: null }, allowed), [503, 0]);
+
+  // What other features remember about Claude never moves this check: Claude is asked anyway.
+  clearHealth();
+  markDown("anthropic", "account", "claude-haiku-5-5");
+  markDown("anthropic", "busy", "claude-haiku-5-5");
+  const asked = clientFor(claudeBlocks);
+  const idle = geminiFor(allowed);
+  await assert.rejects(moderateText("a laptop on a desk", { client: asked.client, gemini: idle.gemini }), (error: unknown) => error instanceof ApiError && error.status === 422);
+  assert.deepEqual([asked.calls.length, idle.calls.length], [1, 0]);
+  // And a Claude outage seen HERE is not remembered: the next check asks Claude again.
+  clearHealth();
+  await moderateText("a laptop on a desk", { client: clientFor(noCredit).client, gemini: geminiFor(allowed).gemini });
+  const again = clientFor(claudeAllows);
+  await moderateText("a laptop on a desk", { client: again.client, gemini: geminiFor(blocked).gemini });
+  assert.equal(again.calls.length, 1);
 
   // The standby gets the same policy and the same escaped data block.
   clearHealth();

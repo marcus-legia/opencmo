@@ -31,20 +31,22 @@ assert.equal(outage(new ApiError({ status: 400, message: "API key not valid. Ple
 assert.equal(outage(new ApiError({ status: 400, message: "Invalid JSON payload" })), null);
 assert.equal(outage(new Error("anything else")), null);
 
-// ---------------------------------------------------------------- how long
+// ---------------------------------------------------------------- how long, and for which model
 clearHealth();
-markDown("anthropic", "account", 1_000);
-assert.equal(isDown("anthropic", 1_000 + 9 * 60_000), true, "an account problem is remembered for ten minutes");
-assert.equal(isDown("anthropic", 1_000 + 11 * 60_000), false);
-assert.equal(isDown("gemini", 2_000), false);
-markDown("gemini", "busy", 1_000);
-assert.equal(isDown("gemini", 1_000 + 30_000), true);
-assert.equal(isDown("gemini", 1_000 + 90_000), false, "a busy provider is retried after a minute");
+markDown("anthropic", "account", "claude-sonnet-5-5", 1_000);
+assert.equal(isDown("anthropic", "claude-sonnet-5-5", 1_000 + 9 * 60_000), true, "an account problem is remembered for ten minutes");
+assert.equal(isDown("anthropic", "claude-haiku-5-5", 1_000 + 9 * 60_000), true, "the key or its credit: every model of the provider");
+assert.equal(isDown("anthropic", "claude-sonnet-5-5", 1_000 + 11 * 60_000), false);
+assert.equal(isDown("gemini", "gemini-pro-latest", 2_000), false);
+markDown("gemini", "busy", "gemini-pro-latest", 1_000);
+assert.equal(isDown("gemini", "gemini-pro-latest", 1_000 + 30_000), true);
+assert.equal(isDown("gemini", "gemini-flash-latest", 1_000 + 30_000), false, "one busy model says nothing about another");
+assert.equal(isDown("gemini", "gemini-pro-latest", 1_000 + 90_000), false, "a busy model is retried after a minute");
 
 async function main(): Promise<void> {
   // ---------------------------------------------------------------- failover
-  type Agent = { provider: "anthropic" | "gemini" };
-  const both: Agent[] = [{ provider: "anthropic" }, { provider: "gemini" }];
+  type Agent = { provider: "anthropic" | "gemini"; model: string };
+  const both: Agent[] = [{ provider: "anthropic", model: "claude-sonnet-5-5" }, { provider: "gemini", model: "gemini-pro-latest" }];
 
   clearHealth();
   let tried: string[] = [];
@@ -56,7 +58,7 @@ async function main(): Promise<void> {
   });
   assert.equal(answer, "from gemini");
   assert.deepEqual(tried, ["anthropic", "gemini"]);
-  assert.equal(isDown("anthropic"), true, "the failed provider is remembered");
+  assert.equal(isDown("anthropic", "claude-sonnet-5-5"), true, "the failed provider is remembered");
 
   // While it is down, the next call starts with the healthy one.
   tried = [];
@@ -83,13 +85,13 @@ async function main(): Promise<void> {
   // failure says nothing about the shared key: the provider is not marked down for everyone.
   clearHealth();
   type Keyed = Agent & { ownKey?: boolean };
-  const keyed: Keyed[] = [{ provider: "anthropic", ownKey: true }, { provider: "gemini" }];
+  const keyed: Keyed[] = [{ provider: "anthropic", model: "claude-sonnet-5-5", ownKey: true }, { provider: "gemini", model: "gemini-pro-latest" }];
   assert.equal(await withFailover(keyed, async (agent) => { if (agent.provider === "anthropic") throw credit; return "ok"; }, (agent) => !agent.ownKey), "ok");
-  assert.equal(isDown("anthropic"), false);
+  assert.equal(isDown("anthropic", "claude-sonnet-5-5"), false);
 
   // One provider only: no failover, the error passes through.
   clearHealth();
-  await assert.rejects(withFailover([{ provider: "anthropic" }] as Agent[], async () => { throw credit; }), (error) => error === credit);
+  await assert.rejects(withFailover([both[0]!], async () => { throw credit; }), (error) => error === credit);
 
   console.log("llm health: outages, durations and failover correct");
 }
