@@ -192,7 +192,6 @@ Chi tiết ở `docs/pr45-viec-con-lai.md`.
 **PR sau:** `docs/ke-hoach-pr-sau.md`. Thứ tự: đo trước → export 60 fps → file project phình to → `capture` trên worker (nếu cần) → quyền RPC.
 
 **Giới hạn đã biết:**
-- export 24/25/50/60 fps lấy mẫu trên lưới 30 fps;
 - mỗi đoạn cắt mang một bản copy track bám mặt;
 - `capture` phải vòng qua tab trình duyệt;
 - `save_editor_document` / `agent_record_tool` được grant cho `authenticated`.

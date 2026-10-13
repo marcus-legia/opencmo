@@ -42,7 +42,11 @@ function visibility(r: RNode, frame: number): void {
     r.local = frame;
     r.visible = true;
   } else {
-    r.local = Math.round((frame - r.origin) * r.rate);
+    // Integer frames (every 30 fps render, the editor, golden tests) keep the rounded local time so
+    // their output stays byte-identical; a fractional frame (export at 24/25/50/60 fps) keeps its
+    // exact time, or motion would hold still between two grid frames.
+    const local = (frame - r.origin) * r.rate;
+    r.local = Number.isInteger(frame) ? Math.round(local) : local;
     r.visible = frame >= r.start && frame < r.end;
   }
   for (const child of r.children) visibility(child, frame);

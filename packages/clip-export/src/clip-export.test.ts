@@ -261,6 +261,24 @@ describe('exportJob (ffmpeg thật)', () => {
     expect(Math.abs(grayAt(join(dir, 'fps24.mp4'), 12) - 4 * (15 + 15))).toBeLessThan(3);
   });
 
+  it('60 fps draws in-between frames: a keyframed square moves on every exported frame', async () => {
+    const document = clip([
+      {
+        kind: 'rect', x: -40, y: 0, width: 40, height: 40, start: 0, end: 1, fill: '#FFFFFF',
+        tracks: [{ property: 'x', keyframes: [{ time: 0, value: -40 }, { time: 1, value: 40 }] }],
+      },
+    ]) as unknown as { stage: { children: Record<string, unknown>[] } };
+    document.stage.children[0]!.fps = 60;
+    const { document: _document, ...rest } = job('moving60.mp4', document as never, 1);
+    await exportJob({ ...rest, out: join(dir, 'moving60.mp4'), document: document as never });
+    // grayAt reads the top-left 40×40 output pixels (20×20 scene pixels at 720p): the white square
+    // slides into it, so the grey level grows on every frame. Exported frames 5 and 6 are scene
+    // frames 2.5 and 3 (edge at 6.7 and 8 scene pixels); rounding 2.5 up made them the same frame.
+    const before = grayAt(join(dir, 'moving60.mp4'), 5);
+    const after = grayAt(join(dir, 'moving60.mp4'), 6);
+    expect(after - before).toBeGreaterThan(1);
+  });
+
   it('J/L-cut (E1): hình cắt đúng khung, tiếng đoạn trước kéo sang đoạn sau', async () => {
     // Nguồn 4 s: khung N xám mức 2N; tiếng chỉ kêu ở giây nguồn 1.0–1.5.
     run([
