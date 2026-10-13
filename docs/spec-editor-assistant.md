@@ -50,7 +50,7 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 - `apps/web/lib/agent/session.ts`: bắt đầu và nối tiếp lượt;
 - `loop.ts`: vòng lặp;
 - `scope.ts`: tool, lập kế hoạch và quyết định cho từng loại phiên;
-- `providers/anthropic.ts`: gọi Claude.
+- `providers/anthropic.ts`: gọi Claude (mặc định); `providers/gemini.ts`: gọi Gemini. Kiểm duyệt chỉ chạy trên Claude. Tool search, context editing và strict tool chỉ có ở Claude.
 
 1. **Bắt đầu:** `startTurn` dựng scope **một lần** cho request. Tin nhắn đầu gồm câu lệnh, `<clip_context>` (kịch bản clip theo giây) và `<project_state>` (tóm tắt và `<check>`).
 2. **Mỗi bước trong `runTurn`:**
@@ -158,6 +158,9 @@ Tất cả đi qua `structured()` (`lib/cmo/jobs/llm.ts`):
 | `OPENCMO_AGENT_TOOL_SEARCH=1` | Nạp tool chuyên biệt khi cần |
 | `OPENCMO_AGENT_CONTEXT_EDITING=1` | Xoá kết quả tool cũ trong chat dài |
 | `ANTHROPIC_API_KEY`, `FAL_KEY` | Model thật; kiểm duyệt cần cả hai |
+| `GEMINI_API_KEY` | Có thì panel cho chọn thêm Gemini; team con dùng được Gemini |
+| `OPENCMO_AGENT_PROVIDER=anthropic\|gemini` | Model mặc định của chat mới (không đặt: Claude nếu có key) |
+| `CMO_LLM_PROVIDER=anthropic\|gemini` | Provider của mọi agent CMO và team con (`structured()`); `CMO_AGENT_<ID>_PROVIDER` cho từng agent |
 
 ## 9. Cách kiểm
 
