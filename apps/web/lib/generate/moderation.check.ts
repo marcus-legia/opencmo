@@ -65,6 +65,22 @@ async function main(): Promise<void> {
   assert.match(AUDIO_POLICY, /cloning/, "voice cloning stays blocked");
 
   assert.deepEqual(specText({ prompt: "a cat", model: "fal-veo", voice: "Aria", refs: ["x"] }), ["a cat"]);
+
+  // No key: skipped in dev, refused live (self-hosted production included), never unchecked.
+  const keys = { a: process.env.ANTHROPIC_API_KEY, b: process.env.ANTHROPIC_AUTH_TOKEN, env: process.env.OPENCMO_ENV, fake: process.env.OPENCMO_AI_FAKE };
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_AUTH_TOKEN;
+  delete process.env.OPENCMO_AI_FAKE;
+  try {
+    await moderateText("a cat on a sofa");
+    process.env.OPENCMO_ENV = "production";
+    await assert.rejects(moderateText("a cat on a sofa"), (err: unknown) => err instanceof ApiError && err.status === 503);
+  } finally {
+    for (const [name, value] of [["ANTHROPIC_API_KEY", keys.a], ["ANTHROPIC_AUTH_TOKEN", keys.b], ["OPENCMO_ENV", keys.env], ["OPENCMO_AI_FAKE", keys.fake]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
   console.log("moderation: every check passed");
 }
 

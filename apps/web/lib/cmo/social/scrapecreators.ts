@@ -11,13 +11,15 @@
  * Không `server-only` để check chạy được; khoá chỉ đọc từ env phía server.
  */
 
+import { isProduction } from "@/lib/production";
+
 export const SC_BASE = "https://api.scrapecreators.com";
 const TIMEOUT_MS = 20_000;
 
 export class SocialReadError extends Error {}
 
 export function scFakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && process.env.VERCEL_ENV !== "production";
+  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
 }
 
 /** Đọc được mạng xã hội: có khoá thật, hoặc bản giả (CI/E2E). */

@@ -441,6 +441,13 @@ def sweep() -> None:
         except TransientError:
             log.warning("Task reconciler lỗi tạm — phút sau chạy lại", exc_info=True)
 
+        try:
+            reaped = store.reap_agent_turns()
+            if reaped:
+                log.warning("Assistant turns closed by the sweep: %s", reaped)
+        except TransientError:
+            log.warning("Turn sweep: transient error, retrying next minute", exc_info=True)
+
         for _ in range(SWEEP_BATCH):
             try:
                 job = store.claim_next_job()

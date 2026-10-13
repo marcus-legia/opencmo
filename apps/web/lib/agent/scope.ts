@@ -54,6 +54,7 @@ import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepa
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import { turnStatus } from "./loop";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
@@ -387,7 +388,13 @@ export function clipScope(
         };
       }
       const { outcome, generationId } = await runGeneration(
-        { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env) },
+        {
+          supabase,
+          jobId: context.clip.job_id,
+          clipId,
+          applyOp: (op) => applyOpTool(op, env),
+          alive: async () => (await turnStatus(supabase, turn.id))?.status === "running",
+        },
         prepared as Parameters<typeof runGeneration>[1],
       );
       return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };

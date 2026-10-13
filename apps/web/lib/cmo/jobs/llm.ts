@@ -13,12 +13,13 @@ import { z } from "zod";
 import { resolveAgent, type AgentId } from "@/lib/cmo/agents/registry";
 
 import { LlmError } from "./llm-error";
+import { isProduction } from "@/lib/production";
 
 export { LlmError };
 
 /** Bản giả cho CI/E2E. Không bao giờ bật trên production. */
 export function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && process.env.VERCEL_ENV !== "production";
+  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
 }
 
 /** Agent chạy được: bản giả, hoặc đã có khoá cho provider của nó. */

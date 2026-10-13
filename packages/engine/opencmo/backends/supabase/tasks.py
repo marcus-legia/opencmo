@@ -103,6 +103,13 @@ class TasksMixin(_Http):
         )
         return resp.json() is True
 
+    def reap_agent_turns(self) -> int:
+        """Close Assistant turns nobody will finish (dead request, tab closed on a card); their held
+        credits come back."""
+        resp = self._rpc("agent_reap_turns", {}, idempotent=True)
+        value = resp.json()
+        return value if isinstance(value, int) else 0
+
     def reclaim_expired_tasks(self, max_attempts: int = 3) -> dict[str, Any]:
         resp = self._rpc(
             "reclaim_expired_tasks", {"p_max_attempts": max_attempts}, idempotent=True

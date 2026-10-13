@@ -17,9 +17,10 @@ import { ANTHROPIC_MODEL, anthropicFormat, anthropicProvider } from "./providers
 import { fakeProvider } from "./providers/fake";
 import { geminiFormat } from "./providers/gemini-history";
 import type { Format, Provider, ProviderKind } from "./providers/types";
+import { isProduction } from "@/lib/production";
 
 function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && process.env.VERCEL_ENV !== "production";
+  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
 }
 
 const hasAnthropicKey = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);

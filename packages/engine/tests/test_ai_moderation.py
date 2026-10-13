@@ -161,6 +161,24 @@ def test_skipped_without_keys(monkeypatch, image):
     assert not moderation.ready()
 
 
+def test_production_without_keys_refuses_instead_of_skipping(monkeypatch, image):
+    """Live, missing keys must not mean unchecked AI media: the task fails and is refunded."""
+    monkeypatch.delenv("FAL_KEY")
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    with pytest.raises(ProviderError) as blocked:
+        moderation.check_output(get_model("fal-nano-banana"), {"prompt": "x"}, image)
+    assert not blocked.value.retryable and "refunded" in str(blocked.value)
+
+
+def test_fake_models_never_run_in_production(monkeypatch):
+    from opencmo.ai.providers import fake_allowed
+
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    assert fake_allowed()
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    assert not fake_allowed()
+
+
 def test_real_fal_nsfw_response_passes_a_clean_image(monkeypatch, tmp_path):
     """`fixtures/live/fal-nsfw.json` is the real answer for one clean image, 2026-10-11."""
     import json

@@ -98,6 +98,15 @@ class _Verdict(BaseModel):
     category: str
 
 
+NOT_CHECKED = "Content checks are not set up on this server, so this could not be made. Your credits were refunded."
+
+
+def production() -> bool:
+    """Live worker (`OPENCMO_ENV=production` in its secret): missing keys mean no checks, which is
+    never allowed there; in dev the checks are skipped."""
+    return os.environ.get("OPENCMO_ENV") == "production"
+
+
 def ready() -> bool:
     """Both checks have their keys. Production only enables AI images/video when the web side
     says the same (`moderationReady`)."""
@@ -111,14 +120,22 @@ def _anthropic_key() -> str:
 def check_input(model: AiModel, path: Path) -> None:
     """Images the user feeds in (first/last frame, references) are checked too: the model
     transforms its input, so an unsafe image in is an unsafe result out."""
-    if model.provider in ("fake", *SKIP_PROVIDERS) or not ready():
+    if model.provider in ("fake", *SKIP_PROVIDERS):
+        return
+    if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         return
     check_images([path])
 
 
 def check_input_video(model: AiModel, path: Path, workdir: Path, spec: dict | None = None) -> None:
     """A video the user hands to a video-edit model (G2): three frames, like output moderation."""
-    if model.provider in ("fake", *SKIP_PROVIDERS) or not ready():
+    if model.provider in ("fake", *SKIP_PROVIDERS):
+        return
+    if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         return
     frames = _frames(path, workdir)
     if not frames:
@@ -136,6 +153,8 @@ def check_output(model: AiModel, spec: dict, path: Path) -> None:
             raise ProviderError(BLOCKED)
         return
     if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         log.warning("Moderation keys missing: skipping output moderation for %s", model.id)
         return
     with tempfile.TemporaryDirectory(prefix="opencmo-moderate-") as tmp:

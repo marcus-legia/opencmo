@@ -27,7 +27,7 @@ import "server-only";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
-import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, STOP_POLL_MS } from "./limits";
+import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS, SLOW_PLANS, STOP_POLL_MS } from "./limits";
 import { danglingToolUses } from "./providers/anthropic";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
@@ -253,7 +253,18 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const approvals: { call: ToolCall; card: unknown }[] = [];
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
+      let deferred = false;
       for (const call of result.toolCalls) {
+        if (SLOW_PLANS.has(call.name) && Date.now() - started > SLOW_PLAN_CUTOFF_MS) {
+          // Not started: it would run past the request's limit. This request pauses ("time") and
+          // the tab continues at once, where the model calls it again with a full budget.
+          const content = JSON.stringify({ INVALID_INPUT: "Not started yet: this request was near its time limit. Call it again with the same input now." });
+          await recordTool(env, call, "failed", { summary: "Continuing in a moment" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Continuing in a moment" });
+          results.push({ id: call.id, name: call.name, ok: false, content });
+          deferred = true;
+          continue;
+        }
         const plan = await scope.plan(call);
         if (plan.kind === "browser") {
           browser.push({ ...call, input: plan.input });
@@ -323,7 +334,11 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         p_role: "user",
         p_content: provider.toolResults(results, state),
       });
-
+      if (deferred) {
+        await pause(env, "time");
+        emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });
+        return;
+      }
     }
   } catch (err) {
     if (isStopped(err)) {

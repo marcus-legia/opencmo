@@ -473,6 +473,14 @@ type GenerateEnv = {
   clipId: string;
   /** Áp op lên clip qua đường ghi chung (CAS + checkpoint), như mọi tool ghi. */
   applyOp: (op: Op) => Promise<ToolOutcome>;
+  /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
+  alive?: () => Promise<boolean>;
+};
+
+const STOPPED: ToolOutcome = {
+  ok: false,
+  content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was generated or charged." }),
+  summary: "Stopped",
 };
 
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
@@ -504,6 +512,8 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   } catch (err) {
     return failed(err);
   }
+  // Stop pressed while the checks ran: nothing has been held yet.
+  if (env.alive && !(await env.alive())) return { outcome: STOPPED };
   // Credits are held one by one, so a failure cancels exactly the holds made so far.
   for (const item of ready) {
     try {
@@ -517,6 +527,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
 
   // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
   // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
+  // Stop pressed while the credits were held: give them back before anything lands on the clip.
+  if (env.alive && !(await env.alive())) {
+    await cancelAll();
+    return { outcome: STOPPED };
+  }
   const applied = await env.applyOp(prepared.op);
   if (!applied.ok) {
     // Không đặt được lên clip (vd clip vừa đổi ở tab khác): huỷ lượt sinh để

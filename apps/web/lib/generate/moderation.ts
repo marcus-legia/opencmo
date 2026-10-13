@@ -17,6 +17,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 
 import { aiFakeEnabled } from "./models";
+import { isProduction } from "@/lib/production";
 
 const MODEL = process.env.OPENCMO_MODERATION_MODEL || "claude-haiku-5-5";
 /** Fake mode: text containing this mark is blocked — tests the refusal path without the network. */
@@ -103,7 +104,7 @@ export async function classify(client: Client, input: string, policy: string = P
 }
 
 /**
- * Throws 422 when the text is blocked, 503 when it could not be checked. Skipped without a key (dev).
+ * Throws 422 when the text is blocked, 503 when it could not be checked. Skipped without a key, outside production.
  * `kind` is the model kind the text goes to (`policyFor`).
  */
 export async function moderateText(text: string, { kind, client }: { kind?: string; client?: Client } = {}): Promise<void> {
@@ -113,7 +114,11 @@ export async function moderateText(text: string, { kind, client }: { kind?: stri
     if (input.includes(FAKE_FLAG)) throw new ApiError(422, BLOCKED_MESSAGE);
     return;
   }
-  if (!client && !anthropicKey()) return;
+  if (!client && !anthropicKey()) {
+    // Live, a missing key must not mean "no checks": nothing is created until they can run.
+    if (isProduction()) throw new ApiError(503, "Content checks are not set up on this server, so AI media cannot be created yet.");
+    return;
+  }
   const verdict = await classify(client ?? new Anthropic({ apiKey: anthropicKey(), timeout: 15_000, maxRetries: 1 }), input, policyFor(kind));
   if (!verdict.allowed) throw new ApiError(422, BLOCKED_MESSAGE);
 }

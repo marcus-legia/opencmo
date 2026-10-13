@@ -275,6 +275,17 @@ def test_reclaim_expired_tasks_returns_json_dict():
     assert store.reclaim_expired_tasks(5) == {"requeued": 2, "failed": 1}
 
 
+def test_reap_agent_turns_calls_the_sweep_function():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        return httpx.Response(200, json=2)
+
+    assert _store_with(handler).reap_agent_turns() == 2
+    assert seen["path"].endswith("/rpc/agent_reap_turns")
+
+
 def test_complete_media_probe_sends_expected_body():
     seen = {}
 
