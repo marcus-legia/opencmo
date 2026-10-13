@@ -66,19 +66,19 @@ const GUIDES = {
   workflow: `# How to edit a clip
 
 1. Understand the request. If it is ambiguous or would remove a lot of the clip, ask_user once. Otherwise decide.
-2. Look before you touch: get_project_state, then get_transcript for anything about words or pacing, list_library for media, capture a contact sheet (count 6-8) to see what the viewer sees.
+2. Look before you touch, in ONE step: get_project_state, get_transcript for anything about words or pacing, list_library for media. Then capture a contact sheet (count 6-8) to see what the viewer sees.
 3. For anything with more than two steps, write the plan with update_plan and keep it current.
 4. Work in this order, because later steps depend on earlier ones:
    a. Story and pacing: cut words, filler and pauses (remove_words, remove_ranges). Cutting changes every later time, so cut FIRST.
    b. Frame: set_frame if the shape changes.
-   c. Layers: B-roll (insert_asset), titles and hooks (add_text / insert_node), shapes.
-      insert_asset puts B-roll and audio on a shared row ("B-roll 1", "Audio 1") when the time is free. To tidy layers of the same kind onto one row, move_to_row (clips of another kind are refused).
+   c. Layers: B-roll (place_broll for library shots, all in one call), titles and hooks (add_text / insert_node), shapes; music and sound effects with insert_asset.
+      place_broll and insert_asset put B-roll and audio on a shared row ("B-roll 1", "Audio 1") when the time is free. To tidy layers of the same kind onto one row, move_to_row (clips of another kind are refused).
    d. Motion: keyframes (zoom-ins, pans), animations, transitions.
    e. Captions last: style and colors (set_caption_style), then fix misheard words.
 5. Verify: run check and fix every error; then capture frames at the moments you changed (and one before/after) and look at them. Is the speaker in frame? Is every text readable, inside the frame, not covering faces or the captions? Does B-roll start and end where the words say?
 6. Finish with one to three sentences about what changed. Never claim something you did not check.
 
-Times after cuts: get_transcript and find_silences use SOURCE seconds; everything on the timeline (add_text, insert_asset, capture, keyframes) uses CLIP seconds after cuts. get_project_state shows the kept duration; the captions line up with the clip timeline.`,
+Times after cuts: get_transcript and find_silences use SOURCE seconds; everything on the timeline (add_text, place_broll, insert_asset, capture, keyframes) uses CLIP seconds after cuts. get_project_state shows the kept duration; the captions line up with the clip timeline.`,
 
   pacing: `# Pacing: filler, pauses, dead air
 
@@ -124,18 +124,18 @@ AI images and video (generate_media): fill the brief from the script. quote = th
 
   broll: `# B-roll
 
-- B-roll covers the speaker with footage that shows what they talk about. Place it where the words mention the thing: insert_asset {path, quote} with the words from <clip_context> starts it on those words (1.5-4 s); give start/end in clip seconds only to adjust.
+- B-roll covers the speaker with footage that shows what they talk about. Place every library shot in ONE place_broll call: each beat {path, quote} starts on those words from <clip_context> (1.5-4 s), fills the frame (fit "pip" keeps the speaker visible), fades in and out and is muted over the speaker; give start/seconds only to adjust.
 - 1.5-4 seconds per shot. Never cover the first sentence (the viewer needs the face to trust the speaker) or the last line.
-- insert_asset {path, start, end, fit: "cover"} fills the frame. Use media_grab first to see what the file shows and pick sourceIn if the good part is later in the file (set_props {sourceIn}).
-- Mute B-roll sound unless it matters (volume -60 or muted).
-- A dissolve or a quick scale keyframe (1.0 -> 1.08) makes cuts feel smoother.
+- Use media_grab first to see what a file shows; pass source_start when the good part is later in the file.
+- Keep the B-roll's own sound only when it matters (sound: true).
+- A quick scale keyframe (1.0 -> 1.08) on a shot adds motion.
 - Capture a frame in the middle of each B-roll shot to confirm.
 
 ## AI B-roll (when the user asks to generate B-roll and generate_media is available)
 
 1. Read <clip_context>. Pick 3-5 lines that name something concrete a picture can show (a place, an object, an action). Skip the hook, the last line and opinions. Write them to update_plan: "[12.4s] 'my first store' → a small shop front at dawn".
 2. Stills first: call generate_media kind "image" for EVERY shot in the same step (one call per shot, all in one message), so the user approves them on one card with the total price. Same style for every shot; aspect_ratio of the clip frame. length 2-3, so each still already works as a short cutaway. variants 3 on each still (a B-roll pack): the user sees three versions of every shot and keeps the best; say that each variant costs the full price.
-3. When they are approved, list_library until the images are no longer "still generating", capture a frame on each, tell the user they can pick another variant of any shot in the Inspector (Variants) or by right-clicking it, then ask_user which ones to animate (options: "Animate all", "Keep as stills", or each shot by name). Animation costs much more than a still: say so in the question.
+3. When they are approved, wait_for_media, then capture a frame on each, tell the user they can pick another variant of any shot in the Inspector (Variants) or by right-clicking it, then ask_user which ones to animate (options: "Animate all", "Keep as stills", or each shot by name). Animation costs much more than a still: say so in the question.
 4. Animate the chosen ones: generate_media kind "video" with start_image = that still's library path, the same brief and quote, the shortest duration, length 1.5-4 and muted true — again all in one message, one card. Then delete the still it replaces (delete_element) so the two do not stack.
 5. Capture a frame in the middle of each shot; nothing covers the first or last line.
 
@@ -193,7 +193,7 @@ Use apply_color (one call can set many adjustments on many elements) and check w
 - Add the layout FIRST, then the visuals for that range: visuals without an explicit region or at land in the panel on their own.
 - The layout wraps the clip video in "Speaker" (a group, or a masked rect once pip/side-by-side is used) and adds a rect "Layout panel" (plus "Layout backdrop" for pip): do not edit or delete them by hand; call set_layout again. It survives text cuts and set_frame.
 - check reports covers-speaker when a visual sits on the speaker's band.
-- Several sources at once (B-roll, photos, the clip's own video) go in apply_layout, not set_layout: layouts full, side_by_side, top_bottom, pip_top_left/top_right/bottom_left/bottom_right (main = the full frame, inset = the small corner box on top), grid_2x2/3x3/4x4, main_sidebar (70/30), three_up (3 columns), three_stack (3 rows). Every slot needs an element (list_library + insert_asset first for new media); the elements must play at the same time. fit fill crops to cover the slot (anchor picks the kept part, e.g. top for a face), fit shows all of it. The clip's own video can take one slot: it keeps its face tracking and the slot holds while the other elements play. On a vertical clip prefer three_stack, top_bottom or a pip; three_up columns are thin.`,
+- Several sources at once (B-roll, photos, the clip's own video) go in apply_layout, not set_layout: layouts full, side_by_side, top_bottom, pip_top_left/top_right/bottom_left/bottom_right (main = the full frame, inset = the small corner box on top), grid_2x2/3x3/4x4, main_sidebar (70/30), three_up (3 columns), three_stack (3 rows). Every slot needs an element (list_library + place_broll first for new media); the elements must play at the same time. fit fill crops to cover the slot (anchor picks the kept part, e.g. top for a face), fit shows all of it. The clip's own video can take one slot: it keeps its face tracking and the slot holds while the other elements play. On a vertical clip prefer three_stack, top_bottom or a pip; three_up columns are thin.`,
 
   visuals: `# Explainer visuals
 
@@ -282,7 +282,7 @@ When the user describes a whole video ("a 20-second video about…", /video), ca
 1. Plan the video first with update_plan, one beat per line in seconds: "[0-3s] hook: a laptop glowing in a dark hotel room", "[3-7s] the dashboard fills with bookings". Keep each shot 2-5 seconds.
 2. work_area in <clip_context> is how long the video plays. When the plan is longer, set_workarea {start: 0, end: <plan length>} BEFORE adding media, or the shots past the end will not play.
 3. Stills first: generate_media kind "image" for every shot in ONE message (one card, one total price), each with idea, subject, action, setting, style, camera, mood, start = the beat's first second and length = the beat's seconds, and variants 3 so the user can keep the best version of each shot. No quote. One style and the frame's aspect ratio for every shot.
-4. After approval, list_library until they are ready, capture a frame on each, tell the user they can pick another variant in the Inspector (Variants), then ask_user which shots to animate (animation costs much more). Animate with generate_media kind "video": start_image = that still, the same brief, the same start, length = the beat, muted true. Delete the still each video replaces.
+4. After approval, wait_for_media, then capture a frame on each, tell the user they can pick another variant in the Inspector (Variants), then ask_user which shots to animate (animation costs much more). Animate with generate_media kind "video": start_image = that still, the same brief, the same start, length = the beat, muted true. Delete the still each video replaces.
 5. Words: add_voiceover with mode "overlay" and start 0 (about 3 words per second of video), or add_text titles timed to the beats.
 6. Music: generate_media kind "audio" (instrumental, mood, genre, tempo), start 0, duration = the video length up to the model's limit, then set_props volume -18 when there is a voice.
 7. Capture a frame in the middle of every beat: nothing empty, nothing off-screen, text readable.`,
@@ -304,7 +304,7 @@ create_video makes a new video from a prompt: a director writes the voice-over a
 1. Use it on a blank "New edit" only. On a clip of the user's own footage, add AI shots with B-roll (read_guide "broll") or generate_media instead: create_video would reframe and cover their video, and it refuses to run there.
 2. Pass the user's words as prompt. Pass seconds, aspect, voice or model only when the user asked for them. Shots come out at the model's shot lengths, so the video can end up a second shorter or longer than asked; say so if it matters.
 3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again.
-4. After approval the shots fill in as they finish (about one shot's wait). list_library until no shot is "still generating", then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
+4. After approval the shots fill in as they finish (about one shot's wait). Call wait_for_media (again if it says some are still generating), then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
 5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.
 6. A shot marked "continues" on the card starts from the last frame of the shot before it (no cut), so it fills in after that shot. If the shot before fails or is cancelled, the continuing shot fails too and its credits come back. Regenerating a shot also makes the shots that continue it again, from its new last frame; the Regenerate menu item names them and its price counts them.`,
 
@@ -315,7 +315,7 @@ edit_video redraws one range of the user's own video from a short instruction: l
 1. Pick a range of 3-10 s inside one shot (no cut, no split-screen layout on it). For a longer change, ask which moment matters most; each range is its own paid edit.
 2. Write the change, not the whole scene: "night, warm desk lamp, city lights in the window". No real people, celebrities or logos: those are refused.
 3. To change only what is behind the speaker, use replace_background instead: it keeps the speaker exactly as filmed.
-4. The user approves the price. After it is placed, list_library until it is no longer "still generating", then capture a frame in the middle of the range: the speaker is in the same place and the edit covers the whole range.`,
+4. The user approves the price. After it is placed, wait_for_media, then capture a frame in the middle of the range: the speaker is in the same place and the edit covers the whole range.`,
 
   document: "",
 } as const;

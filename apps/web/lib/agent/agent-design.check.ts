@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import { PARALLEL_SAFE, readGroup } from "./tools";
 
 async function main(): Promise<void> {
+  // The fake media catalog, so the priced tools (create_video, generate_media…) are offered here too.
+  process.env.OPENCMO_AI_FAKE = "1";
   // 1. Reads next to each other run together; a write ends the group, so a later read sees it.
   {
     const calls = ["get_project_state", "get_transcript", "list_library", "set_frame", "check", "capture"].map((name) => ({ name }));
@@ -141,6 +143,21 @@ async function main(): Promise<void> {
     const { checkErrorKeys } = await import("./tools");
     assert.equal(failingCheck(error, checkErrorKeys(error)), null);
     assert.equal(checkErrorKeys(error).size, 1);
+  }
+
+  // 7. The system prompt routes by intent to tools that exist, and keeps its promises.
+  {
+    const { SYSTEM_PROMPT } = await import("./prompt");
+    const { clipToolSpecs } = await import("./scope");
+    const offered = new Set(clipToolSpecs().map((spec) => spec.name));
+    const named = new Set([...SYSTEM_PROMPT.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
+    for (const word of ["untrusted_data", "user_answer", "clip_context", "project_state", "your_skills"]) named.delete(word);
+    for (const name of named) assert.ok(offered.has(name), `the prompt names ${name}, which is not a tool`);
+    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "request_export"]) {
+      assert.ok(named.has(route), `the routing names ${route}`);
+    }
+    assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");
+    assert.ok(SYSTEM_PROMPT.length < 6000, `the prompt stays short (${SYSTEM_PROMPT.length} chars)`);
   }
 
   console.log("agent-design.check: ok");
