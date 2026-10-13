@@ -44,6 +44,9 @@
  *   "split the screen" → set_layout split-bottom 16–21s → add_diagram cùng khoảng (tự vào panel)
  *   "icon"             → find_icons → add_icon trending-up lúc "growing" (1.5–4s mẫu)
  *   "emoji"            → find_lotties → add_lottie emoji/scream neo quote "people lose viewers"
+ *   "b-roll from the library" → search_transcript + list_library in one step → place_broll at "better hooks"
+ *   "hook title" / "caption style … classic" / "punch-in zoom" / "problems … fix" / "make it better" /
+ *   "call to action" / "uppercase … outline" / "fade to black" → the eval's edit tasks, done as the guides say
  *   "gate test"        → insert_node an image missing from the library; the verify gate then makes it delete_element it
  *   còn lại            → trả lời bằng chữ
  * Sau tool_result: ảnh thì đếm và nói số ảnh đã xem; còn lại một câu kết.
@@ -116,6 +119,15 @@ function script(history: StoredMessage[]): unknown[] {
       return cuts.length ? [use("remove_ranges", { ranges: cuts })] : [text("There are no long pauses to cut.")];
     }
     if (previous.includes("update_plan")) return [use("add_text", { text: "Watch this", start: 0, end: 3 })];
+    // Library B-roll the way the guide says: the reads came back together, then one place_broll.
+    if (/b-roll from the library/.test(asked) && !/side by side/.test(asked) && previous.includes("list_library") && previous.includes("search_transcript")) {
+      const listing = anthropicFormat.callsIn(assistant?.content ?? []).find((call) => call.name === "list_library");
+      const block = results.find((item) => item.tool_use_id === listing?.id);
+      const listed = typeof block?.content === "string" ? block.content : undefined;
+      const assets = listed ? ((JSON.parse(listed) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? []) : [];
+      const media = assets.find((asset) => !asset.role && asset.type === "VIDEO");
+      return media ? [use("place_broll", { beats: [{ path: media.path, quote: "better hooks" }] })] : [text("The library has no B-roll yet.")];
+    }
     if (/side by side with/.test(asked) && previous.includes("list_library")) {
       const assets = (JSON.parse(raw0) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? [];
       const media = assets.find((asset) => !asset.role && (asset.type === "VIDEO" || asset.type === "IMAGE"));
@@ -218,6 +230,73 @@ function script(history: StoredMessage[]): unknown[] {
     const report = /<check>(\{.*\})<\/check>/s.exec(original)?.[1];
     const ids = report ? (JSON.parse(report) as { issues: { severity: string; node_id?: string }[] }).issues.filter((issue) => issue.severity === "error" && issue.node_id).map((issue) => issue.node_id!) : [];
     return ids.length ? [text("The check found a problem; removing it."), ...[...new Set(ids)].map((element_id) => use("delete_element", { element_id }))] : [text("I could not fix what the check reported.")];
+  }
+  // Single-request edits the eval asks for, done the way the prompt and guides say. Ids and times come
+  // from the <project_state>, <check> and <clip_context> that arrive with the request.
+  const stateJson = /<project_state>(\{.*?\})<\/project_state>/s.exec(original)?.[1];
+  const project = stateJson ? (JSON.parse(stateJson) as { duration?: number; elements?: { id: string; tag: string; label?: string }[] }) : {};
+  const masterId = project.elements?.find((item) => item.tag === "video" && item.label === "assets/master.mp4")?.id;
+  const spoken = (words: string) => {
+    for (const match of original.matchAll(/\[([\d.]+)–([\d.]+)\] ([^\n<]+)/g)) if (match[3]!.toLowerCase().includes(words)) return Number(match[1]);
+    return null;
+  };
+  if (/b-roll from the library/.test(ask) && !/side by side/.test(ask)) {
+    return [text("Finding the line and the footage."), use("search_transcript", { query: "better hooks" }), use("list_library", {})];
+  }
+  if (/hook title/.test(ask)) {
+    const said = /says?:\s*([^.<]+)/i.exec(original.split(/<clip_context>|<project_state>/)[0]!)?.[1]?.trim() ?? "Watch this";
+    return [
+      text("Adding a bold hook that pops in."),
+      use("insert_node", {
+        parent_id: "scene0",
+        node: { kind: "text", text: said, start: 0, end: 3, x: 0, y: 260, width: 1080, height: 240, textAlign: "center", textBaseline: "middle", fontSize: 84, fontWeight: 800, color: "#FFFFFF", animations: [{ type: "fade", phase: "in", duration: 0.3 }] },
+      }),
+    ];
+  }
+  if (/caption style/.test(ask) && /classic/.test(ask)) {
+    const yellow = /yellow/.test(ask);
+    return [text("Switching the captions to classic."), use("set_caption_style", { preset: "classic", ...(yellow ? { colors: ["#FFD400"], highlight: "block" } : {}) })];
+  }
+  if (/punch-in zoom/.test(ask) && masterId) {
+    const at = spoken("first three seconds") ?? 2;
+    return [
+      text("Punching in on that line."),
+      use("set_keyframe", { element_id: masterId, property: "scale", time: at, value: 1 }),
+      use("set_keyframe", { element_id: masterId, property: "scale", time: at + 0.3, value: 1.15 }),
+      use("set_keyframe", { element_id: masterId, property: "scale", time: at + 2.3, value: 1.15 }),
+      use("set_keyframe", { element_id: masterId, property: "scale", time: at + 2.6, value: 1 }),
+    ];
+  }
+  if (/problems/.test(ask) && /fix/.test(ask)) {
+    const report = /<check>(\{.*?\})<\/check>/s.exec(original)?.[1];
+    const ids = report ? [...new Set((JSON.parse(report) as { issues: { node_id?: string; code: string }[] }).issues.filter((issue) => issue.node_id && issue.code !== "caption-overlap").map((issue) => issue.node_id!))] : [];
+    return ids.length ? [text("The check flags layers nobody can see; removing them."), ...ids.map((element_id) => use("delete_element", { element_id }))] : [text("The check found nothing to fix.")];
+  }
+  if (/^\s*make it better\b/.test(ask)) {
+    return [use("ask_user", { question: "What should be better?", options: ["Tighter pacing", "A hook title", "Better captions"], multi: true })];
+  }
+  if (/call to action/.test(ask) && project.duration) {
+    const said = /'([^']+)'/.exec(original)?.[1] ?? "Follow for more";
+    return [text("Adding the call to action at the end."), use("add_text", { text: said, start: Math.max(0, project.duration - 2), end: project.duration, y: 0.75, bold: true })];
+  }
+  if (/uppercase/.test(ask) && /outline/.test(ask)) {
+    const title = project.elements?.find((item) => item.tag === "text");
+    if (title) {
+      return [
+        text("Restyling the title."),
+        use("set_props", { element_id: title.id, props: { textCase: "upper", fontSize: 96 } }),
+        use("add_part", { element_id: title.id, key: "strokes", part: { color: "#000000", width: 8 } }),
+      ];
+    }
+  }
+  if (/fade to black/.test(ask) && project.duration) {
+    return [
+      text("Fading to black over the last second."),
+      use("insert_node", {
+        parent_id: "scene0",
+        node: { kind: "rect", fill: "#000000", x: 0, y: 0, width: 1080, height: 1920, start: project.duration - 1, end: project.duration, animations: [{ type: "fade", phase: "in", duration: 1 }] },
+      }),
+    ];
   }
   if (/gate test/.test(ask)) {
     // Places an image the library does not have: the check after it reports an error.
