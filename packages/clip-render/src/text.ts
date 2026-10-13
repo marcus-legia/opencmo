@@ -96,14 +96,20 @@ function styleFor(node: TextNode, ranges: TextRange[]): Style {
  * không, nên nơi nào có `fontVariationSettings` thì đặt tay cho giống.
  */
 /**
- * Scripts the brand fonts do not cover (translated captions, emoji). The browser falls back on its
- * own; Skia in the export does not, and draws boxes, so they are named. Installed in the export
- * image (`modal_app.py`); Latin text never reaches them.
+ * Families tried after the brand font, for scripts it does not cover (translated captions, emoji).
+ * The browser falls back on its own; Skia in the export does not, and draws boxes. The exporter
+ * sets them from what is really installed (`clip-export` `registerFonts`), with a Latin font
+ * first: when the brand font is missing, Skia takes the first family it has, and an emoji font
+ * there draws no Latin text at all.
  */
-const FALLBACK_FAMILIES = ', "Noto Sans CJK JP", "Noto Sans Thai", "Noto Sans Devanagari", "Noto Color Emoji"';
+let fallbackFamilies = '';
+
+export function setFallbackFamilies(families: string[]): void {
+  fallbackFamilies = families.map((family) => `, "${family}"`).join('');
+}
 
 export function applyFont(ctx: Measurer, style: Style, baseline: string): void {
-  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}${FALLBACK_FAMILIES}`;
+  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}${fallbackFamilies}`;
   ctx.letterSpacing = `${style.spacing}px`;
   if (isChromium(ctx)) {
     ctx.textBaseline = baseline;
