@@ -165,6 +165,9 @@ export async function runTurn(env: TurnEnv): Promise<void> {
   let gated = false;
   // Errors the clip already had before this request's first write.
   let baseline: Set<string> | undefined;
+  // The turn's credits so far, as agent_record_usage returns them after each model call; read again
+  // only when it may be stale (first step, or a step whose tools ran sub-agents that record their own).
+  let spent: number | null = null;
 
   try {
     for (let step = 0; ; step++) {
@@ -173,7 +176,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         emit("done", { status: "stopped", credits: null, error: null });
         return;
       }
-      const spentSoFar = await spentCredits(supabase, turn.id);
+      const spentSoFar = spent ?? (await spentCredits(supabase, turn.id));
       let hold = status.hold_credits ?? 0;
       if (!(step === 0 && env.extended) && spentSoFar >= hold) {
         // Lượt làm cảnh 3D (đã preview_3d) được tự nâng phần giữ một lần lên
@@ -229,7 +232,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         watch.done();
       }
 
-      await rpcOrThrow<number>(supabase, "agent_record_usage", {
+      spent = await rpcOrThrow<number>(supabase, "agent_record_usage", {
         p_turn_id: turn.id,
         p_model: result.model,
         p_input: result.usage.input,
@@ -271,6 +274,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
       let deferred = false;
+      // Planning tools run their own model calls and record them: read the total again next step.
+      if (result.toolCalls.some((call) => SLOW_PLANS.has(call.name))) spent = null;
       if (!baseline && result.toolCalls.some((call) => scope.isWrite(call.name))) {
         baseline = checkErrorKeys(await scope.state().catch(() => ""));
       }
