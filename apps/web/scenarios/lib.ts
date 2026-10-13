@@ -62,22 +62,34 @@ export async function newEdit(page: Page, aspect: "9:16" | "1:1" | "16:9" = "9:1
 
 /** Back to the engine's first version of the clip, so every scenario starts from the same cut. */
 export async function resetClip(page: Page, clipId: string): Promise<void> {
-  const current = await page.request.get(`/api/v1/editor/project?clip_id=${clipId}`);
-  expect(current.ok(), await current.text()).toBeTruthy();
-  const body = (await current.json()) as { version?: number; project?: { version?: number } };
-  const version = body.version ?? body.project?.version;
+  // The version from the database: a scenario that broke the document leaves the API unable to read it.
+  const { data, error } = await admin().from("editor_projects").select("version").eq("clip_id", clipId).single();
+  if (error) throw error;
+  const version = data.version as number;
   const reset = await page.request.post("/api/v1/editor/project/reset", { data: { clip_id: clipId, expected_version: version } });
   expect(reset.ok(), await reset.text()).toBeTruthy();
 }
 
 export async function openEditor(page: Page, clipId: string): Promise<void> {
+  // A turn left running by an earlier scenario keeps the chat busy: stop it, as the user would.
+  const { data: sessions } = await admin().from("agent_sessions").select("id").eq("user_id", state().userId);
+  const ids = (sessions ?? []).map((row) => row.id as string);
+  const { data: active } = await admin()
+    .from("agent_turns")
+    .select("session_id")
+    .in("session_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"])
+    .in("status", ["running", "awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"]);
+  for (const id of new Set((active ?? []).map((row) => row.session_id as string))) await page.request.post(`/api/v1/agent/sessions/${id}/stop`);
   await page.goto(`/app/editor/${clipId}`);
   await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText("Loading media…")).toHaveCount(0, { timeout: 180_000 });
   const toggle = page.getByTestId("panel-agent");
   if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
   await expect(page.getByLabel("Message the assistant")).toBeVisible();
+  // Each scenario is a new chat. The button turns on once the saved chat has loaded.
   const fresh = page.getByTestId("assistant-new");
+  await expect(fresh).toBeVisible();
+  await expect.poll(async () => (await fresh.isEnabled()) || (await page.getByTestId("assistant-turn").count()) === 0, { timeout: 30_000 }).toBe(true);
   if (await fresh.isEnabled()) await fresh.click();
 }
 
@@ -112,10 +124,13 @@ export async function ask(page: Page, prompt: string, options: AskOptions = {}):
   const started = new Date();
   const { approve = true, waitForMedia = true } = options;
   const box = page.getByLabel("Message the assistant");
+  const turns = page.getByTestId("assistant-turn");
+  const before = await turns.count();
   await box.fill(prompt);
   await box.press("Enter");
-  const turn = page.getByTestId("assistant-turn").last();
-  await expect(turn).toBeVisible();
+  // The panel may still show earlier turns: follow the one this prompt created, never an old one.
+  await expect(turns).toHaveCount(before + 1, { timeout: 60_000 });
+  const turn = turns.nth(before);
 
   const approvals: string[] = [];
   const answered: string[] = [];
@@ -243,7 +258,7 @@ export async function exportClip(page: Page, name: string): Promise<{ file: stri
   return { file, frames, seconds: Math.round(seconds * 10) / 10 };
 }
 
-/** One line per scenario in .out/report.jsonl, for the bug list. */
+/** One line per scenario in .scenarios-out/report.jsonl, for the bug list. */
 export function record(scenario: string, data: Record<string, unknown>): void {
   mkdirSync(OUT, { recursive: true });
   appendFileSync(join(OUT, "report.jsonl"), `${JSON.stringify({ scenario, at: new Date().toISOString(), ...data })}\n`);

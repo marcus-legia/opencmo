@@ -11,7 +11,9 @@ import { createClient } from "@supabase/supabase-js";
 
 import { isLoopbackUrl } from "../lib/local-supabase";
 
-export const OUT = join(__dirname, ".out");
+// Outside apps/web: `next dev` watches that tree, and traces written there make it recompile and
+// reload the editor in a loop.
+export const OUT = join(__dirname, "..", "..", "..", ".scenarios-out");
 const STATE = join(OUT, "state.json");
 
 export const EMAIL = "scenarios@opencmo.test";
