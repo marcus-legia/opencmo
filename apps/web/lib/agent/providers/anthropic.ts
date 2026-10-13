@@ -163,7 +163,22 @@ export const NOT_COMPLETED = "Not completed: the turn was stopped before this to
  * leaves them unanswered in the stored history, and every later turn in that chat would fail.
  * Answer them here as not completed; the stored history is left as it is.
  */
-export function closeDanglingToolUses(history: StoredMessage[]): StoredMessage[] {
+/** Ids of `tool_use` blocks no `tool_result` answers: what `closeDanglingToolUses` fills in. */
+export function danglingToolUses(history: StoredMessage[]): string[] {
+  type Item = { type?: string; id?: string; tool_use_id?: string };
+  const out: string[] = [];
+  history.forEach((message, index) => {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) return;
+    const next = history[index + 1];
+    const answered = new Set(
+      (next?.role === "user" && Array.isArray(next.content) ? (next.content as Item[]) : []).filter((block) => block.type === "tool_result").map((block) => block.tool_use_id),
+    );
+    for (const block of message.content as Item[]) if (block.type === "tool_use" && !answered.has(block.id)) out.push(block.id!);
+  });
+  return out;
+}
+
+export function closeDanglingToolUses(history: StoredMessage[], ran: Map<string, { ok: boolean; content: string }> = new Map()): StoredMessage[] {
   type Item = { type?: string; id?: string; tool_use_id?: string };
   const out: StoredMessage[] = [];
   for (let index = 0; index < history.length; index++) {
@@ -177,7 +192,10 @@ export function closeDanglingToolUses(history: StoredMessage[]): StoredMessage[]
     const answered = new Set((nextBlocks ?? []).filter((block) => block.type === "tool_result").map((block) => block.tool_use_id));
     const missing = ids.filter((id) => !answered.has(id));
     if (!missing.length) continue;
-    const results = missing.map((id) => ({ type: "tool_result", tool_use_id: id, content: NOT_COMPLETED, is_error: true }));
+    const results = missing.map((id) => {
+      const done = ran.get(id);
+      return { type: "tool_result", tool_use_id: id, content: done?.content ?? NOT_COMPLETED, is_error: done ? !done.ok : true };
+    });
     if (nextBlocks) {
       // tool_result blocks go first in the user message, before any text.
       const existing = nextBlocks.filter((block) => block.type === "tool_result");
@@ -214,7 +232,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
     model,
     ...anthropicFormat,
     failureMessage,
-    async step({ history, tools: specs, system, signal }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
+    async step({ history, tools: specs, system, signal, ran }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
       let jsonRetries = 0;
       let useStrict = true;
       for (;;) {
@@ -226,7 +244,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
           tools: tools(specs, useStrict),
-          messages: closeDanglingToolUses(history) as Anthropic.Beta.Messages.BetaMessageParam[],
+          messages: closeDanglingToolUses(history, ran) as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA],
           fallbacks: "default",
         }, { signal });

@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { anthropicFormat, closeDanglingToolUses, danglingToolUses, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -77,6 +77,13 @@ const partial = closeDanglingToolUses([stopped[0]!, stopped[1]!, { role: "user" 
 assert.deepEqual((partial[2]!.content as { tool_use_id: string }[]).map((block) => block.tool_use_id), ["t1", "t2"]);
 // Last message is the unanswered tool_use: a user message is added.
 assert.equal(closeDanglingToolUses(stopped.slice(0, 2)).at(-1)!.role, "user");
+// A tool that did run before the turn was interrupted is reported as it ran, not as never run:
+// told "not completed", the model inserted the same b-roll again.
+assert.deepEqual(danglingToolUses(stopped), ["t1", "t2"]);
+const ran = closeDanglingToolUses(stopped, new Map([["t1", { ok: true, content: '{"ok":true,"path":"frame.png"}' }]]));
+const reported = ran[2]!.content as { tool_use_id?: string; content?: string; is_error?: boolean }[];
+assert.deepEqual([reported[0]!.content, reported[0]!.is_error], ['{"ok":true,"path":"frame.png"}', false]);
+assert.deepEqual([reported[1]!.content, reported[1]!.is_error], [NOT_COMPLETED, true]);
 // A clean history is passed through unchanged.
 assert.deepEqual(closeDanglingToolUses([stopped[0]!, { role: "assistant" as const, content: [{ type: "text", text: "hi" }] }]).length, 2);
 

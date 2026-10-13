@@ -147,7 +147,8 @@ export class AssistantClient {
       `sessions/${sessionId}/turns/${number}/undo`,
       { method: "POST" },
     );
-    this.session.adopt(project.document, project.version, project.document_hash ?? null);
+    // Like an Assistant write: a library change made meanwhile (a generation finishing) still saves.
+    this.session.rebase(project.document, project.version, project.document_hash ?? null);
   }
 
   /** Gửi câu lệnh. Bài đang dở lên server TRƯỚC: Assistant đọc bản server giữ. */
@@ -157,22 +158,30 @@ export class AssistantClient {
   }
 
   /** Nối tiếp lượt dừng giữa hai request; `extend` = người dùng duyệt giữ thêm credit. */
-  continue(sessionId: string, extend: boolean, onEvent: (event: AssistantEvent) => void) {
+  // Every way the Assistant goes on saves the tab first, like a new prompt: an edit made while a
+  // card was waiting would otherwise be replaced by the Assistant's next version.
+  async continue(sessionId: string, extend: boolean, onEvent: (event: AssistantEvent) => void) {
+    await this.session.flush();
     return this.stream(`sessions/${sessionId}/continue`, { extend }, onEvent);
   }
 
-  approve(sessionId: string, decisions: { tool_use_id: string; approved: boolean }[], onEvent: (event: AssistantEvent) => void) {
+  async approve(sessionId: string, decisions: { tool_use_id: string; approved: boolean }[], onEvent: (event: AssistantEvent) => void) {
+    await this.session.flush();
     return this.stream(`sessions/${sessionId}/approvals`, { decisions }, onEvent);
   }
 
-  results(sessionId: string, results: BrowserResult[], onEvent: (event: AssistantEvent) => void) {
+  async results(sessionId: string, results: BrowserResult[], onEvent: (event: AssistantEvent) => void) {
+    await this.session.flush();
     return this.stream(`sessions/${sessionId}/tool-results`, { results }, onEvent);
   }
 
   private async adoptLatest(): Promise<void> {
-    const response = await fetch(`/api/v1/editor/document?clip_id=${encodeURIComponent(this.clipId)}`);
-    if (!response.ok) return;
-    const latest = (await response.json()) as { document: ClipDocument; version: number; document_hash?: string | null };
+    // A failed fetch must not fail the turn: it already ran, and the panel would offer to send the
+    // prompt again (a second paid turn). The next change or reload brings the version.
+    const response = await fetch(`/api/v1/editor/document?clip_id=${encodeURIComponent(this.clipId)}`).catch(() => null);
+    if (!response?.ok) return;
+    const latest = (await response.json().catch(() => null)) as { document: ClipDocument; version: number; document_hash?: string | null } | null;
+    if (!latest) return;
     // Not `adopt`: the tab's own library changes made during the turn still have to be saved.
     this.session.rebase(latest.document, latest.version, latest.document_hash ?? null);
   }

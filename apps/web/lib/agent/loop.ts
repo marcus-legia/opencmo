@@ -28,6 +28,7 @@ import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, STOP_POLL_MS } from "./limits";
+import { danglingToolUses } from "./providers/anthropic";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
 import { captureInput } from "./tools";
@@ -67,6 +68,18 @@ async function history(supabase: SupabaseClient, sessionId: string): Promise<Sto
     .order("seq", { ascending: true });
   if (error) throw error;
   return (data ?? []) as StoredMessage[];
+}
+
+/** Stored results of tool calls an interrupted turn never answered (see `StepRequest.ran`). */
+async function ranTools(supabase: SupabaseClient, past: StoredMessage[]): Promise<Map<string, { ok: boolean; content: string }>> {
+  const ids = danglingToolUses(past);
+  if (!ids.length) return new Map();
+  const { data } = await supabase.from("agent_tool_calls").select("tool_use_id, status, content").in("tool_use_id", ids).in("status", ["done", "failed"]);
+  return new Map(
+    ((data ?? []) as { tool_use_id: string; status: string; content: { text?: string } | null }[])
+      .filter((row) => typeof row.content?.text === "string")
+      .map((row) => [row.tool_use_id, { ok: row.status === "done", content: row.content!.text! }]),
+  );
 }
 
 export async function turnStatus(supabase: SupabaseClient, turnId: string) {
@@ -184,9 +197,11 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const watch = watchStop(supabase, turn.id);
       let result;
       try {
+        const past = await history(supabase, turn.session_id);
         result = await provider.step(
           {
-            history: provider.trimImages(await history(supabase, turn.session_id), KEEP_IMAGES),
+            history: provider.trimImages(past, KEEP_IMAGES),
+            ran: await ranTools(supabase, past),
             tools: scope.tools,
             system: scope.system,
             signal: watch.signal,
@@ -247,7 +262,6 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         }
         if (plan.kind === "approval") {
           approvals.push({ call: { ...call, input: plan.input }, card: plan.card });
-          await recordTool(env, { ...call, input: plan.input }, "pending", { approval: plan.card }, null);
           continue;
         }
         if (plan.kind === "input") {
@@ -276,6 +290,19 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         }
         results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content });
       }
+
+      // A question and a price card in the same step: the panel shows the question, and the card the
+      // user never saw would be declined with the answer. Send the card back to the model instead,
+      // to propose again once the user has answered.
+      if (questions.length && approvals.length) {
+        const content = JSON.stringify({ INVALID_INPUT: "Ask your question first. Propose this again after the user answers, so they see its price card." });
+        for (const { call } of approvals) {
+          await recordTool(env, call, "failed", { summary: "Waiting for your answer first" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Waiting for your answer first" });
+        }
+        approvals.length = 0;
+      }
+      for (const { call, card } of approvals) await recordTool(env, call, "pending", { approval: card }, null);
 
       if (browser.length || approvals.length || questions.length) {
         // Phần chạy ngay của bước đã xong và đã lưu; phần còn lại chờ.

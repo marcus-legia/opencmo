@@ -75,6 +75,11 @@ export type StepRequest = {
   system: string;
   /** Stop của người dùng cắt luồng đang chạy, không đợi model nói xong. */
   signal?: AbortSignal;
+  /**
+   * Stored results of tool calls an interrupted turn never sent to the model (by tool_use id):
+   * a tool that did run is reported as it ran, not as "not completed", or the model does it again.
+   */
+  ran?: Map<string, { ok: boolean; content: string }>;
 };
 
 /** Chữ thay cho ảnh đã bỏ khỏi request. */
