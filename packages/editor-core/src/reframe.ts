@@ -152,18 +152,45 @@ export function writeFrame(input: ClipDocument, next: Frame, master: Size, viewp
     if (entity.kind !== tag || FIXED.has(tag as ClipNode['kind']) || isMaster(entity as unknown as ClipNode)) return;
     const x = num(entity, 'x');
     const y = num(entity, 'y');
-    if (x !== undefined) entity.x = round(x * ratioW);
-    if (y !== undefined) entity.y = round(y * ratioH);
     const width = num(entity, 'width');
     const height = num(entity, 'height');
     if (tag === 'text') {
+      if (x !== undefined) entity.x = round(x * ratioW);
+      if (y !== undefined) entity.y = round(y * ratioH);
       if (width !== undefined) entity.width = round(width * ratioW);
       if (height !== undefined) entity.height = round(height * ratioH);
       const size = num(entity, 'fontSize');
       if (size !== undefined) entity.fontSize = Math.max(8, Math.round(size * Math.min(ratioW, ratioH)));
-    } else {
-      if (width !== undefined) entity.width = round(width * media);
-      if (height !== undefined) entity.height = round(height * media);
+      return;
+    }
+    if (width === undefined || height === undefined) {
+      if (x !== undefined) entity.x = round(x * ratioW);
+      if (y !== undefined) entity.y = round(y * ratioH);
+      return;
+    }
+    // Media keeps its aspect (one factor for both sides) and stays where it was relative to the
+    // frame: positions scale around the element's own centre, not its top-left corner (a full
+    // 9:16 AI shot turned 16:9 used to be a narrow strip at the left edge). What covered the old
+    // frame covers the new one (an AI shot, a background, a full-frame b-roll).
+    const left = x ?? 0;
+    const top = y ?? 0;
+    const covered = left <= 0.5 && top <= 0.5 && left + width >= oldWidth - 0.5 && top + height >= oldHeight - 0.5;
+    const factor = covered ? Math.max(ratioW, ratioH) : media;
+    const placeX = (value: number, size: number) => round((value + size / 2) * ratioW - (size * factor) / 2);
+    const placeY = (value: number, size: number) => round((value + size / 2) * ratioH - (size * factor) / 2);
+    entity.x = placeX(left, width);
+    entity.y = placeY(top, height);
+    entity.width = round(width * factor);
+    entity.height = round(height * factor);
+    // Animated geometry follows the same mapping, keyframe by keyframe.
+    for (const track of (entity.tracks as Entity[] | undefined) ?? []) {
+      const keyframes = (track.keyframes as { value: unknown }[] | undefined) ?? [];
+      for (const keyframe of keyframes) {
+        if (typeof keyframe.value !== 'number') continue;
+        if (track.property === 'x') keyframe.value = placeX(keyframe.value, width);
+        else if (track.property === 'y') keyframe.value = placeY(keyframe.value, height);
+        else if (track.property === 'width' || track.property === 'height') keyframe.value = round(keyframe.value * factor);
+      }
     }
   });
 

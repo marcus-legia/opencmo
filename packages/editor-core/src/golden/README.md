@@ -18,3 +18,7 @@ Hai chỗ bản mới CỐ Ý khác bản cũ, test ghi rõ:
   (`Watch {this}`) và null.
 - Fixture sinh bằng `fromTsx` ĐÃ sửa lỗi khoảng trắng (`{'}'} {'<'}` từng ra hai
   dấu cách), chạy trên bản editor-core cũ ở một git worktree.
+- `set_frame`: media scales around its own centre with one factor for both sides, and what
+  covered the old frame covers the new one (`centredAfterFrame` in the test). The old version
+  scaled the top-left corner per axis, so a 16:9 frame left a square logo or a 9:16 AI shot
+  pinned to the left edge.

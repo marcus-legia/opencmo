@@ -130,8 +130,11 @@ cpu_image = (
     # `FaceDetector.create_from_options` ném `OSError: libEGL.so.1` — mà
     # `reframe.py` KHÔNG bắt lỗi đó (chỉ fallback khi thiếu hẳn MediaPipe), nên
     # cả job chết. Máy dev có sẵn nên lỗi này chỉ lộ ra trên Modal.
+    # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
+    # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
     .apt_install(
-        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2"
+        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2",
+        "fonts-noto-cjk", "fonts-noto-core", "fonts-noto-color-emoji",
     )
 )
 cpu_image = (

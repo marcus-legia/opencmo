@@ -95,8 +95,15 @@ function styleFor(node: TextNode, ranges: TextRange[]): Style {
  * theo độ đậm và cỡ chữ (optical sizing: opsz = cỡ px). Skia của Node thì
  * không, nên nơi nào có `fontVariationSettings` thì đặt tay cho giống.
  */
+/**
+ * Scripts the brand fonts do not cover (translated captions, emoji). The browser falls back on its
+ * own; Skia in the export does not, and draws boxes, so they are named. Installed in the export
+ * image (`modal_app.py`); Latin text never reaches them.
+ */
+const FALLBACK_FAMILIES = ', "Noto Sans CJK JP", "Noto Sans Thai", "Noto Sans Devanagari", "Noto Color Emoji"';
+
 export function applyFont(ctx: Measurer, style: Style, baseline: string): void {
-  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}`;
+  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}${FALLBACK_FAMILIES}`;
   ctx.letterSpacing = `${style.spacing}px`;
   if (isChromium(ctx)) {
     ctx.textBaseline = baseline;

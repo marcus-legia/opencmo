@@ -431,6 +431,34 @@ describe('exportJob (ffmpeg thật)', () => {
     expect(box[0]! - box[2]!, `box ${box}`).toBeGreaterThan(100);
   });
 
+  it('phone video with a rotation tag exports upright, as the browser shows it', async () => {
+    // Coded 640×360 (top red, bottom blue), tagged to display rotated 90°: a portrait phone clip
+    // whose upright picture is split left/right. Read with the coded size, rows shear diagonally.
+    run(['-f', 'lavfi', '-i', 'color=c=red:s=640x180:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=640x180:d=1', '-filter_complex', '[0][1]vstack', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', join(dir, 'coded.mp4')]);
+    run(['-display_rotation', '90', '-i', join(dir, 'coded.mp4'), '-c', 'copy', join(dir, 'rotated.mp4')]);
+    const document = clip([{ kind: 'video', src: 'rotated.mp4', width: 360, height: 640, objectFit: 'cover', start: 0, end: 1 }]);
+    await exportJob({ document, media: [{ src: 'rotated.mp4', file: join(dir, 'rotated.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'upright.mp4'), resolution: 720, parallel: 1 });
+    const rgb = (x: number, y: number) => [...execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'upright.mp4'), '-vf', `crop=4:4:${x}:${y},format=rgb24`, '-frames:v', '1', '-f', 'rawvideo', 'pipe:1']).subarray(0, 3)];
+    const pure = (pixel: number[]) => (pixel[0]! > 200 && pixel[2]! < 60) || (pixel[2]! > 200 && pixel[0]! < 60);
+    // Upright: each half is one colour from top to bottom.
+    for (const x of [90, 630]) {
+      const column = [100, 640, 1180].map((y) => rgb(x, y));
+      expect(column.every(pure), `x=${x}: ${column.join(' / ')}`).toBe(true);
+      expect(new Set(column.map((pixel) => pixel[0]! > 200)).size, `x=${x}: ${column.join(' / ')}`).toBe(1);
+    }
+    expect(rgb(90, 640)[0]! > 200).not.toBe(rgb(630, 640)[0]! > 200);
+  });
+
+  it('variable frame rate b-roll plays in real time', async () => {
+    // Every other pair of frames dropped (a phone or screen recording): 30 fps nominal, 15 fps real.
+    // The grey level of a frame is 4 × its frame number at 30 fps, so it tells the source time.
+    run(['-f', 'lavfi', '-i', "color=s=360x640:r=30:d=2,format=gray,geq=lum='4*N'", '-vf', "select='lt(mod(n\\,4)\\,2)'", '-fps_mode', 'vfr', '-c:v', 'libx264', '-preset', 'veryfast', '-qp', '0', '-pix_fmt', 'yuv420p', join(dir, 'vfr.mp4')]);
+    const document = clip([{ kind: 'video', src: 'vfr.mp4', width: 360, height: 640, start: 0, end: 2 }]);
+    await exportJob({ document, media: [{ src: 'vfr.mp4', file: join(dir, 'vfr.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'vfr-out.mp4'), resolution: 720, parallel: 1 });
+    // At 1 s of output the source shows frame ~29 (the last kept before 30): grey ~116, not ~240.
+    expect(Math.abs(grayAt(join(dir, 'vfr-out.mp4'), 30) - 116)).toBeLessThan(12);
+  });
+
   it('báo lỗi khi thiếu file cho một nguồn', async () => {
     await expect(exportJob({ ...job('x.mp4', source([]), 1), media: [] })).rejects.toThrow(/thiếu file/);
   });

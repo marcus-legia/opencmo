@@ -20,6 +20,11 @@ import { USER_INPUT } from './inputs.ts';
 const SKIP_LIMIT_SECONDS = 2;
 /** Số luồng tối đa cho một nguồn; thêm nữa thì mở lại luồng dùng lâu nhất. */
 const STREAMS_PER_SOURCE = 3;
+/**
+ * A stream not used for this many output frames is closed and dropped. Each one holds an ffmpeg
+ * process and a full-size frame: an 18-shot AI video kept all of them open to the end of the export.
+ */
+const IDLE_FRAMES = 90;
 
 class Stream {
   readonly canvas: Canvas;
@@ -56,7 +61,7 @@ class Stream {
 
   private open(index: number) {
     this.close();
-    const filters = [this.info.matrix ? `scale=in_color_matrix=${this.info.matrix}` : null, 'format=rgba']
+    const filters = [this.info.vfr ? `fps=${this.info.fps}` : null, this.info.matrix ? `scale=in_color_matrix=${this.info.matrix}` : null, 'format=rgba']
       .filter(Boolean)
       .join(',');
     // Một luồng giải mã: ~190 MB thay vì ~280 MB mỗi tiến trình (đo trên
@@ -154,6 +159,15 @@ export class VideoFrames {
   beginFrame() {
     this.claimed = new Set();
     this.clock++;
+    for (const [key, pool] of this.pools) {
+      const live = pool.filter((stream) => {
+        if (this.clock - stream.lastUsed <= IDLE_FRAMES) return true;
+        stream.close();
+        return false;
+      });
+      if (live.length) this.pools.set(key, live);
+      else this.pools.delete(key);
+    }
   }
 
   async frame(key: string, seconds: number): Promise<Canvas | 'failed'> {
