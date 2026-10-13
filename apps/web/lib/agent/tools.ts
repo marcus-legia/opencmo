@@ -450,6 +450,19 @@ export const TOOL_SPECS: ToolSpec[] = [
 ];
 
 // `generate_media`/`add_3d_scene`/`add_voiceover` ghi lên clip (khai báo `generate.*`) sau thẻ duyệt.
+/**
+ * Tools that only read: the model often asks for several in one step (state, transcript, library),
+ * and they can run at the same time. Anything that writes, pauses or spends stays in order.
+ */
+export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "read_skill", "list_clips", "get_clip"]);
+
+/** The run of parallel-safe calls that starts at `index` (empty when that call is not one). */
+export function readGroup<T extends { name: string }>(calls: T[], index: number): T[] {
+  const group: T[] = [];
+  for (let at = index; at < calls.length && PARALLEL_SAFE.has(calls[at]!.name); at++) group.push(calls[at]!);
+  return group;
+}
+
 const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
@@ -504,8 +517,8 @@ function documentView(document: ClipDocument, nodeId?: string): unknown {
 }
 
 /** Chạy `check` trên bản đang lưu — tool `check` và lượt tự kiểm của loop dùng chung. */
-export async function runCheck(workspace: AgentWorkspace): Promise<CheckReport> {
-  const snapshot = await workspace.read();
+export async function runCheck(workspace: AgentWorkspace, read?: Awaited<ReturnType<AgentWorkspace["read"]>>): Promise<CheckReport> {
+  const snapshot = read ?? (await workspace.read());
   const ctx = await workspace.opContext(snapshot.document, snapshot.manifest);
   const paths = new Set([MASTER_SRC, ...snapshot.manifest.assets.map((record) => record.path)]);
   return checkDocument(snapshot.document, {

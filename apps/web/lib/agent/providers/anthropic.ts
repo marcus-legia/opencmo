@@ -63,7 +63,7 @@ export const anthropicFormat: Omit<Format, "kind"> = {
       .filter((block) => block.type === "text" && block.text)
       .map((block) => block.text!)
       .join("\n\n"),
-  trimImages(history: StoredMessage[], keep: number): StoredMessage[] {
+  trimImages(history: StoredMessage[], keep: number, window = 0): StoredMessage[] {
     type Item = { type?: string; content?: unknown };
     // Ảnh nằm trong tool_result (capture) HOẶC thẳng trong tin nhắn (khung người dùng đính kèm).
     const hasImage = (message: StoredMessage) =>
@@ -71,11 +71,12 @@ export const anthropicFormat: Omit<Format, "kind"> = {
       (message.content as Item[]).some(
         (block) => block.type === "image" || (Array.isArray(block.content) && (block.content as Item[]).some((part) => part.type === "image")),
       );
+    const live = keep + imagesOver(history.filter(hasImage).length, keep, window);
     let seen = 0;
     const out = [...history];
     for (let index = out.length - 1; index >= 0; index--) {
       const message = out[index]!;
-      if (!hasImage(message) || ++seen <= keep) continue;
+      if (!hasImage(message) || ++seen <= live) continue;
       out[index] = {
         ...message,
         content: (message.content as Item[]).map((block) =>
@@ -93,6 +94,16 @@ export const anthropicFormat: Omit<Format, "kind"> = {
     return out;
   },
 };
+
+/**
+ * How many images beyond `keep` stay, out of `count`: up to `window` more pile up before the oldest
+ * are cut back to `keep` together. Omitting an image rewrites its message, and the prompt cache
+ * from that message on, so cutting in steps rewrites it every `window` captures instead of every one.
+ */
+export function imagesOver(count: number, keep: number, window: number): number {
+  if (window <= 0 || count <= keep + window) return Math.max(0, Math.min(count - keep, window));
+  return (count - keep - window - 1) % window;
+}
 
 /**
  * Strict grammar limits: the API rejects a request with more strict tools than this, or with more

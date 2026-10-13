@@ -61,7 +61,9 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
       max_tokens: opts.maxTokens ?? 8000,
       output_config: effort ? { effort, format: betaZodOutputFormat(opts.schema) } : { format: betaZodOutputFormat(opts.schema) },
       ...(drafts ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-      system: opts.system,
+      // Each agent's system prompt is fixed text (motion director, video director: several
+      // thousand tokens), so repeat calls and fix rounds read it from the cache.
+      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: opts.prompt }],
     }, opts.timeoutMs ? { timeout: opts.timeoutMs, maxRetries: 1 } : undefined);
   } catch (error) {

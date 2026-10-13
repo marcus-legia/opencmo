@@ -16,7 +16,6 @@ import { resolveMediaRefs } from "@/lib/generate/create";
 import { moderateText, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
-import { readEditorProject } from "@/lib/editor/apply";
 
 import {
   applyInput,
@@ -162,10 +161,11 @@ export function clipScope(
       return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout).catch(() => "")}${skills}`;
     },
     async state() {
-      const project = await readEditorProject(supabase, clipId);
+      // One read serves both the summary and the check.
+      const project = await workspace.read();
       const block = projectStateBlock({ version: project.version, ...summarizeProject(project.document) });
       // Lượt tự kiểm (spec agent-editor §3.4): model thấy lỗi mới ngay sau bước ghi.
-      const report = await runCheck(workspace).catch(() => null);
+      const report = await runCheck(workspace, project).catch(() => null);
       return report ? `${block}${checkBlock(report)}` : block;
     },
     async plan(call) {

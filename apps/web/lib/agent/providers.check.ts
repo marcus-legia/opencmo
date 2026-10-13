@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { anthropicFormat, closeDanglingToolUses, imagesOver, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -118,6 +118,14 @@ const attached = { role: "user" as const, content: anthropicFormat.userTurn("hi"
 assert.deepEqual(anthropicFormat.trimImages([attached, withImage("x"), withImage("y")], 2).map(imagesIn), [0, 1, 1]);
 const geminiAttached = { role: "user" as const, content: geminiFormat.userTurn("hi", "state", [{ data: "AAAA", mimeType: "image/jpeg" }]) };
 assert.equal(JSON.stringify(geminiFormat.trimImages([geminiAttached, ...geminiHistory.slice(1)], 2)[0]!.content).includes("inlineData"), false);
+
+// Windowed trimming: images pile up to keep + window, then the oldest are cut back to keep at once,
+// so the cached prefix is rewritten every `window` captures instead of on each one.
+const omitted = (count: number) => Math.max(0, count - 2 - imagesOver(count, 2, 2));
+assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(omitted), [0, 0, 0, 0, 3, 3, 5, 5, 7]);
+const many = ["a", "b", "c", "d", "e"].map(withImage);
+assert.deepEqual(anthropicFormat.trimImages(many, 2, 2).map(imagesIn), [0, 0, 0, 1, 1]);
+assert.deepEqual(anthropicFormat.trimImages(many.slice(0, 4), 2, 2).map(imagesIn), [1, 1, 1, 1], "nothing cut before the window fills");
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.
 assert.deepEqual(

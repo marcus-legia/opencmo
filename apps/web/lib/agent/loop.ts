@@ -31,7 +31,7 @@ import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS,
 import { danglingToolUses } from "./providers/anthropic";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
-import { captureInput } from "./tools";
+import { captureInput, readGroup } from "./tools";
 
 export type Emit = (event: string, data: unknown) => void;
 
@@ -157,6 +157,9 @@ async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "t
 export async function runTurn(env: TurnEnv): Promise<void> {
   const { supabase, turn, emit, provider, scope } = env;
   const started = Date.now();
+  // The session's messages, read once per request: this loop is the only writer while the turn
+  // runs, so each step appends here what it appends to the database.
+  let past: StoredMessage[] | undefined;
 
   try {
     for (let step = 0; ; step++) {
@@ -197,10 +200,10 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const watch = watchStop(supabase, turn.id);
       let result;
       try {
-        const past = await history(supabase, turn.session_id);
+        past ??= await history(supabase, turn.session_id);
         result = await provider.step(
           {
-            history: provider.trimImages(past, KEEP_IMAGES),
+            history: provider.trimImages(past, KEEP_IMAGES, KEEP_IMAGES),
             ran: await ranTools(supabase, past),
             tools: scope.tools,
             system: scope.system,
@@ -233,6 +236,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       // Nguyên khối native: lịch sử phải giữ từng byte để khối suy nghĩ
       // (thinking block / thoughtSignature) và cache còn hợp lệ ở bước sau.
       await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "assistant", p_content: result.content });
+      past?.push({ role: "assistant", content: result.content as unknown[] });
 
       if (result.stop === "refusal") {
         await finish(env, "failed", "The assistant can't help with that request.");
@@ -254,7 +258,20 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
       let deferred = false;
-      for (const call of result.toolCalls) {
+      // Read-only calls next to each other start together; a read after a write still sees it.
+      const early = new Map<string, { plan: Awaited<ReturnType<Scope["plan"]>>; outcome?: Awaited<ReturnType<Scope["run"]>> }>();
+      for (const [index, call] of result.toolCalls.entries()) {
+        if (!early.has(call.id)) {
+          const group = readGroup(result.toolCalls, index);
+          if (group.length > 1) {
+            await Promise.all(
+              group.map(async (member) => {
+                const plan = await scope.plan(member);
+                early.set(member.id, { plan, ...(plan.kind === "run" ? { outcome: await scope.run(member) } : {}) });
+              }),
+            );
+          }
+        }
         if (SLOW_PLANS.has(call.name) && Date.now() - started > SLOW_PLAN_CUTOFF_MS) {
           // Not started: it would run past the request's limit. This request pauses ("time") and
           // the tab continues at once, where the model calls it again with a full budget.
@@ -265,7 +282,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           deferred = true;
           continue;
         }
-        const plan = await scope.plan(call);
+        const ready = early.get(call.id);
+        const plan = ready?.plan ?? (await scope.plan(call));
         if (plan.kind === "browser") {
           browser.push({ ...call, input: plan.input });
           await recordTool(env, { ...call, input: plan.input }, "pending", null, null);
@@ -286,7 +304,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           results.push({ id: call.id, name: call.name, ok: false, content: plan.content });
           continue;
         }
-        const outcome = await scope.run(call);
+        const outcome = ready?.outcome ?? (await scope.run(call));
         await recordTool(
           env,
           call,
@@ -329,11 +347,9 @@ export async function runTurn(env: TurnEnv): Promise<void> {
 
       // Tool ghi xong thì model thấy trạng thái mới + `check` ngay trong tin nhắn này.
       const state = wrote && result.toolCalls.some((call) => scope.isWrite(call.name)) ? await scope.state() : undefined;
-      await rpcOrThrow(supabase, "agent_append", {
-        p_turn_id: turn.id,
-        p_role: "user",
-        p_content: provider.toolResults(results, state),
-      });
+      const answer = provider.toolResults(results, state);
+      await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
+      past?.push({ role: "user", content: answer as unknown[] });
       if (deferred) {
         await pause(env, "time");
         emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });

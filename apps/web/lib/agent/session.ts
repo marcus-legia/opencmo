@@ -76,17 +76,20 @@ function attachmentText(attachments: Attachments | undefined): string {
 /** Bắt đầu một lượt và stream nó. */
 export async function startTurn(supabase: SupabaseClient, sessionId: string | undefined, prompt: string, attachments?: Attachments) {
   const { session, provider } = await loadSession(supabase, sessionId);
-  // Trạng thái đầu lượt: dựng phạm vi chỉ để đọc nó, trước khi lượt tồn tại.
-  const reader = await scopeFor(supabase, session, { id: "", prompt });
+  // One scope for the whole request (catalog, clip context and tools load once). It reads the
+  // opening state before the turn exists; the turn's id is filled in once it does, and nothing
+  // uses it before then.
+  const pending = { id: "", prompt };
+  const scope = await scopeFor(supabase, session, pending);
   // Kịch bản clip đi trước trạng thái: agent đọc người nói nói gì trước khi sửa.
-  const state = `${(await reader.context?.()) ?? ""}${await reader.state()}`;
+  const state = `${(await scope.context?.()) ?? ""}${await scope.state()}`;
   const images = attachments?.frame ? [{ data: attachments.frame, mimeType: "image/jpeg" as const }] : undefined;
   const turn = await rpcOrThrow<Turn>(supabase, "agent_begin_turn", {
     p_session_id: session.id,
     p_prompt: prompt,
     p_content: provider.userTurn(prompt, `${slashDirective(prompt)}${attachmentText(attachments)}${state}`, images),
   });
-  const scope = await scopeFor(supabase, session, turn);
+  pending.id = turn.id;
   return sseResponse(async (emit) => {
     emit("turn", { number: turn.number });
     await runTurn({ supabase, provider, scope, turn, emit });

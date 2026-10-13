@@ -65,7 +65,8 @@ export interface Format {
    * nguyên; hàm KHÔNG sửa đầu vào. Cắt theo tin nhắn nên prefix cache chỉ vỡ
    * khi có ảnh mới.
    */
-  trimImages(history: StoredMessage[], keep: number): StoredMessage[];
+  /** Older images become text; `window` lets that many more pile up first (see `imagesOver`). */
+  trimImages(history: StoredMessage[], keep: number, window?: number): StoredMessage[];
 }
 
 /** Một lần gọi model: lịch sử, bộ tool và system prompt của PHẠM VI phiên (clip hay project). */
