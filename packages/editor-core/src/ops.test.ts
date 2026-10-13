@@ -258,6 +258,39 @@ describe("applyOps", () => {
     await expect(applyOps(SOURCE, [{ op: "set_frame", width: 1080, height: 1080 }], { ...memoryContext(), master: null })).rejects.toThrow(/not ready/);
   });
 
+  it("set_frame keeps a full-frame AI shot covering the frame and a logo where it was", async () => {
+    const shot = { kind: "rect", id: "shot", x: 0, y: 0, width: 1080, height: 1920, tracks: [{ property: "x", keyframes: [{ time: 0, value: 0 }, { time: 2, value: -100 }] }] };
+    const logo = { kind: "rect", id: "logo", x: 440, y: 860, width: 200, height: 200 };
+    const blank = {
+      version: 1,
+      stage: { children: [{ kind: "scene", name: "Edit", width: 1080, height: 1920, active: true, children: [shot, logo] }] },
+    } as unknown as ClipDocument;
+    const { document } = await applyOps(blank, [{ op: "set_frame", width: 1920, height: 1080 }], { ...memoryContext(), master: null });
+    const [wide, small] = (sceneOf(document) as unknown as { children: { x: number; y: number; width: number; height: number; tracks?: { keyframes: { value: number }[] }[] }[] }).children;
+    // Covers 1920×1080 (it used to be a 607 px strip at the left edge), centred.
+    expect(wide!.x).toBeLessThanOrEqual(0);
+    expect(wide!.y).toBeLessThanOrEqual(0);
+    expect(wide!.x + wide!.width).toBeGreaterThanOrEqual(1920);
+    expect(wide!.y + wide!.height).toBeGreaterThanOrEqual(1080);
+    expect(wide!.tracks![0]!.keyframes[0]!.value).toBe(wide!.x);
+    // The centred logo stays centred, same aspect.
+    expect(small!.x + small!.width / 2).toBeCloseTo(960, 0);
+    expect(small!.y + small!.height / 2).toBeCloseTo(540, 0);
+    expect(small!.width).toBe(small!.height);
+  });
+
+  it("set_frame keeps layout cells on their grid", async () => {
+    const cell = (id: string, y: number) => ({ kind: "rect", id, x: 0, y, width: 1080, height: 640, paints: [{ type: "image", src: `${id}.png`, objectFit: "cover" }] });
+    const blank = {
+      version: 1,
+      stage: { children: [{ kind: "scene", name: "Edit", width: 1080, height: 1920, active: true, children: [cell("a", 0), cell("b", 640), cell("c", 1280)] }] },
+    } as unknown as ClipDocument;
+    const { document } = await applyOps(blank, [{ op: "set_frame", width: 1920, height: 1080 }], { ...memoryContext(), master: null });
+    const cells = (sceneOf(document) as unknown as { children: { x: number; y: number; width: number; height: number }[] }).children;
+    // Still three full-width bands stacked edge to edge: no gaps, no overlaps.
+    expect(cells.map((item) => [item.x, item.y, item.width, item.height])).toEqual([[0, 0, 1920, 360], [0, 360, 1920, 360], [0, 720, 1920, 360]]);
+  });
+
   it("set_project_settings (E2-b): fps lưu trên scene, cỡ theo tỉ lệ/chất lượng, khung có video đi đường set_frame", async () => {
     const ctx = memoryContext();
     const fps = (await applyOps(SOURCE, [{ op: "set_project_settings", fps: 60 }], ctx)).document;

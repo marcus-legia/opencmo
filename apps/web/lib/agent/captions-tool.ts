@@ -155,7 +155,7 @@ export async function runCaptions(
       if (!done.src) {
         return {
           ok: false,
-          content: JSON.stringify({ pending: true, message: "Captions are still being created. Ask the user to add them from the element's inspector in a minute; nothing more was charged." }),
+          content: JSON.stringify({ pending: true, message: "Captions are still being created (already paid for). Tell the user to check the element's captions in its inspector in a minute; do not request them again." }),
           summary: "Captions still processing",
         };
       }
@@ -164,7 +164,9 @@ export async function runCaptions(
     const out = await translateCaptions(supabase, clipId, prepared.hash, prepared.language);
     return insert({ op: "insert_captions", parent_id: prepared.parent_id, node: { ...prepared.node, src: out.src, name: `Captions · ${prepared.language}` } });
   } catch (error) {
-    const message = error instanceof ApiError || error instanceof Error ? error.message : "Could not create captions. Your credits were refunded.";
+    // Only messages written for the user: anything else (a driver error, a timeout) gets the plain one.
+    const message = error instanceof ApiError && error.status < 500 ? error.message : "Could not create captions. Your credits were refunded.";
+    if (!(error instanceof ApiError)) console.error("[agent] captions failed", error);
     return { ok: false, content: JSON.stringify({ error: message }), summary: message };
   }
 }

@@ -26,15 +26,11 @@ export async function loadSession(supabase: SupabaseClient, id: string | undefin
   const { data } = await supabase.from("agent_sessions").select("id, scope, clip_id, job_id, model").eq("id", id).maybeSingle();
   const session = data as SessionRow | null;
   if (!session) throw notFound("Assistant session not found.");
-  // A CMO chat runs on the `cmo` agent's CURRENT model; history only replays within the same
-  // provider family, so a chat from another family cannot continue.
+  // A CMO chat runs on the `cmo` agent's current model of the chat's own provider family: history
+  // only replays within a family.
+  const family = kindOf(session.model);
   const provider =
-    session.scope === "cmo"
-      ? (() => {
-          const current = agentChatProvider("cmo");
-          return current && current.kind === kindOf(session.model) ? current : null;
-        })()
-      : providerForModel(session.model);
+    session.scope === "cmo" ? (family === "fake" ? agentChatProvider("cmo") : agentChatProvider("cmo", family)) : providerForModel(session.model);
   if (!provider && kindOf(session.model) === "gemini") throw new ApiError(409, "This chat used a model that is no longer available. Start a new chat.");
   if (!provider) throw new ApiError(503, "The assistant is not available yet.");
   return { session, provider };
@@ -76,17 +72,20 @@ function attachmentText(attachments: Attachments | undefined): string {
 /** Bắt đầu một lượt và stream nó. */
 export async function startTurn(supabase: SupabaseClient, sessionId: string | undefined, prompt: string, attachments?: Attachments) {
   const { session, provider } = await loadSession(supabase, sessionId);
-  // Trạng thái đầu lượt: dựng phạm vi chỉ để đọc nó, trước khi lượt tồn tại.
-  const reader = await scopeFor(supabase, session, { id: "", prompt });
+  // One scope for the whole request (catalog, clip context and tools load once). It reads the
+  // opening state before the turn exists; the turn's id is filled in once it does, and nothing
+  // uses it before then.
+  const pending = { id: "", prompt };
+  const scope = await scopeFor(supabase, session, pending);
   // Kịch bản clip đi trước trạng thái: agent đọc người nói nói gì trước khi sửa.
-  const state = `${(await reader.context?.()) ?? ""}${await reader.state()}`;
+  const state = `${(await scope.context?.()) ?? ""}${await scope.state()}`;
   const images = attachments?.frame ? [{ data: attachments.frame, mimeType: "image/jpeg" as const }] : undefined;
   const turn = await rpcOrThrow<Turn>(supabase, "agent_begin_turn", {
     p_session_id: session.id,
     p_prompt: prompt,
     p_content: provider.userTurn(prompt, `${slashDirective(prompt)}${attachmentText(attachments)}${state}`, images),
   });
-  const scope = await scopeFor(supabase, session, turn);
+  pending.id = turn.id;
   return sseResponse(async (emit) => {
     emit("turn", { number: turn.number });
     await runTurn({ supabase, provider, scope, turn, emit });

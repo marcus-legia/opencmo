@@ -206,3 +206,29 @@ describe('schema của marks (R5)', () => {
     bad({ wobble: 1 }, /wobble/);
   });
 });
+
+describe('storedBytes', () => {
+  it('measures the document the way the database does (jsonb text: a space after every : and ,)', async () => {
+    const { storedBytes } = await import('./validate.ts');
+    const document = {
+      version: 1,
+      stage: {
+        children: [
+          {
+            kind: 'scene',
+            name: 'Đoạn 1',
+            width: 1080,
+            height: 1920,
+            children: [
+              { kind: 'text', text: 'Hi, "there": a,b', x: 1.5, tracks: [{ property: 'x', keyframes: [{ time: 0, value: 1 }, { time: 2, value: -3.25 }] }] },
+              { kind: 'rect', paints: [] },
+            ],
+          },
+        ],
+      },
+    };
+    // Python json.dumps(separators=(', ', ': '), ensure_ascii=False) prints like Postgres jsonb::text.
+    expect(storedBytes(document)).toBe(314);
+    expect(storedBytes(document)).toBeGreaterThan(new TextEncoder().encode(JSON.stringify(document)).length);
+  });
+});

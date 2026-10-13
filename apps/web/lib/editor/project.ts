@@ -68,8 +68,11 @@ async function branded(supabase: SupabaseClient, document: ClipDocument, source:
  * Project lưu trước bất biến `captionsOnTop` (02/10) có thể còn b-roll/visual vẽ
  * ĐÈ lên phụ đề: bất biến chỉ chạy sau một lượt op, nên project chưa sửa lại lần
  * nào giữ nguyên thứ tự cũ — phụ đề có trên timeline mà không thấy trên khung.
- * Mở ra là sửa và lưu một lần (cả bản export đọc document đã lưu). Lưu hỏng vì
- * khoá lạc quan thì trả bản đang có: lượt op kế tiếp sẽ sửa.
+ * Mở ra là sửa và lưu một lần (cả bản export đọc document đã lưu).
+ *
+ * A save that loses the optimistic lock means another request saved first (the editor reads the
+ * project twice in parallel when it opens): return what is stored NOW. Returning the row read
+ * before gave the tab a stale `version`, and its first autosave failed with "changed in another tab".
  */
 async function captionsUp(supabase: SupabaseClient, project: EditorProject): Promise<EditorProject> {
   const fixed = captionsOnTop(project.document);
@@ -77,8 +80,9 @@ async function captionsUp(supabase: SupabaseClient, project: EditorProject): Pro
   try {
     return { ...project, ...(await saveDocument(supabase, project.clip_id, project.version, fixed)) };
   } catch (err) {
-    console.error("[editor] could not move captions above other layers", err);
-    return project;
+    if (!(err instanceof ApiError && err.status === 409)) console.error("[editor] could not move captions above other layers", err);
+    const { data: current } = await supabase.from("editor_projects").select(PROJECT_COLUMNS).eq("clip_id", project.clip_id).maybeSingle();
+    return current ? { ...project, ...withDocument(current as EditorProject) } : project;
   }
 }
 

@@ -176,3 +176,41 @@ def test_lottie_tro_file_ngoai_thi_reject(tmp_path):
     store = _lottie_store(tmp_path, embedded)
     probe_media.process(store, Task(id="task-8", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1"))
     assert store.completed[1]["ok"] is True, "ảnh nhúng data: vẫn được"
+
+
+def test_audio_the_user_adds_is_stored_so_export_can_mix_it(tmp_path):
+    """Music and sound effects used to stay on the device that imported them: Export failed."""
+    import subprocess
+
+    song = tmp_path / "song.mp3"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(song)],
+        check=True,
+    )
+    store = FakeStore(tmp_path)
+    store.get_media_asset = lambda _id: {
+        "id": "asset-1", "user_id": "user-1", "job_id": "job-1",
+        "storage_path": "media/user-1/job-1/song.mp3",
+    }
+    store.download_object = lambda _bucket, _path, dest, **_kwargs: dest.write_bytes(song.read_bytes())
+    task = Task(id="task-a", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1")
+
+    probe_media.process(store, task)
+
+    done = store.completed[1]
+    assert done["ok"] is True and done["width"] is None and done["height"] is None
+    assert abs(done["duration"] - 2) < 0.2
+
+
+def test_a_file_named_like_audio_that_is_not_is_rejected(tmp_path):
+    store = FakeStore(tmp_path)
+    store.get_media_asset = lambda _id: {
+        "id": "asset-1", "user_id": "user-1", "job_id": "job-1",
+        "storage_path": "media/user-1/job-1/fake.mp3",
+    }
+    task = Task(id="task-b", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1")
+
+    probe_media.process(store, task)
+
+    assert store.completed[1]["ok"] is False
+    assert store.removed == [("media", ["user-1/job-1/fake.mp3"])]

@@ -473,7 +473,10 @@ export const addGenerated = {
   },
 };
 
-type Regenerate = { op: 'regenerate'; element_id: string; seed: number };
+/** Shots in a row that continue one another (/video: the first plus two continuations). */
+export const MAX_CHAIN = 3;
+
+type Regenerate = { op: 'regenerate'; element_id: string; seed: number; continuations?: { element_id: string; after: string }[] };
 
 /** Khai báo `generate.*` của CHÍNH phần tử (`src` của nó, `src` của paint) — không xét con. */
 function ownGenerated(entity: Entity): Entity[] {
@@ -493,6 +496,12 @@ export const regenerate = {
     op: z.literal('regenerate'),
     element_id: z.string().min(1),
     seed: z.number().int().min(0).max(2_147_483_647),
+    /**
+     * Shots that continue this one (/video) name it by its spec hash, which the new seed changes:
+     * each gets the new hash of the shot before it, or it keeps starting from the old shot's last
+     * frame and the seam jumps. The caller computes the hashes (the server's `spec_hash`).
+     */
+    continuations: z.array(z.object({ element_id: z.string().min(1), after: z.string().regex(/^[0-9a-f]{64}$/) })).max(MAX_CHAIN - 1).optional(),
   }),
   describe: () => 'Regenerate',
   async apply(document: ClipDocument, input: Regenerate) {
@@ -502,6 +511,12 @@ export const regenerate = {
     const declarations = ownGenerated(found.entity);
     if (!declarations.length) throw new OpFailure('Only AI-generated media can be regenerated.');
     for (const declaration of declarations) declaration.seed = input.seed;
+    for (const link of input.continuations ?? []) {
+      const shot = byId(next, link.element_id);
+      const continuing = shot ? ownGenerated(shot.entity).filter((declaration) => declaration.generate === 'video' && typeof declaration.after === 'string') : [];
+      if (!continuing.length) throw new OpFailure('A shot that continues this one is no longer in the project.');
+      for (const declaration of continuing) declaration.after = link.after;
+    }
     return next;
   },
 };

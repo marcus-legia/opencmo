@@ -29,6 +29,15 @@ export const AGENT_AUTO_HOLD_CAP = 60;
  */
 export const MAX_REQUEST_MS = 240_000;
 
+/**
+ * A plan that runs its own model calls (the /video director, the intro team) takes up to about three
+ * minutes, after the request's time check. Started later than this, it would outlive the route's
+ * 300 s limit and the turn would die mid-step; it waits for the next request instead.
+ */
+export const SLOW_PLAN_CUTOFF_MS = 110_000;
+// wait_for_media waits up to a minute: started late, it would outlast the request too.
+export const SLOW_PLANS = new Set(["create_video", "plan_video", "wait_for_media"]);
+
 /** Nhịp hỏi trạng thái lượt khi model đang nói — Stop cắt luồng trong chừng này. */
 export const STOP_POLL_MS = 2_000;
 

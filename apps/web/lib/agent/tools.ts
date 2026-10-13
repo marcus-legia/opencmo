@@ -29,6 +29,7 @@ import {
   diffDocuments,
   findLotties,
   findSilences,
+  guardProps,
   isRemoved,
   loadCaptions,
   quoteRange,
@@ -149,6 +150,17 @@ export const insertAssetInput = z.object({
     .describe("cover fills the whole frame (default for B-roll), contain shows all of it, native keeps its own size centered."),
   volume: z.number().min(-60).max(12).optional().describe("dB for video/audio. -60 is nearly silent; omit to keep its sound."),
 });
+
+const brollBeat = z.object({
+  path: z.string().min(1).max(500).describe("A video or image from list_library."),
+  quote: z.string().trim().min(2).max(300).optional().describe("The words from <clip_context> it illustrates; it appears when they are spoken. Or give start."),
+  start: z.number().min(0).max(86_400).optional().describe("Clip seconds where it appears, when there is no quote."),
+  seconds: z.number().min(0.5).max(30).optional().describe("How long it shows, 0.5 to 30 s. Default: while the quoted words are spoken (1.5 to 4 s), otherwise 3 s."),
+  source_start: z.number().min(0).max(86_400).optional().describe("For a video: the second inside the file to start from (look with media_grab first)."),
+  fit: z.enum(["cover", "pip"]).optional().describe("cover fills the frame over the speaker (default); pip shows it small in the top right corner, the speaker still visible."),
+  sound: z.boolean().optional().describe("Keep the video's own sound. Default: muted when the clip has a speaker, so the voice stays clear."),
+});
+export const placeBrollInput = z.object({ beats: z.array(brollBeat).min(1).max(12).describe("One entry per shot, in any order, 1 to 12.") });
 
 /** Tool trình duyệt: editor vẽ bằng clip-render và trả ảnh/số liệu. */
 export const captureInput = z
@@ -368,12 +380,14 @@ const OP_DESCRIPTIONS: Record<string, string> = {
   ripple_delete:
     "Delete one element and pull everything after it in the same container earlier to close the gap (e.g. a B-roll shot inside a sequence). Refused when that would move the clip's own video or captions.",
   set_props:
-    "Set any properties of one element (see read_guide 'document' for names), e.g. {opacity: 0.8}, {fontWeight: 800, textCase: 'upper'}, {scale: 1.1}, {transition: {type: 'dissolve', duration: 0.5}}. null removes a property.",
+    "Set any properties of one element (see read_guide 'document' for names), e.g. {opacity: 0.8}, {fontWeight: 800, textCase: 'upper'}, {scale: 1.1}, {transition: {type: 'dissolve', duration: 0.5}}, {start: 2, end: 6}; on a text element {text: '...'} replaces what it says. null removes a property.",
   set_keyframe:
     "Add, change or remove a keyframe for an animatable property (x, y, scale, rotation, opacity, width, height, volume, blur, ...). time is in the element's own seconds from its start. Use it for zoom-ins, pans and fades.",
   add_part:
     "Add a sub-part to an element: paints, strokes, shadows, effects, animations (e.g. {type: 'fade', phase: 'in', duration: 0.4}), ranges (text highlight), masks or gradient stops.",
   move_part: "Reorder a sub-part (paint, stroke, effect, ...) within its list.",
+  move_to_row:
+    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds.",
   copy_settings:
     "Make elements look like another one: copy groups of settings from from_id to to_ids — look (opacity, corners, blend), text (font, size, weight, color, case, stroke; text to text only), effects (filters, shadows), motion (animations, transition), audio (volume, mute). Never copies timing, position, wording or keyframes. Default: every group that fits each target.",
   duplicate_elements: "Duplicate elements in place.",
@@ -435,6 +449,21 @@ const INSERT_ASSET = spec(
   insertAssetInput,
 );
 
+const PLACE_BROLL = spec(
+  "place_broll",
+  "Place B-roll from the library (videos or images) on several moments of the clip in ONE step and one undo: each beat appears when its quoted words are spoken, fills the frame (or sits picture-in-picture), fades in and out, and is muted over the speaker. Use it for B-roll from the library instead of insert_asset + set_props per shot; insert_asset stays for music and sound effects. AI shots from generate_media are already placed. Nothing is placed if one beat is wrong; the error names it.",
+  placeBrollInput,
+);
+
+/**
+ * Ops the Assistant is not offered, though they stay in editor-core (the editor's own buttons, and
+ * calls in older chats still run): each has a better tool for the model. update_element takes no
+ * objects, so the model's transitions and strokes failed there (production run 1); set_props takes
+ * everything it did. duplicate_elements covers paste_nodes; set_keyframe covers move_keyframe; scene
+ * and part reordering are editor gestures. Fewer near-twins, fewer wrong picks, a shorter prompt.
+ */
+export const NOT_OFFERED = new Set(["update_element", "paste_nodes", "insert_scene", "activate_scene", "move_part", "move_keyframe"]);
+
 /**
  * Danh sách tool, THỨ TỰ TẤT ĐỊNH: tools là phần đầu của prefix cache, một
  * thứ tự khác là cache hỏng cho mọi request.
@@ -444,13 +473,70 @@ export const TOOL_SPECS: ToolSpec[] = [
   ...TALK_TOOLS,
   ...BROWSER_TOOLS,
   INSERT_ASSET,
+  PLACE_BROLL,
   ...Object.keys(AGENT_OP_INPUTS)
+    .filter((name) => !NOT_OFFERED.has(name))
     .sort()
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
 
 // `generate_media`/`add_3d_scene`/`add_voiceover` ghi lên clip (khai báo `generate.*`) sau thẻ duyệt.
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+/**
+ * Tools that only read: the model often asks for several in one step (state, transcript, library),
+ * and they can run at the same time. Anything that writes, pauses or spends stays in order.
+ */
+export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "read_skill", "list_clips", "get_clip"]);
+
+/**
+ * Tools that cut or read the clip's own video by its words. A blank New edit has no such video, so
+ * they could only fail there; leaving them out keeps ~6k characters of schema out of every request.
+ * A clip's kind never changes, so a session's tool list (the start of the prompt cache) holds.
+ */
+export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
+
+/**
+ * The verify gate: what the model is told when it tries to finish while the last <check> after its
+ * writes still lists errors. Once per request, so a check it cannot clear never loops.
+ */
+export const VERIFY_GATE =
+  "Before you finish: the check after your last change still lists errors (below). Fix each one, or tell the user plainly why it cannot be fixed, then finish.";
+
+type CheckIssueLike = { severity?: string; code?: string; node_id?: string };
+const issueKey = (issue: CheckIssueLike) => `${issue.code ?? ""}:${issue.node_id ?? ""}`;
+
+function checkIssues(state: string | undefined): CheckIssueLike[] | null {
+  const match = state?.match(/<check>(\{.*\})<\/check>/s);
+  if (!match) return null;
+  try {
+    return (JSON.parse(match[1]!) as { issues?: CheckIssueLike[] }).issues ?? [];
+  } catch {
+    return null;
+  }
+}
+
+/** The errors a state message's `<check>` reports, by code and element: the gate's baseline. */
+export function checkErrorKeys(state: string | undefined): Set<string> {
+  return new Set((checkIssues(state) ?? []).filter((issue) => issue.severity === "error").map(issueKey));
+}
+
+/**
+ * A `<check>` block of the errors in `state` that `before` did not have, else null. Errors the clip
+ * had when the request began (a blank edit's empty seconds, the user's own stray layer) are not the
+ * model's to fix before it may finish.
+ */
+export function failingCheck(state: string | undefined, before: Set<string> = new Set()): string | null {
+  const fresh = (checkIssues(state) ?? []).filter((issue) => issue.severity === "error" && !before.has(issueKey(issue)));
+  return fresh.length ? `<check>${JSON.stringify({ ok: false, issues: fresh })}</check>` : null;
+}
+
+/** The run of parallel-safe calls that starts at `index` (empty when that call is not one). */
+export function readGroup<T extends { name: string }>(calls: T[], index: number): T[] {
+  const group: T[] = [];
+  for (let at = index; at < calls.length && PARALLEL_SAFE.has(calls[at]!.name); at++) group.push(calls[at]!);
+  return group;
+}
+
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };
@@ -504,8 +590,8 @@ function documentView(document: ClipDocument, nodeId?: string): unknown {
 }
 
 /** Chạy `check` trên bản đang lưu — tool `check` và lượt tự kiểm của loop dùng chung. */
-export async function runCheck(workspace: AgentWorkspace): Promise<CheckReport> {
-  const snapshot = await workspace.read();
+export async function runCheck(workspace: AgentWorkspace, read?: Awaited<ReturnType<AgentWorkspace["read"]>>): Promise<CheckReport> {
+  const snapshot = read ?? (await workspace.read());
   const ctx = await workspace.opContext(snapshot.document, snapshot.manifest);
   const paths = new Set([MASTER_SRC, ...snapshot.manifest.assets.map((record) => record.path)]);
   return checkDocument(snapshot.document, {
@@ -670,7 +756,16 @@ function guard(op: Record<string, unknown>, document: ClipDocument): string | nu
     case "set_props":
     case "update_element": {
       const props = Object.keys((op.props as object | undefined) ?? {});
-      return touches(op.element_id) && props.some((prop) => TIMING_PROPS.includes(prop)) ? recut : null;
+      if (touches(op.element_id) && props.some((prop) => TIMING_PROPS.includes(prop))) return recut;
+      // The same rules as update_element's: no ids or children, no frame size, no captions source.
+      const found = typeof op.element_id === "string" ? byId(document, op.element_id) : null;
+      if (!found) return null;
+      try {
+        guardProps(found.tag, found.entity, props);
+      } catch (error) {
+        return error instanceof Error ? error.message : "That property cannot be changed.";
+      }
+      return null;
     }
     default:
       return null;
@@ -712,6 +807,7 @@ export async function runTool(name: string, input: unknown, env: ToolEnv): Promi
       return { ok: true, content: JSON.stringify({ ok: true }), summary: "Updated the plan", view: { plan: parsed.data.items } };
     }
     if (name === "insert_asset") return await insertAsset(input, env);
+    if (name === "place_broll") return await placeBroll(input, env);
 
     // Chỉ op Assistant được gọi thẳng: `add_generated` mà model tự bịa tên gọi
     // thì bị từ chối ở đây — nó chỉ đi qua `generate_media` (thẻ có giá).
@@ -783,6 +879,83 @@ async function insertAsset(input: unknown, env: ToolEnv): Promise<ToolOutcome> {
   return applyOpOutcome((rowed ? { op: "insert_to_row", node } : { op: "insert_node", parent_id: scene.id, node }) as Op, env);
 }
 
+/** Seconds of fade at each end of a B-roll beat: a hard cut over a speaker reads as a glitch. */
+const BROLL_FADE = 0.25;
+
+/**
+ * Several B-roll beats as one write: each resolved (time from its quote, size, sound) before any is
+ * placed, so a wrong beat places nothing and the model fixes that one; the rest is one revision and
+ * one undo.
+ */
+async function placeBroll(input: unknown, env: ToolEnv): Promise<ToolOutcome> {
+  const parsed = placeBrollInput.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, content: JSON.stringify({ INVALID_INPUT: `${issue?.path.join(".") ?? ""}: ${issue?.message}` }), summary: "Could not place the B-roll" };
+  }
+  const snapshot = await env.workspace.read();
+  const scenes = snapshot.document.stage.children.filter((node) => node.kind === "scene");
+  const scene = (scenes.find((node) => (node as { active?: boolean }).active) ?? scenes[0]) as unknown as Record<string, unknown> & { id?: string };
+  if (!scene?.id) return { ok: false, content: JSON.stringify({ error: "This project has no scene." }), summary: "No scene" };
+  const W = Number(scene.width);
+  const H = Number(scene.height);
+  const speaker = JSON.stringify(snapshot.document).includes(`"${MASTER_SRC}"`);
+  const ctx = parsed.data.beats.some((beat) => beat.quote) ? await env.workspace.opContext(snapshot.document, snapshot.manifest) : null;
+  const ops: Op[] = [];
+  for (const [index, beat] of parsed.data.beats.entries()) {
+    const fail = (message: string): ToolOutcome => ({
+      ok: false,
+      content: JSON.stringify({ error: `Beat ${index + 1} (${beat.path}): ${message} Nothing was placed.` }),
+      summary: "Could not place the B-roll",
+    });
+    const record = snapshot.manifest.assets.find((item) => item.path === beat.path);
+    if (!record) return fail("not in the library. Call list_library.");
+    if ("state" in record) return fail("still generating or failed.");
+    if (record.type !== "VIDEO" && record.type !== "IMAGE") return fail("not a video or image; place sounds with insert_asset.");
+    let start = beat.start;
+    let length = beat.seconds;
+    if (start === undefined) {
+      if (!beat.quote || !ctx) return fail("give quote (words from <clip_context>) or start.");
+      try {
+        const found = await quoteRange(snapshot.document, ctx, beat.quote, { min: 1.5, max: 4 });
+        start = found.start;
+        length ??= found.end - found.start;
+      } catch (err) {
+        return fail((err as Error).message);
+      }
+    }
+    length ??= 3;
+    const node = nodeFor(record, scene, { start });
+    if (!node || typeof node.width !== "number" || typeof node.height !== "number") return fail("cannot be placed on the clip.");
+    if (record.type === "VIDEO") {
+      const from = beat.source_start ?? 0;
+      const footage = typeof record.duration === "number" ? record.duration - from : Infinity;
+      if (footage <= 0.1) return fail(`source_start is past the end of the file (${record.duration}s).`);
+      length = Math.min(length, footage);
+      if (from > 0) node.sourceIn = Math.round(from * 1e4) / 1e4;
+      if (speaker && !beat.sound) node.muted = true;
+    }
+    node.end = Math.round((start + length) * 1e4) / 1e4;
+    if (beat.fit === "pip") {
+      const width = Math.round(W * 0.42);
+      const height = Math.round((node.height / node.width) * width);
+      Object.assign(node, { width, height, x: Math.round(W - width - W * 0.05), y: Math.round(H * 0.08), cornerRadius: Math.round(width * 0.04) });
+    } else {
+      const ratio = Math.max(W / node.width, H / node.height);
+      const width = Math.round(node.width * ratio);
+      const height = Math.round(node.height * ratio);
+      Object.assign(node, { width, height, x: Math.round((W - width) / 2), y: Math.round((H - height) / 2) });
+    }
+    const fade = Math.min(BROLL_FADE, length / 4);
+    node.animations = [
+      { type: "fade", phase: "in", duration: fade },
+      { type: "fade", phase: "out", duration: fade },
+    ];
+    ops.push({ op: "insert_to_row", node } as Op);
+  }
+  return applyOpsOutcome(ops, env, `Placed ${ops.length} B-roll ${ops.length === 1 ? "shot" : "shots"}`);
+}
+
 /**
  * Áp MỘT op đã qua schema lên clip và trả kết quả cho model. Dùng chung cho
  * tool op và cho `generate_media` sau thẻ duyệt.
@@ -798,8 +971,14 @@ export async function applyOpTool(op: Op, env: ToolEnv): Promise<ToolOutcome> {
 }
 
 async function applyOpOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
-  const applied = await env.workspace.apply([op]);
-  const result = applied.results[0];
+  return applyOpsOutcome([op], env);
+}
+
+/** Several ops as one write (one revision, one undo); `label` sums them up for the panel. */
+async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string): Promise<ToolOutcome> {
+  const op = ops[0]!;
+  const applied = await env.workspace.apply(ops);
+  const result = ops.length === 1 ? applied.results[0] : { summary: label ?? `${ops.length} changes` };
   // Trả phần đổi thay cho cả project (học Palmier §A1): model tự cập nhật, không đọc lại.
   const delta = applied.changed ? diffDocuments(applied.before, applied.after) : null;
   const touched = delta ? [...delta.added.map((item) => item.id), ...delta.changed.map((item) => item.id), ...delta.shifted.flatMap((rule) => rule.ids)] : [];

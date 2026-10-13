@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -226,3 +227,39 @@ def test_video_input_is_uploaded_to_fal_storage_not_sent_as_a_data_url(tmp_path)
     assert ref["cutout"] is True
     assert [method for method, _url in seen] == ["POST", "POST", "POST"]
     assert seen[-1][1] == "https://queue.fal.run/veed/video-background-removal"
+
+
+def _ffmpeg(*args: str) -> None:
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *args], check=True)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+def test_provider_output_is_read_as_untrusted_media(tmp_path):
+    """Engine rule 7: a provider's file is untrusted like an upload. A real song and image still
+    convert; an HLS playlist served as audio (it could make ffmpeg read files on the worker) does not."""
+    from opencmo.ai.providers.base import ProviderError
+    from opencmo.ai.providers.fal import _normalize
+    from opencmo.media.ffmpeg import FFmpegError
+
+    song = tmp_path / "song"
+    _ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-f", "mp3", str(song))
+    out = tmp_path / "a"
+    out.mkdir()
+    assert _normalize(song, "audio/mpeg", out).path.name == "result.m4a"
+
+    image = tmp_path / "image"
+    _ffmpeg("-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1", "-f", "image2", "-c:v", "png", str(image))
+    out = tmp_path / "b"
+    out.mkdir()
+    assert _normalize(image, "image/png", out).path.name == "result.png"
+
+    # A concat list naming a file next to it in the worker's folder: without the allowlist ffmpeg
+    # follows it and turns whatever that file holds into the "generated" result.
+    local = tmp_path / "local.mp3"
+    _ffmpeg("-f", "lavfi", "-i", "sine=frequency=220:duration=1", str(local))
+    playlist = tmp_path / "playlist"
+    playlist.write_text("ffconcat version 1.0\nfile local.mp3\n")
+    out = tmp_path / "c"
+    out.mkdir()
+    with pytest.raises((FFmpegError, ProviderError, subprocess.CalledProcessError)):
+        _normalize(playlist, "audio/mpeg", out)

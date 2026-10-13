@@ -2,7 +2,7 @@
  * Stress test export cho visual nặng (Lottie + 3D) — KHÔNG chạy trong CI.
  *
  *   npx tsx packages/clip-export/scripts/stress.mts <out-dir> [lottie|3d|mixed|edge|plain|emoji ...]
- *     [--base <job.json có master + transcript>] [--res 720|1080]
+ *     [--base <job.json có master + transcript>] [--res 720|1080] [--fps 24|25|30|50|60]
  *
  * Mỗi ca: dựng document bằng op thật của editor-core, ghi job, chạy CLI export
  * dưới `/usr/bin/time -v`, rồi báo thời gian, RAM đỉnh, số khung đen và rút
@@ -34,6 +34,8 @@ const flag = (name: string) => {
 };
 const base = flag('--base');
 const resolution = Number(flag('--res') ?? 1080) as 720 | 1080;
+// Export frame rate: 60 draws twice the frames of 30, so memory is measured at the rate shipped.
+const fps = flag('--fps');
 const KILL_MB = Number(flag('--kill-mb') ?? 3000);
 const [outDir, ...wanted] = args;
 if (!outDir) {
@@ -248,6 +250,7 @@ async function run(one: Case): Promise<Result> {
 	const dir = join(outDir, one.name);
 	mkdirSync(dir, { recursive: true });
 	const out = join(dir, `${one.name}.mp4`);
+	if (fps) (one.document.stage.children[0] as { fps?: number }).fps = Number(fps);
 	const job = { document: one.document, media: one.media, transcripts: one.transcripts, fonts: FONTS, lottie: LOTTIE, out, resolution };
 	const jobFile = join(dir, 'job.json');
 	writeFileSync(jobFile, JSON.stringify(job));

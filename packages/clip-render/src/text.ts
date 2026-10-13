@@ -95,8 +95,21 @@ function styleFor(node: TextNode, ranges: TextRange[]): Style {
  * theo độ đậm và cỡ chữ (optical sizing: opsz = cỡ px). Skia của Node thì
  * không, nên nơi nào có `fontVariationSettings` thì đặt tay cho giống.
  */
+/**
+ * Families tried after the brand font, for scripts it does not cover (translated captions, emoji).
+ * The browser falls back on its own; Skia in the export does not, and draws boxes. The exporter
+ * sets them from what is really installed (`clip-export` `registerFonts`), with a Latin font
+ * first: when the brand font is missing, Skia takes the first family it has, and an emoji font
+ * there draws no Latin text at all.
+ */
+let fallbackFamilies = '';
+
+export function setFallbackFamilies(families: string[]): void {
+  fallbackFamilies = families.map((family) => `, "${family}"`).join('');
+}
+
 export function applyFont(ctx: Measurer, style: Style, baseline: string): void {
-  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}`;
+  ctx.font = `${style.style} ${style.weight} ${style.size}px ${style.family}${fallbackFamilies}`;
   ctx.letterSpacing = `${style.spacing}px`;
   if (isChromium(ctx)) {
     ctx.textBaseline = baseline;
@@ -480,7 +493,7 @@ type Tweak = { dx: number; dy: number; scale: number; alpha: number; color?: str
  * Biến đổi của từng từ ở khung này (E4, học Palmier TextAnimation theo từ):
  * - wordSlide: từ thứ i bắt đầu sau i × per khung, trượt lên từ dưới 0.6 chiều cao chữ và hiện dần;
  * - highlightPop: từ đang tới (t / per) phóng 1.15 quanh tâm, đổi màu nhấn;
- * - phụ đề `highlight: 'pop'`: từ đang nói phóng theo `caption.pop.scale`.
+ * - phụ đề `highlight: 'pop'`: từ đang nói phóng theo `caption.pop.scale`; the rest of its line moves aside.
  * Từ khoảng trắng không đếm.
  */
 function wordTweaks(r: RNode, layout: TextLayout): (word: Word) => Tweak | null {
@@ -490,8 +503,26 @@ function wordTweaks(r: RNode, layout: TextLayout): (word: Word) => Tweak | null 
   const index = new Map<Word, number>();
   let count = 0;
   for (const word of layout.words) if (word.chars.trim()) index.set(word, count++);
+  // The spoken word grows around its centre by more than a space is wide at caption sizes, so
+  // it ran into its neighbours ("hundredthousand"): the rest of its line moves aside as much.
+  const grow = new Map<number, { x0: number; x1: number; by: number }>();
+  if (pop && pop.scale > 1) {
+    for (const word of layout.words) {
+      if (!word.style.ranges.includes(pop.range) || !word.chars.trim()) continue;
+      const span = grow.get(word.y);
+      if (span) (span.x0 = Math.min(span.x0, word.x)), (span.x1 = Math.max(span.x1, word.x + word.width));
+      else grow.set(word.y, { x0: word.x, x1: word.x + word.width, by: 0 });
+    }
+    for (const span of grow.values()) span.by = ((pop.scale - 1) * (span.x1 - span.x0)) / 2;
+  }
   return (word) => {
-    if (pop) return word.style.ranges.includes(pop.range) ? { dx: 0, dy: 0, scale: pop.scale, alpha: 1 } : null;
+    if (pop) {
+      if (word.style.ranges.includes(pop.range)) return { dx: 0, dy: 0, scale: pop.scale, alpha: 1 };
+      const span = grow.get(word.y);
+      if (!span?.by) return null;
+      const dx = word.x + word.width <= span.x0 + 0.5 ? -span.by : word.x >= span.x1 - 0.5 ? span.by : 0;
+      return dx ? { dx, dy: 0, scale: 1, alpha: 1 } : null;
+    }
     const i = index.get(word);
     if (!fx || i === undefined) return null;
     if (fx.type === 'wordSlide') {

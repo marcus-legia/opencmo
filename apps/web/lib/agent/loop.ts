@@ -25,14 +25,19 @@ import "server-only";
  */
 
 import { ApiError } from "@/lib/api/errors";
+import { markDown, outage } from "@/lib/llm-health";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
-import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, STOP_POLL_MS } from "./limits";
+import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS, SLOW_PLANS, STOP_POLL_MS } from "./limits";
+import { canSwitchFrom } from "./model";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
-import { captureInput } from "./tools";
+import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
 
 export type Emit = (event: string, data: unknown) => void;
+
+/** Shown when the chat's model cannot answer and another one can: a chat is bound to its model. */
+export const SWITCH_MODEL_MESSAGE = "This chat's model is not available right now. Start a new chat to continue on another model.";
 
 export type Turn = { id: string; session_id: string; number: number; prompt: string; checkpoint_id?: string | null };
 
@@ -67,6 +72,24 @@ async function history(supabase: SupabaseClient, sessionId: string): Promise<Sto
     .order("seq", { ascending: true });
   if (error) throw error;
   return (data ?? []) as StoredMessage[];
+}
+
+/** Stored results of tool calls an interrupted turn never answered (see `StepRequest.ran`). */
+async function ranTools(supabase: SupabaseClient, provider: Provider, sessionId: string, past: StoredMessage[]): Promise<Map<string, { ok: boolean; content: string }>> {
+  const ids = provider.danglingCalls(past);
+  if (!ids.length) return new Map();
+  // Within this chat only: Claude's ids are unique everywhere, Gemini's are short and can repeat.
+  const { data } = await supabase
+    .from("agent_tool_calls")
+    .select("tool_use_id, status, content, agent_turns!inner(session_id)")
+    .eq("agent_turns.session_id", sessionId)
+    .in("tool_use_id", ids)
+    .in("status", ["done", "failed"]);
+  return new Map(
+    ((data ?? []) as { tool_use_id: string; status: string; content: { text?: string } | null }[])
+      .filter((row) => typeof row.content?.text === "string")
+      .map((row) => [row.tool_use_id, { ok: row.status === "done", content: row.content!.text! }]),
+  );
 }
 
 export async function turnStatus(supabase: SupabaseClient, turnId: string) {
@@ -144,6 +167,17 @@ async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "t
 export async function runTurn(env: TurnEnv): Promise<void> {
   const { supabase, turn, emit, provider, scope } = env;
   const started = Date.now();
+  // The session's messages, read once per request: this loop is the only writer while the turn
+  // runs, so each step appends here what it appends to the database.
+  let past: StoredMessage[] | undefined;
+  // The check after this request's last write, while it lists errors; the gate runs once.
+  let openCheck: string | null = null;
+  let gated = false;
+  // Errors the clip already had before this request's first write.
+  let baseline: Set<string> | undefined;
+  // The turn's credits so far, as agent_record_usage returns them after each model call; read again
+  // only when it may be stale (first step, or a step whose tools ran sub-agents that record their own).
+  let spent: number | null = null;
 
   try {
     for (let step = 0; ; step++) {
@@ -152,7 +186,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         emit("done", { status: "stopped", credits: null, error: null });
         return;
       }
-      const spentSoFar = await spentCredits(supabase, turn.id);
+      const spentSoFar = spent ?? (await spentCredits(supabase, turn.id));
       let hold = status.hold_credits ?? 0;
       if (!(step === 0 && env.extended) && spentSoFar >= hold) {
         // Lượt làm cảnh 3D (đã preview_3d) được tự nâng phần giữ một lần lên
@@ -184,9 +218,11 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const watch = watchStop(supabase, turn.id);
       let result;
       try {
+        past ??= await history(supabase, turn.session_id);
         result = await provider.step(
           {
-            history: provider.trimImages(await history(supabase, turn.session_id), KEEP_IMAGES),
+            history: provider.trimImages(past, KEEP_IMAGES, KEEP_IMAGES),
+            ran: await ranTools(supabase, provider, turn.session_id, past),
             tools: scope.tools,
             system: scope.system,
             signal: watch.signal,
@@ -206,7 +242,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         watch.done();
       }
 
-      await rpcOrThrow<number>(supabase, "agent_record_usage", {
+      spent = await rpcOrThrow<number>(supabase, "agent_record_usage", {
         p_turn_id: turn.id,
         p_model: result.model,
         p_input: result.usage.input,
@@ -218,12 +254,21 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       // Nguyên khối native: lịch sử phải giữ từng byte để khối suy nghĩ
       // (thinking block / thoughtSignature) và cache còn hợp lệ ở bước sau.
       await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "assistant", p_content: result.content });
+      past?.push({ role: "assistant", content: result.content as unknown[] });
 
       if (result.stop === "refusal") {
         await finish(env, "failed", "The assistant can't help with that request.");
         return;
       }
       if (!result.toolCalls.length) {
+        if (openCheck && !gated) {
+          // Finishing with errors the check reported: one more step to fix or explain them.
+          gated = true;
+          const nudge = provider.userTurn(VERIFY_GATE, openCheck);
+          await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: nudge });
+          past?.push({ role: "user", content: nudge });
+          continue;
+        }
         await finish(env, "done", null);
         return;
       }
@@ -238,8 +283,38 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const approvals: { call: ToolCall; card: unknown }[] = [];
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
-      for (const call of result.toolCalls) {
-        const plan = await scope.plan(call);
+      let deferred = false;
+      // Planning tools run their own model calls and record them: read the total again next step.
+      if (result.toolCalls.some((call) => SLOW_PLANS.has(call.name))) spent = null;
+      if (!baseline && result.toolCalls.some((call) => scope.isWrite(call.name))) {
+        baseline = checkErrorKeys(await scope.state().catch(() => ""));
+      }
+      // Read-only calls next to each other start together; a read after a write still sees it.
+      const early = new Map<string, { plan: Awaited<ReturnType<Scope["plan"]>>; outcome?: Awaited<ReturnType<Scope["run"]>> }>();
+      for (const [index, call] of result.toolCalls.entries()) {
+        if (!early.has(call.id)) {
+          const group = readGroup(result.toolCalls, index);
+          if (group.length > 1) {
+            await Promise.all(
+              group.map(async (member) => {
+                const plan = await scope.plan(member);
+                early.set(member.id, { plan, ...(plan.kind === "run" ? { outcome: await scope.run(member) } : {}) });
+              }),
+            );
+          }
+        }
+        if (SLOW_PLANS.has(call.name) && Date.now() - started > SLOW_PLAN_CUTOFF_MS) {
+          // Not started: it would run past the request's limit. This request pauses ("time") and
+          // the tab continues at once, where the model calls it again with a full budget.
+          const content = JSON.stringify({ INVALID_INPUT: "Not started yet: this request was near its time limit. Call it again with the same input now." });
+          await recordTool(env, call, "failed", { summary: "Continuing in a moment" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Continuing in a moment" });
+          results.push({ id: call.id, name: call.name, ok: false, content });
+          deferred = true;
+          continue;
+        }
+        const ready = early.get(call.id);
+        const plan = ready?.plan ?? (await scope.plan(call));
         if (plan.kind === "browser") {
           browser.push({ ...call, input: plan.input });
           await recordTool(env, { ...call, input: plan.input }, "pending", null, null);
@@ -247,7 +322,6 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         }
         if (plan.kind === "approval") {
           approvals.push({ call: { ...call, input: plan.input }, card: plan.card });
-          await recordTool(env, { ...call, input: plan.input }, "pending", { approval: plan.card }, null);
           continue;
         }
         if (plan.kind === "input") {
@@ -261,7 +335,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           results.push({ id: call.id, name: call.name, ok: false, content: plan.content });
           continue;
         }
-        const outcome = await scope.run(call);
+        const outcome = ready?.outcome ?? (await scope.run(call));
         await recordTool(
           env,
           call,
@@ -277,6 +351,19 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content });
       }
 
+      // A question and a price card in the same step: the panel shows the question, and the card the
+      // user never saw would be declined with the answer. Send the card back to the model instead,
+      // to propose again once the user has answered.
+      if (questions.length && approvals.length) {
+        const content = JSON.stringify({ INVALID_INPUT: "Ask your question first. Propose this again after the user answers, so they see its price card." });
+        for (const { call } of approvals) {
+          await recordTool(env, call, "failed", { summary: "Waiting for your answer first" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Waiting for your answer first" });
+        }
+        approvals.length = 0;
+      }
+      for (const { call, card } of approvals) await recordTool(env, call, "pending", { approval: card }, null);
+
       if (browser.length || approvals.length || questions.length) {
         // Phần chạy ngay của bước đã xong và đã lưu; phần còn lại chờ.
         const reason = questions.length ? "input" : approvals.length ? "approval" : "browser";
@@ -291,12 +378,15 @@ export async function runTurn(env: TurnEnv): Promise<void> {
 
       // Tool ghi xong thì model thấy trạng thái mới + `check` ngay trong tin nhắn này.
       const state = wrote && result.toolCalls.some((call) => scope.isWrite(call.name)) ? await scope.state() : undefined;
-      await rpcOrThrow(supabase, "agent_append", {
-        p_turn_id: turn.id,
-        p_role: "user",
-        p_content: provider.toolResults(results, state),
-      });
-
+      if (state !== undefined) openCheck = failingCheck(state, baseline);
+      const answer = provider.toolResults(results, state);
+      await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
+      past?.push({ role: "user", content: answer as unknown[] });
+      if (deferred) {
+        await pause(env, "time");
+        emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });
+        return;
+      }
     }
   } catch (err) {
     if (isStopped(err)) {
@@ -304,7 +394,11 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       return;
     }
     console.error("[agent] lượt lỗi", err);
-    const message = provider.failureMessage(err);
+    // The provider itself could not answer: remember it, so the next chat starts on the other one.
+    const kind = outage(err);
+    if (kind && provider.kind !== "fake" && !provider.ownKey) markDown(provider.kind, kind, provider.model);
+    // Only when a new chat would really start elsewhere: an agent on a key of its own is not moved.
+    const message = kind && !provider.ownKey && canSwitchFrom(provider.kind) ? SWITCH_MODEL_MESSAGE : provider.failureMessage(err);
     try {
       await finish(env, "failed", message);
     } catch (closeErr) {

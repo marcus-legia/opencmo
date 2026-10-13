@@ -849,6 +849,45 @@ $$;
 
 
 --
+-- Name: agent_reap_turns(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_reap_turns() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_turn record;
+  v_count integer := 0;
+begin
+  for v_turn in
+    select t.id, t.status, t.session_id
+    from public.agent_turns t
+    join public.agent_sessions s on s.id = t.session_id
+    where (t.status in ('running', 'awaiting_browser') and (s.lock_until is null or s.lock_until < now()))
+       or (t.status in ('awaiting_approval', 'awaiting_input', 'awaiting_continue') and s.updated_at < now() - interval '24 hours')
+    order by t.created_at
+    limit 200
+  loop
+    -- Same lock order as agent_stop and agent_resume_turn (session, then turn); a session in use
+    -- right now is left for the next sweep.
+    perform 1 from public.agent_sessions where id = v_turn.session_id for update skip locked;
+    if not found then
+      continue;
+    end if;
+    perform public.agent_close_turn(
+      v_turn.id,
+      case when v_turn.status = 'running' then 'failed' else 'stopped' end,
+      case when v_turn.status = 'running' then 'The assistant stopped responding.' else null end
+    );
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+
+--
 -- Name: agent_record_tool(uuid, text, text, jsonb, text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -912,15 +951,22 @@ begin
   select * into v_turn from public.agent_turns
   where session_id = p_session_id
     and status in ('awaiting_browser', 'awaiting_approval', 'awaiting_input', 'awaiting_continue')
-  order by number desc limit 1;
+  order by number desc limit 1
+  for update;
   if not found then
     raise exception 'The assistant is not waiting for you.' using errcode = 'P0001';
   end if;
-  -- Hết credit giữ: chỉ gia hạn (agent_extend_hold) mới chạy tiếp được.
+  -- Out of held credits: only agent_extend_hold lets the turn continue.
   if v_turn.status = 'awaiting_continue' and v_turn.pause_reason = 'budget' then
     raise exception 'Approve more credits to let the assistant continue.' using errcode = 'P0001';
   end if;
-  update public.agent_turns set status = 'running', pause_reason = null where id = v_turn.id returning * into v_turn;
+  update public.agent_turns set status = 'running', pause_reason = null
+  where id = v_turn.id
+    and status in ('awaiting_browser', 'awaiting_approval', 'awaiting_input', 'awaiting_continue')
+  returning * into v_turn;
+  if not found then
+    raise exception 'The assistant is not waiting for you.' using errcode = 'P0001';
+  end if;
   update public.agent_sessions set lock_until = now() + interval '6 minutes', updated_at = now()
   where id = p_session_id;
   return v_turn;
@@ -968,10 +1014,13 @@ declare
   v_turn public.agent_turns;
 begin
   perform public.agent_owned_session(p_session_id, v_user);
+  -- Same lock as agent_resume_turn and agent_begin_turn: Stop waits for a resume in flight.
+  perform 1 from public.agent_sessions where id = p_session_id for update;
   select * into v_turn from public.agent_turns
   where session_id = p_session_id
     and status in ('running', 'awaiting_browser', 'awaiting_approval', 'awaiting_input', 'awaiting_continue')
-  order by number desc limit 1;
+  order by number desc limit 1
+  for update;
   if not found then
     return null;
   end if;
@@ -3721,6 +3770,13 @@ begin
     raise exception 'This model is not available.' using errcode = '22023';
   end if;
   perform public.ai_check_spec(v_model, p_spec);
+
+  -- A finished generation whose file was deleted from the library cannot be reused: Retry would
+  -- return it forever, with no file. Its hash is retired (still 64 hex characters) so a new one can
+  -- be made; a shot continuing it then waits for the new one like for any parent.
+  update public.generations
+  set spec_hash = encode(sha256(convert_to(spec_hash || ':retired:' || id::text, 'UTF8')), 'hex')
+  where job_id = p_job_id and spec_hash = p_spec_hash and status = 'done' and media_asset_id is null;
 
   select * into v_generation from public.generations
   where job_id = p_job_id and spec_hash = p_spec_hash and status in ('queued', 'running', 'done');

@@ -165,6 +165,45 @@ function generatedWithEnd(document: ClipDocument): ClipDocument {
 }
 
 /**
+ * Intentionally different from the old version: `set_frame` scales media around its own centre
+ * (one factor for both sides), and what covered the old frame covers the new one. The old version
+ * scaled the top-left corner by each axis, so a 16:9 frame left a square logo pinned to the left
+ * edge. Rebuilds the old geometry from the old result (x·ratioW, size·min ratio), then applies
+ * the new rule to every non-text media element.
+ */
+function centredAfterFrame(document: ClipDocument, from: { width: number; height: number }): ClipDocument {
+  const next = structuredClone(document);
+  const scene = sceneOf(next) as unknown as { width: number; height: number } | undefined;
+  if (!scene || (scene.width === from.width && scene.height === from.height)) return next;
+  const ratioW = scene.width / from.width;
+  const ratioH = scene.height / from.height;
+  const media = Math.min(ratioW, ratioH);
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const visit = (nodes: ClipNode[] | undefined) => {
+    for (const node of nodes ?? []) {
+      const entity = node as unknown as Record<string, unknown>;
+      const fixed = ['scene', 'sequence', 'captions', 'text', 'group'].includes(String(entity.kind)) || entity.src === 'assets/master.mp4';
+      const { x, y, width, height } = entity as { x?: number; y?: number; width?: number; height?: number };
+      if (!fixed && typeof width === 'number' && typeof height === 'number') {
+        const left = (x ?? 0) / ratioW;
+        const top = (y ?? 0) / ratioH;
+        const oldWidth = width / media;
+        const oldHeight = height / media;
+        const covered = left <= 0.5 && top <= 0.5 && left + oldWidth >= from.width - 0.5 && top + oldHeight >= from.height - 0.5;
+        const factor = covered ? Math.max(ratioW, ratioH) : media;
+        entity.x = round((left + oldWidth / 2) * ratioW - (oldWidth * factor) / 2);
+        entity.y = round((top + oldHeight / 2) * ratioH - (oldHeight * factor) / 2);
+        entity.width = round(oldWidth * factor);
+        entity.height = round(oldHeight * factor);
+      }
+      visit((node as { children?: ClipNode[] }).children);
+    }
+  };
+  visit(sceneOf(next)?.children as ClipNode[] | undefined);
+  return next;
+}
+
+/**
  * CỐ Ý khác bản cũ: media `add_generated` vào một HÀNG (`sequence` "B-roll N" /
  * "Audio N", `tracks.ts`) thay vì một lớp riêng của scene (UAT 09/10). Gỡ hàng ra
  * tại chỗ trước khi so — hàng nằm đúng chỗ lớp cũ nằm, mọi prop của con giữ nguyên.
@@ -224,7 +263,10 @@ describe('golden: op trên document = op trên TSX cũ', () => {
       const mine = normalizer(known);
       const theirs = normalizer(known);
       const reordered = hasGeneratedVisual(test.ops.slice(0, index + 1)) ? generatedBelowText(expected.document) : expected.document;
-      const ended = generatedWithEnd(reordered);
+      const framed = test.ops[index]!.some((op) => (op as { op?: string }).op === 'set_frame')
+        ? centredAfterFrame(reordered, sceneOf(before) as unknown as { width: number; height: number })
+        : reordered;
+      const ended = generatedWithEnd(framed);
       // CỐ Ý khác bản cũ: từ lượt op đầu tiên có đổi document, phụ đề nằm lớp
       // trên cùng (`captionsOnTop`) — bản cũ để chữ/tiếng thêm sau nằm trên phụ đề.
       edited ||= !same(result.document, before);

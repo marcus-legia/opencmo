@@ -6,13 +6,13 @@
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 import { createCanvas, GlobalFonts, loadImage, LottieAnimation, type Canvas, type Image } from '@napi-rs/canvas';
-import { builtinLottieName, createRenderer, FONTS, lottieTime, outputSize, parseCube, type CubeLut, type MediaHost, type Transcript } from '@opencmo/clip-render';
+import { builtinLottieName, createRenderer, FONTS, lottieTime, outputSize, parseCube, setFallbackFamilies, type CubeLut, type MediaHost, type Transcript } from '@opencmo/clip-render';
 
 import { VideoFrames } from './decode.ts';
 import { jobDocument, sourceKey, type Job } from './job.ts';
@@ -36,6 +36,11 @@ export type SegmentInput = {
 
 let fontsLoaded: string | null = null;
 
+/** Our own Latin font, always there (bundled): first after the brand font, see `setFallbackFamilies`. */
+const LATIN_FALLBACK = 'OpenCMO Latin';
+/** Scripts and emoji the brand fonts do not cover, when the export image has them (`modal_app.py`). */
+const SCRIPT_FALLBACKS = ['Noto Sans CJK JP', 'Noto Sans Thai', 'Noto Sans Devanagari', 'Noto Color Emoji'];
+
 export function registerFonts(dir: string) {
   if (fontsLoaded === dir) return;
   for (const [family, entry] of Object.entries(FONTS)) {
@@ -43,6 +48,9 @@ export function registerFonts(dir: string) {
       if (file) GlobalFonts.registerFromPath(join(dir, file), family);
     }
   }
+  const latin = join(dir, 'DejaVuSans.ttf');
+  if (existsSync(latin)) GlobalFonts.registerFromPath(latin, LATIN_FALLBACK);
+  setFallbackFamilies([...(existsSync(latin) ? [LATIN_FALLBACK] : []), ...SCRIPT_FALLBACKS.filter((family) => GlobalFonts.has(family))]);
   fontsLoaded = dir;
 }
 

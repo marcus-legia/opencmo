@@ -36,7 +36,7 @@ from opencmo.ai.providers.base import (
     ProviderError,
     Result,
 )
-from opencmo.media.ffmpeg import run
+from opencmo.media.ffmpeg import USER_INPUT, run
 
 log = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class ElevenLabsProvider(ProviderAdapter):
         raw.write_bytes(audio)
         out = workdir / "result.m4a"
         run([
-            "ffmpeg", "-v", "error", "-y", "-i", str(raw),
+            "ffmpeg", "-v", "error", "-y", *USER_INPUT, "-i", str(raw),
             "-c:a", "aac", "-b:a", "128k", "-ac", "1", str(out),
         ], timeout=180)
         # `normalized_alignment` khớp văn bản đã chuẩn hoá (số đọc thành chữ);
@@ -173,7 +173,7 @@ class ElevenLabsProvider(ProviderAdapter):
         out = workdir / "result.m4a"
         # Đúng số giây đã trả tiền: model có thể trả dài hơn một chút.
         run([
-            "ffmpeg", "-v", "error", "-y", "-i", str(raw), "-t", str(seconds),
+            "ffmpeg", "-v", "error", "-y", *USER_INPUT, "-i", str(raw), "-t", str(seconds),
             "-c:a", "aac", "-b:a", "160k", "-ac", "2", str(out),
         ], timeout=180)
         ref = str(out)

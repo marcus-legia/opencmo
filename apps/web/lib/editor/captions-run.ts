@@ -39,6 +39,8 @@ async function translateLines(lines: TranscriptLine[], language: string): Promis
     label: "captions.translate",
     failure: TRANSLATE_FAILED,
     maxTokens: 16_000,
+    // Without a limit the SDK waits up to 10 minutes, far past the request's own limit.
+    timeoutMs: 120_000,
     system:
       `You translate video captions into ${language}. Translate each numbered line on its own, keeping its meaning and spoken tone. ` +
       "Return exactly one translated line per input line, in the same order. Keep names and brand names as they are. Do not add notes.",
@@ -74,7 +76,7 @@ export async function translateCaptions(
     const { error: refundError } = await supabase.rpc("refund_caption_translation", { p_charge_id: charge.charge_id });
     if (refundError) console.error(`[captions] refund_caption_translation ${charge.charge_id} failed: ${refundError.message}`);
     if (error instanceof ApiError) throw error;
-    throw new ApiError(502, error instanceof LlmError ? error.message : TRANSLATE_FAILED);
+    throw new ApiError(422, error instanceof LlmError ? error.message : TRANSLATE_FAILED);
   }
 }
 
@@ -100,7 +102,11 @@ export async function createMediaCaptions(
     const { data } = await supabase.from("tasks").select("status, error, output").eq("id", task_id).maybeSingle();
     const task = data as { status: string; error: string | null; output: { src?: string } | null } | null;
     if (task?.status === "done" && task.output?.src) return { taskId: task_id, credits, src: task.output.src };
-    if (task?.status === "failed" || task?.status === "cancelled") throw new ApiError(502, task.error ?? CAPTIONS_FAILED);
+    if (task?.status === "failed" || task?.status === "cancelled") {
+      // The worker's own error is for the logs; the user gets what happened and that it was refunded.
+      if (task.error) console.error("[captions] task failed", task_id, task.error);
+      throw new ApiError(422, CAPTIONS_FAILED);
+    }
   }
   return { taskId: task_id, credits, src: null };
 }

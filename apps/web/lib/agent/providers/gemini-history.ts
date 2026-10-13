@@ -1,6 +1,6 @@
 /**
- * Read-only history format for Assistant chats saved while Gemini was a provider. New chats run on
- * Claude; these sessions can still be opened and read, but not continued.
+ * History format of Gemini sessions (native `parts`). Needs no key or SDK, so the panel can draw a
+ * Gemini chat even when the server has no Gemini key; the provider is in `gemini.ts`.
  */
 
 import { IMAGE_OMITTED, type Format, type StoredMessage, type ToolResult } from "./types";
@@ -14,7 +14,7 @@ type Part = {
   functionResponse?: { id?: string; name: string; response: Record<string, unknown>; parts?: Part[] };
 };
 
-const callId = (part: Part, index: number): string => part.functionCall?.id || `gc_${index}`;
+export const callId = (part: { functionCall?: { id?: string } }, index: number): string => part.functionCall?.id || `gc_${index}`;
 
 function parseContent(content: string): Record<string, unknown> {
   try {
@@ -57,6 +57,19 @@ export const geminiFormat: Format = {
       .map((part) => part.text!)
       .join("")
       .trim(),
+  danglingCalls(history: StoredMessage[]): string[] {
+    const out: string[] = [];
+    history.forEach((message, index) => {
+      if (message.role !== "assistant") return;
+      const calls = geminiFormat.callsIn(message.content);
+      const next = history[index + 1];
+      // Responses are sent in call order, so the first `answered` calls are the answered ones.
+      const answered = next?.role === "user" ? (next.content as Part[]).filter((part) => part.functionResponse).length : 0;
+      // Ids we generated (`gc_<position>`) repeat in every message: they cannot name a stored result.
+      for (const call of calls.slice(answered)) if (!call.id.startsWith("gc_")) out.push(call.id);
+    });
+    return out;
+  },
   trimImages(history: StoredMessage[], keep: number): StoredMessage[] {
     const hasImage = (message: StoredMessage) =>
       message.role === "user" && (message.content as Part[]).some((part) => part.inlineData || part.functionResponse?.parts?.length);

@@ -22,7 +22,8 @@
 import type { CaptionsNode, ClipDocument, ClipNode, SequenceNode, TextCutMark, VideoNode } from '@opencmo/clip-doc';
 import { FPS } from '@opencmo/clip-render';
 
-import { activeView, assign, clone, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
+import { activeView, assign, clone, copyOf, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
+import { faceXTrack, type FaceFrame, type XKey } from './face-track';
 import { rebuildLayout } from './layout';
 import { keptDuration, keptRanges, round, type Range } from './transcript';
 
@@ -166,7 +167,7 @@ export function readCaptionState(document: ClipDocument): CaptionState | null {
  * bản id là hai phần tử cùng tên, và lượt sửa kế tiếp theo tên đó trượt lặng lẽ.
  * Lượt stamp sau đặt tên mới.
  */
-function segment(template: VideoNode, range: Range, start: number): VideoNode {
+function segment(template: VideoNode, range: Range, start: number, face: FaceFrame | null): VideoNode {
   const copy = structuredClone(template) as unknown as Entity;
   const strip = (value: unknown, key?: string): void => {
     if (key === 'src' || key === 'marks') return;
@@ -181,7 +182,23 @@ function segment(template: VideoNode, range: Range, start: number): VideoNode {
   // `sequence` không tự xếp các con nối đuôi: thiếu `start` thì mọi đoạn cùng
   // bắt đầu ở 0 và chỉ đoạn cuối còn thấy được.
   copy.start = round(start);
+  // The face-tracking track lives whole in the scene's `reframe` mark: a segment carries only the
+  // keys around its own range, or a long clip cut many times outgrows the save limit.
+  const track = face ? ((copy as unknown as VideoNode).tracks ?? []).find((item) => item.property === 'x') : undefined;
+  const box = Number(copy.width);
+  if (track && face && box > face.frameWidth) {
+    const keys = faceXTrack(track.keyframes as unknown as XKey[], face, range, box);
+    if (keys) track.keyframes = keys as typeof track.keyframes;
+  }
   return copy as unknown as VideoNode;
+}
+
+/** The scene's face track, when the frame slides over the video to follow it. */
+function faceFrame(document: ClipDocument): FaceFrame | null {
+  const scene = sceneOf(document);
+  const mark = scene?.marks?.reframe;
+  if (!scene || !mark || (mark.mode ?? 'fill') !== 'fill' || mark.track.length < 2 || typeof scene.width !== 'number') return null;
+  return { track: mark.track as [number, number][], frameWidth: scene.width };
 }
 
 const withoutMute = (video: VideoNode): VideoNode => {
@@ -210,8 +227,85 @@ function soundSegment(template: VideoNode, range: Range, kept: Range[], index: n
     marks: { 'cut-audio': true },
   };
   for (const key of ['volume', 'denoise', 'playbackRate']) if (source[key] !== undefined) node[key] = source[key];
-  if (tracks.length) node.tracks = structuredClone(tracks);
+  // Every sound segment gets its own copy: the template's track ids would repeat once per segment.
+  if (tracks.length) node.tracks = tracks.map(copyOf);
   return node as unknown as ClipNode;
+}
+
+/** Clip time → source time under `kept` (the clip as it was cut). */
+function sourceAt(time: number, kept: Range[]): number {
+  for (let index = 0; index < kept.length; index++) {
+    const range = kept[index]!;
+    const at = segmentStart(kept, index);
+    if (time < at + (range.end - range.start) || index === kept.length - 1) return Math.min(range.end, range.start + Math.max(0, time - at));
+  }
+  return 0;
+}
+
+/** Source time → clip time under `kept`, snapped to the next kept moment (`forward`) or the last one. */
+function clipAt(source: number, kept: Range[], forward: boolean): number | null {
+  const order = forward ? kept.map((_, index) => index) : kept.map((_, index) => kept.length - 1 - index);
+  for (const index of order) {
+    const range = kept[index]!;
+    const at = segmentStart(kept, index);
+    if (source >= range.start && source <= range.end) return round(at + source - range.start);
+    if (forward && source < range.start) return round(at);
+    if (!forward && source > range.end) return round(at + range.end - range.start);
+  }
+  return null;
+}
+
+/**
+ * Moves what sits on the clip timeline with the words under it when the cut changes: b-roll,
+ * text, AI media, voice-overs, animations and layout ranges were placed in clip seconds, and a cut
+ * earlier in the clip used to leave them over different words. Clip time is mapped back to source
+ * time under the old cut and forward under the new one; what is left with nothing kept is removed.
+ */
+function followCut(document: ClipDocument, skip: Set<unknown>, before: Range[], after: Range[]): void {
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  const move = (start: number, end: number | undefined): { start: number; end?: number } | null => {
+    const from = clipAt(sourceAt(start, before), after, true);
+    if (from === null) return null;
+    if (end === undefined) return { start: from };
+    const to = clipAt(sourceAt(Math.max(start, end - 1e-6), before), after, false);
+    if (to === null || to - from < 0.05) return null;
+    return { start: from, end: Math.max(from, to) };
+  };
+  const visit = (list: Entity[]): Entity[] =>
+    list.filter((entity) => {
+      if (skip.has(entity) || isMaster(entity as unknown as ClipNode)) return true;
+      // The speaker's captions are rebuilt from the cut transcript above.
+      if (entity.kind === 'captions' && !isVoiceoverCaptions(entity as unknown as ClipNode)) return true;
+      // A row (`B-roll 1`): its clips sit on the clip timeline themselves.
+      if (entity.kind === 'sequence' && !entity.start && Array.isArray(entity.children)) {
+        entity.children = visit(entity.children as Entity[]);
+        return (entity.children as Entity[]).length > 0;
+      }
+      if (typeof entity.start !== 'number') return true;
+      // Sound (a voice line, music) and a voice-over's captions keep their length and are never
+      // dropped: trimming them would cut a sentence off. They move with where they start.
+      if (entity.kind === 'audio' || entity.kind === 'captions') {
+        const at = move(entity.start, undefined) ?? { start: clipAt(sourceAt(entity.start, before), after, false) ?? 0 };
+        if (typeof entity.end === 'number') entity.end = round(at.start + (entity.end - entity.start));
+        entity.start = at.start;
+        return true;
+      }
+      const moved = move(entity.start, typeof entity.end === 'number' ? entity.end : undefined);
+      if (!moved) return false;
+      entity.start = moved.start;
+      if (moved.end !== undefined) entity.end = moved.end;
+      return true;
+    });
+  const scene = sceneOf(document) as Entity | undefined;
+  if (!scene) return;
+  scene.children = visit((scene.children as Entity[] | undefined) ?? []);
+  const layout = (scene.marks as { layout?: { ranges?: { start: number; end: number }[] } } | undefined)?.layout;
+  if (layout?.ranges) {
+    layout.ranges = layout.ranges.flatMap((range) => {
+      const moved = move(range.start, range.end);
+      return moved && moved.end !== undefined ? [{ ...range, start: moved.start, end: moved.end }] : [];
+    });
+  }
 }
 
 export type WriteCaptionState = {
@@ -262,8 +356,20 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
   const roll: AudioRoll = Object.fromEntries([...rolls].map(([index, value]) => [rollKey(kept[index]!.start), value]));
   // Lượt trước có J/L-cut thì video mẫu câm vì CHÍNH nó (không phải người dùng tắt
   // tiếng): dựng lại từ một mẫu không câm, rồi câm lại nếu J/L-cut vẫn còn.
-  const template = found.mark?.roll && Object.keys(found.mark.roll).length ? withoutMute(found.template) : found.template;
-  const videos = kept.map((range, index) => segment(template, range, segmentStart(kept, index)));
+  const unmute = (video: VideoNode) => (found.mark?.roll && Object.keys(found.mark.roll).length ? withoutMute(video) : video);
+  const template = unmute(found.template);
+  // Each new segment starts from the old segment that showed most of the same source: a zoom, an
+  // effect or a transition the user put on one segment stays on it instead of being replaced by
+  // the first segment's.
+  const olds = videosIn(found.target);
+  const overlap = (video: VideoNode, range: Range) =>
+    Math.min(range.end, Number(video.sourceOut ?? range.end)) - Math.max(range.start, Number(video.sourceIn ?? range.start));
+  const templateFor = (range: Range): VideoNode => {
+    const best = olds.reduce<VideoNode | null>((pick, video) => (overlap(video, range) > (pick ? overlap(pick, range) : 0) ? video : pick), null);
+    return best ? unmute(best) : template;
+  };
+  const face = faceFrame(document);
+  const videos = kept.map((range, index) => segment(templateFor(range), range, segmentStart(kept, index), face));
   // Có J/L-cut: hình câm, tiếng đi bằng các đoạn `audio` cùng nguồn với điểm cắt đã dời.
   const sounds = rolls.size ? kept.map((range, index) => soundSegment(template, range, kept, index, rolls)) : [];
   if (rolls.size) for (const video of videos) (video as { muted?: boolean }).muted = true;
@@ -275,8 +381,9 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
         },
         children: [...videos, ...sounds],
       } satisfies SequenceNode)
-    : segment(template, window, 0);
+    : segment(template, window, 0, face);
   replaceNode(document, found.target, replacement);
+  followCut(document, new Set([replacement]), keptRanges(window, found.mark?.removed ?? []), kept);
 
   // Sau khi cắt, phụ đề đọc transcript OUTPUT từ giây 0 tới hết phần giữ lại;
   // chưa cắt thì đọc transcript nguồn đúng cửa sổ của video.

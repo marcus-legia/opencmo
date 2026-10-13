@@ -7,9 +7,10 @@ import "server-only";
  */
 
 import type { CalendarItem, ChatMessage, InboxCard, LinkRow, LogEntry, Metrics, SeoMetrics } from "./workspace";
+import { isProduction } from "@/lib/production";
 
 export function demoAllowed(): boolean {
-  return process.env.OPENCMO_CMO_DEMO === "1" && process.env.VERCEL_ENV !== "production";
+  return process.env.OPENCMO_CMO_DEMO === "1" && !isProduction();
 }
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();

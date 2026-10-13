@@ -1,13 +1,17 @@
 /**
  * Assistant providers, offline: tool schemas build correctly, Claude history maps tool results and
- * images, and chats saved while Gemini was a provider still read back.
+ * images, and the Gemini provider maps history, tools, images and usage on a recorded response.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/providers.check.ts
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import type { GoogleGenAI } from "@google/genai";
+
+import { closeDanglingCalls, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
+import type { Delta } from "./providers/types";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
 // ---------------------------------------------------------------- tool
@@ -20,7 +24,7 @@ const text = JSON.stringify(TOOL_SPECS.map((spec) => spec.schema));
 for (const banned of ['"pattern"', '"minimum"', '"maxLength"', '"$schema"', '"propertyNames"']) {
   assert.ok(!text.includes(banned), `schema gửi API không còn ${banned}`);
 }
-assert.equal(TOOL_SPECS.find((spec) => spec.name === "update_element")!.strict, false, "record không strict");
+assert.equal(TOOL_SPECS.find((spec) => spec.name === "set_props")!.strict, false, "record không strict");
 assert.equal(TOOL_SPECS.find((spec) => spec.name === "set_frame")!.strict, true);
 
 // The API allows at most MAX_STRICT_TOOLS strict tools; credit-spending tools keep strict first.
@@ -32,7 +36,7 @@ assert.ok(TOOL_SPECS.filter((spec) => spec.strict).length > MAX_STRICT_TOOLS, "t
 assert.ok(sent.size <= MAX_STRICT_TOOLS, "strict tools capped");
 assert.ok(!sent.has("generate_media"), "one large priced schema does not crowd out the small ones");
 // Eager streaming skips the API's JSON check: only strict tools (valid JSON by grammar) may use it.
-const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true);
+const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true) as { name: string }[];
 for (const tool of defined) {
   const eager = (tool as { eager_input_streaming?: boolean }).eager_input_streaming === true;
   assert.equal(eager, (tool as { strict?: boolean }).strict === true, `${tool.name}: eager streaming only with strict`);
@@ -84,6 +88,13 @@ const partial = closeDanglingToolUses([stopped[0]!, stopped[1]!, { role: "user" 
 assert.deepEqual((partial[2]!.content as { tool_use_id: string }[]).map((block) => block.tool_use_id), ["t1", "t2"]);
 // Last message is the unanswered tool_use: a user message is added.
 assert.equal(closeDanglingToolUses(stopped.slice(0, 2)).at(-1)!.role, "user");
+// A tool that did run before the turn was interrupted is reported as it ran, not as never run:
+// told "not completed", the model inserted the same b-roll again.
+assert.deepEqual(danglingToolUses(stopped), ["t1", "t2"]);
+const ran = closeDanglingToolUses(stopped, new Map([["t1", { ok: true, content: '{"ok":true,"path":"frame.png"}' }]]));
+const reported = ran[2]!.content as { tool_use_id?: string; content?: string; is_error?: boolean }[];
+assert.deepEqual([reported[0]!.content, reported[0]!.is_error], ['{"ok":true,"path":"frame.png"}', false]);
+assert.deepEqual([reported[1]!.content, reported[1]!.is_error], [NOT_COMPLETED, true]);
 // A clean history is passed through unchanged.
 assert.deepEqual(closeDanglingToolUses([stopped[0]!, { role: "assistant" as const, content: [{ type: "text", text: "hi" }] }]).length, 2);
 
@@ -112,13 +123,127 @@ assert.deepEqual(anthropicFormat.trimImages([attached, withImage("x"), withImage
 const geminiAttached = { role: "user" as const, content: geminiFormat.userTurn("hi", "state", [{ data: "AAAA", mimeType: "image/jpeg" }]) };
 assert.equal(JSON.stringify(geminiFormat.trimImages([geminiAttached, ...geminiHistory.slice(1)], 2)[0]!.content).includes("inlineData"), false);
 
+// Windowed trimming: images pile up to keep + window, then the oldest are cut back to keep at once,
+// so the cached prefix is rewritten every `window` captures instead of on each one.
+const omitted = (count: number) => Math.max(0, count - 2 - imagesOver(count, 2, 2));
+assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(omitted), [0, 0, 0, 0, 3, 3, 5, 5, 7]);
+const many = ["a", "b", "c", "d", "e"].map(withImage);
+assert.deepEqual(anthropicFormat.trimImages(many, 2, 2).map(imagesIn), [0, 0, 0, 1, 1]);
+assert.deepEqual(anthropicFormat.trimImages(many.slice(0, 4), 2, 2).map(imagesIn), [1, 1, 1, 1], "nothing cut before the window fills");
+
+// Context editing is off unless asked for; on, it never clears the guides, skills or plan.
+assert.equal(contextEditing({} as NodeJS.ProcessEnv), null);
+const editing = contextEditing({ OPENCMO_AGENT_CONTEXT_EDITING: "1" } as unknown as NodeJS.ProcessEnv)!;
+assert.equal(editing.beta, "context-management-2025-06-27");
+assert.deepEqual(editing.context_management.edits[0]!.exclude_tools, ["read_guide", "read_skill", "update_plan"]);
+
+// Tool search: off by default; on, the search tool leads, the core stays loaded, the rest defers.
+assert.equal(toolSearchOn({} as NodeJS.ProcessEnv), false);
+const plain = toolDefinitions(TOOL_SPECS, false) as { name: string; defer_loading?: boolean }[];
+assert.ok(plain.every((tool) => !tool.defer_loading), "nothing deferred without the flag");
+const searched = toolDefinitions(TOOL_SPECS, false, true) as { name: string; type?: string; defer_loading?: boolean }[];
+assert.equal(searched[0]!.type, "tool_search_tool_bm25_20251119");
+assert.ok(!searched[0]!.defer_loading, "the search tool itself is never deferred");
+for (const tool of searched.slice(1)) assert.equal(Boolean(tool.defer_loading), !ALWAYS_LOADED.has(tool.name), tool.name);
+const loaded = searched.filter((tool) => !tool.defer_loading).length;
+assert.ok(loaded < searched.length / 2 + 5, `most tools wait for a search (${loaded} of ${searched.length} loaded)`);
+// Every always-loaded name is a real tool of the clip scope (or a priced one configured elsewhere).
+const priced = new Set(["create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill"]);
+for (const name of ALWAYS_LOADED) assert.ok(names.includes(name) || priced.has(name), `${name} is a tool`);
+
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.
 assert.deepEqual(
   (anthropicFormat.userTurn("hi", "<project_state>{}</project_state>", [{ data: "AAAA", mimeType: "image/jpeg" }]) as { type: string }[]).map((block) => block.type),
   ["text", "image", "text"],
 );
 
+await geminiChecks();
 console.log("agent providers: mọi kiểm tra xanh");
+}
+
+async function geminiChecks(): Promise<void> {
+  const chunks = [
+    { candidates: [{ content: { role: "model", parts: [{ text: "Planning the frame.", thought: true }] } }] },
+    { candidates: [{ content: { role: "model", parts: [{ text: "Switching to square." }] } }] },
+    {
+      candidates: [
+        {
+          content: {
+            role: "model",
+            parts: [
+              { functionCall: { name: "set_frame", args: { width: 1080, height: 1080 } }, thoughtSignature: "sig-A" },
+              { functionCall: { id: "call-xyz", name: "capture", args: { times: [1] } } },
+            ],
+          },
+          finishReason: "STOP",
+        },
+      ],
+      usageMetadata: { promptTokenCount: 5000, cachedContentTokenCount: 4000, candidatesTokenCount: 60, thoughtsTokenCount: 40 },
+      modelVersion: "gemini-9-pro-preview",
+    },
+  ];
+  let sent: { model?: string; contents?: { role: string; parts: Record<string, unknown>[] }[]; config?: Record<string, unknown> } = {};
+  const client = {
+    models: {
+      generateContentStream: async (params: typeof sent) => {
+        sent = params;
+        return (async function* () {
+          yield* chunks;
+        })();
+      },
+    },
+  } as unknown as Pick<GoogleGenAI, "models">;
+
+  const deltas: Delta[] = [];
+  const provider = geminiProvider("test", client);
+  const step = await provider.step(
+    { history: [{ role: "user", content: geminiFormat.userTurn("make it square", "<project_state>{}</project_state>") }], tools: TOOL_SPECS, system: "system prompt" },
+    (delta) => deltas.push(delta),
+  );
+  assert.equal(sent.config!.systemInstruction, "system prompt");
+  assert.deepEqual(sent.contents!.map((content) => content.role), ["user"]);
+  assert.equal((sent.config!.automaticFunctionCalling as { disable: boolean }).disable, true, "the SDK does not run tools itself");
+  assert.equal((sent.config!.tools as { functionDeclarations: unknown[] }[])[0]!.functionDeclarations.length, TOOL_SPECS.length);
+  assert.equal(step.stop, "tool");
+  assert.equal(step.model, "gemini-9-pro-preview", "usage is priced on the model that answered");
+  assert.deepEqual(step.usage, { input: 1000, output: 100, cacheRead: 4000, cacheWrite: 0 });
+  assert.deepEqual(step.toolCalls.map((call) => [call.id, call.name]), [["gc_2", "set_frame"], ["call-xyz", "capture"]]);
+  assert.equal((step.content as { thoughtSignature?: string }[])[2]!.thoughtSignature, "sig-A", "thoughtSignature kept");
+  assert.deepEqual(geminiFormat.callsIn(step.content), step.toolCalls, "a stored message reads back the same ids");
+  assert.equal(geminiFormat.replyText(step.content), "Switching to square.");
+  assert.deepEqual(deltas.map((delta) => delta.type), ["thinking", "text", "tool_start", "tool_start"]);
+
+  // A stopped turn left both calls unanswered: the next request answers them, with the stored
+  // result for the tool that ran and "not completed" for the other.
+  const dangling = [
+    { role: "user" as const, content: geminiFormat.userTurn("make it square", "state") },
+    { role: "assistant" as const, content: step.content },
+    { role: "user" as const, content: geminiFormat.userTurn("actually stop", "state") },
+  ];
+  const closed = closeDanglingCalls(dangling, new Map([["gc_2", { ok: true, content: '{"ok":true}' }]]));
+  const answers = closed[2]!.content as { functionResponse?: { name: string; response: Record<string, unknown> }; text?: string }[];
+  assert.deepEqual(answers.slice(0, 2).map((part) => part.functionResponse?.name), ["set_frame", "capture"], "responses first, in call order");
+  assert.deepEqual(answers[0]!.functionResponse!.response, { ok: true });
+  assert.ok(JSON.stringify(answers[1]!.functionResponse!.response).includes("Not completed"));
+  assert.equal(answers[2]!.text, "actually stop", "the new prompt follows");
+  assert.equal(closeDanglingCalls(closed).length, closed.length, "an answered history is left alone");
+  assert.equal(JSON.stringify(dangling[2]!.content).includes("functionResponse"), false, "input history not edited");
+  // Through the provider: the request carries the answers.
+  await provider.step({ history: dangling, tools: [], system: "" }, () => undefined);
+  assert.equal(sent.contents![2]!.parts.filter((part) => part.functionResponse).length, 2);
+
+  // Safety refusal → refusal; out of tokens → max_tokens.
+  for (const [finish, stop] of [["SAFETY", "refusal"], ["MAX_TOKENS", "max_tokens"]] as const) {
+    const blocked = geminiProvider("test", {
+      models: {
+        generateContentStream: async () =>
+          (async function* () {
+            yield { candidates: [{ content: { parts: [{ text: "…" }] }, finishReason: finish }] };
+          })(),
+      },
+    } as unknown as Pick<GoogleGenAI, "models">);
+    assert.equal((await blocked.step({ history: [], tools: [], system: "" }, () => undefined)).stop, stop);
+  }
 }
 
 void main().catch((err) => {

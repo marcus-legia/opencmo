@@ -6,17 +6,22 @@
  * are held, so a blocked request costs nothing. What the model draws is checked again in the
  * worker (`opencmo/ai/moderation.py`).
  *
- * Claude Haiku classifies the text against the product rules. If the check cannot run (API error),
- * the request is refused: a user retrying beats delivering something unchecked.
+ * Claude Haiku classifies the text against the product rules. When Claude itself cannot answer
+ * (no credit, rate limits, an outage) and the server has a Gemini key, Gemini Flash applies the
+ * same policy. If no check can run, the request is refused: a user retrying beats delivering
+ * something unchecked. A verdict is final: a block is never retried on the other model.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { ApiError as GeminiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
+import { outage } from "@/lib/llm-health";
 
 import { aiFakeEnabled } from "./models";
+import { isProduction } from "@/lib/production";
 
 const MODEL = process.env.OPENCMO_MODERATION_MODEL || "claude-haiku-5-5";
 /** Fake mode: text containing this mark is blocked — tests the refusal path without the network. */
@@ -26,7 +31,10 @@ const MAX_CHARS = 8000;
 export const BLOCKED_MESSAGE = "This request goes against our content policy. Change it and try again.";
 const UNCHECKED_MESSAGE = "Could not check this request. Please try again.";
 
+const STANDBY_MODEL = process.env.OPENCMO_MODERATION_GEMINI_MODEL || "gemini-flash-latest";
+
 const anthropicKey = () => process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || "";
+const geminiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
 
 /** Real moderation runs on this server — production only enables AI images/video when true. */
 export const moderationReady = (): boolean => Boolean(anthropicKey() && process.env.FAL_KEY);
@@ -82,38 +90,76 @@ type Client = Pick<Anthropic, "beta">;
 /** The user's text can hold `</prompt>` and fake instructions after it; escaped, it stays inside the data block. */
 const asData = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** One classification. Throws 503 when the check could not run; a refusal counts as blocked. */
-export async function classify(client: Client, input: string, policy: string = POLICY): Promise<Verdict> {
-  let response;
-  try {
-    response = await client.beta.messages.parse({
-      model: MODEL,
-      max_tokens: 1024,
-      output_config: { effort: "low", format: betaZodOutputFormat(verdictSchema) },
-      system: policy,
-      messages: [{ role: "user", content: `<prompt>\n${asData(input)}\n</prompt>` }],
-    });
-  } catch (error) {
-    console.error("[moderation] check failed", error instanceof Anthropic.APIError ? error.status : "", error instanceof Error ? error.message : error);
-    throw new ApiError(503, UNCHECKED_MESSAGE);
-  }
+/** Claude's verdict. Throws the SDK's error when Claude could not answer; a refusal counts as blocked. */
+async function askClaude(client: Client, input: string, policy: string): Promise<Verdict> {
+  const response = await client.beta.messages.parse({
+    model: MODEL,
+    max_tokens: 1024,
+    output_config: { effort: "low", format: betaZodOutputFormat(verdictSchema) },
+    system: policy,
+    messages: [{ role: "user", content: `<prompt>\n${asData(input)}\n</prompt>` }],
+  });
   if (response.stop_reason === "refusal") return { allowed: false, category: "other" };
-  if (!response.parsed_output) throw new ApiError(503, UNCHECKED_MESSAGE);
+  if (!response.parsed_output) throw new Error("moderation: no verdict");
   return response.parsed_output;
 }
 
+type Standby = Pick<GoogleGenAI, "models">;
+
+/** Gemini's verdict under the same policy. Its own safety block counts as blocked; anything unreadable throws. */
+async function askGemini(client: Standby, input: string, policy: string): Promise<Verdict> {
+  const response = await client.models.generateContent({
+    model: STANDBY_MODEL,
+    contents: `<prompt>\n${asData(input)}\n</prompt>`,
+    config: {
+      systemInstruction: policy,
+      responseMimeType: "application/json",
+      responseJsonSchema: z.toJSONSchema(verdictSchema),
+      // Thinking tokens count against the cap.
+      maxOutputTokens: 4096,
+      httpOptions: { timeout: 15_000 },
+    },
+  });
+  if (response.promptFeedback?.blockReason) return { allowed: false, category: "other" };
+  return verdictSchema.parse(JSON.parse(response.text ?? ""));
+}
+
 /**
- * Throws 422 when the text is blocked, 503 when it could not be checked. Skipped without a key (dev).
+ * Throws 422 when the text is blocked, 503 when it could not be checked. Skipped without a key, outside production.
  * `kind` is the model kind the text goes to (`policyFor`).
  */
-export async function moderateText(text: string, { kind, client }: { kind?: string; client?: Client } = {}): Promise<void> {
+export async function moderateText(text: string, { kind, client, gemini }: { kind?: string; client?: Client; gemini?: Standby } = {}): Promise<void> {
   const input = text.slice(0, MAX_CHARS).trim();
   if (!input) return;
   if (!client && aiFakeEnabled() && !moderationReady()) {
     if (input.includes(FAKE_FLAG)) throw new ApiError(422, BLOCKED_MESSAGE);
     return;
   }
-  if (!client && !anthropicKey()) return;
-  const verdict = await classify(client ?? new Anthropic({ apiKey: anthropicKey(), timeout: 15_000, maxRetries: 1 }), input, policyFor(kind));
+  const claude = Boolean(client || anthropicKey());
+  const standby = Boolean(gemini || geminiKey());
+  if (!claude && !standby) {
+    // Live, a missing key must not mean "no checks": nothing is created until they can run.
+    if (isProduction()) throw new ApiError(503, "Content checks are not set up on this server, so AI media cannot be created yet.");
+    return;
+  }
+  const policy = policyFor(kind);
+  const askStandby = () => askGemini(gemini ?? new GoogleGenAI({ apiKey: geminiKey() }), input, policy);
+  let verdict: Verdict;
+  try {
+    // Claude is asked EVERY time, whatever the rest of the app has seen of it: the provider memory
+    // in `lib/llm-health.ts` is fed by other features (and by users' traffic), and must not be able
+    // to move this check to the standby.
+    verdict = claude
+      ? await askClaude(client ?? new Anthropic({ apiKey: anthropicKey(), timeout: 15_000, maxRetries: 1 }), input, policy).catch((error: unknown) => {
+          if (!standby || !outage(error)) throw error;
+          console.error("[moderation] Claude could not answer; asking the standby checker", error instanceof Anthropic.APIError ? error.status : "");
+          return askStandby();
+        })
+      : await askStandby();
+  } catch (error) {
+    const status = error instanceof Anthropic.APIError || error instanceof GeminiError ? error.status : "";
+    console.error("[moderation] check failed", outage(error) ?? "", status, error instanceof Error ? error.message : error);
+    throw new ApiError(503, UNCHECKED_MESSAGE);
+  }
   if (!verdict.allowed) throw new ApiError(422, BLOCKED_MESSAGE);
 }

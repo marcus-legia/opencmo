@@ -14,7 +14,7 @@ import { applyOps, MASTER_SRC, OpError, type OpContext, type OpResult } from "@o
 import { ApiError } from "@/lib/api/errors";
 import type { ClipContext } from "@/lib/api/clips";
 import { notFound, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { projectDocument, saveDocument } from "@/lib/editor/document";
+import { checkedDocument, projectDocument, saveDocument } from "@/lib/editor/document";
 import { editorSource, NoEditorSourceError } from "@/lib/editor/media";
 import { EDITED_TRANSCRIPT, MASTER_TRANSCRIPT, readProjectTranscript } from "@/lib/editor/transcript";
 
@@ -190,7 +190,9 @@ export async function applyToClip(
         })
       : null;
 
-  const saved = !changed ? project : await saveDocument(supabase, clipId, expected, applied.document);
+  // Validate before saving, not only when reading back: an op that produced an invalid document
+  // (duplicate ids…) would otherwise be saved, and the project could no longer be opened.
+  const saved = !changed ? project : await saveDocument(supabase, clipId, expected, checkedDocument(applied.document));
 
   return {
     project: { clip_id: saved.clip_id, document: saved.document, document_hash: saved.document_hash, version: saved.version },

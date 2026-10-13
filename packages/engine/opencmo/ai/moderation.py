@@ -4,7 +4,9 @@ The prompt was already checked on the web before credits were held
 (`apps/web/lib/generate/moderation.ts`); this checks what the model actually drew — a clean prompt
 can still produce an unsafe image. Two independent checks run on the image or on three video
 frames: fal's NSFW classifier, and Claude Haiku against the product rules (no identifiable real
-people, no other brands' logos, no sexual, violent or hateful content).
+people, no other brands' logos, no sexual, violent or hateful content). When Claude itself cannot
+answer (no credit, a bad key, rate limits, an outage) and the worker has a Gemini key, Gemini Flash
+applies the same policy; a verdict is final and is never retried on the other model.
 
 Blocked -> a non-retryable `ProviderError`: the worker fails the task, the trigger refunds the
 credits, and the file never reaches the bucket.
@@ -25,7 +27,7 @@ from pydantic import BaseModel
 
 from opencmo.ai.catalog import AiModel
 from opencmo.ai.providers.base import ProviderError
-from opencmo.media.ffmpeg import run
+from opencmo.media.ffmpeg import USER_INPUT, run
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ BLOCKED = "This result was blocked by our content policy. Your credits were refu
 UNCHECKED = "Could not check the result. Please try again."
 NSFW_ENDPOINT = "https://fal.run/fal-ai/x-ailab/nsfw"
 CLAUDE_MODEL = os.environ.get("OPENCMO_MODERATION_MODEL", "claude-haiku-5-5")
+GEMINI_MODEL = os.environ.get("OPENCMO_MODERATION_GEMINI_MODEL", "gemini-flash-latest")
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _REAL_PERSON = "an identifiable real person (a recognisable public figure or celebrity); "
 
 
@@ -72,14 +76,16 @@ def needs_check(model: AiModel) -> bool:
 
 def _frames(path: Path, workdir: Path) -> list[Path]:
     """Three frames (10% / 50% / 90%) at most 512 px wide: enough to check, cheap to send."""
-    proc = run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
+    # The provider's file, untrusted (engine rule 7); a PNG is ours, transcoded through image2pipe.
+    guard = [] if path.suffix == ".png" else USER_INPUT
+    proc = run(["ffprobe", "-v", "error", *guard, "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
     duration = float(json.loads(proc.stdout).get("format", {}).get("duration") or 0) or 1.0
     out: list[Path] = []
     for index, ratio in enumerate((0.1, 0.5, 0.9)):
         frame = workdir / f"moderate-{index}.jpg"
         # `-ss` BEFORE `-i` (engine rule 4): input seeking, no decode from the start.
         run([
-            "ffmpeg", "-v", "error", "-y", "-ss", f"{duration * ratio:.3f}", "-i", str(path),
+            "ffmpeg", "-v", "error", "-y", "-ss", f"{duration * ratio:.3f}", *guard, "-i", str(path),
             "-frames:v", "1", "-vf", "scale='min(512,iw)':-2", str(frame),
         ], timeout=60)
         if frame.exists():
@@ -96,6 +102,15 @@ class _Verdict(BaseModel):
     category: str
 
 
+NOT_CHECKED = "Content checks are not set up on this server, so this could not be made. Your credits were refunded."
+
+
+def production() -> bool:
+    """Live worker (`OPENCMO_ENV=production` in its secret): missing keys mean no checks, which is
+    never allowed there; in dev the checks are skipped."""
+    return os.environ.get("OPENCMO_ENV") == "production"
+
+
 def ready() -> bool:
     """Both checks have their keys. Production only enables AI images/video when the web side
     says the same (`moderationReady`)."""
@@ -106,17 +121,29 @@ def _anthropic_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ""
 
 
+def _gemini_key() -> str:
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+
+
 def check_input(model: AiModel, path: Path) -> None:
     """Images the user feeds in (first/last frame, references) are checked too: the model
     transforms its input, so an unsafe image in is an unsafe result out."""
-    if model.provider in ("fake", *SKIP_PROVIDERS) or not ready():
+    if model.provider in ("fake", *SKIP_PROVIDERS):
+        return
+    if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         return
     check_images([path])
 
 
 def check_input_video(model: AiModel, path: Path, workdir: Path, spec: dict | None = None) -> None:
     """A video the user hands to a video-edit model (G2): three frames, like output moderation."""
-    if model.provider in ("fake", *SKIP_PROVIDERS) or not ready():
+    if model.provider in ("fake", *SKIP_PROVIDERS):
+        return
+    if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         return
     frames = _frames(path, workdir)
     if not frames:
@@ -134,6 +161,8 @@ def check_output(model: AiModel, spec: dict, path: Path) -> None:
             raise ProviderError(BLOCKED)
         return
     if not ready():
+        if production():
+            raise ProviderError(NOT_CHECKED)
         log.warning("Moderation keys missing: skipping output moderation for %s", model.id)
         return
     with tempfile.TemporaryDirectory(prefix="opencmo-moderate-") as tmp:
@@ -166,7 +195,7 @@ def _after_generation(check) -> None:
 def check_images(images: list[Path], policy: str = POLICY) -> None:
     """Runs both checks; either one flagging blocks. A check that cannot answer never passes."""
     _check_nsfw(images)
-    _check_claude(images, policy)
+    _check_policy(images, policy)
 
 
 def _check_nsfw(images: list[Path]) -> None:
@@ -192,6 +221,72 @@ def _check_nsfw(images: list[Path]) -> None:
         raise ProviderError(BLOCKED)
 
 
+class _ClaudeOut(Exception):
+    """Claude itself could not answer. `retryable`: it may answer in a moment (busy), as opposed
+    to a key or credit problem someone has to fix."""
+
+    def __init__(self, retryable: bool):
+        super().__init__("claude cannot answer")
+        self.retryable = retryable
+
+
+def _check_policy(images: list[Path], policy: str) -> None:
+    """Claude's verdict; Gemini's when Claude cannot answer and the worker has a Gemini key."""
+    try:
+        _check_claude(images, policy)
+    except _ClaudeOut as out:
+        if _gemini_key():
+            log.warning("Claude could not check the output; asking %s", GEMINI_MODEL)
+            _check_gemini(images, policy)
+            return
+        # No standby: busy is retried in place, anything else is never delivered unchecked.
+        raise ProviderError(UNCHECKED, retryable=True) if out.retryable else ProviderError(BLOCKED) from out
+
+
+def _check_gemini(images: list[Path], policy: str) -> None:
+    parts: list[dict] = [{"inlineData": {"mimeType": _mime(image), "data": _b64(image)}} for image in images]
+    parts.append({"text": "Judge these images against the policy."})
+    body = {
+        "systemInstruction": {"parts": [{"text": policy}]},
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {"allowed": {"type": "BOOLEAN"}, "category": {"type": "STRING"}},
+                "required": ["allowed", "category"],
+            },
+            # Thinking tokens count against the cap.
+            "maxOutputTokens": 4096,
+        },
+    }
+    try:
+        response = httpx.post(
+            GEMINI_ENDPOINT.format(model=GEMINI_MODEL),
+            headers={"x-goog-api-key": _gemini_key()},
+            json=body,
+            timeout=60,
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(UNCHECKED, retryable=True) from exc
+    if response.status_code >= 500 or response.status_code == 429:
+        raise ProviderError(UNCHECKED, retryable=True)
+    if response.status_code >= 400:
+        log.error("Gemini moderation returned %s: %s", response.status_code, response.text[:300])
+        raise ProviderError(BLOCKED)
+    data = response.json()
+    try:
+        # A safety block has no candidates; an answer that is not the verdict is no answer.
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        verdict = _Verdict.model_validate_json(text, strict=True)
+    except (KeyError, IndexError, TypeError, ValueError):
+        log.warning("Output blocked: %s gave no verdict (%s)", GEMINI_MODEL, str(data.get("promptFeedback") or "")[:200])
+        raise ProviderError(BLOCKED) from None
+    if not verdict.allowed:
+        log.warning("Output blocked by the policy check (%s): %s", GEMINI_MODEL, verdict.category)
+        raise ProviderError(BLOCKED)
+
+
 def _check_claude(images: list[Path], policy: str) -> None:
     import anthropic
 
@@ -214,9 +309,13 @@ def _check_claude(images: list[Path], policy: str) -> None:
             **effort,
         )
     except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as exc:
-        raise ProviderError(UNCHECKED, retryable=True) from exc
+        raise _ClaudeOut(retryable=True) from exc
     except anthropic.APIStatusError as exc:
         log.error("Claude moderation returned %s: %s", exc.status_code, str(exc)[:300])
+        # Anthropic reports an empty balance as a 400; a bad or revoked key as 401/403.
+        unpaid = exc.status_code == 400 and "credit balance" in str(exc).lower()
+        if exc.status_code in (401, 402, 403) or unpaid:
+            raise _ClaudeOut(retryable=False) from exc
         raise ProviderError(BLOCKED) from exc
     verdict = response.parsed_output
     if response.stop_reason == "max_tokens":

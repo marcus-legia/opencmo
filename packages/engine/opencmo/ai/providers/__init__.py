@@ -20,7 +20,7 @@ def fake_allowed() -> bool:
     Trên production một model giả lọt qua catalog nghĩa là người dùng trả
     credit cho một khung màu; chặn ở cả route lẫn worker.
     """
-    return os.environ.get("OPENCMO_AI_FAKE") == "1"
+    return os.environ.get("OPENCMO_AI_FAKE") == "1" and os.environ.get("OPENCMO_ENV") != "production"
 
 
 def adapter_for(model: AiModel) -> ProviderAdapter:

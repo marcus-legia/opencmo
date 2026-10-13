@@ -7,7 +7,7 @@
  * duyệt (`apply_to_clips`).
  */
 
-import { planStudio3d, planVoiceover, quoteRange, summarizeProject } from "@opencmo/editor-core";
+import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, summarizeProject } from "@opencmo/editor-core";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
@@ -16,7 +16,6 @@ import { resolveMediaRefs } from "@/lib/generate/create";
 import { moderateText, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
-import { readEditorProject } from "@/lib/editor/apply";
 
 import {
   applyInput,
@@ -50,13 +49,15 @@ import {
 } from "./generate-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
+import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
-import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo } from "./create-video";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import { turnStatus } from "./loop";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
-import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
+import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
  * Kiểm lời của lượt sinh LÚC BÁO GIÁ: lời bị chặn thì không hiện thẻ duyệt cho
@@ -126,12 +127,13 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 }
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
-export function clipToolSpecs(): ToolSpec[] {
+export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
-  return [...TOOL_SPECS, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : [])];
+  const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
+  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC];
 }
 
 export function clipScope(
@@ -149,7 +151,7 @@ export function clipScope(
   const env = { workspace };
   return {
     kind: "clip",
-    tools: clipToolSpecs(),
+    tools: clipToolSpecs({ blank: context.clip.kind === "blank" }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -161,10 +163,11 @@ export function clipScope(
       return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout).catch(() => "")}${skills}`;
     },
     async state() {
-      const project = await readEditorProject(supabase, clipId);
+      // One read serves both the summary and the check.
+      const project = await workspace.read();
       const block = projectStateBlock({ version: project.version, ...summarizeProject(project.document) });
       // Lượt tự kiểm (spec agent-editor §3.4): model thấy lỗi mới ngay sau bước ghi.
-      const report = await runCheck(workspace).catch(() => null);
+      const report = await runCheck(workspace, project).catch(() => null);
       return report ? `${block}${checkBlock(report)}` : block;
     },
     async plan(call) {
@@ -219,6 +222,10 @@ export function clipScope(
         // Chuẩn bị ở ĐÂY (chọn model, seed, giá) và lưu vào input của tool: thứ
         // người dùng duyệt đúng là thứ sẽ được tạo, không tính lại sau khi bấm.
         // Câu trích phải có thật trong clip: ảnh/video gắn với điều người nói nói.
+        const target = await workspace.read().then(({ document }) => {
+          const scene = activeScene(document) as unknown as { width: number; height: number };
+          return { aspect: frameAspect(Number(scene.width), Number(scene.height)), speaker: JSON.stringify(document).includes(`"${MASTER_SRC}"`) };
+        });
         const prepared = await prepareGeneration(
           call.input,
           async (quote) => {
@@ -234,6 +241,7 @@ export function clipScope(
             const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: record.cloud.mediaId }).catch(() => null)) as { startImage?: string } | null;
             return resolved?.startImage ?? null;
           },
+          target,
         );
         if (typeof prepared === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the generation" };
@@ -282,19 +290,7 @@ export function clipScope(
           const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, or ask for a shorter video.`;
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
         }
-        const shotCount = planned.storyboard.beats.length;
-        const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
-        const pieces = runs.map(({ model, spec }, index) => ({
-          label:
-            index < shotCount
-              ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
-              : model.kind === "voice"
-                ? "The voice-over script"
-                : "The music",
-          spec,
-          kind: model.kind,
-        }));
-        const blocked = await screenPieces(pieces);
+        const blocked = await screenPieces(videoPieces(planned));
         if (blocked) return { kind: "invalid", ...blocked };
         return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
       }
@@ -347,7 +343,9 @@ export function clipScope(
           ? runSkillTool(supabase, call)
           : TURN_TOOLS.has(call.name)
             ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
-            : runTool(call.name, call.input, env),
+            : call.name === WAIT_TOOL_SPEC.name
+              ? runWaitForMedia(call.input, { supabase, clipId })
+              : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
       if (call.name === "plan_video") {
         if (!approved) {
@@ -394,7 +392,13 @@ export function clipScope(
         };
       }
       const { outcome, generationId } = await runGeneration(
-        { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env) },
+        {
+          supabase,
+          jobId: context.clip.job_id,
+          clipId,
+          applyOp: (op) => applyOpTool(op, env),
+          alive: async () => (await turnStatus(supabase, turn.id))?.status === "running",
+        },
         prepared as Parameters<typeof runGeneration>[1],
       );
       return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };

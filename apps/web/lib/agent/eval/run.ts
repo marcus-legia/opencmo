@@ -4,13 +4,19 @@
  *   npm run agent:eval -- --provider fake                 # CI: kiểm harness, không tốn tiền
  *   npm run agent:eval -- --provider anthropic --yes      # model thật: TỐN TIỀN API
  *   npm run agent:eval -- --provider anthropic --task hook --yes
+ *   npm run agent:eval -- --provider anthropic --yes --until-card --task video-
+ *   CMO_LLM_PROVIDER=gemini npm run agent:eval -- --provider gemini --yes   # Gemini, sub-agents too
+ *
+ * `--until-card` stops a task at the first price card (what the user would approve), so a real
+ * model costs only its own tokens and the director's, never media credits. `--task video-` runs
+ * every task whose id starts with "video-".
  *
  * Mỗi bài: workspace trong bộ nhớ từ clip mẫu → cùng system prompt, cùng bộ
  * tool, cùng `runTool` với app; tool tab chạy bằng Node (`node-tools.ts`);
  * `ask_user` được trả lời bằng câu soạn sẵn của bài. Chấm bằng code
  * (`tasks.ts`), ghi báo cáo + contact sheet cuối vào `--out`.
  *
- * Model thật cần khoá trong env (`ANTHROPIC_API_KEY`) và
+ * Model thật cần khoá trong env (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`) và
  * `--yes`: không có `--yes` thì chỉ in ước lượng chi phí rồi thoát.
  */
 
@@ -18,22 +24,24 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { planStudio3d, planVoiceover, quoteRange, readCaptionState, summarizeProject, type Transcript } from "@opencmo/editor-core";
+import { MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readCaptionState, summarizeProject, type Transcript } from "@opencmo/editor-core";
 
 import { clipContextBlock } from "../clip-context";
 import { KEEP_IMAGES } from "../limits";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
+import { geminiKey, geminiProvider } from "../providers/gemini";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
 import { backgroundToolSpec, prepareBackground } from "../background-tool";
 import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
-import { generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
-import { BROWSER_INPUTS, TOOL_SPECS, applyOpTool, isWriteTool, runCheck, runTool } from "../tools";
+import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
+import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, VERIFY_GATE, applyOpTool, checkErrorKeys, failingCheck, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
+import { WAIT_TOOL_SPEC, waitReport } from "../wait-tool";
 import {
   FIXTURE_ABOUT,
   FIXTURE_DURATIONS,
@@ -47,7 +55,7 @@ import {
 import { nodeCapture, nodeGrab, nodeInspectColor, nodePreview3d, nodeWaveform, type NodeMedia } from "./node-tools";
 import { TASKS, type EvalTask } from "./tasks";
 
-type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean };
+type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean; untilCard: boolean };
 
 function args(): Args {
   const argv = process.argv.slice(2);
@@ -61,12 +69,14 @@ function args(): Args {
     out: value("--out") ?? join(process.cwd(), ".agent-eval"),
     maxSteps: Number(value("--max-steps") ?? 60),
     yes: argv.includes("--yes"),
+    untilCard: argv.includes("--until-card"),
   };
 }
 
 /** Price per million tokens (USD), same as `agent_model_prices`. */
 const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
   anthropic: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  gemini: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 2.5 },
   fake: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 };
 
@@ -75,6 +85,10 @@ function providerFor(name: string): Provider {
   if (name === "anthropic") {
     if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_API_KEY chưa có trong env.");
     return anthropicProvider();
+  }
+  if (name === "gemini") {
+    if (!geminiKey()) throw new Error("GEMINI_API_KEY is not set.");
+    return geminiProvider(geminiKey());
   }
   throw new Error(`provider lạ: ${name}`);
 }
@@ -114,14 +128,22 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt)}${about}${await state()}`) }];
   const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const tools: string[] = [];
+  const calls: { name: string; input: unknown }[] = [];
+  const cards: { tool: string; changes: string[]; credits: number }[] = [];
   let steps = 0;
   let stopped = "done";
+  let openCheck: string | null = null;
+  let gated = false;
+  let baseline: Set<string> | undefined;
+  let gateUsed = false;
   const env = { workspace };
   // Sinh media trong eval: chuẩn bị + kiểm brief như bản thật (chọn model, câu
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  const toolSpecs = [...TOOL_SPECS, ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null)];
+  // Same profile as the app: a blank New edit (no video of its own) has no cut-by-words tools.
+  const blank = !JSON.stringify((await workspace.read()).document).includes(`"${MASTER_SRC}"`);
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -136,14 +158,29 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
     usage.cacheRead += step.usage.cacheRead;
     usage.cacheWrite += step.usage.cacheWrite;
     history.push({ role: "assistant", content: step.content });
+    if (!step.toolCalls.length && step.stop !== "refusal" && step.stop !== "max_tokens" && openCheck && !gated) {
+      // The app's verify gate (loop.ts): one more step when it finishes with check errors open.
+      gated = true;
+      gateUsed = true;
+      history.push({ role: "user", content: provider.userTurn(VERIFY_GATE, openCheck) });
+      continue;
+    }
     if (!step.toolCalls.length || step.stop === "refusal" || step.stop === "max_tokens") {
       if (step.stop !== "end" && step.stop !== "tool") stopped = step.stop;
       break;
     }
+    if (!baseline && step.toolCalls.some((call) => isWriteTool(call.name))) baseline = checkErrorKeys(await state());
     const results: ToolResult[] = [];
     let wrote = false;
     for (const call of step.toolCalls) {
       tools.push(call.name);
+      calls.push({ name: call.name, input: call.input });
+      if (call.name === WAIT_TOOL_SPEC.name) {
+        // No worker here: every approved piece counts as finished, as it would be after the wait.
+        const report = waitReport(generations.map((item) => ({ kind: item.model.kind, status: "done", error: null, spec: item.spec as { prompt?: unknown }, created_at: "" })));
+        results.push({ id: call.id, name: call.name, ok: true, content: report.content });
+        continue;
+      }
       if (call.name === "ask_user") {
         const content = task.answer
           ? JSON.stringify({ user_answer: { choices: [], text: task.answer } })
@@ -238,6 +275,12 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
           continue;
         }
         generations.push(prepared);
+        const card = generateCard(prepared, "eval");
+        cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
+        if (options.untilCard) {
+          stopped = "card";
+          break;
+        }
         const applied = await applyOpTool(prepared.op, env);
         if (applied.version !== undefined) wrote = true;
         results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });
@@ -247,21 +290,28 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
       if (outcome.version !== undefined) wrote = true;
       results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content });
     }
+    if (stopped === "card") break;
     const after = wrote && step.toolCalls.some((call) => isWriteTool(call.name)) ? await state() : undefined;
+    if (after !== undefined) openCheck = failingCheck(after, baseline);
     history.push({ role: "user", content: provider.toolResults(results, after) });
   }
 
   const final = workspace.snapshot();
   const report = await runCheck(workspace);
-  const grade = task.grade({ document: final.document, report, tools, generations });
+  const reply = history
+    .filter((message) => message.role === "assistant")
+    .flatMap((message) => (message.content as { type?: string; text?: string }[]).filter((block) => block.type === "text").map((block) => block.text ?? ""))
+    .join("\n");
+  const grade = task.grade({ document: final.document, report, tools, generations, calls, cards, reply, untilCard: options.untilCard });
   await refreshTranscripts();
   const sheet = await nodeCapture(final.document, media(), { count: 8 }).catch(() => null);
-  return { task, grade, steps, usage, tools, stopped, sheet: sheet?.images[0] ?? null, document: final.document };
+  return { task, grade, steps, usage, tools, calls, cards, reply, stopped, gate: gateUsed, sheet: sheet?.images[0] ?? null, document: final.document };
 }
 
 async function main() {
   const options = args();
-  const tasks = options.task ? TASKS.filter((task) => task.id === options.task) : TASKS;
+  // "video-" (ending in a dash) runs every task of that group.
+  const tasks = options.task ? TASKS.filter((task) => (options.task!.endsWith("-") ? task.id.startsWith(options.task!) : task.id === options.task)) : TASKS;
   if (!tasks.length) throw new Error(`không có bài ${options.task}`);
   const price = PRICES[options.provider] ?? PRICES.anthropic!;
 
@@ -277,29 +327,42 @@ async function main() {
   if (options.provider === "fake") process.env.OPENCMO_AGENT_FAKE ??= "1";
   const provider = providerFor(options.provider);
   mkdirSync(options.out, { recursive: true });
-  const rows = [];
+  type Row = { task: string; pass: boolean; steps: number; stopped: string; seconds: number; calls: number; input: number; cached: number; output: number; gate: boolean; cost: number; notes: string };
+  const rows: Row[] = [];
   for (const task of tasks) {
     const started = Date.now();
     const result = await runTask(task, provider, options);
     const cost = (result.usage.input * price.input + result.usage.output * price.output + result.usage.cacheRead * price.cacheRead + result.usage.cacheWrite * price.cacheWrite) / 1e6;
     if (result.sheet) writeFileSync(join(options.out, `${task.id}.jpg`), Buffer.from(result.sheet, "base64"));
-    writeFileSync(join(options.out, `${task.id}.json`), JSON.stringify({ tools: result.tools, grade: result.grade, document: result.document }, null, 2));
-    const row = {
+    writeFileSync(join(options.out, `${task.id}.json`), JSON.stringify({ tools: result.tools, calls: result.calls, cards: result.cards, reply: result.reply, grade: result.grade, document: result.document }, null, 2));
+    const row: Row = {
       task: task.id,
       pass: result.grade.pass,
       steps: result.steps,
       stopped: result.stopped,
       seconds: Math.round((Date.now() - started) / 1000),
+      // What the work costs besides money: model calls, tool calls, tokens read (fresh and cached).
+      calls: result.tools.length,
+      input: result.usage.input,
+      cached: result.usage.cacheRead,
+      output: result.usage.output,
+      gate: result.gate,
       cost: Math.round(cost * 1000) / 1000,
       notes: result.grade.notes.join("; "),
     };
     rows.push(row);
-    console.log(`${row.pass ? "PASS" : "FAIL"} ${row.task.padEnd(9)} ${String(row.steps).padStart(3)} bước  $${row.cost.toFixed(3)}  ${row.notes}`);
+    console.log(`${row.pass ? "PASS" : "FAIL"} ${row.task.padEnd(9)} ${String(row.steps).padStart(3)} bước ${String(row.calls).padStart(3)} tools ${String(row.seconds).padStart(4)}s  $${row.cost.toFixed(3)}${row.gate ? "  [verify gate]" : ""}  ${row.notes}`);
+    // What the user would see: the card they approve, or the Assistant's answer.
+    for (const card of result.cards) console.log(`     card (${card.tool}): ${card.changes[0] ?? ""}`);
+    if (!result.cards.length && result.reply) console.log(`     reply: ${result.reply.replace(/\s+/g, " ").slice(0, 300)}`);
   }
   const passed = rows.filter((row) => row.pass).length;
   const total = rows.reduce((sum, row) => sum + row.cost, 0);
-  console.log(`\n${passed}/${rows.length} bài qua · $${total.toFixed(2)} · báo cáo ở ${options.out}`);
-  writeFileSync(join(options.out, "report.json"), JSON.stringify({ provider: options.provider, rows, passed, cost: total }, null, 2));
+  const sum = (key: "steps" | "calls" | "seconds" | "input" | "cached" | "output") => rows.reduce((acc, row) => acc + row[key], 0);
+  const totals = { steps: sum("steps"), calls: sum("calls"), seconds: sum("seconds"), input: sum("input"), cached: sum("cached"), output: sum("output") };
+  console.log(`\n${passed}/${rows.length} bài qua · $${total.toFixed(2)} · ${totals.steps} steps, ${totals.calls} tool calls, ${totals.seconds}s · tokens in ${totals.input} (+${totals.cached} cached) out ${totals.output} · báo cáo ở ${options.out}`);
+  writeFileSync(join(options.out, "report.json"), JSON.stringify({ provider: options.provider, rows, passed, cost: total, totals }, null, 2));
+  if (passed < rows.length) process.exitCode = 1;
 }
 
 main().catch((error) => {

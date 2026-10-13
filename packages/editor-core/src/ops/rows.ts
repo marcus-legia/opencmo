@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import type { ClipDocument, ClipNode } from '@opencmo/clip-doc';
 
-import { byId, clone, sceneOf, walk, type Entity } from '../doc';
+import { byId, clone, copyOf, sceneOf, walk, type Entity } from '../doc';
 import { LANE_NAME, laneOf, placeInRow, rowName } from '../tracks';
 import { OpFailure, type OpContext } from './context';
 import { checked } from './project';
@@ -16,11 +16,7 @@ import { nodeById, placeOf, settle, timesOf } from './timeline';
 const elementId = z.string().min(1).max(64);
 const node = z.record(z.string(), z.unknown()).refine((value) => typeof value.kind === 'string', 'A node needs a kind.');
 
-const stripId = (input: Record<string, unknown>): ClipNode => {
-  const copy = structuredClone(input) as Entity;
-  delete copy.id;
-  return copy as unknown as ClipNode;
-};
+const stripId = (input: Record<string, unknown>): ClipNode => copyOf(input as Entity) as unknown as ClipNode;
 
 type InsertToRow = { node: Record<string, unknown> };
 

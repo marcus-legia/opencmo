@@ -27,7 +27,20 @@ import {
 import type { PreparedGeneration } from "../generate-tool";
 import { TRANSCRIPT } from "./fixture";
 
-export type Outcome = { document: ClipDocument; report: CheckReport; tools: string[]; generations?: PreparedGeneration[] };
+export type Outcome = {
+  document: ClipDocument;
+  report: CheckReport;
+  tools: string[];
+  generations?: PreparedGeneration[];
+  /** Every tool call with its input, in order. */
+  calls?: { name: string; input: unknown }[];
+  /** Price cards the user was shown (first line is the summary). */
+  cards?: { tool: string; changes: string[]; credits: number }[];
+  /** Everything the Assistant wrote to the user. */
+  reply?: string;
+  /** `--until-card`: the run stopped at the first card, nothing was applied. */
+  untilCard?: boolean;
+};
 export type Grade = { pass: boolean; notes: string[] };
 
 export type EvalTask = {
@@ -74,6 +87,36 @@ function sane(outcome: Outcome, notes: string[]): boolean {
   const a = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
   const b = check(notes, state(outcome.document).duration >= 21, `cut too much: ${state(outcome.document).duration}s left`);
   return a && b;
+}
+
+/** A blank "New edit": no speaker, nothing placed, the default 10 s work area. */
+function blankEdit(document: ClipDocument): void {
+  const scene = document.stage.children[0] as unknown as Entity;
+  scene.children = [];
+  scene.workarea = [0, 10];
+}
+
+/**
+ * A whole video was asked for: create_video is the tool reached, with the length (and frame) the
+ * user asked for, and its card says so. Without `--until-card` the video must also be on the timeline.
+ */
+function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
+  const notes: string[] = [];
+  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene"].includes(call.name));
+  const first = priced[0];
+  if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
+  const input = first!.input as { seconds?: number; aspect?: string };
+  const seconds = check(notes, (input.seconds ?? 30) === want.seconds, `asked for ${want.seconds}s, create_video got seconds ${input.seconds ?? "(default 30)"}`);
+  const aspect = !want.aspect || check(notes, input.aspect === want.aspect, `asked for ${want.aspect}, create_video got aspect ${input.aspect ?? "(the edit's frame)"}`);
+  const card = (outcome.cards ?? []).find((item) => item.tool === "create_video");
+  const shown = check(notes, Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video`).test(card!.changes[0] ?? ""), `card: ${card?.changes[0] ?? "never reached a create_video card"}`);
+  if (outcome.untilCard) return { pass: seconds && aspect && shown, notes };
+  const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
+  const length = check(notes, workarea?.[1] === want.seconds, `work area ${JSON.stringify(workarea)}`);
+  const voice = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "voice"), "no voice-over");
+  const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+  const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+  return { pass: seconds && aspect && shown && length && voice && clean, notes };
 }
 
 const hasAnimation = (entity: Entity, phase?: "in" | "out") =>
@@ -456,7 +499,9 @@ export const TASKS: EvalTask[] = [
       const gen = outcome.generations?.find((item) => item.model.limits.removeBackground);
       const priced = check(notes, Boolean(gen) && (gen!.extra?.length ?? 0) === 1, "the card does not hold the cut-out and the background together");
       const prompt = String(gen?.extra?.[0]?.spec.prompt ?? "");
-      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(prompt), `background prompt has people: ${prompt}`);
+      // "no people" asks for an empty room: only people the prompt actually puts in it count.
+      const asked = prompt.replace(/\b(no|without)\s+\w+/gi, "");
+      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(asked), `background prompt has people: ${prompt}`);
       return { pass: keyed && behind && priced && noPeople && sane(outcome, notes), notes };
     },
   },
@@ -480,6 +525,47 @@ export const TASKS: EvalTask[] = [
       const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
       const length = check(notes, workarea?.[1] === 15, `work area ${JSON.stringify(workarea)}`);
       return { pass: covered && parallel && voice && length && sane(outcome, notes), notes };
+    },
+  },
+  // What founders type for a whole video (PR 45 scenarios 13-14), graded on what they get back:
+  // the card they approve (`--until-card`) or the video placed on the timeline.
+  {
+    id: "video-slash",
+    prompt: "/video a 20-second video introducing a note-taking app for students: calm voice-over, light music, clean modern visuals. No people, no brand logos.",
+    setup: blankEdit,
+    grade: (outcome) => gradeVideo(outcome, { seconds: 20 }),
+  },
+  {
+    id: "video-plain",
+    // No slash command: the system prompt alone must route a whole video to create_video.
+    prompt: "Make me a 20-second video introducing a note-taking app for students.",
+    setup: blankEdit,
+    grade: (outcome) => gradeVideo(outcome, { seconds: 20 }),
+  },
+  {
+    id: "video-outro",
+    prompt:
+      '/video 5-second vertical outro, cinematic and clean. A sleek laptop on a minimal desk at golden hour, its screen glowing with soft colorful blocks sliding into a neat row. No people, no brand logos. Voiceover: "Your videos, cut into clips. You approve, you post. OpenCMO."',
+    setup: blankEdit,
+    grade: (outcome) => gradeVideo(outcome, { seconds: 5 }),
+  },
+  {
+    id: "video-square",
+    prompt: "/video a 15-second square video for Instagram about a budgeting app for freelancers",
+    setup: blankEdit,
+    grade: (outcome) => gradeVideo(outcome, { seconds: 15, aspect: "1:1" }),
+  },
+  {
+    id: "video-own-clip",
+    // On the speaker's own clip /video refuses: the user must be told where to go, not get a loop.
+    prompt: "/video make a video about what I'm saying here",
+    grade(outcome) {
+      const notes: string[] = [];
+      const placed = check(notes, !(outcome.generations ?? []).some((item) => (item.op as { op?: string }).op === "create_video"), "a /video was planned over the user's own footage");
+      const tries = (outcome.calls ?? []).filter((call) => call.name === "create_video").length;
+      const noLoop = check(notes, tries <= 2, `create_video tried ${tries} times`);
+      const told = check(notes, /new edit|\/broll|b-roll/i.test(outcome.reply ?? ""), `the user is not told what to do instead: ${(outcome.reply ?? "").slice(0, 200)}`);
+      return { pass: placed && noLoop && told, notes };
     },
   },
   {
@@ -617,6 +703,18 @@ export const TASKS: EvalTask[] = [
       const media = all(outcome.document).filter((item) => item.tag === "rect" && ((item.entity.paints as { type?: string }[] | undefined) ?? []).some((paint) => paint.type === "video" || paint.type === "image"));
       const half = media.some((item) => Math.abs(Number(item.entity.width) - scene.width / 2) < 2);
       ok = check(notes, half, "no B-roll fills half the frame") && ok;
+      return { pass: ok && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "verifygate",
+    // The library has no logo: a placement leaves a missing-media error, and the Assistant must not
+    // finish with it (the verify gate in loop.ts gives it one more step to fix or explain it).
+    prompt: "Add our logo assets/logo.png in the top-left corner for the first 3 seconds (gate test).",
+    grade(outcome) {
+      const notes: string[] = [];
+      const missing = outcome.report.issues.filter((issue) => issue.code === "missing-source");
+      const ok = check(notes, !missing.length, `left a missing-media error: ${missing.map((issue) => issue.message).join("; ")}`);
       return { pass: ok && sane(outcome, notes), notes };
     },
   },

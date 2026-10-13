@@ -61,3 +61,4 @@ apps/web/playwright-report/
 
 # Personal agent instructions (e.g. pointers to private docs); never committed.
 CLAUDE.local.md
+.scenarios-out/

@@ -83,7 +83,7 @@ export const generateInput = z
       .max(60)
       .optional()
       .describe("Image/video: seconds it stays on the clip (B-roll: 1.5-4). A video is still generated and paid for its full duration."),
-    muted: z.boolean().optional().describe("Video: mute its own sound (always for B-roll)."),
+    muted: z.boolean().optional().describe("Video: mute its own sound. Defaults to muted on a clip with a speaker (B-roll); false keeps the video's sound."),
     fit: z.boolean().optional().describe("Video: speed it up so the WHOLE generated video plays within length — for an AI transition that must reach its end_image."),
     variants: z
       .number()
@@ -161,7 +161,15 @@ const NOUN: Record<GenerationKind, string> = { image: "image", video: "video", v
 /** Đường dẫn thư viện của một ảnh AI đã xong → tên object media (null = không dùng được). */
 export type LookupImage = (path: string) => Promise<string | null>;
 
-export async function prepareGeneration(input: unknown, locate?: LocateQuote, lookupImage?: LookupImage): Promise<PreparedGeneration | string> {
+/** The clip the media goes on: its frame, and whether the user's own video (with its sound) plays under it. */
+export type GenerationTarget = { aspect?: string; speaker?: boolean };
+
+export async function prepareGeneration(
+  input: unknown,
+  locate?: LocateQuote,
+  lookupImage?: LookupImage,
+  target: GenerationTarget = {},
+): Promise<PreparedGeneration | string> {
   const parsed = generateInput.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -177,9 +185,13 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
       : `Creating ${NOUN[request.kind]}s is not available.`;
   }
 
-  // Clip của OpenCMO là khung dọc: mặc định 9:16 khi model nhận.
+  // The clip's own frame by default: a 9:16 shot on a 16:9 clip is a narrow strip over the speaker.
+  // Vertical when the frame is unknown or the model cannot make it (OpenCMO clips are 9:16).
   const ratios = model.limits.aspectRatios ?? [];
-  const aspectRatio = request.aspect_ratio ?? (ratios.includes("9:16") ? "9:16" : ratios[0]);
+  const aspectRatio =
+    request.aspect_ratio ?? (target.aspect && ratios.includes(target.aspect) ? target.aspect : ratios.includes("9:16") ? "9:16" : ratios[0]);
+  // B-roll over the speaker is silent unless the user asked for its sound: some models add audio.
+  const muted = request.kind === "video" && (request.muted ?? Boolean(target.speaker));
   const seed = randomInt(0, 2_147_483_647);
   const count = request.variants ?? 1;
   if (count > 1 && request.kind !== "image") return "variants: only AI images can have variants.";
@@ -271,7 +283,7 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
     ...(refs ? { refs } : {}),
     ...(start ? { start } : {}),
     ...((request.kind === "image" || request.kind === "video") && request.length ? { length: request.length } : {}),
-    ...(request.kind === "video" && request.muted ? { muted: true } : {}),
+    ...(muted ? { muted: true } : {}),
     ...(request.kind === "video" && request.fit ? { fit: true } : {}),
     ...(variantSeeds.length ? { variant_seeds: variantSeeds } : {}),
   } as Op;
@@ -461,13 +473,24 @@ type GenerateEnv = {
   clipId: string;
   /** Áp op lên clip qua đường ghi chung (CAS + checkpoint), như mọi tool ghi. */
   applyOp: (op: Op) => Promise<ToolOutcome>;
+  /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
+  alive?: () => Promise<boolean>;
+};
+
+const STOPPED: ToolOutcome = {
+  ok: false,
+  content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was generated or charged." }),
+  summary: "Stopped",
 };
 
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
 export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string }> {
   // Every variant is its own generation and credit hold; all of them start or none do.
-  const started: { id: string; credits_reserved: number }[] = [];
-  const cancelAll = () => Promise.all(started.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
+  const started: { id: string; credits_reserved: number; reused: boolean }[] = [];
+  // Only what this approval started: a reused generation belongs to an earlier placement (another
+  // card, an MCP retry), and cancelling it would take that media away too.
+  const cancelAll = () =>
+    Promise.all(started.filter((item) => !item.reused).map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
   const runs = [
     ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
     ...(prepared.extra ?? []),
@@ -489,10 +512,13 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   } catch (err) {
     return failed(err);
   }
+  // Stop pressed while the checks ran: nothing has been held yet.
+  if (env.alive && !(await env.alive())) return { outcome: STOPPED };
   // Credits are held one by one, so a failure cancels exactly the holds made so far.
   for (const item of ready) {
     try {
-      started.push((await startGeneration(env.supabase, item)).generation);
+      const { generation, reused } = await startGeneration(env.supabase, item);
+      started.push({ ...generation, reused });
     } catch (err) {
       return failed(err);
     }
@@ -501,6 +527,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
 
   // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
   // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
+  // Stop pressed while the credits were held: give them back before anything lands on the clip.
+  if (env.alive && !(await env.alive())) {
+    await cancelAll();
+    return { outcome: STOPPED };
+  }
   const applied = await env.applyOp(prepared.op);
   if (!applied.ok) {
     // Không đặt được lên clip (vd clip vừa đổi ở tab khác): huỷ lượt sinh để

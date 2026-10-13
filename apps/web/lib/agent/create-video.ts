@@ -20,12 +20,13 @@ import { availableModels, specHash } from "@/lib/generate/models";
 import { ApiError } from "@/lib/api/errors";
 
 import type { PreparedGeneration } from "./generate-tool";
+import type { Piece } from "./screen-pieces";
 import { sanitize, type ToolSpec } from "./tools";
 import type { Storyboard } from "./video-team";
 
 export const createVideoToolInput = z.object({
   prompt: z.string().trim().min(3).max(2000).describe("What the video is about, in the user's words: product, audience, tone, anything they asked for."),
-  seconds: z.number().int().min(10).max(90).optional().describe("Length in seconds; default 30."),
+  seconds: z.number().int().min(5).max(90).optional().describe("Length in seconds, 5 to 90; default 30. A 5-second outro is one shot."),
   aspect: z.enum(VIDEO_ASPECTS).optional().describe("Frame; default the edit's current frame."),
   voice: z.string().trim().max(40).optional().describe("A voice name from the voice model's list, when the user asked for one."),
   model: z.string().trim().max(100).optional().describe("A video model id, only when the user named one."),
@@ -300,7 +301,7 @@ export async function prepareCreateVideo(
       credits: total,
       extra,
       lines: [
-        `Create a ${seconds}s ${aspect} video: ${timed.length} AI shots${voice ? ", voice-over" : ""}${music ? ", music" : ""} · ${credits(total)}${wait}`,
+        `Create a ${seconds}s ${aspect} video: ${timed.length === 1 ? "1 AI shot" : `${timed.length} AI shots`}${voice ? `, voice-over (${voice.voice})` : ""}${music ? ", music" : ""} · ${credits(total)}${wait}`,
         `Shots on ${video.name} · ${credits(shotCredits)}`,
         ...(continuing ? [`${continuing} ${continuing === 1 ? "shot continues" : "shots continue"} the shot before with no cut, starting when it is done`] : []),
         `Script: ${plan.script}`,
@@ -319,4 +320,20 @@ export async function prepareCreateVideo(
       })),
     },
   };
+}
+
+/** Each generation of a planned video, named as moderation reports it: a block says which piece to rewrite. */
+export function videoPieces(planned: { prepared: PreparedGeneration; storyboard: Storyboard }): Piece[] {
+  const shotCount = planned.storyboard.beats.length;
+  const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
+  return runs.map(({ model, spec }, index) => ({
+    label:
+      index < shotCount
+        ? `Shot ${index + 1} (${planned.storyboard.beats[index]!.label})`
+        : model.kind === "voice"
+          ? "The voice-over script"
+          : "The music",
+    spec,
+    kind: model.kind,
+  }));
 }

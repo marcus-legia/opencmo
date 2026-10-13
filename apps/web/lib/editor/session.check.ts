@@ -139,6 +139,81 @@ async function main(): Promise<void> {
     assert.equal(session.getState().canUndo, false);
   }
 
+  // Assistant writes while a library change of the tab is in flight: the 409 is the Assistant's
+  // own write, so autosave keeps going and the library change is saved on the new version.
+  {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const sent: { version: number; manifest: unknown }[] = [];
+    const t: SaveTransport = {
+      save: async (expected, _document, manifest) => {
+        sent.push({ version: expected, manifest });
+        if (expected === 1) {
+          await gate;
+          throw new SaveConflict({ version: 2, document: doc(500) });
+        }
+        return { version: expected + 1, document_hash: `h${expected + 1}` };
+      },
+    };
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1", manifest: { assets: [] } }, t, 5);
+    session.commit(session.current, { manifest: { assets: [{ id: "done" }] }, history: false });
+    await wait(20);
+    assert.equal(session.getState().status, "saving");
+    session.rebase(doc(500), 2, "h2");
+    release();
+    await wait(20);
+    await session.flush();
+    assert.notEqual(session.getState().status, "conflict");
+    assert.deepEqual(sent.at(-1), { version: 2, manifest: { assets: [{ id: "done" }] } }, "library saved on top of the Assistant's version");
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 500, "the Assistant's document stays");
+    assert.equal(session.getState().version, 3);
+    assert.equal(session.getState().status, "saved");
+  }
+
+  // Library change still waiting for its save when the Assistant's version arrives: it is sent,
+  // not marked saved (Export reads generated media from the saved library).
+  {
+    const sent: { version: number; manifest: unknown }[] = [];
+    const t: SaveTransport = {
+      save: async (expected, _document, manifest) => {
+        sent.push({ version: expected, manifest });
+        return { version: expected + 1, document_hash: "h" };
+      },
+    };
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1", manifest: { assets: [] } }, t, 50);
+    session.commit(session.current, { manifest: { assets: [{ id: "done" }] }, history: false });
+    session.rebase(doc(500), 4, "h4");
+    assert.equal(session.getState().status, "pending");
+    await session.flush();
+    assert.deepEqual(sent, [{ version: 4, manifest: { assets: [{ id: "done" }] } }]);
+  }
+
+  // Nothing pending: rebase is just the new version, no save.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5);
+    session.rebase(doc(500), 3, "h3");
+    await wait(20);
+    assert.equal(t.calls.length, 0);
+    assert.equal(session.getState().status, "saved");
+    assert.equal(session.getState().documentHash, "h3");
+  }
+
+  // A save that lands after the version rebased onto is the newest one: no 409 on the next save.
+  {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const t = transport((call) => (call.version === 3 ? gate : undefined));
+    const session = new DocumentSession({ document: doc(1080), version: 3, documentHash: "h3" }, t, 5);
+    session.commit(doc(1));
+    await wait(20);
+    session.rebase(doc(500), 3, "h3");
+    release();
+    await session.flush();
+    assert.deepEqual(t.calls, [{ version: 3, width: 1 }, { version: 4, width: 500 }]);
+    assert.equal(session.getState().status, "saved");
+  }
+
   // Lỗi mạng: giữ bản trong tab, lượt sửa sau thử lại.
   {
     let fail = true;

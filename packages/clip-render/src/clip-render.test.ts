@@ -69,6 +69,25 @@ describe('thời gian theo frame', () => {
   });
 });
 
+describe('fractional frames (export at 24/25/50/60 fps)', () => {
+  const localAt = (frame: number) => treeAt([{ kind: 'rect', start: 0, end: 4, playbackRate: 1.5 }], frame).children[0]!.local;
+
+  it('an integer frame keeps the rounded local time of a sped-up clip (30 fps output unchanged)', () => {
+    // 1 × 1.5 = 1.5 local frames, rounded to 2 as before.
+    expect(localAt(1)).toBe(2);
+  });
+
+  it('a fractional frame keeps its exact local time', () => {
+    expect(localAt(1.5)).toBeCloseTo(2.25);
+  });
+
+  it('keyframes interpolate between two grid frames', () => {
+    const x = (frame: number) =>
+      treeAt([{ kind: 'rect', tracks: [{ property: 'x', keyframes: [{ time: 0, value: 0 }, { time: 1, value: 30 }] }] }], frame).children[0]!.values.x;
+    expect(x(10.5)).toBeCloseTo(10.5);
+  });
+});
+
 describe('giá trị mỗi khung', () => {
   it('keyframe nội suy theo frame, giữ mép ngoài khoảng', () => {
     const x = (frame: number) =>

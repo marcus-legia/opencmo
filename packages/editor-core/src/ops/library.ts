@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 import type { AssetInput, ClipDocument } from '@opencmo/clip-doc';
 
-import { byId, clone, walk, type Entity } from '../doc';
+import { byId, clone, copyOf, walk, type Entity } from '../doc';
 import { OpFailure } from './context';
 import { checked } from './project';
 
@@ -35,8 +35,8 @@ export const insertNode = {
     if (!parent || !CONTAINERS.has(parent.tag) || parent.entity.kind !== parent.tag) {
       throw new OpFailure('Media can only be added to the scene, a group or a sequence.');
     }
-    const node = structuredClone(input.node) as Entity;
-    delete node.id;
+    // Nested ids too: a pasted group or b-roll with its own tracks must not share ids with the original.
+    const node = copyOf(input.node as Entity);
     const children = ((parent.entity.children as Entity[] | undefined) ??= []);
     // Cuối mảng là lớp trên cùng — thứ vừa thả phải nhìn thấy được.
     children.splice(Math.min(input.index ?? children.length, children.length), 0, node);

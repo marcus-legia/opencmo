@@ -161,6 +161,24 @@ def test_skipped_without_keys(monkeypatch, image):
     assert not moderation.ready()
 
 
+def test_production_without_keys_refuses_instead_of_skipping(monkeypatch, image):
+    """Live, missing keys must not mean unchecked AI media: the task fails and is refunded."""
+    monkeypatch.delenv("FAL_KEY")
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    with pytest.raises(ProviderError) as blocked:
+        moderation.check_output(get_model("fal-nano-banana"), {"prompt": "x"}, image)
+    assert not blocked.value.retryable and "refunded" in str(blocked.value)
+
+
+def test_fake_models_never_run_in_production(monkeypatch):
+    from opencmo.ai.providers import fake_allowed
+
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    assert fake_allowed()
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    assert not fake_allowed()
+
+
 def test_real_fal_nsfw_response_passes_a_clean_image(monkeypatch, tmp_path):
     """`fixtures/live/fal-nsfw.json` is the real answer for one clean image, 2026-10-11."""
     import json
@@ -208,3 +226,98 @@ def test_an_edit_of_the_clips_own_video_uses_the_own_footage_policy(monkeypatch,
     assert claude["system"] == moderation.OWN_FOOTAGE_POLICY
     moderation.check_output(edit, {"prompt": "make it night", "sourceVideo": "u/library/a.mp4"}, image)
     assert claude["system"] == moderation.POLICY, "a library file may show anyone"
+
+
+# ---------------------------------------------------------------- Gemini as the standby checker
+
+
+def _http(monkeypatch, gemini=None, gemini_status=200, nsfw_flags=(False,)):
+    """fal's NSFW check answers clean; `gemini` is the JSON text Gemini returns (or a full body)."""
+    seen = {"gemini": []}
+
+    def post(url, **kwargs):
+        if "generativelanguage" in url:
+            seen["gemini"].append({"url": url, **kwargs})
+            body = gemini if isinstance(gemini, dict) else {"candidates": [{"content": {"parts": [{"text": gemini}]}}]}
+            return httpx.Response(gemini_status, json=body, request=httpx.Request("POST", url))
+        return httpx.Response(200, json={"has_nsfw_concepts": list(nsfw_flags)}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(moderation.httpx, "post", post)
+    return seen
+
+
+def _status(code, text):
+    def make(_rate, status):
+        error = status(text)
+        error.status_code = code
+        return error
+
+    return make
+
+
+NO_CREDIT = _status(400, "Your credit balance is too low to access the Anthropic API.")
+ALLOW = '{"allowed": true, "category": "none"}'
+BLOCK = '{"allowed": false, "category": "brand"}'
+
+
+@pytest.mark.parametrize("error", [NO_CREDIT, _status(401, "invalid x-api-key"), lambda rate, _status: rate("slow down")])
+def test_gemini_checks_when_claude_cannot_answer(monkeypatch, image, error):
+    monkeypatch.setenv("GEMINI_API_KEY", "gem")
+    _claude(monkeypatch, error=error)
+    seen = _http(monkeypatch, gemini=ALLOW)
+    moderation.check_images([image], moderation.OWN_FOOTAGE_POLICY)
+    (request,) = seen["gemini"]
+    assert request["headers"]["x-goog-api-key"] == "gem"
+    body = request["json"]
+    assert body["systemInstruction"]["parts"][0]["text"] == moderation.OWN_FOOTAGE_POLICY, "the same policy"
+    assert body["contents"][0]["parts"][0]["inlineData"]["mimeType"] == "image/png"
+
+    _http(monkeypatch, gemini=BLOCK)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert str(err.value) == moderation.BLOCKED and not err.value.retryable
+
+
+def test_claudes_verdict_is_final_and_gemini_is_not_asked(monkeypatch, image):
+    monkeypatch.setenv("GEMINI_API_KEY", "gem")
+    _claude(monkeypatch, allowed=False)
+    seen = _http(monkeypatch, gemini=ALLOW)
+    with pytest.raises(ProviderError):
+        moderation.check_images([image])
+    # A request of ours that Claude rejects is not an outage: still blocked, nobody else is asked.
+    _claude(monkeypatch, error=_status(400, "messages: image too large"))
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert not err.value.retryable
+    assert seen["gemini"] == []
+
+
+def test_neither_checker_answering_never_passes(monkeypatch, image):
+    monkeypatch.setenv("GEMINI_API_KEY", "gem")
+    _claude(monkeypatch, error=NO_CREDIT)
+    _http(monkeypatch, gemini=ALLOW, gemini_status=503)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert err.value.retryable, "busy: tried again in place, then failed for good"
+
+    for unreadable in ("looks fine to me", '{"allowed": "yes"}', {"promptFeedback": {"blockReason": "SAFETY"}}, {"candidates": []}):
+        _http(monkeypatch, gemini=unreadable)
+        with pytest.raises(ProviderError) as err:
+            moderation.check_images([image])
+        assert str(err.value) == moderation.BLOCKED and not err.value.retryable
+
+    _http(monkeypatch, gemini=ALLOW, gemini_status=403)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert not err.value.retryable
+
+
+def test_without_a_gemini_key_an_unpaid_claude_still_blocks(monkeypatch, image):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    _claude(monkeypatch, error=NO_CREDIT)
+    seen = _http(monkeypatch, gemini=ALLOW)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert not err.value.retryable
+    assert seen["gemini"] == []

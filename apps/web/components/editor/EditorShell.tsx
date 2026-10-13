@@ -16,7 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
-import type { ClipDocument } from "@opencmo/clip-doc";
+import { DocumentInvalidError, validate, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
 import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
@@ -55,6 +55,7 @@ import { priceOf, type AiModel } from "@opencmo/editor-core/generate";
 import { liveModel, liveModels, storedImages, GeneratePanel, useEnabledModels, type EditSource } from "./generate/GeneratePanel";
 import { useVoiceovers } from "./generate/useVoiceovers";
 import { VisualsPanel, type SelectedVisual } from "./visuals/VisualsPanel";
+import { continuationsOf } from "./generate/chain";
 import { aiStateOf, ownDeclarations, pendingGenerations, resolve as resolveGeneration, useGenerations } from "./generate/useGenerations";
 import { useLibrary } from "./library/useLibrary";
 import { gridFor, layoutKey, MIN, PRESETS, splitterFor, useEditorLayout, type PanelName } from "./layout";
@@ -399,9 +400,17 @@ function Workspace({
       setPreview(null);
       try {
         const applied = await applyOps(session.current, ops, opContext());
+        // The server refuses an invalid document, and autosave would then fail on every later edit:
+        // refuse the change here instead.
+        validate(applied.document);
         session.commit(applied.document, options);
         return applied.document;
       } catch (error) {
+        if (error instanceof DocumentInvalidError) {
+          console.error("[editor] op produced an invalid document", ops, error);
+          setNotice("This change would break the project, so it was not applied.");
+          return null;
+        }
         setNotice((error as Error).message || "This change could not be applied.");
         return null;
       } finally {
@@ -711,6 +720,13 @@ function Workspace({
     };
     setExportState({ phase: "preparing" });
     try {
+      // The preview leaves a piece that is still generating empty, but the export worker cannot:
+      // it would fail after the upload with a library error. Say what to wait for instead.
+      if (generating.length) {
+        throw new Error(
+          `${generating.length} AI ${generating.length === 1 ? "piece is" : "pieces are"} still generating (${generating.map((item) => item.label).join(", ")}). Export when ${generating.length === 1 ? "it is" : "they are"} ready.`,
+        );
+      }
       await session.flush();
       const hash = session.getState().documentHash;
       if (!hash) throw new Error("Could not save your changes. Try again.");
@@ -1071,7 +1087,11 @@ function Workspace({
     selection,
     manifest: library.latest(),
     enabled: enabledModels,
-    regenerate: (id) => void run([{ op: "regenerate", element_id: id, seed: Math.floor(Math.random() * 2_147_483_647) }]),
+    regenerate: (id) => {
+      const seed = Math.floor(Math.random() * 2_147_483_647);
+      const continuations = continuationsOf(session.current, id, seed).map(({ element_id, after }) => ({ element_id, after }));
+      void run([{ op: "regenerate", element_id: id, seed, ...(continuations.length ? { continuations } : {}) }]);
+    },
     pickVariant: (id, seed) => void run([{ op: "pick_variant", element_id: id, seed }]),
     replaceBackground: () => {
       const at = Math.round((playback.frame / 30) * 100) / 100;
@@ -1645,14 +1665,17 @@ function aiMenuItems({
   const declarations = ownDeclarations(found);
   if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL)) {
     // Giá theo catalog máy chủ (G5); model đã tắt thì không mời sinh lại.
-    const priced = declarations.map((declaration) => {
+    // Shots continuing this one are made again from its new last frame: same price, counted here.
+    const following = continuationsOf(document, String(found.id), 0).map((link) => link.declaration);
+    const priced = [...declarations, ...following].map((declaration) => {
       const resolved = resolveGeneration(declaration);
       const model = liveModel(resolved.model);
       return model ? priceOf(model, resolved.spec as never) : null;
     });
     if (priced.every((value) => value !== null)) {
       const price = priced.reduce<number>((sum, value) => sum + value!, 0);
-      items.push({ label: `Regenerate · ${price} ${price === 1 ? "credit" : "credits"}`, onSelect: () => regenerate(String(found.id)), testid: "ai-regenerate" });
+      const chain = following.length ? ` (and the ${following.length === 1 ? "shot" : `${following.length} shots`} after it)` : "";
+      items.push({ label: `Regenerate${chain} · ${price} ${price === 1 ? "credit" : "credits"}`, onSelect: () => regenerate(String(found.id)), testid: "ai-regenerate" });
     }
     // Same numbering as the Inspector's Variants row, so "variant 2" means one thing.
     const variants = variantsOf(found);

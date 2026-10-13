@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@/lib/settings-schema";
 
 import { moderationReady } from "./moderation";
+import { isProduction } from "@/lib/production";
 
 /**
  * Model giả (`provider: fake`) chỉ bật khi được yêu cầu rõ ràng và KHÔNG BAO
@@ -18,7 +19,7 @@ import { moderationReady } from "./moderation";
  * khung màu. Worker chặn thêm một lần nữa (`opencmo/ai/providers`).
  */
 export const aiFakeEnabled = (): boolean =>
-  process.env.OPENCMO_AI_FAKE === "1" && process.env.VERCEL_ENV !== "production";
+  process.env.OPENCMO_AI_FAKE === "1" && !isProduction();
 
 /**
  * Provider nào bật được trên máy chủ này. Khoá nằm ở worker (Modal secret) chứ
@@ -53,7 +54,7 @@ const PROMPT_MEDIA_KINDS = new Set(["image", "video"]);
 
 const allowedHere = (model: AiModel): boolean =>
   !(
-    process.env.VERCEL_ENV === "production" &&
+    isProduction() &&
     PROMPT_MEDIA_KINDS.has(model.kind) &&
     !model.limits.scene &&
     !moderationReady()

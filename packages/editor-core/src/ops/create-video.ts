@@ -12,7 +12,7 @@ import type { ClipDocument } from '@opencmo/clip-doc';
 
 import { walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
-import { addGenerated, addText, setFrame } from './project';
+import { addGenerated, addText, MAX_CHAIN, setFrame } from './project';
 import { setWorkarea } from './timeline';
 import { addVoiceover } from './voiceover';
 
@@ -60,8 +60,7 @@ const TOLERANCE = 0.05;
 /** Seconds of gain fade on each side of a seam where the music starts again. */
 const SEAM = 1;
 
-/** Shots in a row that continue one another (the first plus two continuations). */
-export const MAX_CHAIN = 3;
+export { MAX_CHAIN };
 
 /** Shots must play back to back from 0 to the end of the video, with no gap or overlap. */
 export function checkShots(input: Pick<CreateVideo, 'seconds' | 'shots'>): string | null {

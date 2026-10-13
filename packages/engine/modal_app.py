@@ -10,6 +10,9 @@ Deploy:
     modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
     modal deploy modal_app.py
 
+Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
+cannot answer (no credit, an outage); without it such output is refunded, never delivered.
+
 Bản này CẦN toàn bộ migration D1/D2 đã áp trên database TRƯỚC khi deploy.
 Deploy ngược thứ tự khiến worker gọi RPC chưa tồn tại và mọi job/task đều lỗi.
 
@@ -130,8 +133,11 @@ cpu_image = (
     # `FaceDetector.create_from_options` ném `OSError: libEGL.so.1` — mà
     # `reframe.py` KHÔNG bắt lỗi đó (chỉ fallback khi thiếu hẳn MediaPipe), nên
     # cả job chết. Máy dev có sẵn nên lỗi này chỉ lộ ra trên Modal.
+    # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
+    # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
     .apt_install(
-        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2"
+        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2",
+        "fonts-noto-cjk", "fonts-noto-core", "fonts-noto-color-emoji",
     )
 )
 cpu_image = (
@@ -437,6 +443,13 @@ def sweep() -> None:
                 log.warning("Task reconciler: %s", outcome)
         except TransientError:
             log.warning("Task reconciler lỗi tạm — phút sau chạy lại", exc_info=True)
+
+        try:
+            reaped = store.reap_agent_turns()
+            if reaped:
+                log.warning("Assistant turns closed by the sweep: %s", reaped)
+        except TransientError:
+            log.warning("Turn sweep: transient error, retrying next minute", exc_info=True)
 
         for _ in range(SWEEP_BATCH):
             try:

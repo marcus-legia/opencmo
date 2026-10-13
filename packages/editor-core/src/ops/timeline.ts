@@ -24,7 +24,7 @@ import { z } from 'zod';
 import type { ClipDocument, ClipNode, SceneNode } from '@opencmo/clip-doc';
 import { resolveTimes, type TimeNode } from '@opencmo/clip-render';
 
-import { byId, clone, walk, type Entity } from '../doc';
+import { byId, clone, copyOf, walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
 
 const FPS = 30;
@@ -96,20 +96,7 @@ function moveTo(entity: Entity, t: TimeNode, frame: number): void {
   editTime(entity, 'start', start);
 }
 
-/** Bản sao sâu không mang id: `applyOps` đặt id mới ở cuối lượt. */
-export function copyOf(entity: Entity): Entity {
-  const copy = structuredClone(entity);
-  const strip = (value: unknown) => {
-    if (Array.isArray(value)) value.forEach(strip);
-    else if (value && typeof value === 'object') {
-      delete (value as Entity).id;
-      delete (value as Entity).selected;
-      Object.values(value).forEach(strip);
-    }
-  };
-  strip(copy);
-  return copy;
-}
+export { copyOf };
 
 /** Cha (node) và mảng đang chứa một node. */
 export function placeOf(document: ClipDocument, entity: Entity): { parent: Entity; list: Entity[] } {

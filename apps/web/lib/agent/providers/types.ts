@@ -59,13 +59,16 @@ export interface Format {
   callsIn(content: unknown[]): ToolCall[];
   /** Chữ trả lời cho người đọc — không có thinking. */
   replyText(content: unknown[]): string;
+  /** Ids of tool calls in `history` that the next message never answered (a stopped or replaced turn). */
+  danglingCalls(history: StoredMessage[]): string[];
   /**
    * Bản gửi đi của lịch sử: chỉ giữ ảnh của `keep` tin nhắn có ảnh gần nhất,
    * ảnh cũ thành một dòng chữ (spec agent-editor §5). Lịch sử trong DB giữ
    * nguyên; hàm KHÔNG sửa đầu vào. Cắt theo tin nhắn nên prefix cache chỉ vỡ
    * khi có ảnh mới.
    */
-  trimImages(history: StoredMessage[], keep: number): StoredMessage[];
+  /** Older images become text; `window` lets that many more pile up first (see `imagesOver`). */
+  trimImages(history: StoredMessage[], keep: number, window?: number): StoredMessage[];
 }
 
 /** Một lần gọi model: lịch sử, bộ tool và system prompt của PHẠM VI phiên (clip hay project). */
@@ -75,6 +78,11 @@ export type StepRequest = {
   system: string;
   /** Stop của người dùng cắt luồng đang chạy, không đợi model nói xong. */
   signal?: AbortSignal;
+  /**
+   * Stored results of tool calls an interrupted turn never sent to the model (by tool_use id):
+   * a tool that did run is reported as it ran, not as "not completed", or the model does it again.
+   */
+  ran?: Map<string, { ok: boolean; content: string }>;
 };
 
 /** Chữ thay cho ảnh đã bỏ khỏi request. */
@@ -84,6 +92,8 @@ export interface Provider extends Format {
   /** Id model ghi vào `agent_sessions.model`. */
   model: string;
   step(request: StepRequest, onDelta: (delta: Delta) => void): Promise<Step>;
+  /** Runs on a key of its own (one CMO agent's): its failures say nothing about the server's key. */
+  ownKey?: boolean;
   /** Câu tiếng Anh cho người dùng khi một lỗi của provider làm hỏng lượt. */
   failureMessage(error: unknown): string;
 }

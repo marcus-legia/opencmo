@@ -31,7 +31,7 @@ from opencmo.ai.providers import ProviderError, adapter_for
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Task
 from opencmo.editing.models import canonical_json
-from opencmo.media.ffmpeg import run
+from opencmo.media.ffmpeg import USER_INPUT, run
 from opencmo.worker.task_run import task_workspace
 
 log = logging.getLogger(__name__)
@@ -47,8 +47,11 @@ def spec_hash(model: str, spec: dict[str, Any]) -> str:
 def _probe(path: Path) -> tuple[float | None, int | None, int | None]:
     """Thời lượng + kích thước của file kết quả. Ảnh không có thời lượng;
     âm thanh không có kích thước — cả hai là None, không phải 0."""
+    # A provider's video is kept as it came (renamed, not transcoded): read it like an upload.
+    # Our own PNG output goes through image2, which the allowlist leaves out.
+    guard = [] if path.suffix == ".png" else USER_INPUT
     proc = run([
-        "ffprobe", "-v", "error", "-print_format", "json",
+        "ffprobe", "-v", "error", *guard, "-print_format", "json",
         "-show_format", "-show_streams", str(path),
     ], timeout=60)
     data = json.loads(proc.stdout)
@@ -272,7 +275,9 @@ def process(store: Any, task: Task) -> None:
             # Kiểm thứ model vẽ ra TRƯỚC khi lên bucket: bị chặn thì không có file nào để lộ.
             check_output(model, spec, result.path)
             duration, width, height = _probe(result.path)
-            object_name = f"{task.user_id}/{task.job_id}/gen-{generation_id}.{result.extension}"
+            # One object per attempt: a retried task (worker killed after the upload, Modal retry)
+            # must not collide with the previous attempt's file and fail a paid generation.
+            object_name = f"{task.user_id}/{task.job_id}/gen-{task.attempt_id}.{result.extension}"
             store.upload_object("media", object_name, result.path, content_type=result.content_type)
             won = store.complete_generation(
                 task.id, task.attempt_id,
