@@ -114,7 +114,7 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
     const kind = outage(error);
     if (!kind) throw error;
     console.error(`[cmo] ${opts.label} (${opts.agent}): no provider could answer`, error instanceof Error ? error.message : error);
-    throw new LlmError(kind === "busy" ? "Our AI is busy right now. Try again in a minute." : opts.failure);
+    throw new LlmError(kind === "account" ? opts.failure : "Our AI is busy right now. Try again in a minute.");
   }
 }
 

@@ -26,6 +26,8 @@ assert.equal(outage(anthropicError(400, "messages: text content blocks must be n
 assert.equal(outage(new Anthropic.APIConnectionTimeoutError()), null);
 assert.equal(outage(new ApiError({ status: 429, message: "quota" })), "busy");
 assert.equal(outage(new ApiError({ status: 503, message: "unavailable" })), "busy");
+// The day's quota of one model is gone: a minute's wait will not bring it back.
+assert.equal(outage(new ApiError({ status: 429, message: "Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day, limit: 250" })), "quota");
 assert.equal(outage(new ApiError({ status: 403, message: "permission denied" })), "account");
 assert.equal(outage(new ApiError({ status: 400, message: "API key not valid. Please pass a valid API key." })), "account");
 assert.equal(outage(new ApiError({ status: 400, message: "Invalid JSON payload" })), null);
@@ -42,6 +44,9 @@ markDown("gemini", "busy", "gemini-pro-latest", 1_000);
 assert.equal(isDown("gemini", "gemini-pro-latest", 1_000 + 30_000), true);
 assert.equal(isDown("gemini", "gemini-flash-latest", 1_000 + 30_000), false, "one busy model says nothing about another");
 assert.equal(isDown("gemini", "gemini-pro-latest", 1_000 + 90_000), false, "a busy model is retried after a minute");
+markDown("gemini", "quota", "gemini-pro-latest", 1_000);
+assert.equal(isDown("gemini", "gemini-pro-latest", 1_000 + 9 * 60_000), true, "a spent daily quota is skipped for ten minutes at a time");
+assert.equal(isDown("gemini", "gemini-flash-latest", 1_000 + 9 * 60_000), false, "the quota is the model's, not the provider's");
 
 async function main(): Promise<void> {
   // ---------------------------------------------------------------- failover

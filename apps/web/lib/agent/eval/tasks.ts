@@ -499,7 +499,9 @@ export const TASKS: EvalTask[] = [
       const gen = outcome.generations?.find((item) => item.model.limits.removeBackground);
       const priced = check(notes, Boolean(gen) && (gen!.extra?.length ?? 0) === 1, "the card does not hold the cut-out and the background together");
       const prompt = String(gen?.extra?.[0]?.spec.prompt ?? "");
-      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(prompt), `background prompt has people: ${prompt}`);
+      // "no people" asks for an empty room: only people the prompt actually puts in it count.
+      const asked = prompt.replace(/\b(no|without)\s+\w+/gi, "");
+      const noPeople = check(notes, !/\b(person|people|man|woman|crowd)\b/i.test(asked), `background prompt has people: ${prompt}`);
       return { pass: keyed && behind && priced && noPeople && sane(outcome, notes), notes };
     },
   },

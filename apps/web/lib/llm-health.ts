@@ -14,10 +14,13 @@ import { ApiError } from "@google/genai";
 
 export type LlmProvider = "anthropic" | "gemini";
 
-/** `account`: the key or its credit; someone must fix it. `busy`: rate limit or outage; it passes. */
-export type Outage = "account" | "busy";
+/**
+ * `account`: the key or its credit; someone must fix it. `busy`: rate limit or outage; it passes.
+ * `quota`: one model's daily quota is spent; it comes back tomorrow.
+ */
+export type Outage = "account" | "busy" | "quota";
 
-const SKIP_MS: Record<Outage, number> = { account: 10 * 60_000, busy: 60_000 };
+const SKIP_MS: Record<Outage, number> = { account: 10 * 60_000, busy: 60_000, quota: 10 * 60_000 };
 
 /** The kind of outage an SDK error means, or null when the provider answered and the request is at fault. */
 export function outage(error: unknown): Outage | null {
@@ -35,6 +38,7 @@ export function outage(error: unknown): Outage | null {
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) return "account";
     if (error.status === 400 && /api key/i.test(error.message)) return "account";
+    if (error.status === 429 && /per_day/i.test(error.message)) return "quota";
     return error.status === 429 || error.status >= 500 ? "busy" : null;
   }
   return null;
@@ -42,7 +46,7 @@ export function outage(error: unknown): Outage | null {
 
 /**
  * A key or credit problem takes down every model of the provider; a busy answer (rate limit,
- * overload) is about the one model that gave it.
+ * overload) or a spent quota is about the one model that gave it.
  */
 const accountDownUntil = new Map<LlmProvider, number>();
 const busyUntil = new Map<string, number>();
