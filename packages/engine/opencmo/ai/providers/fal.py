@@ -29,7 +29,7 @@ from opencmo.ai.catalog import AiModel
 from opencmo.ai.cutout import demuxer, stack_embedded, stack_matte
 from opencmo.ai.providers.base import Poll, ProviderAdapter, ProviderError, Result
 from opencmo.ai.providers.elevenlabs import words_from_alignment
-from opencmo.media.ffmpeg import run
+from opencmo.media.ffmpeg import USER_INPUT, run
 
 QUEUE = "https://queue.fal.run"
 #: fal storage: a short-lived token, then raw bytes to the CDN (what fal_client.upload_file does).
@@ -344,11 +344,17 @@ def _normalize(raw: Path, content_type: str, dest_dir: Path, *, seconds: int | N
     if content_type.startswith("audio/"):
         out = dest_dir / "result.m4a"
         trim = ["-t", str(seconds)] if seconds else []
-        run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), *trim, "-c:a", "aac", "-b:a", "192k", str(out)], timeout=300)
+        # Provider bytes are untrusted like an upload (engine rule 7): a "song" can be an HLS playlist.
+        run(["ffmpeg", "-v", "error", "-y", *USER_INPUT, "-i", str(raw), *trim, "-c:a", "aac", "-b:a", "192k", str(out)], timeout=300)
         return Result(out, "audio/mp4", "m4a")
     if content_type in ("image/png", "image/jpeg", "image/webp") or content_type.startswith("image/"):
         out = dest_dir / "result.png"
         # WebP/JPEG → PNG: renderer và OPFS editor đọc PNG, và tên file luôn `.png` như Gemini.
-        run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-frames:v", "1", str(out)], timeout=120)
+        # Through stdin as image2pipe, like the user's own images: only these bytes are decoded.
+        run(
+            ["ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-f", "image2pipe", "-i", "pipe:0", "-frames:v", "1", str(out)],
+            timeout=120,
+            stdin_path=raw,
+        )
         return Result(out, "image/png", "png")
     raise ProviderError(FAILED)

@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from opencmo.ai.catalog import AiModel
 from opencmo.ai.providers.base import ProviderError
-from opencmo.media.ffmpeg import run
+from opencmo.media.ffmpeg import USER_INPUT, run
 
 log = logging.getLogger(__name__)
 
@@ -71,14 +71,16 @@ def needs_check(model: AiModel) -> bool:
 
 def _frames(path: Path, workdir: Path) -> list[Path]:
     """Three frames (10% / 50% / 90%) at most 512 px wide: enough to check, cheap to send."""
-    proc = run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
+    # The provider's file, untrusted (engine rule 7); a PNG is ours, transcoded through image2pipe.
+    guard = [] if path.suffix == ".png" else USER_INPUT
+    proc = run(["ffprobe", "-v", "error", *guard, "-show_entries", "format=duration", "-of", "json", str(path)], timeout=60)
     duration = float(json.loads(proc.stdout).get("format", {}).get("duration") or 0) or 1.0
     out: list[Path] = []
     for index, ratio in enumerate((0.1, 0.5, 0.9)):
         frame = workdir / f"moderate-{index}.jpg"
         # `-ss` BEFORE `-i` (engine rule 4): input seeking, no decode from the start.
         run([
-            "ffmpeg", "-v", "error", "-y", "-ss", f"{duration * ratio:.3f}", "-i", str(path),
+            "ffmpeg", "-v", "error", "-y", "-ss", f"{duration * ratio:.3f}", *guard, "-i", str(path),
             "-frames:v", "1", "-vf", "scale='min(512,iw)':-2", str(frame),
         ], timeout=60)
         if frame.exists():

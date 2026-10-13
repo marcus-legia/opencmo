@@ -62,6 +62,16 @@ async function main(): Promise<void> {
     assert.equal(ok.quote, "watch the numbers change");
     assert.match(ok.spec.prompt, /No text/);
 
+    // B-roll matches the clip it goes on: its frame, and silent over the speaker unless asked.
+    const onLandscape = await prepareGeneration({ kind: "video", ...brief }, locate, undefined, { aspect: "16:9", speaker: true });
+    assert.ok(typeof onLandscape !== "string", String(onLandscape));
+    assert.equal(onLandscape.spec.aspectRatio, "16:9", "a 16:9 clip gets 16:9 b-roll, not a vertical strip");
+    assert.equal((onLandscape.op as { muted?: boolean }).muted, true, "b-roll over the speaker is muted by default");
+    const withSound = await prepareGeneration({ kind: "video", ...brief, muted: false }, locate, undefined, { aspect: "16:9", speaker: true });
+    assert.ok(typeof withSound !== "string", String(withSound));
+    assert.equal((withSound.op as { muted?: boolean }).muted, undefined, "the user can keep its sound");
+    assert.equal(ok.spec.aspectRatio, "9:16", "no frame known: vertical");
+
     assert.match(String(await prepareGeneration({ kind: "image", ...brief, quote: "compound interest" }, locate)), /not in this clip's transcript/);
     assert.match(String(await prepareGeneration({ kind: "image", prompt: "a sunset" }, locate)), /idea is required/);
     const { quote: _quote, ...noQuote } = brief;

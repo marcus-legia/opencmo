@@ -162,12 +162,24 @@ def test_sinh_anh_tai_len_media_va_chot(monkeypatch):
     generate_task.process(store, _task())
 
     assert store.failed == []
-    assert store.uploaded == [("media", f"user-1/job-1/gen-{GEN_ID}.png", "image/png")]
-    assert store.completed["object_name"] == f"user-1/job-1/gen-{GEN_ID}.png"
+    assert store.uploaded == [("media", "user-1/job-1/gen-attempt-1.png", "image/png")]
+    assert store.completed["object_name"] == "user-1/job-1/gen-attempt-1.png"
     assert store.completed["name"] == "a red fox in snow.png"
     assert (store.completed["width"], store.completed["height"]) == (1024, 1024)
     assert store.completed["duration"] is None, "ảnh không có thời lượng"
     assert store.completed["credits"] == 1
+
+
+def test_retried_attempt_uploads_its_own_object(monkeypatch):
+    """A retry (worker killed after the upload, Modal retry) must not collide with the previous
+    attempt's object: uploads never overwrite, so the paid result used to fail on the size check."""
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    store = FakeStore(_generation())
+    generate_task.process(store, _task())
+    retry = Task(id="task-1", user_id="user-1", kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-2")
+    generate_task.process(store, retry)
+    names = [name for _bucket, name, _type in store.uploaded]
+    assert len(names) == 2 and len(set(names)) == 2
 
 
 def test_ten_file_cat_o_ranh_gioi_tu_khong_them_ky_tu_la():
@@ -180,7 +192,7 @@ def test_bi_huy_giua_chung_thi_xoa_file_vua_tai(monkeypatch):
     monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
     store = FakeStore(_generation(), complete=False)
     generate_task.process(store, _task())
-    assert store.removed == [("media", [f"user-1/job-1/gen-{GEN_ID}.png"])]
+    assert store.removed == [("media", ["user-1/job-1/gen-attempt-1.png"])]
 
 
 def test_model_gia_bi_chan_khi_khong_bat(monkeypatch):

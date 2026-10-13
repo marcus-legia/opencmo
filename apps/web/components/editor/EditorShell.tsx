@@ -719,6 +719,13 @@ function Workspace({
     };
     setExportState({ phase: "preparing" });
     try {
+      // The preview leaves a piece that is still generating empty, but the export worker cannot:
+      // it would fail after the upload with a library error. Say what to wait for instead.
+      if (generating.length) {
+        throw new Error(
+          `${generating.length} AI ${generating.length === 1 ? "piece is" : "pieces are"} still generating (${generating.map((item) => item.label).join(", ")}). Export when ${generating.length === 1 ? "it is" : "they are"} ready.`,
+        );
+      }
       await session.flush();
       const hash = session.getState().documentHash;
       if (!hash) throw new Error("Could not save your changes. Try again.");

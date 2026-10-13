@@ -61,6 +61,7 @@ class FakeStore:
         self.replaced: tuple[str, str, bytes] | None = None
         self.completed: dict | None = None
         self.failed: str | None = None
+        self.generations: list[dict] = []
 
     def get_clip(self, _clip_id):
         return {"id": "c1", "job_id": "j1"}
@@ -94,7 +95,12 @@ class FakeStore:
         return {
             "m-broll": {"user_id": "u1", "job_id": "j1", "status": "ready", "storage_path": "media/u1/j1/broll.mp4"},
             "m-fox": {"user_id": "u1", "job_id": "j1", "status": "ready", "storage_path": "media/u1/j1/fox.png"},
+            "m-shot": {"user_id": "u1", "job_id": "j1", "status": "ready", "storage_path": "media/u1/j1/gen-shot.mp4"},
         }.get(media_id)
+
+    def done_generations(self, job_id):
+        assert job_id == "j1"
+        return self.generations
 
     def heartbeat_task(self, *_args):
         return True
@@ -444,3 +450,30 @@ def test_huy_export_dung_exporter_ngay(tmp_path, monkeypatch):
     with pytest.raises(task_module.ExportCancelled):
         task_module._node_run(tmp_path / "job.json", timeout=120, on_render=lambda _part: None, stop=stop)
     assert clock.monotonic() - began < 5
+
+
+SHOT = {"generate": "video", "prompt": "a laptop on a desk", "model": "fal-seedance", "duration": 5, "seed": 7}
+
+
+def test_finished_generation_exports_although_no_tab_put_it_in_the_library(monkeypatch):
+    """Closed the tab after Approve (or used MCP): the shot finished and was paid for, but only the
+    editor tab writes it into the library. Export finds it in the project's generations."""
+    jobs: list[dict] = []
+    _fake_node(monkeypatch, [{"kind": "video", "src": SHOT}], jobs)
+    store = FakeStore()
+    store.generations = [
+        {"id": "g-other", "model": "fal-seedance", "spec": {**SHOT, "seed": 8}, "media_asset_id": "m-fox"},
+        {"id": "g-shot", "model": "fal-seedance", "spec": {k: v for k, v in SHOT.items() if k not in ("generate", "model")}, "media_asset_id": "m-shot"},
+    ]
+    rd.process(store, _task())
+    assert store.failed is None
+    assert ("media", "u1/j1/gen-shot.mp4") in store.downloads
+    assert ("media", "u1/j1/fox.png") not in store.downloads, "another seed is another shot"
+
+
+def test_generation_that_never_finished_still_fails_with_the_library_message(monkeypatch):
+    _fake_node(monkeypatch, [{"kind": "video", "src": SHOT}], [])
+    store = FakeStore()
+    store.generations = [{"id": "g", "model": "other-model", "spec": {"prompt": SHOT["prompt"]}, "media_asset_id": "m-shot"}]
+    rd.process(store, _task())
+    assert store.failed is not None and "is not in this project's library" in store.failed

@@ -7,7 +7,7 @@
  * duyệt (`apply_to_clips`).
  */
 
-import { planStudio3d, planVoiceover, quoteRange, summarizeProject } from "@opencmo/editor-core";
+import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, summarizeProject } from "@opencmo/editor-core";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
@@ -219,6 +219,10 @@ export function clipScope(
         // Chuẩn bị ở ĐÂY (chọn model, seed, giá) và lưu vào input của tool: thứ
         // người dùng duyệt đúng là thứ sẽ được tạo, không tính lại sau khi bấm.
         // Câu trích phải có thật trong clip: ảnh/video gắn với điều người nói nói.
+        const target = await workspace.read().then(({ document }) => {
+          const scene = activeScene(document) as unknown as { width: number; height: number };
+          return { aspect: frameAspect(Number(scene.width), Number(scene.height)), speaker: JSON.stringify(document).includes(`"${MASTER_SRC}"`) };
+        });
         const prepared = await prepareGeneration(
           call.input,
           async (quote) => {
@@ -234,6 +238,7 @@ export function clipScope(
             const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: record.cloud.mediaId }).catch(() => null)) as { startImage?: string } | null;
             return resolved?.startImage ?? null;
           },
+          target,
         );
         if (typeof prepared === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the generation" };

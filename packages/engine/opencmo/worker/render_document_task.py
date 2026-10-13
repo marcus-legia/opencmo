@@ -205,6 +205,17 @@ def _generation_matches(declaration: dict[str, Any], record: dict[str, Any]) -> 
     return all(spec.get(name) == declaration[name] for name in _SPEC_FIELDS if name in declaration)
 
 
+def _generation_row_matches(declaration: dict[str, Any], row: dict[str, Any]) -> bool:
+    """A finished `generations` row for this declaration: same prompt, same model when the
+    declaration names one, and every spec field the declaration wrote."""
+    spec = row.get("spec") or {}
+    if not isinstance(spec, dict) or spec.get("prompt") != declaration.get("prompt"):
+        return False
+    if "model" in declaration and row.get("model") != declaration["model"]:
+        return False
+    return all(spec.get(name) == declaration[name] for name in _SPEC_FIELDS if name in declaration)
+
+
 def _library_record(manifest: dict[str, Any], src: Any) -> dict[str, Any] | None:
     for record in manifest.get("assets") or []:
         if not isinstance(record, dict) or record.get("state") in ("pending", "error"):
@@ -231,6 +242,8 @@ class _Sources:
         masters = (job.get("media_manifest") or {}).get("masters") or {}
         self.master = masters.get(task.clip_id) or {}
         self.count = 0
+        # Finished generations of this project, read once and only when a declaration needs one.
+        self.generations: list[dict[str, Any]] | None = None
 
     def _path(self, suffix: str) -> Path:
         self.count += 1
@@ -254,6 +267,12 @@ class _Sources:
             raise SourceError("Editing an existing file with AI is not available yet.")
         record = _library_record(self.manifest, src)
         name = (record or {}).get("path") or (src if isinstance(src, str) else "A generated file")
+        if record is None and isinstance(src, dict) and "generate" in src:
+            # Only the editor tab writes a finished generation into the library. When no tab was
+            # open (closed after Approve, MCP), the paid file is still in the project: find it.
+            done = self._finished_generation(src)
+            if done:
+                return self._media_asset(done, name)
         if record is None:
             raise SourceError(f"{name} is not in this project's library. Add it again, then export.")
         cloud = record.get("cloud") or {}
@@ -266,6 +285,17 @@ class _Sources:
                 f"{name} was only saved on the device that added it, so Export can't use it. "
                 "Remove it from the clip, then export."
             )
+        return self._media_asset(media_id, name)
+
+    def _finished_generation(self, declaration: dict[str, Any]) -> str | None:
+        if self.generations is None:
+            self.generations = self.store.done_generations(self.task.job_id)
+        for row in self.generations:
+            if _generation_row_matches(declaration, row):
+                return str(row["media_asset_id"])
+        return None
+
+    def _media_asset(self, media_id: str, name: str) -> Path:
         row = self.store.get_media_asset(media_id)
         if (
             not row

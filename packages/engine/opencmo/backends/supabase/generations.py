@@ -18,6 +18,24 @@ class GenerationsMixin(_Http):
         )
         return _first_row(resp.json())
 
+    def done_generations(self, job_id: str) -> list[dict[str, Any]]:
+        """Finished generations of a project that still have their file, newest first: export
+        finds a generation the editor never wrote into the library."""
+        resp = self._send(
+            "GET",
+            "/rest/v1/generations",
+            idempotent=True,
+            params={
+                "job_id": f"eq.{job_id}",
+                "status": "eq.done",
+                "media_asset_id": "not.is.null",
+                "select": "id,model,spec,media_asset_id",
+                "order": "created_at.desc",
+            },
+        )
+        rows = resp.json()
+        return rows if isinstance(rows, list) else []
+
     def get_ai_model(self, model_id: str) -> dict[str, Any] | None:
         """Hàng catalog trong DB (G5): giá, giới hạn, bật/tắt — nguồn sự thật khi chạy."""
         resp = self._send(

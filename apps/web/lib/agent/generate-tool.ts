@@ -83,7 +83,7 @@ export const generateInput = z
       .max(60)
       .optional()
       .describe("Image/video: seconds it stays on the clip (B-roll: 1.5-4). A video is still generated and paid for its full duration."),
-    muted: z.boolean().optional().describe("Video: mute its own sound (always for B-roll)."),
+    muted: z.boolean().optional().describe("Video: mute its own sound. Defaults to muted on a clip with a speaker (B-roll); false keeps the video's sound."),
     fit: z.boolean().optional().describe("Video: speed it up so the WHOLE generated video plays within length — for an AI transition that must reach its end_image."),
     variants: z
       .number()
@@ -161,7 +161,15 @@ const NOUN: Record<GenerationKind, string> = { image: "image", video: "video", v
 /** Đường dẫn thư viện của một ảnh AI đã xong → tên object media (null = không dùng được). */
 export type LookupImage = (path: string) => Promise<string | null>;
 
-export async function prepareGeneration(input: unknown, locate?: LocateQuote, lookupImage?: LookupImage): Promise<PreparedGeneration | string> {
+/** The clip the media goes on: its frame, and whether the user's own video (with its sound) plays under it. */
+export type GenerationTarget = { aspect?: string; speaker?: boolean };
+
+export async function prepareGeneration(
+  input: unknown,
+  locate?: LocateQuote,
+  lookupImage?: LookupImage,
+  target: GenerationTarget = {},
+): Promise<PreparedGeneration | string> {
   const parsed = generateInput.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -177,9 +185,13 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
       : `Creating ${NOUN[request.kind]}s is not available.`;
   }
 
-  // Clip của OpenCMO là khung dọc: mặc định 9:16 khi model nhận.
+  // The clip's own frame by default: a 9:16 shot on a 16:9 clip is a narrow strip over the speaker.
+  // Vertical when the frame is unknown or the model cannot make it (OpenCMO clips are 9:16).
   const ratios = model.limits.aspectRatios ?? [];
-  const aspectRatio = request.aspect_ratio ?? (ratios.includes("9:16") ? "9:16" : ratios[0]);
+  const aspectRatio =
+    request.aspect_ratio ?? (target.aspect && ratios.includes(target.aspect) ? target.aspect : ratios.includes("9:16") ? "9:16" : ratios[0]);
+  // B-roll over the speaker is silent unless the user asked for its sound: some models add audio.
+  const muted = request.kind === "video" && (request.muted ?? Boolean(target.speaker));
   const seed = randomInt(0, 2_147_483_647);
   const count = request.variants ?? 1;
   if (count > 1 && request.kind !== "image") return "variants: only AI images can have variants.";
@@ -271,7 +283,7 @@ export async function prepareGeneration(input: unknown, locate?: LocateQuote, lo
     ...(refs ? { refs } : {}),
     ...(start ? { start } : {}),
     ...((request.kind === "image" || request.kind === "video") && request.length ? { length: request.length } : {}),
-    ...(request.kind === "video" && request.muted ? { muted: true } : {}),
+    ...(muted ? { muted: true } : {}),
     ...(request.kind === "video" && request.fit ? { fit: true } : {}),
     ...(variantSeeds.length ? { variant_seeds: variantSeeds } : {}),
   } as Op;
