@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import { geminiFormat } from "./providers/gemini-history";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
@@ -32,7 +32,7 @@ assert.ok(TOOL_SPECS.filter((spec) => spec.strict).length > MAX_STRICT_TOOLS, "t
 assert.ok(sent.size <= MAX_STRICT_TOOLS, "strict tools capped");
 assert.ok(!sent.has("generate_media"), "one large priced schema does not crowd out the small ones");
 // Eager streaming skips the API's JSON check: only strict tools (valid JSON by grammar) may use it.
-const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true);
+const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true) as { name: string }[];
 for (const tool of defined) {
   const eager = (tool as { eager_input_streaming?: boolean }).eager_input_streaming === true;
   assert.equal(eager, (tool as { strict?: boolean }).strict === true, `${tool.name}: eager streaming only with strict`);
@@ -132,6 +132,20 @@ assert.equal(contextEditing({} as NodeJS.ProcessEnv), null);
 const editing = contextEditing({ OPENCMO_AGENT_CONTEXT_EDITING: "1" } as unknown as NodeJS.ProcessEnv)!;
 assert.equal(editing.beta, "context-management-2025-06-27");
 assert.deepEqual(editing.context_management.edits[0]!.exclude_tools, ["read_guide", "read_skill", "update_plan"]);
+
+// Tool search: off by default; on, the search tool leads, the core stays loaded, the rest defers.
+assert.equal(toolSearchOn({} as NodeJS.ProcessEnv), false);
+const plain = toolDefinitions(TOOL_SPECS, false) as { name: string; defer_loading?: boolean }[];
+assert.ok(plain.every((tool) => !tool.defer_loading), "nothing deferred without the flag");
+const searched = toolDefinitions(TOOL_SPECS, false, true) as { name: string; type?: string; defer_loading?: boolean }[];
+assert.equal(searched[0]!.type, "tool_search_tool_bm25_20251119");
+assert.ok(!searched[0]!.defer_loading, "the search tool itself is never deferred");
+for (const tool of searched.slice(1)) assert.equal(Boolean(tool.defer_loading), !ALWAYS_LOADED.has(tool.name), tool.name);
+const loaded = searched.filter((tool) => !tool.defer_loading).length;
+assert.ok(loaded < searched.length / 2 + 5, `most tools wait for a search (${loaded} of ${searched.length} loaded)`);
+// Every always-loaded name is a real tool of the clip scope (or a priced one configured elsewhere).
+const priced = new Set(["create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill"]);
+for (const name of ALWAYS_LOADED) assert.ok(names.includes(name) || priced.has(name), `${name} is a tool`);
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.
 assert.deepEqual(

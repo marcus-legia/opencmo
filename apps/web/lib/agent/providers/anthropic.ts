@@ -182,9 +182,36 @@ export function optionalParams(schema: unknown): number {
   return count;
 }
 
-export const toolDefinitions = (specs: ToolSpec[], useStrict: boolean): Anthropic.Beta.BetaTool[] => {
+/**
+ * Tools always in context when tool search is on: the routing targets of the system prompt and the
+ * tools nearly every edit uses. The rest (colour, layouts, keyframe and timeline detail, icons,
+ * animations, markers, audio, 3D preview…) load when the model searches for them.
+ */
+export const ALWAYS_LOADED = new Set([
+  "get_project_state", "get_document", "get_transcript", "search_transcript", "list_library", "check", "read_guide", "read_skill",
+  "update_plan", "ask_user", "capture", "media_grab",
+  "insert_asset", "place_broll", "wait_for_media", "add_text", "set_props", "set_keyframe", "add_part", "delete_element", "move_elements", "trim_element", "split_elements",
+  "set_frame", "set_layout", "set_caption_style", "remove_words", "remove_ranges", "remove_silence", "find_filler_words", "find_silences", "undo",
+  "add_diagram", "add_chart", "add_shape",
+  "create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions",
+]);
+
+const TOOL_SEARCH = { type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" } as const;
+
+/** Appended to the system prompt when tool search is on (fixed text: the cache prefix holds). */
+export const TOOL_SEARCH_NOTE =
+  "\n\nSpecialised tools load on demand: colour grading, layouts of several sources, icons and animations, graphs, staggered reveals, markers, timelines and rows, fades and audio, slips, grouping, copy_settings, 3D preview and more. Search for one with tool_search_tool_bm25 by what you need (\"color grade\", \"animated icon\", \"split screen layout\"), or by the name the guide gives, then call it.";
+
+/**
+ * Deferred tool loading (tool search), behind OPENCMO_AGENT_TOOL_SEARCH=1 until a real-model eval
+ * shows it pays: ~90 tool definitions (about 17k tokens) shrink to the ~45 in ALWAYS_LOADED, and
+ * the model's choice among them gets easier. Deferred tools leave the cached prefix untouched.
+ */
+export const toolSearchOn = (env: NodeJS.ProcessEnv = process.env): boolean => env.OPENCMO_AGENT_TOOL_SEARCH === "1";
+
+export const toolDefinitions = (specs: ToolSpec[], useStrict: boolean, search = false): Anthropic.Beta.BetaToolUnion[] => {
   const strict = useStrict ? strictTools(specs) : new Set<string>();
-  return specs.map((spec) => ({
+  const tools: Anthropic.Beta.BetaToolUnion[] = specs.map((spec) => ({
     name: spec.name,
     description: spec.description,
     input_schema: spec.schema as Anthropic.Beta.BetaTool["input_schema"],
@@ -192,7 +219,9 @@ export const toolDefinitions = (specs: ToolSpec[], useStrict: boolean): Anthropi
     // their grammar guarantees valid JSON. A non-strict tool without it gets its input checked,
     // instead of the model's broken JSON ("avoid": text, logos) failing the whole turn.
     ...(strict.has(spec.name) ? { strict: true, eager_input_streaming: true } : {}),
+    ...(search && !ALWAYS_LOADED.has(spec.name) ? { defer_loading: true } : {}),
   }));
+  return search ? [TOOL_SEARCH, ...tools] : tools;
 };
 
 /** Shown to the model for a tool call its turn never answered (stopped, or replaced by a new turn). */
@@ -277,15 +306,17 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
       let jsonRetries = 0;
       let useStrict = true;
       const editing = contextEditing();
+      // The CMO and project scopes have few tools; only the editor's large set is worth searching.
+      const search = toolSearchOn() && specs.length > ALWAYS_LOADED.size;
       for (;;) {
         const stream = client.beta.messages.stream({
           model,
           max_tokens: MAX_TOKENS,
           thinking: { type: "adaptive", display: "summarized", block_binding: { prefix_mismatch_behavior: "drop_block" } },
-          system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+          system: [{ type: "text", text: search ? `${system}${TOOL_SEARCH_NOTE}` : system, cache_control: { type: "ephemeral" } }],
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
-          tools: toolDefinitions(specs, useStrict),
+          tools: toolDefinitions(specs, useStrict, search),
           messages: closeDanglingToolUses(history, ran) as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA, ...(editing ? [editing.beta] : [])],
           fallbacks: "default",
