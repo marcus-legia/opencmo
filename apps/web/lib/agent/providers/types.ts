@@ -59,6 +59,8 @@ export interface Format {
   callsIn(content: unknown[]): ToolCall[];
   /** Chữ trả lời cho người đọc — không có thinking. */
   replyText(content: unknown[]): string;
+  /** Ids of tool calls in `history` that the next message never answered (a stopped or replaced turn). */
+  danglingCalls(history: StoredMessage[]): string[];
   /**
    * Bản gửi đi của lịch sử: chỉ giữ ảnh của `keep` tin nhắn có ảnh gần nhất,
    * ảnh cũ thành một dòng chữ (spec agent-editor §5). Lịch sử trong DB giữ

@@ -13,6 +13,8 @@ import { z } from "zod";
 
 import { resolveAgent, type AgentId, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 
+import { outage, withFailover } from "@/lib/llm-health";
+
 import { LlmError } from "./llm-error";
 import { isProduction } from "@/lib/production";
 
@@ -63,7 +65,8 @@ async function structuredGemini<S extends z.ZodType>(opts: Options<S>, agent: Re
       },
     });
   } catch (error) {
-    if (error instanceof ApiError && error.status === 429) throw new LlmError("Our AI is busy right now. Try again in a minute.");
+    // The provider itself cannot answer: `structured` decides whether another one can.
+    if (outage(error)) throw error;
     console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): Gemini error`, error instanceof ApiError ? error.status : "", error instanceof Error ? error.message : error);
     throw new LlmError(opts.failure);
   }
@@ -90,10 +93,28 @@ async function structuredGemini<S extends z.ZodType>(opts: Options<S>, agent: Re
   return parsed.data;
 }
 
+/**
+ * One structured call. The agent's configured provider answers; when that provider cannot (no
+ * credit, a bad key, rate limits, an outage) and the server has a key for the other one, the call
+ * runs there on that provider's model of the same tier.
+ */
 export async function structured<S extends z.ZodType>(opts: Options<S>): Promise<z.infer<S>> {
-  const agent = resolveAgent(opts.agent);
-  if (!agent.apiKey) throw new LlmError("The AI CMO is not set up on this server yet.");
-  if (agent.provider === "gemini") return structuredGemini(opts, agent);
+  const configured = resolveAgent(opts.agent);
+  const other = resolveAgent(opts.agent, process.env, configured.provider === "anthropic" ? "gemini" : "anthropic");
+  const candidates = [configured, other].filter((agent) => agent.apiKey);
+  if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
+  try {
+    return await withFailover(candidates, (agent) => (agent.provider === "gemini" ? structuredGemini(opts, agent) : structuredAnthropic(opts, agent)));
+  } catch (error) {
+    if (error instanceof LlmError) throw error;
+    const kind = outage(error);
+    if (!kind) throw error;
+    console.error(`[cmo] ${opts.label} (${opts.agent}): no provider could answer`, error instanceof Error ? error.message : error);
+    throw new LlmError(kind === "busy" ? "Our AI is busy right now. Try again in a minute." : opts.failure);
+  }
+}
+
+async function structuredAnthropic<S extends z.ZodType>(opts: Options<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
   const client = new Anthropic({ apiKey: agent.apiKey });
   // Opus and Sonnet 5.5 have server-side fallback; Haiku has none. Haiku 5.5 thinks by default
   // (effort medium): a check runs at low. Haiku 4.5 rejects `effort`.
@@ -112,7 +133,7 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
       messages: [{ role: "user", content: opts.prompt }],
     }, opts.timeoutMs ? { timeout: opts.timeoutMs, maxRetries: 1 } : undefined);
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) throw new LlmError("Our AI is busy right now. Try again in a minute.");
+    if (outage(error)) throw error;
     if (error instanceof Anthropic.APIError) console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): lỗi API`, error.status, error.message);
     else console.error(`[cmo] ${opts.label}: parse/khác`, error);
     throw new LlmError(opts.failure);

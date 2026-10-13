@@ -36,6 +36,13 @@ console.error = () => undefined;
 assert.equal(resolveAgent("cmo", { ...both, CMO_AGENT_CMO_PROVIDER: "openai" } as unknown as NodeJS.ProcessEnv).provider, "anthropic", "an unknown provider falls back");
 console.error = errors;
 
+// Failover: the same agent on the other provider uses that provider's tier model and shared key,
+// never the agent's own model id or key (they belong to the configured provider).
+const own = { ...both, CMO_AGENT_DIRECTOR_MODEL: "claude-opus-5-5", CMO_AGENT_DIRECTOR_API_KEY: "a-director" } as unknown as NodeJS.ProcessEnv;
+const fallback = resolveAgent("director", own, "gemini");
+assert.deepEqual([fallback.provider, fallback.model, fallback.apiKey], ["gemini", "gemini-pro-latest", "g-shared"]);
+assert.equal(resolveAgent("checker", base, "gemini").apiKey, "", "no key for the other provider: no failover");
+
 // No key: empty (the caller reports it in English).
 assert.equal(resolveAgent("cmo", {} as unknown as NodeJS.ProcessEnv).apiKey, "");
 

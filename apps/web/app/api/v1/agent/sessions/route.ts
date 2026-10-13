@@ -3,7 +3,8 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { clipContext } from "@/lib/api/clips";
 import { notFound, rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
-import { agentChatProvider, agentProvider, availableModels, providerForModel } from "@/lib/agent/model";
+import { agentChatProvider, agentProvider, availableModels, kindOf, providerForModel } from "@/lib/agent/model";
+import { isDown } from "@/lib/llm-health";
 import { sessionView, type SessionRow } from "@/lib/agent/view";
 import { availableModels as generationModels } from "@/lib/generate/models";
 
@@ -20,7 +21,9 @@ async function ownJob(supabase: SupabaseClient, jobId: string): Promise<void> {
 /** Model được chọn: model client xin nếu server bật nó, không thì mặc định. */
 function pickModel(wanted: string | null | undefined): string | null {
   const models = availableModels();
-  if (wanted && models.some((model) => model.id === wanted) && providerForModel(wanted)) return wanted;
+  // A model the panel remembers is honoured unless its provider just failed to answer.
+  const down = wanted ? (kindOf(wanted) !== "fake" && isDown(kindOf(wanted) as "anthropic" | "gemini")) : false;
+  if (wanted && !down && models.some((model) => model.id === wanted) && providerForModel(wanted)) return wanted;
   return agentProvider()?.model ?? null;
 }
 

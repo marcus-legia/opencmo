@@ -55,6 +55,7 @@ export function contextEditing(env: NodeJS.ProcessEnv = process.env) {
 
 /** Định dạng content block của Claude — dùng chung cho Claude giả. */
 export const anthropicFormat: Omit<Format, "kind"> = {
+  danglingCalls: (history) => danglingToolUses(history),
   userTurn: (prompt, state, images) => [
     { type: "text", text: prompt },
     ...(images ?? []).map((image) => ({

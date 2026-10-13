@@ -6,6 +6,8 @@ import "server-only";
  * - `OPENCMO_AGENT_FAKE=1` (never in production): the scripted model for CI/E2E.
  * - `OPENCMO_AGENT_PROVIDER=anthropic|gemini`: the default for new chats.
  * - Unset: Claude when the server has an Anthropic key, otherwise Gemini.
+ * - A provider that just failed to answer (no credit, bad key, outage: `lib/llm-health.ts`) is
+ *   skipped for new chats while the other one has a key.
  *
  * A session is bound to its model family (native history): `providerForModel` rebuilds that
  * provider, or returns null when the server has no key for it any more.
@@ -18,6 +20,7 @@ import { fakeProvider } from "./providers/fake";
 import { GEMINI_MODEL, geminiKey, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
 import type { Format, Provider, ProviderKind } from "./providers/types";
+import { healthyFirst, isDown, type LlmProvider } from "@/lib/llm-health";
 import { isProduction } from "@/lib/production";
 
 function fakeAllowed(): boolean {
@@ -26,14 +29,25 @@ function fakeAllowed(): boolean {
 
 const hasAnthropicKey = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
+/** Providers the server has a key for, the configured default first. */
+function configured(): LlmProvider[] {
+  const order: LlmProvider[] = process.env.OPENCMO_AGENT_PROVIDER?.trim().toLowerCase() === "gemini" ? ["gemini", "anthropic"] : ["anthropic", "gemini"];
+  return order.filter((kind) => (kind === "gemini" ? Boolean(geminiKey()) : hasAnthropicKey()));
+}
+
+const build = (kind: LlmProvider): Provider => (kind === "gemini" ? geminiProvider(geminiKey()) : anthropicProvider());
+
 /** Provider for a NEW session, or null when the Assistant is not set up. */
 export function agentProvider(): Provider | null {
   if (fakeAllowed()) return fakeProvider;
-  const wanted = process.env.OPENCMO_AGENT_PROVIDER?.trim().toLowerCase();
-  if (wanted === "gemini") return geminiKey() ? geminiProvider(geminiKey()) : null;
-  if (wanted === "anthropic") return hasAnthropicKey() ? anthropicProvider() : null;
-  if (hasAnthropicKey()) return anthropicProvider();
-  return geminiKey() ? geminiProvider(geminiKey()) : null;
+  const [first] = healthyFirst(configured().map((provider) => ({ provider })));
+  return first ? build(first.provider) : null;
+}
+
+/** True when a chat on `kind` failed on an outage and a new chat would start on the other provider. */
+export function canSwitchFrom(kind: ProviderKind): boolean {
+  if (kind === "fake" || fakeAllowed()) return false;
+  return configured().some((other) => other !== kind && !isDown(other));
 }
 
 /**

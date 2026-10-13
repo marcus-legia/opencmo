@@ -57,6 +57,19 @@ export const geminiFormat: Format = {
       .map((part) => part.text!)
       .join("")
       .trim(),
+  danglingCalls(history: StoredMessage[]): string[] {
+    const out: string[] = [];
+    history.forEach((message, index) => {
+      if (message.role !== "assistant") return;
+      const calls = geminiFormat.callsIn(message.content);
+      const next = history[index + 1];
+      // Responses are sent in call order, so the first `answered` calls are the answered ones.
+      const answered = next?.role === "user" ? (next.content as Part[]).filter((part) => part.functionResponse).length : 0;
+      // Ids we generated (`gc_<position>`) repeat in every message: they cannot name a stored result.
+      for (const call of calls.slice(answered)) if (!call.id.startsWith("gc_")) out.push(call.id);
+    });
+    return out;
+  },
   trimImages(history: StoredMessage[], keep: number): StoredMessage[] {
     const hasImage = (message: StoredMessage) =>
       message.role === "user" && (message.content as Part[]).some((part) => part.inlineData || part.functionResponse?.parts?.length);

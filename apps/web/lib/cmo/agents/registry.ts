@@ -60,9 +60,12 @@ export type ResolvedAgent = AgentSpec & { provider: ProviderKind; model: string;
  * An agent's real model and key. An empty `apiKey` means the agent is not set up (no key); the
  * caller reports that in English. Keys never leave the server.
  */
-export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env): ResolvedAgent {
+export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env, fallback?: ProviderKind): ResolvedAgent {
   const spec = AGENT_SPECS[id];
   const prefix = `CMO_AGENT_${id.toUpperCase()}_`;
+  // The agent as the OTHER provider would run it (failover): that provider's model of the same
+  // tier and its shared key. The agent's own MODEL and API_KEY belong to its configured provider.
+  if (fallback) return { ...spec, provider: fallback, model: defaultModel(fallback, spec.tier), apiKey: sharedKey(fallback, env), source: "default" };
   const own = env[`${prefix}PROVIDER`]?.trim().toLowerCase();
   const wanted = own || env.CMO_LLM_PROVIDER?.trim().toLowerCase();
   if (wanted && wanted !== "gemini" && wanted !== "anthropic") {

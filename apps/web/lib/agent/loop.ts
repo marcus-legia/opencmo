@@ -25,15 +25,19 @@ import "server-only";
  */
 
 import { ApiError } from "@/lib/api/errors";
+import { markDown, outage } from "@/lib/llm-health";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS, SLOW_PLANS, STOP_POLL_MS } from "./limits";
-import { danglingToolUses } from "./providers/anthropic";
+import { canSwitchFrom } from "./model";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
 import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
 
 export type Emit = (event: string, data: unknown) => void;
+
+/** Shown when the chat's model cannot answer and another one can: a chat is bound to its model. */
+export const SWITCH_MODEL_MESSAGE = "This chat's model is not available right now. Start a new chat to continue on another model.";
 
 export type Turn = { id: string; session_id: string; number: number; prompt: string; checkpoint_id?: string | null };
 
@@ -71,10 +75,16 @@ async function history(supabase: SupabaseClient, sessionId: string): Promise<Sto
 }
 
 /** Stored results of tool calls an interrupted turn never answered (see `StepRequest.ran`). */
-async function ranTools(supabase: SupabaseClient, past: StoredMessage[]): Promise<Map<string, { ok: boolean; content: string }>> {
-  const ids = danglingToolUses(past);
+async function ranTools(supabase: SupabaseClient, provider: Provider, sessionId: string, past: StoredMessage[]): Promise<Map<string, { ok: boolean; content: string }>> {
+  const ids = provider.danglingCalls(past);
   if (!ids.length) return new Map();
-  const { data } = await supabase.from("agent_tool_calls").select("tool_use_id, status, content").in("tool_use_id", ids).in("status", ["done", "failed"]);
+  // Within this chat only: Claude's ids are unique everywhere, Gemini's are short and can repeat.
+  const { data } = await supabase
+    .from("agent_tool_calls")
+    .select("tool_use_id, status, content, agent_turns!inner(session_id)")
+    .eq("agent_turns.session_id", sessionId)
+    .in("tool_use_id", ids)
+    .in("status", ["done", "failed"]);
   return new Map(
     ((data ?? []) as { tool_use_id: string; status: string; content: { text?: string } | null }[])
       .filter((row) => typeof row.content?.text === "string")
@@ -212,7 +222,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         result = await provider.step(
           {
             history: provider.trimImages(past, KEEP_IMAGES, KEEP_IMAGES),
-            ran: await ranTools(supabase, past),
+            ran: await ranTools(supabase, provider, turn.session_id, past),
             tools: scope.tools,
             system: scope.system,
             signal: watch.signal,
@@ -384,7 +394,10 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       return;
     }
     console.error("[agent] lượt lỗi", err);
-    const message = provider.failureMessage(err);
+    // The provider itself could not answer: remember it, so the next chat starts on the other one.
+    const kind = outage(err);
+    if (kind && provider.kind !== "fake") markDown(provider.kind, kind);
+    const message = kind && canSwitchFrom(provider.kind) ? SWITCH_MODEL_MESSAGE : provider.failureMessage(err);
     try {
       await finish(env, "failed", message);
     } catch (closeErr) {
