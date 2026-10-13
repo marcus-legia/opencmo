@@ -76,6 +76,22 @@ describe('create_video', () => {
 		expect(sources.map((src) => src.after)).toEqual([undefined, after, undefined]);
 	});
 
+	it('regenerating a shot repoints the shots that continue it', async () => {
+		const after = 'a'.repeat(64);
+		const { document } = await applyOps(blank, [{ ...video, seconds: 15, shots: [shot(0, 5), { ...shot(5, 5), after }, { ...shot(10, 5), after }] }], ctx);
+		const shots = () => flat(document.stage.children as unknown as Node[]).filter((node) => (node.paints ?? []).some((paint) => paint.src?.generate === 'video'));
+		const [first, second, third] = shots().map((node) => String(node.id));
+		const continuations = [{ element_id: second!, after: 'b'.repeat(64) }, { element_id: third!, after: 'c'.repeat(64) }];
+		const again = await applyOps(document, [{ op: 'regenerate', element_id: first!, seed: 9, continuations }], ctx);
+		const sources = flat(again.document.stage.children as unknown as Node[])
+			.flatMap((node) => node.paints ?? [])
+			.map((paint) => paint.src)
+			.filter((src) => src && typeof src === 'object' && src.generate === 'video');
+		expect(sources.map((src) => [src.seed === 9, src.after])).toEqual([[true, undefined], [false, 'b'.repeat(64)], [false, 'c'.repeat(64)]]);
+		// A continuation that is no longer a continuing shot: nothing is half-applied.
+		await expect(applyOps(document, [{ op: 'regenerate', element_id: first!, seed: 9, continuations: [{ element_id: first!, after: 'b'.repeat(64) }] }], ctx)).rejects.toThrow(/continues this one/);
+	});
+
 	it('refuses a chain that cannot be seamless', async () => {
 		const after = 'a'.repeat(64);
 		await expect(applyOps(blank, [{ ...video, shots: [{ ...shot(0, 5), after }, shot(5, 4), shot(9, 3)] }], ctx)).rejects.toThrow(/first shot cannot continue/);

@@ -369,7 +369,9 @@ export function useGenerations({
             await attempt;
             break;
           } catch (error) {
-            const stillUploading = /still uploading/i.test((error as Error).message);
+            // A shot that continues another is refused until that one is started (Regenerate starts
+            // the whole chain at once); the refusal comes before any credit is held.
+            const stillUploading = /still uploading|Start the shot before this one first/i.test((error as Error).message);
             if (!stillUploading || Date.now() - waitStarted > PROBE_WAIT_MS || !recordFor(libraryRef.current.latest(), key)) throw error;
             await sleep(POLL_MS);
             attempt = post();

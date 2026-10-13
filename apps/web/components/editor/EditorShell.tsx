@@ -55,6 +55,7 @@ import { priceOf, type AiModel } from "@opencmo/editor-core/generate";
 import { liveModel, liveModels, storedImages, GeneratePanel, useEnabledModels, type EditSource } from "./generate/GeneratePanel";
 import { useVoiceovers } from "./generate/useVoiceovers";
 import { VisualsPanel, type SelectedVisual } from "./visuals/VisualsPanel";
+import { continuationsOf } from "./generate/chain";
 import { aiStateOf, ownDeclarations, pendingGenerations, resolve as resolveGeneration, useGenerations } from "./generate/useGenerations";
 import { useLibrary } from "./library/useLibrary";
 import { gridFor, layoutKey, MIN, PRESETS, splitterFor, useEditorLayout, type PanelName } from "./layout";
@@ -1086,7 +1087,11 @@ function Workspace({
     selection,
     manifest: library.latest(),
     enabled: enabledModels,
-    regenerate: (id) => void run([{ op: "regenerate", element_id: id, seed: Math.floor(Math.random() * 2_147_483_647) }]),
+    regenerate: (id) => {
+      const seed = Math.floor(Math.random() * 2_147_483_647);
+      const continuations = continuationsOf(session.current, id, seed).map(({ element_id, after }) => ({ element_id, after }));
+      void run([{ op: "regenerate", element_id: id, seed, ...(continuations.length ? { continuations } : {}) }]);
+    },
     pickVariant: (id, seed) => void run([{ op: "pick_variant", element_id: id, seed }]),
     replaceBackground: () => {
       const at = Math.round((playback.frame / 30) * 100) / 100;
@@ -1660,14 +1665,17 @@ function aiMenuItems({
   const declarations = ownDeclarations(found);
   if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL)) {
     // Giá theo catalog máy chủ (G5); model đã tắt thì không mời sinh lại.
-    const priced = declarations.map((declaration) => {
+    // Shots continuing this one are made again from its new last frame: same price, counted here.
+    const following = continuationsOf(document, String(found.id), 0).map((link) => link.declaration);
+    const priced = [...declarations, ...following].map((declaration) => {
       const resolved = resolveGeneration(declaration);
       const model = liveModel(resolved.model);
       return model ? priceOf(model, resolved.spec as never) : null;
     });
     if (priced.every((value) => value !== null)) {
       const price = priced.reduce<number>((sum, value) => sum + value!, 0);
-      items.push({ label: `Regenerate · ${price} ${price === 1 ? "credit" : "credits"}`, onSelect: () => regenerate(String(found.id)), testid: "ai-regenerate" });
+      const chain = following.length ? ` (and the ${following.length === 1 ? "shot" : `${following.length} shots`} after it)` : "";
+      items.push({ label: `Regenerate${chain} · ${price} ${price === 1 ? "credit" : "credits"}`, onSelect: () => regenerate(String(found.id)), testid: "ai-regenerate" });
     }
     // Same numbering as the Inspector's Variants row, so "variant 2" means one thing.
     const variants = variantsOf(found);

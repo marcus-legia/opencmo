@@ -306,7 +306,7 @@ create_video makes a new video from a prompt: a director writes the voice-over a
 3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again.
 4. After approval the shots fill in as they finish (about one shot's wait). list_library until no shot is "still generating", then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
 5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.
-6. A shot marked "continues" on the card starts from the last frame of the shot before it (no cut), so it fills in after that shot. If the shot before fails or is cancelled, the continuing shot fails too and its credits come back. Regenerating a continuing shot works while the shot before it is still there; after the shot before was regenerated, the chain is broken, so make the video again.`,
+6. A shot marked "continues" on the card starts from the last frame of the shot before it (no cut), so it fills in after that shot. If the shot before fails or is cancelled, the continuing shot fails too and its credits come back. Regenerating a shot also makes the shots that continue it again, from its new last frame; the Regenerate menu item names them and its price counts them.`,
 
   edit: `# Edit your own video with words (edit_video, /edit)
 
