@@ -53,8 +53,16 @@ export function shownTime(el: HTMLVideoElement): number {
   const shown = presented.get(el);
   const at = presentedAt.get(el);
   if (shown === undefined || at === undefined || el.seeking || at < (seekingAt.get(el) ?? 0)) return el.currentTime;
-  return el.paused ? shown : shown + ((performance.now() - at) / 1000) * el.playbackRate;
+  if (el.paused) return shown;
+  // Carry forward only across the gap between two frames. No new frame for longer means the element
+  // stalled (buffering, decoder stuck): extrapolating would follow the clock and hide the stall from
+  // the drift check, so report `currentTime`, which stops with the picture.
+  const since = (performance.now() - at) / 1000;
+  return since > MAX_CARRY_SECONDS ? el.currentTime : shown + since * el.playbackRate;
 }
+
+/** Longest gap between presented frames treated as normal playback (a 10 fps source still fits). */
+const MAX_CARRY_SECONDS = 0.1;
 
 /** Chờ frame kế tiếp hiện ra (tối đa `timeout` ms) — cho thẻ tạm của `media_grab`. */
 export function nextFrame(el: HTMLVideoElement, timeout: number): Promise<void> {
