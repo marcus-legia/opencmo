@@ -71,7 +71,7 @@ updates). This track has the biggest user impact. Do it in order.
   clearing history; that is correct there.
   Tests: rebase → undo restores the pre-rebase document and schedules a save with the new version;
   redo re-applies the Assistant's version; manifest unchanged by undo.
-- [ ] **A3. `run()` uses the queue.**
+- [x] **A3. `run()` uses the queue.**
   In `EditorShell.tsx` `run()` (≈ 393–421) remove `if (busy) return null;` and route through
   `session.transact`. Keep `busy` only as UI state (spinner / disabled buttons), never as a guard
   that throws edits away. Keep the existing notice for `DocumentInvalidError` and op errors.
@@ -97,6 +97,7 @@ Import a file while a voiceover is attaching: both survive.
 
 - A1: `transact(build, options)` keeps editor-core out of `session.ts`; callers run `applyOps` inside `build`, the session validates. Undo/redo/rebase stay synchronous; a write whose document changed while `build` awaited is rebuilt on the new one (max 3 tries).
 - A2: `rebase` pushes the tab's document as one undo step only when the Assistant's version differs; the panel's turn Undo goes through `rebase` too, so it is also one Ctrl+Z step.
+- A3: `busy` is a counter of queued `run`s (spinner only). Dropped the now-unused `validate` import at the top of `EditorShell.tsx` (one line outside A's range).
 
 ---
 

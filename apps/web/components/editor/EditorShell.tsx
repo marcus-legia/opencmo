@@ -16,14 +16,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
-import { DocumentInvalidError, validate, type ClipDocument } from "@opencmo/clip-doc";
+import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
 import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import type { RenderTask } from "@/lib/api/tasks";
-import { DocumentSession, SaveConflict, type SaveTransport } from "@/lib/editor/session";
+import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
 
 import { fitCamera, renderScale, zoomAt, type Camera, type Size } from "./camera";
 import { FrameBar } from "./FrameBar";
@@ -390,21 +390,18 @@ function Workspace({
     }),
     [clipId, editorMedia, viewport, media],
   );
+  // Edits are queued in the session, never dropped: `busy` only drives the spinner and buttons.
+  const running = useRef(0);
   const run = useCallback(
-    async (ops: unknown[], options: { history?: boolean } = {}): Promise<ClipDocument | null> => {
-      if (busy) return null;
+    async (ops: unknown[], options: TransactOptions = {}): Promise<ClipDocument | null> => {
+      running.current++;
       setBusy(true);
       setNotice(null);
-      // Ghi thật thay mọi bản xem trước (kéo trên canvas có thể kết thúc bằng op khác bản xem).
+      // The real write replaces every preview (a canvas drag may end with a different op than it previewed).
       previewSeq.current++;
       setPreview(null);
       try {
-        const applied = await applyOps(session.current, ops, opContext());
-        // The server refuses an invalid document, and autosave would then fail on every later edit:
-        // refuse the change here instead.
-        validate(applied.document);
-        session.commit(applied.document, options);
-        return applied.document;
+        return await session.transact(async (latest) => (await applyOps(latest, ops, opContext())).document, options);
       } catch (error) {
         if (error instanceof DocumentInvalidError) {
           console.error("[editor] op produced an invalid document", ops, error);
@@ -414,10 +411,11 @@ function Workspace({
         setNotice((error as Error).message || "This change could not be applied.");
         return null;
       } finally {
-        setBusy(false);
+        running.current--;
+        setBusy(running.current > 0);
       }
     },
-    [busy, opContext, session],
+    [opContext, session],
   );
 
   const library = useLibrary({
