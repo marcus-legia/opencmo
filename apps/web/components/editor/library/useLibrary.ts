@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Nối thư viện với session: mọi thay đổi manifest đi qua `session.commit(…,
- * { manifest })` nên lưu CÙNG lượt với document. Thay đổi thư viện không phải
- * bước Undo (như fork); đổi tên asset thì `src` của element đi theo bằng op
- * `replace_src` — phần đó là một bước Undo.
+ * Connects the library to the session: every manifest change is a queued `session.transact`, so
+ * it is saved in the same request as the document and applies to the latest one. Library changes
+ * are not Undo steps; renaming an asset makes elements follow with a `replace_src` op, and that
+ * part is an Undo step.
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -87,20 +87,22 @@ export function useLibrary({
   const files = useRef(new Map<string, File>());
   const [progress, setProgress] = useState<Record<string, number>>({});
 
-  /** Sửa manifest trên bản MỚI NHẤT (upload chạy nền về muộn). */
+  /** Change the LATEST manifest (background uploads come back late). */
   const change = useCallback(
     async (update: (current: Manifest) => Change) => {
-      const current = normalizeManifest(session.currentManifest);
-      const result = update(current);
-      const next = "renames" in result ? result.manifest : result;
-      const renames = "renames" in result ? result.renames : [];
-      if (next === current && !renames.length) return;
-      if (renames.length) {
-        const applied = await applyOps(session.current, [{ op: "replace_src", renames }], context());
-        session.commit(applied.document as ClipDocument, { manifest: next });
-      } else {
-        session.commit(session.current, { manifest: next, history: false });
-      }
+      await session.transact(
+        async (latest, latestManifest) => {
+          const current = normalizeManifest(latestManifest);
+          const result = update(current);
+          const next = "renames" in result ? result.manifest : result;
+          const renames = "renames" in result ? result.renames : [];
+          if (next === current && !renames.length) return latest;
+          if (!renames.length) return { document: latest, manifest: next, history: false };
+          const applied = await applyOps(latest, [{ op: "replace_src", renames }], context());
+          return { document: applied.document as ClipDocument, manifest: next };
+        },
+        { label: "Library change" },
+      );
     },
     [context, session],
   );
@@ -185,16 +187,21 @@ export function useLibrary({
       void (async () => {
         // A generated file leaves with the elements that declare it, in that order: a declaration
         // without its record would be generated again, and charged, without an approval.
-        const keys = manifest.assets.filter((record) => ids.includes(record.id) && record.generation?.key).map((record) => record.generation!.key);
-        const uses = [...new Set(keys.flatMap((key) => elementsForGeneration(session.current, key)))];
-        if (uses.length) {
-          try {
-            const applied = await applyOps(session.current, uses.map((element_id) => ({ op: "delete_element", element_id })), context());
-            session.commit(applied.document);
-          } catch (error) {
-            notify((error as Error).message || "That file is still used on the timeline.");
-            return;
-          }
+        try {
+          await session.transact(
+            async (latest, latestManifest) => {
+              const keys = normalizeManifest(latestManifest)
+                .assets.filter((record) => ids.includes(record.id) && record.generation?.key)
+                .map((record) => record.generation!.key);
+              const uses = [...new Set(keys.flatMap((key) => elementsForGeneration(latest, key)))];
+              if (!uses.length) return latest;
+              return (await applyOps(latest, uses.map((element_id) => ({ op: "delete_element", element_id })), context())).document;
+            },
+            { label: "Remove generated media" },
+          );
+        } catch (error) {
+          notify((error as Error).message || "That file is still used on the timeline.");
+          return;
         }
         let removed: LibraryRecord[] = [];
         let after: Manifest | null = null;
@@ -206,7 +213,7 @@ export function useLibrary({
         });
         if (after) await forget(removed, after);
       })(),
-    [change, context, forget, manifest, notify, session],
+    [change, context, forget, notify, session],
   );
 
   const insert = useCallback(
@@ -236,14 +243,21 @@ export function useLibrary({
         });
         return out;
       };
-      const before = new Set(ids(session.current));
-      // B-roll/âm thanh vào hàng cùng làn còn trống chỗ (`insert_to_row`), không mỗi cái một hàng.
+      // B-roll and audio go into a row of the same lane that has room (`insert_to_row`), not one row each.
       const rowed = record.type === "VIDEO" || record.type === "IMAGE" || record.type === "AUDIO";
-      const op = rowed ? { op: "insert_to_row", node } : { op: "insert_node", parent_id: scene.id, node };
-      const applied = await applyOps(session.current, [op], context());
-      session.commit(applied.document);
-      // Lớp mới có thể nằm trong một hàng (sequence) — tìm cả cây; hàng mới thì lấy clip, không lấy hàng.
-      const fresh = ids(applied.document).filter((id) => !before.has(id));
+      let before = new Set<string>();
+      const after = await session.transact(
+        async (latest) => {
+          const parent = (activeScene(latest) as unknown as { id?: string }).id;
+          if (!rowed && !parent) throw new Error("There is no timeline to add this to.");
+          before = new Set(ids(latest));
+          const op = rowed ? { op: "insert_to_row", node } : { op: "insert_node", parent_id: parent, node };
+          return (await applyOps(latest, [op], context())).document;
+        },
+        { label: "Insert media" },
+      );
+      // The new layer may sit inside a row (sequence): search the whole tree; for a new row take the clip, not the row.
+      const fresh = ids(after).filter((id) => !before.has(id));
       return fresh[fresh.length - 1] ?? null;
     },
     [clipId, context, notify, session],
@@ -263,23 +277,27 @@ export function useLibrary({
     [],
   );
 
+  // Fire-and-forget library edits still tell the user when the queued write was refused.
+  const fire = (update: (current: Manifest) => Change) =>
+    void change(update).catch((error: Error) => notify(error.message || "That library change could not be saved."));
+
   return {
     manifest,
     progress,
     cloudOf,
     importFiles,
     retry,
-    rename: (id, name) => void change((current) => renameAsset(current, id, name)),
-    move: (ids, folder) => void change((current) => moveAssets(current, ids, folder)),
+    rename: (id, name) => fire((current) => renameAsset(current, id, name)),
+    move: (ids, folder) => fire((current) => moveAssets(current, ids, folder)),
     remove,
     createFolder: (parent) => {
       const name = uniqueFolderName(manifest, parent, "New folder");
       const path = parent ? `${parent}/${name}` : name;
-      void change((current) => createFolder(current, path));
+      fire((current) => createFolder(current, path));
       return path;
     },
-    renameFolder: (path, name) => void change((current) => renameFolder(current, path, name)),
-    moveFolder: (path, into) => void change((current) => moveFolder(current, path, into)),
+    renameFolder: (path, name) => fire((current) => renameFolder(current, path, name)),
+    moveFolder: (path, into) => fire((current) => moveFolder(current, path, into)),
     deleteFolder: (path) =>
       void (async () => {
         let removed: LibraryRecord[] = [];

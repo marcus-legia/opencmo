@@ -106,7 +106,8 @@ export function HistoryDialog({
       const { document } = await api<{ document: ClipDocument }>(
         `/editor/revisions?clip_id=${encodeURIComponent(clipId)}&id=${encodeURIComponent(revision.id)}`,
       );
-      session.commit(document);
+      // Queued and validated like any edit: it lands after edits still being applied, not under them.
+      await session.transact(() => document, { label: "Restore version" });
       notify(`Restored ${revisionName(revision)}.`);
       onClose();
     } catch (err) {

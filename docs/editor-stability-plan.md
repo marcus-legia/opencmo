@@ -75,7 +75,7 @@ updates). This track has the biggest user impact. Do it in order.
   In `EditorShell.tsx` `run()` (≈ 393–421) remove `if (busy) return null;` and route through
   `session.transact`. Keep `busy` only as UI state (spinner / disabled buttons), never as a guard
   that throws edits away. Keep the existing notice for `DocumentInvalidError` and op errors.
-- [ ] **A4. Every other document writer goes through the queue.**
+- [x] **A4. Every other document writer goes through the queue.**
   These read the document before an `await` and commit after it, without `validate()`:
   `library/useLibrary.ts:99-100`, `:192-193`, `:243-244`; `menus/dialogs.tsx:109`.
   Route each through `transact` so they apply to the latest document and are validated.
@@ -98,6 +98,7 @@ Import a file while a voiceover is attaching: both survive.
 - A1: `transact(build, options)` keeps editor-core out of `session.ts`; callers run `applyOps` inside `build`, the session validates. Undo/redo/rebase stay synchronous; a write whose document changed while `build` awaited is rebuilt on the new one (max 3 tries).
 - A2: `rebase` pushes the tab's document as one undo step only when the Assistant's version differs; the panel's turn Undo goes through `rebase` too, so it is also one Ctrl+Z step.
 - A3: `busy` is a counter of queued `run`s (spinner only). Dropped the now-unused `validate` import at the top of `EditorShell.tsx` (one line outside A's range).
+- A4: library edits, generated-media removal, insert and version restore are `transact` writes reading the latest document and library. A `Built` result may carry `history`, since only `build` knows whether a library change touched the document (a rename does).
 
 ---
 

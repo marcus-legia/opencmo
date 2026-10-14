@@ -58,8 +58,11 @@ const ATTEMPTS = 3;
 
 type Snapshot = { document: ClipDocument; manifest: unknown };
 
-/** What a queued write produces: the next document, and optionally the next library. */
-export type Built = ClipDocument | { document: ClipDocument; manifest: unknown };
+/**
+ * What a queued write produces: the next document, optionally the next library, and whether it is
+ * an Undo step when only `build` can tell (a library change is one only if it touched the document).
+ */
+export type Built = ClipDocument | { document: ClipDocument; manifest?: unknown; history?: boolean };
 
 export type TransactOptions = {
   /** `false` for bookkeeping that is saved but is not an edit the user would undo. */
@@ -162,10 +165,10 @@ export class DocumentSession {
         const latestManifest = this.manifest;
         const built = await build(latest, latestManifest);
         if (this.document !== latest || this.manifest !== latestManifest) continue;
-        const next: { document: ClipDocument; manifest?: unknown } = "stage" in built ? { document: built } : built;
+        const next: Exclude<Built, ClipDocument> = "stage" in built ? { document: built } : built;
         this.check(next.document);
         const manifest = "manifest" in next ? { manifest: next.manifest } : "manifest" in options ? { manifest: options.manifest } : {};
-        this.commit(next.document, { history: options.history, ...manifest });
+        this.commit(next.document, { history: next.history ?? options.history, ...manifest });
         return this.document;
       }
       throw new Error("The clip changed while this edit was being applied. Try again.");
