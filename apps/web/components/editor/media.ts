@@ -4,11 +4,11 @@
  * Renderer vẽ đồng bộ và không tự tải gì; lớp này trả lời `MediaHost` bằng thứ
  * đã có sẵn và tải phần còn thiếu ở nền, rồi gọi `onChange` để canvas vẽ lại.
  *
- * Video là MỘT thẻ `<video>` cho mỗi nguồn, không phải giải mã từng khung như
- * export: preview cần mượt hơn cần đúng từng khung, và file xuất do server vẽ
- * (§7) nên preview lệch một khung không bao giờ lọt vào sản phẩm. Hai đoạn
- * cùng nguồn hiện CÙNG LÚC (chuyển cảnh giữa hai đoạn cắt của master) thì dùng
- * chung khung của thẻ — ghi ở checklist như một khác biệt của preview.
+ * Video is a `<video>` element per source, not frame-by-frame decoding like export: the preview
+ * needs to be smooth more than frame-exact, and the server renders the exported file (§7), so a
+ * preview that is a frame off never reaches the product. When two pieces of the same source are
+ * visible AT ONCE (a transition between two cuts of the master) the second piece gets its own
+ * element (`slot`), otherwise both would show whichever second the shared element was last at.
  *
  * `el.width/height` được đặt bằng cỡ thật của video: renderer đọc `width/height`
  * của thứ nó vẽ để tính cover/contain, còn thuộc tính đó của thẻ video mặc định
@@ -140,7 +140,15 @@ type Element = {
   gain: GainNode | null;
   /** Lần cuối ký lại URL cho thẻ này (ms) — chặn vòng lặp khi file hỏng thật. */
   recoveredAt: number;
+  key: string;
+  /** Source second this element was last asked for: tells which piece of the source it follows. */
+  target: number | null;
 };
+
+/** Elements per video source: one, plus one for a second piece visible at the same time. */
+const VIDEO_SLOTS = 2;
+/** Two requests this close (seconds) are the same piece drawn twice, not two pieces. */
+const SAME_PIECE = 1 / 60;
 
 /** Ký lại URL tối đa một lần mỗi phút cho mỗi thẻ; lỗi lần hai trong phút đó là hỏng thật. */
 const RECOVER_EVERY_MS = 60_000;
@@ -150,6 +158,8 @@ export class BrowserMedia implements MediaHost {
   private libraryUrls: Promise<Map<string, string>> | null = null;
   private localUrls = new Map<string, string>();
   private elements = new Map<string, Element>();
+  /** Slots already handed out in the current synchronous draw pass (cleared in a microtask). */
+  private claimed = new Set<string>();
   private images = new Map<string, ImageBitmap | "failed" | "loading">();
   private transcripts = new Map<string, Transcript | "failed" | "loading">();
   private luts = new Map<string, CubeLut | "failed" | "loading">();
@@ -219,7 +229,12 @@ export class BrowserMedia implements MediaHost {
   }
 
   video(src: AssetInput, seconds: number): MediaResult {
-    const entry = this.element(src, "video");
+    // A render is synchronous, so every request of one pass lands before this microtask runs.
+    if (!this.claimed.size) queueMicrotask(() => this.claimed.clear());
+    const primary = this.element(src, "video");
+    let entry = this.elements.get(this.slotKey(src, seconds, this.claimed))!;
+    // A second element that is still loading (or broke): draw the shared one, as before, rather than nothing.
+    if ((!entry.ready || entry.failed) && entry !== primary) entry = primary;
     if (entry.failed) return "failed";
     if (!entry.ready) return null;
     const el = entry.el;
@@ -274,6 +289,29 @@ export class BrowserMedia implements MediaHost {
     );
   }
 
+  /**
+   * Key of the video element that plays `src` at `seconds`, for one pass (a draw, or one playback
+   * tick) that tracks what it handed out in `claimed`. The element whose last target is nearest
+   * keeps following its piece; a second piece of the same source visible in the same pass gets the
+   * second element. Playback and drawing pick with the same rule, so they drive the same element.
+   */
+  slotKey(src: AssetInput, seconds: number, claimed: Set<string>): string {
+    const key = keyOf(src);
+    const slots = [this.element(src, "video")];
+    for (let index = 2; index <= VIDEO_SLOTS; index++) {
+      const extra = this.elements.get(`${key}#${index}`);
+      if (extra) slots.push(extra);
+    }
+    const distance = (entry: Element) => (entry.target === null ? Number.MAX_VALUE : Math.abs(entry.target - seconds));
+    const nearest = (pool: Element[]) => pool.reduce<Element | null>((best, entry) => (!best || distance(entry) < distance(best) ? entry : best), null);
+    let pick = slots.find((entry) => claimed.has(entry.key) && distance(entry) < SAME_PIECE) ?? nearest(slots.filter((entry) => !claimed.has(entry.key)));
+    if (!pick && slots.length < VIDEO_SLOTS) pick = this.element(src, "video", `${key}#${slots.length + 1}`);
+    pick ??= nearest(slots)!;
+    claimed.add(pick.key);
+    pick.target = seconds;
+    return pick.key;
+  }
+
   /** Thẻ media của một nguồn, để `Playback` điều khiển phát và tiếng. */
   elementFor(src: AssetInput): Element | undefined {
     return this.elements.get(keyOf(src)) ?? this.elements.get(audioKeyOf(src));
@@ -305,8 +343,7 @@ export class BrowserMedia implements MediaHost {
 
   // ------------------------------------------------------------ nội bộ
 
-  private element(src: AssetInput, kind: "video" | "audio"): Element {
-    const key = mediaKeyOf(src, kind);
+  private element(src: AssetInput, kind: "video" | "audio", key = mediaKeyOf(src, kind)): Element {
     let entry = this.elements.get(key);
     if (entry) return entry;
     const el = document.createElement(kind);
@@ -316,7 +353,7 @@ export class BrowserMedia implements MediaHost {
     el.preservesPitch = true;
     let settle = () => {};
     const settled = new Promise<void>((resolve) => (settle = resolve));
-    entry = { el, ready: false, failed: false, duration: null, gain: null, settled, settle, recoveredAt: 0 };
+    entry = { el, ready: false, failed: false, duration: null, gain: null, settled, settle, recoveredAt: 0, key, target: null };
     this.elements.set(key, entry);
     const current = entry;
     el.addEventListener("loadeddata", () => {

@@ -13,16 +13,22 @@
 import type { AssetInput } from "@opencmo/clip-doc";
 import { FPS, type AudioClip, type Renderer } from "@opencmo/clip-render";
 
-import { keyOf, mediaKeyOf, type BrowserMedia } from "./media";
+import { shownTime } from "./frames";
+import { mediaKeyOf, type BrowserMedia } from "./media";
 
 /** Lệch hơn chừng này giữa thẻ và đồng hồ thì tua lại; nhỏ hơn thì tai không nghe ra. */
 const DRIFT = 0.2;
 
 type Want = { src: AssetInput; seconds: number; rate: number; gain: number };
 
-/** Nguồn nào cần chạy ở giây nào tại `frame`, và to bao nhiêu. */
-export function wanted(renderer: Renderer, frame: number, solo: string | null = null): Map<string, Want> {
+/**
+ * Which media element must run at which source second at `frame`, and how loud. Video sources go
+ * through `media.slotKey`, so two pieces of one source visible together drive two elements, the
+ * same ones the canvas draws from.
+ */
+export function wanted(renderer: Renderer, media: BrowserMedia, frame: number, solo: string | null = null): Map<string, Want> {
   const out = new Map<string, Want>();
+  const claimed = new Set<string>();
   const gains = renderer.gains(frame);
   const soloed = (clip: AudioClip) => {
     for (let r: AudioClip["node"] | null = clip.node; r; r = r.parent) {
@@ -34,13 +40,15 @@ export function wanted(renderer: Renderer, frame: number, solo: string | null = 
     if (frame < clip.start || frame >= clip.end) return;
     if (solo && !soloed(clip)) gains[index] = 0;
     const seconds = clip.sourceIn + ((frame - clip.start) / FPS) * clip.rate;
-    const key = mediaKeyOf(clip.src, clip.node.node.kind);
+    const kind = clip.node.node.kind;
+    const key = kind === "audio" ? mediaKeyOf(clip.src, kind) : media.slotKey(clip.src, seconds, claimed);
     const found = out.get(key);
     if (!found || gains[index] > found.gain) out.set(key, { src: clip.src, seconds, rate: clip.rate, gain: gains[index] });
   });
   for (const need of renderer.needs(frame)) {
-    if (need.kind !== "video" || out.has(keyOf(need.src))) continue;
-    out.set(keyOf(need.src), { src: need.src, seconds: need.seconds, rate: 1, gain: 0 });
+    if (need.kind !== "video") continue;
+    const key = media.slotKey(need.src, need.seconds, claimed);
+    if (!out.has(key)) out.set(key, { src: need.src, seconds: need.seconds, rate: 1, gain: 0 });
   }
   return out;
 }
@@ -154,7 +162,7 @@ export class Playback {
   };
 
   private sync(frame: number): void {
-    const want = wanted(this.renderer!, frame, this.solo);
+    const want = wanted(this.renderer!, this.media, frame, this.solo);
     for (const [key, entry] of this.elements()) {
       const target = want.get(key);
       const el = entry.el;
@@ -172,7 +180,8 @@ export class Playback {
       }
       const rate = target.rate * this.speed;
       if (el.playbackRate !== rate) el.playbackRate = rate;
-      if (Math.abs(el.currentTime - target.seconds) > DRIFT * rate) el.currentTime = target.seconds;
+      const shown = el instanceof HTMLVideoElement ? shownTime(el) : el.currentTime;
+      if (!el.seeking && Math.abs(shown - target.seconds) > DRIFT * rate) el.currentTime = target.seconds;
       if (el.paused) void el.play().catch(() => undefined);
       if (entry.gain) entry.gain.gain.value = target.gain;
     }

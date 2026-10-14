@@ -123,7 +123,7 @@ Fixes review issues #3 (laggy drag) and the short-term part of #4 (preview vs ex
   rebuilds all of them. Key `media.preload`, `sampleRenderer` and `otherScenes` on `state.document`;
   keep the main `renderer` on `doc`. Measure before/after (Performance panel, a drag across a clip
   with 50+ elements) and write the numbers in Notes.
-- [ ] **B4. Playback accuracy, short-term.**
+- [x] **B4. Playback accuracy, short-term.**
   `playback.ts:19` re-seeks only when a `<video>` drifts more than `DRIFT = 0.2` s (≈ 6 frames).
   - Use `requestVideoFrameCallback` where available to read the presented `mediaTime` instead of
     trusting `currentTime`.
@@ -145,7 +145,8 @@ across a cut between two pieces of the master and pause on both sides: correct f
 **Notes (B):**
 
 - B1/B2: previews run once per animation frame via the gesture's latest op; `onUp` bumps the Timeline's own sequence so a late preview can't bring the ghost back (no change needed in EditorShell's JSX). Snap targets live on the `move`/`trim` gesture. `editor-rows.spec.ts` passes; `editor-clipping.spec.ts` couldn't run yet because another session's e2e run was recreating the shared `opencmo-e2e` stack at the same time.
-- B3: `media.preload`, `sampleRenderer` and `otherScenes` follow `state.document`; only the main renderer follows the preview. Adjust-tab scopes now update on release, not mid-drag. Node bench (60 elements + 2 other scenes, renderer builds only): 0.33 ms → 0.13 ms per preview step. Browser Performance-panel numbers: pending, measured with B4's browser pass.
+- B3: `media.preload`, `sampleRenderer` and `otherScenes` follow `state.document`; only the main renderer follows the preview. Adjust-tab scopes now update on release, not mid-drag. Node bench (60 elements + 2 other scenes, renderer builds only): 0.33 ms → 0.13 ms per preview step. Browser (headless Chromium, 6× CPU throttle, 90-step drag on a 57-element timeline), frame gaps before → after B1–B3: p95 33 ms → 16.7 ms, max 83 ms → 33 ms, no long tasks either way.
+- B4: a second piece of one source visible at the same time gets its own `<video>` (`BrowserMedia.slotKey`: nearest last-requested second wins, capped at 2 per source); drawing and `Playback` pick with the same rule. Measured with a test video whose red channel encodes the frame, two overlapping pieces 4 s apart: before, both pieces showed the same frame (paused at 4.23 s: one value, frame 125); after, each shows its own (paused 4.26 s: 127 and 247, expected 128 and 248; stepped to 5.29 s: 158 and 277). Paused/scrub seeks were already exact (`media.video` seeks to the frame's second), so no change there. Drift check now reads the rVFC-presented time (`frames.ts` `shownTime`, falls back to `currentTime`) and skips elements that are mid-seek. Threshold kept at 0.2 s: under 4× CPU throttle, re-seeks in ~4 s of playback were 0 at 0.2 s, 2 at 0.1 s (two runs), 3 at 1/15 s, and each one is a visible hitch. `frames.ts` (unowned) gained `shownTime`. `editor-rows` and `editor-clipping` e2e green on the final tree.
 
 ---
 
