@@ -93,6 +93,11 @@ export class DocumentSession {
   private listeners = new Set<() => void>();
   /** Tail of the write queue; never rejects, so one failed write doesn't stop the next. */
   private queue: Promise<unknown> = Promise.resolve();
+  /**
+   * Group of the rebase that pushed the newest Undo step, while nothing else has touched the
+   * stacks since: later versions of the same Assistant turn fold into that step.
+   */
+  private rebaseGroup: string | null = null;
   private snapshot: SessionState;
   conflictWith: { version: number; document: ClipDocument } | null = null;
 
@@ -138,6 +143,7 @@ export class DocumentSession {
     const sameDocument = next === this.document || canonicalJson(next) === canonicalJson(this.document);
     if (sameDocument && json(manifest) === json(this.manifest)) return;
     if (options.history !== false) {
+      this.rebaseGroup = null;
       this.undoStack.push(this.here());
       if (this.undoStack.length > HISTORY) this.undoStack.shift();
       this.redoStack = [];
@@ -180,6 +186,7 @@ export class DocumentSession {
   undo(): void {
     const previous = this.undoStack.pop();
     if (!previous) return;
+    this.rebaseGroup = null;
     this.redoStack.push(this.here());
     this.go(previous);
   }
@@ -187,6 +194,7 @@ export class DocumentSession {
   redo(): void {
     const next = this.redoStack.pop();
     if (!next) return;
+    this.rebaseGroup = null;
     this.undoStack.push(this.here());
     this.go(next);
   }
@@ -233,6 +241,7 @@ export class DocumentSession {
     this.documentHash = documentHash;
     this.undoStack = [];
     this.redoStack = [];
+    this.rebaseGroup = null;
     this.status = "saved";
     this.error = null;
     this.conflictWith = null;
@@ -248,16 +257,22 @@ export class DocumentSession {
    * own write, not another tab, so it must not stop autosave.
    * The Assistant's version is one Undo step: undoing it puts the tab's document back and saves it
    * on top of the new version, like any edit. Earlier steps stay reachable.
+   * `group` names the Assistant turn: its later versions fold into the same step, so one Ctrl+Z
+   * undoes the whole turn instead of walking back through its half-finished writes. An edit, Undo
+   * or Redo in between starts a new step.
    */
-  rebase(document: ClipDocument, version: number, documentHash: string | null): void {
+  rebase(document: ClipDocument, version: number, documentHash: string | null, group?: string): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.epoch++;
     const savedJson = canonicalJson(document);
     if (savedJson !== canonicalJson(this.document)) {
-      this.undoStack.push(this.here());
-      if (this.undoStack.length > HISTORY) this.undoStack.shift();
+      if (!group || group !== this.rebaseGroup) {
+        this.undoStack.push(this.here());
+        if (this.undoStack.length > HISTORY) this.undoStack.shift();
+      }
       this.redoStack = [];
+      this.rebaseGroup = group ?? null;
     }
     this.document = document;
     this.version = version;

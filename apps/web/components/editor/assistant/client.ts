@@ -117,6 +117,13 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export class AssistantClient {
+  /**
+   * Undo group of the turn in progress: every version a turn saves, across its continue / approve /
+   * tool-result requests, folds into one Ctrl+Z step. A new prompt starts a new group.
+   */
+  private group: string | null = null;
+  private turns = 0;
+
   constructor(
     private clipId: string,
     private session: DocumentSession,
@@ -163,6 +170,7 @@ export class AssistantClient {
   /** Gửi câu lệnh. Bài đang dở lên server TRƯỚC: Assistant đọc bản server giữ. */
   async turn(sessionId: string, prompt: string, attachments: Attachments | undefined, onEvent: (event: AssistantEvent) => void) {
     await this.session.flush();
+    this.group = `turn-${++this.turns}`;
     await this.stream(`sessions/${sessionId}/turns`, { prompt, attachments }, onEvent);
   }
 
@@ -192,7 +200,9 @@ export class AssistantClient {
     const latest = (await response.json().catch(() => null)) as { document: ClipDocument; version: number; document_hash?: string | null } | null;
     if (!latest) return;
     // Not `adopt`: the tab's own library changes made during the turn still have to be saved.
-    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null);
+    // A turn resumed after a reload has no group yet: it starts one here.
+    this.group ??= `turn-${++this.turns}`;
+    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null, this.group);
   }
 
   /** POST rồi đọc stream tới hết. Lỗi trước khi stream mở (thiếu credit…) ném câu của server. */

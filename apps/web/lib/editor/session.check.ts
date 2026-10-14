@@ -267,6 +267,46 @@ async function main(): Promise<void> {
     assert.equal(session.getState().canRedo, false);
   }
 
+  // One Assistant turn is one Undo step, however many versions it saves.
+  {
+    const t = transport();
+    const width = (session: DocumentSession) => (session.current.stage.children[0] as { width: number }).width;
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5);
+    session.commit(doc(1));
+    session.rebase(doc(2), 3, "h3", "turn-1");
+    session.rebase(doc(3), 4, "h4", "turn-1");
+    session.commit(session.current, { manifest: { assets: [{ id: "landed" }] }, history: false });
+    session.rebase(doc(4), 5, "h5", "turn-1");
+    session.undo();
+    assert.equal(width(session), 1, "one Ctrl+Z undoes the whole turn, library saves in between included");
+    session.redo();
+    assert.equal(width(session), 4, "redo brings the turn's last version back");
+
+    // A user edit in the middle of a turn splits it: the edit stays its own step.
+    session.commit(doc(5));
+    session.rebase(doc(6), 7, "h7", "turn-2");
+    session.commit(doc(7));
+    session.rebase(doc(8), 9, "h9", "turn-2");
+    session.undo();
+    assert.equal(width(session), 7, "the turn's version after the edit is its own step");
+    session.undo();
+    assert.equal(width(session), 6);
+    session.undo();
+    assert.equal(width(session), 5, "the turn's first version is a separate step");
+
+    // A different turn (or no group, like the panel's turn Undo) is a new step.
+    const next = new DocumentSession({ document: doc(10), version: 1, documentHash: "h1" }, t, 5);
+    next.rebase(doc(11), 2, "h2", "turn-1");
+    next.rebase(doc(12), 3, "h3", "turn-2");
+    next.rebase(doc(13), 4, "h4");
+    next.undo();
+    assert.equal(width(next), 12);
+    next.undo();
+    assert.equal(width(next), 11);
+    next.undo();
+    assert.equal(width(next), 10);
+  }
+
   // Queued writes: two fired in the same tick both land, in order, the second on the first's result.
   {
     const t = transport();
