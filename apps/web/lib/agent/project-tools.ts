@@ -152,8 +152,8 @@ export async function validateApply(env: ProjectEnv, input: unknown): Promise<z.
   return { ...parsed.data, clip_ids: [...new Set(parsed.data.clip_ids)] };
 }
 
-/** `version`: what the clip was saved as, so the turn's Undo can tell whether it was edited since. */
-export type ClipOutcome = { clip_id: string; label: string; ok: boolean; error?: string; checkpoint_id?: string; version?: number };
+/** `version` / `document_hash`: what the clip was saved as, so the turn's Undo can tell whether it was edited since. */
+export type ClipOutcome = { clip_id: string; label: string; ok: boolean; error?: string; checkpoint_id?: string; version?: number; document_hash?: string };
 
 /**
  * Chạy `apply_to_clips` đã được duyệt: từng clip một, CAS + checkpoint riêng.
@@ -176,7 +176,7 @@ export async function runApply(
       const applied = await applyToClip(env.supabase, context, clipId, input.ops, { checkpoint: { kind: "agent", label } });
       if (applied.checkpoint) await onCheckpoint(applied.checkpoint.id);
       if (applied.changed) versions++;
-      clips.push({ clip_id: clipId, label: name, ok: true, checkpoint_id: applied.checkpoint?.id, version: applied.project.version });
+      clips.push({ clip_id: clipId, label: name, ok: true, checkpoint_id: applied.checkpoint?.id, version: applied.project.version, document_hash: applied.project.document_hash });
     } catch (err) {
       const message = err instanceof ApiError && err.status < 500 ? err.message : "This clip could not be changed.";
       if (!(err instanceof ApiError)) console.error(`[agent] apply_to_clips ${clipId} lỗi`, err);
@@ -188,7 +188,7 @@ export async function runApply(
   return {
     outcome: {
       ok: done > 0,
-      content: JSON.stringify({ results: clips.map(({ checkpoint_id: _c, version: _v, ...rest }) => rest) }),
+      content: JSON.stringify({ results: clips.map(({ checkpoint_id: _c, version: _v, document_hash: _h, ...rest }) => rest) }),
       summary,
     },
     clips,

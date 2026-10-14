@@ -15,8 +15,12 @@ import { applyOps, type OpContext, type OpResult, type Transcript } from "@openc
 
 export type Snapshot = { version: number; document: ClipDocument; manifest: Manifest };
 
-/** `before`/`after`: document trước và sau lượt áp — để tính delta cho agent. */
-export type Applied = { changed: boolean; version: number; results: OpResult[]; before: ClipDocument; after: ClipDocument };
+/**
+ * `before`/`after`: document trước và sau lượt áp — để tính delta cho agent.
+ * `documentHash`: the saved document's fingerprint (DB workspace only). A later save that changes only
+ * the library keeps it, so the turn's Undo can tell a library save from an edit.
+ */
+export type Applied = { changed: boolean; version: number; documentHash?: string; results: OpResult[]; before: ClipDocument; after: ClipDocument };
 
 export interface AgentWorkspace {
   read(): Promise<Snapshot>;

@@ -409,8 +409,9 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           {
             summary: outcome.summary,
             ...(outcome.view ? { view: outcome.view } : {}),
-            // The clip version this call left behind: the turn's Undo refuses once the clip moved past it.
+            // The clip version and document this call left behind: the turn's Undo refuses once the document moved past them.
             ...(outcome.version !== undefined ? { version: outcome.version } : {}),
+            ...(outcome.documentHash !== undefined ? { document_hash: outcome.documentHash } : {}),
           },
           content,
         );
@@ -611,6 +612,7 @@ export async function resumeTurn(env: TurnEnv, answers: Answer[]): Promise<void>
             summary: decided.outcome.summary,
             ...decided.extra,
             ...(decided.outcome.version !== undefined ? { version: decided.outcome.version } : {}),
+            ...(decided.outcome.documentHash !== undefined ? { document_hash: decided.outcome.documentHash } : {}),
           },
         });
         emit("tool_result", { id: call.id, name: call.name, ok: decided.outcome.ok, summary: decided.outcome.summary, view: decided.outcome.view });

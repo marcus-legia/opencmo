@@ -38,6 +38,24 @@ async function main() {
   assert.equal(await unchangedSince({ version: 10, document: doc("x") }, written, null), false, "a manual save after the turn: refuse");
   assert.equal(await unchangedSince({ version: 40, document: doc("x") }, undefined, null), true, "a turn from before versions were stored: restore as before");
 
+  // Library-only saves after the turn move the version but keep the document fingerprint.
+  const hashed = writtenVersions(
+    [
+      { name: "edit", result: { summary: "a", version: 7, document_hash: "h7" } },
+      { name: "edit", result: { summary: "b", version: 9, document_hash: "h9" } },
+      { name: "edit", result: { summary: "c", version: 8, document_hash: "h8" } },
+    ],
+    "clip-1",
+  ).get("clip-1");
+  assert.deepEqual(hashed, { first: 7, last: 9, lastHash: "h9" }, "the hash belongs to the newest write, whatever the row order");
+  assert.equal(await unchangedSince({ version: 12, document: doc("x"), document_hash: "h9" }, hashed, null), true, "library saves after the turn: restore");
+  assert.equal(await unchangedSince({ version: 12, document: doc("y"), document_hash: "h12" }, hashed, null), false, "document edited after the turn: refuse");
+  assert.equal(
+    writtenVersions([{ name: "apply_to_clips", result: { clips: [{ clip_id: "a", version: 3, document_hash: "ha3" }] } }], null).get("a")?.lastHash,
+    "ha3",
+    "project chat records the hash per clip",
+  );
+
   // A newer turn was undone first: the clip holds that turn's checkpoint.
   const checkpoint = async () => doc("after turn");
   assert.equal(
