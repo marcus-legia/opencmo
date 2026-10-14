@@ -406,7 +406,12 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           env,
           call,
           outcome.ok ? "done" : "failed",
-          { summary: outcome.summary, ...(outcome.view ? { view: outcome.view } : {}) },
+          {
+            summary: outcome.summary,
+            ...(outcome.view ? { view: outcome.view } : {}),
+            // The clip version this call left behind: the turn's Undo refuses once the clip moved past it.
+            ...(outcome.version !== undefined ? { version: outcome.version } : {}),
+          },
           content,
         );
         emit("tool_result", { id: call.id, name: call.name, ok: outcome.ok, summary: outcome.summary, view: outcome.view });
@@ -602,7 +607,11 @@ export async function resumeTurn(env: TurnEnv, answers: Answer[]): Promise<void>
           p_turn_id: turn.id,
           p_tool_use_id: call.id,
           p_status: decided.outcome.ok ? "done" : "failed",
-          p_result: { summary: decided.outcome.summary, ...decided.extra },
+          p_result: {
+            summary: decided.outcome.summary,
+            ...decided.extra,
+            ...(decided.outcome.version !== undefined ? { version: decided.outcome.version } : {}),
+          },
         });
         emit("tool_result", { id: call.id, name: call.name, ok: decided.outcome.ok, summary: decided.outcome.summary, view: decided.outcome.view });
         if (decided.wrote) emit("project_changed", {});

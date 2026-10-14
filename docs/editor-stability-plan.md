@@ -161,7 +161,7 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
   when the same tool call (same name + same input) fails 3 times in a row, telling the model why.
   Make sure the tab handles the new reason (if that needs a change in `components/editor/assistant/**`,
   that's A's `client.ts` or the panel: add a Request).
-- [ ] **C2. Assistant Undo never silently drops manual edits.**
+- [x] **C2. Assistant Undo never silently drops manual edits.**
   `app/api/v1/agent/sessions/[id]/turns/[number]/undo/route.ts:17-33` restores the turn's checkpoint
   even if the user edited the clip after the turn. If the clip's current version is not the version
   the turn last wrote, refuse with a clear English message ("You edited this clip after the Assistant's
@@ -195,6 +195,7 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
 **Notes (C):**
 
 - C1: `MAX_STEPS = 40` per request pauses with 'steps', which auto-continues like 'time' (owner's call), so the real stop for a looping model is the repeated-failure rule: the 3rd identical failing call (same name + canonical input) is told to change course, the 4th ends the turn. 'steps' needs migration `20261123090000_agent_step_pause.sql` (+ pgTAP `153`); `supabase db test` passes. The panel side is a Request to A.
+- C2: each write's resulting clip version is now stored in its `agent_tool_calls.result` (`version`; per clip in `apply_to_clips`). Undo refuses with the 409 message when the clip moved past it; after an undone newer turn it checks that turn followed directly (versions bump by exactly 1 per save) and that the clip still holds that turn's checkpoint. Turns from before this change restore as before. Rule + tests in `lib/agent/undo-guard.ts` / `.check.ts` (in `check:contracts`). Known false refusal: any non-user save after the turn (e.g. the tab's id stamp) also counts as an edit; that refuses safely and never loses work.
 
 ---
 
