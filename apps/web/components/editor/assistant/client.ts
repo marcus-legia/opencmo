@@ -140,7 +140,10 @@ export class AssistantClient {
     return call<{ stopped: boolean }>(`sessions/${sessionId}/stop`, { method: "POST" });
   }
 
-  /** Undo một lượt: server đưa project về checkpoint trước lượt; tab nhận bản đó. */
+  /**
+   * Undo a turn: the server puts the project back to the checkpoint before it and the tab takes
+   * that version. Like every rebased version, it is one Ctrl+Z step in the editor.
+   */
   async undo(sessionId: string, number: number): Promise<void> {
     await this.session.flush();
     const { project } = await call<{ project: { document: ClipDocument; version: number; document_hash?: string | null } }>(

@@ -214,6 +214,46 @@ async function main(): Promise<void> {
     assert.equal(session.getState().status, "saved");
   }
 
+  // The Assistant's version is one Undo step: undo saves the tab's document on the new version,
+  // redo brings the Assistant's back, the library never goes back.
+  {
+    const sent: { version: number; width: number; manifest: unknown }[] = [];
+    const t: SaveTransport = {
+      save: async (expected, document, manifest) => {
+        sent.push({ version: expected, width: (document.stage.children[0] as { width: number }).width, manifest });
+        return { version: expected + 1, document_hash: `h${expected + 1}` };
+      },
+    };
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1", manifest: { assets: [] } }, t, 5);
+    session.commit(doc(1));
+    await session.flush();
+    session.rebase(doc(500), 5, "h5");
+    assert.equal(session.getState().canUndo, true);
+    session.commit(session.current, { manifest: { assets: [{ id: "new" }] }, history: false });
+    await session.flush();
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1, "back to the tab's document");
+    assert.deepEqual(session.currentManifest, { assets: [{ id: "new" }] }, "Undo doesn't take the library back");
+    assert.equal(session.getState().status, "pending");
+    await session.flush();
+    assert.deepEqual(sent.at(-1), { version: 6, width: 1, manifest: { assets: [{ id: "new" }] } }, "saved on the new version");
+    session.redo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 500);
+    await session.flush();
+    assert.equal(sent.at(-1)?.width, 500);
+    session.undo();
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080, "earlier steps survive the rebase");
+    // The same document again is not a step.
+    const steps = new DocumentSession({ document: doc(7), version: 1, documentHash: "h1" }, t, 5);
+    steps.rebase(doc(7), 2, "h2");
+    assert.equal(steps.getState().canUndo, false);
+    // `adopt` (conflict, reset) still starts over.
+    session.adopt(doc(9), 20, "h20");
+    assert.equal(session.getState().canUndo, false);
+    assert.equal(session.getState().canRedo, false);
+  }
+
   // Queued writes: two fired in the same tick both land, in order, the second on the first's result.
   {
     const t = transport();

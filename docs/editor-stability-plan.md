@@ -62,7 +62,7 @@ updates). This track has the biggest user impact. Do it in order.
   - Tests in `session.check.ts`: two `transact` calls fired in the same tick both land, in order, and
     the second sees the first's result; a throwing write doesn't block the next; a no-op write adds no
     undo step.
-- [ ] **A2. Assistant edits become one undo step instead of wiping history.**
+- [x] **A2. Assistant edits become one undo step instead of wiping history.**
   `rebase()` (`session.ts:197-211`) currently clears both stacks (`session.ts:205-206`), so Ctrl+Z
   can't go back past any Assistant edit. Change it to push the tab's pre-rebase snapshot onto the undo
   stack (one step per adopted version), and clear only the redo stack. Undoing then commits the old
@@ -96,6 +96,7 @@ Import a file while a voiceover is attaching: both survive.
 **Notes (A):**
 
 - A1: `transact(build, options)` keeps editor-core out of `session.ts`; callers run `applyOps` inside `build`, the session validates. Undo/redo/rebase stay synchronous; a write whose document changed while `build` awaited is rebuilt on the new one (max 3 tries).
+- A2: `rebase` pushes the tab's document as one undo step only when the Assistant's version differs; the panel's turn Undo goes through `rebase` too, so it is also one Ctrl+Z step.
 
 ---
 

@@ -243,17 +243,23 @@ export class DocumentSession {
    * the new version. `adopt` would mark it saved unsent, and Export would miss that media.
    * A save already in flight was sent against the old version: a 409 from it is the Assistant's
    * own write, not another tab, so it must not stop autosave.
+   * The Assistant's version is one Undo step: undoing it puts the tab's document back and saves it
+   * on top of the new version, like any edit. Earlier steps stay reachable.
    */
   rebase(document: ClipDocument, version: number, documentHash: string | null): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.epoch++;
+    const savedJson = canonicalJson(document);
+    if (savedJson !== canonicalJson(this.document)) {
+      this.undoStack.push(this.here());
+      if (this.undoStack.length > HISTORY) this.undoStack.shift();
+      this.redoStack = [];
+    }
     this.document = document;
     this.version = version;
-    this.savedJson = canonicalJson(document);
+    this.savedJson = savedJson;
     this.documentHash = documentHash;
-    this.undoStack = [];
-    this.redoStack = [];
     this.status = "saved";
     this.error = null;
     this.conflictWith = null;
