@@ -22,7 +22,7 @@ import { captionFrame, placeCaption, stateAt } from './captions.ts';
 import { mixColor, parseColor } from './color.ts';
 import { curve, easing } from './easing.ts';
 import { layoutText, revealChars, revealWords, scramble, type Measurer, type TextLayout } from './text.ts';
-import { authored, IDENTITY, multiply, toFrames, type Mat, type RNode, type SubValues, type Values } from './tree.ts';
+import { authored, FPS, IDENTITY, multiply, toFrames, type Mat, type RNode, type SubValues, type Values } from './tree.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -97,7 +97,7 @@ function motion(root: RNode, frame: number, playFrom: number): void {
     r.shape = null;
     if (!r.visible || node.hidden) return;
     if (node.kind === 'captions' && r.groups) {
-      r.caption = captionFrame(node, r.groups, r.local / 30, guineaCount(r, frame, playFrom));
+      r.caption = captionFrame(node, r.groups, r.local / FPS, guineaCount(r, frame, playFrom));
       r.values.color = r.caption.node.color ? parseColor(r.caption.node.color) : null;
     }
     const animations = ((node as { animations?: Animation[] }).animations ?? []) as Animation[];
@@ -414,7 +414,7 @@ function guineaCount(r: RNode, frame: number, playFrom: number): number {
       history.state = null;
       continue;
     }
-    const state = stateAt(node, r.groups, Math.round((at - r.origin) * r.rate) / 30);
+    const state = stateAt(node, r.groups, Math.round((at - r.origin) * r.rate) / FPS);
     if (state !== null && state !== history.state) history.count++;
     history.state = state;
   }

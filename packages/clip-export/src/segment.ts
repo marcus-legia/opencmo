@@ -12,6 +12,7 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 import { createCanvas, GlobalFonts, loadImage, LottieAnimation, type Canvas, type Image } from '@napi-rs/canvas';
+import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
 import { builtinLottieName, createRenderer, FONTS, lottieTime, outputSize, parseCube, setFallbackFamilies, type CubeLut, type MediaHost, type Transcript } from '@opencmo/clip-render';
 
 import { VideoFrames } from './decode.ts';
@@ -191,7 +192,7 @@ export async function renderSegment(input: SegmentInput, onFrames: (count: numbe
     [
       '-v', 'error', '-y',
       '-thread_queue_size', '2',
-      '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${size.width}x${size.height}`, '-r', String(input.fps ?? 30), '-i', 'pipe:0',
+      '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${size.width}x${size.height}`, '-r', String(input.fps ?? FPS), '-i', 'pipe:0',
       '-vf', filters,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(job.crf), '-threads', String(input.threads),
       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
@@ -204,9 +205,9 @@ export async function renderSegment(input: SegmentInput, onFrames: (count: numbe
   const exited = once(encoder, 'close');
 
   try {
-    const fps = input.fps ?? 30;
+    const fps = input.fps ?? FPS;
     // 30 fps: khung xuất = khung scene, như trước (không làm tròn lại số nguyên nào).
-    const sceneFrame = (index: number) => (fps === 30 ? index : (input.start ?? 0) + Math.round(((index - (input.start ?? 0)) * 30 * 1e6) / fps) / 1e6);
+    const sceneFrame = (index: number) => (fps === FPS ? index : (input.start ?? 0) + Math.round(((index - (input.start ?? 0)) * FPS * 1e6) / fps) / 1e6);
     for (let i = 0; i < input.count; i++) {
       const frame = sceneFrame(input.from + i);
       frames.beginFrame();

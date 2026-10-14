@@ -16,7 +16,7 @@
  *   không biết độ dài nguồn (ảnh, rect…) thì 16 giây.
  */
 
-import type { ClipNode, PathSegment, SceneNode } from '@opencmo/clip-doc';
+import { FRAME_RATE, type ClipNode, type PathSegment, type SceneNode } from '@opencmo/clip-doc';
 
 import { parseColor } from './color.ts';
 import { censorTranscript } from './profanity.ts';
@@ -24,7 +24,7 @@ import { groupPhrases, groupWords, presetOf, transcriptEnd, type CaptionFrame, t
 import type { TextLayout } from './text.ts';
 import type { MediaHost } from './types.ts';
 
-export const FPS = 30;
+export const FPS = FRAME_RATE;
 export const DEFAULT_FRAMES = 16 * FPS;
 
 export const toFrames = (seconds: number | undefined): number => Math.round((seconds ?? 0) * FPS);

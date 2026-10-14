@@ -20,7 +20,7 @@ import { hasTransition, partnerOf, subValue, transitionWindow } from './frame.ts
 import { gradeFrame, gradeSteps, unstackAlpha, type CanvasFactory, type CubeLut, type PixelCanvas } from './grade.ts';
 import { drawText } from './text.ts';
 import { drawScene3D } from './three/render.ts';
-import { toFrames, type Mat, type RNode } from './tree.ts';
+import { FPS, toFrames, type Mat, type RNode } from './tree.ts';
 import type { Ctx2D, Drawable, MediaHost, MediaNeed } from './types.ts';
 
 const MISSING = '#5C2828';
@@ -407,7 +407,7 @@ export function sourceSeconds(r: RNode): number {
   const node = r.node as { sourceIn?: number };
   const inFrames = toFrames(node.sourceIn);
   const out = inFrames + Math.round((r.end - r.start) * r.rate);
-  return Math.min(Math.max(r.local, inFrames), out) / 30;
+  return Math.min(Math.max(r.local, inFrames), out) / FPS;
 }
 
 /**
@@ -434,7 +434,7 @@ export function builtinLottieName(src: unknown): string | null {
 /** Giây của animation Lottie ở khung này: thời gian cục bộ × tốc độ + offset. */
 export function lottieSeconds(r: RNode): number {
   const node = r.node as { speed?: number; offset?: number };
-  return Math.max(0, (r.local / 30) * (node.speed ?? 1) + (node.offset ?? 0));
+  return Math.max(0, (r.local / FPS) * (node.speed ?? 1) + (node.offset ?? 0));
 }
 
 /**

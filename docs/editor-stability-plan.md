@@ -178,12 +178,12 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
   segment; long clips cut by `remove_silence` can hit the 256 KB cap (`clip-doc/src/validate.ts`).
   Follow the existing design in `docs/ke-hoach-pr-sau.md` §2 exactly, **starting with its step 1
   (measure)**. If the measurement says it isn't needed, stop and write the numbers in Notes.
-- [ ] **C5. One FPS constant.**
+- [x] **C5. One FPS constant.**
   About 20 copies of `FPS = 30` live across packages (e.g. `editor-core/src/ops/timeline.ts:30`,
   `clip-render/src/draw.ts:410`, `clip-export/src/export.ts:106`). Export one constant from the
   clip-doc time module and import it everywhere **inside `packages/`**. No behavior change: golden and
   parity tests must stay identical. Leave copies in `apps/web` for whoever owns those files.
-- [ ] **C6. Run the eval against the real model.**
+- [x] **C6. Run the eval against the real model.**
   CI only runs `lib/agent/eval` with the fake provider. Add an npm script that runs
   `lib/agent/eval/run.ts` with the real provider (document the expected cost in the script comment),
   run it once, and write the pass rate and the failing task names in Notes. Do **not** add it to CI.
@@ -198,6 +198,8 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
 - C2: each write's resulting clip version is now stored in its `agent_tool_calls.result` (`version`; per clip in `apply_to_clips`). Undo refuses with the 409 message when the clip moved past it; after an undone newer turn it checks that turn followed directly (versions bump by exactly 1 per save) and that the clip still holds that turn's checkpoint. Turns from before this change restore as before. Rule + tests in `lib/agent/undo-guard.ts` / `.check.ts` (in `check:contracts`). Known false refusal: any non-user save after the turn (e.g. the tab's id stamp) also counts as an edit; that refuses safely and never loses work.
 - C3: `timingIssues(doc)` in `clip-doc/src/timing.ts`; `applyOps` judges the whole batch (one op may set `start`, the next `end`) and rejects only issues the input didn't have, keyed by node id (or kind + timing values for id-less nodes, so the id stamp doesn't make old issues look new). None of the 70 parity samples has an issue; all 567 existing editor-core tests unchanged, plus 9 new in `timing.test.ts`.
 - C4: the design in `ke-hoach-pr-sau.md` §2 had already landed in 725f258 (`faceXTrack` in `segment()`, tests in `face-track.test.ts`), so I only measured (step 1). Setup: the `longClip` fixture with a realistic engine track (≤ 40 keys, `MAX_KEYFRAMES` in `steps/reframe.py`), then `remove_silence` 3× (only the first pass cuts). 10 min: 3.5 KB → 52.5 KB, 119 segments = **20% of the 256 KB cap**, under the doc's 30% stop line, so no further work. 54 min: 286 KB, 647 segments = **109%: cannot save**. Face data is now about 214 B per segment (≈2 keys) and doesn't multiply any more; the same cut with no face track is still 148 KB (56%, ≈174 B per bare segment). So what still breaks long clips is the segment count, not face-track copies. Follow-up (out of scope here): derive segment `x` from the mark at render time, or store cuts more compactly.
+- C5: reused the existing `FRAME_RATE` from `clip-doc/src/time.ts` rather than adding a second constant. It replaces the 10 local `FPS = 30` copies (`clip-render/tree.ts` still exports `FPS = FRAME_RATE`) and the bare grid literals in `draw.ts`, `frame.ts`, `export.ts`, `segment.ts`, `layout.ts` and `ops/project.ts`. Left alone: `FPS_CHOICES`, the schema's fps union, `probe.ts` (source fps) and `clip-three` (no clip-doc dependency; `spec.ts` keeps its own `FPS`). Node parity renders are **byte-identical** before and after (sha256 of all 155 candidate frames). In this container node parity fails the same 31 text frames with or without the change (fonts here differ from CI's), so CI's parity job is the real gate. Browser parity was not run here (it needs Chromium 141).
+- C6: **skipped** (owner's call). This container has no `ANTHROPIC_API_KEY` and a real run costs API money. `npm run agent:eval -- --provider anthropic --yes` already exists for whoever has a key (it prints a cost estimate without `--yes`).
 
 ---
 

@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import type { AssetDeclaration, ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type AssetDeclaration, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 import { sampleTrack, type TimeNode } from '@opencmo/clip-render';
 
 import { clone, isMaster, MASTER_SRC, sceneOf, type Entity } from '../doc';
@@ -16,7 +16,6 @@ import { OpFailure, type OpContext } from './context';
 import { checked } from './project';
 import { timesOf } from './timeline';
 
-const FPS = 30;
 /** Longest range one cut-out covers (the background-removal models take 1–15 s). */
 export const MAX_SWAP_SECONDS = 15;
 export const CUTOUT_PROMPT = 'Remove background';

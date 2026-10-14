@@ -31,7 +31,7 @@
  * trong khoảng pip. Clip không có hai kiểu này giữ nguyên cấu trúc cũ (group).
  */
 
-import { LAYOUT_ANCHORS, LAYOUT_MODES, type ClipDocument, type ClipNode, type LayoutRange as StoredRange } from '@opencmo/clip-doc';
+import { FRAME_RATE, LAYOUT_ANCHORS, LAYOUT_MODES, type ClipDocument, type ClipNode, type LayoutRange as StoredRange } from '@opencmo/clip-doc';
 
 import { clone, isMaster, nodes, sceneOf, type Entity } from './doc';
 import { summarizeProject } from './summary';
@@ -69,7 +69,7 @@ const PIP_MARGIN = 0.04;
 /** Bo góc ô PiP, phần cạnh ô. */
 const PIP_RADIUS = 0.14;
 
-const FRAME = 1 / 30;
+const FRAME = 1 / FRAME_RATE;
 /** Chuyển cảnh, giây — ngắn lại khi khoảng quá ngắn. */
 const TRANSITION = 0.3;
 /** Khoảng ngắn hơn thế này không đáng một lần chia khung. */

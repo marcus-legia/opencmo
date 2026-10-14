@@ -5,11 +5,10 @@
  * cùng một luật với preview và MP4, không có bản sao thứ hai để lệch.
  */
 
+import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
 import type { Renderer } from '@opencmo/clip-render';
 
 export type Cue = { start: number; end: number; text: string };
-
-const FPS = 30;
 
 /** Cue theo giây của BẢN XUẤT (0 = đầu workarea). Chữ đổi là cue mới; khoảng không ai nói thì trống. */
 export function subtitleCues(renderer: Renderer): Cue[] {

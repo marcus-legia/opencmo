@@ -25,7 +25,7 @@
 
 import { z } from 'zod';
 
-import type { ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 import { createRenderer, multiply, type LayoutBox, type Mat } from '@opencmo/clip-render';
 
 import { byId, clone, walk, type Entity } from '../doc';
@@ -42,7 +42,6 @@ import {
   trimIn,
 } from './timeline';
 
-const FPS = 30;
 const CONTAINERS = new Set(['scene', 'group', 'sequence']);
 const elementId = z.string().min(1).max(64);
 const ids = z.array(elementId).min(1).max(500);

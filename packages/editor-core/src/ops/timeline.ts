@@ -21,13 +21,12 @@
 
 import { z } from 'zod';
 
-import type { ClipDocument, ClipNode, SceneNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument, type ClipNode, type SceneNode } from '@opencmo/clip-doc';
 import { resolveTimes, type TimeNode } from '@opencmo/clip-render';
 
 import { byId, clone, copyOf, walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
 
-const FPS = 30;
 const CONTAINERS = new Set(['scene', 'group', 'sequence']);
 
 /** Giây ghi vào document: bốn chữ số lẻ đủ để mọi frame 30 fps khứ hồi đúng. */
