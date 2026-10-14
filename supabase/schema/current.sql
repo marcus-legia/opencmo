@@ -243,7 +243,7 @@ CREATE TABLE public.agent_turns (
     CONSTRAINT agent_turns_credits_check CHECK (((credits IS NULL) OR (credits >= 0))),
     CONSTRAINT agent_turns_error_check CHECK (((error IS NULL) OR (char_length(error) <= 500))),
     CONSTRAINT agent_turns_hold_credits_check CHECK ((hold_credits >= 0)),
-    CONSTRAINT agent_turns_pause_reason_check CHECK (((pause_reason IS NULL) OR (pause_reason = ANY (ARRAY['browser'::text, 'approval'::text, 'input'::text, 'time'::text, 'budget'::text])))),
+    CONSTRAINT agent_turns_pause_reason_check CHECK (((pause_reason IS NULL) OR (pause_reason = ANY (ARRAY['browser'::text, 'approval'::text, 'input'::text, 'time'::text, 'steps'::text, 'budget'::text])))),
     CONSTRAINT agent_turns_prompt_check CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 4000))),
     CONSTRAINT agent_turns_status_check CHECK ((status = ANY (ARRAY['running'::text, 'awaiting_browser'::text, 'awaiting_approval'::text, 'awaiting_input'::text, 'awaiting_continue'::text, 'done'::text, 'failed'::text, 'stopped'::text])))
 );
@@ -754,7 +754,7 @@ declare
   v_turn public.agent_turns;
 begin
   v_turn := public.agent_owned_turn(p_turn_id, v_user);
-  if p_reason is null or p_reason not in ('browser', 'approval', 'input', 'time', 'budget') then
+  if p_reason is null or p_reason not in ('browser', 'approval', 'input', 'time', 'steps', 'budget') then
     raise exception 'Invalid pause reason.' using errcode = '22023';
   end if;
   update public.agent_turns
@@ -768,7 +768,7 @@ begin
   if not found then
     raise exception 'This assistant turn was stopped.' using errcode = 'P0001';
   end if;
-  -- Chờ người (duyệt, trả lời, gia hạn) có thể lâu; chờ tab (chụp, nối tiếp) thì không.
+  -- Waiting on a person (approve, answer, extend) can take a while; waiting on the tab cannot.
   update public.agent_sessions
   set lock_until = now() + case when p_reason in ('approval', 'input', 'budget') then interval '30 minutes'
                                 else interval '6 minutes' end,

@@ -34,8 +34,8 @@ const body = z.object({
  * · `approval_request` {id, name, card} (thẻ duyệt → route `approvals`)
  * · `input_request` {id, name, card} (câu hỏi `ask_user` → route `tool-results`)
  * · `done` {status, reason?, credits, extend?, error} — `awaiting_continue`:
- *   'time' thì gọi route `continue` ngay; 'budget' thì hỏi người dùng rồi
- *   `continue` với `extend: true`.
+ *   'time' or 'steps' → call the `continue` route at once; 'budget' → ask the user, then
+ *   `continue` with `extend: true`.
  */
 export const POST = withApi({ body }, async ({ supabase, body, params }) =>
   startTurn(supabase, params.id, body.prompt, body.attachments),

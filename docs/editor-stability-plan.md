@@ -154,7 +154,7 @@ across a cut between two pieces of the master and pause on both sides: correct f
 Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded Assistant loop),
 #10 (scattered FPS constants), and the server half of #1 (Assistant Undo discarding later manual edits).
 
-- [ ] **C1. Bound the Assistant loop.**
+- [x] **C1. Bound the Assistant loop.**
   `apps/web/lib/agent/loop.ts:183` is `for (let step = 0; ; step++)`, bounded only by credits and
   request time. Add `MAX_STEPS` to `lib/agent/limits.ts` (e.g. 40 per request) and pause with
   `awaiting_continue` and a new reason `"steps"`, the same way `"time"` works (`loop.ts:211`). Also stop
@@ -194,11 +194,15 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
 
 **Notes (C):**
 
+- C1: `MAX_STEPS = 40` per request pauses with 'steps', which auto-continues like 'time' (owner's call), so the real stop for a looping model is the repeated-failure rule: the 3rd identical failing call (same name + canonical input) is told to change course, the 4th ends the turn. 'steps' needs migration `20261123090000_agent_step_pause.sql` (+ pgTAP `153`); `supabase db test` passes. The panel side is a Request to A.
+
 ---
 
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from C → owner A) C1 adds pause reason `"steps"` (request hit `MAX_STEPS`). It must auto-continue exactly like `"time"`: add it to the reason type in `assistant/client.ts` (≈ line 62) and treat `reason`/`pause_reason === "steps"` like `"time"` in `assistant/AssistantPanel.tsx` (≈ lines 242, 410, 710). The `continue` route already accepts it. Until then a 'steps' pause shows no Continue button and the turn waits.
 
 ---
 

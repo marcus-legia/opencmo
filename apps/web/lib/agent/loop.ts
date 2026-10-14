@@ -11,12 +11,15 @@ import "server-only";
  * → chạy tool, trả MỌI kết quả của bước trong MỘT tin nhắn user (sau bước có
  * ghi thì kèm trạng thái + `check` mới).
  *
- * Không có trần số bước. Lượt TẠM DỪNG giữa hai request khi:
- * - tool chạy ở tab (`capture`, `media_waveform`, `media_grab`, `save_frame`) → `awaiting_browser`;
- * - thẻ duyệt có giá (`generate_media`, `apply_to_clips`) → `awaiting_approval`;
- * - agent hỏi (`ask_user`) → `awaiting_input`;
- * - chạm trần thời gian của MỘT request → `awaiting_continue` ('time'): tab tự nối;
- * - tiêu hết credit đã giữ → `awaiting_continue` ('budget'): người dùng gia hạn.
+ * A turn has no overall step limit; it PAUSES between two requests when:
+ * - a tool runs in the tab (`capture`, `media_waveform`, `media_grab`, `save_frame`) → `awaiting_browser`;
+ * - a priced approval card (`generate_media`, `apply_to_clips`) → `awaiting_approval`;
+ * - the agent asks (`ask_user`) → `awaiting_input`;
+ * - one request hits its time limit → `awaiting_continue` ('time'): the tab continues on its own;
+ * - one request hits `MAX_STEPS` → `awaiting_continue` ('steps'): the tab continues on its own;
+ * - the held credits are spent → `awaiting_continue` ('budget'): the user extends.
+ * The same call failing `MAX_REPEATED_FAILURES` times in a row is reported to the model; one more
+ * identical failure ends the turn.
  * Tool chạy ngay của cùng bước được giữ kết quả (`agent_tool_calls.content`);
  * `resumeTurn` ghép lại MỘT tin nhắn theo đúng thứ tự tool call rồi chạy tiếp.
  *
@@ -28,7 +31,18 @@ import { ApiError } from "@/lib/api/errors";
 import { markDown, outage } from "@/lib/llm-health";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
-import { AGENT_EXTEND_CREDITS, KEEP_IMAGES, MAX_REQUEST_MS, SLOW_PLAN_CUTOFF_MS, SLOW_PLANS, STOP_POLL_MS } from "./limits";
+import { canonicalJson } from "@opencmo/clip-doc";
+
+import {
+  AGENT_EXTEND_CREDITS,
+  KEEP_IMAGES,
+  MAX_REPEATED_FAILURES,
+  MAX_REQUEST_MS,
+  MAX_STEPS,
+  SLOW_PLAN_CUTOFF_MS,
+  SLOW_PLANS,
+  STOP_POLL_MS,
+} from "./limits";
 import { canSwitchFrom } from "./model";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
@@ -154,13 +168,48 @@ function watchStop(supabase: SupabaseClient, turnId: string) {
  * một `runTurn` mới, nên một biến trong bộ nhớ không đủ — thiếu chốt này thì
  * một agent chụp khung ở mọi bước tiêu vượt phần giữ mà không ai được hỏi.
  */
+/** Shown when the model keeps sending a call that fails the same way. */
+export const REPEATED_FAILURE_MESSAGE = "The assistant kept repeating a step that fails, so it stopped. Try rephrasing the request.";
+
+const callKey = (call: ToolCall): string => {
+  try {
+    return `${call.name}:${canonicalJson(call.input ?? {})}`;
+  } catch {
+    return `${call.name}:${JSON.stringify(call.input ?? {})}`;
+  }
+};
+
+/**
+ * Counts identical failing calls in a row. Retrying the exact same input after an error teaches the
+ * model nothing; after `MAX_REPEATED_FAILURES` it is told so, and one more identical failure ends the turn.
+ */
+function failureStreak() {
+  let key = "";
+  let count = 0;
+  return {
+    succeeded: () => {
+      key = "";
+      count = 0;
+    },
+    /** The content to send back, and whether the turn should stop now. */
+    failed: (call: ToolCall, content: string): { content: string; stop: boolean } => {
+      const next = callKey(call);
+      count = next === key ? count + 1 : 1;
+      key = next;
+      if (count < MAX_REPEATED_FAILURES) return { content, stop: false };
+      const note = `This exact call has now failed ${count} times in a row. Do not send it again unchanged: change the input, try another approach, or stop and explain the problem to the user.`;
+      return { content: JSON.stringify({ INVALID_INPUT: note, last_error: content }), stop: count > MAX_REPEATED_FAILURES };
+    },
+  };
+}
+
 async function spentCredits(supabase: SupabaseClient, turnId: string): Promise<number> {
   const { data } = await supabase.from("agent_usage").select("micro_usd").eq("turn_id", turnId);
   const micro = ((data ?? []) as { micro_usd: number | string }[]).reduce((sum, row) => sum + Number(row.micro_usd), 0);
   return micro <= 0 ? 0 : Math.max(1, Math.ceil(micro / 50_000));
 }
 
-async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "time" | "budget") {
+async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "time" | "steps" | "budget") {
   await rpcOrThrow(env.supabase, "agent_pause_turn", { p_turn_id: env.turn.id, p_reason: reason });
 }
 
@@ -178,6 +227,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
   // The turn's credits so far, as agent_record_usage returns them after each model call; read again
   // only when it may be stale (first step, or a step whose tools ran sub-agents that record their own).
   let spent: number | null = null;
+  const streak = failureStreak();
 
   try {
     for (let step = 0; ; step++) {
@@ -208,8 +258,14 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         emit("done", { status: "awaiting_continue", reason: "budget", credits: spentSoFar, extend: AGENT_EXTEND_CREDITS, error: null });
         return;
       }
+      if (step >= MAX_STEPS) {
+        // Not an error: a request has a step limit, the turn does not. The tab continues.
+        await pause(env, "steps");
+        emit("done", { status: "awaiting_continue", reason: "steps", credits: null, error: null });
+        return;
+      }
       if (Date.now() - started > MAX_REQUEST_MS) {
-        // Không phải lỗi: request HTTP có trần, lượt thì không. Tab gọi nối tiếp.
+        // Not an error: an HTTP request has a time limit, the turn does not. The tab continues.
         await pause(env, "time");
         emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });
         return;
@@ -284,6 +340,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const questions: { call: ToolCall; card: unknown }[] = [];
       let wrote = false;
       let deferred = false;
+      let runaway = false;
       // Planning tools run their own model calls and record them: read the total again next step.
       if (result.toolCalls.some((call) => SLOW_PLANS.has(call.name))) spent = null;
       if (!baseline && result.toolCalls.some((call) => scope.isWrite(call.name))) {
@@ -330,25 +387,34 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           continue;
         }
         if (plan.kind === "invalid") {
-          await recordTool(env, call, "failed", { summary: plan.summary }, plan.content);
+          const failure = streak.failed(call, plan.content);
+          runaway ||= failure.stop;
+          await recordTool(env, call, "failed", { summary: plan.summary }, failure.content);
           emit("tool_result", { id: call.id, name: call.name, ok: false, summary: plan.summary });
-          results.push({ id: call.id, name: call.name, ok: false, content: plan.content });
+          results.push({ id: call.id, name: call.name, ok: false, content: failure.content });
           continue;
         }
         const outcome = ready?.outcome ?? (await scope.run(call));
+        let content = outcome.content;
+        if (outcome.ok) streak.succeeded();
+        else {
+          const failure = streak.failed(call, content);
+          runaway ||= failure.stop;
+          content = failure.content;
+        }
         await recordTool(
           env,
           call,
           outcome.ok ? "done" : "failed",
           { summary: outcome.summary, ...(outcome.view ? { view: outcome.view } : {}) },
-          outcome.content,
+          content,
         );
         emit("tool_result", { id: call.id, name: call.name, ok: outcome.ok, summary: outcome.summary, view: outcome.view });
         if (outcome.version !== undefined) {
           wrote = true;
           emit("project_changed", { version: outcome.version });
         }
-        results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content });
+        results.push({ id: call.id, name: call.name, ok: outcome.ok, content });
       }
 
       // A question and a price card in the same step: the panel shows the question, and the card the
@@ -382,6 +448,10 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const answer = provider.toolResults(results, state);
       await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
       past?.push({ role: "user", content: answer as unknown[] });
+      if (runaway) {
+        await finish(env, "failed", REPEATED_FAILURE_MESSAGE);
+        return;
+      }
       if (deferred) {
         await pause(env, "time");
         emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });
