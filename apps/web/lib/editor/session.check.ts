@@ -96,6 +96,19 @@ async function main(): Promise<void> {
     assert.deepEqual(t.calls, [{ version: 1, width: 7 }]);
   }
 
+  // Bookkeeping after a user edit (voiceover sync): undo takes back the user's edit, redo brings
+  // back the state with the bookkeeping in it.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    session.commit(doc(1));
+    await session.transact(() => doc(2), { history: false, origin: "system" });
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080);
+    session.redo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 2);
+  }
+
   // Manifest lưu cùng lượt với document, nhưng Undo không lùi nó.
   {
     const sent: unknown[] = [];

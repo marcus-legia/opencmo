@@ -80,7 +80,7 @@ updates). This track has the biggest user impact. Do it in order.
   `library/useLibrary.ts:99-100`, `:192-193`, `:243-244`; `menus/dialogs.tsx:109`.
   Route each through `transact` so they apply to the latest document and are validated.
   (The id stamp at `EditorShell.tsx:129` is outside A's range; leave it, it is `history: false` and synchronous.)
-- [ ] **A5. Voiceover sync stops retrying forever.**
+- [x] **A5. Voiceover sync stops retrying forever.**
   `generate/useVoiceovers.ts:75-79` retries every `RETRY_MS` with no limit when `run` returns null.
   After A3 `run` no longer returns null for "busy", so: cap retries (e.g. 5), and log once when giving up.
   Voiceover attachment is bookkeeping, not a user action: commit it with `history: false` if that is
@@ -99,6 +99,7 @@ Import a file while a voiceover is attaching: both survive.
 - A2: `rebase` pushes the tab's document as one undo step only when the Assistant's version differs; the panel's turn Undo goes through `rebase` too, so it is also one Ctrl+Z step.
 - A3: `busy` is a counter of queued `run`s (spinner only). Dropped the now-unused `validate` import at the top of `EditorShell.tsx` (one line outside A's range).
 - A4: library edits, generated-media removal, insert and version restore are `transact` writes reading the latest document and library. A `Built` result may carry `history`, since only `build` knows whether a library change touched the document (a rename does).
+- A5: voiceover sync gives up after 5 attempts with one `console.warn`, and commits with `history: false`: undoing past it drops the `synced` mark and the hook attaches again (test in `session.check.ts`).
 
 ---
 

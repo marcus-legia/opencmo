@@ -17,6 +17,8 @@ import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import type { ClipDocument } from "@opencmo/clip-doc";
 import { activeScene, VOICEOVER_MARK, walk, type VoiceoverMark } from "@opencmo/editor-core";
 
+import type { TransactOptions } from "@/lib/editor/session";
+
 import { generationMatches } from "../media";
 import type { LibraryApi } from "../library/useLibrary";
 
@@ -24,6 +26,8 @@ type Word = { text: string; start: number; end: number };
 type View = { status: string; asset: { duration: number | null; words: Word[] | null } | null };
 
 const RETRY_MS = 1500;
+/** A sync that keeps failing is an op error, not a busy editor: stop instead of looping forever. */
+const MAX_ATTEMPTS = 5;
 
 export function useVoiceovers({
   document,
@@ -33,7 +37,7 @@ export function useVoiceovers({
 }: {
   document: ClipDocument;
   library: LibraryApi;
-  run: (ops: unknown[]) => Promise<ClipDocument | null>;
+  run: (ops: unknown[], options?: TransactOptions) => Promise<ClipDocument | null>;
   notify: (message: string) => void;
 }): void {
   const pending = useRef(new Set<string>());
@@ -66,16 +70,25 @@ export function useVoiceovers({
       void attach(key, id, to - from - start).finally(() => pending.current.delete(key));
     }
 
-    async function attach(key: string, id: string, room: number) {
+    async function attach(key: string, id: string, room: number, attempt = 1) {
       const response = await fetch(`/api/v1/generations/${encodeURIComponent(id)}`).catch(() => null);
       const view = response?.ok ? ((await response.json().catch(() => null)) as View | null) : null;
       const duration = view?.asset?.duration;
       if (!duration || duration <= 0) return;
       const words = view?.asset?.words ?? undefined;
-      const applied = await runRef.current([{ op: "sync_voiceover", key, duration, ...(words?.length ? { words } : {}) }]);
-      // Editor đang bận một lượt sửa khác: thử lại một nhịp sau.
+      // Bookkeeping, not a user edit: no Undo step. Undoing back past it drops the `synced` mark,
+      // and this effect attaches the voiceover again.
+      const applied = await runRef.current([{ op: "sync_voiceover", key, duration, ...(words?.length ? { words } : {}) }], {
+        history: false,
+        origin: "system",
+        label: "Attach voiceover",
+      });
       if (!applied) {
-        timers.push(setTimeout(() => void attach(key, id, room), RETRY_MS));
+        if (attempt >= MAX_ATTEMPTS) {
+          console.warn(`[editor] gave up attaching voiceover ${key} after ${attempt} attempts`);
+          return;
+        }
+        timers.push(setTimeout(() => void attach(key, id, room, attempt + 1), RETRY_MS));
         return;
       }
       // Export dừng ở cuối clip: giọng dài hơn thì mất đuôi mà timeline vẫn vẽ
