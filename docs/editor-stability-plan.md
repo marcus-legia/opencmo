@@ -173,7 +173,7 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
   (`packages/editor-core/src/ops/index.ts:249-291`), reject a batch that **introduces** an issue on an
   element it touched, with an actionable `OpError` message. Existing documents with old issues must
   keep loading and saving. Tests in editor-core for each invariant and for "old issue doesn't block".
-- [ ] **C4. Face-track data stops multiplying with each cut.**
+- [x] **C4. Face-track data stops multiplying with each cut.**
   `segment()` (`packages/editor-core/src/captions.ts:169`) copies the whole face track into every cut
   segment; long clips cut by `remove_silence` can hit the 256 KB cap (`clip-doc/src/validate.ts`).
   Follow the existing design in `docs/ke-hoach-pr-sau.md` §2 exactly, **starting with its step 1
@@ -197,6 +197,7 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
 - C1: `MAX_STEPS = 40` per request pauses with 'steps', which auto-continues like 'time' (owner's call), so the real stop for a looping model is the repeated-failure rule: the 3rd identical failing call (same name + canonical input) is told to change course, the 4th ends the turn. 'steps' needs migration `20261123090000_agent_step_pause.sql` (+ pgTAP `153`); `supabase db test` passes. The panel side is a Request to A.
 - C2: each write's resulting clip version is now stored in its `agent_tool_calls.result` (`version`; per clip in `apply_to_clips`). Undo refuses with the 409 message when the clip moved past it; after an undone newer turn it checks that turn followed directly (versions bump by exactly 1 per save) and that the clip still holds that turn's checkpoint. Turns from before this change restore as before. Rule + tests in `lib/agent/undo-guard.ts` / `.check.ts` (in `check:contracts`). Known false refusal: any non-user save after the turn (e.g. the tab's id stamp) also counts as an edit; that refuses safely and never loses work.
 - C3: `timingIssues(doc)` in `clip-doc/src/timing.ts`; `applyOps` judges the whole batch (one op may set `start`, the next `end`) and rejects only issues the input didn't have, keyed by node id (or kind + timing values for id-less nodes, so the id stamp doesn't make old issues look new). None of the 70 parity samples has an issue; all 567 existing editor-core tests unchanged, plus 9 new in `timing.test.ts`.
+- C4: the design in `ke-hoach-pr-sau.md` §2 had already landed in 725f258 (`faceXTrack` in `segment()`, tests in `face-track.test.ts`), so I only measured (step 1). Setup: the `longClip` fixture with a realistic engine track (≤ 40 keys, `MAX_KEYFRAMES` in `steps/reframe.py`), then `remove_silence` 3× (only the first pass cuts). 10 min: 3.5 KB → 52.5 KB, 119 segments = **20% of the 256 KB cap**, under the doc's 30% stop line, so no further work. 54 min: 286 KB, 647 segments = **109%: cannot save**. Face data is now about 214 B per segment (≈2 keys) and doesn't multiply any more; the same cut with no face track is still 148 KB (56%, ≈174 B per bare segment). So what still breaks long clips is the segment count, not face-track copies. Follow-up (out of scope here): derive segment `x` from the mark at render time, or store cuts more compactly.
 
 ---
 
