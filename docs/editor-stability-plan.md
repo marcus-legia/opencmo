@@ -215,12 +215,41 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 
 ---
 
+## Review
+
+Cross-track review of A+B+C on `0001107` (CI green). Three fixes landed after it; they touch A, B and
+C files because the tracks were already done.
+
+- [x] **Assistant Undo refused after library-only saves.** The C2 guard compared clip versions, and
+  the tab bumps the version for library-only saves too (upload state, a generation landing, a
+  voiceover attaching), so most real turns were refused. Writes now record `document_hash` next to
+  `version`; the guard also passes when the clip still holds the document the turn saved.
+  `undo-guard.check.ts` covers it.
+- [x] **`shownTime` hid a stalled video.** It carried the last presented frame forward with the clock
+  with no limit, so a stalled element looked in sync. It now carries forward only across a normal
+  frame gap (0.1 s) and then reports `currentTime`.
+- [x] **One Assistant turn was N Undo steps** (one per saved version). `rebase` takes the turn as a
+  group and folds its later versions into one step; an edit, Undo or Redo in between starts a new
+  one. `session.check.ts` covers it.
+- Note: `MAX_STEPS` is a per-request limit and 'steps' continues on its own, so it does not cap a
+  turn. What stops a looping turn is the repeated-failure rule and the credit hold (auto-extended up
+  to `AGENT_AUTO_HOLD_CAP`, then the user is asked).
+- Note: C6 was skipped, so the Assistant has still only been measured against the fake model. Run
+  `npm run agent:eval -- --provider anthropic --yes` once with a key before launch.
+
+---
+
 ## Out of scope for this PR (follow-ups)
 
 Listed so nobody starts them here:
 UI state out of the document (`selected`, `clipHeight`, `expanded`, `playhead`; needs a schema migration),
 explicit tracks in the schema, integer-frame time in the schema, patch-based history, WebCodecs preview,
 tool consolidation, compact `get_timeline` with mutation-delta receipts and short ids.
+
+**Next PR, highest priority: long videos can't be saved.** C4 measured a 54-minute clip after
+`remove_silence` at 286 KB, 109% of the 256 KB cap. The cause is the segment count (≈174 B per
+segment), not face tracks. Long video is the main Video path, so cuts need a compact storage form
+(for example ranges over the master instead of one element per segment).
 
 ## Done when
 
