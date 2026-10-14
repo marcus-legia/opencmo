@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 
-import type { ClipDocument, ClipNode, SceneNode } from '@opencmo/clip-doc';
+import { timingIssues, type ClipDocument, type ClipNode, type SceneNode } from '@opencmo/clip-doc';
 
 import { activeView, clone, mergeView, nodes, same, stamp, timelinesOf, viewOf } from '../doc';
 import {
@@ -238,13 +238,29 @@ export function captionsOnTop(input: ClipDocument): ClipDocument {
 }
 
 /**
- * Áp một chuỗi op lên document, tuần tự. Op đầu tiên hỏng dừng cả chuỗi bằng
- * `OpError` và KHÔNG trả document nào — nửa chuỗi op là một trạng thái không ai
- * yêu cầu. Mọi op được kiểm schema trước khi op đầu tiên chạy. Document đầu vào
- * không bị sửa.
+ * A batch must not leave an element with broken timing (start after end, negative time…) that it
+ * did not already have. Issues the document already had never block, so old projects keep saving.
+ * The whole batch is judged, not each op: one op may set `start` and the next `end`.
+ */
+function rejectNewTimingIssues(before: ClipDocument, after: ClipDocument, steps: { op: string; document: ClipDocument }[]): void {
+	const old = new Set(timingIssues(before).map((issue) => `${issue.key}:${issue.kind}`));
+	const fresh = timingIssues(after).filter((issue) => !old.has(`${issue.key}:${issue.kind}`));
+	if (!fresh.length) return;
+	const first = fresh[0]!;
+	const index = Math.max(
+		0,
+		steps.findIndex((step) => timingIssues(step.document).some((issue) => issue.key === first.key && issue.kind === first.kind)),
+	);
+	throw new OpError(index, steps[index]?.op ?? 'apply', `${first.message} Change the times so this element still plays.`);
+}
+
+/**
+ * Applies a list of ops to the document, in order. The first failing op stops the whole list
+ * with `OpError` and NO document is returned: half a list is a state nobody asked for. Every op is
+ * schema-checked before the first one runs. The input document is not modified.
  *
- * Kết thúc bằng một lượt stamp: phần tử mới (chữ vừa thêm, đoạn video vừa cắt)
- * có `id` ngay, để lượt op kế tiếp — hay agent — gọi được tên chúng.
+ * Ends with a stamp pass: new elements (text just added, a video piece just cut) get an `id` at
+ * once, so the next batch of ops, or the agent, can name them.
  */
 export async function applyOps(
 	document: ClipDocument,
@@ -254,6 +270,7 @@ export async function applyOps(
 	const valid = ops.map(validate);
 	let current = document;
 	const results: OpResult[] = [];
+	const steps: { op: string; document: ClipDocument }[] = [];
 	for (const [index, op] of valid.entries()) {
 		const definition = byName.get(op.op)!;
 		let next: ClipDocument;
@@ -273,6 +290,7 @@ export async function applyOps(
 		}
 		results.push({ op: op.op, summary: definition.describe(op as never), changed: !same(next, current) });
 		current = next;
+		steps.push({ op: op.op, document: current });
 	}
 	// Trạng thái suy ra từ voiceover (tắt tiếng/hạ tiếng video gốc, phụ đề mồ
 	// côi) tính lại sau mọi lượt — document không có voiceover đi qua nguyên vẹn.
@@ -283,6 +301,7 @@ export async function applyOps(
 		}
 	}
 	if (current !== document) current = captionsOnTop(current);
+	if (current !== document && !same(current, document)) rejectNewTimingIssues(document, current, steps);
 	if (!same(current, document)) {
 		current = current === document ? clone(current) : current;
 		stamp(current);

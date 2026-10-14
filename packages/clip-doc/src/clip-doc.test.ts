@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { documentHash, DocumentInvalidError, migrate, parseTime, validate, type ClipDocument } from './index.ts';
+import { documentHash, DocumentInvalidError, migrate, parseTime, timingIssues, validate, type ClipDocument } from './index.ts';
 
 const SAMPLES = join(import.meta.dirname, '../../editor-parity/samples');
 const manifest = JSON.parse(readFileSync(join(SAMPLES, 'manifest.json'), 'utf8')) as { samples: { id: string }[] };
@@ -230,5 +230,36 @@ describe('storedBytes', () => {
     // Python json.dumps(separators=(', ', ': '), ensure_ascii=False) prints like Postgres jsonb::text.
     expect(storedBytes(document)).toBe(314);
     expect(storedBytes(document)).toBeGreaterThan(new TextEncoder().encode(JSON.stringify(document)).length);
+  });
+});
+
+describe('timingIssues', () => {
+  const doc = (node: Record<string, unknown>) => ({ version: 1, stage: { children: [{ kind: 'scene', id: 's', children: [node] }] } });
+  const kinds = (node: Record<string, unknown>) => timingIssues(doc(node)).map((issue) => issue.kind);
+
+  it('sample documents have none', () => {
+    for (const item of manifest.samples) expect(timingIssues(sample(item.id)), item.id).toEqual([]);
+  });
+  it('start must be before end', () => {
+    expect(kinds({ kind: 'video', id: 'v', start: 2, end: 1 })).toEqual(['start-after-end']);
+    expect(kinds({ kind: 'video', id: 'v', start: 2, end: 2 })).toEqual(['start-after-end']);
+    expect(kinds({ kind: 'video', id: 'v', start: 1, end: 2 })).toEqual([]);
+  });
+  it('sourceIn must be before sourceOut', () => {
+    expect(kinds({ kind: 'video', id: 'v', sourceIn: 5, sourceOut: 4 })).toEqual(['source-in-after-out']);
+  });
+  it('times cannot be negative', () => {
+    expect(kinds({ kind: 'video', id: 'v', start: -1 })).toEqual(['negative-time']);
+    expect(kinds({ kind: 'video', id: 'v', sourceIn: -0.5, sourceOut: 3 })).toEqual(['negative-time']);
+  });
+  it('playbackRate must be positive', () => {
+    expect(kinds({ kind: 'video', id: 'v', playbackRate: 0 })).toEqual(['bad-playback-rate']);
+    expect(kinds({ kind: 'video', id: 'v', playbackRate: 1.5 })).toEqual([]);
+  });
+  it('finds nested nodes and names them in the message', () => {
+    const issues = timingIssues(doc({ kind: 'group', id: 'g', children: [{ kind: 'text', name: 'Title', start: 3, end: 1 }] }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.key).toBe('text@3,1,,,');
+    expect(issues[0]!.message).toBe('Text "Title": start (3s) must be before end (1s).');
   });
 });
