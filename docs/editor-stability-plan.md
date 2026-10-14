@@ -117,7 +117,7 @@ Fixes review issues #3 (laggy drag) and the short-term part of #4 (preview vs ex
   `targets()` (`Timeline.tsx:207-240`) calls `timesOf(props.base())` and walks the scene on every move.
   The committed document does not change during a drag: compute `committed`, `lookup` and the target
   list at gesture start and keep them on the gesture.
-- [ ] **B3. Only the main renderer follows the drag preview.**
+- [x] **B3. Only the main renderer follows the drag preview.**
   `doc = preview ?? state.document` (`EditorShell.tsx:174`) drives `media.preload` (`:198-207`),
   the sample renderer (`:238-247`) and the other-scene renderers (`:264-290`), so each preview step
   rebuilds all of them. Key `media.preload`, `sampleRenderer` and `otherScenes` on `state.document`;
@@ -145,6 +145,7 @@ across a cut between two pieces of the master and pause on both sides: correct f
 **Notes (B):**
 
 - B1/B2: previews run once per animation frame via the gesture's latest op; `onUp` bumps the Timeline's own sequence so a late preview can't bring the ghost back (no change needed in EditorShell's JSX). Snap targets live on the `move`/`trim` gesture. `editor-rows.spec.ts` passes; `editor-clipping.spec.ts` couldn't run yet because another session's e2e run was recreating the shared `opencmo-e2e` stack at the same time.
+- B3: `media.preload`, `sampleRenderer` and `otherScenes` follow `state.document`; only the main renderer follows the preview. Adjust-tab scopes now update on release, not mid-drag. Node bench (60 elements + 2 other scenes, renderer builds only): 0.33 ms → 0.13 ms per preview step. Browser Performance-panel numbers: pending, measured with B4's browser pass.
 
 ---
 
