@@ -107,13 +107,13 @@ Import a file while a voiceover is attaching: both survive.
 
 Fixes review issues #3 (laggy drag) and the short-term part of #4 (preview vs export).
 
-- [ ] **B1. Coalesce drag previews and drop stale ones.**
+- [x] **B1. Coalesce drag previews and drop stale ones.**
   Every pointermove calls `preview(op)` (`Timeline.tsx:301`), which runs a full `applyOps`
   (`Timeline.tsx:195-205`). Change to: store the latest op on the gesture and run at most one preview
   per animation frame (`requestAnimationFrame`, latest op wins). Give each preview a sequence number
   and ignore results that come back after a newer one started or after `onUp` (`Timeline.tsx:307-331`),
   the same way the Inspector already does (`EditorShell.tsx:517-519`).
-- [ ] **B2. Compute snap targets once per gesture.**
+- [x] **B2. Compute snap targets once per gesture.**
   `targets()` (`Timeline.tsx:207-240`) calls `timesOf(props.base())` and walks the scene on every move.
   The committed document does not change during a drag: compute `committed`, `lookup` and the target
   list at gesture start and keep them on the gesture.
@@ -143,6 +143,8 @@ exactly where the preview showed. Release outside the timeline: no leftover ghos
 across a cut between two pieces of the master and pause on both sides: correct frames.
 
 **Notes (B):**
+
+- B1/B2: previews run once per animation frame via the gesture's latest op; `onUp` bumps the Timeline's own sequence so a late preview can't bring the ghost back (no change needed in EditorShell's JSX). Snap targets live on the `move`/`trim` gesture. `editor-rows.spec.ts` passes; `editor-clipping.spec.ts` couldn't run yet because another session's e2e run was recreating the shared `opencmo-e2e` stack at the same time.
 
 ---
 
