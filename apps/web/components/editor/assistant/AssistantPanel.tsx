@@ -15,21 +15,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  Action,
-  ApprovalCard,
-  Storyboard,
-  AssistantClient,
-  AssistantEvent,
-  Attachments,
-  BrowserResult,
-  ModelChoice,
-  PlanItem,
-  QuestionCard,
-  SessionSummary,
-  SessionView,
-  ToolRequest,
-  TurnView,
+import {
+  continuesOnItsOwn,
+  type Action,
+  type ApprovalCard,
+  type Storyboard,
+  type AssistantClient,
+  type AssistantEvent,
+  type Attachments,
+  type BrowserResult,
+  type ModelChoice,
+  type PlanItem,
+  type QuestionCard,
+  type SessionSummary,
+  type SessionView,
+  type ToolRequest,
+  type TurnView,
 } from "./client";
 import { api } from "@/components/clipping/api";
 import type { RenderTask } from "@/lib/api/tasks";
@@ -239,7 +240,7 @@ export function AssistantPanel({
       if (current.requests.length && current.done?.status === "awaiting_browser") {
         const results = await runBrowserTools(current.requests);
         await client.results(sessionId, results, onEvent(pending));
-      } else if (current.done?.status === "awaiting_continue" && current.done.reason === "time") {
+      } else if (current.done?.status === "awaiting_continue" && continuesOnItsOwn(current.done.reason)) {
         await client.continue(sessionId, false, onEvent(pending));
       } else {
         break;
@@ -407,7 +408,7 @@ export function AssistantPanel({
     }
     const waitsForTab =
       (lastTurn.status === "awaiting_browser" && !lastTurn.pending.some((request) => request.card)) ||
-      (lastTurn.status === "awaiting_continue" && lastTurn.pause_reason === "time");
+      (lastTurn.status === "awaiting_continue" && continuesOnItsOwn(lastTurn.pause_reason));
     const key = `${session.id}:${lastTurn.number}:${lastTurn.status}:${lastTurn.pending.length}`;
     if (waitsForTab && autoResumed.current !== key) {
       autoResumed.current = key;
@@ -707,7 +708,7 @@ function Turn({
       ) : null}
       <div className="ed2-row ed2-asst-meta">
         {turn.status === "stopped" ? <span>Stopped</span> : null}
-        {(turn.status === "awaiting_browser" || (turn.status === "awaiting_continue" && turn.pause_reason === "time")) && !busy ? (
+        {(turn.status === "awaiting_browser" || (turn.status === "awaiting_continue" && continuesOnItsOwn(turn.pause_reason))) && !busy ? (
           <>
             <span>Paused</span>
             <button type="button" className="ed2-link" data-testid="assistant-resume" onClick={onResume}>

@@ -28,7 +28,7 @@ export type TurnView = {
   number: number;
   prompt: string;
   status: (typeof WAITING)[number] | "running" | "done" | "failed" | "stopped";
-  /** `awaiting_continue`: 'time' (tab tự nối) hay 'budget' (người dùng gia hạn). */
+  /** `awaiting_continue`: 'time' / 'steps' (the tab continues on its own) or 'budget' (the user extends). */
   pause_reason: string | null;
   error: string | null;
   reply: string;

@@ -52,6 +52,12 @@ export type Action = {
   running?: boolean;
 };
 
+/**
+ * A request paused at its time or step limit: the tab continues it at once, nobody is asked.
+ * ('budget' waits for the user to extend.)
+ */
+export const continuesOnItsOwn = (reason: string | null | undefined): boolean => reason === "time" || reason === "steps";
+
 /** Một lượt như server trả (`agent_turns` + hành động + tool đang chờ). */
 export type TurnView = {
   number: number;
@@ -59,7 +65,7 @@ export type TurnView = {
   prompt: string;
   reply: string;
   status: TurnStatus;
-  /** `awaiting_continue`: 'time' (tab tự nối) hay 'budget' (người dùng gia hạn). */
+  /** `awaiting_continue`: 'time' / 'steps' (the tab continues on its own) or 'budget' (the user extends). */
   pause_reason?: string | null;
   error: string | null;
   credits: number | null;

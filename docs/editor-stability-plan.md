@@ -100,6 +100,8 @@ Import a file while a voiceover is attaching: both survive.
 - A3: `busy` is a counter of queued `run`s (spinner only). Dropped the now-unused `validate` import at the top of `EditorShell.tsx` (one line outside A's range).
 - A4: library edits, generated-media removal, insert and version restore are `transact` writes reading the latest document and library. A `Built` result may carry `history`, since only `build` knows whether a library change touched the document (a rename does).
 - A5: voiceover sync gives up after 5 attempts with one `console.warn`, and commits with `history: false`: undoing past it drops the `synced` mark and the hook attaches again (test in `session.check.ts`).
+- Request from C: `continuesOnItsOwn(reason)` in `assistant/client.ts` ('time' or 'steps'); `AssistantPanel.tsx` uses it in its three places (auto-continue after a stream, auto-resume on load, the Paused/Continue link). `lib/agent/view.ts` comment updated.
+- Cross-track review (A over A+B+C, no other code changes): (1) C2 refuses the panel's turn Undo after *any* save past the turn's version. With A2/A5 that now includes the tab's own bookkeeping saves (a library change, a voiceover attaching) after the turn: it refuses safely and Ctrl+Z still steps back through both; accepted. (2) B4 slots: the other-scene thumbnails drawing the same source at a different second in the same pass take the second `<video>`, which beats sharing one; with 3+ scenes on one source the rest share by nearest second, same as before B4. (3) C3 walks the tree twice per `applyOps`, O(elements), cheap next to the op itself, including drag previews. (4) Migration `20261123090000` keeps `agent_pause_turn` identical apart from 'steps'.
 
 ---
 
@@ -208,7 +210,7 @@ Fixes review issues #7 (projects grow until they can't be saved), #9 (unbounded 
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
 
-- [ ] (from C → owner A) C1 adds pause reason `"steps"` (request hit `MAX_STEPS`). It must auto-continue exactly like `"time"`: add it to the reason type in `assistant/client.ts` (≈ line 62) and treat `reason`/`pause_reason === "steps"` like `"time"` in `assistant/AssistantPanel.tsx` (≈ lines 242, 410, 710). The `continue` route already accepts it. Until then a 'steps' pause shows no Continue button and the turn waits.
+- [x] (from C → owner A) C1 adds pause reason `"steps"` (request hit `MAX_STEPS`). It must auto-continue exactly like `"time"`: add it to the reason type in `assistant/client.ts` (≈ line 62) and treat `reason`/`pause_reason === "steps"` like `"time"` in `assistant/AssistantPanel.tsx` (≈ lines 242, 410, 710). The `continue` route already accepts it. Until then a 'steps' pause shows no Continue button and the turn waits.
 
 ---
 
