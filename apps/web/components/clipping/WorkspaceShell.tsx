@@ -34,9 +34,10 @@ type NavEntry = { view: WorkspaceNavView; label: string; icon: IconName };
  * chuyên cần biết NGAY nên bấm vào đâu. "Marketing plan" không còn trên rail:
  * nó là sheet mở trên Dashboard (`?doc=`), vào từ menu dự án và cột Brief.
  */
-const MAIN: (NavEntry & { hint: string })[] = [
+const MAIN: (NavEntry & { hint: string; beta?: boolean })[] = [
   { view: "home", label: "Dashboard", icon: "chart-column", hint: "AI CMO" },
-  { view: "editor", label: "Editor", icon: "clapperboard", hint: "Clips, captions, timeline" },
+  // Beta while background swap and AI editing are being reworked; the AI CMO is the main door.
+  { view: "editor", label: "Editor", icon: "clapperboard", hint: "Clips, captions, timeline", beta: true },
 ];
 
 const VIDEO: NavEntry[] = [
@@ -206,19 +207,22 @@ export function WorkspaceShell({
   // Marketing plan là sheet trên Dashboard, nên mở nó vẫn sáng Dashboard.
   const isCurrent = (view: WorkspaceNavView) => activeView === view || (view === "home" && activeView === "plan");
 
-  const mainItem = (entry: NavEntry & { hint: string }) => (
+  const mainItem = (entry: NavEntry & { hint: string; beta?: boolean }) => (
     <Link
       key={entry.view}
       className="rail-main"
       href={hrefFor(entry.view)}
       aria-current={isCurrent(entry.view) ? "page" : undefined}
-      title={railOpen ? undefined : entry.label}
+      title={railOpen ? undefined : entry.beta ? `${entry.label} (beta)` : entry.label}
     >
       <span className="rail-main-chip">
         <Icon name={entry.icon} size={18} />
       </span>
       <span className="rail-label rail-main-text">
-        <b>{entry.label}</b>
+        <b>
+          {entry.label}
+          {entry.beta ? <span className="beta-badge">Beta</span> : null}
+        </b>
         <small>{entry.view === "home" && pending ? `${entry.hint} · ${pending} waiting` : entry.hint}</small>
       </span>
     </Link>

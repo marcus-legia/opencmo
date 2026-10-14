@@ -2791,6 +2791,27 @@ html[data-theme] .rail-avatar {
   }
 }
 
+/* --- Beta badge: a feature that works but is still being reworked ----- */
+.beta-badge {
+  display: inline-block;
+  flex: none;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: var(--ds-text-10);
+  font-weight: 700;
+  line-height: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 2px;
+  opacity: 0.75;
+}
+.ed2-top .beta-badge {
+  margin-left: 0;
+  color: var(--ds-fg-1);
+}
+
 /* --- Job đang chạy: badge trên rail + chip ở top bar ------------------ */
 .rail-badge {
   margin-left: auto;
