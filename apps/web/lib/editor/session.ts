@@ -16,7 +16,7 @@
  *   thử lại.
  */
 
-import { canonicalJson, type ClipDocument } from "@opencmo/clip-doc";
+import { canonicalJson, validate, type ClipDocument } from "@opencmo/clip-doc";
 
 export type Saved = { version: number; document_hash: string };
 
@@ -53,7 +53,23 @@ export type SessionState = {
 /** Undo xa hơn thế này là hiếm; mỗi bước giữ nguyên một document (vài chục KB). */
 const HISTORY = 200;
 
+/** A write rebuilt this many times because the document kept changing under it gives up. */
+const ATTEMPTS = 3;
+
 type Snapshot = { document: ClipDocument; manifest: unknown };
+
+/** What a queued write produces: the next document, and optionally the next library. */
+export type Built = ClipDocument | { document: ClipDocument; manifest: unknown };
+
+export type TransactOptions = {
+  /** `false` for bookkeeping that is saved but is not an edit the user would undo. */
+  history?: boolean;
+  /** For logs and future history UI; no effect on how the write applies. */
+  label?: string;
+  origin?: "user" | "assistant" | "system";
+  /** Same meaning as in `commit`; a `manifest` returned by `build` wins. */
+  manifest?: unknown;
+};
 const json = (value: unknown) => (value === undefined ? "" : canonicalJson(value));
 
 export class DocumentSession {
@@ -72,6 +88,8 @@ export class DocumentSession {
   /** Bumped by `rebase`: a save sent before it answers for a version the tab no longer holds. */
   private epoch = 0;
   private listeners = new Set<() => void>();
+  /** Tail of the write queue; never rejects, so one failed write doesn't stop the next. */
+  private queue: Promise<unknown> = Promise.resolve();
   private snapshot: SessionState;
   conflictWith: { version: number; document: ClipDocument } | null = null;
 
@@ -79,6 +97,8 @@ export class DocumentSession {
     initial: { document: ClipDocument; version: number; documentHash: string | null; manifest?: unknown },
     private transport: SaveTransport,
     private delay = 1000,
+    /** Injected so the checks can run with stand-in documents that aren't full clips. */
+    private check: (document: ClipDocument) => unknown = validate,
   ) {
     this.document = initial.document;
     this.manifest = initial.manifest;
@@ -122,6 +142,36 @@ export class DocumentSession {
     this.document = next;
     this.manifest = manifest;
     this.changed();
+  }
+
+  /**
+   * Queue a write. `build` gets the document (and library) as they are when the write runs, never
+   * a copy read before an `await`, so writes started close together all land, in order. If the
+   * document changes while `build` is awaiting (Undo, an Assistant version), `build` runs again on
+   * the new one rather than overwriting it. The result is validated before it is committed: the
+   * server refuses an invalid document, and autosave would then fail on every later edit.
+   * Rejects with the write's own error; later writes still run.
+   */
+  transact(
+    build: (latest: ClipDocument, manifest: unknown) => Built | Promise<Built>,
+    options: TransactOptions = {},
+  ): Promise<ClipDocument> {
+    const write = this.queue.then(async () => {
+      for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+        const latest = this.document;
+        const latestManifest = this.manifest;
+        const built = await build(latest, latestManifest);
+        if (this.document !== latest || this.manifest !== latestManifest) continue;
+        const next: { document: ClipDocument; manifest?: unknown } = "stage" in built ? { document: built } : built;
+        this.check(next.document);
+        const manifest = "manifest" in next ? { manifest: next.manifest } : "manifest" in options ? { manifest: options.manifest } : {};
+        this.commit(next.document, { history: options.history, ...manifest });
+        return this.document;
+      }
+      throw new Error("The clip changed while this edit was being applied. Try again.");
+    });
+    this.queue = write.catch(() => {});
+    return write;
   }
 
   undo(): void {

@@ -214,6 +214,77 @@ async function main(): Promise<void> {
     assert.equal(session.getState().status, "saved");
   }
 
+  // Queued writes: two fired in the same tick both land, in order, the second on the first's result.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    const width = (document: ClipDocument) => (document.stage.children[0] as { width: number }).width;
+    const seen: number[] = [];
+    const first = session.transact(async (latest) => {
+      await wait(10);
+      seen.push(width(latest));
+      return doc(width(latest) + 1);
+    });
+    const second = session.transact((latest) => {
+      seen.push(width(latest));
+      return doc(width(latest) + 1);
+    });
+    await Promise.all([first, second]);
+    assert.deepEqual(seen, [1080, 1081]);
+    assert.equal(width(session.current), 1082);
+    session.undo();
+    assert.equal(width(session.current), 1081, "each write is its own undo step");
+  }
+
+  // A throwing write rejects alone; the next one still runs. A no-op write adds no undo step.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    const failed = session.transact(() => {
+      throw new Error("bad op");
+    });
+    const next = session.transact(() => doc(5));
+    await assert.rejects(failed, /bad op/);
+    await next;
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 5);
+    session.undo();
+    assert.equal(session.getState().canUndo, false);
+    await session.transact((latest) => latest);
+    assert.equal(session.getState().canUndo, false, "unchanged document is not an undo step");
+    await session.transact((latest) => ({ document: latest, manifest: { assets: [1] } }), { history: false });
+    assert.deepEqual(session.currentManifest, { assets: [1] });
+    assert.equal(session.getState().canUndo, false);
+  }
+
+  // The document changes while a write is awaiting (Undo): the write is rebuilt on the new one.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    session.commit(doc(1));
+    let runs = 0;
+    const write = session.transact(async (latest) => {
+      runs++;
+      await wait(10);
+      return doc((latest.stage.children[0] as { width: number }).width + 100);
+    });
+    await wait(2); // the build is now awaiting
+    session.undo();
+    await write;
+    assert.equal(runs, 2);
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1180, "built on the undone document");
+  }
+
+  // An invalid result is refused and leaves the document alone.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, (document) => {
+      if ((document.stage.children[0] as { width: number }).width < 0) throw new Error("invalid");
+    });
+    await assert.rejects(session.transact(() => doc(-1)), /invalid/);
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080);
+    assert.equal(session.getState().canUndo, false);
+  }
+
   // Lỗi mạng: giữ bản trong tab, lượt sửa sau thử lại.
   {
     let fail = true;

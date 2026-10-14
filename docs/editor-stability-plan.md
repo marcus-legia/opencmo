@@ -46,7 +46,7 @@ re-locate it by the code, not the line number.
 Fixes review issues #1 (undo wiped by every Assistant edit) and #2 (edits silently dropped / lost
 updates). This track has the biggest user impact. Do it in order.
 
-- [ ] **A1. Serialized write queue in `DocumentSession`.**
+- [x] **A1. Serialized write queue in `DocumentSession`.**
   Add `transact(build, options)` to `apps/web/lib/editor/session.ts`:
   - `build(latest: ClipDocument)` returns either ops (applied with `applyOps` + `validate`) or a
     finished document. It always receives the document **as it is when the write runs**, never a
@@ -94,6 +94,8 @@ Ask the Assistant for an edit, then Ctrl+Z: the edit is undone and saved; Ctrl+S
 Import a file while a voiceover is attaching: both survive.
 
 **Notes (A):**
+
+- A1: `transact(build, options)` keeps editor-core out of `session.ts`; callers run `applyOps` inside `build`, the session validates. Undo/redo/rebase stay synchronous; a write whose document changed while `build` awaited is rebuilt on the new one (max 3 tries).
 
 ---
 
