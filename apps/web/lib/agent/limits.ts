@@ -23,11 +23,20 @@ export const AGENT_3D_HOLD_CREDITS = 20;
 export const AGENT_AUTO_HOLD_CAP = 60;
 
 /**
- * Thời gian tối đa của MỘT request HTTP (không phải của lượt — lượt không có
- * trần bước, spec agent-editor §3.5). Dưới `maxDuration` của route (300s) một
- * khoảng đủ để tạm dừng gọn; tab gọi nối tiếp ngay sau đó.
+ * Longest a single HTTP request may run (the turn itself has no time limit). It stays far enough
+ * under the route's `maxDuration` (300 s) to pause cleanly; the tab continues right after.
  */
 export const MAX_REQUEST_MS = 240_000;
+
+/**
+ * Model steps in one request before it pauses (`awaiting_continue`, 'steps') and the tab continues.
+ * Credits and time already bound a turn; this also bounds a request whose steps are cheap and fast,
+ * so a looping model surfaces between requests instead of spinning inside one.
+ */
+export const MAX_STEPS = 40;
+
+/** The same tool call (same name and input) failing this many times in a row stops repeating it. */
+export const MAX_REPEATED_FAILURES = 3;
 
 /**
  * A plan that runs its own model calls (the /video director, the intro team) takes up to about three

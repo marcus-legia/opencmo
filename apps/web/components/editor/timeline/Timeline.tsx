@@ -69,8 +69,9 @@ export type TimelineProps = {
 };
 
 type Gesture =
-  | { kind: "move"; ids: string[]; x: number; y: number; edges: number[]; moved: boolean; op: unknown | null; row: string | null }
-  | { kind: "trim"; id: string; edge: "in" | "out"; x: number; from: number; moved: boolean; op: unknown | null }
+  // `snap`: snap targets, computed once at gesture start — the committed document doesn't change mid-drag.
+  | { kind: "move"; ids: string[]; x: number; y: number; edges: number[]; snap: number[]; moved: boolean; op: unknown | null; row: string | null }
+  | { kind: "trim"; id: string; edge: "in" | "out"; x: number; from: number; snap: number[]; moved: boolean; op: unknown | null }
   | { kind: "slip"; id: string; x: number; moved: boolean; op: unknown | null }
   | { kind: "marker"; id: string; x: number; from: number; moved: boolean; op: unknown | null }
   | { kind: "keyframe"; id: string; x: number; frame: number; origin: number; rate: number; moved: boolean; op: unknown | null }
@@ -192,20 +193,43 @@ export function Timeline(props: TimelineProps) {
 
   // ------------------------------------------------------------ cử chỉ
 
-  const preview = useCallback(
+  // Every pointermove used to run a full `applyOps`. Now the latest op waits for the next animation
+  // frame (latest wins), and a result that lands after a newer preview started or after release is
+  // dropped, so it can't overwrite a fresher preview or leave a ghost behind.
+  const previewSeq = useRef(0);
+  const previewFrame = useRef(0);
+  const runPreview = useCallback(
     async (op: unknown) => {
+      const seq = ++previewSeq.current;
       try {
         const applied = await applyOps(props.base(), [op], props.context());
-        props.onPreview(applied.document);
+        if (seq === previewSeq.current && gesture.current) props.onPreview(applied.document);
       } catch {
-        // Bước trung gian không hợp lệ (vd kéo qua mép): giữ bản xem trước cũ.
+        // An invalid intermediate step (e.g. dragged past an edge): keep the previous preview.
       }
     },
     [props],
   );
+  const runPreviewRef = useRef(runPreview);
+  runPreviewRef.current = runPreview;
+  const schedulePreview = useCallback(() => {
+    if (previewFrame.current) return;
+    previewFrame.current = requestAnimationFrame(() => {
+      previewFrame.current = 0;
+      const g = gesture.current;
+      const op = g && "op" in g ? g.op : null;
+      if (op) void runPreviewRef.current(op);
+    });
+  }, []);
+  const stopPreviews = useCallback(() => {
+    cancelAnimationFrame(previewFrame.current);
+    previewFrame.current = 0;
+    previewSeq.current++;
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(previewFrame.current), []);
 
-  const targets = useCallback(
-    (moving: Entity[]) => {
+  const gestureTargets = useCallback(
+    (moving: Entity[]): number[] => {
       const extra = [0, props.frame];
       if (workarea) extra.push(Math.round(workarea[0] * FPS), Math.round(workarea[1] * FPS));
       const committed = timesOf(props.base(), { media });
@@ -234,7 +258,7 @@ export function Timeline(props: TimelineProps) {
           if (frame >= t.start && frame <= t.end) extra.push(frame);
         }
       }
-      return { list: snapTargets(committed, nodes, extra), committed, lookup };
+      return snapTargets(committed, nodes, extra);
     },
     [media, props, workarea],
   );
@@ -265,17 +289,14 @@ export function Timeline(props: TimelineProps) {
       // Snap tắt: ngưỡng 0, chỉ dính khi trùng đúng khung.
       const threshold = snapOn.current ? SNAP_PX / ppf : 0;
       if (g.kind === "move") {
-        const { list } = targets(g.ids.map((id) => byId.get(id)).filter(Boolean) as Entity[]);
-        const snap = snapDelta(g.edges, frames, list, threshold);
+        const snap = snapDelta(g.edges, frames, g.snap, threshold);
         setSnapAt(snap?.at ?? null);
         g.op = { op: "move_elements", element_ids: g.ids, by: (snap?.delta ?? frames) / FPS };
         g.row = rowFor(g.ids, event.clientY);
         setRowTarget(g.row);
       } else if (g.kind === "trim") {
-        const entity = byId.get(g.id);
-        const { list } = targets(entity ? [entity] : []);
         const wanted = g.from + frames;
-        const snapped = snapFrame(wanted, list, threshold);
+        const snapped = snapFrame(wanted, g.snap, threshold);
         setSnapAt(snapped);
         g.op = { op: "trim_element", element_id: g.id, edge: g.edge, at: Math.max(0, snapped ?? wanted) / FPS };
       } else if (g.kind === "marker") {
@@ -298,15 +319,16 @@ export function Timeline(props: TimelineProps) {
         if (range[1] - range[0] < 1) return;
         g.op = { op: "set_workarea", start: range[0] / FPS, end: range[1] / FPS };
       }
-      if (g.op) void preview(g.op);
+      if (g.op) schedulePreview();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [byId, frameAt, ppf, preview, props, targets],
+    [byId, frameAt, ppf, schedulePreview, props],
   );
 
   const onUp = useCallback(async () => {
     const g = gesture.current;
     gesture.current = null;
+    stopPreviews();
     setSnapAt(null);
     setDrop(null);
     setRowTarget(null);
@@ -339,7 +361,7 @@ export function Timeline(props: TimelineProps) {
     }
     if (g.moved && g.op) await props.run([g.op]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props]);
+  }, [props, stopPreviews]);
 
   // Listener gắn vào window sống qua nhiều lượt render (bản xem trước vẽ lại
   // timeline mỗi bước kéo): nó gọi bản MỚI NHẤT của hai hàm qua ref, và gỡ
@@ -460,7 +482,8 @@ export function Timeline(props: TimelineProps) {
       const t = byId.get(item) ? times.get(byId.get(item) as unknown as ClipNode) : undefined;
       return t ? [t.start, t.end] : [];
     });
-    begin({ kind: "move", ids: moving, x: event.clientX, y: event.clientY, edges, moved: false, op: null, row: null }, event);
+    const snap = gestureTargets(moving.map((item) => byId.get(item)).filter(Boolean) as Entity[]);
+    begin({ kind: "move", ids: moving, x: event.clientX, y: event.clientY, edges, snap, moved: false, op: null, row: null }, event);
   };
 
   const onBarDown = (entity: Entity, t: TimeNode, event: React.PointerEvent) => {
@@ -470,11 +493,11 @@ export function Timeline(props: TimelineProps) {
     const trimmable = entity.kind !== "sequence";
     if (trimmable && local <= HANDLE_PX && box.width > HANDLE_PX * 3) {
       select(entity.id, event);
-      return begin({ kind: "trim", id: entity.id, edge: "in", x: event.clientX, from: t.start, moved: false, op: null }, event);
+      return begin({ kind: "trim", id: entity.id, edge: "in", x: event.clientX, from: t.start, snap: gestureTargets([entity]), moved: false, op: null }, event);
     }
     if (trimmable && local >= box.width - HANDLE_PX && box.width > HANDLE_PX * 3) {
       select(entity.id, event);
-      return begin({ kind: "trim", id: entity.id, edge: "out", x: event.clientX, from: t.end, moved: false, op: null }, event);
+      return begin({ kind: "trim", id: entity.id, edge: "out", x: event.clientX, from: t.end, snap: gestureTargets([entity]), moved: false, op: null }, event);
     }
     // Alt+kéo thân clip có nguồn (học Palmier §B5): slip — đổi đoạn footage, giữ chỗ trên timeline.
     if (event.altKey && (entity.kind === "video" || entity.kind === "audio") && entity.src !== "assets/master.mp4") {

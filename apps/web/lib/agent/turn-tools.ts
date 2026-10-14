@@ -95,6 +95,7 @@ async function undoTurn({ supabase, clipId, turnId }: Env): Promise<ToolOutcome>
     content: JSON.stringify({ ok: true, changed: true, version: saved.version, message: "Back to how the clip was before this request." }),
     summary: "Undid this request's changes",
     version: saved.version,
+    documentHash: saved.document_hash,
   };
 }
 

@@ -3,28 +3,45 @@ import { clipContext } from "@/lib/api/clips";
 import { notFound, rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@opencmo/clip-doc";
 
+import { EDITED_AFTER_MESSAGE, unchangedSince, writtenVersions, type ToolCallRow, type Written } from "@/lib/agent/undo-guard";
 import { readEditorProject, type EditorProjectRow } from "@/lib/editor/apply";
 import { projectDocument, saveDocument } from "@/lib/editor/document";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Đưa MỘT clip về một checkpoint. Bản hiện tại được chụp thành checkpoint
- * trước — "Undo" nhầm thì lấy lại từ Version history. Lưu document của
- * checkpoint với version vừa đọc: tab nào đang mở clip này nhận 409
- * ở lượt autosave kế tiếp và tải lại, như mọi lượt ghi từ nơi khác.
- */
-async function restoreClip(supabase: SupabaseClient, clipId: string, revisionId: string, number: number): Promise<EditorProjectRow> {
+/** Finished tool calls of a turn, for the versions it wrote. */
+async function turnCalls(supabase: SupabaseClient, turnId: string): Promise<ToolCallRow[]> {
+  const { data } = await supabase.from("agent_tool_calls").select("name, result").eq("turn_id", turnId).eq("status", "done");
+  return (data ?? []) as ToolCallRow[];
+}
+
+async function revisionDocument(supabase: SupabaseClient, revisionId: string) {
   const { data: revision } = await supabase
     .from("editor_revisions")
     .select("document")
     .eq("id", revisionId)
     .maybeSingle();
   if (!revision) throw notFound("That version is no longer available.");
-  const saved = revision as { document: unknown };
-  const document = projectDocument(saved);
+  return projectDocument(revision as { document: unknown });
+}
+
+/**
+ * Puts ONE clip back to a checkpoint. The current version is checkpointed first, so a mistaken Undo
+ * can be recovered from Version history. The checkpoint's document is saved against the version
+ * just read: any tab with this clip open gets a 409 on its next autosave and reloads, like after
+ * any write from elsewhere.
+ */
+async function restoreClip(
+  supabase: SupabaseClient,
+  clipId: string,
+  revisionId: string,
+  number: number,
+  check: (project: EditorProjectRow) => Promise<boolean>,
+): Promise<EditorProjectRow> {
+  const document = await revisionDocument(supabase, revisionId);
   const project = await readEditorProject(supabase, clipId);
   if (canonicalJson(project.document) === canonicalJson(document)) return project;
+  if (!(await check(project))) throw new ApiError(409, EDITED_AFTER_MESSAGE);
   await rpcOrThrow(supabase, "checkpoint_editor_project", {
     p_clip_id: clipId,
     p_kind: "manual",
@@ -34,15 +51,15 @@ async function restoreClip(supabase: SupabaseClient, clipId: string, revisionId:
 }
 
 /**
- * Undo một lượt Assistant: đưa (các) clip về checkpoint chụp TRƯỚC lượt ghi
- * đầu tiên của lượt đó trên từng clip (spec §5).
+ * Undoes one Assistant turn: puts the clip(s) back to the checkpoint taken BEFORE the turn's first
+ * write on each clip (spec §5).
  *
- * - Phiên clip: một checkpoint, của lượt (`agent_turns.checkpoint_id`).
- * - Phiên project: checkpoint từng clip nằm trong kết quả `apply_to_clips`;
- *   clip nào được đổi nhiều lần trong lượt thì lấy checkpoint ĐẦU TIÊN.
+ * - Clip chat: one checkpoint, the turn's (`agent_turns.checkpoint_id`).
+ * - Project chat: each clip's checkpoint is in the `apply_to_clips` results; a clip changed several
+ *   times in the turn uses its FIRST checkpoint.
  *
- * Chỉ lượt ghi mới nhất chưa hoàn tác: checkpoint là bản trước lượt đó, undo
- * một lượt cũ hơn là xoá luôn các lượt sau nó.
+ * Only the newest turn not yet undone: its checkpoint predates it, so undoing an older turn would
+ * also erase the turns after it. A clip the user edited after the turn is refused, not restored.
  */
 export const POST = withApi({}, async ({ supabase, params }) => {
   const number = Number(params.number);
@@ -80,38 +97,53 @@ export const POST = withApi({}, async ({ supabase, params }) => {
     .limit(1);
   if (newer?.length) throw new ApiError(409, "Undo the newer requests first.");
 
+  // The oldest newer turn that wrote (already undone, checked above): its undo is where the clip stands now.
+  const { data: nextRow } = await supabase
+    .from("agent_turns")
+    .select("id")
+    .eq("session_id", params.id)
+    .gt("number", number)
+    .not("checkpoint_id", "is", null)
+    .order("number", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const next = nextRow as { id: string } | null;
+  const written = writtenVersions(await turnCalls(supabase, row.id), session.clip_id);
+
   if (session.clip_id) {
-    await clipContext(supabase, session.clip_id);
-    const project = await restoreClip(supabase, session.clip_id, row.checkpoint_id, number);
+    const clipId = session.clip_id;
+    await clipContext(supabase, clipId);
+    const nextCheckpoint = next ? await turnCheckpoint(supabase, next.id) : undefined;
+    const later = next
+      ? {
+          written: writtenVersions(await turnCalls(supabase, next.id), clipId).get(clipId),
+          checkpoint: nextCheckpoint ? () => revisionDocument(supabase, nextCheckpoint) : undefined,
+        }
+      : null;
+    const project = await restoreClip(supabase, clipId, row.checkpoint_id, number, (current) => unchangedSince(current, written.get(clipId), later));
     await rpcOrThrow(supabase, "agent_mark_undone", { p_turn_id: row.id });
     return {
       project: { clip_id: project.clip_id, document: project.document, document_hash: project.document_hash, version: project.version },
     };
   }
 
-  // Phiên project: checkpoint ĐẦU TIÊN của từng clip trong lượt.
-  const { data: calls } = await supabase
-    .from("agent_tool_calls")
-    .select("result, created_at")
-    .eq("turn_id", row.id)
-    .eq("name", "apply_to_clips")
-    .order("created_at", { ascending: true });
-  const firstCheckpoint = new Map<string, string>();
-  for (const call of (calls ?? []) as { result: { clips?: { clip_id: string; checkpoint_id?: string }[] } | null }[]) {
-    for (const clip of call.result?.clips ?? []) {
-      if (clip.checkpoint_id && !firstCheckpoint.has(clip.clip_id)) firstCheckpoint.set(clip.clip_id, clip.checkpoint_id);
-    }
-  }
+  // Project chat: each clip's FIRST checkpoint in the turn.
+  const firstCheckpoint = await projectCheckpoints(supabase, row.id);
+  const nextCheckpoints = next ? await projectCheckpoints(supabase, next.id) : new Map<string, string>();
+  const nextWritten = next ? writtenVersions(await turnCalls(supabase, next.id), null) : new Map<string, Written>();
 
   const clips: { clip_id: string; ok: boolean; error?: string }[] = [];
   for (const [clipId, revisionId] of firstCheckpoint) {
     try {
       await clipContext(supabase, clipId);
-      await restoreClip(supabase, clipId, revisionId, number);
+      // A newer turn that never touched this clip leaves it where this turn left it.
+      const nextCheckpoint = nextCheckpoints.get(clipId);
+      const later = nextCheckpoint ? { written: nextWritten.get(clipId), checkpoint: () => revisionDocument(supabase, nextCheckpoint) } : null;
+      await restoreClip(supabase, clipId, revisionId, number, (current) => unchangedSince(current, written.get(clipId), later));
       clips.push({ clip_id: clipId, ok: true });
     } catch (err) {
       clips.push({ clip_id: clipId, ok: false, error: err instanceof ApiError ? err.message : "This clip could not be restored." });
-      if (!(err instanceof ApiError)) console.error("[agent] undo clip lỗi", err);
+      if (!(err instanceof ApiError)) console.error("[agent] undo clip failed", err);
     }
   }
   if (clips.length && clips.every((clip) => !clip.ok)) {
@@ -120,3 +152,26 @@ export const POST = withApi({}, async ({ supabase, params }) => {
   await rpcOrThrow(supabase, "agent_mark_undone", { p_turn_id: row.id });
   return { clips };
 });
+
+/** Each clip's FIRST checkpoint in a project-chat turn, from its `apply_to_clips` results. */
+async function projectCheckpoints(supabase: SupabaseClient, turnId: string): Promise<Map<string, string>> {
+  const { data: calls } = await supabase
+    .from("agent_tool_calls")
+    .select("result, created_at")
+    .eq("turn_id", turnId)
+    .eq("name", "apply_to_clips")
+    .order("created_at", { ascending: true });
+  const first = new Map<string, string>();
+  for (const call of (calls ?? []) as { result: { clips?: { clip_id: string; checkpoint_id?: string }[] } | null }[]) {
+    for (const clip of call.result?.clips ?? []) {
+      if (clip.checkpoint_id && !first.has(clip.clip_id)) first.set(clip.clip_id, clip.checkpoint_id);
+    }
+  }
+  return first;
+}
+
+/** The checkpoint a clip-chat turn took before its first write. */
+async function turnCheckpoint(supabase: SupabaseClient, turnId: string): Promise<string | undefined> {
+  const { data } = await supabase.from("agent_turns").select("checkpoint_id").eq("id", turnId).maybeSingle();
+  return (data as { checkpoint_id: string | null } | null)?.checkpoint_id ?? undefined;
+}

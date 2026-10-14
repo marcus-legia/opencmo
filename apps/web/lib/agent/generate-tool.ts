@@ -556,6 +556,7 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
       }),
       summary: `Started ${NOUN[prepared.model.kind]} (${credits})`,
       version: applied.version,
+      documentHash: applied.documentHash,
     },
   };
 }

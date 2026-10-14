@@ -549,6 +549,8 @@ export type ToolOutcome = {
   summary: string;
   /** Version mới khi tool ghi thành công và document đổi. */
   version?: number;
+  /** The saved document's fingerprint alongside `version`; library-only saves keep it. */
+  documentHash?: string;
   /** Dữ liệu cho UI (plan, câu hỏi) — không gửi model. */
   view?: Record<string, unknown>;
 };
@@ -987,6 +989,7 @@ async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string): Promise
     content: JSON.stringify({ ok: true, changed: applied.changed, version: applied.version, summary: result?.summary, ...(delta ? { delta } : {}) }),
     summary: result?.summary ?? describeOp(op),
     version: applied.changed ? applied.version : undefined,
+    documentHash: applied.changed ? applied.documentHash : undefined,
     // Editor nháy các lớp vừa đổi trên timeline (§A6).
     ...(touched.length ? { view: { touched: touched.slice(0, 60) } } : {}),
   };

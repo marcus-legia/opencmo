@@ -16,14 +16,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
-import { DocumentInvalidError, validate, type ClipDocument } from "@opencmo/clip-doc";
+import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
 import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import type { RenderTask } from "@/lib/api/tasks";
-import { DocumentSession, SaveConflict, type SaveTransport } from "@/lib/editor/session";
+import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
 
 import { fitCamera, renderScale, zoomAt, type Camera, type Size } from "./camera";
 import { FrameBar } from "./FrameBar";
@@ -198,13 +198,15 @@ function Workspace({
   useEffect(() => {
     media.setManifest(state.manifest as Manifest);
     let live = true;
-    void Promise.all([loadFonts(), media.preload(doc)]).then(() => {
+    // The committed document, not the drag preview: a preview only moves or trims what is already
+    // loaded, and re-running preload on every pointermove was wasted work.
+    void Promise.all([loadFonts(), media.preload(state.document)]).then(() => {
       if (live) setLoaded(true);
     });
     return () => {
       live = false;
     };
-  }, [media, state.manifest, doc]);
+  }, [media, state.manifest, state.document]);
 
   // Camera: vừa khung cho tới khi người dùng tự zoom/kéo.
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
@@ -234,17 +236,18 @@ function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, media, scale, loaded, generation]);
 
-  // Khung nhỏ (≤ 256 px) của playhead cho scopes ở tab Adjust (E3) — cùng renderer với preview.
+  // A small (≤ 256 px) frame at the playhead for the Adjust tab scopes (E3). Built from the committed
+  // document: only the main renderer follows a drag preview, so the scopes catch up on release.
   const sampleRenderer = useMemo(() => {
     if (!loaded || typeof OffscreenCanvas === "undefined") return null;
     try {
-      const probe = activeScene(doc) as unknown as { width: number; height: number };
-      return createRenderer(doc, media, { scale: 256 / Math.max(probe.width, probe.height) });
+      const probe = activeScene(state.document) as unknown as { width: number; height: number };
+      return createRenderer(state.document, media, { scale: 256 / Math.max(probe.width, probe.height) });
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, media, loaded, generation]);
+  }, [state.document, media, loaded, generation]);
   const sampleFrame = useCallback(
     (at: number): ImageData | null => {
       if (!sampleRenderer) return null;
@@ -259,12 +262,14 @@ function Workspace({
     [sampleRenderer],
   );
 
-  // Scene cấp stage khác (công cụ Scene): vẽ cạnh scene đang mở, ở khung đầu
-  // (hay playhead đã lưu) của chúng. Bấm tên một scene để mở nó.
+  // Other stage-level scenes (Scene tool), drawn beside the open one at their first frame (or saved
+  // playhead); click a scene's name to open it. Built from the committed document so a drag preview
+  // doesn't rebuild one renderer per scene on every step.
   const otherScenes = useMemo(() => {
     if (!loaded) return [];
-    const active = activeScene(doc) as unknown as { id?: string; x?: number; y?: number };
-    return doc.stage.children
+    const committed = state.document;
+    const active = activeScene(committed) as unknown as { id?: string; x?: number; y?: number };
+    return committed.stage.children
       .filter((node) => node.kind === "scene" && node !== (active as unknown))
       .flatMap((node) => {
         const scene = node as unknown as { id?: string; x?: number; y?: number; playhead?: number; name?: string; width: number; height: number };
@@ -276,7 +281,7 @@ function Workspace({
               name: scene.name ?? "Scene",
               width: scene.width,
               height: scene.height,
-              renderer: createRenderer(doc, media, { scale, scene: scene.id }),
+              renderer: createRenderer(committed, media, { scale, scene: scene.id }),
               frame: Math.round((scene.playhead ?? 0) * 30),
               dx: (scene.x ?? 0) - (active.x ?? 0),
               dy: (scene.y ?? 0) - (active.y ?? 0),
@@ -287,7 +292,7 @@ function Workspace({
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, media, scale, loaded, generation]);
+  }, [state.document, media, scale, loaded, generation]);
 
   const sceneWidth = renderer?.scene.width ?? 0;
   const sceneHeight = renderer?.scene.height ?? 0;
@@ -390,21 +395,18 @@ function Workspace({
     }),
     [clipId, editorMedia, viewport, media],
   );
+  // Edits are queued in the session, never dropped: `busy` only drives the spinner and buttons.
+  const running = useRef(0);
   const run = useCallback(
-    async (ops: unknown[], options: { history?: boolean } = {}): Promise<ClipDocument | null> => {
-      if (busy) return null;
+    async (ops: unknown[], options: TransactOptions = {}): Promise<ClipDocument | null> => {
+      running.current++;
       setBusy(true);
       setNotice(null);
-      // Ghi thật thay mọi bản xem trước (kéo trên canvas có thể kết thúc bằng op khác bản xem).
+      // The real write replaces every preview (a canvas drag may end with a different op than it previewed).
       previewSeq.current++;
       setPreview(null);
       try {
-        const applied = await applyOps(session.current, ops, opContext());
-        // The server refuses an invalid document, and autosave would then fail on every later edit:
-        // refuse the change here instead.
-        validate(applied.document);
-        session.commit(applied.document, options);
-        return applied.document;
+        return await session.transact(async (latest) => (await applyOps(latest, ops, opContext())).document, options);
       } catch (error) {
         if (error instanceof DocumentInvalidError) {
           console.error("[editor] op produced an invalid document", ops, error);
@@ -414,10 +416,11 @@ function Workspace({
         setNotice((error as Error).message || "This change could not be applied.");
         return null;
       } finally {
-        setBusy(false);
+        running.current--;
+        setBusy(running.current > 0);
       }
     },
-    [busy, opContext, session],
+    [opContext, session],
   );
 
   const library = useLibrary({

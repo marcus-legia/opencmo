@@ -4,6 +4,7 @@
  * timeline bằng `adelay`, đổi âm lượng theo từng khung qua `asendcmd`.
  */
 
+import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
 import type { AudioClip } from '@opencmo/clip-render';
 
 export type MixInput = { file: string; seek: number; duration: number };
@@ -33,8 +34,6 @@ function tempo(rate: number): string[] {
   if (Math.abs(left - 1) > 1e-9) out.push(`atempo=${left.toFixed(6)}`);
   return out;
 }
-
-const FPS = 30;
 
 /**
  * Khử ồn giọng nói (học Palmier §C7) cho node có `denoise` 0…1: cắt rền dưới 80 Hz rồi

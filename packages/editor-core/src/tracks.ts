@@ -9,13 +9,12 @@
  * b-roll là mười hàng, không gom lại được (UAT 09/10/2026).
  */
 
-import type { ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
 import { clone, isMaster, isMasterSound, sceneOf, type Entity } from './doc';
 import type { OpContext } from './ops/context';
 import { nextName, timesOf } from './ops/timeline';
 
-const FPS = 30;
 /** Chồng ở đầu tới ngần này frame thì dời clip mới cho khít, không mở hàng mới. */
 const NUDGE = 2;
 

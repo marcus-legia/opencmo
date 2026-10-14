@@ -38,7 +38,14 @@ export function dbWorkspace(
     async apply(ops) {
       const applied = await applyToClip(supabase, context, clipId, ops, { checkpoint: checkpoint.take() });
       if (applied.checkpoint) await checkpoint.mark(applied.checkpoint.id);
-      return { changed: applied.changed, version: applied.project.version, results: applied.results, before: applied.before, after: applied.project.document };
+      return {
+        changed: applied.changed,
+        version: applied.project.version,
+        documentHash: applied.project.document_hash,
+        results: applied.results,
+        before: applied.before,
+        after: applied.project.document,
+      };
     },
   };
 }

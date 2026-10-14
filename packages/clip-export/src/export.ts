@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
 
-import type { ClipDocument } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument } from '@opencmo/clip-doc';
 import { createRenderer, mediaSources, parseCube, type MediaHost } from '@opencmo/clip-render';
 
 import { planMix } from './audio.ts';
@@ -102,8 +102,8 @@ export async function exportJob(raw: unknown, log: (line: string) => void = () =
   if (range.frames <= 0) throw new Error('scene không có khung nào để xuất');
 
   // Số khung/giây của bản xuất (E2-b): scene mang `fps`, vắng = 30. Tiếng tính theo lưới 30 như cũ.
-  const fps = (planner.scene as { fps?: number }).fps ?? 30;
-  const outFrames = Math.max(1, Math.round((range.frames * fps) / 30));
+  const fps = (planner.scene as { fps?: number }).fps ?? FPS;
+  const outFrames = Math.max(1, Math.round((range.frames * fps) / FPS));
 
   const gains: number[][] = [];
   for (let i = 0; i < range.frames; i++) gains.push(planner.gains(range.start + i));
@@ -174,7 +174,7 @@ export async function exportJob(raw: unknown, log: (line: string) => void = () =
     args.push(
       '-c:v', 'copy',
       '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
-      '-t', (range.frames / 30).toFixed(6),
+      '-t', (range.frames / FPS).toFixed(6),
       '-movflags', '+faststart',
       job.out,
     );

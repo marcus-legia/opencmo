@@ -96,6 +96,19 @@ async function main(): Promise<void> {
     assert.deepEqual(t.calls, [{ version: 1, width: 7 }]);
   }
 
+  // Bookkeeping after a user edit (voiceover sync): undo takes back the user's edit, redo brings
+  // back the state with the bookkeeping in it.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    session.commit(doc(1));
+    await session.transact(() => doc(2), { history: false, origin: "system" });
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080);
+    session.redo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 2);
+  }
+
   // Manifest lưu cùng lượt với document, nhưng Undo không lùi nó.
   {
     const sent: unknown[] = [];
@@ -212,6 +225,157 @@ async function main(): Promise<void> {
     await session.flush();
     assert.deepEqual(t.calls, [{ version: 3, width: 1 }, { version: 4, width: 500 }]);
     assert.equal(session.getState().status, "saved");
+  }
+
+  // The Assistant's version is one Undo step: undo saves the tab's document on the new version,
+  // redo brings the Assistant's back, the library never goes back.
+  {
+    const sent: { version: number; width: number; manifest: unknown }[] = [];
+    const t: SaveTransport = {
+      save: async (expected, document, manifest) => {
+        sent.push({ version: expected, width: (document.stage.children[0] as { width: number }).width, manifest });
+        return { version: expected + 1, document_hash: `h${expected + 1}` };
+      },
+    };
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1", manifest: { assets: [] } }, t, 5);
+    session.commit(doc(1));
+    await session.flush();
+    session.rebase(doc(500), 5, "h5");
+    assert.equal(session.getState().canUndo, true);
+    session.commit(session.current, { manifest: { assets: [{ id: "new" }] }, history: false });
+    await session.flush();
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1, "back to the tab's document");
+    assert.deepEqual(session.currentManifest, { assets: [{ id: "new" }] }, "Undo doesn't take the library back");
+    assert.equal(session.getState().status, "pending");
+    await session.flush();
+    assert.deepEqual(sent.at(-1), { version: 6, width: 1, manifest: { assets: [{ id: "new" }] } }, "saved on the new version");
+    session.redo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 500);
+    await session.flush();
+    assert.equal(sent.at(-1)?.width, 500);
+    session.undo();
+    session.undo();
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080, "earlier steps survive the rebase");
+    // The same document again is not a step.
+    const steps = new DocumentSession({ document: doc(7), version: 1, documentHash: "h1" }, t, 5);
+    steps.rebase(doc(7), 2, "h2");
+    assert.equal(steps.getState().canUndo, false);
+    // `adopt` (conflict, reset) still starts over.
+    session.adopt(doc(9), 20, "h20");
+    assert.equal(session.getState().canUndo, false);
+    assert.equal(session.getState().canRedo, false);
+  }
+
+  // One Assistant turn is one Undo step, however many versions it saves.
+  {
+    const t = transport();
+    const width = (session: DocumentSession) => (session.current.stage.children[0] as { width: number }).width;
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5);
+    session.commit(doc(1));
+    session.rebase(doc(2), 3, "h3", "turn-1");
+    session.rebase(doc(3), 4, "h4", "turn-1");
+    session.commit(session.current, { manifest: { assets: [{ id: "landed" }] }, history: false });
+    session.rebase(doc(4), 5, "h5", "turn-1");
+    session.undo();
+    assert.equal(width(session), 1, "one Ctrl+Z undoes the whole turn, library saves in between included");
+    session.redo();
+    assert.equal(width(session), 4, "redo brings the turn's last version back");
+
+    // A user edit in the middle of a turn splits it: the edit stays its own step.
+    session.commit(doc(5));
+    session.rebase(doc(6), 7, "h7", "turn-2");
+    session.commit(doc(7));
+    session.rebase(doc(8), 9, "h9", "turn-2");
+    session.undo();
+    assert.equal(width(session), 7, "the turn's version after the edit is its own step");
+    session.undo();
+    assert.equal(width(session), 6);
+    session.undo();
+    assert.equal(width(session), 5, "the turn's first version is a separate step");
+
+    // A different turn (or no group, like the panel's turn Undo) is a new step.
+    const next = new DocumentSession({ document: doc(10), version: 1, documentHash: "h1" }, t, 5);
+    next.rebase(doc(11), 2, "h2", "turn-1");
+    next.rebase(doc(12), 3, "h3", "turn-2");
+    next.rebase(doc(13), 4, "h4");
+    next.undo();
+    assert.equal(width(next), 12);
+    next.undo();
+    assert.equal(width(next), 11);
+    next.undo();
+    assert.equal(width(next), 10);
+  }
+
+  // Queued writes: two fired in the same tick both land, in order, the second on the first's result.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    const width = (document: ClipDocument) => (document.stage.children[0] as { width: number }).width;
+    const seen: number[] = [];
+    const first = session.transact(async (latest) => {
+      await wait(10);
+      seen.push(width(latest));
+      return doc(width(latest) + 1);
+    });
+    const second = session.transact((latest) => {
+      seen.push(width(latest));
+      return doc(width(latest) + 1);
+    });
+    await Promise.all([first, second]);
+    assert.deepEqual(seen, [1080, 1081]);
+    assert.equal(width(session.current), 1082);
+    session.undo();
+    assert.equal(width(session.current), 1081, "each write is its own undo step");
+  }
+
+  // A throwing write rejects alone; the next one still runs. A no-op write adds no undo step.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    const failed = session.transact(() => {
+      throw new Error("bad op");
+    });
+    const next = session.transact(() => doc(5));
+    await assert.rejects(failed, /bad op/);
+    await next;
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 5);
+    session.undo();
+    assert.equal(session.getState().canUndo, false);
+    await session.transact((latest) => latest);
+    assert.equal(session.getState().canUndo, false, "unchanged document is not an undo step");
+    await session.transact((latest) => ({ document: latest, manifest: { assets: [1] } }), { history: false });
+    assert.deepEqual(session.currentManifest, { assets: [1] });
+    assert.equal(session.getState().canUndo, false);
+  }
+
+  // The document changes while a write is awaiting (Undo): the write is rebuilt on the new one.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, () => {});
+    session.commit(doc(1));
+    let runs = 0;
+    const write = session.transact(async (latest) => {
+      runs++;
+      await wait(10);
+      return doc((latest.stage.children[0] as { width: number }).width + 100);
+    });
+    await wait(2); // the build is now awaiting
+    session.undo();
+    await write;
+    assert.equal(runs, 2);
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1180, "built on the undone document");
+  }
+
+  // An invalid result is refused and leaves the document alone.
+  {
+    const t = transport();
+    const session = new DocumentSession({ document: doc(1080), version: 1, documentHash: "h1" }, t, 5, (document) => {
+      if ((document.stage.children[0] as { width: number }).width < 0) throw new Error("invalid");
+    });
+    await assert.rejects(session.transact(() => doc(-1)), /invalid/);
+    assert.equal((session.current.stage.children[0] as { width: number }).width, 1080);
+    assert.equal(session.getState().canUndo, false);
   }
 
   // Lỗi mạng: giữ bản trong tab, lượt sửa sau thử lại.

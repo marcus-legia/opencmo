@@ -17,7 +17,7 @@
 
 import { z } from 'zod';
 
-import type { ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
 import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, writeCaptionState } from '../captions';
 import { clone, isMasterSound, sceneOf, type Entity } from '../doc';
@@ -25,7 +25,6 @@ import { keptRanges } from '../transcript';
 import { OpFailure, type OpContext } from './context';
 import { nodeById, parentOrigin, placeOf, timesOf } from './timeline';
 
-const FPS = 30;
 const elementId = z.string().min(1).max(64);
 const seconds = (frames: number): number => Math.round((frames / FPS) * 1e4) / 1e4;
 const AUDIBLE = new Set(['video', 'audio']);

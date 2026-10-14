@@ -13,13 +13,12 @@
 
 import { z } from 'zod';
 
-import { TRACK_PROPERTIES, type ClipDocument } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, TRACK_PROPERTIES, type ClipDocument } from '@opencmo/clip-doc';
 
 import { assign, byId, clone, copyOf, type Entity } from '../doc';
 import { OpFailure } from './context';
 import { checked } from './project';
 
-const FPS = 30;
 const elementId = z.string().min(1).max(64);
 
 /**

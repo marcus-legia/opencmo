@@ -52,6 +52,12 @@ export type Action = {
   running?: boolean;
 };
 
+/**
+ * A request paused at its time or step limit: the tab continues it at once, nobody is asked.
+ * ('budget' waits for the user to extend.)
+ */
+export const continuesOnItsOwn = (reason: string | null | undefined): boolean => reason === "time" || reason === "steps";
+
 /** Một lượt như server trả (`agent_turns` + hành động + tool đang chờ). */
 export type TurnView = {
   number: number;
@@ -59,7 +65,7 @@ export type TurnView = {
   prompt: string;
   reply: string;
   status: TurnStatus;
-  /** `awaiting_continue`: 'time' (tab tự nối) hay 'budget' (người dùng gia hạn). */
+  /** `awaiting_continue`: 'time' / 'steps' (the tab continues on its own) or 'budget' (the user extends). */
   pause_reason?: string | null;
   error: string | null;
   credits: number | null;
@@ -111,6 +117,13 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export class AssistantClient {
+  /**
+   * Undo group of the turn in progress: every version a turn saves, across its continue / approve /
+   * tool-result requests, folds into one Ctrl+Z step. A new prompt starts a new group.
+   */
+  private group: string | null = null;
+  private turns = 0;
+
   constructor(
     private clipId: string,
     private session: DocumentSession,
@@ -140,7 +153,10 @@ export class AssistantClient {
     return call<{ stopped: boolean }>(`sessions/${sessionId}/stop`, { method: "POST" });
   }
 
-  /** Undo một lượt: server đưa project về checkpoint trước lượt; tab nhận bản đó. */
+  /**
+   * Undo a turn: the server puts the project back to the checkpoint before it and the tab takes
+   * that version. Like every rebased version, it is one Ctrl+Z step in the editor.
+   */
   async undo(sessionId: string, number: number): Promise<void> {
     await this.session.flush();
     const { project } = await call<{ project: { document: ClipDocument; version: number; document_hash?: string | null } }>(
@@ -154,6 +170,7 @@ export class AssistantClient {
   /** Gửi câu lệnh. Bài đang dở lên server TRƯỚC: Assistant đọc bản server giữ. */
   async turn(sessionId: string, prompt: string, attachments: Attachments | undefined, onEvent: (event: AssistantEvent) => void) {
     await this.session.flush();
+    this.group = `turn-${++this.turns}`;
     await this.stream(`sessions/${sessionId}/turns`, { prompt, attachments }, onEvent);
   }
 
@@ -183,7 +200,9 @@ export class AssistantClient {
     const latest = (await response.json().catch(() => null)) as { document: ClipDocument; version: number; document_hash?: string | null } | null;
     if (!latest) return;
     // Not `adopt`: the tab's own library changes made during the turn still have to be saved.
-    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null);
+    // A turn resumed after a reload has no group yet: it starts one here.
+    this.group ??= `turn-${++this.turns}`;
+    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null, this.group);
   }
 
   /** POST rồi đọc stream tới hết. Lỗi trước khi stream mở (thiếu credit…) ném câu của server. */

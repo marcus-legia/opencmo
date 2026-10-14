@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import type { ClipDocument, ClipNode } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
 import { byId, clone, isMaster, walk, type Entity } from '../doc';
 import { mergeLayout, readLayout, writeLayout, MIN_RANGE } from '../layout';
@@ -18,7 +18,6 @@ import { OpFailure, type OpContext } from './context';
 import { checked } from './project';
 import { timesOf } from './timeline';
 
-const FPS = 30;
 const elementId = z.string().min(1).max(64);
 /** Track hình học bị bỏ khi xếp vào ô: bố cục là hộp tĩnh, như Palmier bỏ position/scale track. */
 const PLACEMENT = new Set(['x', 'y', 'width', 'height', 'scale', 'scaleX', 'scaleY', 'rotation', 'offsetX', 'offsetY']);

@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import { CAPTION_PRESETS, DocumentSchema, type AssetDeclaration, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
+import { CAPTION_PRESETS, DocumentSchema, FRAME_RATE, type AssetDeclaration, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 import { FONTS as RENDER_FONTS, type FontFamily } from '@opencmo/clip-render';
 
 import { readCaptionStyle, writeCaptionStyle } from '../captions';
@@ -123,11 +123,11 @@ export const setProjectSettings = {
     }
     if (input.fps !== undefined) {
       const target = sceneOf(next) as unknown as Entity;
-      const current = (target.fps as number | undefined) ?? 30;
+      const current = (target.fps as number | undefined) ?? FRAME_RATE;
       if (current !== input.fps) {
         if (next === document) next = clone(document);
         const edited = sceneOf(next) as unknown as Entity;
-        if (input.fps === 30) delete edited.fps;
+        if (input.fps === FRAME_RATE) delete edited.fps;
         else edited.fps = input.fps;
       }
     }
