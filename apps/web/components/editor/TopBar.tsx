@@ -85,6 +85,9 @@ export function TopBar({
             ← Back
           </button>
         )}
+        <span className="beta-badge" title="The editor is in beta: some tools may not work as expected yet.">
+          Beta
+        </span>
         <span
           className="ed2-status"
           data-testid="save-status"
