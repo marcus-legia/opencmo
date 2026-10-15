@@ -122,7 +122,7 @@ describe('explainer timing and price', () => {
 		provider: 'opencmo-motion',
 		name: 'Explainer',
 		description: '',
-		price: { unit: 'second', credits: 0.1, voiceKchars: 5 },
+		price: { unit: 'explainer', credits: 1, voiceKchars: 5 },
 		limits: { maxPromptChars: 200, scene: true, aspectRatios: ['16:9', '9:16', '1:1'], durations: [15, 20, 25, 30], voices: ['Aria'] },
 	} as AiModel;
 
@@ -135,8 +135,12 @@ describe('explainer timing and price', () => {
 		expect(tooBig.error?.issues[0]?.message).toMatch(/too long/);
 	});
 
-	it('price: credits per second plus the voice per started 1,000 characters', () => {
-		// 20 s × 0.1 = 2, narration < 1,000 characters = 5.
+	it('price: credits per started 10 s plus the voice per started 1,000 characters', () => {
+		// 20 s = 2 started 10 s blocks, narration < 1,000 characters = 5.
 		expect(priceOf(model, spec('16:9', 20) as never)).toBe(7);
+		expect(priceOf(model, spec('16:9', 25) as never)).toBe(8);
+		// Narration counted in code points: 600 emoji are 600 characters, not 1,200 UTF-16 units.
+		const emoji = { ...spec('16:9', 20), scene: { ...spec('16:9', 20).scene, beats: [{ say: '😀'.repeat(240) }, { say: '😀'.repeat(240) }, { say: '😀'.repeat(119) }] } };
+		expect(priceOf(model, emoji as never)).toBe(7);
 	});
 });

@@ -32,7 +32,7 @@ export type AiModel = {
 	 * `voiceKchars`: credits per 1,000 narration characters added on top (explainers voice their own
 	 * script inside the render), rounded up per started 1,000 — same as `ai_price` (SQL).
 	 */
-	price: { unit: 'generation' | 'second' | 'kchars'; credits: number; resolution?: Record<string, number>; voiceKchars?: number };
+	price: { unit: 'generation' | 'second' | 'kchars' | 'explainer'; credits: number; resolution?: Record<string, number>; voiceKchars?: number };
 	limits: {
 		maxPromptChars: number;
 		aspectRatios?: string[];
@@ -198,12 +198,16 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 				return model.price.credits * Math.ceil(spec.duration ?? 1);
 			case 'kchars':
 				return model.price.credits * Math.max(1, Math.ceil(spec.prompt.trim().length / 1000));
+			case 'explainer':
+				// Integer credits per started 10 s: 0.1 per second rounds differently in JS, SQL and Python.
+				return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);
 		}
 	})();
 	const factor = (spec.resolution && model.price.resolution?.[spec.resolution]) || 1;
 	const scene = spec.scene as Partial<ExplainerScene> | undefined;
 	const voice = model.price.voiceKchars && Array.isArray(scene?.beats)
-		? model.price.voiceKchars * Math.max(1, Math.ceil(narrationOf(scene.beats).length / 1000))
+		// Code points, as SQL `length()` and Python `len()` count them.
+		? model.price.voiceKchars * Math.max(1, Math.ceil([...narrationOf(scene.beats)].length / 1000))
 		: 0;
 	return Math.ceil(base * factor) + voice;
 }
