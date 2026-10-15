@@ -255,7 +255,7 @@ probe task (`complete_media_probe`).
     - longer than 30 min;
     - over today's cap, summing `media_transcripts.seconds` for files transcribed automatically today.
   - pgTAP: cap reached → `skipped`, no task; no audio → `none`; idempotent on a repeated probe completion.
-- [ ] **A3. Worker: file transcripts.**
+- [x] **A3. Worker: file transcripts.**
   - `transcribe_media` with `payload.scope = 'file'`:
     - extract the whole audio with a streaming ffmpeg subprocess (never into Python memory);
     - `transcribe_audio` (Scribe, existing parallel parts);
@@ -265,18 +265,18 @@ probe task (`complete_media_probe`).
     when `OPENCMO_AI_FAKE=1` and not in production.
   - Engine tests for both scopes. Measure a 30-minute file with `/usr/bin/time -v` (peak RSS < 2 GB) and write the
     numbers in Notes.
-- [ ] **A4. Slicing and reuse.**
+- [x] **A4. Slicing and reuse.**
   - `use_media_transcript` slices to the window (contract) and stores it in `editor_transcripts`
     (content-addressed).
   - `request_media_captions` returns the existing transcript at 0 credits.
   - pgTAP for the slice (words at the edges, empty window) and for "no double charge".
-- [ ] **A5. Web read path.**
+- [x] **A5. Web read path.**
   - `apps/web/lib/editor/captions-run.ts` gains `useMediaTranscript(supabase, { clipId, mediaId, sourceIn, sourceOut })`.
     It is shared by the editor (Track B) and the Assistant (Track C), so they cannot diverge.
   - The captions route answers a GET for a library file's `transcript_status`.
   - The inspector's "Generate captions" shows "Free — transcript ready" when one exists.
   - `npm run check:contracts`.
-- [ ] **A6. Request to C:** document the free-transcript behaviour for the guide (what `pending` / `none` mean).
+- [x] **A6. Request to C:** document the free-transcript behaviour for the guide (what `pending` / `none` mean).
 
 **Checks:** `npm run db:reset && npm run db:test`; engine `pytest -q` + `ruff check .`; `npm run typecheck`;
 `npm run check:contracts --workspace @opencmo/web`; a local upload going `none → queued → ready`.
@@ -295,6 +295,32 @@ probe task (`complete_media_probe`).
     credits, so the inspector's existing polling works unchanged (no client change needed);
   - `use_media_transcript` with an empty slice returns `ready` with an empty transcript (no words in that window).
   - The cap counts seconds of `transcribe_asset` tasks queued/running/done since UTC midnight.
+- A3: `opencmo/worker/transcribe_asset_task.py` (kind `transcribe_asset`, `task-kinds.json`): whole-file audio
+  through the streaming `extract_audio`, `transcribe()` (Scribe), `complete_media_transcript`. No speech is an
+  empty transcript (`[]`), not a failure. The probe reports `has_audio` (video: ffprobe audio stream; sounds:
+  true; images, LUTs, Lottie: false). Tests: `tests/test_worker_transcribe_asset.py` (4) and a probe test for
+  `has_audio`; engine `pytest` + `ruff` green.
+  **Measured** (`/usr/bin/time -v`, real task code, only the Scribe call replaced): a 30-minute 720p file →
+  7.3 MB of audio in 14.3 s, **peak RSS 82 MB**. Scribe itself sends that audio in parallel parts (existing code).
+- A3, for C6 (fake transcriber): `tests/e2e_worker.py` replaces `transcribe_asset_task.transcribe`. For a library
+  file named `<name>` it reads **`apps/web/e2e/fixtures/<name>.transcript.json`** when it exists, in the editor's
+  transcript shape, file seconds:
+  `[{"text": "um so we built it", "words": [{"text": "um", "start": 0.4, "end": 0.6}, …]}, …]`.
+  Segments with no words are skipped. Without a sidecar it returns the existing library captions fixture. The
+  match is on `media_assets.name`, i.e. the uploaded file name.
+- A4: slicing is `slice_transcript` (SQL, words whose start is in `[in, out)`, file seconds; a cut segment keeps
+  its own words and its text is rebuilt from them), stored per clip by `store_transcript_slice`. Paid captions on
+  a transcribed file: 0 credits, task already `done` (pgTAP covers both).
+- A5: `lib/editor/captions-run.ts` gains `loadMediaTranscript` and `requestMediaTranscript` (not `use…`: the hooks
+  lint would read it as a React hook). Routes, as B asked:
+  - `GET /api/v1/editor/captions?media_ids=a,b,…` (≤ 50 uuids) → `{ media: [{ id, transcript_status }] }` under RLS;
+  - `POST /api/v1/editor/captions/transcript` `{clip_id, media_id, source_in, source_out}` → `use_media_transcript`
+    as is; `{media_id, request: true}` → `{ transcript_status }`.
+  `typecheck` and `check:contracts` green.
+  **Not run end to end here:** this cloud session could not pull the PostgREST image (Docker Hub 429, ghcr
+  forbidden), so the full stack (`npm run dev`) did not start. The SQL behind every route is covered by pgTAP, and
+  the worker by its tests. **For the owner:** `npm run dev`, upload a talking video into a New edit, and watch the
+  library row go `Transcribing…` → `Transcript ready` (no credits charged).
 
 ---
 
@@ -567,10 +593,10 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [x] (from C → owner B) Starter "Rough cut my video" in `components/editor/assistant/AssistantPanel.tsx`
   (`EXAMPLES`), shown when the clip has a speech source (`speechSources(document).length > 0`). It sends
   `/roughcut`; the slash command, guide and tool are in.
-- [ ] (from C → owner A) A3's fake-transcriber sidecar must cover the C6 fixture: a short talk with "um", a 2 s
+- [x] (from C → owner A) A3's fake-transcriber sidecar must cover the C6 fixture: a short talk with "um", a 2 s
   pause and a sentence said twice. Please name the fixture path and the sidecar format in Notes (A).
 - [x] (from C → owner B) B6's `data-testid`s on the library badge and the Transcript source picker, for C6.
-- [ ] (from B → owner A) Route shapes the editor (B4, `apps/web/lib/editor/media-transcript-client.ts`) calls; both
+- [x] (from B → owner A) Route shapes the editor (B4, `apps/web/lib/editor/media-transcript-client.ts`) calls; both
   under RLS, in `app/api/v1/editor/captions/**`:
   1. `GET /api/v1/editor/captions?media_ids=<uuid>,<uuid>…` (≤ 50 ids) →
      `{ "media": [{ "id": "<uuid>", "transcript_status": "none|queued|running|ready|failed|skipped" }] }`.
@@ -584,6 +610,12 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   "Generate captions" now does. Linked captions make that video a speech source, so the transcript tools can cut
   it. Also: if a captions layer already has `source` = that element (the hidden automatic one), unhide it with
   `update_element {props:{hidden:false}}` instead of charging for a new transcript.
+- [ ] (from A → owner C, A6) For the guide and the tools: a library video's transcript is automatic and free.
+  `loadMediaTranscript(supabase, { clipId, mediaId, sourceIn, sourceOut })` (`lib/editor/captions-run.ts`) gives
+  `ready` (with `src`), `pending` (being transcribed, about a minute: wait or retry, do not charge) or `none` (no
+  audio, over 30 min, over the daily cap, or failed). For `none`, `requestMediaTranscript(supabase, mediaId)` asks
+  again for free when the file is eligible; the paid `add_captions` stays for what remains, and it charges 0 for
+  a file that already has its transcript.
 
 ---
 

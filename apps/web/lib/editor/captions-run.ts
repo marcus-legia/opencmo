@@ -80,6 +80,30 @@ export async function translateCaptions(
   }
 }
 
+export type MediaTranscript = { status: "ready"; src: string; hash: string } | { status: "pending" } | { status: "none" };
+
+/**
+ * The file's automatic transcript for an element's window `[sourceIn, sourceOut)`, stored for this clip
+ * (`use_media_transcript`, file seconds). Free. Shared by the editor's route and the Assistant so the two
+ * cannot slice differently. `pending`: still being transcribed; `none`: no audio, skipped or failed.
+ */
+export function loadMediaTranscript(
+  supabase: SupabaseClient,
+  input: { clipId: string; mediaId: string; sourceIn: number; sourceOut?: number | null },
+): Promise<MediaTranscript> {
+  return rpcOrThrow<MediaTranscript>(supabase, "use_media_transcript", {
+    p_clip_id: input.clipId,
+    p_media_id: input.mediaId,
+    p_source_in: input.sourceIn,
+    p_source_out: input.sourceOut ?? null,
+  });
+}
+
+/** Asks for the free transcript of a file that has none yet; returns its new `transcript_status`. */
+export function requestMediaTranscript(supabase: SupabaseClient, mediaId: string): Promise<string> {
+  return rpcOrThrow<string>(supabase, "request_media_transcript", { p_media_id: mediaId });
+}
+
 /**
  * Tạo phụ đề cho một file thư viện rồi chờ worker (tối đa `waitMs`): trả `src` của
  * transcript, hoặc null nếu hết giờ chờ (task vẫn chạy; credit hoàn nếu nó hỏng).
