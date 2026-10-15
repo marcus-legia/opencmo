@@ -94,6 +94,15 @@ class TasksMixin(_Http):
         )
         return resp.json()
 
+    def complete_media_transcript(self, task_id: str, attempt_id: str | None, body: str, source: str) -> str | None:
+        """Store a file's transcript (`media_transcripts`) and finish the task in one transaction."""
+        resp = self._rpc(
+            "complete_media_transcript",
+            {"p_task_id": task_id, "p_attempt_id": attempt_id, "p_body": body, "p_source": source},
+            idempotent=True,
+        )
+        return resp.json()
+
     def fail_task(self, task_id: str, attempt_id: str | None, error: str) -> bool:
         """`error` hiện THẲNG trên màn hình người dùng — phải là tiếng Anh."""
         resp = self._rpc(
@@ -126,7 +135,9 @@ class TasksMixin(_Http):
         height: int | None,
         ok: bool,
         error: str | None = None,
+        has_audio: bool | None = None,
     ) -> bool:
+        """`has_audio`: a ready file with an audio stream is queued for its free transcript."""
         resp = self._rpc(
             "complete_media_probe",
             {
@@ -137,6 +148,7 @@ class TasksMixin(_Http):
                 "p_height": height,
                 "p_ok": ok,
                 "p_error": error,
+                "p_has_audio": has_audio,
             },
             idempotent=True,
         )

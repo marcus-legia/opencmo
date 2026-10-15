@@ -17,7 +17,7 @@ async function openEditor(page: Page) {
 
 const fieldValue = (page: Page, prop: string) => page.getByTestId(`ins-${prop}`).locator("input").inputValue();
 
-test("bố cục Three-Stack từ 3 lớp, PiP 4 góc", async ({ page }, testInfo) => {
+test("Three-Stack layout from 3 layers, PiP in 4 corners", async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.a);

@@ -123,7 +123,7 @@ def process(store: Any, task: Task) -> None:
             store.complete_media_probe(
                 task.asset_id, task.attempt_id,
                 duration=None if image else info.duration, width=info.width, height=info.height,
-                ok=True, error=None,
+                ok=True, error=None, has_audio=False if image else info.has_audio,
             )
         except TransientError:
             raise
@@ -158,7 +158,8 @@ def _probe_audio(store: Any, task: Task, object_name: str) -> None:
             if heartbeat.lost.is_set():
                 return
             store.complete_media_probe(
-                task.asset_id, task.attempt_id, duration=duration, width=None, height=None, ok=True, error=None
+                task.asset_id, task.attempt_id, duration=duration, width=None, height=None, ok=True, error=None,
+                has_audio=True,
             )
         except TransientError:
             raise

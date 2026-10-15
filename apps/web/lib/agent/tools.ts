@@ -23,6 +23,7 @@ import {
   MASTER_SRC,
   OP_INPUTS,
   OpError,
+  OpFailure,
   byId,
   checkDocument,
   describeOp,
@@ -35,6 +36,7 @@ import {
   quoteRange,
   readMarkers,
   searchSpoken,
+  speechElement,
   summarizeProject,
   cutPoints,
   walk,
@@ -47,7 +49,10 @@ import { ApiError } from "@/lib/api/errors";
 import { nodeFor } from "@/lib/editor/asset-node";
 
 import { GUIDE_NAMES, readGuide } from "./guides";
+import { FILLERS, bare, findRetakes } from "./retakes";
+import { noTranscript, sourceOf, speechCount } from "./speech";
 import type { AgentWorkspace } from "./workspace";
+import type { Image } from "./providers/types";
 
 /** Một tool ở dạng trung lập: provider nào cũng dựng tool definition của mình từ đây. */
 export type ToolSpec = {
@@ -117,12 +122,16 @@ export function spec(name: string, description: string, input: z.ZodType, extra:
 export const documentInput = z.object({
   node_id: z.string().max(64).optional().describe("Only this element and what is inside it. Omit for the whole project."),
 });
+/** Which video's words: the transcript tools take the same `element_id` as the cut ops. */
+export const transcriptInput = z.object({ element_id: speechElement });
 export const silencesInput = z.object({
+  element_id: speechElement,
   min_gap: z.number().min(0.1).max(10).optional().describe("Shortest pause to report, seconds. Default 0.5."),
   keep: z.number().min(0).max(2).optional().describe("Pause to leave in when cutting, seconds, split between both sides. Default 0.2."),
 });
 export const guideInput = z.object({ name: z.enum(GUIDE_NAMES) });
 export const searchInput = z.object({
+  element_id: speechElement,
   query: z.string().trim().min(1).max(120).describe('Words the speaker says, e.g. "late invoices". Case, accents and punctuation are ignored; the last word may be a prefix.'),
   limit: z.number().int().min(1).max(40).optional(),
 });
@@ -235,8 +244,8 @@ const READ_TOOLS: ToolSpec[] = [
   ),
   spec(
     "get_transcript",
-    "Read the clip's transcript as caption lines of words with stable ids, source-time seconds, and whether each word is already cut from the video.",
-    z.object({}),
+    "Read a video's transcript as caption lines of words with stable ids, source-time seconds, and whether each word is already cut from the video. Pass element_id for a video other than the main one (<clip_context> speech_sources).",
+    transcriptInput,
   ),
   spec(
     "search_transcript",
@@ -246,12 +255,17 @@ const READ_TOOLS: ToolSpec[] = [
   spec(
     "find_filler_words",
     "List likely filler words (um, uh, erm, ...) and immediately repeated words, with ids. Suggestions only: check the context in get_transcript before removing.",
-    z.object({}),
+    transcriptInput,
   ),
   spec(
     "find_silences",
     "List pauses between spoken words (source seconds), with the words on each side and a suggested range to pass to remove_ranges that leaves a natural gap.",
     silencesInput,
+  ),
+  spec(
+    "find_retakes",
+    "List sentences the speaker said more than once within a minute (retakes and false starts), each with the last take to keep, the earlier takes as [first word id, last word id], and drop_word_ids to pass to remove_words. Suggestions only: a repetition can be deliberate, so read the lines in get_transcript before removing.",
+    transcriptInput,
   ),
   spec(
     "list_library",
@@ -336,7 +350,7 @@ const BROWSER_TOOLS: ToolSpec[] = [
 /** Mô tả op cho model. */
 const OP_DESCRIPTIONS: Record<string, string> = {
   remove_words:
-    "Cut words out of the video (and captions) by word id. Non-adjacent ids become separate cuts. Get ids from get_transcript or search_transcript. tightness also cuts the pauses around the removed words, leaving tight 0.06s / balanced 0.15s / loose 0.32s next to the words that stay — use balanced for fillers and stumbles so the sentence does not gap.",
+    "Cut words out of the video (and captions) by word id. Non-adjacent ids become separate cuts. Get ids from get_transcript or search_transcript. tightness also cuts the pauses around the removed words, leaving tight 0.06s / balanced 0.15s / loose 0.32s next to the words that stay — use balanced for fillers and stumbles so the sentence does not gap. element_id picks the video when the clip has several with speech (speech_sources in <clip_context>).",
   remove_silence:
     "Cut every pause longer than min_pause (default 0.5s) from the video in one step, leaving padding (default 0.15s) next to speech on each side; dead air at the very start and end of the clip is cut fully. Prefer it over many remove_ranges calls for general tightening.",
   remove_ranges:
@@ -488,11 +502,12 @@ export const TOOL_SPECS: ToolSpec[] = [
 export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "read_skill", "list_clips", "get_clip"]);
 
 /**
- * Tools that cut or read the clip's own video by its words. A blank New edit has no such video, so
- * they could only fail there; leaving them out keeps ~6k characters of schema out of every request.
- * A clip's kind never changes, so a session's tool list (the start of the prompt cache) holds.
+ * Tools that cut or read a video by its words. A blank New edit with no video that has a transcript
+ * could only fail with them; leaving them out keeps ~6k characters of schema out of every request.
+ * They come back once a video on it is transcribed: the tool list (the start of the prompt cache)
+ * changes once in that session, then holds.
  */
-export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
+export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "find_retakes", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
 
 /**
  * The verify gate: what the model is told when it tries to finish while the last <check> after its
@@ -536,7 +551,7 @@ export function readGroup<T extends { name: string }>(calls: T[], index: number)
   return group;
 }
 
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };
@@ -553,10 +568,10 @@ export type ToolOutcome = {
   documentHash?: string;
   /** Dữ liệu cho UI (plan, câu hỏi) — không gửi model. */
   view?: Record<string, unknown>;
+  /** Images the model sees with the result (a server-rendered preview); not stored in the tool row. */
+  images?: Image[];
 };
 
-const FILLERS = new Set(["um", "umm", "uh", "uhh", "uhm", "erm", "er", "ah", "hmm", "mm", "mhm"]);
-const bare = (text: string): string => text.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
 
 /**
  * Dữ liệu từ người dùng (transcript, chữ trên video) đi vào tool_result trong
@@ -672,16 +687,30 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
   }
 
   const ctx = await workspace.opContext(document, snapshot.manifest);
-  const model = await loadCaptions(document, ctx);
-  if (!model) return { ok: true, content: JSON.stringify({ captions: null }), summary: "No captions on this clip" };
+  const asked = transcriptInput.safeParse(input ?? {});
+  if (!asked.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: asked.error.issues[0]?.message }), summary: "Could not read the transcript" };
+  const elementId = asked.data.element_id;
+  let model: Awaited<ReturnType<typeof loadCaptions>>;
+  try {
+    model = await loadCaptions(document, ctx, elementId);
+  } catch (err) {
+    // A video on the timeline without a transcript yet: say whether it is coming, not "no such video".
+    const missing = elementId && err instanceof OpFailure ? await noTranscript(document, snapshot.manifest, workspace.transcriptStatus, elementId) : null;
+    if (missing) return missing;
+    throw err;
+  }
+  if (!model) return (await noTranscript(document, snapshot.manifest, workspace.transcriptStatus))!;
+  // Results name the video they read, so a clip with several speakers' videos stays unambiguous.
+  const source = sourceOf(document, elementId);
+  const of = source && speechCount(document) > 1 ? ` of ${source.name}` : "";
 
   if (name === "find_silences") {
     const options = silencesInput.parse(input ?? {});
     const silences = findSilences(model, { minGap: options.min_gap, keep: options.keep });
     return {
       ok: true,
-      content: JSON.stringify({ window: model.window, silences }),
-      summary: silences.length ? `Found ${silences.length} ${silences.length === 1 ? "pause" : "pauses"}` : "No long pauses",
+      content: JSON.stringify({ source, window: model.window, silences }),
+      summary: silences.length ? `Found ${silences.length} ${silences.length === 1 ? "pause" : "pauses"}${of}` : `No long pauses${of}`,
     };
   }
 
@@ -702,13 +731,22 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
     const hits = searchSpoken(model.transcript as Transcript, { window: model.window, removed }, parsed.data.query, parsed.data.limit ?? 20);
     return {
       ok: true,
-      content: asData({ query: parsed.data.query, hits }),
-      summary: hits.length ? `Found "${parsed.data.query}" ${hits.length} ${hits.length === 1 ? "time" : "times"}` : `"${parsed.data.query}" is not said`,
+      content: asData({ source, query: parsed.data.query, hits }),
+      summary: hits.length ? `Found "${parsed.data.query}" ${hits.length} ${hits.length === 1 ? "time" : "times"}${of}` : `"${parsed.data.query}" is not said${of}`,
     };
   }
 
   if (name === "get_transcript") {
-    return { ok: true, content: asData({ window: model.window, cuts: removed, lines }), summary: "Read the transcript" };
+    return { ok: true, content: asData({ source, window: model.window, cuts: removed, lines }), summary: `Read the transcript${of}` };
+  }
+
+  if (name === "find_retakes") {
+    const retakes = findRetakes(model.transcript as Transcript, (word) => isRemoved(word, removed));
+    return {
+      ok: true,
+      content: asData({ source, retakes }),
+      summary: retakes.length ? `Found ${retakes.length} repeated ${retakes.length === 1 ? "sentence" : "sentences"}${of}` : `No retakes found${of}`,
+    };
   }
 
   // find_filler_words
@@ -723,12 +761,12 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
   });
   return {
     ok: true,
-    content: asData({ suggestions: hits }),
-    summary: hits.length ? `Found ${hits.length} possible filler ${hits.length === 1 ? "word" : "words"}` : "No filler words found",
+    content: asData({ source, suggestions: hits }),
+    summary: hits.length ? `Found ${hits.length} possible filler ${hits.length === 1 ? "word" : "words"}${of}` : `No filler words found${of}`,
   };
 }
 
-const READS = new Set(["get_project_state", "get_document", "get_transcript", "search_transcript", "find_filler_words", "find_silences", "list_library", "check"]);
+const READS = new Set(["get_project_state", "get_document", "get_transcript", "search_transcript", "find_filler_words", "find_silences", "find_retakes", "list_library", "check"]);
 
 /** Op timeline/inspector chạm vào thời gian của video chính thì phá mốc cắt và phụ đề. */
 const TIMING_PROPS = ["start", "end", "sourceIn", "sourceOut", "playbackRate", "src"];
@@ -999,7 +1037,8 @@ function toolFailure(name: string, err: unknown): ToolOutcome {
   if (err instanceof ApiError && err.status < 500) {
     return { ok: false, content: JSON.stringify({ error: err.message }), summary: err.message };
   }
-  if (err instanceof OpError) return { ok: false, content: JSON.stringify({ error: err.message }), summary: err.message };
+  // OpFailure: a read tool's own refusal ("several videos with speech: pass element_id").
+  if (err instanceof OpError || err instanceof OpFailure) return { ok: false, content: JSON.stringify({ error: err.message }), summary: err.message };
   console.error(`[agent] tool ${name} lỗi`, err);
   return {
     ok: false,

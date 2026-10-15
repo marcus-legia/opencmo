@@ -387,6 +387,33 @@ describe('tiếng', () => {
     expect(b).toBe(0);
     expect(c).toBeCloseTo(10 ** (6 / 20), 5);
   });
+
+  it('marks the joins of a cut for a short fade; the outer edges and other sequences keep their sound', () => {
+    const media: MediaHost = { ...NO_MEDIA, duration: () => 10 };
+    const cut = { 'text-cut': { transcript: 't.json', window: { start: 0, end: 6 }, removed: [{ start: 1, end: 2 }] } };
+    const renderer = createRenderer(
+      project([
+        {
+          kind: 'sequence',
+          marks: cut,
+          children: [
+            { kind: 'video', src: 'v.mp4', start: 0, sourceIn: 0, sourceOut: 1 },
+            { kind: 'video', src: 'v.mp4', start: 1, sourceIn: 2, sourceOut: 4 },
+            { kind: 'video', src: 'v.mp4', start: 3, sourceIn: 4, sourceOut: 6 },
+          ],
+        },
+        { kind: 'sequence', children: [{ kind: 'audio', end: 2, src: 'a.mp3' }, { kind: 'audio', start: 2, end: 4, src: 'b.mp3' }] },
+      ]),
+      media,
+    );
+    expect(renderer.audio.map((clip) => [clip.src, clip.fadeIn ?? false, clip.fadeOut ?? false])).toEqual([
+      ['v.mp4', false, true],
+      ['v.mp4', true, true],
+      ['v.mp4', true, false],
+      ['a.mp3', false, false],
+      ['b.mp3', false, false],
+    ]);
+  });
 });
 
 describe('layout (hộp cho canvas và op hình học)', () => {

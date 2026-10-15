@@ -101,7 +101,7 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 
 - Presets: classic (one word highlighted at a time, clean), spotlight (bold, colored active word), stark (white boxed), cascade, whisper, paper, guinea. For talking heads on TikTok/Reels, spotlight or classic read best.
 - set_caption_style {preset, colors, color?, font?, weight?}: applies to EVERY caption layer of the clip (video and voiceover captions share one style). colors are up to 3 hex values; the preset decides what each color does (usually highlight). color = the main text color, font = one of the editor fonts, weight 100-900; null resets to the preset, leaving a field out keeps it.
-- Captions for OTHER media (B-roll, an uploaded talk, a song): add_captions {element_id} transcribes what that element plays (1 credit/min, user approves). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
+- Captions for OTHER media (B-roll, an uploaded talk, a song): uploads are transcribed automatically for free, and a video's transcript is a hidden captions layer linked to it: show it with set_props {hidden: false}. add_captions {element_id} covers the rest (free when the file is already transcribed, otherwise 1 credit/min; the user approves the price). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
 - highlight: "block" (box behind the spoken word) or "pop" (the spoken word grows and turns yellow) with set_props on the captions element; censor: true masks swear words on screen (the transcript keeps them).
 - Fix misheard words with edit_words; split long lines with split_line and join short ones with merge_lines.
 - Keep captions off faces: they sit at the bottom by default; move them with set_props on the captions element (verticalAlign, offsetY).
@@ -158,6 +158,34 @@ A straight cut changes picture and sound on the same frame; at a jump between tw
 - J-cut (seconds < 0): the next sentence starts under the end of the previous shot, then the picture follows. Use it to lead into a new point or a reaction.
 - 0.3-0.8 s is natural; more than 1.5 s sounds like a mistake. Use it on a few key cuts, not every cut.
 - get_project_state lists cut_points with the roll each already has. Capture a frame on each side of the cut and listen (media_waveform) to check the overlap does not land in the middle of a word.`,
+
+  roughcut: `# Rough cut (/roughcut): a self-recorded talk, tightened
+
+The user recorded themselves and wants the mistakes out: retakes, false starts, filler and dead air. Keep their words; remove only what a viewer would not miss. When in doubt, keep: a repeat left in costs a second pass, a lost sentence costs the video.
+
+## 1. Look, in ONE step
+get_transcript, find_filler_words, find_silences, find_retakes, then one capture contact sheet (count 6). When <clip_context> lists several speech_sources, pass the element_id of the video to cut to every read and every cut (ask which one if the user did not say). Uploaded videos are transcribed automatically and for free, usually within a minute; the editor links the transcript as a hidden captions layer. If a video is still transcribing, say so and wait (wait_for_media) or ask the user to try again in a minute; never pay for it. If it has no transcript at all (no audio, longer than 30 minutes, or over today's free minutes), offer add_captions, which costs nothing when the file already has its transcript.
+
+## 2. Propose in 4-8 sentences, then wait
+Say what goes and what stays, with counts and seconds:
+- goes: earlier takes of a repeated sentence and false starts (keep the LAST take, it is usually the one the speaker meant), filler sounds (um, uh), pauses over about 0.6 s;
+- stays: laughs, a pause after a question or before a punchline, the call to action, "like"/"so"/"you know" when they carry meaning;
+- the length now and the estimated length after.
+End with "Shall I cut it?" and wait for the user's go, unless they already said to just do it. Never cut more than about a fifth of the clip without saying so in the plan.
+
+## 3. Cut, in this order, one call each
+1. Retakes and false starts: ONE remove_words with the drop_word_ids of every retake you agree with. Read each pair in the transcript first: a deliberate repetition ("again: ship it") stays.
+2. Fillers: ONE remove_words with the true fillers, tightness "balanced".
+3. Silences: remove_silence {min_pause: 0.6, padding: 0.15}, which leaves about 0.3 s. Never leave less than 0.25 s; never cut inside a word.
+Each call is one Undo step; the user can undo the whole request in one click.
+
+## 4. Verify before you report
+- get_transcript again: every kept sentence still reads from start to end, and no word is cut in half.
+- capture at 3-6 of the cut edges: the speaker does not jump mid-gesture in a way that looks like an error.
+- Report the length before and after and what was removed (how many takes, fillers, pauses), in two or three sentences.
+
+## 5. Captions last
+Style or add captions only after the cutting is finished; a later cut moves every caption.`,
 
   color: `# Color grading
 
@@ -258,6 +286,76 @@ Fix and preview again — up to 3 rounds — until there are no errors and no la
 ## 4. Add it
 add_3d_scene { title, code (exactly what you last previewed), quote, theme? }. Duration comes from the quote (3-10 s); use the same duration in preview_3d. The video always takes the shape of the area it fills, so preview in that shape: full screen = clip_context.frame (a 16:9 clip is landscape); the panel of a split = 1:1 or 4:5.
 After it renders (about half a minute) capture a frame in its middle to confirm it sits well on the clip.`,
+
+  explainer: `# Animated explainers (/explain → preview_explainer → add_explainer)
+
+An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene: a navy field of glowing dots, lines, grids and short labels that keeps transforming, each beat changing what is already on screen. It renders as one video layer with its own voice (credits after the user approves).
+
+## 1. The script first — show it and ask
+Write the beats in your reply and ask "Shall I make it?" before writing any code. Wait for the user's go.
+- Pick one structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
+- Beat 1 is the hook: the surprising question or fact, never "In this video…".
+- Each beat: say = 6-20 words of narration (about 4 s); label = the main words on screen, at most 5 words. 4-12 beats.
+- Each beat transforms the picture: a dot becomes a line, noise is filtered to peaks, a grid gets a match. No slideshow of separate pictures.
+- Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
+- Colour has meaning and the kit applies it: signal = gold, answer = teal (the brand accent), wrong = red, noise = grey.
+
+## 2. The code
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Title, Label, … } = kit;
+- R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
+- Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed) or the seeded data helpers; time comes from the frame.
+- Positions are pixels of the composition (1920×1080, 1080×1920 or 1080×1080); times are FRAMES (30 fps), taken from the timing helpers. Every component takes at (enter frame), dur, exitAt and exitDur; before at and after its exit it renders nothing.
+Layout
+- <Stage grid?> — the navy field (gradient, drifting grid, bloom, vignette). Wrap the whole scene in it.
+- <Camera keys={[{ at, focus: [x, y], zoom, dur? }]}> — slow push-ins and pans of what is inside. Keep text OUTSIDE the Camera.
+- kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (bottom 17% kept for captions). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
+Text (at most 5 words)
+- <Title text kicker? y? size?> — big serif headline.
+- <Label text x? y? area? anchor? size? color? swapTo? swapAt? strikeAt?> — the main words; swapTo replaces the text at swapAt; strikeAt strikes it through in red.
+- <Mono …same> — data text such as "f1 | f2 | gap", typed in. <Counter to from? x? y? size? prefix? suffix? decimals?> — a number counting up.
+Data and marks
+- <DotField count? seed? area? layout="scatter|grid|cluster" points? size? glow? filterAt? threshold? morphTo? morphAt?> — up to 4000 glowing dots; filterAt fades dim dots to noise and flares bright ones (≥ threshold); morphTo (normalised points) flies them there from morphAt.
+- <Spectrogram data={kit.spectrogram(seed, { cols, rows, peaks })} area? peaksAt? constellationAt?> — a time × pitch heat map; data.peaks[i].x/y are normalised: kit.place(area, [p.x, p.y]).
+- <Waveform area? seed? noise? cleanAt? amp?> — audio bars; noise mixes in grey noise, cleanAt removes it.
+- <Axes area x? y?>, <Scatter area points={[{ x, y }]} highlight? highlightAt?>, <FitLine area from={[u, v]} to={[u, v]}> — one plot, data units 0..1 with y up, the same area for all three; kit.trend(seed, { n, slope, spread }) gives points.
+- <Link from={[x, y]} to={[x, y]} curve? dashed? dots? width?> (pixels) — a line that draws itself. <Box area | x y w h label? dashed?> — a highlighted region. <Check x y size kind="check|cross">. <Icon name x y size> with name in kit.icons: mic, music, phone, search, database, wave, bolt, user, lock, server, cloud, chart, clock, globe, key, play.
+Timing — never hard-code frames
+- kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word of beat i is spoken (the beat start when it is not there); kit.at(i, 0..1) → a frame part-way through beat i. Previews use estimated timings; the final render uses the real voice, so anything placed with these lands on the narration in both.
+Motion and colour
+- kit.enter(frame, { at, dur, ease }) → 0..1, kit.stagger(i, { at, each }), kit.morph(a, b, t), kit.lerp. kit.ease.out, kit.ease.hero, kit.ease.inOut, kit.ease.linear; nothing bounces.
+- Colours by name (color="answer"): signal gold (what we follow), answer teal (the result; the brand accent replaces it), wrong red, noise grey-blue, text, dim, field. Never pick other colours.
+Do and don't
+- One continuous scene: transform what is on screen (swap a label, filter the dots, morph, push the camera) instead of cutting to something new. About one change per beat.
+- At most three things move at once; start the next only when the previous has landed.
+- One main label at a time, in the headline row (area('full').y + about 7%).
+- Hold the last state still for the final second.
+
+Example:
+const { Stage, Title, Label, DotField, Check } = kit;
+const b = kit.beat;
+const field = kit.area('full');
+return function Scene() {
+  return (
+    <Stage>
+      <Title text="Why most leads go cold" exitAt={kit.at(0, 0.6)} />
+      <DotField area={field} count={1200} seed={4} at={kit.at(0, 0.5)} filterAt={kit.cue(1, 'reply')} threshold={0.85} />
+      <Label text="Thousands of visitors" y={field.y + 60} at={b(1).from} swapTo="A few reply" swapAt={kit.cue(1, 'reply')} />
+      <Check x={kit.width / 2} y={kit.height * 0.45} at={b(2).from + 10} />
+    </Stage>
+  );
+};
+
+## 3. Preview and fix — required
+preview_explainer { title, beats, code, format } returns stills (beat midpoints and the last frame) and a layout report. Look at every still AND read the issues:
+- an error (phase compile/guard/render + message) → fix the code;
+- "overlaps" → move one label to another area or time;
+- "outside the safe area" → place it with kit.area;
+- "text under 36 px" → fewer words, bigger primitive;
+- "more than 85% empty" → the beat needs its picture.
+Check that each still reads at a glance on a phone. Fix and preview again — at most 3 rounds.
+
+## 4. Add it
+add_explainer { title, beats, code (exactly what you last previewed), format, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 

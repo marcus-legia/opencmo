@@ -22,10 +22,11 @@ import {
   walk,
   type CheckReport,
   type Entity,
+  type Transcript,
 } from "@opencmo/editor-core";
 
 import type { PreparedGeneration } from "../generate-tool";
-import { TRANSCRIPT } from "./fixture";
+import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
 
 export type Outcome = {
   document: ClipDocument;
@@ -48,6 +49,10 @@ export type EvalTask = {
   prompt: string;
   /** Sửa document mẫu trước khi chạy (cài sẵn lỗi cho bài "sửa lỗi"). */
   setup?: (document: ClipDocument) => void;
+  /** The clip's transcript when the task needs other words than the shared fixture's. */
+  transcript?: Transcript;
+  /** More transcripts by path, for videos the setup adds. */
+  transcripts?: Record<string, Transcript>;
   /** Câu trả lời khi agent hỏi (`ask_user`). */
   answer?: string;
   grade: (outcome: Outcome) => Grade;
@@ -102,7 +107,7 @@ function blankEdit(document: ClipDocument): void {
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
-  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene"].includes(call.name));
+  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer"].includes(call.name));
   const first = priced[0];
   if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
   const input = first!.input as { seconds?: number; aspect?: string };
@@ -130,6 +135,47 @@ const srcOf = (entity: Entity): string[] => [
 const masters = (document: ClipDocument) => all(document).filter((item) => item.tag === "video" && item.entity.src === MASTER_SRC);
 
 export const TASKS: EvalTask[] = [
+  {
+    id: "roughcut",
+    prompt: "/roughcut my talk. Just do it, no need to ask.",
+    transcript: ROUGHCUT_TRANSCRIPT,
+    grade(outcome) {
+      const notes: string[] = [];
+      const { window, removed } = state(outcome.document);
+      const line = (index: number) => ROUGHCUT_TRANSCRIPT[index]!.words;
+      const cut = (index: number) => line(index).every((word) => isRemoved(word, removed));
+      const kept = (index: number, skip = "") => line(index).filter((word) => word.text !== skip).every((word) => !isRemoved(word, removed));
+      const retakes = check(notes, cut(2) && cut(4), "the false start or the first take of the repeated sentence is still in");
+      const last = check(notes, kept(3) && kept(5), "a kept take lost words (keep the LAST take whole)");
+      const rest = check(notes, kept(0) && kept(6, "uh") && kept(7), "cut words of a sentence said only once");
+      const fillers = check(notes, cut(1) && line(6).filter((word) => word.text === "uh").every((word) => isRemoved(word, removed)), "um/uh still in the video");
+      const left = findSilences({ transcript: ROUGHCUT_TRANSCRIPT, window, removed }, { minGap: 1 });
+      const tight = check(notes, !left.length, `pauses left: ${left.map((item) => `${item.start}-${item.end}`).join(", ")}`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: retakes && last && rest && fillers && tight && clean, notes };
+    },
+  },
+  {
+    id: "second-video",
+    prompt: "Remove the filler words from the second video only. Leave the main video as it is.",
+    setup: addSecondTalk,
+    transcripts: { [SECOND_TALK.transcript]: SECOND_TRANSCRIPT },
+    grade(outcome) {
+      const notes: string[] = [];
+      const second = readCaptionState(outcome.document, SECOND_TALK.id);
+      const main = state(outcome.document);
+      if (!check(notes, Boolean(second), "the second video lost its transcript link")) return { pass: false, notes };
+      const fillers = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => /^(um|uh)$/.test(word.text));
+      const cut = check(notes, fillers.every((word) => isRemoved(word, second!.removed)), "um/uh still in the second video");
+      const kept = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => !/^(um|uh)$/.test(word.text));
+      const careful = check(notes, kept.every((word) => !isRemoved(word, second!.removed)), "cut words that are not fillers from the second video");
+      const untouched = check(notes, main.removed.length === 0, `the main video was cut too (${main.removed.length} ranges)`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: cut && careful && untouched && clean, notes };
+    },
+  },
   {
     id: "filler",
     prompt: "Remove the filler words.",
@@ -566,6 +612,50 @@ export const TASKS: EvalTask[] = [
       const noLoop = check(notes, tries <= 2, `create_video tried ${tries} times`);
       const told = check(notes, /new edit|\/broll|b-roll/i.test(outcome.reply ?? ""), `the user is not told what to do instead: ${(outcome.reply ?? "").slice(0, 200)}`);
       return { pass: placed && noLoop && told, notes };
+    },
+  },
+  // Explainers (docs/explainer-build.md): the script is shown and approved before any code or credit.
+  {
+    id: "explain-script",
+    prompt: "/explain How Shazam recognizes a song in a noisy bar",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const reply = outcome.reply ?? "";
+      const waited = check(notes, !outcome.tools.some((name) => ["preview_explainer", "add_explainer"].includes(name)), `tools before the user said go: ${outcome.tools.join(", ")}`);
+      const beats = reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
+      const scripted = check(notes, beats.length >= 3, `script has ${beats.length} beats: ${reply.slice(0, 300)}`);
+      const asked = check(notes, /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
+      return { pass: waited && scripted && asked, notes };
+    },
+  },
+  {
+    id: "explain-make",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. I trust your script, no need to show it: go ahead and make it.",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const previewed = outcome.tools.indexOf("preview_explainer");
+      const added = outcome.tools.lastIndexOf("add_explainer");
+      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
+      if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
+      const scene = gen!.spec.scene as { template?: string; code_ref?: string; beats?: { say: string; label?: string }[] } | undefined;
+      const ref = check(notes, scene?.template === "explainer" && /^[0-9a-f]{64}$/.test(scene.code_ref ?? ""), `scene: ${JSON.stringify(scene).slice(0, 200)}`);
+      const beats = scene?.beats ?? [];
+      const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+      const paced = check(notes, beats.length >= 3 && beats.every((beat) => words(beat.say) >= 4 && words(beat.say) <= 24), `beat lengths: ${beats.map((beat) => words(beat.say)).join(", ")}`);
+      const labels = check(notes, beats.every((beat) => !beat.label || words(beat.label) <= 5), "a label is longer than 5 words");
+      const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
+      const placed = check(
+        notes,
+        all(outcome.document).some((item) => ((item.entity.paints as { src?: { model?: string } }[] | undefined) ?? []).some((paint) => paint.src?.model === "motion-explainer")),
+        "the explainer is not on the clip",
+      );
+      // Not `sane`: a blank edit is exactly as long as its explainer, which may be under 21 s.
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: order && ref && paced && labels && shape && placed && clean, notes };
     },
   },
   {

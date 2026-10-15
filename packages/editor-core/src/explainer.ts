@@ -1,0 +1,70 @@
+/**
+ * The explainer's data shapes, shared by the op, the Assistant's tools and the generation spec
+ * check (`generate.ts`). No document code here: the light `./generate` entry imports it.
+ * Mirrors the contract in `docs/explainer-build.md` and `packages/clip-motion/src/job.ts`.
+ */
+
+import { z } from 'zod';
+
+export const EXPLAINER_MODEL = 'motion-explainer';
+
+/** Same frames as `FORMATS` in `packages/clip-motion/src/job.ts`. */
+export const EXPLAINER_FORMATS = { '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080] } as const;
+export type ExplainerFormat = keyof typeof EXPLAINER_FORMATS;
+
+/** Durations the model sells (`limits.durations`): 15–90 s in steps of 5. */
+export const EXPLAINER_MIN_SECONDS = 15;
+export const EXPLAINER_MAX_SECONDS = 90;
+/** SQL caps a generation's `scene` at 4000 bytes (`create_generation`). */
+export const EXPLAINER_SCENE_BYTES = 4000;
+
+/** `jsonb::text` of a JSON value: Postgres writes `": "` and `", "`, so it is longer than `JSON.stringify`. */
+function jsonbText(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map(jsonbText).join(', ')}]`;
+	if (value && typeof value === 'object') {
+		const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+		return `{${entries.map(([key, item]) => `${JSON.stringify(key)}: ${jsonbText(item)}`).join(', ')}}`;
+	}
+	return JSON.stringify(value);
+}
+
+/** Bytes of `scene` as SQL measures them (`octet_length((p_spec->'scene')::text)`). */
+export const sceneBytes = (scene: unknown): number => new TextEncoder().encode(jsonbText(scene)).length;
+
+export const ExplainerBeatSchema = z
+	.object({
+		say: z.string().trim().min(1).max(240),
+		label: z.string().trim().max(40).optional(),
+	})
+	.strict();
+export type ExplainerBeat = z.infer<typeof ExplainerBeatSchema>;
+
+/** The `scene` of a `motion-explainer` spec. The code itself lives in `scene_codes`, by hash. */
+export const ExplainerSceneSchema = z
+	.object({
+		template: z.literal('explainer'),
+		code_ref: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid scene code reference.'),
+		title: z.string().trim().min(1).max(60),
+		beats: z.array(ExplainerBeatSchema).min(3).max(16),
+		accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+	})
+	.strict();
+export type ExplainerScene = z.infer<typeof ExplainerSceneSchema>;
+
+/** The narration the voice reads: every beat's words, in order. */
+export const narrationOf = (beats: readonly ExplainerBeat[]): string => beats.map((beat) => beat.say.trim()).join(' ');
+
+const wordCount = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+
+/**
+ * Narration estimate, as `estimateDuration` in `packages/clip-motion/src/job.ts`: 2.4 words/s plus a
+ * 1.5 s tail, rounded up to 5 s. Not clamped: see `explainerSeconds`.
+ */
+export function estimateDuration(beats: readonly ExplainerBeat[]): number {
+	const seconds = wordCount(narrationOf(beats)) / 2.4 + 1.5;
+	return Math.ceil(seconds / 5) * 5;
+}
+
+/** Seconds of video the user pays for: the estimate, inside what the model sells. */
+export const explainerSeconds = (beats: readonly ExplainerBeat[]): number =>
+	Math.min(EXPLAINER_MAX_SECONDS, Math.max(EXPLAINER_MIN_SECONDS, estimateDuration(beats)));

@@ -145,6 +145,84 @@ async function main(): Promise<void> {
     assert.equal(checkErrorKeys(error).size, 1);
   }
 
+  // 7a. Rough cut: find_retakes is a parallel read that reads the clip's transcript, and /roughcut
+  // sends the model to its guide with the "ask before cutting" rule.
+  {
+    const { runTool } = await import("./tools");
+    const { memoryWorkspace } = await import("./workspace");
+    const { slashDirective } = await import("./slash");
+    const { readGuide } = await import("./guides");
+    const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, ROUGHCUT_TRANSCRIPT } = await import("./eval/fixture");
+    assert.ok(PARALLEL_SAFE.has("find_retakes"));
+    const workspace = memoryWorkspace(
+      { version: 1, document: fixtureDocument(), manifest: fixtureManifest() },
+      { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": ROUGHCUT_TRANSCRIPT }, master: FIXTURE_MASTER },
+    );
+    const found = await runTool("find_retakes", {}, { workspace });
+    assert.equal(found.ok, true, found.content);
+    const retakes = (JSON.parse(found.content) as { untrusted_data: { retakes: { drop_word_ids: string[]; text: string }[] } }).untrusted_data.retakes;
+    assert.equal(retakes.length, 2, found.content);
+    assert.match(retakes[0]!.text, /answer every question/);
+    assert.match(retakes[1]!.text, /every day for a month/);
+    assert.ok(retakes.every((take) => take.drop_word_ids.length > 0));
+    assert.match(slashDirective("/roughcut"), /read_guide "roughcut".*ask before cutting/);
+    assert.match(readGuide("roughcut"), /keep the LAST take/);
+  }
+
+  // 7b. Any video with a transcript can be read by element_id; results name it; a video still being
+  // transcribed (or never) gets an answer that says what to do; <clip_context> lists the videos.
+  {
+    const { runTool } = await import("./tools");
+    const { memoryWorkspace } = await import("./workspace");
+    const { clipContextBlock } = await import("./clip-context");
+    const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, addSecondTalk } = await import("./eval/fixture");
+    const document = fixtureDocument();
+    addSecondTalk(document);
+    // A third video, placed but not transcribed yet: its file is still in the automatic queue.
+    (document.stage.children[0] as unknown as { children: unknown[] }).children.push({ kind: "video", id: "fresh", src: "assets/fresh.mp4", width: 1080, height: 1920, start: 20, end: 25 });
+    const manifest = fixtureManifest();
+    manifest.assets.push({ id: "fresh0", path: "assets/fresh.mp4", source: "fresh0", type: "VIDEO", mimeType: "video/mp4", createdAt: "2026-10-15T00:00:00.000Z", cloud: { state: "synced", mediaId: "media-fresh" } } as never);
+    const files = { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": TRANSCRIPT, [SECOND_TALK.transcript]: SECOND_TRANSCRIPT }, master: FIXTURE_MASTER };
+    const workspace = memoryWorkspace({ version: 1, document, manifest }, { ...files, transcriptStatus: { "media-fresh": "running" } });
+    const read = async (input: Record<string, unknown>) => JSON.parse((await runTool("get_transcript", input, { workspace })).content);
+
+    const second = await read({ element_id: SECOND_TALK.id });
+    assert.equal(second.untrusted_data.source.element_id, SECOND_TALK.id);
+    assert.equal(second.untrusted_data.lines.flat()[0].text, "um", "the second video's own words");
+    const main = await read({});
+    assert.equal(main.untrusted_data.source.main, true, "no element_id reads the main video");
+    const summary = (await runTool("find_filler_words", { element_id: SECOND_TALK.id }, { workspace })).summary;
+    assert.match(summary, /of Second take/, "with several videos the summary names the one read");
+
+    const pending = await read({ element_id: "fresh" });
+    assert.equal(pending.transcript, "pending");
+    assert.match(pending.next, /still being transcribed/);
+    const idle = memoryWorkspace({ version: 1, document, manifest }, files);
+    const none = JSON.parse((await runTool("get_transcript", { element_id: "fresh" }, { workspace: idle })).content);
+    assert.equal(none.transcript, "none");
+    assert.match(none.next, /add_captions/);
+    const wrong = await runTool("get_transcript", { element_id: "captions0" }, { workspace });
+    assert.equal(wrong.ok, false, "an id that is no video stays an error");
+
+    const ctx = await workspace.opContext(document, manifest);
+    const block = await clipContextBlock(document, ctx, {}, [{ id: "fresh", name: "fresh.mp4", mediaId: "media-fresh" }]);
+    const payload = JSON.parse(/<clip_context>(\{.*?\})\n/s.exec(block)![1]!) as { speech_sources: { id: string; words: unknown; main?: boolean }[] };
+    assert.deepEqual(payload.speech_sources.map((source) => source.id), ["video0", SECOND_TALK.id, "fresh"]);
+    assert.equal(payload.speech_sources[1]!.words, 8);
+    assert.equal(payload.speech_sources[2]!.words, "transcribing…");
+    const plain = await clipContextBlock(fixtureDocument(), ctx);
+    assert.ok(!plain.includes("speech_sources"), "a clip with only its own video needs no list");
+
+    // A blank New edit with only an upload: the upload's words are the script, at its place on the timeline.
+    const blank = fixtureDocument();
+    const scene = blank.stage.children[0] as unknown as { children: unknown[] };
+    scene.children = [];
+    addSecondTalk(blank);
+    const uploaded = await clipContextBlock(blank, ctx);
+    assert.ok(!uploaded.includes("no_script"), "a spoken upload is a script");
+    assert.match(uploaded, /\[10\.\d–1[0-5]\.\d\] um so the second/, "times are clip seconds from where the upload starts");
+  }
+
   // 7. The system prompt routes by intent to tools that exist, and keeps its promises.
   {
     const { SYSTEM_PROMPT } = await import("./prompt");
@@ -153,7 +231,7 @@ async function main(): Promise<void> {
     const named = new Set([...SYSTEM_PROMPT.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
     for (const word of ["untrusted_data", "user_answer", "clip_context", "project_state", "your_skills"]) named.delete(word);
     for (const name of named) assert.ok(offered.has(name), `the prompt names ${name}, which is not a tool`);
-    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "request_export"]) {
+    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "preview_explainer", "add_explainer", "request_export", "find_retakes"]) {
       assert.ok(named.has(route), `the routing names ${route}`);
     }
     assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");

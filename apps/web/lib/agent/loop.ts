@@ -415,12 +415,20 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           },
           content,
         );
-        emit("tool_result", { id: call.id, name: call.name, ok: outcome.ok, summary: outcome.summary, view: outcome.view });
+        emit("tool_result", {
+          id: call.id,
+          name: call.name,
+          ok: outcome.ok,
+          summary: outcome.summary,
+          view: outcome.view,
+          // The panel shows server-rendered stills as it shows a tab's captures (not stored with the call).
+          ...(outcome.images?.length ? { images: outcome.images.map((image) => image.data) } : {}),
+        });
         if (outcome.version !== undefined) {
           wrote = true;
           emit("project_changed", { version: outcome.version });
         }
-        results.push({ id: call.id, name: call.name, ok: outcome.ok, content });
+        results.push({ id: call.id, name: call.name, ok: outcome.ok, content, ...(outcome.images?.length ? { images: outcome.images } : {}) });
       }
 
       // A question and a price card in the same step: the panel shows the question, and the card the

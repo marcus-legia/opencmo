@@ -928,6 +928,9 @@ export const CaptionsSchema = z
     kind: z.literal('captions'),
     ...naming,
     src: z.string().min(1).optional(),
+    // The id of the video element this layer transcribes: cutting that video by words rewrites
+    // this layer. Missing = the master video's captions (documents from before linked videos).
+    source: id.optional(),
     preset: z.enum(CAPTION_PRESETS).optional(),
     // Màu nhấn theo ô của preset (spotlight: chữ đang nói; guinea: 3 màu dòng).
     colors: z.array(color).optional(),

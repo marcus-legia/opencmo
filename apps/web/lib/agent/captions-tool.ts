@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import type { Manifest } from "@opencmo/clip-assets";
 import type { ClipDocument } from "@opencmo/clip-doc";
-import { byId } from "@opencmo/editor-core";
+import { byId, walk } from "@opencmo/editor-core";
 
 import { ApiError } from "@/lib/api/errors";
 import { defaultBrandKit } from "@/lib/brand";
@@ -27,7 +27,7 @@ const translateInput = z.object({ element_id: z.string().min(1).max(64), languag
 export const CAPTION_TOOL_SPECS: ToolSpec[] = [
   spec(
     "add_captions",
-    "Create captions for a video or audio element from the library (B-roll, an uploaded talk, music with vocals): transcribes the part of the file the element plays and adds a captions layer timed to it. Costs 1 credit per minute; the user approves the price first. The clip's own speaker already has captions — use this for other media.",
+    "Create captions for a video or audio element from the library (B-roll, an uploaded talk, music with vocals): adds a captions layer timed to the part of the file the element plays. Uploaded files are transcribed automatically and for free; when the file already has its transcript the captions cost nothing, otherwise 1 credit per minute. The user approves the price first. A video whose transcript is a hidden layer already gets that layer shown instead (set_props hidden:false, free). Captions of a video also make it cuttable by its words. The clip's own speaker already has captions — use this for other media.",
     addInput,
   ),
   spec(
@@ -64,7 +64,20 @@ export async function runBrandTool(
 }
 
 export type PreparedCaptions =
-  | { kind: "add"; parent_id: string; media_id: string; source_in: number; source_out: number; credits: number; timing: Record<string, unknown>; name: string }
+  | {
+      kind: "add";
+      parent_id: string;
+      media_id: string;
+      source_in: number;
+      source_out: number;
+      credits: number;
+      timing: Record<string, unknown>;
+      name: string;
+      /** The video element the captions transcribe (`source`), so it becomes cuttable by its words; null for sound. */
+      source: string | null;
+      /** The file already has its automatic transcript: no charge (`request_media_captions` reuses it). */
+      transcribed: boolean;
+    }
   | { kind: "translate"; parent_id: string; hash: string; language: string; credits: number; node: Record<string, unknown> };
 
 const containerOf = (parent: Record<string, unknown> | null, scene: string) =>
@@ -98,15 +111,29 @@ export async function prepareCaptions(
     if (cloud?.state !== "synced" || !cloud.mediaId) return "This file is still uploading. Try again when it is stored with the project.";
     const range = sourceRange(media.timing, typeof record.duration === "number" ? record.duration : undefined);
     if (range.end - range.start < 0.5) return "The element plays less than half a second of the file.";
+    const elementId = typeof found.entity.id === "string" ? found.entity.id : null;
+    // `mediaOf` only matches video, audio and rects painted with a video.
+    const video = found.entity.kind !== "audio";
+    // The automatic transcript is already on the clip as a hidden layer: show it, do not pay again.
+    const linked = elementId ? linkedCaptions(snapshot.document, elementId) : null;
+    if (linked) {
+      return linked.hidden
+        ? `This video already has its transcript as a hidden captions layer (id ${linked.id}). Show it for free with set_props on ${linked.id} {"hidden": false}; do not call add_captions.`
+        : `This video already has captions (layer ${linked.id}). Restyle them with set_caption_style instead of adding another layer.`;
+    }
+    const { data: stored } = await supabase.from("media_transcripts").select("asset_id").eq("asset_id", cloud.mediaId).maybeSingle();
+    const transcribed = Boolean(stored);
     return {
       kind: "add",
       parent_id: parent,
       media_id: cloud.mediaId,
       source_in: range.start,
       source_out: range.end,
-      credits: captionCredits(range.end - range.start),
+      credits: transcribed ? 0 : captionCredits(range.end - range.start),
       timing: media.timing,
       name: `Captions · ${String(record.path).split("/").pop()}`,
+      source: video ? elementId : null,
+      transcribed,
     };
   }
 
@@ -124,15 +151,26 @@ export async function prepareCaptions(
   }
 }
 
+/** The captions layer linked to a video (`source`), e.g. the hidden one of its automatic transcript. */
+function linkedCaptions(document: ClipDocument, elementId: string): { id: string; hidden: boolean } | null {
+  let found: { id: string; hidden: boolean } | null = null;
+  walk(document, ({ entity }) => {
+    if (!found && entity.kind === "captions" && entity.source === elementId && typeof entity.id === "string") {
+      found = { id: entity.id, hidden: entity.hidden === true };
+    }
+  });
+  return found;
+}
+
 export function captionsCard(prepared: PreparedCaptions, clipId: string) {
-  const credits = `${prepared.credits} ${prepared.credits === 1 ? "credit" : "credits"}`;
+  const credits = prepared.credits === 0 ? "free (already transcribed)" : `${prepared.credits} ${prepared.credits === 1 ? "credit" : "credits"}`;
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       prepared.kind === "add"
         ? `Create captions for ${prepared.name.replace("Captions · ", "")} (${Math.round(prepared.source_out - prepared.source_in)} s) · ${credits}`
         : `Translate the captions into ${prepared.language} as a new layer · ${credits}`,
-      "Credits are refunded if it fails.",
+      ...(prepared.credits > 0 ? ["Credits are refunded if it fails."] : []),
     ],
     credits: prepared.credits,
   };
@@ -159,7 +197,10 @@ export async function runCaptions(
           summary: "Captions still processing",
         };
       }
-      return insert({ op: "insert_captions", parent_id: prepared.parent_id, node: captionsNode(prepared.timing, done.src, prepared.name) });
+      const node = captionsNode(prepared.timing, done.src, prepared.name);
+      // Linked to its video: the transcript tools can then read and cut that video by its words.
+      if (prepared.source) node.source = prepared.source;
+      return insert({ op: "insert_captions", parent_id: prepared.parent_id, node });
     }
     const out = await translateCaptions(supabase, clipId, prepared.hash, prepared.language);
     return insert({ op: "insert_captions", parent_id: prepared.parent_id, node: { ...prepared.node, src: out.src, name: `Captions · ${prepared.language}` } });

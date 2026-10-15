@@ -41,7 +41,35 @@ export function GenerateCaptionsSection({ ctx, parent, clipId }: { ctx: Inspecto
   const media = mediaOf(node);
   const record = media && typeof media.src === "string" ? libraryRecord(ctx.manifest, media.src) : null;
   const mediaId = record?.cloud?.state === "synced" ? record.cloud.mediaId : undefined;
+  // A video's captions are linked to it (`source`), so the video can be cut by its words. Its
+  // automatic transcript may already be linked, hidden: showing it is free.
+  const video = node.kind === "video" || (node.kind === "rect" && Array.isArray(node.paints) && (node.paints as Entity[]).some((paint) => paint.type === "video"));
+  let linked: Entity | null = null;
+  if (video && typeof node.id === "string") {
+    walk(ctx.doc, ({ entity }) => {
+      if (!linked && entity.kind === "captions" && entity.source === node.id) linked = entity as Entity;
+    });
+  }
+  const shown = linked as Entity | null;
   if (!media || !record) return null;
+  if (shown && typeof shown.id === "string") {
+    return (
+      <Section title="Captions" testid="ins-media-captions">
+        {shown.hidden === true ? (
+          <button
+            type="button"
+            className="ed2-btn"
+            data-testid="show-captions"
+            onClick={() => void ctx.edit([{ op: "update_element", element_id: shown.id, props: { hidden: false } }])}
+          >
+            Show captions (free — transcript ready)
+          </button>
+        ) : (
+          <p className="ed2-hint">This video has captions. Select the captions layer to style them.</p>
+        )}
+      </Section>
+    );
+  }
   const range = sourceRange(media.timing, typeof record.duration === "number" ? record.duration : undefined);
   const credits = captionCredits(range.end - range.start);
   const run = async () => {
@@ -64,7 +92,9 @@ export function GenerateCaptionsSection({ ctx, parent, clipId }: { ctx: Inspecto
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
         const task = await api<{ status: string; error: string | null; output: { src?: string } | null }>(`/api/v1/editor/captions?task=${task_id}`);
         if (task.status === "done" && task.output?.src) {
-          await ctx.edit([{ op: "insert_captions", parent_id: parentFor(ctx, parent), node: captionsNode(media.timing, task.output.src, `Captions · ${String(record.path ?? "file").split("/").pop()}`) }]);
+          const layer = captionsNode(media.timing, task.output.src, `Captions · ${String(record.path ?? "file").split("/").pop()}`);
+          if (video && typeof node.id === "string") layer.source = node.id;
+          await ctx.edit([{ op: "insert_captions", parent_id: parentFor(ctx, parent), node: layer }]);
           break;
         }
         if (task.status === "failed" || task.status === "cancelled") throw new Error(task.error ?? "Could not create captions. Your credits were refunded.");

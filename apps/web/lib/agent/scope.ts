@@ -7,12 +7,13 @@
  * duyệt (`apply_to_clips`).
  */
 
-import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, summarizeProject } from "@opencmo/editor-core";
+import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
+import { previewMotion } from "@/lib/motion/preview";
 import { moderateText, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
@@ -36,6 +37,7 @@ import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
 import { clipContextBlock, type ClipAbout } from "./clip-context";
 import { dbWorkspace } from "./db-workspace";
+import { libraryVideos, transcribing } from "./speech";
 import {
   generateCard,
   generateToolSpec,
@@ -47,6 +49,7 @@ import {
   voiceoverToolSpec,
   type PreparedGeneration,
 } from "./generate-tool";
+import { addExplainerInput, explainerCard, explainerText, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "./explainer-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
@@ -80,13 +83,13 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
 // add_3d_studio (4 khuôn) không còn cho agent: 3D của agent là code (add_3d_scene, spec code-scenes).
-const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
   | { kind: "run" }
   | { kind: "browser"; input: unknown }
-  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard }
+  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
 
@@ -133,25 +136,28 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
-  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC];
+  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
 }
 
-export function clipScope(
+export async function clipScope(
   supabase: SupabaseClient,
   context: ClipContext,
   clipId: string,
   turn: Turn,
   checkpointed: boolean,
-): Scope {
+): Promise<Scope> {
   const checkpoint = checkpointing(supabase, turn, checkpointed);
   const workspace = dbWorkspace(supabase, context, clipId, {
     take: () => (checkpoint.taken() ? null : { kind: "agent" as const, label: checkpoint.label }),
     mark: checkpoint.mark,
   });
   const env = { workspace };
+  // A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by.
+  const start = await workspace.read();
+  const blank = context.clip.kind === "blank" && !speechSources(start.document).length;
   return {
     kind: "clip",
-    tools: clipToolSpecs({ blank: context.clip.kind === "blank" }),
+    tools: clipToolSpecs({ blank }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -160,7 +166,8 @@ export function clipScope(
         supabase.from("clips").select("hook, reason").eq("id", clipId).maybeSingle().then(({ data }) => data ?? {}),
         skillIndex(supabase).catch(() => ""),
       ]);
-      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout).catch(() => "")}${skills}`;
+      const pending = await transcribing(libraryVideos(snapshot.document, snapshot.manifest), workspace.transcriptStatus);
+      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout, pending).catch(() => "")}${skills}`;
     },
     async state() {
       // One read serves both the summary and the check.
@@ -267,6 +274,41 @@ export function clipScope(
         if (blocked) return blocked;
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
       }
+      if (call.name === "add_explainer") {
+        // One check of everything the render shows or says: the script, and the words in the code
+        // (the spec only holds the script, so `screen` alone would miss the labels). Before the code
+        // is saved, so refused code never lands in `scene_codes`.
+        const request = addExplainerInput.safeParse(call.input);
+        if (request.success) {
+          try {
+            await moderateText(explainerText(request.data), { kind: "video" });
+          } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+            return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+          }
+        }
+        const snapshot = await workspace.read();
+        const accent = readBrand(snapshot.document)?.colors.accent;
+        const prepared = await prepareExplainer(call.input, {
+          // Code previewed in this turn: add_explainer only takes code the model has looked at.
+          previewed: async () => {
+            const { data } = await supabase
+              .from("agent_tool_calls")
+              .select("input")
+              .eq("turn_id", turn.id)
+              .eq("name", "preview_explainer")
+              .eq("status", "done")
+              .order("created_at", { ascending: false });
+            return ((data ?? []) as { input: { code?: unknown } }[]).map((row) => String(row.input?.code ?? ""));
+          },
+          save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
+          ...(accent ? { accent } : {}),
+        });
+        if (typeof prepared === "string") {
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
+        }
+        return { kind: "approval", input: prepared, card: explainerCard(prepared, clipId) };
+      }
       if (call.name === "create_video") {
         // The director plans here, before the card; its model calls are charged on this turn.
         const snapshot = await workspace.read();
@@ -345,7 +387,12 @@ export function clipScope(
             ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
             : call.name === WAIT_TOOL_SPEC.name
               ? runWaitForMedia(call.input, { supabase, clipId })
-              : runTool(call.name, call.input, env),
+              : call.name === "preview_explainer"
+                ? workspace.read().then(({ document }) => {
+                    const accent = readBrand(document)?.colors.accent;
+                    return runPreviewExplainer(call.input, { preview: previewMotion, ...(accent ? { accent } : {}) });
+                  })
+                : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
       if (call.name === "plan_video") {
         if (!approved) {

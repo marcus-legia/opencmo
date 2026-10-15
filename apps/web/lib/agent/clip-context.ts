@@ -10,20 +10,42 @@
  */
 
 import type { ClipDocument } from "@opencmo/clip-doc";
-import { activeScene, clipScript, frameRatio, readBrand, clipTranscript, formatScript, loadCaptions, summarizeProject, type OpContext } from "@opencmo/editor-core";
+import { activeScene, clipScript, frameRatio, readBrand, clipTranscript, formatScript, loadCaptions, speechOffset, speechSources, summarizeProject, type OpContext } from "@opencmo/editor-core";
+
+import { speechContext, type MediaVideo } from "./speech";
 
 export type ClipAbout = { hook?: string | null; reason?: string | null };
 
-export async function clipContextBlock(document: ClipDocument, ctx: Pick<OpContext, "readTranscript">, about: ClipAbout = {}): Promise<string> {
-  const model = await loadCaptions(document, ctx).catch(() => null);
-  const script = model ? formatScript(clipScript(clipTranscript(model.transcript, model.window, model.removed))) : "";
+/**
+ * `transcribing`: library videos on the timeline whose automatic transcript is still running; they
+ * are listed so the agent waits for them instead of paying for captions.
+ */
+export async function clipContextBlock(
+  document: ClipDocument,
+  ctx: Pick<OpContext, "readTranscript">,
+  about: ClipAbout = {},
+  transcribing: MediaVideo[] = [],
+): Promise<string> {
+  // The script is the master's, else the first video with speech (a New edit with an upload).
+  const sources = speechSources(document);
+  const primary = sources.find((source) => source.master) ?? sources[0];
+  const model = primary ? await loadCaptions(document, ctx, primary.elementId).catch(() => null) : null;
+  // A placed video's words are spoken from where it starts on the timeline, not from 0.
+  const offset = model && primary && !primary.master ? speechOffset(document, primary.elementId) : 0;
+  const lines = model ? clipScript(clipTranscript(model.transcript, model.window, model.removed)).map((line) => ({ ...line, start: line.start + offset, end: line.end + offset })) : [];
+  const script = formatScript(lines);
+  // A clip with only its own video needs no list: that video is the default of every tool.
+  const listed = sources.some((source) => !source.master) || transcribing.length > 0;
+  const speech = listed ? await speechContext(document, (src) => ctx.readTranscript(src), transcribing) : [];
   const payload = {
     ...(about.hook ? { title: about.hook } : {}),
     ...(about.reason ? { why_this_clip: about.reason } : {}),
     duration: summarizeProject(document).duration,
+    // The videos the transcript tools and cuts take as element_id.
+    ...(speech.length ? { speech_sources: speech } : {}),
     // No speaker and no script (a blank "New edit", or AI-only video): media is placed by time,
     // so the agent needs the work area and the guide that explains it.
-    ...(model ? {} : noScript(document)),
+    ...(model || speech.length ? {} : noScript(document)),
     // Hình khung: agent từng mặc định 9:16 cho 3D toàn khung trên clip 16:9 (02/10).
     ...(() => {
       const frame = frameRatio(document);

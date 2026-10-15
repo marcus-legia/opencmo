@@ -25,7 +25,7 @@ async function leftTab(page: Page, name: RegExp) {
   await page.getByRole("tab", { name }).click();
 }
 
-test("ảnh trong thư viện làm frame đầu, B-roll một thẻ duyệt, save_frame", async ({ page }, testInfo) => {
+test("library image as first frame, B-roll in one approval card, save_frame", async ({ page }, testInfo) => {
   test.setTimeout(1_500_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   page.on("response", (response) => {

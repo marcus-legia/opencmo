@@ -16,6 +16,7 @@ ZIP — chạy bằng ĐÚNG code của worker thật; đó là thứ E2E cần 
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -34,7 +35,7 @@ from opencmo.models import (
     TranscriptSegment,
     Word,
 )
-from opencmo.worker import kinds, loop, process_job, transcribe_media_task
+from opencmo.worker import kinds, loop, process_job, transcribe_asset_task, transcribe_media_task
 
 log = logging.getLogger("opencmo.e2e")
 
@@ -110,6 +111,31 @@ def _fixture_transcribe(audio: Path, cfg) -> Transcript:
     return Transcript(segments=[TranscriptSegment(0.2, 2.15, "b-roll has its own voice", words)], language="en", source="whisper")
 
 
+#: Sidecar transcripts for library fixtures: `<file name>.transcript.json` next to the e2e fixtures,
+#: in the editor's transcript shape (`[{text, words: [{text, start, end}]}]`, file seconds).
+FIXTURES = Path(__file__).resolve().parents[3] / "apps" / "web" / "e2e" / "fixtures"
+
+
+def _fixture_file_transcript(asset: dict, audio: Path) -> Transcript:
+    """Replaces Scribe for the automatic file transcript: a fixture's sidecar when it has one, so a
+    spec can rely on known fillers, pauses and retakes; otherwise the library captions fixture."""
+    assert audio.stat().st_size > 0
+    sidecar = FIXTURES / f"{asset.get('name') or ''}.transcript.json"
+    if not sidecar.is_file():
+        return _fixture_transcribe(audio, None)
+    segments = [
+        TranscriptSegment(
+            float(segment["words"][0]["start"]),
+            float(segment["words"][-1]["end"]),
+            str(segment["text"]),
+            [Word(float(word["start"]), float(word["end"]), str(word["text"])) for word in segment["words"]],
+        )
+        for segment in json.loads(sidecar.read_text(encoding="utf-8"))
+        if segment.get("words")
+    ]
+    return Transcript(segments=segments, language="en", source="whisper")
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -134,6 +160,7 @@ def main() -> int:
 
     process_job.run_pipeline = _fixture_pipeline  # type: ignore[assignment]
     transcribe_media_task.transcribe_audio = _fixture_transcribe  # type: ignore[assignment]
+    transcribe_asset_task.transcribe = _fixture_file_transcript  # type: ignore[assignment]
 
     loop.run_forever(
         lambda: SupabaseStore(url, service_role_key),

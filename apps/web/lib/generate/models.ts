@@ -39,6 +39,14 @@ function providerEnabled(provider: string): boolean {
       // 3D Studio: renderer của chính mình (GPU Modal, hoặc CLI local khi dev);
       // bản fake vẽ khung màu thay cảnh. Cùng luật với `adapter_for` ở worker.
       return ["modal", "local"].includes(process.env.OPENCMO_3D ?? "") || aiFakeEnabled();
+    case "opencmo-motion":
+      // Explainers: Remotion on Modal, or the CLI on this machine when developing, plus a voice (fal,
+      // or the silent fake voice outside production). Same rule as `adapter_for` in the worker.
+      return (
+        (["modal", "local"].includes(process.env.OPENCMO_MOTION ?? "") &&
+          (Boolean(process.env.FAL_KEY) || (process.env.OPENCMO_MOTION_FAKE_VOICE === "1" && !isProduction()))) ||
+        aiFakeEnabled()
+      );
     default:
       return false;
   }

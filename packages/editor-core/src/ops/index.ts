@@ -13,6 +13,7 @@ import { timingIssues, type ClipDocument, type ClipNode, type SceneNode } from '
 
 import { activeView, clone, mergeView, nodes, same, stamp, timelinesOf, viewOf } from '../doc';
 import {
+	attachTranscript,
 	editWords,
 	mergeLines,
 	nudgeWordOp,
@@ -32,6 +33,7 @@ import { deleteMarker, setMarker } from './markers';
 import { insertNode, replaceSrc } from './library';
 import { activateScene, duplicateElements, groupElements, insertScene, pasteNodes, ungroupElements } from './structure';
 import { add3dStudio } from './studio3d';
+import { addExplainer } from './explainer';
 import { createTimeline, deleteTimeline, renameTimeline, setActiveTimeline, STAGE_OPS } from './timelines';
 import { applyBrand } from './brand';
 import { applyColor } from './color';
@@ -51,7 +53,7 @@ export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDE
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
-export { loadCaptions, type CaptionModel } from './captions';
+export { loadCaptions, speechElement, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
 export { CAPTION_PRESETS, FONTS, guardProps } from './project';
 export { BRAND_SRC_PREFIX, LOGO_MARK, logoBox } from './brand';
@@ -68,6 +70,25 @@ export {
 	type VoiceoverInput,
 	type VoiceoverMark,
 } from './voiceover';
+export {
+	addExplainer,
+	estimateDuration,
+	EXPLAINER_FORMATS,
+	EXPLAINER_MAX_SECONDS,
+	EXPLAINER_MIN_SECONDS,
+	EXPLAINER_MODEL,
+	EXPLAINER_SCENE_BYTES,
+	ExplainerBeatSchema,
+	explainerInput,
+	explainerLayerName,
+	ExplainerSceneSchema,
+	explainerSeconds,
+	narrationOf,
+	type ExplainerBeat,
+	type ExplainerFormat,
+	type ExplainerInput,
+	type ExplainerScene,
+} from './explainer';
 export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
 
 const REGISTRY = [
@@ -147,6 +168,8 @@ const REGISTRY = [
 	replaceBackground,
 	createVideo,
 	editVideo,
+	addExplainer,
+	attachTranscript,
 ] as const;
 
 type Definition = {

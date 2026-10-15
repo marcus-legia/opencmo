@@ -1,0 +1,316 @@
+"""Provider `opencmo-motion` (explainers): spec and price rules, the voice → job → CLI path, and
+the Modal path with a fake SDK. The CLI is replaced by a fake `subprocess.run`: no Chromium needed."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from opencmo.ai import catalog
+from opencmo.ai.catalog import SpecError, get_model, validate_spec
+from opencmo.ai.providers import adapter_for, motion
+from opencmo.ai.providers.base import ProviderError, Result
+from opencmo.ai.providers.fake import FakeProvider
+from opencmo.ai.providers.motion import MotionLocalProvider, MotionModalProvider, motion_job
+
+BEATS = [
+    {"say": "A noisy bar, and a song you half know.", "label": "Noisy bar"},
+    {"say": "Shazam turns the sound into a map of peaks."},
+    {"say": "Pairs of peaks become fingerprints.", "label": "f1 | f2 | gap"},
+    {"say": "One match in millions, in under a second.", "label": "Match"},
+]
+SPEC = {
+    "prompt": "Explainer: How Shazam hears a song",
+    "aspectRatio": "16:9",
+    "duration": 20,
+    "voice": "Aria",
+    "scene": {"template": "explainer", "code_ref": "e" * 64, "title": "How Shazam hears a song", "beats": BEATS},
+}
+CODE = "return function Scene() { return null; };"
+
+
+def model():
+    return get_model("motion-explainer")
+
+
+def test_spec_hop_le_va_chi_model_explainer_nhan_no() -> None:
+    validate_spec(model(), SPEC)
+    validate_spec(model(), {**SPEC, "seed": 3, "scene": {**SPEC["scene"], "accent": "#12ABef"}})
+    with pytest.raises(SpecError, match="Describe the 3D scene"):
+        validate_spec(get_model("studio-3d"), {k: v for k, v in SPEC.items() if k != "voice"} | {"duration": 5, "aspectRatio": "9:16"})
+    with pytest.raises(SpecError, match="does not take"):
+        validate_spec(get_model("studio-3d"), {**SPEC, "duration": 5, "aspectRatio": "9:16"})
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"voice": "Someone Real"}, "listed voices"),
+        ({"voice": None}, "listed voices"),
+        ({"duration": 12}, "does not support that duration"),
+        ({"duration": 95}, "does not support that duration"),
+        ({"aspectRatio": "4:5"}, "aspect ratio"),
+        ({"scene": {**SPEC["scene"], "template": "code"}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "code_ref": "nope"}}, "explainer code was not found"),
+        ({"scene": {**SPEC["scene"], "beats": BEATS[:2]}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "beats": [*BEATS, {"say": " "}]}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "beats": [*BEATS, {"say": "x" * 241}]}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "beats": [*BEATS, {"say": "ok", "colour": "red"}]}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "title": ""}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "accent": "red"}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "beats": [{"say": "x" * 240}] * 16}}, "too much data"),
+    ],
+)
+def test_spec_hong_bi_chan(change: dict, message: str) -> None:
+    spec = {**SPEC, **change}
+    if change.get("voice", "") is None:
+        spec.pop("voice")
+    with pytest.raises(SpecError, match=message):
+        validate_spec(model(), spec)
+
+
+def test_gia_theo_thoi_luong_va_loi_doc() -> None:
+    # 1 credit per started 10 s + 5 per started 1,000 characters of narration.
+    assert catalog.price_of(model(), SPEC) == 2 + 5
+    assert catalog.price_of(model(), {**SPEC, "duration": 25}) == 3 + 5
+    long = {**SPEC, "duration": 90, "scene": {**SPEC["scene"], "beats": [{"say": "y" * 200}] * 6}}
+    assert len(catalog.narration(long["scene"])) == 1205
+    assert catalog.price_of(model(), long) == 9 + 10
+
+
+def test_adapter_theo_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("OPENCMO_MOTION", "OPENCMO_AI_FAKE", "OPENCMO_MOTION_FAKE_VOICE", "FAL_KEY", "OPENCMO_ENV"):
+        monkeypatch.delenv(key, raising=False)
+    with pytest.raises(SpecError, match="not set up"):
+        adapter_for(model())
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    assert isinstance(adapter_for(model()), FakeProvider)
+    monkeypatch.setenv("OPENCMO_MOTION", "local")
+    with pytest.raises(SpecError, match="not set up"):
+        adapter_for(model())  # no voice: neither a fal key nor the fake voice
+    monkeypatch.setenv("OPENCMO_MOTION_FAKE_VOICE", "1")
+    assert isinstance(adapter_for(model()), MotionLocalProvider)
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    with pytest.raises(SpecError, match="not set up"):
+        adapter_for(model())  # the fake voice never runs in production
+    monkeypatch.setenv("FAL_KEY", "k")
+    assert isinstance(adapter_for(model()), MotionLocalProvider)
+
+
+def test_job_dung_hop_dong_motion_job() -> None:
+    job = motion_job({**SPEC, "seed": 9, "code": CODE, "scene": {**SPEC["scene"], "accent": "#ff8800"}})
+    assert job == {
+        "title": "How Shazam hears a song",
+        "code": CODE,
+        "beats": [{"say": b["say"], **({"label": b["label"]} if "label" in b else {})} for b in BEATS],
+        "format": "16:9",
+        "duration": 20,
+        "seed": 9,
+        "accent": "#ff8800",
+    }
+    words = [{"text": "A", "start": 0.0, "end": 0.2}]
+    assert motion_job({**SPEC, "code": CODE}, words)["words"] == words
+    assert "words" not in motion_job({**SPEC, "code": CODE}, None)
+
+
+class _Voice:
+    """Stands in for FalProvider: writes an audio file and returns word timings."""
+
+    def __init__(self, words: list[dict]) -> None:
+        self.words = words
+        self.calls: list[tuple[str, dict]] = []
+
+    def run(self, voice_model, spec, workdir):
+        self.calls.append((voice_model.id, spec))
+        path = workdir / "result.m4a"
+        path.write_bytes(b"audio")
+        return Result(path, "audio/mp4", "m4a", words=self.words)
+
+
+def _fake_cli(monkeypatch: pytest.MonkeyPatch, code: int = 0, stderr: str = "") -> list[dict]:
+    seen: list[dict] = []
+    real_run = subprocess.run
+
+    def fake_run(args, **kwargs):
+        if args[0] != "node":
+            return real_run(args, **kwargs)  # ffmpeg (the silent track) runs for real
+        assert args[:3] == ["node", str(motion.CLIP_MOTION), "render"]
+        seen.append({"args": args, "job": json.loads(Path(args[3]).read_text())})
+        if code == 0:
+            Path(args[4]).write_bytes(b"\x00\x00\x00\x18ftypmp42")
+        return subprocess.CompletedProcess(args, code, '{"frames":600,"seconds":20,"msPerFrame":80}', stderr)
+
+    monkeypatch.setattr(motion.subprocess, "run", fake_run)
+    return seen
+
+
+def test_local_giong_that_mang_words_vao_job(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_FAKE_VOICE", raising=False)
+    seen = _fake_cli(monkeypatch)
+    words = [{"text": "A", "start": 0.1, "end": 0.3}, {"text": "noisy", "start": 0.35, "end": 0.7}]
+    voice = _Voice(words)
+    result = MotionLocalProvider(voice).run(model(), {**SPEC, "code": CODE}, tmp_path)
+    assert result is not None and result.content_type == "video/mp4"
+    assert voice.calls == [("elevenlabs-voice", {"prompt": catalog.narration(SPEC["scene"]), "voice": "Aria"})]
+    assert seen[0]["job"]["words"] == words
+    assert seen[0]["args"][5:] == ["--audio", str(tmp_path / "voice" / "result.m4a")]
+
+
+def test_loi_doc_dai_hon_video_thi_cat_giong(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_FAKE_VOICE", raising=False)
+    seen = _fake_cli(monkeypatch)
+    cuts: list[list[str]] = []
+    monkeypatch.setattr(motion, "run", lambda args, **k: cuts.append(args))
+    words = [
+        {"text": "early", "start": 1.0, "end": 1.5},
+        {"text": "edge", "start": 19.8, "end": 20.4},
+        {"text": "late", "start": 20.5, "end": 21.0},
+    ]
+    MotionLocalProvider(_Voice(words)).run(model(), {**SPEC, "code": CODE}, tmp_path)
+    assert cuts and cuts[0][cuts[0].index("-t") + 1] == "20"
+    assert "-format_whitelist" in cuts[0], "the provider's audio is read like an upload"
+    assert seen[0]["job"]["words"] == [
+        {"text": "early", "start": 1.0, "end": 1.5},
+        {"text": "edge", "start": 19.8, "end": 20.0},
+    ]
+    assert seen[0]["args"][-1] == str(tmp_path / "voice-cut.m4a")
+
+
+def test_giong_gia_la_im_lang_va_khong_co_words(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OPENCMO_MOTION_FAKE_VOICE", "1")
+    monkeypatch.delenv("OPENCMO_ENV", raising=False)
+    seen = _fake_cli(monkeypatch)
+    voice = _Voice([])
+    MotionLocalProvider(voice).run(model(), {**SPEC, "code": CODE}, tmp_path)
+    assert voice.calls == [], "no paid voice"
+    assert "words" not in seen[0]["job"], "the renderer estimates the timings"
+    assert (tmp_path / "voice.m4a").stat().st_size > 0
+
+
+@pytest.mark.parametrize(
+    ("code", "stderr", "message"),
+    [
+        (4, "compile\nSyntaxError: Unexpected token (3:7).", "The explainer code failed: SyntaxError: Unexpected token (3:7). Your credits were refunded."),
+        (3, "job: beats too short", motion.INVALID),
+        (1, "chromium crashed", motion.FAILED),
+    ],
+)
+def test_ma_thoat_cua_cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: int, stderr: str, message: str) -> None:
+    monkeypatch.setenv("OPENCMO_MOTION_FAKE_VOICE", "1")
+    monkeypatch.delenv("OPENCMO_ENV", raising=False)
+    _fake_cli(monkeypatch, code, stderr)
+    with pytest.raises(ProviderError) as info:
+        MotionLocalProvider().run(model(), {**SPEC, "code": CODE}, tmp_path)
+    assert str(info.value) == message
+    assert not info.value.retryable
+
+
+class _Call:
+    def __init__(self, results: list[object]) -> None:
+        self.object_id = "fc-9"
+        self._results = results
+
+    def get(self, timeout: float = 0) -> object:
+        value = self._results.pop(0)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+
+def _modal(call: _Call, spawned: list[dict]) -> SimpleNamespace:
+    def spawn(payload: dict) -> _Call:
+        spawned.append(payload)
+        return call
+
+    return SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda app, name: SimpleNamespace(spawn=spawn)),
+        FunctionCall=SimpleNamespace(from_id=lambda ref: call),
+    )
+
+
+def test_modal_giong_o_worker_render_tren_modal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_FAKE_VOICE", raising=False)
+    spawned: list[dict] = []
+    words = [{"text": "A", "start": 0.1, "end": 0.3}]
+    call = _Call([TimeoutError(), b"\x00\x00\x00\x18ftypmp42"])
+    adapter = MotionModalProvider(_modal(call, spawned), voice=_Voice(words))
+    result = adapter.run(model(), {**SPEC, "code": CODE}, tmp_path, sleep=lambda _: None)
+    assert result is not None and result.path.read_bytes().startswith(b"\x00\x00\x00\x18ftyp")
+    assert spawned[0]["audio"] == b"audio"
+    assert spawned[0]["job"] == motion_job({**SPEC, "code": CODE}, words)
+
+
+def test_modal_giu_cau_loi_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_FAKE_VOICE", raising=False)
+    failed = motion.code_failed("ReferenceError: foo is not defined")
+    for error, message in ((ProviderError(failed), failed), (RuntimeError("OOM"), motion.FAILED)):
+        adapter = MotionModalProvider(_modal(_Call([error]), []), voice=_Voice([]))
+        with pytest.raises(ProviderError) as info:
+            adapter.run(model(), {**SPEC, "code": CODE}, tmp_path, sleep=lambda _: None)
+        assert str(info.value) == message
+
+
+def test_modal_khong_spawn_duoc_thi_thu_lai(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_FAKE_VOICE", raising=False)
+
+    def broken(app, name):
+        raise ConnectionError("modal down")
+
+    functions = SimpleNamespace(Function=SimpleNamespace(from_name=broken))
+    with pytest.raises(ProviderError) as info:
+        MotionModalProvider(functions, voice=_Voice([])).run(model(), {**SPEC, "code": CODE}, tmp_path)
+    assert info.value.retryable
+
+
+def test_render_bytes_cua_ham_modal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen = _fake_cli(monkeypatch)
+    job = motion_job({**SPEC, "code": CODE})
+    data = motion.render_bytes({"job": job, "audio": b"voice"}, tmp_path)
+    assert data.startswith(b"\x00\x00\x00\x18ftyp")
+    assert seen[0]["job"] == job
+    assert (tmp_path / "voice.m4a").read_bytes() == b"voice"
+
+
+def test_preview_tra_anh_base64_va_chan_file_ngoai_thu_muc(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    job = motion_job({**SPEC, "code": CODE})
+
+    def fake_run(args, **kwargs):
+        outdir = Path(args[4])
+        (outdir / "s0.jpg").write_bytes(b"\xff\xd8jpeg")
+        stills = [{"t": 1.5, "file": "s0.jpg"}]
+        return subprocess.CompletedProcess(args, 0, json.dumps({"ok": True, "stills": stills, "issues": ["Label overlaps"], "estimated": True}), "")
+
+    monkeypatch.setattr(motion.subprocess, "run", fake_run)
+    result = motion.preview_local(job, tmp_path)
+    assert result["ok"] and result["issues"] == ["Label overlaps"]
+    assert result["images"] == ["/9hqcGVn"]
+    assert result["stills"] == [{"t": 1.5, "file": "s0.jpg"}]
+
+    def escaping(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, json.dumps({"ok": True, "stills": [{"t": 0, "file": "/etc/passwd"}], "issues": [], "estimated": True}), "")
+
+    monkeypatch.setattr(motion.subprocess, "run", escaping)
+    with pytest.raises(RuntimeError):
+        motion.preview_local(job, tmp_path)
+
+
+def test_preview_loi_code_tra_ve_cho_agent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    job = motion_job({**SPEC, "code": CODE})
+    failed = {"ok": False, "phase": "guard", "message": "fetch is not allowed (line 2)"}
+    monkeypatch.setattr(motion.subprocess, "run", lambda args, **k: subprocess.CompletedProcess(args, 4, json.dumps(failed), "fetch is not allowed (line 2)"))
+    assert motion.preview_local(job, tmp_path) == failed
+    monkeypatch.setattr(motion.subprocess, "run", lambda args, **k: subprocess.CompletedProcess(args, 4, "", "boom\nTypeError: x is undefined"))
+    assert motion.preview_local(job, tmp_path) == {"ok": False, "phase": "render", "message": "TypeError: x is undefined"}
+
+
+def test_cli_khong_nhan_khoa_cua_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "secret")
+    monkeypatch.setenv("FAL_KEY", "secret")
+    monkeypatch.setenv("OPENCMO_MOTION_SCALE", "0.5")
+    env = motion.cli_env()
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in env and "FAL_KEY" not in env
+    assert env["OPENCMO_MOTION_SCALE"] == "0.5" and "PATH" in env

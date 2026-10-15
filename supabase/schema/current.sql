@@ -836,8 +836,10 @@ begin
     raise exception 'Turn not found.' using errcode = 'P0002';
   end if;
   v_more := public.agent_3d_hold_credits() - v_turn.hold_credits;
+  -- An explainer turn previews its scene like a 3D turn and needs the same bigger hold.
   if v_turn.status <> 'running' or v_more <= 0
-     or not exists (select 1 from public.agent_tool_calls c where c.turn_id = v_turn.id and c.name = 'preview_3d')
+     or not exists (select 1 from public.agent_tool_calls c
+                    where c.turn_id = v_turn.id and c.name in ('preview_3d', 'preview_explainer'))
      or public.credit_balance(v_user) < v_more then
     return v_turn.hold_credits;
   end if;
@@ -1052,7 +1054,7 @@ CREATE TABLE public.ai_models (
 CREATE FUNCTION public.ai_check_spec(p_model public.ai_models, p_spec jsonb) RETURNS void
     LANGUAGE plpgsql STABLE
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_allowed text[] := case p_model.kind
     when 'image' then array['prompt', 'aspectRatio', 'seed']
@@ -1064,6 +1066,10 @@ declare
   v_scene boolean := coalesce((p_model.limits->>'scene')::boolean, false);
   v_max_refs int := coalesce((p_model.limits->>'maxReferences')::int, 0);
   v_source boolean := coalesce((p_model.limits->>'sourceVideo')::boolean, false);
+  -- A narrated video (explainer) takes a voice, like a voiceover.
+  v_voiced boolean := p_model.kind = 'voice' or (p_model.kind = 'video' and p_model.limits ? 'voices');
+  v_explainer boolean := p_model.provider = 'opencmo-motion';
+  v_beat jsonb;
 begin
   if v_scene then
     v_allowed := v_allowed || array['scene'];
@@ -1077,6 +1083,7 @@ begin
     if coalesce((p_model.limits->>'lastFrame')::boolean, false) then v_allowed := v_allowed || array['endImage']; end if;
     if coalesce((p_model.limits->>'audio')::boolean, false) then v_allowed := v_allowed || array['audio']; end if;
     if v_source then v_allowed := v_allowed || array['sourceVideo', 'sourceStart']; end if;
+    if v_voiced then v_allowed := v_allowed || array['voice']; end if;
   end if;
   if p_spec is null or jsonb_typeof(p_spec) <> 'object' then
     raise exception 'Invalid generation request.' using errcode = '22023';
@@ -1155,13 +1162,48 @@ begin
   if v_scene and octet_length((p_spec->'scene')::text) > 4000 then
     raise exception 'This 3D scene has too much data.' using errcode = '22023';
   end if;
+  -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
+  -- script is checked here because the price and the voice are computed from it.
+  if v_scene and v_explainer <> (p_spec->'scene'->>'template' = 'explainer') then
+    if v_explainer then
+      raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+    end if;
+    raise exception 'Describe the 3D scene first.' using errcode = '22023';
+  end if;
+  if v_explainer and (
+      jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
+      or not exists (select 1 from public.scene_codes c
+                     where c.user_id = auth.uid() and c.hash = p_spec->'scene'->>'code_ref')) then
+    raise exception 'This explainer code was not found. Preview it again.' using errcode = '22023';
+  end if;
+  if v_explainer and (
+      jsonb_typeof(p_spec->'scene'->'title') is distinct from 'string'
+      or length(btrim(p_spec->'scene'->>'title')) not between 1 and 60
+      or jsonb_typeof(p_spec->'scene'->'beats') is distinct from 'array'
+      or jsonb_array_length(p_spec->'scene'->'beats') not between 3 and 16
+      or (p_spec->'scene' ? 'accent' and (jsonb_typeof(p_spec->'scene'->'accent') is distinct from 'string'
+          or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))) then
+    raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  end if;
+  if v_explainer then
+    for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
+      if jsonb_typeof(v_beat) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label'))
+          or jsonb_typeof(v_beat->'say') is distinct from 'string'
+          or length(btrim(v_beat->>'say')) not between 1 and 240
+          or (v_beat ? 'label' and (jsonb_typeof(v_beat->'label') is distinct from 'string'
+              or length(btrim(v_beat->>'label')) > 40)) then
+        raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+      end if;
+    end loop;
+  end if;
   if v_scene and p_spec->'scene'->>'template' = 'code' and (
       jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
       or not exists (select 1 from public.scene_codes c
                      where c.user_id = auth.uid() and c.hash = p_spec->'scene'->>'code_ref')) then
     raise exception 'This 3D scene code was not found. Preview it again.' using errcode = '22023';
   end if;
-  if p_model.kind = 'voice' and (jsonb_typeof(p_spec->'voice') is distinct from 'string'
+  if v_voiced and (jsonb_typeof(p_spec->'voice') is distinct from 'string'
       or not coalesce(p_model.limits->'voices' ? (p_spec->>'voice'), false)) then
     raise exception 'Choose one of the listed voices.' using errcode = '22023';
   end if;
@@ -1173,7 +1215,7 @@ begin
       using errcode = '22023';
   end if;
 end;
-$$;
+$_$;
 
 
 --
@@ -1225,6 +1267,11 @@ CREATE FUNCTION public.ai_price(p_model public.ai_models, p_spec jsonb) RETURNS 
       when 'second' then (p_model.price->>'credits')::numeric * ceil(coalesce((p_spec->>'duration')::numeric, 1))
       when 'kchars' then (p_model.price->>'credits')::numeric
         * greatest(1, ceil(length(btrim(p_spec->>'prompt')) / 1000.0))
+      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters.
+      when 'explainer' then (p_model.price->>'credits')::numeric * ceil((p_spec->>'duration')::numeric / 10)
+        + (p_model.price->>'voiceKchars')::numeric * greatest(1, ceil(coalesce((
+            select length(string_agg(btrim(b->>'say'), ' ' order by i))
+            from jsonb_array_elements(p_spec->'scene'->'beats') with ordinality as t(b, i)), 0) / 1000.0))
     end)
     * coalesce((p_model.price->'resolution'->>(p_spec->>'resolution'))::numeric, 1)
   )::int;
@@ -1277,6 +1324,15 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: auto_transcript_daily_seconds(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auto_transcript_daily_seconds() RETURNS numeric
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 10800::numeric $$;
 
 
 --
@@ -1357,7 +1413,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text, 'transcribe_asset'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -3373,10 +3429,10 @@ $$;
 
 
 --
--- Name: complete_media_probe(uuid, uuid, numeric, integer, integer, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: complete_media_probe(uuid, uuid, numeric, integer, integer, boolean, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.complete_media_probe(p_asset_id uuid, p_attempt_id uuid, p_duration numeric, p_width integer, p_height integer, p_ok boolean, p_error text DEFAULT NULL::text) RETURNS boolean
+CREATE FUNCTION public.complete_media_probe(p_asset_id uuid, p_attempt_id uuid, p_duration numeric, p_width integer, p_height integer, p_ok boolean, p_error text DEFAULT NULL::text, p_has_audio boolean DEFAULT NULL::boolean) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3402,9 +3458,56 @@ begin
     duration = p_duration, width = p_width, height = p_height, error = v_error,
     finished_at = now(), lease_until = null where id = v_task.id;
   update public.media_assets set status = case when p_ok then 'ready' else 'rejected' end,
-    duration = p_duration, width = p_width, height = p_height, error = left(v_error, 500)
+    duration = p_duration, width = p_width, height = p_height, error = left(v_error, 500),
+    has_audio = case when p_ok then p_has_audio end
   where id = p_asset_id;
+  if p_ok then
+    perform public.queue_asset_transcript(p_asset_id);
+  end if;
   return true;
+end;
+$$;
+
+
+--
+-- Name: complete_media_transcript(uuid, uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.complete_media_transcript(p_task_id uuid, p_attempt_id uuid, p_body text, p_source text DEFAULT 'scribe'::text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_task public.tasks;
+  v_asset public.media_assets;
+  v_hash text;
+begin
+  select * into v_task from public.tasks
+  where id = p_task_id and kind = 'transcribe_asset' and status = 'running'
+    and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then
+    select output ->> 'hash' into v_hash from public.tasks
+    where id = p_task_id and kind = 'transcribe_asset' and status = 'done'
+      and attempt_id is not distinct from p_attempt_id;
+    return v_hash;
+  end if;
+  perform public.check_transcript_body(p_body);
+  select * into v_asset from public.media_assets where id = v_task.asset_id and user_id = v_task.user_id;
+  if not found then
+    raise exception 'This file is no longer stored with this project.' using errcode = 'P0002';
+  end if;
+  v_hash := encode(sha256(convert_to(p_body, 'UTF8')), 'hex');
+  insert into public.media_transcripts (asset_id, user_id, hash, body, seconds, source)
+  values (v_asset.id, v_asset.user_id, v_hash, p_body, greatest(v_asset.duration, 0.001), p_source)
+  on conflict (asset_id) do update
+    set hash = excluded.hash, body = excluded.body, seconds = excluded.seconds,
+        source = excluded.source, created_at = now();
+  update public.tasks
+  set status = 'done', error = null, finished_at = now(), lease_until = null,
+      output = jsonb_build_object('hash', v_hash)
+  where id = p_task_id;
+  return v_hash;
 end;
 $$;
 
@@ -5445,6 +5548,54 @@ $$;
 
 
 --
+-- Name: queue_asset_transcript(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.queue_asset_transcript(p_asset_id uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_asset public.media_assets;
+  v_used numeric;
+  v_status text;
+begin
+  select * into v_asset from public.media_assets where id = p_asset_id for update;
+  if not found then return null; end if;
+  if v_asset.transcript_status in ('queued', 'running', 'ready') then
+    return v_asset.transcript_status;
+  end if;
+  if v_asset.status <> 'ready' or v_asset.storage_path not like 'media/%' then
+    return v_asset.transcript_status;
+  end if;
+  if v_asset.has_audio is distinct from true or v_asset.duration is null or v_asset.duration < 0.5 then
+    v_status := 'none';
+  elsif v_asset.duration > public.captions_max_seconds() then
+    v_status := 'skipped';
+  else
+    -- Lock per user so two uploads finishing together cannot both slip under the cap.
+    perform public.lock_credit_owner(v_asset.user_id);
+    select coalesce(sum(a.duration), 0) into v_used
+    from public.tasks t join public.media_assets a on a.id = t.asset_id
+    where t.user_id = v_asset.user_id and t.kind = 'transcribe_asset'
+      and t.status in ('queued', 'running', 'done')
+      and t.created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc';
+    if v_used + v_asset.duration > public.auto_transcript_daily_seconds() then
+      v_status := 'skipped';
+    else
+      insert into public.tasks (user_id, kind, job_id, asset_id, payload, status, request_id)
+      values (v_asset.user_id, 'transcribe_asset', v_asset.job_id, v_asset.id,
+              jsonb_build_object('scope', 'file', 'auto', true, 'credits', 0), 'queued', gen_random_uuid());
+      v_status := 'queued';
+    end if;
+  end if;
+  update public.media_assets set transcript_status = v_status where id = v_asset.id;
+  return v_status;
+end;
+$$;
+
+
+--
 -- Name: rate_limit_hit(text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5830,7 +5981,10 @@ CREATE TABLE public.media_assets (
     error text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     words jsonb,
+    has_audio boolean,
+    transcript_status text DEFAULT 'none'::text NOT NULL,
     CONSTRAINT media_assets_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'rejected'::text]))),
+    CONSTRAINT media_assets_transcript_status_check CHECK ((transcript_status = ANY (ARRAY['none'::text, 'queued'::text, 'running'::text, 'ready'::text, 'failed'::text, 'skipped'::text]))),
     CONSTRAINT media_assets_words_check CHECK (((words IS NULL) OR ((jsonb_typeof(words) = 'array'::text) AND (octet_length((words)::text) < 524288))))
 );
 
@@ -6143,6 +6297,8 @@ declare
   v_out numeric;
   v_credits int;
   v_task public.tasks;
+  v_body text;
+  v_hash text;
 begin
   v_clip := public.owned_clip(p_clip_id, v_user);
   select * into v_asset from public.media_assets
@@ -6151,8 +6307,8 @@ begin
   if not found then
     raise exception 'This file is not stored with this project. Wait for it to finish uploading.' using errcode = 'P0002';
   end if;
-  -- Thư viện báo "synced" ngay khi upload xong, trước khi worker đo xong độ dài: client
-  -- thấy câu "still being processed" (409) thì chờ rồi gọi lại, không bắt người dùng bấm lần hai.
+  -- The library says "synced" as soon as the upload ends, before the worker has measured the
+  -- file: the client sees "still being processed" (409), waits and calls again.
   if v_asset.status <> 'ready' then
     raise exception 'This file is still being processed. Try again in a moment.' using errcode = 'P0001';
   end if;
@@ -6165,6 +6321,28 @@ begin
   if v_out - v_in < 0.5 then
     raise exception 'Choose a longer part of the file to caption.' using errcode = '22023';
   end if;
+
+  if p_request_id is not null then
+    select * into v_task from public.tasks where request_id = p_request_id and user_id = v_user;
+    if found then
+      return jsonb_build_object('task_id', v_task.id, 'credits', (v_task.payload ->> 'credits')::int);
+    end if;
+  end if;
+
+  -- Reuse: the file's own transcript, sliced to this window, for free.
+  select body into v_body from public.media_transcripts where asset_id = v_asset.id;
+  if v_body is not null then
+    v_hash := public.store_transcript_slice(p_clip_id, v_body::jsonb, v_in, v_out);
+    insert into public.tasks (user_id, kind, clip_id, job_id, asset_id, payload, status, request_id,
+                              started_at, finished_at, output)
+    values (v_user, 'transcribe_media', p_clip_id, v_clip.job_id, p_media_id,
+            jsonb_build_object('source_in', v_in, 'source_out', v_out, 'credits', 0, 'reused', true),
+            'done', coalesce(p_request_id, gen_random_uuid()), now(), now(),
+            jsonb_build_object('hash', v_hash, 'src', 'assets/transcripts/' || v_hash || '.json'))
+    returning * into v_task;
+    return jsonb_build_object('task_id', v_task.id, 'credits', 0);
+  end if;
+
   if v_out - v_in > public.captions_max_seconds() then
     raise exception 'Captions work on up to % minutes at a time. Trim the clip first.', public.captions_max_seconds() / 60
       using errcode = '22023';
@@ -6172,12 +6350,6 @@ begin
   v_credits := public.captions_credits(v_out - v_in);
 
   perform public.lock_credit_owner(v_user);
-  if p_request_id is not null then
-    select * into v_task from public.tasks where request_id = p_request_id and user_id = v_user;
-    if found then
-      return jsonb_build_object('task_id', v_task.id, 'credits', (v_task.payload ->> 'credits')::int);
-    end if;
-  end if;
   select * into v_task from public.tasks
   where user_id = v_user and kind = 'transcribe_media' and clip_id = p_clip_id and asset_id = p_media_id
     and status in ('queued', 'running')
@@ -6198,6 +6370,31 @@ begin
   returning * into v_task;
   perform public.credit_hold(v_user, 'captions', v_task.id, v_credits, 'Captions', v_clip.job_id);
   return jsonb_build_object('task_id', v_task.id, 'credits', v_credits);
+end;
+$$;
+
+
+--
+-- Name: request_media_transcript(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.request_media_transcript(p_media_id uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_asset public.media_assets;
+begin
+  select * into v_asset from public.media_assets
+  where id = p_media_id and user_id = v_user and status <> 'rejected' and storage_path like 'media/%';
+  if not found then
+    raise exception 'This file is not stored with this project. Wait for it to finish uploading.' using errcode = 'P0002';
+  end if;
+  if v_asset.transcript_status = 'failed' then
+    update public.media_assets set transcript_status = 'none' where id = v_asset.id;
+  end if;
+  return public.queue_asset_transcript(v_asset.id);
 end;
 $$;
 
@@ -7000,6 +7197,32 @@ CREATE FUNCTION public.signup_credits() RETURNS integer
 
 
 --
+-- Name: slice_transcript(jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.slice_transcript(p_body jsonb, p_in numeric, p_out numeric) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(jsonb_agg(segment order by ord), '[]'::jsonb)
+  from (
+    select s.ord,
+      case when kept.total = kept.n then s.seg
+           else jsonb_build_object('text', kept.text, 'words', kept.words) end as segment
+    from jsonb_array_elements(p_body) with ordinality as s(seg, ord)
+    cross join lateral (
+      select count(*) filter (where (w ->> 'start')::numeric >= p_in and (w ->> 'start')::numeric < p_out) as n,
+             count(*) as total,
+             coalesce(jsonb_agg(w order by wi) filter (where (w ->> 'start')::numeric >= p_in and (w ->> 'start')::numeric < p_out), '[]'::jsonb) as words,
+             string_agg(w ->> 'text', ' ' order by wi) filter (where (w ->> 'start')::numeric >= p_in and (w ->> 'start')::numeric < p_out) as text
+      from jsonb_array_elements(s.seg -> 'words') with ordinality as x(w, wi)
+    ) kept
+    where kept.n > 0
+  ) parts;
+$$;
+
+
+--
 -- Name: snapshot_editor_revision(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7143,6 +7366,52 @@ $$;
 
 
 --
+-- Name: store_transcript_slice(uuid, jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_transcript_slice(p_clip_id uuid, p_body jsonb, p_in numeric, p_out numeric) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_body text := public.slice_transcript(p_body, p_in, p_out)::text;
+  v_hash text;
+begin
+  perform public.check_transcript_body(v_body);
+  v_hash := encode(sha256(convert_to(v_body, 'UTF8')), 'hex');
+  insert into public.editor_transcripts (clip_id, hash, body)
+  values (p_clip_id, v_hash, v_body)
+  on conflict (clip_id, hash) do nothing;
+  return v_hash;
+end;
+$$;
+
+
+--
+-- Name: sync_asset_transcript_from_task(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sync_asset_transcript_from_task() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind <> 'transcribe_asset' or new.asset_id is null or new.status is not distinct from old.status then
+    return new;
+  end if;
+  update public.media_assets
+  set transcript_status = case new.status
+    when 'running' then 'running'
+    when 'queued' then 'queued'
+    when 'done' then 'ready'
+    else 'failed' end
+  where id = new.asset_id and transcript_status <> 'ready';
+  return new;
+end;
+$$;
+
+
+--
 -- Name: sync_generation_from_task(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7260,6 +7529,45 @@ begin
       and (storage.foldername(name))[1] = v_user::text;
   return jsonb_build_object('bytes', v_bytes, 'limit', v_limits.stored_bytes,
     'objects', v_objects, 'objectLimit', v_limits.stored_objects);
+end;
+$$;
+
+
+--
+-- Name: use_media_transcript(uuid, uuid, numeric, numeric); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.use_media_transcript(p_clip_id uuid, p_media_id uuid, p_source_in numeric DEFAULT 0, p_source_out numeric DEFAULT NULL::numeric) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_clip public.clips;
+  v_asset public.media_assets;
+  v_body text;
+  v_in numeric;
+  v_out numeric;
+  v_hash text;
+begin
+  v_clip := public.owned_clip(p_clip_id, v_user);
+  select * into v_asset from public.media_assets
+  where id = p_media_id and user_id = v_user and job_id = v_clip.job_id
+    and status <> 'rejected' and storage_path like 'media/%';
+  if not found then
+    raise exception 'This file is not stored with this project. Wait for it to finish uploading.' using errcode = 'P0002';
+  end if;
+  select body into v_body from public.media_transcripts where asset_id = v_asset.id;
+  if v_body is null then
+    return jsonb_build_object('status', case when v_asset.transcript_status in ('queued', 'running') then 'pending' else 'none' end);
+  end if;
+  v_in := greatest(0, coalesce(p_source_in, 0));
+  v_out := coalesce(p_source_out, v_asset.duration, 1e9);
+  if v_out <= v_in then
+    raise exception 'Choose a longer part of the file.' using errcode = '22023';
+  end if;
+  v_hash := public.store_transcript_slice(p_clip_id, v_body::jsonb, v_in, v_out);
+  return jsonb_build_object('status', 'ready', 'hash', v_hash, 'src', 'assets/transcripts/' || v_hash || '.json');
 end;
 $$;
 
@@ -7497,6 +7805,25 @@ CREATE VIEW public.marketing_documents_latest WITH (security_invoker='true') AS
     created_at
    FROM public.marketing_documents
   ORDER BY user_id, kind, version DESC;
+
+
+--
+-- Name: media_transcripts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.media_transcripts (
+    asset_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    hash text NOT NULL,
+    body text NOT NULL,
+    seconds numeric NOT NULL,
+    source text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT media_transcripts_body_check CHECK ((octet_length(body) < 524288)),
+    CONSTRAINT media_transcripts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_transcripts_seconds_check CHECK ((seconds > (0)::numeric)),
+    CONSTRAINT media_transcripts_source_check CHECK ((source = ANY (ARRAY['scribe'::text, 'fake'::text, 'import'::text])))
+);
 
 
 --
@@ -8086,6 +8413,14 @@ ALTER TABLE ONLY public.media_assets
 
 ALTER TABLE ONLY public.media_assets
     ADD CONSTRAINT media_assets_storage_path_key UNIQUE (storage_path);
+
+
+--
+-- Name: media_transcripts media_transcripts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.media_transcripts
+    ADD CONSTRAINT media_transcripts_pkey PRIMARY KEY (asset_id);
 
 
 --
@@ -8753,6 +9088,13 @@ CREATE TRIGGER tasks_refund_media_captions AFTER UPDATE OF status ON public.task
 
 
 --
+-- Name: tasks tasks_sync_asset_transcript; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tasks_sync_asset_transcript AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.sync_asset_transcript_from_task();
+
+
+--
 -- Name: tasks tasks_sync_generation; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9117,6 +9459,22 @@ ALTER TABLE ONLY public.media_assets
 
 ALTER TABLE ONLY public.media_assets
     ADD CONSTRAINT media_assets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: media_transcripts media_transcripts_asset_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.media_transcripts
+    ADD CONSTRAINT media_transcripts_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES public.media_assets(id) ON DELETE CASCADE;
+
+
+--
+-- Name: media_transcripts media_transcripts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.media_transcripts
+    ADD CONSTRAINT media_transcripts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -9510,6 +9868,12 @@ ALTER TABLE public.marketing_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.media_assets ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: media_transcripts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.media_transcripts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: operation_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -9587,6 +9951,13 @@ CREATE POLICY "read own CMO goals" ON public.cmo_goals FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: media_transcripts read own media transcripts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own media transcripts" ON public.media_transcripts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

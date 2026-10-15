@@ -18,6 +18,7 @@ import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 const names = TOOL_SPECS.map((spec) => spec.name);
 assert.ok(names.includes("capture"), "có tool trình duyệt capture");
 assert.ok(names.includes("set_frame") && names.includes("remove_words"), "op của editor-core là tool");
+assert.ok(names.includes("find_retakes"), "the rough cut finds retakes");
 assert.equal(new Set(names).size, names.length, "tên tool không trùng");
 assert.ok("capture" in BROWSER_INPUTS && !("set_frame" in BROWSER_INPUTS));
 const text = JSON.stringify(TOOL_SPECS.map((spec) => spec.schema));
@@ -148,7 +149,7 @@ for (const tool of searched.slice(1)) assert.equal(Boolean(tool.defer_loading), 
 const loaded = searched.filter((tool) => !tool.defer_loading).length;
 assert.ok(loaded < searched.length / 2 + 5, `most tools wait for a search (${loaded} of ${searched.length} loaded)`);
 // Every always-loaded name is a real tool of the clip scope (or a priced one configured elsewhere).
-const priced = new Set(["create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill"]);
+const priced = new Set(["create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill", "preview_explainer", "add_explainer"]);
 for (const name of ALWAYS_LOADED) assert.ok(names.includes(name) || priced.has(name), `${name} is a tool`);
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.

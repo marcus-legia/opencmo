@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -42,6 +42,7 @@ import { variantsOf } from "./inspector/variants";
 import { BackgroundPanel } from "./generate/BackgroundPanel";
 import { EditVideoPanel } from "./generate/EditVideoPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
+import { useAutoTranscripts } from "./library/useAutoTranscripts";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
 import { CLIP_COUNTS, CLIP_LENGTH_OPTIONS } from "@/lib/clip-options";
@@ -432,6 +433,9 @@ function Workspace({
     notify: setNotice,
     onLocalBytes: () => media.retryMissing(),
   });
+  // Library files transcribe themselves; a ready transcript links to the videos that play the file.
+  const transcripts = useAutoTranscripts({ document: state.document, manifest: library.manifest, clipId, run });
+  const hasSpeech = useMemo(() => speechSources(state.document).length > 0, [state.document]);
   // Generate (B8): khai báo `generate.*` trong document → file thật trong thư viện.
   const generating = useMemo(() => pendingGenerations(state.document, library.manifest), [state.document, library.manifest]);
   const { retry: retryGeneration } = useGenerations({
@@ -456,8 +460,12 @@ function Workspace({
     walk(session.current, ({ entity }) => typeof entity.id === "string" && before.add(entity.id));
     const after = await run(ops);
     if (!after) return;
-    const scene = activeScene(after) as unknown as { children?: { id?: string }[] };
-    setSelection((scene.children ?? []).flatMap((child) => (child.id && !before.has(child.id) ? [child.id] : [])));
+    // Select the new elements, not the B-roll row they were placed into: the AI menu (Regenerate,
+    // variants) reads the generation off the selected element.
+    type Child = { id?: string; children?: Child[] };
+    const added = (children: Child[]): string[] =>
+      children.flatMap((child) => (isRow(child) ? added(child.children ?? []) : child.id && !before.has(child.id) ? [child.id] : []));
+    setSelection(added((activeScene(after) as unknown as Child).children ?? []));
   };
   /** Chèn asset rồi chọn node vừa chèn. */
   const insertAssets = async (records: LibraryRecord[], options: { at?: { x: number; y: number }; start: number }) => {
@@ -1298,6 +1306,7 @@ function Workspace({
             }}
             notify={setNotice}
             onTouched={flashLayers}
+            speech={hasSpeech}
             runTool={async (request) => {
               const input = (request.input ?? {}) as Record<string, unknown>;
               if (request.name === "media_waveform") {
@@ -1368,6 +1377,7 @@ function Workspace({
         {leftTab === "media" ? (
           <LibraryPanel
             library={library}
+            transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
           />
         ) : leftTab === "clips" ? (
@@ -1383,6 +1393,7 @@ function Workspace({
             busy={busy}
             run={run}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
+            selection={selection}
           />
         )}
       </section>
@@ -1666,7 +1677,8 @@ function aiMenuItems({
   const found: Record<string, unknown> = entity;
   const items: MenuItem[] = [];
   const declarations = ownDeclarations(found);
-  if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL)) {
+  // Rendered from code (3D Studio, explainers): a new seed would pay for the same picture again.
+  if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL && declaration.model !== EXPLAINER_MODEL)) {
     // Giá theo catalog máy chủ (G5); model đã tắt thì không mời sinh lại.
     // Shots continuing this one are made again from its new last frame: same price, counted here.
     const following = continuationsOf(document, String(found.id), 0).map((link) => link.declaration);
@@ -1821,7 +1833,9 @@ const TRANSITION_PROMPT =
 
 /** Nhãn chờ của phần tử AI: cảnh 3D render trên GPU, còn lại là sinh. */
 function aiLabel(entity: Record<string, unknown>): string {
-  return ownDeclarations(entity).some((declaration) => declaration.model === STUDIO_MODEL) ? "Rendering 3D…" : "Generating…";
+  const models = ownDeclarations(entity).map((declaration) => declaration.model);
+  if (models.includes(STUDIO_MODEL)) return "Rendering 3D…";
+  return models.includes(EXPLAINER_MODEL) ? "Rendering explainer…" : "Generating…";
 }
 
 function download(blob: Blob, name: string): void {
