@@ -276,13 +276,13 @@ Mirror 3D Studio: `opencmo/ai/providers/three.py`, `generate_task.py` (the `code
 (`gpu_image`, `render_three`), and the scene checks in `create_generation`
 (`supabase/migrations/20261118090000_chained_shots.sql:122-132`).
 
-- [ ] **B1. `apps/web/lib/motion/preview.ts`.**
+- [x] **B1. `apps/web/lib/motion/preview.ts`.**
   - `previewMotion` implemented exactly as in Contracts.
   - Local path: spawn the CLI in a temp dir, read the JPEGs as base64, clean up.
   - Modal path: POST with a token.
   - Timeout 60 s, then an English error.
   - **Push early** (Track C uses it).
-- [ ] **B2. Model and SQL.**
+- [x] **B2. Model and SQL.**
   - Add `motion-explainer` to `ai-models.json`.
   - Price: start at 1 credit per 10 s plus the voice (5 per 1,000 characters), rounded up. Adjust after B6's measurements.
   - Migration:
@@ -290,7 +290,7 @@ Mirror 3D Studio: `opencmo/ai/providers/three.py`, `generate_task.py` (the `code
     - duration must be in `limits.durations`;
     - the scene stays ≤ 4000 bytes.
   - A pgTAP test, `scripts/dump-schema.sh`, and `npm run check:contracts --workspace @opencmo/web`.
-- [ ] **B3. Provider `opencmo-motion`** (`opencmo/ai/providers/motion.py`, registered in `providers/__init__.py`).
+- [x] **B3. Provider `opencmo-motion`** (`opencmo/ai/providers/motion.py`, registered in `providers/__init__.py`).
   1. Load the code by `scene.code_ref`, as `generate_task.py:254` does.
   2. Get the voice:
      - **Real:** ElevenLabs through the fal speech path (`speech_payload`, `speech_words`). Narration = the beats' `say` joined with spaces; premade voices only.
@@ -304,7 +304,7 @@ Mirror 3D Studio: `opencmo/ai/providers/three.py`, `generate_task.py` (the `code
   - A CPU image `motion_image`: Node, `packages/clip-motion`, Remotion's headless Chrome installed at build time, the bundle pre-built.
   - `render_motion(payload) -> bytes`, with cpu 4 and memory 4096 like `render_three`, and no secrets.
   - A web endpoint `motion_preview` (token auth like `submit`) that returns PreviewResult with base64 stills.
-- [ ] **B5. Dev experience.**
+- [x] **B5. Dev experience.**
   - `scripts/dev.mjs` and `.env.example` default to `OPENCMO_MOTION=local`, plus `OPENCMO_MOTION_FAKE_VOICE=1` when there is no fal key.
   - A first run downloads Remotion's browser once.
   - Document it in `.env.example`.
@@ -320,6 +320,42 @@ Mirror 3D Studio: `opencmo/ai/providers/three.py`, `generate_task.py` (the `code
 - One local render through the worker: a task in the DB, then an MP4 in Storage.
 
 **Notes (B):**
+- B1: `previewMotion(job, { timeoutMs? })`. Local spawns `node packages/clip-motion/src/cli.ts preview` with a
+  minimal env (the server's keys stay out, and its `NODE_OPTIONS=--conditions=react-server` broke Remotion);
+  returns `{ ok: false }` for job/code errors (the Assistant fixes those) and throws an English error on a
+  timeout or outage. `stills[].file` comes back as a bare file name; a still outside the temp folder is refused.
+  Checked by `lib/motion/preview.check.ts` (fake CLIs + a local HTTP server) and against A's real CLI.
+- B2: price `{ "unit": "explainer", "credits": 1, "voiceKchars": 5 }` = `credits × ceil(duration / 10)` +
+  `voiceKchars × max(1, ceil(narration chars / 1000))`, narration = beats' `say` trimmed and joined with one
+  space. Integer on purpose: `0.1 × 30` is `3.0000000000000004` in JS (ceil → 4) but 3 in SQL, and Python read
+  `int(0.1)` as 0. A 20 s, short script costs 7; 90 s with 1,205 characters costs 19. Provisional until B6.
+  `maxPromptChars: 80` for `"Explainer: <title>"`. Migration `20261124090000_motion_explainer.sql`:
+  `ai_check_spec` takes `voice` on video models with `limits.voices`, ties `template = 'explainer'` to the
+  `opencmo-motion` provider both ways, checks `code_ref` against the caller's `scene_codes` and the script
+  (title, 3–16 beats, `say` ≤ 240, `label` ≤ 40, accent); `ai_price` gains the unit; `agent_raise_hold_3d`
+  counts `preview_explainer`. pgTAP `154_motion_explainer` (22 tests); full suite 1398/1398. Schema dumped.
+- B3: `opencmo/ai/providers/motion.py`. Voice through `FalProvider` + `elevenlabs-voice` (premade names);
+  narration longer than `duration` is cut with ffmpeg and words past the end dropped (logged). Fake voice =
+  silent AAC of `duration` seconds and no `words`, so the renderer estimates. Exit 4 →
+  `The explainer code failed: …. Your credits were refunded.`, exit 3 → invalid, both never retried. The CLI
+  gets a minimal env. Moderation skips `opencmo-motion` like 3D (text is checked on the web, C3).
+  `adapter_for` needs `OPENCMO_MOTION=local|modal` plus a fal key or the fake voice (never in production);
+  with neither renderer, `OPENCMO_AI_FAKE=1` falls back to the fake model.
+  **Verified through the worker:** a `motion-explainer` generation created by `create_generation` on local
+  Supabase, picked up by `python -m opencmo.worker` (`OPENCMO_MOTION=local`, fake voice, scale 0.5): task
+  `done`, 7 credits settled, MP4 in `media` (540×960, 15 s, H.264 + AAC). Frame at 5 s looked at: A1's
+  placeholder (navy + title). 16:9 run directly: 25.6 s cold for 15 s, peak child RSS ~725 MB
+  (`getrusage`; `/usr/bin/time` is not installed here). For A: in 9:16 the placeholder title touches the left edge.
+- B4: written, **not built or deployed** (no Modal credentials in this session). `motion_image` (CPU: Node,
+  Remotion's libs, `npm install` of clip-motion, `ensureBrowser()` then the shell pinned as
+  `OPENCMO_MOTION_CHROME` so the CLI's offline flags apply, bundle warmed by rendering
+  `fixtures/placeholder.job.json` at build), `render_motion` (cpu 4, 4 GB, no secrets, `{job, audio}` → bytes;
+  the worker makes the voice first and spawns it), and `motion_preview` (token in the body like `submit`). The
+  preview container gets a new token-only secret, never `opencmo` with the service key:
+  `modal secret create opencmo-motion OPENCMO_WORKER_TOKEN=...`. The worker image sets `OPENCMO_MOTION=modal`.
+- B5: `npm run dev` passes `OPENCMO_MOTION=local` to web and worker, and `OPENCMO_MOTION_FAKE_VOICE=1` when
+  no `FAL_KEY` is set; `.env.local` values win. Documented in `apps/web/.env.example`.
+- B6: blocked here (needs Modal access): deploy, render the showcase and a 60 s job, then set the price.
 
 ---
 
@@ -389,11 +425,17 @@ Mirror 3D Studio:
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
 
-- [ ] (from C → owner B) `motion-explainer` in `ai-models.json` needs `limits.voices` (premade voices; the tool lists them and `specSchema` checks them) and the price as `{ "unit": "second", "credits": 0.1, "voiceKchars": 5 }`. `priceOf` (editor-core) already adds `voiceKchars × ceil(narration chars / 1000)`, narration = beats' `say` joined with spaces; `ai_price` (SQL) must do the same.
-- [ ] (from C → owner B) The spec C sends: `{ prompt: "Explainer: <title>", aspectRatio, duration, voice, seed, scene: { template: "explainer", code_ref, title, beats, accent? } }`. `create_generation` must accept `voice` on this video model and check `code_ref` for `template = 'explainer'`.
-- [ ] (from C → owner B) `agent_raise_hold_3d` counts only `preview_3d`: count `preview_explainer` too, so an explainer turn gets the bigger hold.
-- [ ] (from C → owner B) With `OPENCMO_AI_FAKE=1` and `OPENCMO_MOTION=local` (the e2e env, `apps/web/e2e/run.ts`), the worker must render `motion-explainer` with the local CLI, not the fake colour frame: the e2e checks real pixels.
+- [x] (from C → owner B) `motion-explainer` in `ai-models.json` needs `limits.voices` (premade voices; the tool lists them and `specSchema` checks them) and the price as `{ "unit": "second", "credits": 0.1, "voiceKchars": 5 }`. `priceOf` (editor-core) already adds `voiceKchars × ceil(narration chars / 1000)`, narration = beats' `say` joined with spaces; `ai_price` (SQL) must do the same.
+- [x] (from C → owner B) The spec C sends: `{ prompt: "Explainer: <title>", aspectRatio, duration, voice, seed, scene: { template: "explainer", code_ref, title, beats, accent? } }`. `create_generation` must accept `voice` on this video model and check `code_ref` for `template = 'explainer'`.
+- [x] (from C → owner B) `agent_raise_hold_3d` counts only `preview_3d`: count `preview_explainer` too, so an explainer turn gets the bigger hold.
+- [x] (from C → owner B) With `OPENCMO_AI_FAKE=1` and `OPENCMO_MOTION=local` (the e2e env, `apps/web/e2e/run.ts`), the worker must render `motion-explainer` with the local CLI, not the fake colour frame: the e2e checks real pixels.
+  - B: done, but with an integer price unit (see Notes B2 for why): `{ "unit": "explainer", "credits": 1, "voiceKchars": 5 }`. See the request to C below.
+  - B: `maxPromptChars` is 80 so `"Explainer: <title>"` fits.
+  - B: `OPENCMO_MOTION=local` wins over `OPENCMO_AI_FAKE`. The voice also needs `OPENCMO_MOTION_FAKE_VOICE=1` (or `FAL_KEY`): add it to `apps/web/e2e/run.ts` for the worker.
 - [ ] (from C → owner A) The guide `explainer` quotes the kit API from Contracts. Tell C when the README (A8) changes a name; the fake provider plays `fixtures/showcase.job.json` as is, so it must stay a valid, kit-only job.
+- [ ] (from B → owner C) `priceOf` (editor-core): add `case 'explainer': return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);` and `'explainer'` to the `unit` union; the `voiceKchars` addition stays as it is. Until then `priceOf` returns `NaN` for this model. Also count narration in code points (`[...text].length`), as SQL `length()` and Python `len()` do.
+- [ ] (from B → owner C) `providerEnabled` in `apps/web/lib/generate/models.ts`: `opencmo-motion` is on when `OPENCMO_MOTION` is `local` or `modal` and (`FAL_KEY` or `OPENCMO_MOTION_FAKE_VOICE=1` outside production), or `aiFakeEnabled()`, the same rule as `adapter_for`. Until then the web hides the model.
+- [ ] (from B → owner C) In `apps/web/package.json`: add `"@opencmo/clip-motion": "*"` (`lib/motion/preview.ts` imports its types) and `NODE_OPTIONS=--conditions=react-server tsx lib/motion/preview.check.ts` to `check:contracts`.
 
 ---
 
