@@ -326,7 +326,7 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
   - Measure: export a cut talk, extract the audio around 3 joins, look at the waveform (or `astats`) and confirm
     no click.
   - Parity stays green.
-- [ ] **B6. E2E support for C:** stable `data-testid`s on the library badge and the Transcript panel source picker
+- [x] **B6. E2E support for C:** stable `data-testid`s on the library badge and the Transcript panel source picker
   (list them in Notes).
 
 **Checks:** `npm run check:clip-doc`, `npm run check:editor-core`, `npm run test:editor-core`,
@@ -382,6 +382,34 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
     37 frames fail on the base commit too (environment); that is unchanged.
   - Preview limit: the ramp starts on the first or last rendered frame of a segment. If requestAnimationFrame skips
     that frame, there is no fade on that join in preview. Export is exact.
+- B4: editor wiring:
+  - `components/editor/library/useAutoTranscripts.ts`:
+    - asks A's route for `transcript_status` of every stored library file, every 5 s while one is
+      `queued`/`running`;
+    - when a file is `ready` and a video element on the open timeline plays it with no linked captions, asks for
+      the element's slice (`sourceRange` window) and runs `attach_transcript` as its own Undo step
+      (`origin: "system"`, label "Attach transcript");
+    - an element placed later is linked the same way; `pending` retries after 5 s.
+  - The client is in `lib/editor/media-transcript-client.ts`, with the route shapes under Requests (B → A).
+    Until A's routes exist they answer 404, and the editor stops asking for the session (no errors shown).
+  - Library row badges: `Transcribing…` / `Transcript ready`.
+  - Transcript panel:
+    - with several speech sources it shows a picker; the default is the selected video if it has speech, else
+      the master, else the first;
+    - every op it sends carries `element_id` (none for the master);
+    - word clicks seek at the video's own clip second.
+  - Inspector "Generate captions" on a video now links the new layer (`source`), so a captioned library video is
+    cuttable by words, with no wait for A.
+  - When a linked layer already exists (the hidden automatic one), the inspector offers "Show captions (free —
+    transcript ready)" instead of charging.
+  - Assistant: starter "Rough cut my video" (sends `/roughcut`), shown when `speechSources(document)` is not
+    empty.
+- B6 `data-testid`s for C6:
+  - library row badges `transcript-pending` / `transcript-ready`, inside the row `asset-<basename>`;
+  - Transcript panel picker `transcript-source`, a `<select>` whose options carry
+    `transcript-source-<elementId>`; pick with `selectOption(<elementId>)`. It only shows with 2+ sources;
+  - Assistant starter `assistant-roughcut`;
+  - inspector `show-captions`.
 
 ---
 
@@ -507,12 +535,12 @@ the e2e spec locally.
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
 
-- [ ] (from C → owner B) Starter "Rough cut my video" in `components/editor/assistant/AssistantPanel.tsx`
+- [x] (from C → owner B) Starter "Rough cut my video" in `components/editor/assistant/AssistantPanel.tsx`
   (`EXAMPLES`), shown when the clip has a speech source (`speechSources(document).length > 0`). It sends
   `/roughcut`; the slash command, guide and tool are in.
 - [ ] (from C → owner A) A3's fake-transcriber sidecar must cover the C6 fixture: a short talk with "um", a 2 s
   pause and a sentence said twice. Please name the fixture path and the sidecar format in Notes (A).
-- [ ] (from C → owner B) B6's `data-testid`s on the library badge and the Transcript source picker, for C6.
+- [x] (from C → owner B) B6's `data-testid`s on the library badge and the Transcript source picker, for C6.
 - [ ] (from B → owner A) Route shapes the editor (B4, `apps/web/lib/editor/media-transcript-client.ts`) calls; both
   under RLS, in `app/api/v1/editor/captions/**`:
   1. `GET /api/v1/editor/captions?media_ids=<uuid>,<uuid>…` (≤ 50 ids) →
@@ -522,6 +550,11 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   2. `POST /api/v1/editor/captions/transcript` with body `{ clip_id, media_id, source_in, source_out }` → the
      `use_media_transcript` jsonb as is: `{status:"ready",src,hash}` | `{status:"pending"}` | `{status:"none"}`.
   Until these exist the editor treats 404 as "no automatic transcript" and does nothing.
+- [ ] (from B → owner C) `add_captions` (`lib/agent/captions-tool.ts`): when the element is a video (a `video`, or a
+  `rect` with a video paint), set `source: <element id>` on the inserted captions node, as the inspector's
+  "Generate captions" now does. Linked captions make that video a speech source, so the transcript tools can cut
+  it. Also: if a captions layer already has `source` = that element (the hidden automatic one), unhide it with
+  `update_element {props:{hidden:false}}` instead of charging for a new transcript.
 
 ---
 

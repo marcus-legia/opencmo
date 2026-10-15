@@ -22,6 +22,8 @@ import {
   keptRanges,
   loadCaptions,
   search,
+  speechOffset,
+  speechSources,
   toOutput,
   walk,
   type CaptionModel,
@@ -39,6 +41,7 @@ export function TranscriptPanel({
   busy,
   run,
   onSeek,
+  selection = [],
 }: {
   doc: ClipDocument;
   context: () => OpContext;
@@ -46,7 +49,21 @@ export function TranscriptPanel({
   run: (ops: unknown[]) => Promise<unknown>;
   /** Giây trên trục ra của clip (sau cắt). */
   onSeek: (seconds: number) => void;
+  /** Selected elements: a selected video with speech opens on its own transcript. */
+  selection?: string[];
 }) {
+  // Which video's words the panel edits: the one picked here, else a selected video with speech,
+  // else the main video (or the only one).
+  const sources = useMemo(() => speechSources(doc), [doc]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const source =
+    sources.find((item) => item.elementId === picked) ??
+    sources.find((item) => selection.includes(item.elementId)) ??
+    sources.find((item) => item.master) ??
+    sources[0] ??
+    null;
+  // The master is the default source: its ops stay as they were (no `element_id`).
+  const elementId = source && !source.master ? source.elementId : undefined;
   const [model, setModel] = useState<CaptionModel | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "none" | "error">("loading");
   const [query, setQuery] = useState("");
@@ -60,7 +77,7 @@ export function TranscriptPanel({
   // Đọc lại mỗi khi document đổi — kể cả Undo, sửa từ timeline hay Assistant.
   useEffect(() => {
     let live = true;
-    loadCaptions(doc, context()).then(
+    loadCaptions(doc, context(), elementId).then(
       (next) => {
         if (!live) return;
         setModel(next);
@@ -75,9 +92,9 @@ export function TranscriptPanel({
     return () => {
       live = false;
     };
-    // `context` đổi theo khung nhìn; transcript thì không — chỉ đọc lại theo document.
+    // `context` changes with the viewport, the transcript does not: re-read on document or source.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [doc, elementId]);
 
   const flat = useMemo(
     () => (model?.transcript ?? []).flatMap((segment, s) => segment.words.map((word, w) => ({ at: [s, w] as At, word }))),
@@ -94,9 +111,34 @@ export function TranscriptPanel({
   const selectedKeys = useMemo(() => new Set(selected.map((entry) => key(entry.at))), [selected]);
   const hits = useMemo(() => new Set(search(model?.transcript ?? [], query).map((at) => key(at as At))), [model, query]);
 
+  const picker =
+    sources.length > 1 ? (
+      <label className="ed2-trn-opt ed2-trn-source">
+        <span>Video</span>
+        <select
+          value={source?.elementId ?? ""}
+          aria-label="Which video's words to edit"
+          data-testid="transcript-source"
+          onChange={(event) => {
+            setPicked(event.target.value);
+            setAnchor(null);
+            setFocus(null);
+          }}
+        >
+          {sources.map((item) => (
+            <option key={item.elementId} value={item.elementId} data-testid={`transcript-source-${item.elementId}`}>
+              {item.name}
+              {item.transcript ? "" : " (no transcript yet)"}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+
   if (status !== "ready" || !model) {
     return (
       <section className="ed2-trn" data-testid="transcript-panel">
+        {picker}
         <p className={status === "error" ? "ed2-error ed2-trn-note" : "ed2-muted ed2-trn-note"}>
           {status === "loading"
             ? "Loading the transcript…"
@@ -124,14 +166,15 @@ export function TranscriptPanel({
       setAnchor(null);
       setFocus(null);
     }
-    void run(ops);
+    void run(elementId ? ops.map((op) => ({ ...(op as object), element_id: elementId })) : ops);
   };
 
   const seekTo = (word: Word) => {
     const time = model.removed.length
       ? toOutput(word.start, keptRanges(model.window, model.removed))
       : word.start - model.window.start;
-    if (time !== null) onSeek(Math.max(0, time));
+    // A video placed later on the timeline starts at its own clip second.
+    if (time !== null) onSeek(Math.max(0, time + speechOffset(doc, elementId)));
   };
 
   const nudge = (edge: "start" | "end", seconds: number) =>
@@ -170,6 +213,7 @@ export function TranscriptPanel({
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => event.stopPropagation()}
       />
+      {picker}
       <div className="ed2-row ed2-wrap ed2-trn-tools">
         <label className="ed2-trn-opt">
           <span>Cut</span>

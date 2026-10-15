@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, EXPLAINER_MODEL, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -42,6 +42,7 @@ import { variantsOf } from "./inspector/variants";
 import { BackgroundPanel } from "./generate/BackgroundPanel";
 import { EditVideoPanel } from "./generate/EditVideoPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
+import { useAutoTranscripts } from "./library/useAutoTranscripts";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
 import { CLIP_COUNTS, CLIP_LENGTH_OPTIONS } from "@/lib/clip-options";
@@ -432,6 +433,9 @@ function Workspace({
     notify: setNotice,
     onLocalBytes: () => media.retryMissing(),
   });
+  // Library files transcribe themselves; a ready transcript links to the videos that play the file.
+  const transcripts = useAutoTranscripts({ document: state.document, manifest: library.manifest, clipId, run });
+  const hasSpeech = useMemo(() => speechSources(state.document).length > 0, [state.document]);
   // Generate (B8): khai báo `generate.*` trong document → file thật trong thư viện.
   const generating = useMemo(() => pendingGenerations(state.document, library.manifest), [state.document, library.manifest]);
   const { retry: retryGeneration } = useGenerations({
@@ -1298,6 +1302,7 @@ function Workspace({
             }}
             notify={setNotice}
             onTouched={flashLayers}
+            speech={hasSpeech}
             runTool={async (request) => {
               const input = (request.input ?? {}) as Record<string, unknown>;
               if (request.name === "media_waveform") {
@@ -1368,6 +1373,7 @@ function Workspace({
         {leftTab === "media" ? (
           <LibraryPanel
             library={library}
+            transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
           />
         ) : leftTab === "clips" ? (
@@ -1383,6 +1389,7 @@ function Workspace({
             busy={busy}
             run={run}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
+            selection={selection}
           />
         )}
       </section>

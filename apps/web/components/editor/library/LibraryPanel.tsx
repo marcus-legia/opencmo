@@ -10,6 +10,8 @@ import { useRef, useState } from "react";
 
 import { basename, childrenOf, dirname, isPartial, type AssetRecord, type LibraryRecord } from "@opencmo/clip-assets";
 
+import type { TranscriptStatus } from "@/lib/editor/media-transcript-client";
+
 import type { LibraryApi } from "./useLibrary";
 
 /** Kiểu dữ liệu kéo thả của một asset trong thư viện — canvas và timeline đọc nó. */
@@ -24,7 +26,16 @@ function seconds(value: unknown): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-export function LibraryPanel({ library, onInsert }: { library: LibraryApi; onInsert: (record: LibraryRecord) => void }) {
+export function LibraryPanel({
+  library,
+  onInsert,
+  transcriptOf,
+}: {
+  library: LibraryApi;
+  onInsert: (record: LibraryRecord) => void;
+  /** The file's automatic transcript (`useAutoTranscripts`); null = none to show. */
+  transcriptOf?: (record: LibraryRecord) => TranscriptStatus | null;
+}) {
   const [folder, setFolder] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -198,6 +209,16 @@ export function LibraryPanel({ library, onInsert }: { library: LibraryApi; onIns
                   ) : (
                     <>
                       <span>{seconds((record as AssetRecord).duration)}</span>
+                      {transcriptOf?.(record) === "queued" || transcriptOf?.(record) === "running" ? (
+                        <span data-testid="transcript-pending" title="Transcribing in the background, free. Then you can edit it by its words.">
+                          Transcribing…
+                        </span>
+                      ) : null}
+                      {transcriptOf?.(record) === "ready" ? (
+                        <span data-testid="transcript-ready" title="Open the Transcript tab, or ask the Assistant to cut it.">
+                          Transcript ready
+                        </span>
+                      ) : null}
                       {cloud === "uploading" ? (
                         <span data-testid="sync-uploading">Uploading{progress !== undefined ? ` ${Math.round(progress * 100)}%` : "…"}</span>
                       ) : null}
