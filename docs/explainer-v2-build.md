@@ -197,7 +197,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 
 - [x] **A1. Contract.** `theme` and `personality` in `job.ts` (optional, defaults as above); `kit.theme`,
   `kit.personality`; v1 fixtures still parse and render unchanged. **Push this first.**
-- [ ] **A2. Every Lucide icon.** `Icon` reads `packages/clip-icons/data/icons.json` (bundled into the Remotion
+- [x] **A2. Every Lucide icon.** `Icon` reads `packages/clip-icons/data/icons.json` (bundled into the Remotion
   bundle; ~720 KB, no fetch). Unknown name → kit error with the 5 closest names. Keep the draw-on animation.
   Test: `virus`, `syringe`, `shield-check` render; `virsu` suggests `virus`.
 - [ ] **A3. Lottie.** Add `@remotion/lottie` pinned to the same version as `remotion` (4.0.530). `<Lottie>` loads
@@ -302,6 +302,12 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   fields in `job.ts`; `kit.theme`, `kit.personality`. A job without them is v1: the `premium` personality keeps
   v1 motion, and the ambient layer is on by default only when the job sets a personality, so the showcase golden
   stills stay valid. `check:clip-motion` green.
+- A2: `src/assets.ts` assembles the bundle's public dir (fonts + `icons.json` + `lottie/`), cached by an asset
+  hash; the page loads `icons.json` once before the first frame (`src/remotion/assets.ts`). `Icon` takes any
+  Lucide name, v1 names keep their drawings, an unknown name fails with the closest 5 (`virsu` → `virus, …`).
+  Looked at a preview still: virus (wrong), syringe (signal) and shield-check (answer) drawn correctly.
+  **Request to B (B3):** the Modal image needs `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie`
+  next to `packages/clip-motion` (or set `OPENCMO_MOTION_ICONS` / `OPENCMO_MOTION_LOTTIE`).
 
 ### Track B
 
@@ -312,3 +318,7 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from A → owner B) B3: copy `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie` into
+  `motion_image` at the same relative paths as in the repo (`<root>/packages/clip-icons/data`,
+  `<root>/packages/clip-media/lottie`); the bundle reads them from there (env overrides in the clip-motion README).

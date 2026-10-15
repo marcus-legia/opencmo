@@ -21,6 +21,11 @@ code failed (last stderr line is the message for the agent; never retried) · 1 
 | `OPENCMO_MOTION_GL` | Chromium GL backend, default `angle` (`angle-egl` on a GPU; `swangle` is 5× slower on CPU) |
 | `OPENCMO_MOTION_CACHE` | bundle cache dir, default `$TMPDIR/opencmo-motion` |
 | `OPENCMO_EDITOR_FONTS` | fonts dir, default `packages/clip-media/fonts` |
+| `OPENCMO_MOTION_ICONS` | Lucide icon data, default `packages/clip-icons/data/icons.json` |
+| `OPENCMO_MOTION_LOTTIE` | built-in Lottie animations, default `packages/clip-media/lottie` |
+
+Fonts, icon data and Lottie files are copied into one public dir of the Remotion bundle (`src/assets.ts`), so
+scenes load them from the local bundle server and never from the network.
 
 The job contract (`MotionJob`, `PreviewResult`, `estimateDuration`) is in `src/job.ts` and
 `docs/explainer-build.md`. `fixtures/showcase.job.json` is the reference scene (edit
@@ -79,8 +84,11 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
 - `<Link from={[x, y]} to={[x, y]} curve? dashed? dots? width?>` – a line that draws itself.
 - `<Box area | x y w h label? dashed?>` – a highlighted region.
 - `<Check x y size kind="check|cross">` – a ring and a check (or a cross).
-- `<Icon name x y size>` – `kit.icons`: mic, music, phone, search, database, wave, bolt, user, lock, server,
-  cloud, chart, clock, globe, key, play.
+- `<Icon name x y size color?>` – a line icon that draws itself. Any of the ~1,850 Lucide names of
+  `packages/clip-icons` (`virus`, `syringe`, `shield-check`, `dna`, `microscope`…; the Assistant searches them
+  with `find_icons`). The 16 v1 names (`kit.icons`: mic, music, phone, search, database, wave, bolt, user, lock,
+  server, cloud, chart, clock, globe, key, play) keep their v1 drawings. An unknown name fails with the 5 closest
+  names.
 
 ### Timing
 - `kit.beat(i)` → `{ from, to, frames }` of beat `i`.

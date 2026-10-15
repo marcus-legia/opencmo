@@ -5,6 +5,7 @@ import { FAMILY } from '../remotion/fonts.ts';
 import { plotBox, plotPoint, type Box as BoxShape } from './areas.ts';
 import { kitError, MarkTag, TextTag, useArea, useColor, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import { enter, ease } from './motion.ts';
+import { closestIcons, ICON_NAMES, iconPath } from './icons.ts';
 import { alpha } from './theme.ts';
 
 type XY = [number, number];
@@ -136,33 +137,15 @@ export function Check(props: CheckProps) {
 	);
 }
 
-const ICONS: Record<string, string> = {
-	mic: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z M5 11a7 7 0 0 0 14 0 M12 18v3 M8 21h8',
-	music: 'M9 18V5l11-2v13 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
-	phone: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z M11 18h2',
-	search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14Z M16 16l5 5',
-	database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
-	wave: 'M2 12h2 M6 8v8 M10 4v16 M14 7v10 M18 10v4 M22 12h-2',
-	bolt: 'M13 2 4 14h7l-1 8 9-12h-7l1-8Z',
-	user: 'M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z M4 21a8 8 0 0 1 16 0',
-	lock: 'M6 11h12v10H6z M8 11V7a4 4 0 0 1 8 0v4',
-	server: 'M4 4h16v6H4z M4 14h16v6H4z M8 7h.01 M8 17h.01',
-	cloud: 'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8Z',
-	chart: 'M4 20V4 M4 20h16 M8 16v-4 M12 16V8 M16 16v-6',
-	clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z M12 7v5l3 3',
-	globe: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z M3 12h18 M12 3c3 3.5 3 14.5 0 18 M12 3c-3 3.5-3 14.5 0 18',
-	key: 'M8 14a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z M11 10h10 M18 10v3 M15 10v2',
-	play: 'M7 4l13 8-13 8Z',
-};
-export const ICON_NAMES = Object.keys(ICONS);
+export { ICON_NAMES };
 
 export type IconProps = LifeProps & { name: string; x?: number; y?: number; size?: number; color?: ColorProp };
 
-/** A small line icon that draws itself. Names: see ICON_NAMES. */
+/** A line icon that draws itself: any Lucide name (`virus`, `syringe`, `shield-check`…) or a v1 name. */
 export function Icon(props: IconProps) {
 	const { width, height } = useVideoConfig();
-	const d = ICONS[props.name];
-	if (!d) throw kitError(`unknown icon "${props.name}": use ${ICON_NAMES.join(', ')}.`);
+	const d = typeof props.name === 'string' ? iconPath(props.name) : null;
+	if (!d) throw kitError(`unknown icon "${String(props.name)}": closest names are ${closestIcons(String(props.name)).join(', ')} (search with find_icons).`);
 	const life = useLife({ dur: 24, ...props });
 	const color = useColor(props.color, 'text');
 	if (!life.visible) return null;
