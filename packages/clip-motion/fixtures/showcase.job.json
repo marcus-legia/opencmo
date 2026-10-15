@@ -1,0 +1,7 @@
+{
+  "title": "How Shazam hears a song",
+  "code": "return function Scene() { return null; }",
+  "beats": [{ "say": "A noisy bar." }, { "say": "One phone listens." }, { "say": "It finds the song." }],
+  "format": "16:9",
+  "duration": 10
+}

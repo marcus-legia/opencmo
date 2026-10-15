@@ -221,7 +221,7 @@ The body of `(React, R, kit) => { …; return function Scene() { … } }`, with 
 
 Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and copy its patterns.
 
-- [ ] **A1. Package and contract.**
+- [x] **A1. Package and contract.**
   - Create `packages/clip-motion` with pinned `remotion`, `@remotion/bundler`, `@remotion/renderer`, `react`, `react-dom`, `zod` and `esbuild`.
   - Add `src/job.ts` exactly as in Contracts.
   - Add `src/cli.ts` with `preview` and `render` producing a placeholder (navy field plus title).
@@ -262,6 +262,11 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
 **Checks:** `npm run check:clip-motion`, `npm run typecheck`, and a showcase render with frames looked at.
 
 **Notes (A):**
+- A1: `@opencmo/clip-motion` with Remotion 4.0.530 pinned (all `@remotion/*` must match). `job.ts` is the
+  contract verbatim (`estimateDuration` clamps to 15–90 so it is always a valid model duration). The CLI
+  renders a real Remotion placeholder already (navy + title): 10 s at 0.5 scale in 25 s cold, 34 ms/frame.
+  Bundle is cached on disk under `OPENCMO_MOTION_CACHE` (default `$TMPDIR/opencmo-motion`); fonts come from
+  `OPENCMO_EDITOR_FONTS` or `packages/clip-media/fonts`. Needs `ffmpeg` on PATH only for `--audio`.
 
 ---
 

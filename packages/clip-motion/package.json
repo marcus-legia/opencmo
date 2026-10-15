@@ -1,0 +1,33 @@
+{
+  "name": "@opencmo/clip-motion",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./job": "./src/job.ts"
+  },
+  "bin": {
+    "clip-motion": "./src/cli.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.530",
+    "@remotion/renderer": "4.0.530",
+    "esbuild": "^0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.530",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}

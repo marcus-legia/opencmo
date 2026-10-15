@@ -11,7 +11,8 @@ per-platform captions), **Post** (X drafts you approve and publish), and **Sales
 threads scored with evidence and draft replies the user posts themselves).
 
 One system: Next.js web app + Supabase + a Modal worker. There is no second runtime; do not
-build one.
+build one. Generated-media renderers (`clip-three`, `clip-motion`) run on the worker and produce
+video files; the editor itself has one runtime (`clip-render`).
 
 ## Product rules
 
@@ -106,6 +107,7 @@ packages/editor-core/   operations on the document — the ONLY write path (butt
 packages/clip-render/   Canvas 2D renderer (browser + Node)
 packages/clip-export/   server export: document → MP4 (task `render_document`)
 packages/clip-three/    3D scenes rendered on a GPU worker
+packages/clip-motion/   explainer animations (Remotion) rendered on the worker
 packages/clip-icons/, clip-media/, clip-assets/, editor-parity/
 apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes via RPC)
   lib/agent/            the editor assistant (tools = editor-core ops)

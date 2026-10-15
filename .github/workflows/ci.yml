@@ -70,6 +70,22 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
+  motion:
+    # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
+    # Remotion in Chrome Headless Shell (Remotion downloads it when no browser is configured).
+    name: motion (clip-motion)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - run: npm run check:clip-motion
+
   browsers:
     # The editor outside Chromium (Safari/Firefox): feature detection + library bytes
     # (OPFS, or IndexedDB when createWritable is missing as in Safari 17) on real engines.
