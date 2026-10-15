@@ -356,6 +356,10 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   set up on the server yet." Deploy order: generate a new token; `modal secret create opencmo-motion
   MOTION_PREVIEW_TOKEN=<new> --force`; set the same `MOTION_PREVIEW_TOKEN` on Vercel; deploy Modal and Vercel.
   `preview.check.ts` passes.
+- B6: not started. It needs a Modal deploy (A9 for the image, A's `serve` for B4) and paid voice runs. The
+  session that built B1–B5 had no Modal credentials. To do on the owner's machine: deploy; run the showcase and vaccine
+  jobs cold and warm; time 3 real ElevenLabs scripts against 2.4 words/s; then set the price in `ai-models.json` plus
+  a migration for the `ai_models` row (`check:pricing` compares them).
 
 ### Track C
 
