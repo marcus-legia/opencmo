@@ -273,16 +273,49 @@ Write the beats in your reply and ask "Shall I make it?" before writing any code
 - Colour has meaning and the kit applies it: signal = gold, answer = teal (the brand accent), wrong = red, noise = grey.
 
 ## 2. The code
-The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. R is remotion (useCurrentFrame, interpolate, spring, Sequence, AbsoluteFill…), kit is the motion kit. Not available (the guard rejects them): fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage. Randomness: kit.random(seed).
-Compose ONLY kit primitives — never pick colours, fonts or easing yourself.
-- Layout: wrap everything in <kit.Stage> (field, vignette, grid, bloom). kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') gives safe boxes for the format; place things inside them.
-- Text: kit.Title; kit.Label({ text, at, swapTo?, swapAt?, strikeAt? }); kit.Mono for data text such as "f1 | f2 | gap".
-- Data and marks: kit.DotField({ count, seed, area, glow, filterAt?, threshold? }), kit.Spectrogram, kit.Waveform, kit.Axes, kit.Scatter, kit.FitLine, kit.Link (draws on between points), kit.Box (dashed region), kit.Counter, kit.Check, kit.Icon.
-- Camera: kit.Camera({ focus, zoom, at }) for slow push-ins between beats.
-- Timing — never hard-code frames: kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word is spoken in beat i; kit.at(i, 0..1) → a frame inside beat i. They follow the real voice when it is rendered.
-- Motion: kit.enter(frame, opts), kit.morph(a, b, progress) (point sets), kit.stagger, kit.ease.out, kit.ease.hero. No bounce.
-- Colours: kit.color.signal | answer | wrong | noise | text | field.
-Keep elements alive across beats and change them (filterAt, swapTo, strikeAt, morph) instead of cutting to a new picture. Hold the last state still for the final second.
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Title, Label, … } = kit;
+- R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
+- Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed) or the seeded data helpers; time comes from the frame.
+- Positions are pixels of the composition (1920×1080, 1080×1920 or 1080×1080); times are FRAMES (30 fps), taken from the timing helpers. Every component takes at (enter frame), dur, exitAt and exitDur; before at and after its exit it renders nothing.
+Layout
+- <Stage grid?> — the navy field (gradient, drifting grid, bloom, vignette). Wrap the whole scene in it.
+- <Camera keys={[{ at, focus: [x, y], zoom, dur? }]}> — slow push-ins and pans of what is inside. Keep text OUTSIDE the Camera.
+- kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (bottom 17% kept for captions). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
+Text (at most 5 words)
+- <Title text kicker? y? size?> — big serif headline.
+- <Label text x? y? area? anchor? size? color? swapTo? swapAt? strikeAt?> — the main words; swapTo replaces the text at swapAt; strikeAt strikes it through in red.
+- <Mono …same> — data text such as "f1 | f2 | gap", typed in. <Counter to from? x? y? size? prefix? suffix? decimals?> — a number counting up.
+Data and marks
+- <DotField count? seed? area? layout="scatter|grid|cluster" points? size? glow? filterAt? threshold? morphTo? morphAt?> — up to 4000 glowing dots; filterAt fades dim dots to noise and flares bright ones (≥ threshold); morphTo (normalised points) flies them there from morphAt.
+- <Spectrogram data={kit.spectrogram(seed, { cols, rows, peaks })} area? peaksAt? constellationAt?> — a time × pitch heat map; data.peaks[i].x/y are normalised: kit.place(area, [p.x, p.y]).
+- <Waveform area? seed? noise? cleanAt? amp?> — audio bars; noise mixes in grey noise, cleanAt removes it.
+- <Axes area x? y?>, <Scatter area points={[{ x, y }]} highlight? highlightAt?>, <FitLine area from={[u, v]} to={[u, v]}> — one plot, data units 0..1 with y up, the same area for all three; kit.trend(seed, { n, slope, spread }) gives points.
+- <Link from={[x, y]} to={[x, y]} curve? dashed? dots? width?> (pixels) — a line that draws itself. <Box area | x y w h label? dashed?> — a highlighted region. <Check x y size kind="check|cross">. <Icon name x y size> with name in kit.icons: mic, music, phone, search, database, wave, bolt, user, lock, server, cloud, chart, clock, globe, key, play.
+Timing — never hard-code frames
+- kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word of beat i is spoken (the beat start when it is not there); kit.at(i, 0..1) → a frame part-way through beat i. Previews use estimated timings; the final render uses the real voice, so anything placed with these lands on the narration in both.
+Motion and colour
+- kit.enter(frame, { at, dur, ease }) → 0..1, kit.stagger(i, { at, each }), kit.morph(a, b, t), kit.lerp. kit.ease.out, kit.ease.hero, kit.ease.inOut, kit.ease.linear; nothing bounces.
+- Colours by name (color="answer"): signal gold (what we follow), answer teal (the result; the brand accent replaces it), wrong red, noise grey-blue, text, dim, field. Never pick other colours.
+Do and don't
+- One continuous scene: transform what is on screen (swap a label, filter the dots, morph, push the camera) instead of cutting to something new. About one change per beat.
+- At most three things move at once; start the next only when the previous has landed.
+- One main label at a time, in the headline row (area('full').y + about 7%).
+- Hold the last state still for the final second.
+
+Example:
+const { Stage, Title, Label, DotField, Check } = kit;
+const b = kit.beat;
+const field = kit.area('full');
+return function Scene() {
+  return (
+    <Stage>
+      <Title text="Why most leads go cold" exitAt={kit.at(0, 0.6)} />
+      <DotField area={field} count={1200} seed={4} at={kit.at(0, 0.5)} filterAt={kit.cue(1, 'reply')} threshold={0.85} />
+      <Label text="Thousands of visitors" y={field.y + 60} at={b(1).from} swapTo="A few reply" swapAt={kit.cue(1, 'reply')} />
+      <Check x={kit.width / 2} y={kit.height * 0.45} at={b(2).from + 10} />
+    </Stage>
+  );
+};
 
 ## 3. Preview and fix — required
 preview_explainer { title, beats, code, format } returns stills (beat midpoints and the last frame) and a layout report. Look at every still AND read the issues:

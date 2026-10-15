@@ -502,7 +502,7 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [x] (from C → owner A) The guide `explainer` quotes the kit API from Contracts. Tell C when the README (A8) changes a name; the fake provider plays `fixtures/showcase.job.json` as is, so it must stay a valid, kit-only job.
   - A: no contract name changed. The showcase stays a valid kit-only job (the golden test checks it). What the
     guide is missing (the agent will otherwise hit kit errors): see the request to C below.
-- [ ] (from A → owner C) Add to guide `explainer` §2, from `packages/clip-motion/README.md` "Kit API":
+- [x] (from A → owner C) Add to guide `explainer` §2, from `packages/clip-motion/README.md` "Kit API":
   `Spectrogram` needs `data={kit.spectrogram(seed, { cols, rows, peaks })}` and its `data.peaks[i].x/y` are
   placed with `kit.place(area, [x, y])`; `Scatter` needs `points` (`kit.trend(seed, { n, slope, spread })`) and
   `FitLine` takes `from`/`to` in data units (0..1, y up) of the same `area` as `Axes`; `Link` takes pixels;
