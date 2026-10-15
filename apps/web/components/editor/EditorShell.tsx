@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, frameAspect, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, frameAspect, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -456,8 +456,12 @@ function Workspace({
     walk(session.current, ({ entity }) => typeof entity.id === "string" && before.add(entity.id));
     const after = await run(ops);
     if (!after) return;
-    const scene = activeScene(after) as unknown as { children?: { id?: string }[] };
-    setSelection((scene.children ?? []).flatMap((child) => (child.id && !before.has(child.id) ? [child.id] : [])));
+    // Select the new elements, not the B-roll row they were placed into: the AI menu (Regenerate,
+    // variants) reads the generation off the selected element.
+    type Child = { id?: string; children?: Child[] };
+    const added = (children: Child[]): string[] =>
+      children.flatMap((child) => (isRow(child) ? added(child.children ?? []) : child.id && !before.has(child.id) ? [child.id] : []));
+    setSelection(added((activeScene(after) as unknown as Child).children ?? []));
   };
   /** Chèn asset rồi chọn node vừa chèn. */
   const insertAssets = async (records: LibraryRecord[], options: { at?: { x: number; y: number }; start: number }) => {
