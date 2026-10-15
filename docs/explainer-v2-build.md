@@ -270,7 +270,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
   scene code and the storyboard and wants every beat's `visual` to name an icon, Lottie or shape that exists, at
   least 3 subject icons (`virus`, `syringe`, `shield…`, `dna`…) and no `database`/`server` icon, a `Headline`,
   and `theme`/`personality` set.
-- [ ] **C6. e2e.** `editor-explainer.spec.ts`: storyboard shows `visual`; after render a captions layer
+- [x] **C6. e2e.** `editor-explainer.spec.ts`: storyboard shows `visual`; after render a captions layer
   `Captions · …` exists and is visible (fake voice: seed words through the fake transcriber the way
   `editor-roughcut` does); look at one frame with the board.
 - [x] **C7. Notices.** `THIRD_PARTY_NOTICES.md`: add the explainer files to the motion-design row; add
@@ -430,6 +430,16 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 - C7: notices: explainer files in the motion-design row, Noto emoji in explainers, Remotion licence (incl.
   `@remotion/lottie`).
 - Full `agent:eval --provider fake` (`OPENCMO_MOTION=local`, fake voice) on A5 + B1–B5: **41/41**.
+- C6 run (from the Track A session, on A6–A10, a laptop with Docker; Supabase CLI 2.117.0, Chrome):
+  `npm run test:e2e -- editor-explainer` **1 passed** (2.3 min, peak RSS 2.6 GB, no memory pressure). Fixed in the
+  spec: the board frame was picked by spreading the beats' words over the whole video, but with the fake voice the
+  kit times words at 2.4 words/s from the start, so it landed in beat 6; it now uses the same pace (24.75 s, the
+  steps board, checked on the rendered MP4). Looked at `05-explainer-captions.png`: the `Captions · How a vaccine
+  trains your body` layer sits above the explainer layer and a caption is on the preview.
+- Review of B and C (Track A session): migration, worker words, `sync_explainer`, `useExplainers` and the guide
+  read through; the guide's kit API matches the landed README. Engine `pytest` 709 passed, `ruff` clean; web
+  `typecheck` and `check:contracts` pass; fake eval 41/41 on the A9 fixture. B3 and B4 are unblocked (A9 and
+  `serve` landed) but stay open until Modal is deployed and measured with B6.
 - Checks: `npm run typecheck` ✓, editor-core `vitest` 599/599 ✓, `check:contracts` ✓ (new
   `lib/agent/explainer-tool.check.ts`).
 

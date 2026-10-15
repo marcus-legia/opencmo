@@ -86,10 +86,9 @@ test("New edit: /explain → storyboard → go → stills → approve → the ex
   // A frame with something drawn on it has contrast; a blank or black frame has std ≈ 0.
   expect(std, `frame at 2 s: mean ${mean.toFixed(1)}, std ${std.toFixed(1)}`).toBeGreaterThan(2);
   execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", "2", "-i", mp4, "-frames:v", "1", testInfo.outputPath("03-explainer-2s.png")]);
-  // The steps board of beat 5: the middle of that beat, with timings spread by words as the fake voice has none.
-  const length = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4], { encoding: "utf8" }));
-  const total = BEAT_WORDS.reduce((sum, value) => sum + value, 0);
-  const boardAt = ((BEAT_WORDS.slice(0, 4).reduce((sum, value) => sum + value, 0) + BEAT_WORDS[4]! * 0.7) / total) * length;
+  // The steps board of beat 5, 70% into it. The fake voice has no words, so the kit times words at its estimate
+  // (2.4 words/s from the start, `WORDS_PER_SECOND` in clip-motion), not spread over the whole video.
+  const boardAt = (BEAT_WORDS.slice(0, 4).reduce((sum, value) => sum + value, 0) + BEAT_WORDS[4]! * 0.7) / 2.4;
   execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", boardAt.toFixed(2), "-i", mp4, "-frames:v", "1", testInfo.outputPath("04-explainer-board.png")]);
 
   // In the editor too, at the playhead. The bundled Chromium cannot decode H.264, so only real Chrome.
