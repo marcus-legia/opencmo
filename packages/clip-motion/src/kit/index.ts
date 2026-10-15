@@ -3,11 +3,15 @@
  * type, easing and layout are decided here, once.
  */
 
-import { FPS, type MotionJob } from '../job.ts';
+import { DEFAULT_PERSONALITY, DEFAULT_THEME, FPS, type MotionJob } from '../job.ts';
 import { area, place, plotPoint, type AreaName, type Box } from './areas.ts';
 import { DotField, Spectrogram, Waveform } from './canvas.tsx';
 import { kitError } from './context.tsx';
 import { spectrogram, trend } from './data.ts';
+import { LOTTIE_NAMES } from './lotties.ts';
+import { Lottie } from './lottie.tsx';
+import { Board, BOARD_KINDS, Headline } from './board.tsx';
+import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
@@ -35,6 +39,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		width: size.width,
 		height: size.height,
 		portrait: size.height > size.width,
+		theme: job.theme ?? DEFAULT_THEME,
+		personality: job.personality ?? DEFAULT_PERSONALITY,
 		fps: FPS,
 		frames: timeline.frames,
 		beats: timeline.beats.length,
@@ -43,6 +49,9 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		Label,
 		Mono,
 		Counter,
+		Headline,
+		Board,
+		boards: BOARD_KINDS,
 		// Data and marks
 		DotField,
 		Spectrogram,
@@ -55,6 +64,14 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		Check,
 		Icon,
 		icons: ICON_NAMES,
+		Lottie,
+		lotties: LOTTIE_NAMES,
+		Shape,
+		shapes: SHAPE_KINDS,
+		Path,
+		Arrow,
+		Group,
+		Burst,
 		spectrogram,
 		trend,
 		// Timing

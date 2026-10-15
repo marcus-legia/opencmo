@@ -7,6 +7,7 @@
 
 import type { ClipDocument } from "@opencmo/clip-doc";
 import {
+  BUILTIN_LOTTIES,
   MASTER_SRC,
   clipWords,
   findQuote,
@@ -24,6 +25,8 @@ import {
   type Entity,
   type Transcript,
 } from "@opencmo/editor-core";
+
+import icons from "../../../../../packages/clip-icons/data/icons.json";
 
 import type { PreparedGeneration } from "../generate-tool";
 import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
@@ -131,6 +134,28 @@ const srcOf = (entity: Entity): string[] => [
   ...(typeof entity.src === "string" ? [entity.src] : []),
   ...(((entity.paints as { src?: unknown }[] | undefined) ?? []).flatMap((paint) => (typeof paint.src === "string" ? [paint.src] : []))),
 ];
+
+/** Things an explainer can draw (`docs/explainer-v2-build.md`, kit API v2): Lucide icons, built-in Lotties, kit shapes. */
+const ICON_NAMES = new Set(Object.keys((icons as { icons: Record<string, unknown> }).icons));
+const LOTTIE_NAMES = new Set(BUILTIN_LOTTIES().map((entry) => entry.name));
+const SHAPE_KINDS = new Set(["circle", "cell", "blob", "ring", "pill", "capsule", "star", "arrow", "path"]);
+
+/** Does a storyboard `visual` name something drawable? Single words and hyphen-joined pairs ("shield check"). */
+function drawable(visual: string): boolean {
+  const words = visual.toLowerCase().split(/[^a-z0-9/-]+/).filter(Boolean);
+  const names = [...words, ...words.slice(1).map((word, index) => `${words[index]}-${word}`)];
+  return names.some((name) => ICON_NAMES.has(name) || LOTTIE_NAMES.has(name) || SHAPE_KINDS.has(name));
+}
+
+/** The last `add_explainer` call's storyboard and code (the spec keeps neither the visuals nor the code). */
+function storyboardOf(outcome: Outcome) {
+  const call = [...(outcome.calls ?? [])].reverse().find((item) => item.name === "add_explainer");
+  const input = (call?.input ?? {}) as { beats?: { say?: string; visual?: string }[]; code?: string; theme?: string; personality?: string };
+  return { beats: input.beats ?? [], code: input.code ?? "" };
+}
+
+/** Every icon name the scene code draws (`<Icon name="virus" …>`). */
+const codeIcons = (code: string): string[] => [...code.matchAll(/<Icon\b[^>]*?\bname=["'{`]+([a-z0-9-]+)/g)].map((match) => match[1]!);
 
 const masters = (document: ClipDocument) => all(document).filter((item) => item.tag === "video" && item.entity.src === MASTER_SRC);
 
@@ -646,6 +671,8 @@ export const TASKS: EvalTask[] = [
       const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
       const paced = check(notes, beats.length >= 3 && beats.every((beat) => words(beat.say) >= 4 && words(beat.say) <= 24), `beat lengths: ${beats.map((beat) => words(beat.say)).join(", ")}`);
       const labels = check(notes, beats.every((beat) => !beat.label || words(beat.label) <= 5), "a label is longer than 5 words");
+      const board = storyboardOf(outcome).beats;
+      const pictured = check(notes, board.length === beats.length && board.every((beat) => beat.visual?.trim()), "a beat has no visual in the storyboard");
       const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
       const placed = check(
         notes,
@@ -655,7 +682,36 @@ export const TASKS: EvalTask[] = [
       // Not `sane`: a blank edit is exactly as long as its explainer, which may be under 21 s.
       const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
       const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
-      return { pass: order && ref && paced && labels && shape && placed && clean, notes };
+      return { pass: order && ref && paced && labels && pictured && shape && placed && clean, notes };
+    },
+  },
+  // Explainer v2 (docs/explainer-v2-build.md): the subject is on screen, mapped noun by noun before any code.
+  {
+    id: "explain-vaccine",
+    prompt: "/explain How a vaccine teaches your immune system to fight a virus. 16:9, about 30 seconds, voice Aria. Go ahead and make it, no need to show the script.",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const previewed = outcome.tools.indexOf("preview_explainer");
+      const added = outcome.tools.lastIndexOf("add_explainer");
+      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
+      if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
+      const scene = gen!.spec.scene as { theme?: string; personality?: string } | undefined;
+      const look = check(notes, Boolean(scene?.theme && scene.personality), `theme ${scene?.theme ?? "(none)"}, personality ${scene?.personality ?? "(none)"}`);
+      const { beats, code } = storyboardOf(outcome);
+      const unpictured = beats.filter((beat) => !drawable(beat.visual ?? "")).map((beat) => beat.visual ?? "(none)");
+      const pictured = check(notes, beats.length >= 3 && !unpictured.length, `visuals that name no icon, Lottie or shape: ${unpictured.join(" | ")}`);
+      const drawn = codeIcons(code);
+      const unknown = drawn.filter((name) => !ICON_NAMES.has(name));
+      const real = check(notes, !unknown.length, `unknown icons in the code: ${unknown.join(", ")}`);
+      const subject = new Set(drawn.filter((name) => /virus|syringe|shield|dna|microscope|biohazard|pill|bacteria|heart-pulse/.test(name)));
+      const onTopic = check(notes, subject.size >= 3, `subject icons: ${[...subject].join(", ") || "none"}`);
+      const offTopic = drawn.filter((name) => /database|server|cpu|hard-drive/.test(name));
+      const relevant = check(notes, !offTopic.length, `icons unrelated to vaccines: ${offTopic.join(", ")}`);
+      const headline = check(notes, /<Headline\b/.test(code), "no Headline row in the scene code");
+      const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
+      return { pass: order && look && pictured && real && onTopic && relevant && headline && shape, notes };
     },
   },
   {

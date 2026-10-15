@@ -3,9 +3,11 @@ import { Composition } from 'remotion';
 
 import { FPS, frameSize, type MotionJob } from '../job.ts';
 import { Explainer, type ExplainerProps } from './Explainer.tsx';
+import { loadIcons } from './assets.ts';
 import { loadFonts } from './fonts.ts';
 
 loadFonts();
+loadIcons();
 
 const PLACEHOLDER: MotionJob = {
 	title: 'Explainer',

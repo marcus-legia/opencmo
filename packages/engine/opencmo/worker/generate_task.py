@@ -286,7 +286,8 @@ def process(store: Any, task: Task) -> None:
                 name=_file_name(str(spec.get("prompt") or ""), result.extension),
                 duration=duration, width=width, height=height,
                 credits=adapter.cost(model, spec, result),
-                words=result.words if model.kind == "voice" else None,
+                # Narrated media only: a voiceover, or an explainer's voice (its captions).
+                words=result.words if model.kind == "voice" or model.provider == "opencmo-motion" else None,
             )
             if not won:
                 # Bị huỷ hoặc mất lease trong lúc sinh: không hàng nào tham chiếu

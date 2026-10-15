@@ -27,8 +27,9 @@
  *   "look like night"  → edit_video 2–6 s (the speaker's own video redrawn, one card)
  *   "/video …" (slash directive), or "make a … video" on a blank edit → create_video at the length and frame asked
  *                        ("20-second", "square"; else 15 s and the edit's frame) · "/image …" → generate_media image at 0 s
- *   "/explain …"       → shows the showcase script and asks; then "go" → preview_explainer (showcase code)
- *                        → add_explainer (price card with the beats)
+ *   "/explain …"       → shows the storyboard (say, label, picture per beat) and asks; then "go" (or "go ahead"
+ *                        up front) → preview_explainer → a subject check per still → add_explainer (price card)
+ *                        Vaccine topics use the v2 vaccine scene, everything else Track A's showcase (`fake-explainers.ts`).
  *   "/roughcut"        → proposes the cut and asks; then "go" (or "just do it" up front) → find_retakes + find_filler_words → ONE remove_words
  *                        (earlier takes + fillers) → remove_silence 0.6 s / 0.15 s → reports what went
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
@@ -59,7 +60,7 @@
 
 import { aiModel } from "@opencmo/editor-core/generate";
 
-import showcase from "../../../../../packages/clip-motion/fixtures/showcase.job.json";
+import { explainerFor, type FakeExplainer } from "./fake-explainers";
 
 import { anthropicFormat } from "./anthropic";
 import type { Delta, Provider, Step, StepRequest, StoredMessage, ToolCall } from "./types";
@@ -75,8 +76,11 @@ const text = (value: string) => ({ type: "text", text: value, citations: null })
 function sceneCode(quote: string, body: string): string {
   return `// quote: ${quote.replace(/\n/g, " ")}\n${body}`;
 }
-/** The explainer the fake makes: Track A's showcase, written only with the kit as a model would. */
-const EXPLAINER = { title: showcase.title, beats: showcase.beats, code: showcase.code, format: showcase.format as "16:9" | "9:16" | "1:1" };
+/** The tool input of an explainer: the storyboard (with `visual` per beat), its code and its look. */
+const explainerInput = (explainer: FakeExplainer) => ({ ...explainer });
+/** The words that asked for an explainer: the latest `/explain` command of the conversation. */
+const explainAsk = (history: StoredMessage[]): string =>
+  [...history].reverse().map(userText).find((words) => /<command name="\/explain">/.test(words)) ?? "";
 const EXPLAINER_SCRIPT = "Explainer script";
 const explainerVoice = () => aiModel("motion-explainer")?.limits.voices?.[0] ?? "Aria";
 const quoteOf = (code: string): string => /^\/\/ quote: (.*)$/m.exec(code)?.[1] ?? "";
@@ -147,7 +151,13 @@ function script(history: StoredMessage[]): unknown[] {
       const raw = typeof content === "string" ? content : ((content as Block[]).find((item) => item.type === "text")?.text ?? "{}");
       const parsed = JSON.parse(raw) as { ok?: boolean; error?: string; issues?: string[] };
       if (!parsed.ok) return [text(`The explainer preview failed: ${parsed.error ?? "unknown error"}`)];
-      return [text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}. Here is the price.`), use("add_explainer", { ...EXPLAINER, voice: explainerVoice() })];
+      // The subject check of the guide: one line per still, what it shows against what the beat says.
+      const explainer = explainerFor(explainAsk(history));
+      const checked = explainer.beats.map((beat, index) => `Still ${index + 1}: shows ${beat.visual}; the beat says “${beat.say}”`).join("\n");
+      return [
+        text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}.\n${checked}\nEvery still shows what its beat says. Here is the price.`),
+        use("add_explainer", { ...explainerInput(explainer), voice: explainerVoice() }),
+      ];
     }
     if (previous.includes("preview_3d")) {
       const call = anthropicFormat.callsIn(assistant?.content ?? []).find((item) => item.name === "preview_3d");
@@ -384,10 +394,16 @@ function script(history: StoredMessage[]): unknown[] {
       use("create_video", { prompt: words || "a short product video", seconds: asked ? Number(asked) : 15, ...(aspect ? { aspect } : {}) }),
     ];
   }
-  // /explain: the script first, as the guide says; the code only after the user says go.
+  // /explain: the storyboard first, as the guide says; the code only after the user says go, or
+  // straight away when the user already said so ("go ahead", "no need to show it").
   if (/<command name="\/explain">/.test(ask)) {
-    const beats = EXPLAINER.beats.map((beat, index) => `${index + 1}. ${beat.say}${"label" in beat && beat.label ? ` [${beat.label}]` : ""}`).join("\n");
-    return [text(`${EXPLAINER_SCRIPT} — “${EXPLAINER.title}”:\n${beats}\n\nShall I make it?`)];
+    const explainer = explainerFor(ask);
+    if (/\bgo ahead\b|\bjust (do|make) it\b|no need to (show|ask)/.test(ask)) {
+      return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer))];
+    }
+    const look = [explainer.theme, explainer.personality].filter(Boolean).join(", ");
+    const beats = explainer.beats.map((beat, index) => `${index + 1}. ${beat.say}${beat.label ? ` [${beat.label}]` : ""}\n   Picture: ${beat.visual}`).join("\n");
+    return [text(`${EXPLAINER_SCRIPT} — “${explainer.title}”${look ? ` (${look})` : ""}:\n${beats}\n\nShall I make it?`)];
   }
   if (/<command name="\/roughcut">/.test(ask) && !/just do it/.test(ask)) {
     return [text(`${ROUGHCUT_PLAN}: I'll cut the earlier takes of repeated sentences and keep the last one, remove the filler sounds, and trim pauses over 0.6 s to about 0.3 s. Laughs, dramatic pauses and the call to action stay. Shall I cut it?`)];
@@ -399,7 +415,7 @@ function script(history: StoredMessage[]): unknown[] {
     (message) => message.role === "assistant" && (message.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(EXPLAINER_SCRIPT)),
   );
   if (proposed && /^\s*(go|yes|ok|make it)\b/.test(ask)) {
-    return [text("Writing the animation and previewing it."), use("preview_explainer", EXPLAINER)];
+    return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainerFor(explainAsk(history))))];
   }
   if (/<command name="\/image">/.test(ask)) {
     return [

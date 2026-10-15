@@ -8,7 +8,7 @@ Deploy:
         OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule + cleanup; same CRON_SECRET as Vercel
     modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # transcripts (Scribe); same key as Vercel
     modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
-    modal secret create opencmo-motion OPENCMO_WORKER_TOKEN=... # explainer previews; same token as `opencmo`
+    modal secret create opencmo-motion MOTION_PREVIEW_TOKEN=... # explainer previews; same as Vercel, not the worker token
     modal deploy modal_app.py
 
 Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
@@ -248,7 +248,15 @@ motion_image = (
     # For the `motion_preview` endpoint.
     .pip_install("fastapi[standard]")
     .add_local_dir(_PACKAGES / "clip-motion", remote_path=f"{WEB_ROOT}/packages/clip-motion", copy=True, ignore=_NODE_IGNORE)
-    .env({**_MEDIA_ENV, "OPENCMO_MOTION_CACHE": "/root/motion-cache"})
+    # v2 kit: every Lucide icon (`<Icon>`) and the built-in Lottie pack (`<Lottie>`, in clip-media
+    # above) are copied into the Remotion bundle, never fetched. The CLI only sees OPENCMO_MOTION_*.
+    .add_local_dir(_PACKAGES / "clip-icons" / "data", remote_path=f"{WEB_ROOT}/packages/clip-icons/data", copy=True)
+    .env({
+        **_MEDIA_ENV,
+        "OPENCMO_MOTION_CACHE": "/root/motion-cache",
+        "OPENCMO_MOTION_ICONS": f"{WEB_ROOT}/packages/clip-icons/data/icons.json",
+        "OPENCMO_MOTION_LOTTIE": f"{MEDIA_ROOT}/lottie",
+    })
     .run_commands(
         f"cd {WEB_ROOT}/packages/clip-motion && npm install --omit=dev --no-audit --no-fund",
         # Remotion's own headless shell, downloaded once at build time, then pinned by path so the
@@ -259,11 +267,13 @@ motion_image = (
     )
     .env({"OPENCMO_CLIP_MOTION": f"{WEB_ROOT}/packages/clip-motion/src/cli.ts", "OPENCMO_MOTION_CHROME": "/usr/local/bin/chrome-motion"})
     # Bundle the composition into the image (cached by source hash under OPENCMO_MOTION_CACHE)
-    # and prove the image renders: a cold container then starts at the render, not at webpack.
-    # The image builder has one core, and Remotion rejects a concurrency above the core count.
+    # and prove the image renders the v2 kit (icons, Lotties, both themes): a cold container then
+    # starts at the render, not at webpack. Remotion rejects a concurrency above the core count, and
+    # the image builder may have one core: same rule as `cli_env`, min(cores, 4).
     .run_commands(
-        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25 OPENCMO_MOTION_CONCURRENCY=1"
-        " node src/cli.ts render fixtures/placeholder.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
+        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25"
+        ' OPENCMO_MOTION_CONCURRENCY="$(n=$(nproc); [ "$n" -gt 4 ] && n=4; echo "$n")"'
+        " node src/cli.ts render fixtures/vaccine.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
     )
 )
 
@@ -298,10 +308,10 @@ voice_secret = modal.Secret.from_name("opencmo-voice")
 #   modal secret create fal-secret FAL_KEY=...   # same key as Vercel
 fal_secret = modal.Secret.from_name("fal-secret")
 
-# Explainer previews run code the Assistant wrote: their container gets the worker token only,
-# never the `opencmo` secret with the service-role key.
+# Explainer previews run code the Assistant wrote: their container gets a token that can only ask
+# for previews, never the worker token (it can submit tasks) or the service-role key.
 #
-#   modal secret create opencmo-motion OPENCMO_WORKER_TOKEN=...   # same token as `opencmo`
+#   modal secret create opencmo-motion MOTION_PREVIEW_TOKEN=...   # same value as Vercel's MOTION_PREVIEW_TOKEN
 motion_secret = modal.Secret.from_name("opencmo-motion")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -424,33 +434,56 @@ def render_motion(payload: dict) -> bytes:
         return render_bytes(payload, Path(tmp))
 
 
-@app.function(image=motion_image, secrets=[motion_secret], timeout=70, cpu=4, memory=4096, max_containers=8)
-@modal.fastapi_endpoint(method="POST")
-def motion_preview(payload: dict) -> dict:
-    """Explainer previews for the web app's `previewMotion`: `{token, job}` → PreviewResult
-    plus `images` (base64 JPEGs).
+@app.cls(
+    image=motion_image,
+    secrets=[motion_secret],
+    timeout=70,
+    # Opening Chromium and loading the bundle happen once per container, before the first preview.
+    startup_timeout=120,
+    cpu=4,
+    memory=4096,
+    max_containers=8,
+)
+class MotionPreview:
+    """Explainer previews for the web app's `previewMotion`: `{token, job}` → PreviewResult plus
+    `images` (base64 JPEGs).
 
-    The token is the worker token, in the body like `submit`. The scene code runs here and never
-    on Vercel, so this container gets only the token (`opencmo-motion`), never the service key.
+    The token (`MOTION_PREVIEW_TOKEN`) is in the body like `submit`'s. The scene code runs here and
+    never on Vercel, so this container holds only that preview token, never the worker token or
+    the service key. One `clip-motion serve` process per container keeps Chromium open, so only a
+    cold container pays for starting it.
     """
-    import hmac
 
-    from fastapi import HTTPException
+    @modal.enter()
+    def open_browser(self) -> None:
+        from opencmo.ai.providers.motion import PreviewSession
 
-    from opencmo.ai.providers.motion import preview_local
+        self.session = PreviewSession()
+        self.session.start()
 
-    expected = os.environ.get("OPENCMO_WORKER_TOKEN", "")
-    given = str(payload.get("token") or "")
-    if not expected or not hmac.compare_digest(expected, given):
-        raise HTTPException(status_code=401, detail="Invalid worker token.")
-    job = payload.get("job")
-    if not isinstance(job, dict):
-        raise HTTPException(status_code=400, detail="Send the explainer job.")
-    with tempfile.TemporaryDirectory(prefix="opencmo-motion-preview-") as tmp:
-        try:
-            return preview_local(job, Path(tmp))
-        except RuntimeError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    @modal.exit()
+    def close_browser(self) -> None:
+        self.session.close()
+
+    # Same URL as the v1 function `motion_preview`, so MOTION_PREVIEW_URL does not change.
+    @modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-motion-preview")
+    def motion_preview(self, payload: dict) -> dict:
+        import hmac
+
+        from fastapi import HTTPException
+
+        expected = os.environ.get("MOTION_PREVIEW_TOKEN", "")
+        given = str(payload.get("token") or "")
+        if not expected or not hmac.compare_digest(expected, given):
+            raise HTTPException(status_code=401, detail="Invalid preview token.")
+        job = payload.get("job")
+        if not isinstance(job, dict):
+            raise HTTPException(status_code=400, detail="Send the explainer job.")
+        with tempfile.TemporaryDirectory(prefix="opencmo-motion-preview-") as tmp:
+            try:
+                return self.session.preview(job, Path(tmp))
+            except RuntimeError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.function(secrets=[secret], timeout=30)

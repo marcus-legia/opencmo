@@ -2,7 +2,7 @@ import React from 'react';
 import { useVideoConfig } from 'remotion';
 
 import { FAMILY } from '../remotion/fonts.ts';
-import { useArea, useColor, useLife, kitError, TextTag, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
+import { useArea, useColor, useLife, useTheme, kitError, TextTag, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import { enter, ease } from './motion.ts';
 import { alpha, mix } from './theme.ts';
 
@@ -28,9 +28,11 @@ export type TitleProps = LifeProps & { text: string; kicker?: string; area?: Are
 
 /** Big serif headline; words rise in one after another. */
 export function Title(props: TitleProps) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	const text = requireText('Title', props.text);
 	const { width, height } = useVideoConfig();
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24, { exitEndsAt: true });
 	const color = useColor(props.color, 'text');
 	const kickerColor = useColor(undefined, 'signal');
 	const position = usePosition({ ...props, anchor: 'center' });
@@ -45,7 +47,7 @@ export function Title(props: TitleProps) {
 					{props.kicker}
 				</div>
 			) : null}
-			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.title, fontSize: size, lineHeight: 1.08, color, letterSpacing: '-0.015em', textShadow: `0 0 ${size * 0.4}px ${alpha(color, 0.25)}` }}>
+			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.title, fontSize: size, lineHeight: 1.08, color, letterSpacing: '-0.015em', textShadow: shadow(size * 0.4, color, 0.25) }}>
 				{words.map((word, i) => {
 					const p = enter(life.frame, { at: at + 4 + i * 4, dur: 22, ease: ease.out });
 					return (
@@ -83,9 +85,11 @@ export function Mono(props: MonoProps) {
 }
 
 function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	const text = requireText(props.kind, props.text);
 	const mono = props.kind === 'Mono';
-	const life = useLife({ dur: 15, ...props });
+	const life = useLife(props, undefined, 15, { exitEndsAt: true });
 	const color = useColor(props.color, mono ? 'signal' : 'text');
 	const wrong = useColor(undefined, 'wrong');
 	const noise = useColor(undefined, 'noise');
@@ -93,7 +97,10 @@ function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 	if (!life.visible) return null;
 	const size = props.size ?? (mono ? 44 : 52);
 	const at = props.at ?? 0;
-	const swap = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt, dur: 14, ease: ease.out }) : 0;
+	// Sequential swap: the old words leave in 8 frames, then the new ones arrive in 10; never both at once.
+	const swapOut = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt, dur: 8, ease: ease.inOut }) : 0;
+	const swapIn = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt + 8, dur: 10, ease: ease.out }) : 0;
+	const swap = swapIn >= 1 ? 1 : swapOut > 0 ? 0.5 : 0;
 	const strike = props.strikeAt !== undefined ? enter(life.frame, { at: props.strikeAt, dur: 12, ease: ease.out }) : 0;
 	const ink = strike > 0 ? mix(color, noise, strike * 0.7) : color;
 	const typed = mono && props.type !== false ? Math.ceil(text.length * enter(life.frame, { at, dur: Math.max(10, text.length * 1.5), ease: ease.linear })) : text.length;
@@ -104,21 +111,18 @@ function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 		letterSpacing: mono ? '0.02em' : '-0.01em',
 		lineHeight: 1.15,
 		color: ink,
-		textShadow: `0 0 ${size * 0.45}px ${alpha(ink, 0.35)}`,
+		textShadow: shadow(size * 0.45, ink, 0.35),
 		fontVariantNumeric: 'tabular-nums',
 	};
 	const line = (value: string, offset: number, opacity: number) => (
 		<span style={{ display: 'inline-block', transform: `translateY(${offset}px)`, opacity }}>{value}</span>
 	);
-	const shown = props.swapTo !== undefined && swap >= 1 ? props.swapTo : text;
+	const shown = props.swapTo !== undefined && swapOut >= 1 ? props.swapTo : text;
 	return (
 		<div style={{ ...position, opacity: life.opacity, translate: `0 ${(1 - life.p) * 12}px` }}>
 			<TextTag name={shown} size={size} style={{ ...style, position: 'relative' }}>
 				{swap > 0 && swap < 1 && props.swapTo !== undefined ? (
-					<span style={{ display: 'inline-grid' }}>
-						<span style={{ gridArea: '1 / 1' }}>{line(text, -swap * size * 0.6, 1 - swap)}</span>
-						<span style={{ gridArea: '1 / 1' }}>{line(props.swapTo, (1 - swap) * size * 0.6, swap)}</span>
-					</span>
+					swapOut < 1 ? line(text, -swapOut * size * 0.6, 1 - swapOut) : line(props.swapTo, (1 - swapIn) * size * 0.6, swapIn)
 				) : mono ? (
 					<>
 						<span>{shown.slice(0, typed)}</span>
@@ -139,8 +143,10 @@ export type CounterProps = LifeProps & Placed & { to: number; from?: number; cou
 
 /** A number that counts up over `count` frames (default 45) with ease-out. */
 export function Counter(props: CounterProps) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	if (!Number.isFinite(props.to)) throw kitError('Counter needs a numeric `to`.');
-	const life = useLife({ dur: 12, ...props });
+	const life = useLife(props, undefined, 12, { exitEndsAt: true });
 	const color = useColor(props.color, 'answer');
 	const position = usePosition(props);
 	if (!life.visible) return null;
@@ -150,7 +156,7 @@ export function Counter(props: CounterProps) {
 	const text = `${props.prefix ?? ''}${value.toLocaleString('en-US', { minimumFractionDigits: props.decimals ?? 0, maximumFractionDigits: props.decimals ?? 0 })}${props.suffix ?? ''}`;
 	return (
 		<div style={{ ...position, opacity: life.opacity }}>
-			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.text, fontWeight: 700, fontSize: size, color, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', textShadow: `0 0 ${size * 0.4}px ${alpha(color, 0.4)}` }}>
+			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.text, fontWeight: 700, fontSize: size, color, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', textShadow: shadow(size * 0.4, color, 0.4) }}>
 				{text}
 			</TextTag>
 		</div>

@@ -3,23 +3,20 @@ import { useVideoConfig } from 'remotion';
 
 import { FAMILY } from '../remotion/fonts.ts';
 import { plotBox, plotPoint, type Box as BoxShape } from './areas.ts';
-import { kitError, MarkTag, TextTag, useArea, useColor, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
+import { kitError, MarkTag, TextTag, useArea, useColor, useGlow, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import { enter, ease } from './motion.ts';
+import { closestIcons, ICON_NAMES, iconPath } from './icons.ts';
 import { alpha } from './theme.ts';
 
 type XY = [number, number];
 
-function glow(color: string, strength = 1): string {
-	return `drop-shadow(0 0 ${4 * strength}px ${alpha(color, 0.9)}) drop-shadow(0 0 ${14 * strength}px ${alpha(color, 0.45)})`;
-}
-
-function requirePoint(name: string, value: unknown): XY {
+export function requirePoint(name: string, value: unknown): XY {
 	if (!Array.isArray(value) || value.length !== 2 || !value.every(Number.isFinite)) throw kitError(`${name} must be [x, y] in pixels (got ${JSON.stringify(value)}).`);
 	return value as XY;
 }
 
 /** An SVG layer only as large as its marks (plus glow room): filters cost per pixel of the layer. */
-function Svg({ around, children, style }: { around: BoxShape; children: React.ReactNode; style?: React.CSSProperties }) {
+export function Svg({ around, children, style }: { around: BoxShape; children: React.ReactNode; style?: React.CSSProperties }) {
 	const margin = 48;
 	const x = Math.floor(around.x - margin);
 	const y = Math.floor(around.y - margin);
@@ -48,9 +45,10 @@ export type LinkProps = LifeProps & { from: XY; to: XY; color?: ColorProp; width
 
 /** A line that draws itself between two points. `curve` bends it (fraction of its length). */
 export function Link(props: LinkProps) {
+	const glow = useGlow();
 	const from = requirePoint('Link from', props.from);
 	const to = requirePoint('Link to', props.to);
-	const life = useLife({ dur: 20, ...props });
+	const life = useLife(props, undefined, 20);
 	const color = useColor(props.color, 'signal');
 	if (!life.visible) return null;
 	const strokeWidth = props.width ?? 4;
@@ -80,8 +78,9 @@ export type BoxProps = LifeProps & { area?: AreaProp; x?: number; y?: number; w?
 
 /** A highlighted region: rounded, dashed by default, with an optional small label. */
 export function Box(props: BoxProps) {
+	const glow = useGlow();
 	const fromArea = useArea(props.area, 'hero');
-	const life = useLife({ dur: 18, ...props }, ease.hero);
+	const life = useLife(props, ease.hero, 18);
 	const color = useColor(props.color, 'answer');
 	const target = props.x !== undefined && props.y !== undefined && props.w !== undefined && props.h !== undefined ? { x: props.x, y: props.y, w: props.w, h: props.h } : fromArea;
 	if (![target.x, target.y, target.w, target.h].every(Number.isFinite)) throw kitError('Box needs x, y, w, h in pixels or an area.');
@@ -111,8 +110,9 @@ export type CheckProps = LifeProps & { x?: number; y?: number; size?: number; co
 
 /** A ring that draws itself, then a check (or a cross). */
 export function Check(props: CheckProps) {
+	const glow = useGlow();
 	const { width, height } = useVideoConfig();
-	const life = useLife({ dur: 26, ...props });
+	const life = useLife(props, undefined, 26);
 	const cross = props.kind === 'cross';
 	const color = useColor(props.color, cross ? 'wrong' : 'answer');
 	if (!life.visible) return null;
@@ -136,34 +136,17 @@ export function Check(props: CheckProps) {
 	);
 }
 
-const ICONS: Record<string, string> = {
-	mic: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z M5 11a7 7 0 0 0 14 0 M12 18v3 M8 21h8',
-	music: 'M9 18V5l11-2v13 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
-	phone: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z M11 18h2',
-	search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14Z M16 16l5 5',
-	database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
-	wave: 'M2 12h2 M6 8v8 M10 4v16 M14 7v10 M18 10v4 M22 12h-2',
-	bolt: 'M13 2 4 14h7l-1 8 9-12h-7l1-8Z',
-	user: 'M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z M4 21a8 8 0 0 1 16 0',
-	lock: 'M6 11h12v10H6z M8 11V7a4 4 0 0 1 8 0v4',
-	server: 'M4 4h16v6H4z M4 14h16v6H4z M8 7h.01 M8 17h.01',
-	cloud: 'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8Z',
-	chart: 'M4 20V4 M4 20h16 M8 16v-4 M12 16V8 M16 16v-6',
-	clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z M12 7v5l3 3',
-	globe: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z M3 12h18 M12 3c3 3.5 3 14.5 0 18 M12 3c-3 3.5-3 14.5 0 18',
-	key: 'M8 14a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z M11 10h10 M18 10v3 M15 10v2',
-	play: 'M7 4l13 8-13 8Z',
-};
-export const ICON_NAMES = Object.keys(ICONS);
+export { ICON_NAMES };
 
 export type IconProps = LifeProps & { name: string; x?: number; y?: number; size?: number; color?: ColorProp };
 
-/** A small line icon that draws itself. Names: see ICON_NAMES. */
+/** A line icon that draws itself: any Lucide name (`virus`, `syringe`, `shield-check`…) or a v1 name. */
 export function Icon(props: IconProps) {
+	const glow = useGlow();
 	const { width, height } = useVideoConfig();
-	const d = ICONS[props.name];
-	if (!d) throw kitError(`unknown icon "${props.name}": use ${ICON_NAMES.join(', ')}.`);
-	const life = useLife({ dur: 24, ...props });
+	const d = typeof props.name === 'string' ? iconPath(props.name) : null;
+	if (!d) throw kitError(`unknown icon "${String(props.name)}": closest names are ${closestIcons(String(props.name)).join(', ')} (search with find_icons).`);
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'text');
 	if (!life.visible) return null;
 	const size = props.size ?? 120;
@@ -187,7 +170,7 @@ export type AxesProps = LifeProps & { area?: AreaProp; x?: string; y?: string; c
 /** Two axes drawn on, with optional names. Scatter and FitLine in the same area line up with them. */
 export function Axes(props: AxesProps) {
 	const target = useArea(props.area, 'hero');
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'dim');
 	if (!life.visible) return null;
 	const plot = plotBox(target);
@@ -233,9 +216,10 @@ export type ScatterProps = LifeProps & {
 
 /** Points (0..1, y up) popping in one after another inside the plot of `area`. */
 export function Scatter(props: ScatterProps) {
+	const glow = useGlow();
 	if (!Array.isArray(props.points) || props.points.some((p) => !Number.isFinite(p?.x) || !Number.isFinite(p?.y))) throw kitError('Scatter points must be [{ x, y }] between 0 and 1.');
 	const target = useArea(props.area, 'hero');
-	const life = useLife({ dur: 30, ...props });
+	const life = useLife(props, undefined, 30);
 	const color = useColor(props.color, 'signal');
 	const answer = useColor(undefined, 'answer');
 	const noise = useColor(undefined, 'noise');
@@ -267,10 +251,11 @@ export type FitLineProps = LifeProps & { area?: AreaProp; from: XY; to: XY; colo
 
 /** A line through the plot of `area` (data coordinates, 0..1, y up), drawn left to right. */
 export function FitLine(props: FitLineProps) {
+	const glow = useGlow();
 	const target = useArea(props.area, 'hero');
 	const from = plotPoint(target, requirePoint('FitLine from', props.from));
 	const to = plotPoint(target, requirePoint('FitLine to', props.to));
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'answer');
 	if (!life.visible) return null;
 	return (

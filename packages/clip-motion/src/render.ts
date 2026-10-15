@@ -7,12 +7,13 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition, type ChromiumOptions } from '@remotion/renderer';
 
+import { assetsHash, publicDir } from './assets.ts';
 import { MotionCodeFailure, SCENE_ERROR_MARKER } from './errors.ts';
 import { FPS, type MotionJob } from './job.ts';
 
@@ -41,10 +42,6 @@ export function cacheDir(): string {
 	return dir;
 }
 
-function fontsDir(): string {
-	return resolve(process.env.OPENCMO_EDITOR_FONTS ?? join(HERE, '..', '..', 'clip-media', 'fonts'));
-}
-
 function sourceHash(): string {
 	const hash = createHash('sha256');
 	const walk = (dir: string) => {
@@ -55,7 +52,7 @@ function sourceHash(): string {
 		}
 	};
 	walk(HERE);
-	hash.update(fontsDir());
+	hash.update(assetsHash());
 	hash.update(JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).dependencies.remotion);
 	return hash.digest('hex').slice(0, 16);
 }
@@ -70,7 +67,7 @@ export function getBundle(log?: Log): Promise<string> {
 		const started = Date.now();
 		const staging = `${out}.${process.pid}.tmp`;
 		rmSync(staging, { recursive: true, force: true });
-		await bundle({ entryPoint: ENTRY, outDir: staging, publicDir: fontsDir(), enableCaching: false });
+		await bundle({ entryPoint: ENTRY, outDir: staging, publicDir: publicDir(cacheDir()), enableCaching: false });
 		try {
 			renameSync(staging, out);
 		} catch {

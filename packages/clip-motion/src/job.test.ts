@@ -19,6 +19,14 @@ describe('job contract', () => {
 		expect(bad.ok).toBe(false);
 	});
 
+	it('takes an optional theme and personality and rejects other values', () => {
+		const job = { title: 'T', code: 'return () => null', beats: beats(3, 2), format: '16:9', duration: 20 };
+		expect(MotionJobSchema.parse(job).theme).toBeUndefined();
+		expect(MotionJobSchema.parse({ ...job, theme: 'paper', personality: 'playful' })).toMatchObject({ theme: 'paper', personality: 'playful' });
+		expect(parseJob({ ...job, theme: 'neon' })).toEqual({ ok: false, message: expect.stringContaining('theme') });
+		expect(parseJob({ ...job, personality: 'bouncy' })).toEqual({ ok: false, message: expect.stringContaining('personality') });
+	});
+
 	it('names the failing field', () => {
 		const bad = parseJob({ title: 'T', code: 'x', beats: beats(2, 2), format: '16:9', duration: 20 });
 		expect(bad).toEqual({ ok: false, message: expect.stringContaining('beats') });

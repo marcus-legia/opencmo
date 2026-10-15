@@ -1,0 +1,35 @@
+{
+  "title": "How a vaccine trains your body",
+  "code": "const { Stage, Headline, Board, Icon, Shape, Arrow, Group, Burst, Check, Lottie } = kit;\nconst b = kit.beat;\nconst W = kit.width;\nconst H = kit.height;\nconst full = kit.area('full');\nconst mid = full.y + full.h * 0.56;\nconst left = W * 0.27;\nconst right = W * 0.73;\nconst split = kit.at(1, 0.45);\nconst fragments = [[W * 0.4, mid - 150], [W * 0.52, mid + 120], [W * 0.64, mid - 90]];\nconst impact = kit.at(3, 0.55);\nconst steps = kit.area('left');\n\nreturn function Scene() {\n  return (\n    <Stage ambient>\n      <Headline\n        items={[\n          { text: 'Training, not fighting', at: 0 },\n          { text: 'A harmless piece', at: b(1).from },\n          { text: 'Antibodies that fit', at: b(2).from },\n          { text: 'Ready for the real virus', at: b(3).from },\n          { text: 'Three steps', at: b(4).from },\n          { text: 'Protected', at: b(5).from, color: 'answer' },\n        ]}\n      />\n\n      {/* Beat 1: the vaccine trains the body before the virus arrives. */}\n      <Icon name=\"syringe\" x={left} y={mid} size={380} color=\"signal\" at={kit.at(0, 0.1)} exitAt={b(1).from} />\n      <Arrow from={[left + 230, mid]} to={[right - 230, mid]} color=\"dim\" width={7} curve={-0.12} at={kit.at(0, 0.4)} exitAt={b(1).from} />\n      <Icon name=\"shield-check\" x={right} y={mid} size={380} color=\"answer\" at={kit.cue(0, 'immune')} exitAt={b(1).from} />\n\n      {/* Beat 2: only a harmless piece of the virus. */}\n      <Icon name=\"virus\" x={W / 2} y={mid} size={420} color=\"wrong\" at={b(1).from + 4} exitAt={split + 4} />\n      <Burst x={W / 2} y={mid} at={split} color=\"wrong\" size={320} />\n      {fragments.map(([x, y], i) => (\n        <Icon key={i} name=\"virus\" x={x} y={y} size={170} color=\"noise\" at={split + 2 + i * 4} exitAt={b(3).from} />\n      ))}\n\n      {/* Beat 3: immune cells study the piece and build antibodies that fit it. */}\n      <Shape kind=\"cell\" x={W * 0.19} y={mid} size={320} color=\"answer\" label=\"Immune cell\" secondary at={b(2).from} exitAt={b(3).from} />\n      <Arrow from={[W * 0.28, mid - 40]} to={[fragments[0][0] - 100, fragments[0][1] + 20]} width={7} color=\"answer\" at={kit.at(2, 0.25)} exitAt={b(3).from} />\n      <Icon name=\"dna\" x={W * 0.82} y={mid} size={260} color=\"accent2\" at={kit.cue(2, 'antibodies')} exitAt={b(3).from} />\n      <Shape kind=\"ring\" x={W * 0.82} y={mid} size={380} color=\"accent2\" at={kit.cue(2, 'antibodies') + 6} exitAt={b(3).from} />\n\n      {/* Beat 4: the real virus arrives and is stopped at once. */}\n      <Group x={W * 0.25} y={mid} keys={[{ at: b(3).from + 6, x: W * 0.17 }]} react={{ at: impact, from: [right, mid], strength: 70 }} at={b(3).from} exitAt={b(4).from}>\n        <Icon name=\"virus\" x={W * 0.2} y={mid} size={300} color=\"wrong\" at={b(3).from} />\n      </Group>\n      <Icon name=\"shield-check\" x={right} y={mid} size={420} color=\"answer\" at={b(3).from + 2} exitAt={b(4).from} />\n      <Burst x={right - 210} y={mid} at={impact} color=\"answer\" size={280} />\n\n      {/* Beat 5: the three steps. */}\n      <Board\n        kind=\"steps\"\n        area={steps}\n        lines={['Show a harmless piece', 'Build matching antibodies', 'Remember them for years']}\n        lineAt={[kit.cue(4, 'show'), kit.cue(4, 'build'), kit.cue(4, 'remember')]}\n        at={b(4).from}\n        exitAt={b(5).from}\n      />\n      <Icon name=\"syringe\" x={right} y={mid} size={360} color=\"signal\" at={b(4).from + 8} exitAt={b(5).from} />\n\n      {/* Beat 6: protected. */}\n      <Check x={W / 2} y={mid} size={340} at={b(5).from + 6} />\n      <Lottie name=\"confetti\" x={W / 2} y={mid - 40} size={720} loop={false} at={b(5).from + 18} />\n    </Stage>\n  );\n};\n",
+  "beats": [
+    {
+      "say": "A vaccine trains your immune system before the real virus ever arrives.",
+      "label": "Training, not fighting"
+    },
+    {
+      "say": "It carries only a harmless piece of the virus, like a photo of a suspect.",
+      "label": "A harmless piece"
+    },
+    {
+      "say": "Your immune cells study that piece and build antibodies that fit it.",
+      "label": "Antibodies that fit"
+    },
+    {
+      "say": "When the real virus shows up, your body can recognise it at once.",
+      "label": "Ready for the real virus"
+    },
+    {
+      "say": "Show a harmless piece, build matching antibodies, and remember them for years.",
+      "label": "Three steps"
+    },
+    {
+      "say": "That memory is why one small shot can protect you.",
+      "label": "Protected"
+    }
+  ],
+  "format": "16:9",
+  "duration": 35,
+  "seed": 0,
+  "theme": "paper",
+  "personality": "playful"
+}

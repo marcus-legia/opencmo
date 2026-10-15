@@ -19,6 +19,8 @@ import {
 } from "@opencmo/clip-doc";
 import { FONTS } from "@opencmo/editor-core";
 
+import { EXPLAINER_MOTION } from "./motion-guide";
+
 /** Prop editor ghi cho chính nó — agent không cần biết. */
 const HIDDEN = new Set(["selected", "expanded", "clipHeight", "timeline", "playhead", "marks", "kind", "syncTo"]);
 
@@ -289,73 +291,98 @@ After it renders (about half a minute) capture a frame in its middle to confirm 
 
   explainer: `# Animated explainers (/explain → preview_explainer → add_explainer)
 
-An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene: a navy field of glowing dots, lines, grids and short labels that keeps transforming, each beat changing what is already on screen. It renders as one video layer with its own voice (credits after the user approves).
+An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene. The viewer must understand it with the sound off: every beat SHOWS the things its narration names (a virus, a syringe, a shield, a phone, a coin…), drawn with icons, built-in Lottie animations or kit shapes, with one headline row and a text board where the beat lists steps or facts. It renders as one video layer with its own voice; captions of the voice are added to the clip automatically (credits after the user approves).
 
-## 1. The script first — show it and ask
-Write the beats in your reply and ask "Shall I make it?" before writing any code. Wait for the user's go.
+## 1. The look
+theme — from the topic:
+- blueprint (navy, glowing lines): software, data, AI, networks, money and markets.
+- paper (warm off-white, flat colours, soft shadows): science, health, the body, nature.
+- paper: people, habits, how-to, everyday life.
+- The user's words win ("dark", "techy" → blueprint; "light", "friendly" → paper).
+personality — from the topic and the user's words:
+- premium: ideas, finance, serious topics.
+- corporate: processes, products, B2B.
+- playful: science for everyone, health, kids, consumer.
+- energetic: launches, sport, tips, sales.
+
+## 2. Storyboard first — subject first, then show it and ask
+Before any code, for EVERY beat:
+1. Write say (6-20 words of narration, about 4 s) and label (the main words on screen, at most 5 words).
+2. List the nouns of say. Find each one: find_icons (about 1,850 Lucide icons: virus, syringe, shield-check, dna, microscope, heart-pulse, coins, piggy-bank, smartphone…), find_lotties (built-in animations: walk, heart-beat, emoji/brain…), or a kit shape (circle, cell, blob, ring, pill, capsule, star, arrow, a free path).
+3. Write visual: what is drawn and how it changes, naming those icons, Lotties or shapes (e.g. "a syringe enters left; a virus icon splits into 3 grey fragments").
+Never use an icon whose name does not match the noun (memory cells are not "database"; a cell is a cell shape, not a dot). A noun nothing matches → a labelled shape, not an unrelated icon.
+Show the storyboard in your reply — for each beat: say, label and visual — plus the theme and personality, and ask "Shall I make it?". Wait for the user's go (skip the wait only when the user already said to go ahead).
 - Pick one structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
-- Beat 1 is the hook: the surprising question or fact, never "In this video…".
-- Each beat: say = 6-20 words of narration (about 4 s); label = the main words on screen, at most 5 words. 4-12 beats.
-- Each beat transforms the picture: a dot becomes a line, noise is filtered to peaks, a grid gets a match. No slideshow of separate pictures.
+- Beat 1 is the hook: the surprising question or fact, never "In this video…". 4-12 beats.
+- Each beat transforms the picture: a virus splits, an antibody locks on, a coin pile grows. No slideshow of separate pictures.
 - Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
-- Colour has meaning and the kit applies it: signal = gold, answer = teal (the brand accent), wrong = red, noise = grey.
 
-## 2. The code
-The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Title, Label, … } = kit;
+## 3. The code
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Headline, Icon, … } = kit;
 - R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
 - Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed) or the seeded data helpers; time comes from the frame.
 - Positions are pixels of the composition (1920×1080, 1080×1920 or 1080×1080); times are FRAMES (30 fps), taken from the timing helpers. Every component takes at (enter frame), dur, exitAt and exitDur; before at and after its exit it renders nothing.
 Layout
-- <Stage grid?> — the navy field (gradient, drifting grid, bloom, vignette). Wrap the whole scene in it.
+- <Stage grid? ambient?> — the theme's field (blueprint: navy, grid, bloom; paper: off-white, soft shadow). Wrap the whole scene in it. kit.theme and kit.personality are what the job set.
 - <Camera keys={[{ at, focus: [x, y], zoom, dur? }]}> — slow push-ins and pans of what is inside. Keep text OUTSIDE the Camera.
-- kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (bottom 17% kept for captions). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
-Text (at most 5 words)
-- <Title text kicker? y? size?> — big serif headline.
-- <Label text x? y? area? anchor? size? color? swapTo? swapAt? strikeAt?> — the main words; swapTo replaces the text at swapAt; strikeAt strikes it through in red.
-- <Mono …same> — data text such as "f1 | f2 | gap", typed in. <Counter to from? x? y? size? prefix? suffix? decimals?> — a number counting up.
-Data and marks
-- <DotField count? seed? area? layout="scatter|grid|cluster" points? size? glow? filterAt? threshold? morphTo? morphAt?> — up to 4000 glowing dots; filterAt fades dim dots to noise and flares bright ones (≥ threshold); morphTo (normalised points) flies them there from morphAt.
-- <Spectrogram data={kit.spectrogram(seed, { cols, rows, peaks })} area? peaksAt? constellationAt?> — a time × pitch heat map; data.peaks[i].x/y are normalised: kit.place(area, [p.x, p.y]).
-- <Waveform area? seed? noise? cleanAt? amp?> — audio bars; noise mixes in grey noise, cleanAt removes it.
-- <Axes area x? y?>, <Scatter area points={[{ x, y }]} highlight? highlightAt?>, <FitLine area from={[u, v]} to={[u, v]}> — one plot, data units 0..1 with y up, the same area for all three; kit.trend(seed, { n, slope, spread }) gives points.
-- <Link from={[x, y]} to={[x, y]} curve? dashed? dots? width?> (pixels) — a line that draws itself. <Box area | x y w h label? dashed?> — a highlighted region. <Check x y size kind="check|cross">. <Icon name x y size> with name in kit.icons: mic, music, phone, search, database, wave, bolt, user, lock, server, cloud, chart, clock, globe, key, play.
+- kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (the bottom 17% is the captions' place). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
+Things to draw — the subject of each beat
+- <Icon name x y size color?> — ANY Lucide name from find_icons; it draws itself on. An unknown name is an error listing the 5 closest names.
+- <Lottie name x? y? size? loop? speed?> — a built-in animation from find_lotties (walk, heart-beat, rocket-launch, emoji/brain…), playing from at in step with the frame. At most three on screen.
+- <Shape kind x? y? size? color? color2? fill? label? secondary? breathe? rotate?> — kind: circle, cell (membrane + nucleus), blob (organic, breathes), ring (draws on), pill, capsule (two colours), star. label (≤ 3 words) sits under it; secondary adds a halo that follows a few frames late.
+- <Path d x? y? size? color? fill? draw? width?> — any SVG path in a 24×24 box, drawn on (for what neither icons nor shapes have).
+- <Arrow from={[x, y]} to={[x, y]} curve? color? width? dashed? head?> — draws itself; the head pops in as it lands.
+- <Group x? y? keys={[{ at, x?, y?, scale?, rotate?, dur? }]} react={{ at, from: [x, y], strength? }}> — moves its children together (key x/y are pixel offsets; the group's x/y is the pivot); react knocks it away from an impact and lets it settle.
+- <Burst at x? y? count? size? color?> — a 24-frame particle burst for an impact or a success.
+Text
+- <Title text kicker? y? size?> — the big opening title.
+- <Headline items={[{ text, at, color? }]} y? size? exitAt?> — THE headline row (at most 5 words per item: the label of each beat); each item has fully left before the next rises in, so headlines never overlap. Use one Headline instead of several Labels.
+- <Board kind="steps|facts|compare" title? lines={['…', '…', '…']} area? at lineAt? exitAt> — up to 3 lines of at most 8 words, revealed one by one (lineAt: one frame per line, e.g. kit.cue of each step), when a beat lists steps, facts or numbers; compare lines are "left | right".
+- A text's exitAt is the frame it is gone by.
+- <Label text …>, <Mono text …> (data text, typed in), <Counter to from? prefix? suffix? decimals?> — for a word or number placed on a mark.
+Data and marks (for data topics)
+- <DotField …>, <Spectrogram data={kit.spectrogram(seed, { cols, rows, peaks })} …>, <Waveform …>, <Axes area x? y?>, <Scatter area points highlight? highlightAt?>, <FitLine area from to>, <Link from to curve? dashed? dots? width?>, <Box area | x y w h label? dashed?>, <Check x y size kind="check|cross">.
 Timing — never hard-code frames
 - kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word of beat i is spoken (the beat start when it is not there); kit.at(i, 0..1) → a frame part-way through beat i. Previews use estimated timings; the final render uses the real voice, so anything placed with these lands on the narration in both.
-Motion and colour
-- kit.enter(frame, { at, dur, ease }) → 0..1, kit.stagger(i, { at, each }), kit.morph(a, b, t), kit.lerp. kit.ease.out, kit.ease.hero, kit.ease.inOut, kit.ease.linear; nothing bounces.
-- Colours by name (color="answer"): signal gold (what we follow), answer teal (the result; the brand accent replaces it), wrong red, noise grey-blue, text, dim, field. Never pick other colours.
+- kit.enter(frame, { at, dur, ease }) → 0..1, kit.stagger(i, { at, each }), kit.morph(a, b, t), kit.lerp, kit.random(seed).
+- Colours by name (color="answer"): signal (what we follow), answer (the result; the brand accent replaces it), wrong (red: errors, the enemy), noise (grey: what does not matter), text, dim, field; on paper also ink, accent2, soft. Never pick other colours.
+
+${EXPLAINER_MOTION}
+
 Do and don't
-- One continuous scene: transform what is on screen (swap a label, filter the dots, morph, push the camera) instead of cutting to something new. About one change per beat.
-- At most three things move at once; start the next only when the previous has landed.
-- One main label at a time, in the headline row (area('full').y + about 7%).
-- Hold the last state still for the final second.
+- Do: one continuous scene; transform what is on screen. One Headline row. A Board for lists. The subject's icon in every beat.
+- Don't: decorative dots or icons that do not match the narration; two texts in the same place; text inside the Camera; captions in the scene (the clip gets them from the voice).
 
 Example:
-const { Stage, Title, Label, DotField, Check } = kit;
+const { Stage, Headline, Icon, Board } = kit;
 const b = kit.beat;
-const field = kit.area('full');
+const full = kit.area('full');
+const mid = full.y + full.h * 0.55;
 return function Scene() {
   return (
     <Stage>
-      <Title text="Why most leads go cold" exitAt={kit.at(0, 0.6)} />
-      <DotField area={field} count={1200} seed={4} at={kit.at(0, 0.5)} filterAt={kit.cue(1, 'reply')} threshold={0.85} />
-      <Label text="Thousands of visitors" y={field.y + 60} at={b(1).from} swapTo="A few reply" swapAt={kit.cue(1, 'reply')} />
-      <Check x={kit.width / 2} y={kit.height * 0.45} at={b(2).from + 10} />
+      <Icon name="syringe" x={kit.area('left').cx} y={mid} size={220} at={kit.at(0, 0.3)} exitAt={b(2).from} />
+      <Shape kind="cell" x={kit.width / 2} y={mid} size={260} label="Immune cell" secondary at={kit.cue(1, 'cells')} exitAt={b(2).from} />
+      <Icon name="virus" x={kit.width / 2} y={mid} size={240} color="wrong" at={b(2).from} />
+      <Icon name="shield-check" x={kit.area('right').cx} y={mid} size={240} color="answer" at={kit.cue(2, 'protects')} />
+      <Headline y={full.y + full.h * 0.07} items={[{ text: 'Training, not fighting', at: kit.at(0, 0.5) }, { text: 'A harmless piece', at: b(1).from }, { text: 'Protected', at: b(2).from }]} />
+      <Board kind="steps" lines={['Show a piece', 'Build antibodies', 'Remember']} at={b(3).from} lineAt={[kit.cue(3, 'show'), kit.cue(3, 'build'), kit.cue(3, 'remember')]} exitAt={b(4).from} />
     </Stage>
   );
 };
 
-## 3. Preview and fix — required
-preview_explainer { title, beats, code, format } returns stills (beat midpoints and the last frame) and a layout report. Look at every still AND read the issues:
-- an error (phase compile/guard/render + message) → fix the code;
-- "overlaps" → move one label to another area or time;
-- "outside the safe area" → place it with kit.area;
-- "text under 36 px" → fewer words, bigger primitive;
-- "more than 85% empty" → the beat needs its picture.
-Check that each still reads at a glance on a phone. Fix and preview again — at most 3 rounds.
+## 4. Preview, look, fix — required
+preview_explainer { title, beats (with visual), code, format, theme, personality } returns stills (beat midpoints, 6 frames after every beat start, and the last frame) and a layout report.
+- Subject check: write one line per still — "shows X; the beat says Y". Where X is not what Y names, fix that beat (the icon, its time, or its place) before anything else.
+- An error (phase compile/guard/render + message) → fix the code.
+- "overlaps" → use Headline for the headline row, or move one text to another area or time.
+- "outside the safe area" → place it with kit.area. "text under 36 px" → fewer words, bigger primitive.
+- "more than 85% empty" or "beat N shows no icon, shape or Lottie" → the beat needs its subject.
+- "nothing moves during beat N" → give it a primary, a secondary and an ambient motion.
+Fix and preview again — at most 3 rounds.
 
-## 4. Add it
-add_explainer { title, beats, code (exactly what you last previewed), format, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+## 5. Add it
+add_explainer { title, beats (with visual), code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat with its picture, the look, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer "Captions · <title>" follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 

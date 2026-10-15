@@ -12,9 +12,12 @@ import { z } from 'zod';
 
 import type { AssetDeclaration, ClipDocument } from '@opencmo/clip-doc';
 
-import { clone, sceneOf } from '../doc';
+import { readCaptionStyle } from '../captions';
+import { clone, sceneOf, walk, type Entity } from '../doc';
+import { holderOf } from './captions';
 import { OpFailure, type OpContext } from './context';
 import { checked, setFrame } from './project';
+import { voiceTranscript } from './voiceover';
 import {
 	EXPLAINER_FORMATS,
 	EXPLAINER_MAX_SECONDS,
@@ -117,5 +120,86 @@ export const addExplainer = {
 		} as never);
 		root.children = children;
 		return checked(next, 'That explainer cannot be added');
+	},
+};
+
+// ---------------------------------------------------------------------------
+// The voice's words arrived with the render
+
+const wordSchema = z.object({ text: z.string().max(200), start: z.number().finite().min(0), end: z.number().finite().min(0) });
+
+export const syncExplainerInput = z.object({
+	op: z.literal('sync_explainer'),
+	element_id: z.string().min(1).max(64),
+	words: z.array(wordSchema).max(20000).optional(),
+});
+type SyncExplainer = z.infer<typeof syncExplainerInput>;
+
+/** The explainer declaration a layer plays, if it plays one. */
+function explainerSrc(element: Entity): Record<string, unknown> | null {
+	for (const paint of (element.paints as Entity[] | undefined) ?? []) {
+		const src = paint.type === 'video' ? (paint.src as Record<string, unknown> | undefined) : undefined;
+		if (src && typeof src === 'object' && src.model === EXPLAINER_MODEL) return src;
+	}
+	return null;
+}
+
+/** Title for the captions layer: the scene's title, else the layer name without its prefix. */
+function titleOf(element: Entity, src: Record<string, unknown>): string {
+	const scene = src.scene as { title?: unknown } | undefined;
+	if (typeof scene?.title === 'string' && scene.title.trim()) return scene.title.trim();
+	const name = typeof element.name === 'string' ? element.name.replace(/^Explainer:\s*/, '').trim() : '';
+	return name || 'Explainer';
+}
+
+/**
+ * Captions of an explainer's narration, from the word timings that come back with its generation
+ * (`docs/explainer-v2-build.md`, op `sync_explainer`). The editor runs it when the render lands:
+ * one visible captions layer timed like the explainer layer, `source` = that layer (the own-video
+ * convention, so cut-by-words tools read it). A layer that already has its captions only gets the
+ * new transcript. No words (the fake voice) → no change. `agent: false`: the words live on the
+ * generation row, which only the editor reads.
+ */
+export const syncExplainer = {
+	name: 'sync_explainer',
+	agent: false,
+	input: syncExplainerInput,
+	describe: () => 'Add captions from the explainer',
+	async apply(document: ClipDocument, input: SyncExplainer, ctx: OpContext) {
+		if (!input.words?.some((word) => word.text.trim())) return document;
+		const next = clone(document);
+		const found = holderOf(next, input.element_id);
+		const src = found ? explainerSrc(found.element) : null;
+		if (!found || !src) throw new OpFailure(`No explainer with id "${input.element_id}".`);
+		const transcript = voiceTranscript(input.words);
+		const existing: Entity[] = [];
+		walk(next, ({ entity }) => {
+			if (entity.kind === 'captions' && entity.source === input.element_id) existing.push(entity);
+		});
+		const path = await ctx.saveTranscript(transcript);
+		const element = found.element;
+		const start = round(typeof element.start === 'number' ? element.start : 0);
+		const end = typeof element.end === 'number' ? round(element.end) : undefined;
+		if (existing.length) {
+			if (existing.every((entity) => entity.src === path)) return document;
+			for (const entity of existing) entity.src = path;
+			return checked(next, 'Those captions cannot be added');
+		}
+		const style = readCaptionStyle(next);
+		const captions: Entity = {
+			kind: 'captions',
+			name: `Captions · ${titleOf(element, src)}`.slice(0, 80),
+			src: path,
+			source: input.element_id,
+			...(style?.preset ? { preset: style.preset } : {}),
+			...(style?.colors?.length ? { colors: style.colors } : {}),
+			...(style?.color ? { color: style.color } : {}),
+			...(style?.fontFamily ? { fontFamily: style.fontFamily } : {}),
+			...(style?.fontWeight ? { fontWeight: style.fontWeight } : {}),
+			start,
+			...(end === undefined ? {} : { end }),
+		};
+		((found.holder.children as Entity[] | undefined) ??= []).push(captions);
+		return checked(next, 'Those captions cannot be added');
 	},
 };

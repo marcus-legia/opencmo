@@ -71,3 +71,15 @@ export function stillFrames(timeline: Timeline): number[] {
 	const pick = mids.length <= 5 ? mids : [0, 1, 2, 3, 4].map((i) => mids[Math.round((i * (mids.length - 1)) / 4)]!);
 	return [...new Set([...pick, timeline.frames - 1])].sort((a, b) => a - b);
 }
+
+/**
+ * Layout-only samples (not shown to the Assistant): 6 frames after each beat starts, where a transition can still
+ * leave two texts on screen, and the beat's midpoint, so a beat whose two samples are identical stands still.
+ */
+export function probeFrames(timeline: Timeline): { beat: number; frame: number }[] {
+	return timeline.beats.flatMap((beat, i) => {
+		const early = Math.min(beat.from + 6, beat.to - 1);
+		const mid = Math.floor((beat.from + beat.to) / 2);
+		return early === mid ? [{ beat: i, frame: mid }] : [{ beat: i, frame: early }, { beat: i, frame: mid }];
+	});
+}
