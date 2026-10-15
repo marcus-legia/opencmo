@@ -40,6 +40,7 @@ def model():
 def test_spec_hop_le_va_chi_model_explainer_nhan_no() -> None:
     validate_spec(model(), SPEC)
     validate_spec(model(), {**SPEC, "seed": 3, "scene": {**SPEC["scene"], "accent": "#12ABef"}})
+    validate_spec(model(), {**SPEC, "scene": {**SPEC["scene"], "theme": "paper", "personality": "playful"}})
     with pytest.raises(SpecError, match="Describe the 3D scene"):
         validate_spec(get_model("studio-3d"), {k: v for k, v in SPEC.items() if k != "voice"} | {"duration": 5, "aspectRatio": "9:16"})
     with pytest.raises(SpecError, match="does not take"):
@@ -62,6 +63,10 @@ def test_spec_hop_le_va_chi_model_explainer_nhan_no() -> None:
         ({"scene": {**SPEC["scene"], "beats": [*BEATS, {"say": "ok", "colour": "red"}]}}, "explainer script is not valid"),
         ({"scene": {**SPEC["scene"], "title": ""}}, "explainer script is not valid"),
         ({"scene": {**SPEC["scene"], "accent": "red"}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "theme": "neon"}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "theme": None}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "personality": "Playful"}}, "explainer script is not valid"),
+        ({"scene": {**SPEC["scene"], "beats": [*BEATS[:3], {**BEATS[3], "visual": "a match"}]}}, "explainer script is not valid"),
         ({"scene": {**SPEC["scene"], "beats": [{"say": "x" * 240}] * 16}}, "too much data"),
     ],
 )
@@ -112,6 +117,9 @@ def test_job_dung_hop_dong_motion_job() -> None:
         "seed": 9,
         "accent": "#ff8800",
     }
+    v2 = motion_job({**SPEC, "code": CODE, "scene": {**SPEC["scene"], "theme": "paper", "personality": "energetic"}})
+    assert (v2["theme"], v2["personality"]) == ("paper", "energetic")
+    assert "theme" not in job and "personality" not in job, "v1 scenes keep the renderer's defaults"
     words = [{"text": "A", "start": 0.0, "end": 0.2}]
     assert motion_job({**SPEC, "code": CODE}, words)["words"] == words
     assert "words" not in motion_job({**SPEC, "code": CODE}, None)
@@ -158,6 +166,7 @@ def test_local_giong_that_mang_words_vao_job(monkeypatch: pytest.MonkeyPatch, tm
     assert voice.calls == [("elevenlabs-voice", {"prompt": catalog.narration(SPEC["scene"]), "voice": "Aria"})]
     assert seen[0]["job"]["words"] == words
     assert seen[0]["args"][5:] == ["--audio", str(tmp_path / "voice" / "result.m4a")]
+    assert result.words == words, "the words go back with the video for its captions"
 
 
 def test_loi_doc_dai_hon_video_thi_cat_giong(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -185,8 +194,9 @@ def test_giong_gia_la_im_lang_va_khong_co_words(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.delenv("OPENCMO_ENV", raising=False)
     seen = _fake_cli(monkeypatch)
     voice = _Voice([])
-    MotionLocalProvider(voice).run(model(), {**SPEC, "code": CODE}, tmp_path)
+    result = MotionLocalProvider(voice).run(model(), {**SPEC, "code": CODE}, tmp_path)
     assert voice.calls == [], "no paid voice"
+    assert result is not None and result.words is None, "no words: the editor adds no captions"
     assert "words" not in seen[0]["job"], "the renderer estimates the timings"
     assert (tmp_path / "voice.m4a").stat().st_size > 0
 
@@ -242,6 +252,7 @@ def test_modal_giong_o_worker_render_tren_modal(monkeypatch: pytest.MonkeyPatch,
     assert result is not None and result.path.read_bytes().startswith(b"\x00\x00\x00\x18ftyp")
     assert spawned[0]["audio"] == b"audio"
     assert spawned[0]["job"] == motion_job({**SPEC, "code": CODE}, words)
+    assert result.words == words
 
 
 def test_modal_giu_cau_loi_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -314,3 +325,16 @@ def test_cli_khong_nhan_khoa_cua_worker(monkeypatch: pytest.MonkeyPatch) -> None
     env = motion.cli_env()
     assert "SUPABASE_SERVICE_ROLE_KEY" not in env and "FAL_KEY" not in env
     assert env["OPENCMO_MOTION_SCALE"] == "0.5" and "PATH" in env
+
+
+@pytest.mark.parametrize(("cores", "expected"), [(1, "1"), (2, "2"), (4, "4"), (64, "4"), (None, "1")])
+def test_concurrency_follows_the_cores_capped_at_4(monkeypatch: pytest.MonkeyPatch, cores: int | None, expected: str) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_CONCURRENCY", raising=False)
+    monkeypatch.setattr(motion.os, "cpu_count", lambda: cores)
+    assert motion.cli_env()["OPENCMO_MOTION_CONCURRENCY"] == expected
+
+
+def test_concurrency_set_by_env_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENCMO_MOTION_CONCURRENCY", "3")
+    monkeypatch.setattr(motion.os, "cpu_count", lambda: 1)
+    assert motion.cli_env()["OPENCMO_MOTION_CONCURRENCY"] == "3"

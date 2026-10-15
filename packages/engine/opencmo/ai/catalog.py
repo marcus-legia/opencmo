@@ -112,6 +112,9 @@ EXPLAINER_INVALID = "This explainer script is not valid. Write it again."
 SCENE_MAX_BYTES = 4000
 #: Explainer beats: the bounds of `BeatSchema` in packages/clip-motion/src/job.ts.
 BEATS_MIN, BEATS_MAX, SAY_MAX, LABEL_MAX, TITLE_MAX = 3, 16, 240, 40, 60
+#: Explainer v2 looks and motion personalities: `THEMES` / `PERSONALITIES` in job.ts, same as SQL.
+THEMES = ("blueprint", "paper")
+PERSONALITIES = ("premium", "corporate", "playful", "energetic")
 
 
 def _code_ref_ok(scene: dict[str, Any]) -> bool:
@@ -137,6 +140,10 @@ def _check_explainer(scene: dict[str, Any]) -> None:
             raise SpecError(EXPLAINER_INVALID)
     accent = scene.get("accent")
     if accent is not None and not (isinstance(accent, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", accent)):
+        raise SpecError(EXPLAINER_INVALID)
+    if "theme" in scene and scene["theme"] not in THEMES:
+        raise SpecError(EXPLAINER_INVALID)
+    if "personality" in scene and scene["personality"] not in PERSONALITIES:
         raise SpecError(EXPLAINER_INVALID)
 
 

@@ -14,6 +14,7 @@ import pytest
 
 from opencmo.ai import catalog
 from opencmo.ai.catalog import SpecError, get_model, price_of, validate_spec
+from opencmo.ai.providers.base import Result
 from opencmo.ai.providers.fake import FakeProvider
 from opencmo.backends.supabase import Task
 from opencmo.worker import generate_task
@@ -862,6 +863,33 @@ def test_explainer_tai_code_cua_dung_nguoi(monkeypatch):
     store.codes = {("user-1", "d" * 64): "return function Scene() { return null; };"}
     generate_task.process(store, _task())
     assert seen["code"].startswith("return function Scene")
+
+
+@pytest.mark.parametrize(("model_id", "kept"), [("motion-explainer", True), ("fake-video", False)])
+def test_explainer_words_go_to_complete_generation(monkeypatch, tmp_path, model_id, kept):
+    words = [{"text": "One.", "start": 0.0, "end": 0.4}]
+    spec = {"prompt": "x", "aspectRatio": "16:9", "duration": 5}
+    if model_id == "motion-explainer":
+        spec |= {"duration": 15, "voice": "Aria", "scene": {"template": "explainer", "code_ref": "d" * 64, "title": "Shazam",
+                                             "beats": [{"say": "One."}, {"say": "Two."}, {"say": "Three."}]}}
+    video = tmp_path / "out.mp4"
+    video.write_bytes(b"mp4")
+
+    class Adapter:
+        def run(self, model, spec, workdir, alive):
+            return Result(video, "video/mp4", "mp4", words=words)
+
+        def cost(self, model, spec, result):
+            return 1
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda model: Adapter())
+    monkeypatch.setattr(generate_task, "check_output", lambda *a: None)
+    monkeypatch.setattr(generate_task, "_probe", lambda path: (15.0, 1920, 1080))
+    store = FakeStore(_generation(model=model_id, spec=spec, spec_hash=generate_task.spec_hash(model_id, spec)))
+    store.codes = {("user-1", "d" * 64): "return function Scene() { return null; };"}
+    generate_task.process(store, _task())
+    assert store.failed == []
+    assert store.completed["words"] == (words if kept else None)
 
 
 def test_kiem_duyet_bo_qua_explainer_cua_minh():

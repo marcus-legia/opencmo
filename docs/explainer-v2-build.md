@@ -229,7 +229,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
   - `complete_generation`: keep `p_words` for explainer generations (provider `opencmo-motion`), same size limits
     as voice;
   - `scripts/dump-schema.sh`. **Push this first.**
-- [ ] **B2. Worker.** `motion_job()` passes `theme`/`personality` into the job; `generate_task.py` passes the
+- [x] **B2. Worker.** `motion_job()` passes `theme`/`personality` into the job; `generate_task.py` passes the
   explainer's words to `complete_generation`. Tests in `tests/test_ai_motion_provider.py` and
   `tests/test_worker_generate_task.py`.
 - [ ] **B3. Modal image.** `motion_image` carries `packages/clip-media/lottie` and `packages/clip-icons/data`
@@ -335,6 +335,15 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   `scene.personality` from the fixed lists (wrong type, `null` or an unknown name → "This explainer script is not
   valid. Write it again."; a beat `visual` is refused too); `complete_generation` keeps words for models whose
   provider is `opencmo-motion`. `supabase test db`: 89 files, 1446 tests pass (CLI 2.117.0); schema dumped.
+- B2: `motion_job()` copies `theme` / `personality` from the scene (absent → left out, the kit's defaults);
+  the worker's spec check (`catalog._check_explainer`) takes the same lists as SQL. Both motion providers return the
+  voice's words on the `Result` (cut to the video like the audio); `generate_task` passes them to
+  `complete_generation` for `opencmo-motion`. Fake voice → no words → no captions. Engine: 701 passed, 12 skipped;
+  1 failure needs network (`test_worker_media` YouTube section download), not this change. `ruff`: clean.
+- B3 (code; not yet built on Modal): `motion_image` carries `packages/clip-icons/data` and sets
+  `OPENCMO_MOTION_ICONS` / `OPENCMO_MOTION_LOTTIE` (the Lottie pack was already in via `clip-media`). Concurrency:
+  `cli_env()` sets `OPENCMO_MOTION_CONCURRENCY = min(os.cpu_count(), 4)` unless set; the image build uses
+  `min(nproc, 4)`. The warm-up renders `fixtures/vaccine.job.json` at 0.25, so **the image builds only once A9 lands**.
 
 ### Track C
 

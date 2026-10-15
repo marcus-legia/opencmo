@@ -82,8 +82,9 @@ def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) 
         "duration": int(spec["duration"]),
         "seed": int(spec.get("seed") or 0),
     }
-    if scene.get("accent"):
-        job["accent"] = scene["accent"]
+    for key in ("accent", "theme", "personality"):
+        if scene.get(key):
+            job[key] = scene[key]
     if words:
         job["words"] = words
     return job
@@ -141,10 +142,18 @@ def make_voice(spec: dict[str, Any], workdir: Path, voice: ProviderAdapter | Non
     return result.path, words or None
 
 
+#: Render concurrency cap: `render_motion` and `motion_preview` run with cpu=4.
+MAX_CONCURRENCY = 4
+
+
 def cli_env() -> dict[str, str]:
     """Only what the CLI reads: the worker's keys stay out of a process that runs the Assistant's code."""
     keep = ("PATH", "HOME", "TMPDIR", "LANG", "OPENCMO_EDITOR_FONTS")
-    return {k: v for k, v in os.environ.items() if k in keep or k.startswith("OPENCMO_MOTION_")}
+    env = {k: v for k, v in os.environ.items() if k in keep or k.startswith("OPENCMO_MOTION_")}
+    # Remotion refuses a concurrency above the machine's core count (`os.cpus()`, which is what
+    # `os.cpu_count()` reads), so a fixed number fails on a smaller container.
+    env.setdefault("OPENCMO_MOTION_CONCURRENCY", str(min(os.cpu_count() or 1, MAX_CONCURRENCY)))
+    return env
 
 
 def render_local(job: dict[str, Any], audio: Path | None, workdir: Path) -> Path:
@@ -226,8 +235,9 @@ def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
     return result
 
 
-def _result(path: Path) -> Result:
-    return Result(path=path, content_type="video/mp4", extension="mp4")
+def _result(path: Path, words: list[dict[str, Any]] | None) -> Result:
+    # The words go back with the video so the editor can add captions (`complete_generation`).
+    return Result(path=path, content_type="video/mp4", extension="mp4", words=words)
 
 
 class MotionLocalProvider(ProviderAdapter):
@@ -236,16 +246,17 @@ class MotionLocalProvider(ProviderAdapter):
 
     def __init__(self, voice: ProviderAdapter | None = None) -> None:
         self._voice = voice
+        self._words: list[dict[str, Any]] | None = None
 
     def submit(self, model: AiModel, spec: dict[str, Any], workdir: Path) -> str:
-        audio, words = make_voice(spec, workdir, self._voice)
-        return str(render_local(motion_job(spec, words), audio, workdir))
+        audio, self._words = make_voice(spec, workdir, self._voice)
+        return str(render_local(motion_job(spec, self._words), audio, workdir))
 
     def poll(self, ref: str) -> Poll:
         return Poll("done")
 
     def fetch(self, ref: str, dest_dir: Path) -> Result:
-        return _result(Path(ref))
+        return _result(Path(ref), self._words)
 
 
 class MotionModalProvider(ProviderAdapter):
@@ -264,11 +275,12 @@ class MotionModalProvider(ProviderAdapter):
         self._voice = voice
         self._workdir: Path | None = None
         self._done: dict[str, Path] = {}
+        self._words: list[dict[str, Any]] | None = None
 
     def submit(self, model: AiModel, spec: dict[str, Any], workdir: Path) -> str:
         self._workdir = workdir
-        audio, words = make_voice(spec, workdir, self._voice)
-        payload = {"job": motion_job(spec, words), "audio": audio.read_bytes()}
+        audio, self._words = make_voice(spec, workdir, self._voice)
+        payload = {"job": motion_job(spec, self._words), "audio": audio.read_bytes()}
         try:
             function = self._modal.Function.from_name(MODAL_APP, MODAL_FUNCTION)
             call = function.spawn(payload)
@@ -301,4 +313,4 @@ class MotionModalProvider(ProviderAdapter):
         return Poll("done")
 
     def fetch(self, ref: str, dest_dir: Path) -> Result:
-        return _result(self._done[ref])
+        return _result(self._done[ref], self._words)

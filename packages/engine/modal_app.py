@@ -248,7 +248,15 @@ motion_image = (
     # For the `motion_preview` endpoint.
     .pip_install("fastapi[standard]")
     .add_local_dir(_PACKAGES / "clip-motion", remote_path=f"{WEB_ROOT}/packages/clip-motion", copy=True, ignore=_NODE_IGNORE)
-    .env({**_MEDIA_ENV, "OPENCMO_MOTION_CACHE": "/root/motion-cache"})
+    # v2 kit: every Lucide icon (`<Icon>`) and the built-in Lottie pack (`<Lottie>`, in clip-media
+    # above) are copied into the Remotion bundle, never fetched. The CLI only sees OPENCMO_MOTION_*.
+    .add_local_dir(_PACKAGES / "clip-icons" / "data", remote_path=f"{WEB_ROOT}/packages/clip-icons/data", copy=True)
+    .env({
+        **_MEDIA_ENV,
+        "OPENCMO_MOTION_CACHE": "/root/motion-cache",
+        "OPENCMO_MOTION_ICONS": f"{WEB_ROOT}/packages/clip-icons/data/icons.json",
+        "OPENCMO_MOTION_LOTTIE": f"{MEDIA_ROOT}/lottie",
+    })
     .run_commands(
         f"cd {WEB_ROOT}/packages/clip-motion && npm install --omit=dev --no-audit --no-fund",
         # Remotion's own headless shell, downloaded once at build time, then pinned by path so the
@@ -259,11 +267,13 @@ motion_image = (
     )
     .env({"OPENCMO_CLIP_MOTION": f"{WEB_ROOT}/packages/clip-motion/src/cli.ts", "OPENCMO_MOTION_CHROME": "/usr/local/bin/chrome-motion"})
     # Bundle the composition into the image (cached by source hash under OPENCMO_MOTION_CACHE)
-    # and prove the image renders: a cold container then starts at the render, not at webpack.
-    # The image builder has one core, and Remotion rejects a concurrency above the core count.
+    # and prove the image renders the v2 kit (icons, Lotties, both themes): a cold container then
+    # starts at the render, not at webpack. Remotion rejects a concurrency above the core count, and
+    # the image builder may have one core: same rule as `cli_env`, min(cores, 4).
     .run_commands(
-        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25 OPENCMO_MOTION_CONCURRENCY=1"
-        " node src/cli.ts render fixtures/placeholder.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
+        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25"
+        ' OPENCMO_MOTION_CONCURRENCY="$(n=$(nproc); [ "$n" -gt 4 ] && n=4; echo "$n")"'
+        " node src/cli.ts render fixtures/vaccine.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
     )
 )
 
