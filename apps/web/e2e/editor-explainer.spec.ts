@@ -88,8 +88,9 @@ test("New edit: /explain → script → go → stills → approve → the explai
     await page.getByTestId("timeline-ruler").click({ position: { x: area.x - ruler.x + (area.width * 2) / seconds, y: 4 } });
     await expect(page.getByTestId("playhead-time")).toContainText(/^0:02/);
     const box = await sceneBox(page, { width: 1920, height: 1080 });
-    // A real frame has texture; an empty or black canvas has std ≈ 0.
-    await expect.poll(async () => (await videoRegionStats(page, box)).std, { timeout: 60_000 }).toBeGreaterThan(2);
+    // The frame at 2 s has the white title over the navy field (std ≈ 24 in the MP4); the bare field of
+    // frame 0, or an empty canvas, stays under 10. A low bar would pass on the gradient alone.
+    await expect.poll(async () => (await videoRegionStats(page, box)).std, { timeout: 60_000 }).toBeGreaterThan(12);
     await page.screenshot({ path: testInfo.outputPath("02-explainer-playing.png") });
   }
 
