@@ -102,7 +102,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   task.setup?.(document);
   const workspace = memoryWorkspace(
     { version: 1, document, manifest: fixtureManifest() },
-    { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": TRANSCRIPT }, master: FIXTURE_MASTER },
+    { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": task.transcript ?? TRANSCRIPT }, master: FIXTURE_MASTER },
   );
   // Transcript renderer cần (bản gốc và bản sau cắt do op lưu) — nạp lại trước mỗi lần vẽ.
   const cache = new Map<string, Transcript>();

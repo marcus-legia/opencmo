@@ -14,6 +14,8 @@ live next to the files.
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
 | Story design guidance from HyperFrames by HeyGen (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `explainer`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-hyperframes.md`) |
 | Motion design skill by LottieFiles (adapted) | `apps/web/lib/agent/motion-guide.ts`, `packages/editor-core/src/motion/intro.ts` | MIT (`apps/web/lib/agent/LICENSE-motion-design.md`) |
+| Rough-cut editing rules from video-use, cut-video, claude-code-video-editing-skill and takecut (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`), `apps/web/lib/agent/retakes.ts` | MIT (`apps/web/lib/agent/LICENSE-roughcut.md`) |
+| Talking-head editing order from palmier-skills `ugc-editing` (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-roughcut.md`) |
 
 Voice previews in `apps/web/public/voices/` and demo clips in `apps/web/public/demos/` were
 produced with OpenCMO and its configured providers for use in the product UI.

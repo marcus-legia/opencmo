@@ -49,6 +49,22 @@ export const TRANSCRIPT: Transcript = [
   line("Follow for more tips like this", 26.3, 29.5),
 ];
 
+/**
+ * A self-recorded talk for the rough-cut tasks, on the same 30 s timing: a filler, a 2 s pause, a
+ * false start before its full sentence and a sentence said twice (the last take is the one to keep).
+ */
+export const ROUGHCUT_TRANSCRIPT: Transcript = [
+  line("Here is how I got my first ten customers", 0.3, 3.5),
+  line("um", 3.7, 4.0),
+  // Lặng 4.0 → 6.0
+  line("The trick was to", 6.0, 7.2),
+  line("The trick was to answer every question in my niche", 7.6, 11.5),
+  line("I wrote one helpful reply a day for a month", 12.0, 15.5),
+  line("I wrote one helpful reply every day for a month", 16.0, 19.5),
+  line("uh people started asking what I was building", 20.0, 23.5),
+  line("Try it this week and tell me how it goes", 24.0, 28.0),
+];
+
 export function fixtureDocument(): ClipDocument {
   return {
     version: 1,

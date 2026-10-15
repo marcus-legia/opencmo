@@ -18,6 +18,7 @@ import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 const names = TOOL_SPECS.map((spec) => spec.name);
 assert.ok(names.includes("capture"), "có tool trình duyệt capture");
 assert.ok(names.includes("set_frame") && names.includes("remove_words"), "op của editor-core là tool");
+assert.ok(names.includes("find_retakes"), "the rough cut finds retakes");
 assert.equal(new Set(names).size, names.length, "tên tool không trùng");
 assert.ok("capture" in BROWSER_INPUTS && !("set_frame" in BROWSER_INPUTS));
 const text = JSON.stringify(TOOL_SPECS.map((spec) => spec.schema));

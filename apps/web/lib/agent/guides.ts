@@ -159,6 +159,34 @@ A straight cut changes picture and sound on the same frame; at a jump between tw
 - 0.3-0.8 s is natural; more than 1.5 s sounds like a mistake. Use it on a few key cuts, not every cut.
 - get_project_state lists cut_points with the roll each already has. Capture a frame on each side of the cut and listen (media_waveform) to check the overlap does not land in the middle of a word.`,
 
+  roughcut: `# Rough cut (/roughcut): a self-recorded talk, tightened
+
+The user recorded themselves and wants the mistakes out: retakes, false starts, filler and dead air. Keep their words; remove only what a viewer would not miss. When in doubt, keep: a repeat left in costs a second pass, a lost sentence costs the video.
+
+## 1. Look, in ONE step
+get_transcript, find_filler_words, find_silences, find_retakes, then one capture contact sheet (count 6). If there is no transcript yet, say so and stop.
+
+## 2. Propose in 4-8 sentences, then wait
+Say what goes and what stays, with counts and seconds:
+- goes: earlier takes of a repeated sentence and false starts (keep the LAST take, it is usually the one the speaker meant), filler sounds (um, uh), pauses over about 0.6 s;
+- stays: laughs, a pause after a question or before a punchline, the call to action, "like"/"so"/"you know" when they carry meaning;
+- the length now and the estimated length after.
+End with "Shall I cut it?" and wait for the user's go, unless they already said to just do it. Never cut more than about a fifth of the clip without saying so in the plan.
+
+## 3. Cut, in this order, one call each
+1. Retakes and false starts: ONE remove_words with the drop_word_ids of every retake you agree with. Read each pair in the transcript first: a deliberate repetition ("again: ship it") stays.
+2. Fillers: ONE remove_words with the true fillers, tightness "balanced".
+3. Silences: remove_silence {min_pause: 0.6, padding: 0.15}, which leaves about 0.3 s. Never leave less than 0.25 s; never cut inside a word.
+Each call is one Undo step; the user can undo the whole request in one click.
+
+## 4. Verify before you report
+- get_transcript again: every kept sentence still reads from start to end, and no word is cut in half.
+- capture at 3-6 of the cut edges: the speaker does not jump mid-gesture in a way that looks like an error.
+- Report the length before and after and what was removed (how many takes, fillers, pauses), in two or three sentences.
+
+## 5. Captions last
+Style or add captions only after the cutting is finished; a later cut moves every caption.`,
+
   color: `# Color grading
 
 Use apply_color (one call can set many adjustments on many elements) and check with inspect_color, which measures the frame as exported.

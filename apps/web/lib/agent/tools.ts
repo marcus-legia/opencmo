@@ -47,6 +47,7 @@ import { ApiError } from "@/lib/api/errors";
 import { nodeFor } from "@/lib/editor/asset-node";
 
 import { GUIDE_NAMES, readGuide } from "./guides";
+import { FILLERS, bare, findRetakes } from "./retakes";
 import type { AgentWorkspace } from "./workspace";
 import type { Image } from "./providers/types";
 
@@ -253,6 +254,11 @@ const READ_TOOLS: ToolSpec[] = [
     "find_silences",
     "List pauses between spoken words (source seconds), with the words on each side and a suggested range to pass to remove_ranges that leaves a natural gap.",
     silencesInput,
+  ),
+  spec(
+    "find_retakes",
+    "List sentences the speaker said more than once within a minute (retakes and false starts), each with the last take to keep, the earlier takes as [first word id, last word id], and drop_word_ids to pass to remove_words. Suggestions only: a repetition can be deliberate, so read the lines in get_transcript before removing.",
+    z.object({}),
   ),
   spec(
     "list_library",
@@ -493,7 +499,7 @@ export const PARALLEL_SAFE = new Set([...READ_TOOLS.map((tool) => tool.name), "r
  * they could only fail there; leaving them out keeps ~6k characters of schema out of every request.
  * A clip's kind never changes, so a session's tool list (the start of the prompt cache) holds.
  */
-export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
+export const OWN_VIDEO_TOOLS = new Set(["find_filler_words", "find_silences", "find_retakes", "remove_words", "restore_words", "restore_all", "remove_ranges", "remove_silence", "set_audio_roll"]);
 
 /**
  * The verify gate: what the model is told when it tries to finish while the last <check> after its
@@ -558,8 +564,6 @@ export type ToolOutcome = {
   images?: Image[];
 };
 
-const FILLERS = new Set(["um", "umm", "uh", "uhh", "uhm", "erm", "er", "ah", "hmm", "mm", "mhm"]);
-const bare = (text: string): string => text.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
 
 /**
  * Dữ liệu từ người dùng (transcript, chữ trên video) đi vào tool_result trong
@@ -714,6 +718,15 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
     return { ok: true, content: asData({ window: model.window, cuts: removed, lines }), summary: "Read the transcript" };
   }
 
+  if (name === "find_retakes") {
+    const retakes = findRetakes(model.transcript as Transcript, (word) => isRemoved(word, removed));
+    return {
+      ok: true,
+      content: asData({ retakes }),
+      summary: retakes.length ? `Found ${retakes.length} repeated ${retakes.length === 1 ? "sentence" : "sentences"}` : "No retakes found",
+    };
+  }
+
   // find_filler_words
   const flat = lines.flat().filter((word) => !word.removed);
   const hits: Array<{ id?: string; text: string; reason: string }> = [];
@@ -731,7 +744,7 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
   };
 }
 
-const READS = new Set(["get_project_state", "get_document", "get_transcript", "search_transcript", "find_filler_words", "find_silences", "list_library", "check"]);
+const READS = new Set(["get_project_state", "get_document", "get_transcript", "search_transcript", "find_filler_words", "find_silences", "find_retakes", "list_library", "check"]);
 
 /** Op timeline/inspector chạm vào thời gian của video chính thì phá mốc cắt và phụ đề. */
 const TIMING_PROPS = ["start", "end", "sourceIn", "sourceOut", "playbackRate", "src"];

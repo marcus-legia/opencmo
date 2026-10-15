@@ -22,10 +22,11 @@ import {
   walk,
   type CheckReport,
   type Entity,
+  type Transcript,
 } from "@opencmo/editor-core";
 
 import type { PreparedGeneration } from "../generate-tool";
-import { TRANSCRIPT } from "./fixture";
+import { ROUGHCUT_TRANSCRIPT, TRANSCRIPT } from "./fixture";
 
 export type Outcome = {
   document: ClipDocument;
@@ -48,6 +49,8 @@ export type EvalTask = {
   prompt: string;
   /** Sửa document mẫu trước khi chạy (cài sẵn lỗi cho bài "sửa lỗi"). */
   setup?: (document: ClipDocument) => void;
+  /** The clip's transcript when the task needs other words than the shared fixture's. */
+  transcript?: Transcript;
   /** Câu trả lời khi agent hỏi (`ask_user`). */
   answer?: string;
   grade: (outcome: Outcome) => Grade;
@@ -130,6 +133,27 @@ const srcOf = (entity: Entity): string[] => [
 const masters = (document: ClipDocument) => all(document).filter((item) => item.tag === "video" && item.entity.src === MASTER_SRC);
 
 export const TASKS: EvalTask[] = [
+  {
+    id: "roughcut",
+    prompt: "/roughcut my talk. Just do it, no need to ask.",
+    transcript: ROUGHCUT_TRANSCRIPT,
+    grade(outcome) {
+      const notes: string[] = [];
+      const { window, removed } = state(outcome.document);
+      const line = (index: number) => ROUGHCUT_TRANSCRIPT[index]!.words;
+      const cut = (index: number) => line(index).every((word) => isRemoved(word, removed));
+      const kept = (index: number, skip = "") => line(index).filter((word) => word.text !== skip).every((word) => !isRemoved(word, removed));
+      const retakes = check(notes, cut(2) && cut(4), "the false start or the first take of the repeated sentence is still in");
+      const last = check(notes, kept(3) && kept(5), "a kept take lost words (keep the LAST take whole)");
+      const rest = check(notes, kept(0) && kept(6, "uh") && kept(7), "cut words of a sentence said only once");
+      const fillers = check(notes, cut(1) && line(6).filter((word) => word.text === "uh").every((word) => isRemoved(word, removed)), "um/uh still in the video");
+      const left = findSilences({ transcript: ROUGHCUT_TRANSCRIPT, window, removed }, { minGap: 1 });
+      const tight = check(notes, !left.length, `pauses left: ${left.map((item) => `${item.start}-${item.end}`).join(", ")}`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: retakes && last && rest && fillers && tight && clean, notes };
+    },
+  },
   {
     id: "filler",
     prompt: "Remove the filler words.",

@@ -18,6 +18,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "voiceover", label: "Voice-over", hint: "A voice reading your text", directive: "call add_voiceover" },
   { name: "music", label: "Music", hint: "A music bed or sound effect", directive: 'call generate_media with kind "audio"' },
   {
+    name: "roughcut",
+    label: "Rough cut",
+    hint: "Cut retakes, filler and pauses from your talk",
+    directive: 'read_guide "roughcut" and follow its steps: propose the cut and ask before cutting',
+  },
+  {
     name: "explain",
     label: "Explain a concept",
     hint: "A narrated animated explainer, 15-90 s",

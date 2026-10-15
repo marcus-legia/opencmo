@@ -353,13 +353,13 @@ Start from `apps/web/lib/agent/tools.ts` (the transcript tools, `OWN_VIDEO_TOOLS
 - [ ] **C2. Blank edits and context.**
   - Drop `OWN_VIDEO_TOOLS` gating when the clip has at least one speech source; keep it when there is none.
   - `<clip_context>` lists the speech sources (contract).
-- [ ] **C3. `find_retakes`** (read-only tool, `apps/web/lib/agent/retakes.ts`, pure, unit-tested):
+- [x] **C3. `find_retakes`** (read-only tool, `apps/web/lib/agent/retakes.ts`, pure, unit-tested):
   - sentence segmentation from the transcript lines;
   - 4-gram similarity > 0.7 within 60 s, plus sentence openers (first 3–5 words);
   - suggests keeping the last take.
   - Tests: a three-take sentence keeps the last; a deliberate repetition far apart is not flagged; another language
     still works on token level.
-- [ ] **C4. Guide `roughcut` + `/roughcut`.** Adapted from video-use, cut-video, the vincentventalon skill, takecut
+- [x] **C4. Guide `roughcut` + `/roughcut`.** Adapted from video-use, cut-video, the vincentventalon skill, takecut
   and Palmier `ugc-editing`, with rows in `THIRD_PARTY_NOTICES.md` (MIT / Apache-2.0):
   1. **Look:**
      - `get_transcript` (and `find_filler_words`, `find_silences`, `find_retakes`);
@@ -396,11 +396,48 @@ the e2e spec locally.
 
 **Notes (C):**
 
+- 2026-10-15, first round (owner's call: C3–C5 now; C1, C2, C6 wait for A1/A5 and B1/B2/B4/B6, which have not
+  landed). Nothing in C1/C2 is coded against the contract yet.
+- C3: `retakes.ts` is pure. A sentence ends at a caption line end or . ? !; cut words are skipped and fillers
+  ignored. Pairs within 60 s (start to start) are compared three ways, best score wins, > 0.7 groups them
+  (union-find, so take 1 ~ 2 ~ 3 is one group):
+  - Dice over word grams: 4 words, down to 2 for short sentences (one inserted word breaks every 4-gram of a
+    6-word sentence);
+  - words in order (LCS), sentences of 5+ words: "a day" → "every day" scores 0.63 on trigrams, 0.9 here;
+  - a false start: same first 3 words and the shorter, earlier sentence mostly inside the later one.
+  The result adds `drop_word_ids` to the contract's `{keep, drop, text, similarity}` (additive), so the model
+  removes every dropped take in one `remove_words` without a second id lookup. `retakes.check.ts` (in
+  `check:contracts`): three takes keep the last; a repeat 130 s later is not flagged; short replies and
+  unrelated sentences are not; two sentences on one line split; a one-word change; Vietnamese; cut words.
+- C4: guide `roughcut` (look → propose and wait → retakes, fillers `balanced`, `remove_silence` 0.6 s / 0.15 s →
+  re-read and capture cut edges → report; captions last; when in doubt keep), `/roughcut` in `slash.ts`, routing
+  line and guide name in `prompt.ts` (still < 6000 chars). `THIRD_PARTY_NOTICES.md` rows and
+  `lib/agent/LICENSE-roughcut.md` (the four MIT texts with their copyright lines, Apache-2.0 for palmier-skills;
+  rules rewritten, nothing copied). The starter is a Request to B (its file).
+- C5 (all but the second-video eval task, which needs B's `element_id`): `find_retakes` in `READ_TOOLS`/`READS`
+  (so parallel-safe), `OWN_VIDEO_TOOLS`, `ALWAYS_LOADED`, `providers.check.ts`, `agent-design.check.ts` §7a (runs
+  the tool on the eval fixture, checks the slash directive and guide). The fake scripts `/roughcut` → plan →
+  "go" (or "just do it") → `find_retakes` + `find_filler_words` → one `remove_words` → `remove_silence` → reply.
+  Eval task `roughcut` with `ROUGHCUT_TRANSCRIPT` (false start, a sentence said twice, um/uh, 2 s pause);
+  `EvalTask.transcript` lets a task bring its own words. `docs/spec-editor-assistant.md` updated.
+  `limits.ts` needs nothing (the tool is fast and free).
+- Checked: `npm run typecheck`; `npm run check:contracts` (exit 0); `npm run agent:eval -- --provider fake`
+  38/39, with `roughcut` passing on the real editor-core cuts. The one failure, `explain-make`, fails the same
+  way on the base commit (not this change).
+- Outside C's files: one line in `apps/web/package.json` adds `retakes.check.ts` to `check:contracts`.
+
 ---
 
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from C → owner B) Starter "Rough cut my video" in `components/editor/assistant/AssistantPanel.tsx`
+  (`EXAMPLES`), shown when the clip has a speech source (`speechSources(document).length > 0`). It sends
+  `/roughcut`; the slash command, guide and tool are in.
+- [ ] (from C → owner A) A3's fake-transcriber sidecar must cover the C6 fixture: a short talk with "um", a 2 s
+  pause and a sentence said twice. Please name the fixture path and the sidecar format in Notes (A).
+- [ ] (from C → owner B) B6's `data-testid`s on the library badge and the Transcript source picker, for C6.
 
 ---
 

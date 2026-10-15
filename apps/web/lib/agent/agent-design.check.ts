@@ -145,6 +145,30 @@ async function main(): Promise<void> {
     assert.equal(checkErrorKeys(error).size, 1);
   }
 
+  // 7a. Rough cut: find_retakes is a parallel read that reads the clip's transcript, and /roughcut
+  // sends the model to its guide with the "ask before cutting" rule.
+  {
+    const { runTool } = await import("./tools");
+    const { memoryWorkspace } = await import("./workspace");
+    const { slashDirective } = await import("./slash");
+    const { readGuide } = await import("./guides");
+    const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, ROUGHCUT_TRANSCRIPT } = await import("./eval/fixture");
+    assert.ok(PARALLEL_SAFE.has("find_retakes"));
+    const workspace = memoryWorkspace(
+      { version: 1, document: fixtureDocument(), manifest: fixtureManifest() },
+      { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": ROUGHCUT_TRANSCRIPT }, master: FIXTURE_MASTER },
+    );
+    const found = await runTool("find_retakes", {}, { workspace });
+    assert.equal(found.ok, true, found.content);
+    const retakes = (JSON.parse(found.content) as { untrusted_data: { retakes: { drop_word_ids: string[]; text: string }[] } }).untrusted_data.retakes;
+    assert.equal(retakes.length, 2, found.content);
+    assert.match(retakes[0]!.text, /answer every question/);
+    assert.match(retakes[1]!.text, /every day for a month/);
+    assert.ok(retakes.every((take) => take.drop_word_ids.length > 0));
+    assert.match(slashDirective("/roughcut"), /read_guide "roughcut".*ask before cutting/);
+    assert.match(readGuide("roughcut"), /keep the LAST take/);
+  }
+
   // 7. The system prompt routes by intent to tools that exist, and keeps its promises.
   {
     const { SYSTEM_PROMPT } = await import("./prompt");
@@ -153,7 +177,7 @@ async function main(): Promise<void> {
     const named = new Set([...SYSTEM_PROMPT.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
     for (const word of ["untrusted_data", "user_answer", "clip_context", "project_state", "your_skills"]) named.delete(word);
     for (const name of named) assert.ok(offered.has(name), `the prompt names ${name}, which is not a tool`);
-    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "preview_explainer", "add_explainer", "request_export"]) {
+    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "preview_explainer", "add_explainer", "request_export", "find_retakes"]) {
       assert.ok(named.has(route), `the routing names ${route}`);
     }
     assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");

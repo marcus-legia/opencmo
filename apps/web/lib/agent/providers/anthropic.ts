@@ -192,7 +192,7 @@ export const ALWAYS_LOADED = new Set([
   "get_project_state", "get_document", "get_transcript", "search_transcript", "list_library", "check", "read_guide", "read_skill",
   "update_plan", "ask_user", "capture", "media_grab",
   "insert_asset", "place_broll", "wait_for_media", "add_text", "set_props", "set_keyframe", "add_part", "delete_element", "move_elements", "trim_element", "split_elements",
-  "set_frame", "set_layout", "set_caption_style", "remove_words", "remove_ranges", "remove_silence", "find_filler_words", "find_silences", "undo",
+  "set_frame", "set_layout", "set_caption_style", "remove_words", "remove_ranges", "remove_silence", "find_filler_words", "find_silences", "find_retakes", "undo",
   "add_diagram", "add_chart", "add_shape",
   "create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions",
   "preview_explainer", "add_explainer",
