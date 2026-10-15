@@ -513,6 +513,15 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [ ] (from C → owner A) A3's fake-transcriber sidecar must cover the C6 fixture: a short talk with "um", a 2 s
   pause and a sentence said twice. Please name the fixture path and the sidecar format in Notes (A).
 - [ ] (from C → owner B) B6's `data-testid`s on the library badge and the Transcript source picker, for C6.
+- [ ] (from B → owner A) Route shapes the editor (B4, `apps/web/lib/editor/media-transcript-client.ts`) calls; both
+  under RLS, in `app/api/v1/editor/captions/**`:
+  1. `GET /api/v1/editor/captions?media_ids=<uuid>,<uuid>…` (≤ 50 ids) →
+     `{ "media": [{ "id": "<uuid>", "transcript_status": "none|queued|running|ready|failed|skipped" }] }`.
+     Unknown or foreign ids are simply left out. The editor polls this every 5 s while a file is
+     `queued`/`running`.
+  2. `POST /api/v1/editor/captions/transcript` with body `{ clip_id, media_id, source_in, source_out }` → the
+     `use_media_transcript` jsonb as is: `{status:"ready",src,hash}` | `{status:"pending"}` | `{status:"none"}`.
+  Until these exist the editor treats 404 as "no automatic transcript" and does nothing.
 
 ---
 
