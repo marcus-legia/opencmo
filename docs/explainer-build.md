@@ -469,7 +469,7 @@ Mirror 3D Studio:
   - The layer shows render progress and failure like other generated media.
   - An "Explain a concept" entry on the New edit screen opens the Assistant with `/explain `.
   - Ctrl+Z removes the layer. Export includes it.
-- [ ] **C7. E2E `apps/web/e2e/editor-explainer.spec.ts`.**
+- [x] **C7. E2E `apps/web/e2e/editor-explainer.spec.ts`.**
   - Fake agent, `OPENCMO_MOTION=local`, fake voice.
   - Steps: `/explain` → script → go → preview images visible → approve → the layer appears → render finishes → the playhead at 2 s shows non-empty pixels.
   - Add it to CI if the runtime allows; otherwise say why in Notes.
@@ -484,7 +484,8 @@ Mirror 3D Studio:
 - Verified with Track B's pieces stubbed locally (not committed: a `previewMotion` that returns one still, and a `motion-explainer` catalog entry as in Requests): `tsc` for web, `npm run check:contracts` (providers, agent-design, video-usecases… all green), `next build` green, the fake provider's three turns, and prepare → card → op on a blank clip (frame 1920×1080, work area 0–15, one layer `Explainer: …`).
 - C2–C7 were held on `explainer-track-c` until B1 and B2 landed (they import them), then cherry-picked here.
 - B's requests done: `priceOf` has the integer unit `explainer` (credits × started 10 s) and counts narration in code points; `providerEnabled` uses the worker's rule (renderer + fal key or fake voice, or `aiFakeEnabled`); `@opencmo/clip-motion` is a web dependency and `lib/motion/preview.check.ts` runs in `check:contracts`. Real round trip checked: `runPreviewExplainer` → `previewMotion` → A's CLI with `fixtures/showcase.job.json`; A's `previewJob` is still a stub (no stills), which the tool reports as "No stills came back." until A6.
-- C7: `apps/web/e2e/editor-explainer.spec.ts` written (New edit → starter → /explain → go → stills + card → approve → layer renders → pixels at 2 s → Ctrl+Z), `e2e/run.ts` sets `OPENCMO_MOTION=local` and `OPENCMO_MOTION_FAKE_VOICE=1`. Not run yet: it needs B3 (local motion provider) and A's kit.
+- C7: **`npm run test:e2e -- editor-explainer` passes** (5.2 min, real stack: local Supabase, the Python e2e worker with `OPENCMO_MOTION=local` + fake voice, A's kit and B's provider, no stubs). New edit → "Explain a concept" → `/explain …` → script → "go" → 6 preview stills in the panel → card (35 s · 16:9 · voice Aria · 9 credits, one line per beat) → Approve → one layer `Explainer: How Shazam hears a song`, frame 1920×1080 → render done → the full-size MP4 is 1920×1080 with an audio track and its 2 s frame has the title and waveform → the editor at playhead 0:02 shows the same frame → Ctrl+Z removes the layer. **Looked at** the 2 s frame of the MP4 (kicker "IN A NOISY BAR", serif title, gold waveform on the navy grid), the card and the editor screenshot. Two bugs found by the run and fixed: the fake agent read a result with stills as `{}`, and the first pixel bar (std > 2) passed on the bare navy field of frame 0, so the editor check now needs the title (std > 12; the MP4 frame is 24).
+- C7 is not in CI: CI has no e2e job at all (it needs Docker Supabase, the engine venv with MediaPipe, and a Chrome that plays H.264; the bundled Chromium cannot, and the editor refuses to open there). To run it: `E2E_EXECUTABLE=<Chrome or Chrome for Testing> npm run test:e2e -- editor-explainer` in `apps/web` (`E2E_CHANNEL=chromium` skips only the editor pixel check).
 
 ---
 
