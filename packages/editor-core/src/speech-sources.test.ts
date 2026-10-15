@@ -119,7 +119,7 @@ describe("speech sources", () => {
     expect(node(document, "mastercap")).toEqual(node(MASTER_CLIP, "mastercap"));
 
     const cut = node(document, "talk")!;
-    expect(cut.kind).toBe("sequence");
+    expect(cut).toMatchObject({ kind: "sequence", name: "talk" });
     const segments = cut.children as Record<string, unknown>[];
     expect(segments.map((segment) => [segment.kind, segment.start, segment.end, segment.sourceIn, segment.sourceOut])).toEqual([
       ["rect", 5, 5.97, 0, 0.97],

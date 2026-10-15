@@ -574,6 +574,9 @@ export function writeCaptionState(input: ClipDocument, state: WriteCaptionState)
   // master needs no id: it is the default source.)
   const id = (found.target as { id?: unknown }).id;
   if (!found.master && typeof id === 'string') (replacement as { id?: string }).id = id;
+  // …and its name, so the timeline row still says which video it is.
+  const name = (found.target as { name?: unknown }).name ?? (found.template as { name?: unknown }).name;
+  if (!found.master && cut && typeof name === 'string') (replacement as { name?: string }).name = name;
   replaceNode(document, found.target, replacement);
   const before = keptRanges(window, found.mark?.removed ?? []);
   // Only the clip's spine moves the rest of the timeline: the master, or a video in an edit that

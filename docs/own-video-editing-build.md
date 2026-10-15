@@ -324,7 +324,7 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
   - timing matches `add_captions`;
   - attaching twice is a no-op;
   - Undo removes it.
-- [ ] **B4. Editor wiring.**
+- [x] **B4. Editor wiring.**
   - When a library file's `transcript_status` becomes `ready` and the file is on the timeline (or is placed
     later):
     - call A's `useMediaTranscript` for the element's window;
@@ -417,6 +417,22 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
     transcript ready)" instead of charging.
   - Assistant: starter "Rough cut my video" (sends `/roughcut`), shown when `speechSources(document)` is not
     empty.
+- B4 manual check: the real stack (`npm run test:e2e` stack + production build, worker with the fake transcriber,
+  a throwaway spec that was not committed):
+  1. Blank New edit; uploaded a 6 s talk into the library and placed it (a library `rect`).
+  2. Generate captions: the layer came out linked, `source` = the rect's id.
+  3. The Transcript tab opened on that video's words ("b-roll has its own voice"), with no master in the clip.
+  4. Selected "has" and pressed Delete:
+     - the rect became a cut sequence with the same id: segments `[0–0.57 s ← src 0–0.57]` and
+       `[0.57–5.59 s ← src 0.98–6]`;
+     - the captions were re-timed to 0–5.59 s and the export range followed;
+     - the screenshot showed "has" struck out and a 5.59 s clip.
+  5. One Ctrl+Z restored the rect.
+  - Environment limits: this container's Chromium cannot play H.264, and Google Chrome cannot be downloaded (network
+    policy). The run therefore stubbed only the editor's `canPlayType('avc1')` gate and used a VP9/Opus talk.
+  - Not checked yet: the automatic path (`Transcribing…` → `Transcript ready` → `attach_transcript`). It needs A's
+    routes (Requests B → A); until then they answer 404 and the editor does nothing.
+  - A cut sequence keeps the video's name (the timeline row read "sequence" before).
 - B6 `data-testid`s for C6:
   - library row badges `transcript-pending` / `transcript-ready`, inside the row `asset-<basename>`;
   - Transcript panel picker `transcript-source`, a `<select>` whose options carry
