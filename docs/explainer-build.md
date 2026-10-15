@@ -272,7 +272,7 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   - Golden stills test: PNGs stored, mean-diff threshold as in `editor-parity`.
   - **Look at the frames.**
 - [x] **A8. `README.md`** with the kit API, one complete example, and the do/don't list for the guide (Track C copies it).
-- [x] **A9. Licence.** Email Remotion about SaaS rendering. Record the question and the answer in "Licence" above.
+- [ ] **A9. Licence.** Email Remotion about SaaS rendering. Record the question and the answer in "Licence" above.
 
 **Checks:** `npm run check:clip-motion`, `npm run typecheck`, and a showcase render with frames looked at.
 
@@ -324,7 +324,8 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   overlapping the spectrogram sweep, a wrapped x-axis label and a hard-to-read rotated y label.
 - A8: `packages/clip-motion/README.md`: CLI, env, scene rules, the kit API, a complete example and the
   do/don't list for the guide.
-- A9: see "Licence": question drafted, to be sent by the owner (no email from a cloud session).
+- A9: **not done.** The question is drafted under "Licence"; a cloud session cannot send email, so the owner
+  sends it and records the answer there, then ticks A9.
 - For B: the Modal image needs `ffmpeg`, the repo's `packages/clip-motion` + `packages/clip-media/fonts`, and a
   Chrome Headless Shell (`OPENCMO_MOTION_CHROME`); `ensureBrowser()` from `@remotion/renderer` downloads one at build
   time if you prefer. Budget ~3.5 min of 4 vCPU per 60 s video at 1080p on CPU.
