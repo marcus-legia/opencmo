@@ -381,6 +381,7 @@ Mirror 3D Studio:
 
 **Notes (C):**
 - C1: `packages/editor-core/src/ops/explainer.ts` (op) and `src/explainer.ts` (scene schema, `estimateDuration`, `explainerSeconds`; no Remotion dependency in editor-core, same formula as `clip-motion/src/job.ts`). `specSchema` takes the explainer scene (≤ 4000 bytes) and a premade `voice` for `provider: "opencmo-motion"`; `priceOf` adds `price.voiceKchars` per started 1,000 narration characters. `src/explainer.test.ts`: blank clip (frame + work area), playhead start under text, other format letterboxed, spec mismatch refused, timing, price. `npm run check:editor-core` and vitest green (592 tests).
+- C2–C7 are written and checked (with B's pieces stubbed locally) on branch `explainer-track-c`. They import `apps/web/lib/motion/preview.ts` (B1) and need `motion-explainer` in `ai-models.json` (B2), so C merges that branch here right after those land; see the Requests below.
 
 ---
 
