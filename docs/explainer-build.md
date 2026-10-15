@@ -330,7 +330,7 @@ Mirror 3D Studio:
 - `apps/web/lib/agent/generate-tool.ts` (`prepareScene`, `prepareStudio`, `generateCard`);
 - the `preview_3d` loop and the `"3d"` guide in `guides.ts`.
 
-- [ ] **C1. Op `add_explainer`** in `packages/editor-core/src/ops/` with zod input.
+- [x] **C1. Op `add_explainer`** in `packages/editor-core/src/ops/` with zod input.
   - Places the generated video layer.
   - Sets the frame on a blank clip.
   - `agent: false`.
@@ -380,12 +380,19 @@ Mirror 3D Studio:
 - `cd apps/web && npm run test:e2e -- editor-explainer`
 
 **Notes (C):**
+- C1: `packages/editor-core/src/ops/explainer.ts` (op) and `src/explainer.ts` (scene schema, `estimateDuration`, `explainerSeconds`; no Remotion dependency in editor-core, same formula as `clip-motion/src/job.ts`). `specSchema` takes the explainer scene (≤ 4000 bytes) and a premade `voice` for `provider: "opencmo-motion"`; `priceOf` adds `price.voiceKchars` per started 1,000 narration characters. `src/explainer.test.ts`: blank clip (frame + work area), playhead start under text, other format letterboxed, spec mismatch refused, timing, price. `npm run check:editor-core` and vitest green (592 tests).
 
 ---
 
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from C → owner B) `motion-explainer` in `ai-models.json` needs `limits.voices` (premade voices; the tool lists them and `specSchema` checks them) and the price as `{ "unit": "second", "credits": 0.1, "voiceKchars": 5 }`. `priceOf` (editor-core) already adds `voiceKchars × ceil(narration chars / 1000)`, narration = beats' `say` joined with spaces; `ai_price` (SQL) must do the same.
+- [ ] (from C → owner B) The spec C sends: `{ prompt: "Explainer: <title>", aspectRatio, duration, voice, seed, scene: { template: "explainer", code_ref, title, beats, accent? } }`. `create_generation` must accept `voice` on this video model and check `code_ref` for `template = 'explainer'`.
+- [ ] (from C → owner B) `agent_raise_hold_3d` counts only `preview_3d`: count `preview_explainer` too, so an explainer turn gets the bigger hold.
+- [ ] (from C → owner B) With `OPENCMO_AI_FAKE=1` and `OPENCMO_MOTION=local` (the e2e env, `apps/web/e2e/run.ts`), the worker must render `motion-explainer` with the local CLI, not the fake colour frame: the e2e checks real pixels.
+- [ ] (from C → owner A) The guide `explainer` quotes the kit API from Contracts. Tell C when the README (A8) changes a name; the fake provider plays `fixtures/showcase.job.json` as is, so it must stay a valid, kit-only job.
 
 ---
 
