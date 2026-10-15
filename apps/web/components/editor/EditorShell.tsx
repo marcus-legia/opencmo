@@ -54,6 +54,7 @@ import { GuidesMenu, GuidesOverlay, useGuides } from "./Guides";
 import { preview3d, type Preview3DInput } from "./assistant/preview3d";
 import { priceOf, type AiModel } from "@opencmo/editor-core/generate";
 import { liveModel, liveModels, storedImages, GeneratePanel, useEnabledModels, type EditSource } from "./generate/GeneratePanel";
+import { useExplainers } from "./generate/useExplainers";
 import { useVoiceovers } from "./generate/useVoiceovers";
 import { VisualsPanel, type SelectedVisual } from "./visuals/VisualsPanel";
 import { continuationsOf } from "./generate/chain";
@@ -448,6 +449,7 @@ function Workspace({
   });
   // Voiceover: giọng về thì gắn độ dài thật + phụ đề của giọng.
   useVoiceovers({ document: state.document, library, run, notify: setNotice });
+  useExplainers({ document: state.document, library, run });
   const enabledModels = useEnabledModels();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [backgroundRange, setBackgroundRange] = useState<{ start: number; end: number } | null>(null);

@@ -157,3 +157,103 @@ describe('explainer timing and price', () => {
 		expect(priceOf(model, emoji as never)).toBe(7);
 	});
 });
+
+describe('sync_explainer', () => {
+	const words = [
+		{ text: 'A', start: 0.1, end: 0.2 },
+		{ text: 'song', start: 0.25, end: 0.6 },
+		{ text: 'plays.', start: 0.65, end: 1.0 },
+		{ text: 'Your', start: 1.6, end: 1.8 },
+		{ text: 'phone', start: 1.85, end: 2.2 },
+		{ text: 'knows.', start: 2.25, end: 2.7 },
+	];
+
+	function memory() {
+		const files = new Map<string, unknown>();
+		return {
+			files,
+			ctx: {
+				...ctx,
+				saveTranscript: async (transcript: unknown) => {
+					const path = `assets/transcripts/${String(files.size).padStart(64, '0')}.json`;
+					files.set(path, structuredClone(transcript));
+					return path;
+				},
+			} as unknown as OpContext,
+		};
+	}
+
+	async function placed() {
+		const { document } = await applyOps(busy, [op('16:9', 30)], ctx);
+		const layer = sceneNode(document).children!.find((child) => child.kind === 'rect' && child.name !== undefined && String(child.name).startsWith('Explainer'))!;
+		return { document, id: layer.id as string };
+	}
+
+	const captionsOf = (document: ClipDocument) => {
+		const out: Node[] = [];
+		const visit = (node: Node) => {
+			if (node.kind === 'captions') out.push(node);
+			for (const child of node.children ?? []) visit(child);
+		};
+		visit(sceneNode(document));
+		return out;
+	};
+
+	it('adds one visible captions layer timed like the explainer, with source = the explainer layer', async () => {
+		const { document, id } = await placed();
+		const { files, ctx: context } = memory();
+		const { document: next, results } = await applyOps(document, [{ op: 'sync_explainer', element_id: id, words }], context);
+		expect(() => validate(next)).not.toThrow();
+		expect(results).toEqual([{ op: 'sync_explainer', summary: 'Add captions from the explainer', changed: true }]);
+		const [layer, ...rest] = captionsOf(next);
+		expect(rest).toHaveLength(0);
+		expect(layer).toMatchObject({ name: 'Captions · How Shazam hears a song', source: id, start: 4, end: 34 });
+		expect(layer!.hidden).toBeUndefined();
+		const transcript = files.get(layer!.src as string) as { text: string }[];
+		expect(transcript.map((line) => line.text)).toEqual(['A song plays.', 'Your phone knows.']);
+	});
+
+	it('a second sync updates the same layer instead of adding another; the same words change nothing', async () => {
+		const { document, id } = await placed();
+		const { ctx: context } = memory();
+		const once = await applyOps(document, [{ op: 'sync_explainer', element_id: id, words }], context);
+		const hidden = structuredClone(once.document);
+		captionsOf(hidden)[0]!.hidden = true;
+		const again = await applyOps(hidden, [{ op: 'sync_explainer', element_id: id, words: words.slice(0, 3) }], context);
+		const layers = captionsOf(again.document);
+		expect(layers).toHaveLength(1);
+		expect(layers[0]!.src).not.toBe(captionsOf(once.document)[0]!.src);
+		// The user's choice to hide stays.
+		expect(layers[0]!.hidden).toBe(true);
+	});
+
+	it('no words (the fake voice) → no change; not an Assistant op; refuses a layer that is not an explainer', async () => {
+		const { document, id } = await placed();
+		const { document: same, results } = await applyOps(document, [{ op: 'sync_explainer', element_id: id }], ctx);
+		expect(same).toBe(document);
+		expect(results[0]!.changed).toBe(false);
+		expect(AGENT_OP_INPUTS.sync_explainer).toBeUndefined();
+		await expect(applyOps(document, [{ op: 'sync_explainer', element_id: 'bg', words }], memory().ctx)).rejects.toThrow('No explainer with id "bg"');
+	});
+});
+
+describe('explainer scene: theme and personality', () => {
+	const model = {
+		id: 'motion-explainer',
+		kind: 'video',
+		provider: 'opencmo-motion',
+		name: 'Explainer',
+		description: '',
+		price: { unit: 'explainer', credits: 1, voiceKchars: 5 },
+		limits: { maxPromptChars: 200, scene: true, aspectRatios: ['16:9', '9:16', '1:1'], durations: [15, 20, 25, 30], voices: ['Aria'] },
+	} as AiModel;
+
+	it('accepts the contract values and nothing else', () => {
+		const withScene = (extra: Record<string, unknown>) => ({ ...spec('16:9', 20), scene: { ...spec('16:9', 20).scene, ...extra } });
+		expect(specSchema(model).safeParse(withScene({ theme: 'paper', personality: 'playful' })).success).toBe(true);
+		expect(specSchema(model).safeParse(withScene({ theme: 'neon' })).success).toBe(false);
+		expect(specSchema(model).safeParse(withScene({ personality: 'calm' })).success).toBe(false);
+		// A storyboard's `visual` is for the user and the model, never in the spec.
+		expect(specSchema(model).safeParse(withScene({ beats: beats.map((beat) => ({ ...beat, visual: 'a phone' })) })).success).toBe(false);
+	});
+});

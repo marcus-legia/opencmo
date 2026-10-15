@@ -330,7 +330,7 @@ type AttachTranscript = { element_id: string; src: string };
 const TRANSCRIPT_PATH = /^assets\/transcripts\/[0-9a-f]{64}\.json$/;
 
 /** The element and the nearest scene or group above it (captions live there, not inside a row). */
-function holderOf(document: ClipDocument, id: string): { element: Entity; holder: Entity } | null {
+export function holderOf(document: ClipDocument, id: string): { element: Entity; holder: Entity } | null {
 	let out: { element: Entity; holder: Entity } | null = null;
 	const visit = (entity: Entity, holder: Entity | null) => {
 		if (out) return;

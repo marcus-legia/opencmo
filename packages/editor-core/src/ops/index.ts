@@ -33,7 +33,7 @@ import { deleteMarker, setMarker } from './markers';
 import { insertNode, replaceSrc } from './library';
 import { activateScene, duplicateElements, groupElements, insertScene, pasteNodes, ungroupElements } from './structure';
 import { add3dStudio } from './studio3d';
-import { addExplainer } from './explainer';
+import { addExplainer, syncExplainer } from './explainer';
 import { createTimeline, deleteTimeline, renameTimeline, setActiveTimeline, STAGE_OPS } from './timelines';
 import { applyBrand } from './brand';
 import { applyColor } from './color';
@@ -74,6 +74,8 @@ export {
 	addExplainer,
 	estimateDuration,
 	EXPLAINER_FORMATS,
+	EXPLAINER_PERSONALITIES,
+	EXPLAINER_THEMES,
 	EXPLAINER_MAX_SECONDS,
 	EXPLAINER_MIN_SECONDS,
 	EXPLAINER_MODEL,
@@ -84,7 +86,10 @@ export {
 	ExplainerSceneSchema,
 	explainerSeconds,
 	narrationOf,
+	syncExplainerInput,
 	type ExplainerBeat,
+	type ExplainerPersonality,
+	type ExplainerTheme,
 	type ExplainerFormat,
 	type ExplainerInput,
 	type ExplainerScene,
@@ -170,6 +175,7 @@ const REGISTRY = [
 	editVideo,
 	addExplainer,
 	attachTranscript,
+	syncExplainer,
 ] as const;
 
 type Definition = {

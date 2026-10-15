@@ -39,6 +39,12 @@ export const ExplainerBeatSchema = z
 	.strict();
 export type ExplainerBeat = z.infer<typeof ExplainerBeatSchema>;
 
+/** Same names and defaults as `THEMES` / `PERSONALITIES` in `packages/clip-motion/src/job.ts`. */
+export const EXPLAINER_THEMES = ['blueprint', 'paper'] as const;
+export type ExplainerTheme = (typeof EXPLAINER_THEMES)[number];
+export const EXPLAINER_PERSONALITIES = ['premium', 'corporate', 'playful', 'energetic'] as const;
+export type ExplainerPersonality = (typeof EXPLAINER_PERSONALITIES)[number];
+
 /** The `scene` of a `motion-explainer` spec. The code itself lives in `scene_codes`, by hash. */
 export const ExplainerSceneSchema = z
 	.object({
@@ -47,6 +53,8 @@ export const ExplainerSceneSchema = z
 		title: z.string().trim().min(1).max(60),
 		beats: z.array(ExplainerBeatSchema).min(3).max(16),
 		accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+		theme: z.enum(EXPLAINER_THEMES).optional(),
+		personality: z.enum(EXPLAINER_PERSONALITIES).optional(),
 	})
 	.strict();
 export type ExplainerScene = z.infer<typeof ExplainerSceneSchema>;
