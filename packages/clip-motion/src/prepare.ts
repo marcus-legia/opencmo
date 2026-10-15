@@ -1,3 +1,4 @@
+import { compileScene } from './code/compile.ts';
 import { MotionJobSchema, type MotionJob } from './job.ts';
 import type { Prepared } from './render.ts';
 
@@ -8,7 +9,7 @@ export function parseJob(input: unknown): { ok: true; job: MotionJob } | { ok: f
 	return { ok: false, message: issue ? `${issue.path.join('.') || 'job'}: ${issue.message}` : 'Invalid job.' };
 }
 
-/** Compile + guard the scene code (A2). Throws MotionCodeFailure. */
+/** Compile + guard the scene code. Throws MotionCodeFailure (exit 4). */
 export function prepare(job: MotionJob): Prepared {
-	return { job, compiled: null };
+	return { job, compiled: compileScene(job.code) };
 }

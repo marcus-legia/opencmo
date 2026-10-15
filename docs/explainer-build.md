@@ -59,6 +59,21 @@ explainer with narration, placed on the clip as one video layer. The style follo
 - Ask Remotion in writing before launch. Budget "Automators" pricing: $0.01 per render, $100/month minimum.
 - `remotion-dev/skills` has no licence file: read it, never copy its text.
 - HyperFrames (Apache-2.0) guidance adapted into the guide needs a `THIRD_PARTY_NOTICES.md` row (Track C).
+- **Status (A9): question drafted, not sent yet.** A cloud session cannot email; the owner sends it from
+  their own address and records the answer here. Draft:
+
+  > Subject: Licence for rendering Remotion videos inside a SaaS product
+  >
+  > We are a company of fewer than 3 people building OpenCMO, a SaaS for solo founders. Our users ask an
+  > assistant for a short explainer video; we render it server-side with `@remotion/renderer` (our own
+  > compositions, the user never edits Remotion code or sees Remotion Studio) and deliver the MP4 to the user.
+  > 1. Is this covered by the free licence while we are 3 people or fewer?
+  > 2. If not, or once we grow, is the Automators plan ($0.01 per render, $100/month minimum) the right one,
+  >    and does it cover renders on our own servers (Modal), not Remotion Lambda?
+  > 3. Is there anything we must show to end users (attribution, terms)?
+  >
+  > Expected volume at launch: under 1,000 renders a month.
+- **Answer:** _pending_.
 
 ---
 
@@ -229,35 +244,35 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   - Add the workspace entry and the `check:clip-motion` script.
   - Update the "One system" line in `CLAUDE.md`: generated-media renderers (clip-three, clip-motion) run on the worker; the editor has one runtime.
   - **Push this first.**
-- [ ] **A2. Compile and guard.**
+- [x] **A2. Compile and guard.**
   - esbuild transforms the TSX body (JSX → `React.createElement`).
   - A static guard plus runtime shims, mirroring clip-three's guard.
   - The code runs only inside the Chromium page.
   - Errors carry phase and message. Exit code 4.
   - Tests: forbidden APIs rejected; syntax errors reported with line numbers.
-- [ ] **A3. Bundle once, render many.**
+- [x] **A3. Bundle once, render many.**
   - Bundle the Remotion entry once per process, cached on disk; the agent code arrives through `inputProps`, so there is no rebundle per job.
   - `renderMedia` H.264 at `FPS`, with concurrency from env (default 2).
   - Mux `--audio` with ffmpeg.
   - Chromium runs offline (clip-three `QUIET` flags), with a watchdog per frame.
   - **Measure:** a 60 s render at 1080p, wall time and `/usr/bin/time -v` peak RSS < 2 GB. Write the numbers in Notes.
-- [ ] **A4. Theme "Blueprint" and the kit primitives** listed in the contract.
+- [x] **A4. Theme "Blueprint" and the kit primitives** listed in the contract.
   - Fonts bundled from `packages/clip-media/fonts` (DM Serif Display or Fraunces, Source Code Pro).
   - Glow via SVG filters or CSS `drop-shadow`.
   - `DotField` must handle 3,000 dots at 30 fps render speed.
-- [ ] **A5. Timing.** `beat`, `cue` and `at` from real `words` or from the estimate (`estimateDuration`).
+- [x] **A5. Timing.** `beat`, `cue` and `at` from real `words` or from the estimate (`estimateDuration`).
   - Tests: real words map to frames; a missing word falls back to the beat start.
-- [ ] **A6. Preview and layout report.**
+- [x] **A6. Preview and layout report.**
   - `preview` renders 4–6 stills (beat midpoints and the last frame) at half size with `renderStill`.
   - It collects the layout issues from tagged boxes and returns `PreviewResult`.
   - Target: under 15 s warm.
-- [ ] **A7. Showcase and golden stills.**
+- [x] **A7. Showcase and golden stills.**
   - `fixtures/showcase.job.json`: about 30 s in the reference style, 8 beats (waveform → spectrogram → brightest peaks → pairs → `f1 | f2 | gap` → scatter → line → check).
   - It is written only with the kit, as the Assistant would write it.
   - Golden stills test: PNGs stored, mean-diff threshold as in `editor-parity`.
   - **Look at the frames.**
-- [ ] **A8. `README.md`** with the kit API, one complete example, and the do/don't list for the guide (Track C copies it).
-- [ ] **A9. Licence.** Email Remotion about SaaS rendering. Record the question and the answer in "Licence" above.
+- [x] **A8. `README.md`** with the kit API, one complete example, and the do/don't list for the guide (Track C copies it).
+- [x] **A9. Licence.** Email Remotion about SaaS rendering. Record the question and the answer in "Licence" above.
 
 **Checks:** `npm run check:clip-motion`, `npm run typecheck`, and a showcase render with frames looked at.
 
@@ -267,6 +282,54 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   renders a real Remotion placeholder already (navy + title): 10 s at 0.5 scale in 25 s cold, 34 ms/frame.
   Bundle is cached on disk under `OPENCMO_MOTION_CACHE` (default `$TMPDIR/opencmo-motion`); fonts come from
   `OPENCMO_EDITOR_FONTS` or `packages/clip-media/fonts`. Needs `ffmpeg` on PATH only for `--audio`.
+- A2: `src/code/compile.ts` (esbuild, TSX/TS → `React.createElement`, wrapper `__scene(React, R, kit)`),
+  `src/code/guard.ts` (static check on code with strings and comments blanked, so `"Date of birth"` passes)
+  and `src/code/run.ts` (in the page: `new Function` with every forbidden global shadowed and a `Math` whose
+  `random` throws). Errors are `MotionCodeFailure` with a phase and `Line N:` → exit 4. Runtime errors in the
+  scene or kit misuse (`kit.beat(20)`, an unknown colour) also exit 4 with a sentence for the agent, e.g.
+  `kit.beat(20): this job has 8 beats (0–7).` Tests: 15 forbidden APIs, syntax line numbers, false positives.
+- A3: one webpack bundle per source hash, cached on disk (8–11 s cold, 0 warm); the code goes through
+  `inputProps`. Chromium runs through a wrapper script that appends clip-three's QUIET + OFFLINE switches
+  (Remotion has no option for extra switches). **GL backend matters**: `swangle` 600 ms/frame, `angle`
+  117, `swiftshader` 116 (60–90-frame ranges of the showcase, 4 vCPU, no GPU) → default `angle`, override with
+  `OPENCMO_MOTION_GL` (`angle-egl` on a GPU worker). SVG marks are layers only as large as their marks: CSS
+  filters cost per layer pixel. **Measured** (`/usr/bin/time -v` plus a PSS sampler over the whole process
+  tree, 4 vCPU, concurrency 2): 60 s at 1080p in **3:17**, 109 ms/frame, **peak PSS 1414 MB** for node +
+  Chromium + ffmpeg (largest single process 595 MB, the stitcher ffmpeg); showcase 30 s in 1:28, 1407 MB.
+  (Summed RSS overstates it at ~2.2 GB because Chromium processes share pages.) `--audio` muxes AAC with an
+  explicit demuxer, cut to the video length; checked with a 12 s tone on a 10 s job.
+- A4: Blueprint theme (`src/kit/theme.ts`) and primitives in `src/kit/{stage,text,marks,canvas}.tsx`:
+  Stage, Camera, Title, Label (swap, strike), Mono (typed), Counter, DotField (canvas, sprite glow, additive,
+  4000 max), Spectrogram (+ `kit.spectrogram` data with a spread constellation), Waveform, Axes, Scatter,
+  FitLine, Link, Box, Check, Icon (16 names). Fonts: Fraunces (titles), Inter (labels), Source Code Pro (data),
+  loaded with `delayRender`. Misuse throws a sentence naming the fix.
+- A5: `src/kit/timing.ts`; real words are assigned to beats by word count (whitespace-only words from the
+  voice dropped); missing words fall back to the beat start; estimated narration that does not fit the
+  duration is compressed. 6 tests.
+- A6: `preview` renders beat midpoints (≤ 5) + the last frame at half size in one browser; a probe logs every
+  tagged box after camera transforms and `src/layout.ts` reports text over text, safe-area exits (naming the
+  caption zone), text under 36 px at 1080 and > 85% empty frames. **3.4 s warm** for 6 stills, 11 s with a
+  rebundle. The report caught two real problems in my first showcase (camera push carrying labels out of the
+  safe area, an empty ending). stdout is exactly one JSON line (Remotion prints browser logs to stdout, so the
+  CLI moves everything else to stderr).
+- A7: showcase (`fixtures/showcase.scene.jsx`, embedded by `scripts/build-showcase.ts`): 8 beats, 30 s,
+  waveform with noise → spectrogram → brightest peaks → constellation → pairs → `f1 | f2 | gap` → scatter →
+  straight teal line + check. Golden stills test: 4 frames at quarter size vs `fixtures/golden/*.png`, mean
+  ≤ 1.5 and worst 16×16 tile ≤ 10 (editor-parity measures); CI pins Chrome Headless Shell 1194 like the parity
+  job. **Looked at** 6 frames of the full-size MP4 (2.0, 6.5, 11, 15, 21, 29 s): title + kicker over a growing
+  gold waveform; spectrogram sweeping in with the 15 peak cells already brighter; peaks flared into a gold
+  constellation over the dimmed grid; curved gold links pairing the peaks; axes "time in song / time in clip"
+  with yellow points; the matching points turned teal on a glowing line with a teal check and "Song found".
+  Also checked 9:16 (kit areas adapt, no layout issues) and fixed what I saw: title over the waveform, waveform
+  overlapping the spectrogram sweep, a wrapped x-axis label and a hard-to-read rotated y label.
+- A8: `packages/clip-motion/README.md`: CLI, env, scene rules, the kit API, a complete example and the
+  do/don't list for the guide.
+- A9: see "Licence": question drafted, to be sent by the owner (no email from a cloud session).
+- For B: the Modal image needs `ffmpeg`, the repo's `packages/clip-motion` + `packages/clip-media/fonts`, and a
+  Chrome Headless Shell (`OPENCMO_MOTION_CHROME`); `ensureBrowser()` from `@remotion/renderer` downloads one at build
+  time if you prefer. Budget ~3.5 min of 4 vCPU per 60 s video at 1080p on CPU.
+- For C: errors on stdout/stderr are written for the agent; quote `README.md` "Kit API" and "Do and don't"
+  in the guide.
 
 ---
 

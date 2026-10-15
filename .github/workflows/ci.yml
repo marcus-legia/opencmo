@@ -72,7 +72,7 @@ jobs:
 
   motion:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
-    # Remotion in Chrome Headless Shell (Remotion downloads it when no browser is configured).
+    # Remotion in the same Chrome Headless Shell build the references were drawn with.
     name: motion (clip-motion)
     runs-on: ubuntu-latest
     steps:
@@ -84,6 +84,10 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
+      - name: Chrome Headless Shell 1194 — the build that drew the golden stills
+        run: |
+          npx -y playwright@1.56.1 install --with-deps chromium-headless-shell
+          echo "OPENCMO_MOTION_CHROME=$(ls -d ~/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell | head -1)" >> "$GITHUB_ENV"
       - run: npm run check:clip-motion
 
   browsers:

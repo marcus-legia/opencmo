@@ -1,7 +1,41 @@
 {
   "title": "How Shazam hears a song",
-  "code": "return function Scene() { return null; }",
-  "beats": [{ "say": "A noisy bar." }, { "say": "One phone listens." }, { "say": "It finds the song." }],
+  "code": "const { Stage, Camera, Title, Label, Mono, Waveform, Spectrogram, DotField, Link, Axes, Scatter, FitLine, Check } = kit;\nconst b = kit.beat;\nconst full = kit.area('full');\n// The visual lives under the headline row; narrower than the safe area so the camera push stays inside it.\nconst stage = { x: full.x + full.w * 0.05, y: full.y + full.h * 0.2, w: full.w * 0.9, h: full.h * 0.76 };\nconst headline = full.y + full.h * 0.07;\nconst spec = kit.spectrogram(7, { cols: 44, rows: 20, peaks: 15 });\nconst peak = (i) => kit.place(stage, [spec.peaks[i].x, spec.peaks[i].y]);\nconst pairs = [];\nfor (let i = 0; i + 2 < spec.peaks.length; i += 3) pairs.push([i, i + 1], [i, i + 2]);\nconst matches = kit.trend(3, { n: 22, slope: 0.8, spread: 0.02 });\nconst noise = kit.trend(11, { n: 26, slope: 0, spread: 0.4 });\nconst plot = kit.area('hero');\nconst found = kit.plot(plot, [0.27, 0.74]);\nconst low = { x: stage.x, y: stage.y + stage.h * 0.4, w: stage.w, h: stage.h * 0.6 };\nconst top = kit.area('top');\n\nreturn function Scene() {\n  return (\n    <Stage>\n      <Camera keys={[{ at: b(2).from, zoom: 1.04, focus: [stage.x + stage.w / 2, stage.y + stage.h / 2] }, { at: b(5).from, zoom: 1 }]}>\n        <Waveform area={low} at={kit.at(0, 0.3)} noise={0.9} cleanAt={kit.at(0, 0.85)} exitAt={b(1).from} exitDur={18} />\n        <Spectrogram data={spec} area={stage} at={b(1).from + 6} dur={45} peaksAt={kit.cue(2, 'brightest')} constellationAt={kit.at(2, 0.7)} exitAt={b(5).from} />\n        <DotField area={stage} points={spec.peaks.map((p) => ({ x: p.x, y: p.y, v: 1 }))} size={9} glow={1.3} drift={0} at={kit.at(2, 0.6)} dur={12} exitAt={b(5).from} />\n        {pairs.map(([a, c], i) => (\n          <Link key={i} from={peak(a)} to={peak(c)} at={kit.stagger(i, { at: b(3).from + 10, each: 4 })} curve={0.15} width={3} dots={false} exitAt={b(5).from} />\n        ))}\n        <Axes area={plot} x=\"time in song\" y=\"time in clip\" at={b(5).from + 6} />\n        <Scatter area={plot} points={[...matches, ...noise]} at={b(5).from + 16} dur={40} highlight={matches.map((_, i) => i)} highlightAt={kit.cue(6, 'line')} />\n        <FitLine area={plot} from={[0.05, 0.14]} to={[0.95, 0.86]} at={kit.cue(6, 'line')} />\n        <Check x={found[0]} y={found[1]} size={200} at={b(7).from + 6} />\n      </Camera>\n\n      <Title text=\"How Shazam hears a song\" kicker=\"In a noisy bar\" y={top.cy} exitAt={kit.at(0, 0.7)} />\n      <Label text=\"Music plus noise\" y={headline} at={kit.at(0, 0.8)} exitAt={b(1).from} />\n      <Label text=\"Time × pitch\" y={headline} at={b(1).from + 10} swapTo=\"Brightest peaks\" swapAt={b(2).from} exitAt={b(3).from} />\n      <Label text=\"Pairs of peaks\" y={headline} at={b(3).from} exitAt={b(4).from} />\n      <Mono text=\"f1 | f2 | gap\" y={headline} at={b(4).from} swapTo=\"523 | 784 | 0.12\" swapAt={kit.at(4, 0.6)} exitAt={b(5).from} size={52} />\n      <Label text=\"Matching codes\" y={headline} at={b(5).from} swapTo=\"One straight line\" swapAt={b(6).from} exitAt={b(7).from} />\n      <Label text=\"Song found\" y={headline} size={60} color=\"answer\" at={b(7).from + 20} />\n    </Stage>\n  );\n};\n",
+  "beats": [
+    {
+      "say": "In a noisy bar, your phone hears music and noise at once.",
+      "label": "Music plus noise"
+    },
+    {
+      "say": "First it draws a spectrogram: time across, pitch up.",
+      "label": "Time × pitch"
+    },
+    {
+      "say": "Then it keeps only the brightest peaks.",
+      "label": "Brightest peaks"
+    },
+    {
+      "say": "Each peak is paired with a few that follow.",
+      "label": "Pairs of peaks"
+    },
+    {
+      "say": "A pair becomes a tiny code: two pitches and the gap.",
+      "label": "f1 | f2 | gap"
+    },
+    {
+      "say": "The server finds songs with the same codes.",
+      "label": "Matching codes"
+    },
+    {
+      "say": "For the right song, matches fall on one straight line.",
+      "label": "One straight line"
+    },
+    {
+      "say": "One line, one answer.",
+      "label": "Song found"
+    }
+  ],
   "format": "16:9",
-  "duration": 10
+  "duration": 30,
+  "seed": 7
 }

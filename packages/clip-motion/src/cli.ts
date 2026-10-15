@@ -17,6 +17,12 @@ import { parseJob, prepare } from './prepare.ts';
 import { previewJob } from './preview.ts';
 import { MotionCodeFailure, renderJob } from './render.ts';
 
+// stdout carries exactly one JSON line; Remotion prints browser console lines to stdout, so
+// everything else goes to stderr.
+const stdout = process.stdout.write.bind(process.stdout);
+process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write;
+const emit = (value: unknown) => stdout(`${JSON.stringify(value)}\n`);
+
 const USAGE = 'usage: clip-motion preview <job.json> <outdir> | clip-motion render <job.json> <out.mp4> [--audio <voice.mp3>]\n';
 const log = (line: string) => process.stderr.write(`${line}\n`);
 
@@ -44,7 +50,7 @@ try {
 
 const parsed = parseJob(input);
 if (!parsed.ok) {
-	if (command === 'preview') process.stdout.write(`${JSON.stringify({ ok: false, phase: 'job', message: parsed.message })}\n`);
+	if (command === 'preview') emit({ ok: false, phase: 'job', message: parsed.message });
 	process.stderr.write(`Invalid job: ${parsed.message}\n`);
 	process.exit(3);
 }
@@ -52,14 +58,14 @@ if (!parsed.ok) {
 try {
 	if (command === 'preview') {
 		const result = await previewJob(parsed.job, out, { log });
-		process.stdout.write(`${JSON.stringify(result)}\n`);
+		emit(result);
 		if (!result.ok) {
 			process.stderr.write(`${result.message}\n`);
 			process.exit(4);
 		}
 	} else {
 		const result = await renderJob(prepare(parsed.job), out, { audio, log });
-		process.stdout.write(`${JSON.stringify(result)}\n`);
+		emit(result);
 	}
 } catch (error) {
 	if (error instanceof MotionCodeFailure) {

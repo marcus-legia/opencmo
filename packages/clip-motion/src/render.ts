@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition, type ChromiumOptions } from '@remotion/renderer';
 
+import { MotionCodeFailure, SCENE_ERROR_MARKER } from './errors.ts';
 import { FPS, type MotionJob } from './job.ts';
+
+export { MotionCodeFailure };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY = join(HERE, 'remotion', 'index.ts');
@@ -31,17 +34,6 @@ export type RenderOptions = {
 };
 
 export type RenderResult = { frames: number; seconds: number; msPerFrame: number };
-
-/** The scene code failed (compile, guard or runtime): the agent's fault, never retried (exit 4). */
-export class MotionCodeFailure extends Error {
-	readonly phase: 'compile' | 'guard' | 'render';
-
-	constructor(message: string, phase: 'compile' | 'guard' | 'render') {
-		super(message);
-		this.name = 'MotionCodeFailure';
-		this.phase = phase;
-	}
-}
 
 export function cacheDir(): string {
 	const dir = process.env.OPENCMO_MOTION_CACHE ?? join(tmpdir(), 'opencmo-motion');
@@ -128,7 +120,12 @@ export function browserExecutable(): string | null {
 	return path;
 }
 
-export const CHROMIUM: ChromiumOptions = { gl: 'swangle' };
+const GL_MODES = ['angle', 'angle-egl', 'egl', 'swangle', 'swiftshader', 'vulkan'] as const;
+type GlMode = (typeof GL_MODES)[number];
+const glEnv = process.env.OPENCMO_MOTION_GL as GlMode | undefined;
+
+/** `angle` measured 117 ms/frame vs 600 for `swangle` on 4 CPUs without a GPU (showcase, 1080p). */
+export const CHROMIUM: ChromiumOptions = { gl: glEnv && GL_MODES.includes(glEnv) ? glEnv : 'angle' };
 
 export function envScale(): number {
 	const scale = Number(process.env.OPENCMO_MOTION_SCALE);
@@ -139,9 +136,6 @@ export function envConcurrency(): number {
 	const value = Number(process.env.OPENCMO_MOTION_CONCURRENCY);
 	return Number.isInteger(value) && value > 0 ? Math.min(value, 8) : 2;
 }
-
-/** Scene code arrives already compiled and guarded; render-time failures carry this marker. */
-export const SCENE_ERROR_MARKER = '[scene-code]';
 
 export function sceneFailure(error: unknown): MotionCodeFailure | null {
 	const message = String((error as Error)?.message ?? error);
