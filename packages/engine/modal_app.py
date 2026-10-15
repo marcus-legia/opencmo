@@ -8,6 +8,7 @@ Deploy:
         OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule + cleanup; same CRON_SECRET as Vercel
     modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # transcripts (Scribe); same key as Vercel
     modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
+    modal secret create opencmo-motion OPENCMO_WORKER_TOKEN=... # explainer previews; same token as `opencmo`
     modal deploy modal_app.py
 
 Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
@@ -171,6 +172,8 @@ cpu_image = (
             **_MEDIA_ENV,
             # Task `generate` của model studio-3d spawn `render_three` bên dưới.
             "OPENCMO_3D": "modal",
+            # Explainers: the worker makes the voice, then spawns `render_motion` below.
+            "OPENCMO_MOTION": "modal",
         }
     )
 )
@@ -228,6 +231,41 @@ gpu_image = (
     )
 )
 
+# Explainers (docs/explainer-build.md): a CPU image of its own for `clip-motion` (Remotion +
+# headless Chromium). Rendering is CPU work, so no GPU; the worker image does not carry Chromium.
+# Libraries are the ones Remotion lists for Debian; fonts come from clip-media like the exporter.
+motion_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install(
+        "ffmpeg", "curl", "xz-utils",
+        "libnss3", "libdbus-1-3", "libatk1.0-0", "libatk-bridge2.0-0", "libgbm1", "libasound2",
+        "libxrandr2", "libxkbcommon0", "libxfixes3", "libxcomposite1", "libxdamage1",
+        "libpango-1.0-0", "libcairo2", "libcups2",
+    )
+)
+motion_image = (
+    _with_media(_with_engine(_with_node(motion_image), face=False))
+    # For the `motion_preview` endpoint.
+    .pip_install("fastapi[standard]")
+    .add_local_dir(_PACKAGES / "clip-motion", remote_path=f"{WEB_ROOT}/packages/clip-motion", copy=True, ignore=_NODE_IGNORE)
+    .env({**_MEDIA_ENV, "OPENCMO_MOTION_CACHE": "/root/motion-cache"})
+    .run_commands(
+        f"cd {WEB_ROOT}/packages/clip-motion && npm install --omit=dev --no-audit --no-fund",
+        # Remotion's own headless shell, downloaded once at build time, then pinned by path so the
+        # CLI wraps it with its offline flags (an unset path would download it again per container).
+        f"cd {WEB_ROOT}/packages/clip-motion && node -e \"import('@remotion/renderer').then((r) => r.ensureBrowser())\"",
+        "ln -sf \"$(find / -xdev -type f -name chrome-headless-shell -path '*remotion*' 2>/dev/null | head -1)\""
+        " /usr/local/bin/chrome-motion && test -x /usr/local/bin/chrome-motion",
+    )
+    .env({"OPENCMO_CLIP_MOTION": f"{WEB_ROOT}/packages/clip-motion/src/cli.ts", "OPENCMO_MOTION_CHROME": "/usr/local/bin/chrome-motion"})
+    # Bundle the composition into the image (cached by source hash under OPENCMO_MOTION_CACHE)
+    # and prove the image renders: a cold container then starts at the render, not at webpack.
+    .run_commands(
+        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25"
+        " node src/cli.ts render fixtures/placeholder.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
+    )
+)
+
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
 
@@ -258,6 +296,12 @@ voice_secret = modal.Secret.from_name("opencmo-voice")
 #
 #   modal secret create fal-secret FAL_KEY=...   # same key as Vercel
 fal_secret = modal.Secret.from_name("fal-secret")
+
+# Explainer previews run code the Assistant wrote: their container gets the worker token only,
+# never the `opencmo` secret with the service-role key.
+#
+#   modal secret create opencmo-motion OPENCMO_WORKER_TOKEN=...   # same token as `opencmo`
+motion_secret = modal.Secret.from_name("opencmo-motion")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("opencmo.worker")
@@ -355,6 +399,57 @@ def render_three(payload: dict) -> bytes:
 
     with tempfile.TemporaryDirectory(prefix="opencmo-3d-") as tmp:
         return render_local(payload, Path(tmp), gpu=True).read_bytes()
+
+
+@app.function(
+    image=motion_image,
+    timeout=900,
+    cpu=4,
+    memory=4096,
+    max_containers=4,
+    # Runs code the Assistant wrote: no secrets, and Chromium is cut off from the network by the
+    # CLI's offline flags. Not `block_network=True`: Modal then cannot hand back results > 2 MiB.
+)
+def render_motion(payload: dict) -> bytes:
+    """Explainer: `{job, audio}` → MP4 bytes. No database or Storage: the worker's `generate`
+    task spawns this, polls it, and uploads the result itself.
+
+    Errors leave as `ProviderError` with an English message (Modal pickles it), so the worker
+    reports the right sentence to the user.
+    """
+    from opencmo.ai.providers.motion import render_bytes
+
+    with tempfile.TemporaryDirectory(prefix="opencmo-motion-") as tmp:
+        return render_bytes(payload, Path(tmp))
+
+
+@app.function(image=motion_image, secrets=[motion_secret], timeout=70, cpu=4, memory=4096, max_containers=8)
+@modal.fastapi_endpoint(method="POST")
+def motion_preview(payload: dict) -> dict:
+    """Explainer previews for the web app's `previewMotion`: `{token, job}` → PreviewResult
+    plus `images` (base64 JPEGs).
+
+    The token is the worker token, in the body like `submit`. The scene code runs here and never
+    on Vercel, so this container gets only the token (`opencmo-motion`), never the service key.
+    """
+    import hmac
+
+    from fastapi import HTTPException
+
+    from opencmo.ai.providers.motion import preview_local
+
+    expected = os.environ.get("OPENCMO_WORKER_TOKEN", "")
+    given = str(payload.get("token") or "")
+    if not expected or not hmac.compare_digest(expected, given):
+        raise HTTPException(status_code=401, detail="Invalid worker token.")
+    job = payload.get("job")
+    if not isinstance(job, dict):
+        raise HTTPException(status_code=400, detail="Send the explainer job.")
+    with tempfile.TemporaryDirectory(prefix="opencmo-motion-preview-") as tmp:
+        try:
+            return preview_local(job, Path(tmp))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.function(secrets=[secret], timeout=30)
