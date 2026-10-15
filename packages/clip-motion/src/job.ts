@@ -14,6 +14,15 @@ export const BeatSchema = z.object({
 	label: z.string().trim().max(40).optional(), // main on-screen words (≤ 5 words, checked by the guide/reviewer)
 }).strict();
 
+/** v2 looks: `blueprint` (navy field, v1) and `paper` (light, flat). */
+export const THEMES = ['blueprint', 'paper'] as const;
+/** v2 motion personalities, same names as `PERSONALITY` in packages/editor-core/src/motion/intro.ts. */
+export const PERSONALITIES = ['premium', 'corporate', 'playful', 'energetic'] as const;
+export type Theme = (typeof THEMES)[number];
+export type Personality = (typeof PERSONALITIES)[number];
+export const DEFAULT_THEME: Theme = 'blueprint';
+export const DEFAULT_PERSONALITY: Personality = 'premium';
+
 export const WordSchema = z.object({ text: z.string(), start: z.number().min(0), end: z.number().min(0) }).strict();
 
 export const MotionJobSchema = z.object({
@@ -25,6 +34,8 @@ export const MotionJobSchema = z.object({
 	seed: z.number().int().min(0).max(2_147_483_647).default(0),
 	accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), // Brand Kit accent
 	words: z.array(WordSchema).optional(), // real timings; absent = estimated from beats
+	theme: z.enum(THEMES).optional(), // absent = blueprint
+	personality: z.enum(PERSONALITIES).optional(), // absent = premium, with v1 motion (no ambient layer by default)
 }).strict();
 
 export type Beat = z.infer<typeof BeatSchema>;

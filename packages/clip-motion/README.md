@@ -54,6 +54,9 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
 - `kit.place(area, [u, v])` → pixels of a normalised point (y down). `kit.plot(area, [u, v])` → pixels of a data
   point in the plot of `area` (y up), aligned with `Axes`, `Scatter` and `FitLine`.
 - `kit.width`, `kit.height`, `kit.portrait`, `kit.fps`, `kit.frames`, `kit.beats`.
+- `kit.theme` (`blueprint` | `paper`) and `kit.personality` (`premium` | `corporate` | `playful` | `energetic`), from
+  the job's optional `theme` and `personality` (defaults `blueprint` and `premium`). A job without them renders
+  exactly as in v1.
 
 ### Text (labels of at most 5 words)
 - `<Title text kicker? y? size?>` – big serif headline, words rise in one by one.

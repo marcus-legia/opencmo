@@ -3,7 +3,7 @@
  * type, easing and layout are decided here, once.
  */
 
-import { FPS, type MotionJob } from '../job.ts';
+import { DEFAULT_PERSONALITY, DEFAULT_THEME, FPS, type MotionJob } from '../job.ts';
 import { area, place, plotPoint, type AreaName, type Box } from './areas.ts';
 import { DotField, Spectrogram, Waveform } from './canvas.tsx';
 import { kitError } from './context.tsx';
@@ -35,6 +35,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		width: size.width,
 		height: size.height,
 		portrait: size.height > size.width,
+		theme: job.theme ?? DEFAULT_THEME,
+		personality: job.personality ?? DEFAULT_PERSONALITY,
 		fps: FPS,
 		frames: timeline.frames,
 		beats: timeline.beats.length,

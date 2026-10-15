@@ -195,7 +195,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 
 ## Track A: Kit & renderer (`packages/clip-motion`)
 
-- [ ] **A1. Contract.** `theme` and `personality` in `job.ts` (optional, defaults as above); `kit.theme`,
+- [x] **A1. Contract.** `theme` and `personality` in `job.ts` (optional, defaults as above); `kit.theme`,
   `kit.personality`; v1 fixtures still parse and render unchanged. **Push this first.**
 - [ ] **A2. Every Lucide icon.** `Icon` reads `packages/clip-icons/data/icons.json` (bundled into the Remotion
   bundle; ~720 KB, no fetch). Unknown name → kit error with the 5 closest names. Keep the draw-on animation.
@@ -297,6 +297,11 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 ## Notes
 
 ### Track A
+
+- A1: `THEMES`, `PERSONALITIES`, `DEFAULT_THEME`, `DEFAULT_PERSONALITY` and the optional `theme` / `personality`
+  fields in `job.ts`; `kit.theme`, `kit.personality`. A job without them is v1: the `premium` personality keeps
+  v1 motion, and the ambient layer is on by default only when the job sets a personality, so the showcase golden
+  stills stay valid. `check:clip-motion` green.
 
 ### Track B
 
