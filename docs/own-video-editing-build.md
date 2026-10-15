@@ -516,7 +516,7 @@ Start from `apps/web/lib/agent/tools.ts` (the transcript tools, `OWN_VIDEO_TOOLS
     `remove_silence` → reply;
   - `eval/tasks.ts`: 2 tasks, one rough cut and one "cut the second video only";
   - `docs/spec-editor-assistant.md`.
-- [ ] **C6. E2E `apps/web/e2e/editor-roughcut.spec.ts`** (acceptance step 4).
+- [x] **C6. E2E `apps/web/e2e/editor-roughcut.spec.ts`** (acceptance step 4).
   - Fixture: a short talk with a known transcript (sidecar for the fake transcriber, A3) containing "um", a 2 s
     pause and a sentence said twice.
   - Run it locally (`npm run test:e2e -- editor-roughcut`) and write the result in Notes.
@@ -582,7 +582,22 @@ the e2e spec locally.
   - Checked: `npm run typecheck`; `check:contracts` exit 0 (`agent-design.check.ts` §7b: read by id, default
     to main, named summaries, pending/none, a non-video id stays an error, `speech_sources`, upload script
     times); fake eval 39/40 (`second-video` and `roughcut` pass; `explain-make` fails on the base too).
-- C6 waits for A3 (fake transcriber sidecar) and B4/B6 (editor wiring, test ids); see Requests.
+- C6 (on B4/B6, `bf468c0`): `apps/web/e2e/editor-roughcut.spec.ts`.
+  - Flow: a New edit of its own (`POST /api/v1/editor/new`) → import a 10 s talk and place it → its transcript
+    (a filler, a 2 s pause, a false start, a sentence said twice) saved with the user's own
+    `put_editor_transcript` and linked with `attach_transcript` (what B4 runs when an automatic transcript is
+    ready) → B's starter `assistant-roughcut` → "Rough cut plan … Shall I cut it?" and nothing cut yet → "go"
+    → the false start, the first take, "um" and the pause are cut from that video, every kept sentence whole,
+    10 s → 5.63 s → `assistant-undo` restores it.
+  - Why the transcript is seeded: the e2e worker's fake transcriber returns one fixed line, so A3's sidecar is
+    still needed for the automatic path (Request to A stays open). When A3 lands, swap the two seeding calls
+    for waiting on `transcript-ready`; the rest of the spec stays.
+  - Undo is the Assistant's one-click Undo of the whole request (two writes: remove_words, remove_silence),
+    not Ctrl+Z, which steps through them one by one.
+  - Ran locally: `E2E_CHANNEL=msedge npm run test:e2e -- editor-roughcut`, 1 passed (13.4 s). The bundled
+    Chromium cannot play H.264 (the editor refuses to open) and dl.google.com is blocked here, so this
+    container used Microsoft Edge 155. Looked at `02-cut.png`: four steps ticked, the timeline reads
+    0:05.63. Not in CI: there is no e2e job.
 
 ---
 
