@@ -223,7 +223,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 
 ## Track B: Render service & data
 
-- [ ] **B1. Migration** `supabase/migrations/<ts>_explainer_v2.sql` + `supabase/tests/<n>_explainer_v2.test.sql`:
+- [x] **B1. Migration** `supabase/migrations/<ts>_explainer_v2.sql` + `supabase/tests/<n>_explainer_v2.test.sql`:
   - `ai_check_spec`: explainer scenes accept `theme` ∈ {blueprint, paper} and `personality` ∈ {premium, corporate,
     playful, energetic}; anything else is rejected with "This explainer script is not valid. Write it again.";
   - `complete_generation`: keep `p_words` for explainer generations (provider `opencmo-motion`), same size limits
@@ -330,6 +330,11 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   old headline fading, new one rising word by word, no overlap; the steps board reads well.
 
 ### Track B
+
+- B1: `20261126090000_explainer_v2.sql` + `156_explainer_v2.test.sql`. `ai_check_spec` takes `scene.theme` /
+  `scene.personality` from the fixed lists (wrong type, `null` or an unknown name → "This explainer script is not
+  valid. Write it again."; a beat `visual` is refused too); `complete_generation` keeps words for models whose
+  provider is `opencmo-motion`. `supabase test db`: 89 files, 1446 tests pass (CLI 2.117.0); schema dumped.
 
 ### Track C
 

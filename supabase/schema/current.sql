@@ -1182,7 +1182,13 @@ begin
       or jsonb_typeof(p_spec->'scene'->'beats') is distinct from 'array'
       or jsonb_array_length(p_spec->'scene'->'beats') not between 3 and 16
       or (p_spec->'scene' ? 'accent' and (jsonb_typeof(p_spec->'scene'->'accent') is distinct from 'string'
-          or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))) then
+          or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))
+      -- v2: the look and the motion personality, the same names as `THEMES` and
+      -- `PERSONALITIES` in packages/clip-motion/src/job.ts. Both optional.
+      or (p_spec->'scene' ? 'theme' and (jsonb_typeof(p_spec->'scene'->'theme') is distinct from 'string'
+          or p_spec->'scene'->>'theme' not in ('blueprint', 'paper')))
+      or (p_spec->'scene' ? 'personality' and (jsonb_typeof(p_spec->'scene'->'personality') is distinct from 'string'
+          or p_spec->'scene'->>'personality' not in ('premium', 'corporate', 'playful', 'energetic')))) then
     raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
   end if;
   if v_explainer then
@@ -3158,9 +3164,13 @@ begin
     raise exception 'invalid generated object name';
   end if;
 
-  -- Mốc chữ chỉ có nghĩa với giọng đọc. Sai hình dạng thì BỎ, không làm hỏng
-  -- lượt sinh đã trả tiền: voiceover vẫn dùng được, chỉ không có phụ đề.
-  if v_generation.kind = 'voice' and p_words is not null
+  -- Word timings matter for narrated media only: voiceovers and (v2) explainers, whose captions
+  -- the editor builds from them. A bad shape is DROPPED, never failing a paid generation: the
+  -- media still works, it just has no captions.
+  if (v_generation.kind = 'voice'
+      or exists (select 1 from public.ai_models m
+                 where m.id = v_generation.model and m.provider = 'opencmo-motion'))
+     and p_words is not null
      and jsonb_typeof(p_words) = 'array'
      and jsonb_array_length(p_words) <= 20000
      and octet_length(p_words::text) < 524288
