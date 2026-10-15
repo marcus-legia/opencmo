@@ -40,7 +40,7 @@ const previewSaturation = (page: Page) =>
     return sum / (data.length / 4);
   });
 
-test("tab Adjust: saturation trên pixel, curves, wheels, chroma key, scopes", async ({ page }, testInfo) => {
+test("Adjust tab: saturation on pixels, curves, wheels, chroma key, scopes", async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.a);

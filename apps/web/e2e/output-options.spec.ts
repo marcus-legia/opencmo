@@ -19,7 +19,7 @@ import { openClipsPanel, openProject, signIn, state } from "./helpers";
  * nào — file đã nằm sẵn trong Storage.
  */
 
-test("Don't clip giao nguyên video, không mở editor", async ({ page }) => {
+test("Don't clip delivers the whole video without opening the editor", async ({ page }) => {
   const { users, url, service } = state();
   await signIn(page, users.a);
   await openClipsPanel(page);
@@ -73,7 +73,7 @@ test("Don't clip giao nguyên video, không mở editor", async ({ page }) => {
  * bằng chứng bố cục, không phải bằng chứng luồng dữ liệu — cái đó do hai test
  * trên và `clip-flow.spec.ts` lo.
  */
-test("màn xử lý hiện thumbnail và lưới clip điền dần", async ({ page }, testInfo) => {
+test("processing screen shows the thumbnail and fills the clip grid progressively", async ({ page }, testInfo) => {
   await signIn(page, state().users.a);
 
   const id = "33333333-3333-4333-8333-333333333333";
@@ -133,7 +133,7 @@ test("màn xử lý hiện thumbnail và lưới clip điền dần", async ({ p
   await page.screenshot({ path: testInfo.outputPath("processing-mobile.png"), fullPage: true });
 });
 
-test("tab Clips: mặc định, phụ đề và khung theo bản đang mở", async ({ page }, testInfo) => {
+test("Clips tab: defaults, captions and frame follow the open edit", async ({ page }, testInfo) => {
   await signIn(page, state().users.a);
   await openClipsPanel(page);
   const panel = page.getByTestId("clips-panel");

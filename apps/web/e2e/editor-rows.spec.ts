@@ -21,7 +21,7 @@ async function sceneChildren(page: Page, clipId: string): Promise<Node[]> {
 const shape = (children: Node[]) =>
   children.map((node) => (node.kind === "sequence" ? `${String(node.name)}[${(node.children ?? []).length}]` : node.kind)).join(" ");
 
-test("New project, b-roll chung một hàng, kéo bar giữa các hàng", async ({ page }, testInfo) => {
+test("New project, b-roll sharing one row, dragging bars between rows", async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.a);
@@ -33,21 +33,23 @@ test("New project, b-roll chung một hàng, kéo bar giữa các hàng", async 
   const clipId = page.url().split("/").pop()!;
 
   await page.getByRole("tab", { name: /media/i }).click();
+  const bars = page.locator(".ed2-bar-broll");
   for (const [index, color] of ["red", "green", "blue"].entries()) {
     const file = testInfo.outputPath(`${color}.mp4`);
     execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", `color=c=${color}:s=320x568:r=15:d=2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", file]);
     await page.getByTestId("import-input").setInputFiles(file);
     await expect(page.getByTestId(`asset-${color}.mp4`)).toBeVisible();
-    // Playhead lùi về sau mỗi lượt (w = +1 s): ba clip 2 s không chồng nhau.
+    // Move the playhead past the clips already placed (w = +1 s) so three 2 s clips don't overlap.
+    // It is clamped to the end of the content, so wait for the previous insert to land first.
     if (index) {
       await page.getByTestId("timeline").hover();
       await page.keyboard.press("Escape");
       for (let step = 0; step < 5; step++) await page.keyboard.press("w");
     }
     await page.getByTestId(`asset-${color}.mp4`).locator(".ed2-lib-icon").dblclick();
+    await expect(bars).toHaveCount(index + 1);
   }
 
-  const bars = page.locator(".ed2-bar-broll");
   await expect(bars).toHaveCount(3);
   await expect.poll(async () => shape(await sceneChildren(page, clipId)), { timeout: 60_000 }).toBe("B-roll 1[3]");
   await expect(page.locator('.ed2-role[data-role="broll"]').first()).toContainText("B-roll");

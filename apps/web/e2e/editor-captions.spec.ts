@@ -17,7 +17,7 @@ async function openEditor(page: Page) {
 
 const balance = async (page: Page) => ((await (await page.request.get("/api/v1/account")).json()) as { credits: number }).credits;
 
-test("phụ đề cho video thư viện, dịch, censor", async ({ page }, testInfo) => {
+test("library video captions, translation and censor", async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.a);
@@ -45,14 +45,16 @@ test("phụ đề cho video thư viện, dịch, censor", async ({ page }, testI
   await expect.poll(() => balance(page), { timeout: 30_000 }).toBe(before - 1);
   await page.screenshot({ path: testInfo.outputPath("01-captions.png") });
 
-  // Chọn lớp phụ đề vừa thêm bằng nhãn hàng của nó.
+  // Select the new captions layer by its row label.
   await page.getByText("Captions · talking.mp4").first().click();
+  const originalEnd = await page.getByTestId("ins-end").locator("input").inputValue();
   await page.getByTestId("ins-caption-censor").check();
   await page.getByTestId("translate-captions").selectOption("Spanish");
   await expect(page.getByText("Captions · Spanish").first()).toBeVisible({ timeout: 60_000 });
-  // Bản dịch nằm đúng khung giờ bản gốc (transcript giả 0.2–2.15 s), không phải 16 s mặc định.
+  // The translation keeps the original layer's time window, not the 16 s default of a new layer.
   await page.getByText("Captions · Spanish").first().click();
-  await expect(page.getByTestId("ins-end").locator("input")).toHaveValue("2.17");
+  await expect(page.getByTestId("ins-end").locator("input")).toHaveValue(originalEnd);
+  expect(originalEnd).not.toBe("16");
   await page.getByTestId("zoom-fit").click();
   await page.screenshot({ path: testInfo.outputPath("02-translated.png") });
 
