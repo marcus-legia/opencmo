@@ -95,6 +95,19 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
   CC BY 4.0). `kit.lotties` lists every name (the Assistant searches them with `find_lotties`). Pops in like the
   other marks; `loop` defaults to true, `speed` 0–4. Costs about 5 ms per frame for three on screen.
 
+### Shapes and motion (v2)
+- `<Shape kind x? y? size? color? color2? fill? label? secondary? breathe? rotate? seed?>` – `kind` is one of
+  `kit.shapes`: `circle`, `cell` (membrane + nucleus), `blob` (organic, breathes), `ring` (draws on), `pill`,
+  `capsule` (two colours: `color`, `color2`), `star`. Pops in with the personality's wind-up and overshoot.
+  `label` (≤ 3 words) sits under it; `secondary` adds a halo that follows a few frames late.
+- `<Path d x? y? size? color? fill? draw? width?>` – any SVG path in a 24×24 box, drawn on (for shapes the kit
+  does not have).
+- `<Arrow from={[x, y]} to={[x, y]} curve? color? width? dashed? head?>` – draws itself, the head pops in as it lands.
+- `<Group x? y? keys={[{ at, x?, y?, scale?, rotate?, dur? }]} react={{ at, from: [x, y], strength? }}>` – moves its
+  children together. Key `x`/`y` are offsets in pixels from where the children are drawn; `x`/`y` of the group is
+  the pivot for scale and rotate. `react` knocks the group away from `from` at `at` and lets it settle.
+- `<Burst at x? y? count? size? color? seed?>` – a 24-frame particle burst for an impact or a success.
+
 ### Timing
 - `kit.beat(i)` → `{ from, to, frames }` of beat `i`.
 - `kit.cue(i, 'word')` → the frame where that word of beat `i` is spoken (first word of a phrase; the beat start

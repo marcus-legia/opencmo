@@ -30,7 +30,7 @@ export type TitleProps = LifeProps & { text: string; kicker?: string; area?: Are
 export function Title(props: TitleProps) {
 	const text = requireText('Title', props.text);
 	const { width, height } = useVideoConfig();
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'text');
 	const kickerColor = useColor(undefined, 'signal');
 	const position = usePosition({ ...props, anchor: 'center' });
@@ -85,7 +85,7 @@ export function Mono(props: MonoProps) {
 function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 	const text = requireText(props.kind, props.text);
 	const mono = props.kind === 'Mono';
-	const life = useLife({ dur: 15, ...props });
+	const life = useLife(props, undefined, 15);
 	const color = useColor(props.color, mono ? 'signal' : 'text');
 	const wrong = useColor(undefined, 'wrong');
 	const noise = useColor(undefined, 'noise');
@@ -140,7 +140,7 @@ export type CounterProps = LifeProps & Placed & { to: number; from?: number; cou
 /** A number that counts up over `count` frames (default 45) with ease-out. */
 export function Counter(props: CounterProps) {
 	if (!Number.isFinite(props.to)) throw kitError('Counter needs a numeric `to`.');
-	const life = useLife({ dur: 12, ...props });
+	const life = useLife(props, undefined, 12);
 	const color = useColor(props.color, 'answer');
 	const position = usePosition(props);
 	if (!life.visible) return null;

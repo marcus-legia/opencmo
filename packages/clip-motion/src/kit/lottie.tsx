@@ -40,7 +40,7 @@ export function Lottie(props: LottieProps) {
 			live = false;
 		};
 	}, [props.name, handle]);
-	const life = useLife({ dur: 14, ...props }, ease.hero);
+	const life = useLife(props, ease.hero, 14);
 	const size = props.size ?? Math.round(Math.min(width, height) * 0.28);
 	const x = props.x ?? width / 2;
 	const y = props.y ?? height / 2;

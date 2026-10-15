@@ -74,7 +74,7 @@ export type DotFieldProps = LifeProps & {
 /** Thousands of glowing dots: sound, data, people, stars. */
 export function DotField(props: DotFieldProps) {
 	const target = useArea(props.area, 'full');
-	const life = useLife({ dur: 36, ...props });
+	const life = useLife(props, undefined, 36);
 	const color = useColor(props.color, 'signal');
 	const noise = useColor(undefined, 'noise');
 	const count = props.points ? props.points.length : Math.round(props.count ?? 600);
@@ -162,7 +162,7 @@ export function Spectrogram(props: SpectrogramProps) {
 	const data = props.data;
 	if (!data || !Array.isArray(data.cells) || data.cells.length !== data.cols * data.rows) throw kitError('Spectrogram needs data from kit.spectrogram(seed).');
 	const target = useArea(props.area, 'full');
-	const life = useLife({ dur: 45, ...props });
+	const life = useLife(props, undefined, 45);
 	const low = useColor(undefined, 'field');
 	const mid = useColor(undefined, 'noise');
 	const high = useColor(undefined, 'signal');
@@ -230,7 +230,7 @@ export type WaveformProps = LifeProps & {
 export function Waveform(props: WaveformProps) {
 	const { width } = useVideoConfig();
 	const target = useArea(props.area, 'hero');
-	const life = useLife({ dur: 40, ...props });
+	const life = useLife(props, undefined, 40);
 	const color = useColor(props.color, 'signal');
 	const noiseColor = useColor(undefined, 'noise');
 	const bar = Math.max(5, width / 220);

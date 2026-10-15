@@ -205,7 +205,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
   resolves the name). Only names in `BUILTIN_LOTTIES()` (`packages/editor-core/src/visuals/lottie.ts`) — copy the
   list into a generated `src/kit/lotties.ts` with a test that it matches the folder. Frame-exact: driven by
   `useCurrentFrame`, no wall clock. **Measure** render time with 3 Lotties on screen vs without.
-- [ ] **A4. Shapes, Path, Arrow, Group, Burst** as in the contract, all with layout tags.
+- [x] **A4. Shapes, Path, Arrow, Group, Burst** as in the contract, all with layout tags.
 - [ ] **A5. Text board.** `Headline` (exits always finish before the next entrance) and `Board`. Fix the v1
   overlap: a `Label` swap must never show two texts at full opacity in the same frame.
 - [ ] **A6. Theme `paper`.** Off-white field, flat colours, soft shadows, fonts already in
@@ -315,6 +315,13 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   names. Looked at a still (heart-beat, emoji/brain, walk all drawn); frames 3.0 s and 3.5 s differ, so they move.
   **Measured** (15 s, 1080p, this laptop, concurrency 2): 3 icons 40 ms/frame, 18.8 s, peak RSS 725 MB; 3 Lotties
   45 ms/frame, 20.8 s, 736 MB.
+- A4: `src/kit/shapes.tsx`: `Shape` (circle, cell, blob, ring, pill, capsule, star; `label`, `secondary` halo,
+  `breathe`), `Path`, `Arrow` (head pops in), `Group` (keys + `react` knock), `Burst`. Also the base of A7, because
+  every new mark uses it: `src/kit/personality.ts` (`MOTION` per personality, `pop` with wind-up and overshoot,
+  `wobble`), `MotionContext` / `ThemeContext`, and `useLife` now returns `pop` and scales its default lengths to
+  the personality. A job without `personality` keeps v1 timings exactly (golden stills unchanged). Looked at stills
+  of a `playful` test scene: every shape drawn, the cell's halo, the blob changing outline, the virus group moving
+  left at its key, knocked right at the impact and settling, the burst at the impact.
 
 ### Track B
 

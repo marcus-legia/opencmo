@@ -10,6 +10,7 @@ import { kitError } from './context.tsx';
 import { spectrogram, trend } from './data.ts';
 import { LOTTIE_NAMES } from './lotties.ts';
 import { Lottie } from './lottie.tsx';
+import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
@@ -61,6 +62,12 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		icons: ICON_NAMES,
 		Lottie,
 		lotties: LOTTIE_NAMES,
+		Shape,
+		shapes: SHAPE_KINDS,
+		Path,
+		Arrow,
+		Group,
+		Burst,
 		spectrogram,
 		trend,
 		// Timing

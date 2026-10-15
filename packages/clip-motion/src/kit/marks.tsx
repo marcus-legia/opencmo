@@ -10,17 +10,17 @@ import { alpha } from './theme.ts';
 
 type XY = [number, number];
 
-function glow(color: string, strength = 1): string {
+export function glow(color: string, strength = 1): string {
 	return `drop-shadow(0 0 ${4 * strength}px ${alpha(color, 0.9)}) drop-shadow(0 0 ${14 * strength}px ${alpha(color, 0.45)})`;
 }
 
-function requirePoint(name: string, value: unknown): XY {
+export function requirePoint(name: string, value: unknown): XY {
 	if (!Array.isArray(value) || value.length !== 2 || !value.every(Number.isFinite)) throw kitError(`${name} must be [x, y] in pixels (got ${JSON.stringify(value)}).`);
 	return value as XY;
 }
 
 /** An SVG layer only as large as its marks (plus glow room): filters cost per pixel of the layer. */
-function Svg({ around, children, style }: { around: BoxShape; children: React.ReactNode; style?: React.CSSProperties }) {
+export function Svg({ around, children, style }: { around: BoxShape; children: React.ReactNode; style?: React.CSSProperties }) {
 	const margin = 48;
 	const x = Math.floor(around.x - margin);
 	const y = Math.floor(around.y - margin);
@@ -51,7 +51,7 @@ export type LinkProps = LifeProps & { from: XY; to: XY; color?: ColorProp; width
 export function Link(props: LinkProps) {
 	const from = requirePoint('Link from', props.from);
 	const to = requirePoint('Link to', props.to);
-	const life = useLife({ dur: 20, ...props });
+	const life = useLife(props, undefined, 20);
 	const color = useColor(props.color, 'signal');
 	if (!life.visible) return null;
 	const strokeWidth = props.width ?? 4;
@@ -82,7 +82,7 @@ export type BoxProps = LifeProps & { area?: AreaProp; x?: number; y?: number; w?
 /** A highlighted region: rounded, dashed by default, with an optional small label. */
 export function Box(props: BoxProps) {
 	const fromArea = useArea(props.area, 'hero');
-	const life = useLife({ dur: 18, ...props }, ease.hero);
+	const life = useLife(props, ease.hero, 18);
 	const color = useColor(props.color, 'answer');
 	const target = props.x !== undefined && props.y !== undefined && props.w !== undefined && props.h !== undefined ? { x: props.x, y: props.y, w: props.w, h: props.h } : fromArea;
 	if (![target.x, target.y, target.w, target.h].every(Number.isFinite)) throw kitError('Box needs x, y, w, h in pixels or an area.');
@@ -113,7 +113,7 @@ export type CheckProps = LifeProps & { x?: number; y?: number; size?: number; co
 /** A ring that draws itself, then a check (or a cross). */
 export function Check(props: CheckProps) {
 	const { width, height } = useVideoConfig();
-	const life = useLife({ dur: 26, ...props });
+	const life = useLife(props, undefined, 26);
 	const cross = props.kind === 'cross';
 	const color = useColor(props.color, cross ? 'wrong' : 'answer');
 	if (!life.visible) return null;
@@ -146,7 +146,7 @@ export function Icon(props: IconProps) {
 	const { width, height } = useVideoConfig();
 	const d = typeof props.name === 'string' ? iconPath(props.name) : null;
 	if (!d) throw kitError(`unknown icon "${String(props.name)}": closest names are ${closestIcons(String(props.name)).join(', ')} (search with find_icons).`);
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'text');
 	if (!life.visible) return null;
 	const size = props.size ?? 120;
@@ -170,7 +170,7 @@ export type AxesProps = LifeProps & { area?: AreaProp; x?: string; y?: string; c
 /** Two axes drawn on, with optional names. Scatter and FitLine in the same area line up with them. */
 export function Axes(props: AxesProps) {
 	const target = useArea(props.area, 'hero');
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'dim');
 	if (!life.visible) return null;
 	const plot = plotBox(target);
@@ -218,7 +218,7 @@ export type ScatterProps = LifeProps & {
 export function Scatter(props: ScatterProps) {
 	if (!Array.isArray(props.points) || props.points.some((p) => !Number.isFinite(p?.x) || !Number.isFinite(p?.y))) throw kitError('Scatter points must be [{ x, y }] between 0 and 1.');
 	const target = useArea(props.area, 'hero');
-	const life = useLife({ dur: 30, ...props });
+	const life = useLife(props, undefined, 30);
 	const color = useColor(props.color, 'signal');
 	const answer = useColor(undefined, 'answer');
 	const noise = useColor(undefined, 'noise');
@@ -253,7 +253,7 @@ export function FitLine(props: FitLineProps) {
 	const target = useArea(props.area, 'hero');
 	const from = plotPoint(target, requirePoint('FitLine from', props.from));
 	const to = plotPoint(target, requirePoint('FitLine to', props.to));
-	const life = useLife({ dur: 24, ...props });
+	const life = useLife(props, undefined, 24);
 	const color = useColor(props.color, 'answer');
 	if (!life.visible) return null;
 	return (

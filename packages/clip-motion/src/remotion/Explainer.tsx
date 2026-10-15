@@ -3,8 +3,9 @@ import * as Remotion from 'remotion';
 import { AbsoluteFill, continueRender, delayRender, useVideoConfig } from 'remotion';
 
 import { buildScene, sceneError } from '../code/run.ts';
-import type { MotionJob } from '../job.ts';
-import { PaletteContext } from '../kit/context.tsx';
+import { DEFAULT_PERSONALITY, DEFAULT_THEME, type MotionJob } from '../job.ts';
+import { MotionContext, PaletteContext, ThemeContext } from '../kit/context.tsx';
+import { MOTION } from '../kit/personality.ts';
 import { makeKit } from '../kit/index.ts';
 import { makePalette } from '../kit/theme.ts';
 import { FAMILY } from './fonts.ts';
@@ -52,10 +53,16 @@ class SceneBoundary extends Component<{ children: React.ReactNode }, { error: Er
 export function Explainer({ job, compiled, probe }: ExplainerProps) {
 	const { width, height } = useVideoConfig();
 	const palette = useMemo(() => makePalette(job.accent), [job.accent]);
+	const motion = useMemo(() => {
+		const personality = job.personality ?? DEFAULT_PERSONALITY;
+		return { personality, style: MOTION[personality], explicit: job.personality !== undefined };
+	}, [job.personality]);
 	const kit = useMemo(() => makeKit(job, { width, height }), [job, width, height]);
 	const Scene = useMemo(() => (compiled ? buildScene(compiled, React, R, kit) : null), [compiled, kit]);
 	return (
 		<PaletteContext.Provider value={palette}>
+			<ThemeContext.Provider value={job.theme ?? DEFAULT_THEME}>
+			<MotionContext.Provider value={motion}>
 			<AbsoluteFill style={{ background: palette.field }}>
 				{Scene ? (
 					<SceneBoundary>
@@ -68,6 +75,8 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 				)}
 				{probe ? <LayoutProbe /> : null}
 			</AbsoluteFill>
+			</MotionContext.Provider>
+			</ThemeContext.Provider>
 		</PaletteContext.Provider>
 	);
 }
