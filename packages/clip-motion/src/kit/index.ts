@@ -8,6 +8,8 @@ import { area, place, plotPoint, type AreaName, type Box } from './areas.ts';
 import { DotField, Spectrogram, Waveform } from './canvas.tsx';
 import { kitError } from './context.tsx';
 import { spectrogram, trend } from './data.ts';
+import { LOTTIE_NAMES } from './lotties.ts';
+import { Lottie } from './lottie.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
@@ -57,6 +59,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		Check,
 		Icon,
 		icons: ICON_NAMES,
+		Lottie,
+		lotties: LOTTIE_NAMES,
 		spectrogram,
 		trend,
 		// Timing

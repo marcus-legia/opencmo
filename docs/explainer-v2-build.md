@@ -200,7 +200,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 - [x] **A2. Every Lucide icon.** `Icon` reads `packages/clip-icons/data/icons.json` (bundled into the Remotion
   bundle; ~720 KB, no fetch). Unknown name → kit error with the 5 closest names. Keep the draw-on animation.
   Test: `virus`, `syringe`, `shield-check` render; `virsu` suggests `virus`.
-- [ ] **A3. Lottie.** Add `@remotion/lottie` pinned to the same version as `remotion` (4.0.530). `<Lottie>` loads
+- [x] **A3. Lottie.** Add `@remotion/lottie` pinned to the same version as `remotion` (4.0.530). `<Lottie>` loads
   JSON from `packages/clip-media/lottie` through the bundle (`staticFile` stays forbidden to scene code; the kit
   resolves the name). Only names in `BUILTIN_LOTTIES()` (`packages/editor-core/src/visuals/lottie.ts`) — copy the
   list into a generated `src/kit/lotties.ts` with a test that it matches the folder. Frame-exact: driven by
@@ -308,6 +308,13 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   Looked at a preview still: virus (wrong), syringe (signal) and shield-check (answer) drawn correctly.
   **Request to B (B3):** the Modal image needs `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie`
   next to `packages/clip-motion` (or set `OPENCMO_MOTION_ICONS` / `OPENCMO_MOTION_LOTTIE`).
+- A3: `@remotion/lottie` 4.0.530 (exact, like `remotion`; it adds `lottie-web` 5.13.0 to `package-lock.json`).
+  `<Lottie name>` plays a built-in animation from the bundle inside a `Sequence` starting at `at`, so it follows
+  the frame. `src/kit/lotties.ts` is generated from the folder by `scripts/build-lotties.ts` (165 names: 22 OpenCMO
+  CC0 + 143 `emoji/*` Noto CC BY 4.0); a test keeps it equal to the folder. Unknown name → kit error with close
+  names. Looked at a still (heart-beat, emoji/brain, walk all drawn); frames 3.0 s and 3.5 s differ, so they move.
+  **Measured** (15 s, 1080p, this laptop, concurrency 2): 3 icons 40 ms/frame, 18.8 s, peak RSS 725 MB; 3 Lotties
+  45 ms/frame, 20.8 s, 736 MB.
 
 ### Track B
 

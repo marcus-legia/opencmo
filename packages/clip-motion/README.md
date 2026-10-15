@@ -89,6 +89,11 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
   with `find_icons`). The 16 v1 names (`kit.icons`: mic, music, phone, search, database, wave, bolt, user, lock,
   server, cloud, chart, clock, globe, key, play) keep their v1 drawings. An unknown name fails with the 5 closest
   names.
+- `<Lottie name x? y? size? loop? speed?>` – a built-in animation that plays from `at` in step with the frame:
+  the OpenCMO pack (`walk`, `run`, `wave`, `point`, `cheer`, `heart-beat`, `lightbulb-on`, `rocket-launch`,
+  `target-hit`, `confetti`…, CC0) and the Noto animated emoji (`emoji/brain`, `emoji/robot`, `emoji/rocket`…,
+  CC BY 4.0). `kit.lotties` lists every name (the Assistant searches them with `find_lotties`). Pops in like the
+  other marks; `loop` defaults to true, `speed` 0–4. Costs about 5 ms per frame for three on screen.
 
 ### Timing
 - `kit.beat(i)` → `{ from, to, frames }` of beat `i`.
@@ -145,3 +150,6 @@ return function Scene() {
   1194; `UPDATE_GOLDEN=1` rewrites `fixtures/golden/`, look at the images before committing).
 - `node scripts/bench.ts <job.json> <from> <to> [gl] [concurrency]`: ms/frame for a frame range, to compare GL
   backends or concurrency before changing the defaults.
+
+After changing `packages/clip-media/lottie`, run `node scripts/build-lotties.ts` (a test keeps `src/kit/lotties.ts`
+equal to the folder).

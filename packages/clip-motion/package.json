@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@remotion/bundler": "4.0.530",
+    "@remotion/lottie": "4.0.530",
     "@remotion/renderer": "4.0.530",
     "esbuild": "^0.28.2",
     "react": "19.3.0",
