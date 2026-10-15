@@ -238,7 +238,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 - [ ] **B4. Faster previews.** Open Chromium once per container and reuse it for every preview
   (`@modal.enter`, Remotion's browser reuse); measure a warm and a cold preview. Decide with the owner whether
   `motion_preview` keeps one warm container (`min_containers=1`) — write the monthly cost in Notes first.
-- [ ] **B5. Own preview token.** `motion_preview` checks a new `MOTION_PREVIEW_TOKEN` (secret `opencmo-motion`,
+- [x] **B5. Own preview token.** `motion_preview` checks a new `MOTION_PREVIEW_TOKEN` (secret `opencmo-motion`,
   Vercel env), not the worker token: the container that runs model-written code must not hold a token that can
   submit tasks. `apps/web/lib/motion/preview.ts` sends it; fall back to `OPENCMO_WORKER_TOKEN` for one deploy only.
 - [ ] **B6. Measure on Modal** (carried over from v1 B6): showcase and vaccine jobs, cold and warm; time, cost per
@@ -344,6 +344,18 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   `OPENCMO_MOTION_ICONS` / `OPENCMO_MOTION_LOTTIE` (the Lottie pack was already in via `clip-media`). Concurrency:
   `cli_env()` sets `OPENCMO_MOTION_CONCURRENCY = min(os.cpu_count(), 4)` unless set; the image build uses
   `min(nproc, 4)`. The warm-up renders `fixtures/vaccine.job.json` at 0.25, so **the image builds only once A9 lands**.
+- B4 (code; waits on the `serve` Request to A, not measured yet): `motion_preview` is now a method of the Modal class
+  `MotionPreview` with the same URL (`label="opencmo-motion-preview"`). `@modal.enter` opens one `PreviewSession`
+  (`opencmo/ai/providers/motion.py`): a long-lived `clip-motion serve`, one JSON line each way, killed and
+  restarted after a crash or a preview past 55 s. Tests use a fake `serve`. **Warm container cost:**
+  `min_containers=1` at cpu=4, memory=4 GiB idles at 4 × $0.0000131 + 4 × $0.00000222 per second ≈ **$159 a month**
+  (Modal pricing, Oct 2026). Not set: owner's call once a warm and a cold preview are measured on Modal.
+- B5: `motion_preview` accepts only `MOTION_PREVIEW_TOKEN`; `apps/web/lib/motion/preview.ts` sends it. **No fallback to
+  the worker token**, unlike the plan: Modal no longer accepts that token, so sending it would only fail, and it
+  would put a task-submitting token in the container we want it out of. Missing token → "Explainer previews are not
+  set up on the server yet." Deploy order: generate a new token; `modal secret create opencmo-motion
+  MOTION_PREVIEW_TOKEN=<new> --force`; set the same `MOTION_PREVIEW_TOKEN` on Vercel; deploy Modal and Vercel.
+  `preview.check.ts` passes.
 
 ### Track C
 
@@ -352,6 +364,14 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from B → owner A) `clip-motion serve` for B4: open Chromium (`openBrowser`) and the bundle once, print
+  `{"ready":true}` on stdout, then for each stdin line `{"job": MotionJob, "outdir": string}` render the preview stills
+  into `outdir` with that browser (`puppeteerInstance`) and print exactly one PreviewResult line (`ok:false` with
+  `phase`/`message` where `preview` exits 3/4 today). Reopen the browser if it died; exit on stdin EOF; any other
+  failure exits non-zero (the worker starts a new process). stdout carries only these lines, as in `preview`.
+- [ ] (from B → owner C) `apps/web/.env.example`: add `MOTION_PREVIEW_TOKEN=` next to `MOTION_PREVIEW_URL` (B5: the
+  preview endpoint has its own token now; same value as the `opencmo-motion` Modal secret).
 
 - [ ] (from A → owner B) B3: copy `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie` into
   `motion_image` at the same relative paths as in the repo (`<root>/packages/clip-icons/data`,

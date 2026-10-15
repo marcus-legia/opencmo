@@ -3,8 +3,9 @@
  * `MotionJob`, so the Assistant can look at its scene and fix it before anything is paid for.
  *
  * - `OPENCMO_MOTION=local`: spawn the `clip-motion` CLI on this machine in a temp folder.
- * - Otherwise: POST to the Modal endpoint `motion_preview` (`MOTION_PREVIEW_URL`) with the
- *   worker token; the scene code runs there, never inside this server.
+ * - Otherwise: POST to the Modal endpoint `motion_preview` (`MOTION_PREVIEW_URL`) with
+ *   `MOTION_PREVIEW_TOKEN`; the scene code runs there, never inside this server. Not the worker
+ *   token: the container that runs model-written code must not hold a token that submits tasks.
  *
  * A broken job or broken scene code comes back as `{ ok: false }` for the Assistant to fix; an
  * outage or a timeout throws, because no change to the code would help.
@@ -118,7 +119,7 @@ async function previewLocal(job: MotionJob, timeoutMs: number): Promise<MotionPr
 
 async function previewModal(job: MotionJob, timeoutMs: number): Promise<MotionPreview> {
   const url = process.env.MOTION_PREVIEW_URL;
-  const token = process.env.OPENCMO_WORKER_TOKEN;
+  const token = process.env.MOTION_PREVIEW_TOKEN;
   if (!url || !token) throw new Error(NOT_SET_UP);
   let res: Response;
   try {

@@ -94,10 +94,14 @@ async function main() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as { port: number };
   process.env.MOTION_PREVIEW_URL = `http://127.0.0.1:${port}/`;
-  process.env.OPENCMO_WORKER_TOKEN = "secret-token";
+  process.env.OPENCMO_WORKER_TOKEN = "worker-token";
+  delete process.env.MOTION_PREVIEW_TOKEN;
   try {
+    await assert.rejects(previewMotion(job), /not set up/, "the worker token is never sent to the preview container");
+    assert.equal(received, null);
+    process.env.MOTION_PREVIEW_TOKEN = "preview-token";
     const remote = await previewMotion(job);
-    assert.deepEqual(received, { token: "secret-token", job }, "token in the body, like submit");
+    assert.deepEqual(received, { token: "preview-token", job }, "the preview token in the body, like submit");
     assert.ok(remote.ok);
     assert.deepEqual(remote.images, ["aGk="]);
     reply = { ok: true, stills: [{ t: 1, file: "s0.jpg" }], issues: [], estimated: true };

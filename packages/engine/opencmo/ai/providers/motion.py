@@ -24,7 +24,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import select
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -192,13 +195,35 @@ def render_bytes(payload: dict[str, Any], workdir: Path) -> bytes:
     return render_local(payload["job"], audio, workdir).read_bytes()
 
 
-def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
-    """`clip-motion preview` → PreviewResult plus `images` (base64 JPEGs, same order as `stills`).
+PREVIEW_TIMEOUT = 55
+PREVIEW_TOO_LONG = {"ok": False, "phase": "render", "message": "The preview took too long. Simplify the scene."}
+PREVIEW_FAILED = "The explainer preview failed."
 
-    The Modal endpoint `motion_preview` serves this; the web app's local path spawns the CLI itself.
-    """
+
+def _with_images(result: dict[str, Any], outdir: Path) -> dict[str, Any]:
+    """Adds `images` (base64 JPEGs, same order as `stills`) to an ok PreviewResult."""
     import base64
 
+    if result.get("ok"):
+        images = []
+        for still in result.get("stills") or []:
+            path = Path(str(still["file"]))
+            path = path if path.is_absolute() else outdir / path
+            # Only files the CLI wrote into this preview's folder.
+            if outdir.resolve() not in path.resolve().parents:
+                raise RuntimeError(PREVIEW_FAILED)
+            images.append(base64.b64encode(path.read_bytes()).decode())
+            still["file"] = path.name
+        result["images"] = images
+    return result
+
+
+def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    """`clip-motion preview` → PreviewResult plus `images`: one process (and one Chromium) per preview.
+
+    `PreviewSession` is the warm path used by the Modal endpoint; the web app's local path spawns
+    the CLI itself.
+    """
     job_file = workdir / "job.json"
     job_file.write_text(json.dumps(job), encoding="utf-8")
     outdir = workdir / "stills"
@@ -206,10 +231,10 @@ def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             ["node", str(CLIP_MOTION), "preview", str(job_file), str(outdir)],
-            capture_output=True, text=True, timeout=55, env=cli_env(), check=False,
+            capture_output=True, text=True, timeout=PREVIEW_TIMEOUT, env=cli_env(), check=False,
         )
     except subprocess.TimeoutExpired:
-        return {"ok": False, "phase": "render", "message": "The preview took too long. Simplify the scene."}
+        return dict(PREVIEW_TOO_LONG)
     try:
         result = json.loads(proc.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
@@ -220,19 +245,101 @@ def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
             phase = "job" if proc.returncode == 3 else "render"
             return {"ok": False, "phase": phase, "message": (lines[-1] if lines else "")[:500] or "The scene failed."}
         log.error("clip-motion preview failed (code %s): %s", proc.returncode, proc.stderr.strip()[-1500:])
-        raise RuntimeError("The explainer preview failed.")
-    if result.get("ok"):
-        images = []
-        for still in result.get("stills") or []:
-            path = Path(str(still["file"]))
-            path = path if path.is_absolute() else outdir / path
-            # Only files the CLI wrote into this preview's folder.
-            if outdir.resolve() not in path.resolve().parents:
-                raise RuntimeError("The explainer preview failed.")
-            images.append(base64.b64encode(path.read_bytes()).decode())
-            still["file"] = path.name
-        result["images"] = images
-    return result
+        raise RuntimeError(PREVIEW_FAILED)
+    return _with_images(result, outdir)
+
+
+class PreviewSession:
+    """One `clip-motion serve` process per container, so Chromium and the bundle open once and every
+    preview after the first skips that start-up.
+
+    Protocol (one JSON line each way): the CLI prints `{"ready": true}` once the browser is open,
+    then answers each `{"job", "outdir"}` with a PreviewResult. A crash or a preview past the
+    timeout kills the process; the next preview starts a new one. One preview at a time.
+    """
+
+    def __init__(self, command: list[str] | None = None, timeout: float = PREVIEW_TIMEOUT) -> None:
+        self._command = command or ["node", str(CLIP_MOTION), "serve"]
+        self._timeout = timeout
+        self._proc: subprocess.Popen[str] | None = None
+        self._lock = threading.Lock()
+
+    def start(self) -> float:
+        """Opens the process if it is not running; returns the seconds it took (0 when warm)."""
+        with self._lock:
+            return self._start()
+
+    def close(self) -> None:
+        with self._lock:
+            self._kill()
+
+    def preview(self, job: dict[str, Any], workdir: Path) -> dict[str, Any]:
+        outdir = workdir / "stills"
+        outdir.mkdir(exist_ok=True)
+        with self._lock:
+            self._start()
+            assert self._proc is not None and self._proc.stdin is not None
+            try:
+                self._proc.stdin.write(json.dumps({"job": job, "outdir": str(outdir)}) + "\n")
+                self._proc.stdin.flush()
+            except OSError as exc:
+                self._kill()
+                raise RuntimeError(PREVIEW_FAILED) from exc
+            line = self._read_line()
+            if line is None:
+                return dict(PREVIEW_TOO_LONG)
+        try:
+            result = json.loads(line)
+        except ValueError:
+            result = None
+        if not isinstance(result, dict) or "ok" not in result:
+            log.error("clip-motion serve answered %r", line[:300])
+            self.close()
+            raise RuntimeError(PREVIEW_FAILED)
+        return _with_images(result, outdir)
+
+    def _start(self) -> float:
+        if self._proc is not None and self._proc.poll() is None:
+            return 0.0
+        began = time.monotonic()
+        # stderr goes to the container's log: Remotion's progress and the scene's console.
+        self._proc = subprocess.Popen(
+            self._command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=cli_env(), bufsize=1,
+        )
+        line = self._read_line()
+        try:
+            ready = json.loads(line) == {"ready": True} if line is not None else False
+        except ValueError:
+            ready = False
+        if not ready:
+            log.error("clip-motion serve did not start: %r", (line or "")[:300])
+            self._kill()
+            raise RuntimeError(PREVIEW_FAILED)
+        seconds = time.monotonic() - began
+        log.info("clip-motion serve ready in %.1f s", seconds)
+        return seconds
+
+    def _read_line(self) -> str | None:
+        """The next stdout line; None after a timeout (the process is killed). A dead process raises."""
+        assert self._proc is not None and self._proc.stdout is not None
+        ready, _, _ = select.select([self._proc.stdout], [], [], self._timeout)
+        if not ready:
+            log.warning("clip-motion serve timed out after %.0f s", self._timeout)
+            self._kill()
+            return None
+        line = self._proc.stdout.readline()
+        if not line:
+            code = self._proc.wait()
+            log.error("clip-motion serve exited (code %s)", code)
+            self._proc = None
+            raise RuntimeError(PREVIEW_FAILED)
+        return line.strip()
+
+    def _kill(self) -> None:
+        if self._proc is not None:
+            self._proc.kill()
+            self._proc.wait()
+            self._proc = None
 
 
 def _result(path: Path, words: list[dict[str, Any]] | None) -> Result:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -338,3 +339,85 @@ def test_concurrency_set_by_env_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENCMO_MOTION_CONCURRENCY", "3")
     monkeypatch.setattr(motion.os, "cpu_count", lambda: 1)
     assert motion.cli_env()["OPENCMO_MOTION_CONCURRENCY"] == "3"
+
+
+_FAKE_SERVE = """
+import json, os, sys, time
+print(json.dumps({"ready": True}), flush=True)
+for line in sys.stdin:
+    request = json.loads(line)
+    title = request["job"]["title"]
+    if title == "crash":
+        sys.exit(1)
+    if title == "slow":
+        time.sleep(30)
+    if title == "bad code":
+        print(json.dumps({"ok": False, "phase": "render", "message": "ReferenceError: x"}), flush=True)
+        continue
+    name = "/etc/passwd" if title == "escape" else "s0.jpg"
+    if name == "s0.jpg":
+        open(os.path.join(request["outdir"], name), "wb").write(b"jpg")
+    print("console noise", file=sys.stderr)
+    print(json.dumps({"ok": True, "stills": [{"t": 1, "file": name}], "issues": [str(os.getpid())], "estimated": True}), flush=True)
+"""
+
+
+@pytest.fixture
+def serve(tmp_path: Path):
+    script = tmp_path / "serve.py"
+    script.write_text(_FAKE_SERVE)
+    sessions: list[motion.PreviewSession] = []
+
+    def make(timeout: float = 10) -> motion.PreviewSession:
+        session = motion.PreviewSession([sys.executable, str(script)], timeout=timeout)
+        sessions.append(session)
+        return session
+
+    yield make
+    for session in sessions:
+        session.close()
+
+
+def _job(title: str) -> dict:
+    return {"title": title, "code": CODE, "beats": BEATS, "format": "16:9", "duration": 20}
+
+
+def _workdir(tmp_path: Path, name: str) -> Path:
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def test_preview_session_opens_once_and_reuses_the_process(serve, tmp_path: Path) -> None:
+    session = serve()
+    assert session.start() > 0
+    assert session.start() == 0, "already warm"
+    first = session.preview(_job("one"), _workdir(tmp_path, "a"))
+    second = session.preview(_job("two"), _workdir(tmp_path, "b"))
+    assert first["images"] == ["anBn"] and first["stills"] == [{"t": 1, "file": "s0.jpg"}]
+    assert first["issues"] == second["issues"], "same process for both previews"
+
+
+def test_preview_session_returns_code_errors_for_the_agent(serve, tmp_path: Path) -> None:
+    result = serve().preview(_job("bad code"), _workdir(tmp_path, "a"))
+    assert result == {"ok": False, "phase": "render", "message": "ReferenceError: x"}
+
+
+def test_preview_session_restarts_after_a_crash(serve, tmp_path: Path) -> None:
+    session = serve()
+    with pytest.raises(RuntimeError, match="preview failed"):
+        session.preview(_job("crash"), _workdir(tmp_path, "a"))
+    assert session.preview(_job("again"), _workdir(tmp_path, "b"))["ok"]
+
+
+def test_preview_session_kills_a_slow_preview_and_starts_fresh(serve, tmp_path: Path) -> None:
+    session = serve(timeout=1)
+    warm = session.preview(_job("one"), _workdir(tmp_path, "a"))
+    assert session.preview(_job("slow"), _workdir(tmp_path, "b")) == motion.PREVIEW_TOO_LONG
+    fresh = session.preview(_job("two"), _workdir(tmp_path, "c"))
+    assert fresh["issues"] != warm["issues"], "a new process after the timeout"
+
+
+def test_preview_session_refuses_files_outside_the_preview_folder(serve, tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="preview failed"):
+        serve().preview(_job("escape"), _workdir(tmp_path, "a"))
