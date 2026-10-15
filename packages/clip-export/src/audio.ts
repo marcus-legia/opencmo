@@ -5,7 +5,7 @@
  */
 
 import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
-import type { AudioClip } from '@opencmo/clip-render';
+import { SEAM_FADE, type AudioClip } from '@opencmo/clip-render';
 
 export type MixInput = { file: string; seek: number; duration: number };
 export type MixSource = { file: string; channels: number };
@@ -83,6 +83,13 @@ export function planMix(
     });
     commands.push(lines.join('\n'));
     const delay = Math.round(((from - range.start) / FPS) * 1000);
+    // Sample-accurate fades at the joins of a cut (`SEAM_FADE`); an edge the export range cuts
+    // off is not a join in this file.
+    const length = (to - from) / FPS;
+    const fades = [
+      ...(clip.fadeIn && from === clip.start ? [`afade=t=in:st=0:d=${SEAM_FADE}`] : []),
+      ...(clip.fadeOut && to === clip.end ? [`afade=t=out:st=${Math.max(0, length - SEAM_FADE).toFixed(6)}:d=${SEAM_FADE}`] : []),
+    ];
     chains.push(
       [
         `[${n + 1}:a]aresample=48000`,
@@ -92,6 +99,7 @@ export function planMix(
         ...denoiseFilters((clip.node?.node as { denoise?: number } | undefined)?.denoise),
         ...tempo(clip.rate),
         'asetpts=PTS-STARTPTS',
+        ...fades,
         `adelay=${delay}:all=1`,
         `asendcmd=f=CMD${n}`,
         `volume@v${n}=volume=0:precision=float`,

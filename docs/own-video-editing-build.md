@@ -320,7 +320,7 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
   - Library row badge: `Transcribing…` / `Transcript ready` / nothing.
   - The Transcript panel shows the selected speech source and lets you cut it like the master (the panel already
     edits the master).
-- [ ] **B5. Audio fades at cuts.**
+- [x] **B5. Audio fades at cuts.**
   - Check `clip-render` (preview) and `clip-export` (server) at segment joins of a cut sequence.
   - If audio is butt-joined, add a 30 ms fade-out / fade-in at each join, with the same rule in both.
   - Measure: export a cut talk, extract the audio around 3 joins, look at the waveform (or `astats`) and confirm
@@ -366,6 +366,22 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
   - is a no-op when a layer with that `source` already exists.
 - Tests: `packages/editor-core/src/speech-sources.test.ts` (9). The existing 585 editor-core tests pass unchanged.
   `check:clip-doc`, `typecheck` and `check:contracts` are green.
+- B5: before this, nothing faded at a cut. Preview stepped the gain per frame; export used butt-joined `-ss` inputs
+  with stepped `volume`.
+  - One rule now lives in clip-render `audioClips()`: the audible segments of a `text-cut` sequence are marked
+    `fadeIn`/`fadeOut` at the joins only, never at the cut's outer edges. `SEAM_FADE` = 30 ms.
+  - Export adds a sample-accurate `afade` per input at those edges.
+  - Preview (`playback.ts`) ramps the WebAudio gain over the same 30 ms.
+  - Measured on a real export: a 440 Hz sine cut with phase jumps, 3 segments, the largest sample-to-sample jump
+    over ±20 ms around each join:
+    - butt-joined: 0.074 / 0.154;
+    - with fades: 0.0047 / 0.0049 (the sine's own slope).
+  - Looked at the waveform around the 1.0 s join: the hard phase break became a clean 30 ms fade out and in. This
+    is the test "a cut fades its joins" in `clip-export.test.ts`.
+  - Parity (`--target node`): identical before and after, because parity compares frames only. In this container
+    37 frames fail on the base commit too (environment); that is unchanged.
+  - Preview limit: the ramp starts on the first or last rendered frame of a segment. If requestAnimationFrame skips
+    that frame, there is no fade on that join in preview. Export is exact.
 
 ---
 

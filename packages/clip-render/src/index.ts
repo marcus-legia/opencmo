@@ -36,6 +36,7 @@ export { FONTS, type FontFamily } from './fonts.ts';
 export type { Transcript, TranscriptWord } from './captions.ts';
 export { captionPresetText } from './captions.ts';
 export type { AudioClip } from './audio.ts';
+export { SEAM_FADE } from './audio.ts';
 
 export type RenderOptions = {
   /** Scene cần vẽ: chỉ số hoặc id. Mặc định scene `active`, không có thì scene đầu. */
