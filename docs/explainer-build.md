@@ -59,7 +59,7 @@ explainer with narration, placed on the clip as one video layer. The style follo
 - Ask Remotion in writing before launch. Budget "Automators" pricing: $0.01 per render, $100/month minimum.
 - `remotion-dev/skills` has no licence file: read it, never copy its text.
 - HyperFrames (Apache-2.0) guidance adapted into the guide needs a `THIRD_PARTY_NOTICES.md` row (Track C).
-- **Status (A9): question drafted, not sent yet.** A cloud session cannot email; the owner sends it from
+- **Status: question drafted, not sent yet (pre-launch task, outside this PR).** A cloud session cannot email; the owner sends it from
   their own address and records the answer here. Draft:
 
   > Subject: Licence for rendering Remotion videos inside a SaaS product
@@ -272,7 +272,6 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   - Golden stills test: PNGs stored, mean-diff threshold as in `editor-parity`.
   - **Look at the frames.**
 - [x] **A8. `README.md`** with the kit API, one complete example, and the do/don't list for the guide (Track C copies it).
-- [ ] **A9. Licence.** Email Remotion about SaaS rendering. Record the question and the answer in "Licence" above.
 
 **Checks:** `npm run check:clip-motion`, `npm run typecheck`, and a showcase render with frames looked at.
 
@@ -324,8 +323,8 @@ Start from `packages/clip-three` (render.ts, cli.ts, code/guard.ts, fonts) and c
   overlapping the spectrogram sweep, a wrapped x-axis label and a hard-to-read rotated y label.
 - A8: `packages/clip-motion/README.md`: CLI, env, scene rules, the kit API, a complete example and the
   do/don't list for the guide.
-- A9: **not done.** The question is drafted under "Licence"; a cloud session cannot send email, so the owner
-  sends it and records the answer there, then ticks A9.
+- A9 moved out of Track A by the owner: the licence question is a pre-launch task, not a blocker for this PR
+  (see "Out of scope for v1" and the draft under "Licence").
 - For B: the Modal image needs `ffmpeg`, the repo's `packages/clip-motion` + `packages/clip-media/fonts`, and a
   Chrome Headless Shell (`OPENCMO_MOTION_CHROME`); `ensureBrowser()` from `@remotion/renderer` downloads one at build
   time if you prefer. Budget ~3.5 min of 4 vCPU per 60 s video at 1080p on CPU.
@@ -517,6 +516,9 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 ---
 
 ## Out of scope for v1
+
+- **Remotion licence answer (was A9).** Before launch, the owner sends the drafted question under "Licence"
+  and records the answer there. It does not block this PR.
 
 Music bed, separate editable caption layers, re-rendering a single beat, a second "director" sub-agent, a vision
 critic other than the Assistant itself, and landing-page copy (only after the deployed test passes).
