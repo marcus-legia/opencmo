@@ -94,7 +94,7 @@ export type AssistantEvent =
   | { event: "turn"; data: { number: number } }
   | { event: "text" | "thinking"; data: { text: string } }
   | { event: "tool_start"; data: { id: string; name: string } }
-  | { event: "tool_result"; data: { id: string; name: string; ok: boolean; summary: string; view?: { plan?: PlanItem[]; touched?: string[] } } }
+  | { event: "tool_result"; data: { id: string; name: string; ok: boolean; summary: string; view?: { plan?: PlanItem[]; touched?: string[] }; images?: string[] } }
   | { event: "project_changed"; data: { version: number } }
   | { event: "tool_request" | "approval_request" | "input_request"; data: ToolRequest }
   | { event: "done"; data: { status: TurnStatus; reason?: string; credits: number | null; extend?: number; error: string | null } };
@@ -139,6 +139,7 @@ export class AssistantClient {
       model: string | null;
       models: ModelChoice[];
       broll?: boolean;
+      explain?: boolean;
       sessions: SessionSummary[];
       session: SessionView | null;
     }>(`sessions?${query}`);

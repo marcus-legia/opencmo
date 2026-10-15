@@ -27,6 +27,8 @@
  *   "look like night"  → edit_video 2–6 s (the speaker's own video redrawn, one card)
  *   "/video …" (slash directive), or "make a … video" on a blank edit → create_video at the length and frame asked
  *                        ("20-second", "square"; else 15 s and the edit's frame) · "/image …" → generate_media image at 0 s
+ *   "/explain …"       → shows the showcase script and asks; then "go" → preview_explainer (showcase code)
+ *                        → add_explainer (price card with the beats)
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -52,6 +54,10 @@
  * Sau tool_result: ảnh thì đếm và nói số ảnh đã xem; còn lại một câu kết.
  */
 
+import { aiModel } from "@opencmo/editor-core/generate";
+
+import showcase from "../../../../../packages/clip-motion/fixtures/showcase.job.json";
+
 import { anthropicFormat } from "./anthropic";
 import type { Delta, Provider, Step, StepRequest, StoredMessage, ToolCall } from "./types";
 
@@ -66,6 +72,10 @@ const text = (value: string) => ({ type: "text", text: value, citations: null })
 function sceneCode(quote: string, body: string): string {
   return `// quote: ${quote.replace(/\n/g, " ")}\n${body}`;
 }
+/** The explainer the fake makes: Track A's showcase, written only with the kit as a model would. */
+const EXPLAINER = { title: showcase.title, beats: showcase.beats, code: showcase.code, format: showcase.format as "16:9" | "9:16" | "1:1" };
+const EXPLAINER_SCRIPT = "Explainer script";
+const explainerVoice = () => aiModel("motion-explainer")?.limits.voices?.[0] ?? "Aria";
 const quoteOf = (code: string): string => /^\/\/ quote: (.*)$/m.exec(code)?.[1] ?? "";
 const use = (name: string, input: Record<string, unknown>) => ({ type: "tool_use", id: id(), name, input });
 
@@ -104,6 +114,11 @@ function script(history: StoredMessage[]): unknown[] {
       const parsed = JSON.parse(raw0) as { user_answer?: { choices?: string[]; text?: string }; skipped?: boolean };
       if (parsed.skipped) return [text("No problem, I'll keep it as it is.")];
       return [text(`You chose: ${[...(parsed.user_answer?.choices ?? []), parsed.user_answer?.text].filter(Boolean).join(", ")}.`)];
+    }
+    if (previous.includes("preview_explainer")) {
+      const parsed = JSON.parse(raw0) as { ok?: boolean; error?: string; issues?: string[] };
+      if (!parsed.ok) return [text(`The explainer preview failed: ${parsed.error ?? "unknown error"}`)];
+      return [text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}. Here is the price.`), use("add_explainer", { ...EXPLAINER, voice: explainerVoice() })];
     }
     if (previous.includes("preview_3d")) {
       const call = anthropicFormat.callsIn(assistant?.content ?? []).find((item) => item.name === "preview_3d");
@@ -191,7 +206,7 @@ function script(history: StoredMessage[]): unknown[] {
       if (parsed.ok) return [text("Your files are rendering. Each one gets a Download button here when it's ready.")];
       return [text(`That didn't work: ${parsed.error ?? parsed.INVALID_INPUT ?? "unknown error"}`)];
     }
-    if (previous.includes("generate_media") || previous.includes("add_3d_scene") || previous.includes("add_voiceover")) {
+    if (previous.includes("generate_media") || previous.includes("add_3d_scene") || previous.includes("add_voiceover") || previous.includes("add_explainer")) {
       const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
       const parsed = JSON.parse(raw) as { declined?: boolean; ok?: boolean; error?: string; INVALID_INPUT?: string };
       if (parsed.declined) return [text("Okay, I didn't create anything.")];
@@ -319,6 +334,17 @@ function script(history: StoredMessage[]): unknown[] {
       text("I'll have the director plan the video."),
       use("create_video", { prompt: words || "a short product video", seconds: asked ? Number(asked) : 15, ...(aspect ? { aspect } : {}) }),
     ];
+  }
+  // /explain: the script first, as the guide says; the code only after the user says go.
+  if (/<command name="\/explain">/.test(ask)) {
+    const beats = EXPLAINER.beats.map((beat, index) => `${index + 1}. ${beat.say}${"label" in beat && beat.label ? ` [${beat.label}]` : ""}`).join("\n");
+    return [text(`${EXPLAINER_SCRIPT} — “${EXPLAINER.title}”:\n${beats}\n\nShall I make it?`)];
+  }
+  const proposed = history.some(
+    (message) => message.role === "assistant" && (message.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(EXPLAINER_SCRIPT)),
+  );
+  if (proposed && /^\s*(go|yes|ok|make it)\b/.test(ask)) {
+    return [text("Writing the animation and previewing it."), use("preview_explainer", EXPLAINER)];
   }
   if (/<command name="\/image">/.test(ask)) {
     return [

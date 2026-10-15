@@ -371,17 +371,17 @@ Mirror 3D Studio:
   - Sets the frame on a blank clip.
   - `agent: false`.
   - Tests in the style of `studio3d` tests.
-- [ ] **C2. Tool `preview_explainer`** (server tool, not a browser tool).
+- [x] **C2. Tool `preview_explainer`** (server tool, not a browser tool).
   - Input: `{ title, beats, code, format }`.
   - Builds a `MotionJob` with `estimateDuration` and calls `previewMotion` (Track B).
   - Returns the stills as images plus the issues, so the model sees them.
   - Counts as a slow plan.
-- [ ] **C3. Tool `add_explainer`** (approval).
+- [x] **C3. Tool `add_explainer`** (approval).
   - Input: `{ title, beats, code, format, voice }`.
   - Saves the code with `save_scene_code`, builds the spec, prices it, and returns a card listing the beats (Beat / Voice / On screen), the voice name and the credits.
   - Moderation runs on every string literal in the code (like `codeGlyphs`) plus the narration, through `moderateText`.
   - Refuse when the code was not previewed in this turn, as `add_3d_scene` does.
-- [ ] **C4. Guide `explainer`** (`read_guide "explainer"`).
+- [x] **C4. Guide `explainer`** (`read_guide "explainer"`).
   - **Script rules.** Adapted from HyperFrames story design; add the `THIRD_PARTY_NOTICES.md` row.
     - one of 4 structures; a hook in the first beat;
     - 6–20 words per beat; labels ≤ 5 words;
@@ -394,7 +394,7 @@ Mirror 3D Studio:
     4. fix up to 3 rounds;
     5. `add_explainer`.
   - Slash `/explain` in `slash.ts`. Mention it in `prompt.ts`.
-- [ ] **C5. Register the routes** everywhere they are listed:
+- [x] **C5. Register the routes** everywhere they are listed:
   - `SLOW_PLANS` in `limits.ts`
   - `providers/anthropic.ts`
   - `providers.check.ts`
@@ -402,7 +402,7 @@ Mirror 3D Studio:
   - `providers/fake.ts` (a scripted `/explain` that uses the showcase code)
   - `eval/tasks.ts` (2 tasks)
   - `docs/spec-editor-assistant.md` §4–§5
-- [ ] **C6. Editor UX.**
+- [x] **C6. Editor UX.**
   - The layer shows render progress and failure like other generated media.
   - An "Explain a concept" entry on the New edit screen opens the Assistant with `/explain `.
   - Ctrl+Z removes the layer. Export includes it.
@@ -417,7 +417,10 @@ Mirror 3D Studio:
 
 **Notes (C):**
 - C1: `packages/editor-core/src/ops/explainer.ts` (op) and `src/explainer.ts` (scene schema, `estimateDuration`, `explainerSeconds`; no Remotion dependency in editor-core, same formula as `clip-motion/src/job.ts`). `specSchema` takes the explainer scene (≤ 4000 bytes) and a premade `voice` for `provider: "opencmo-motion"`; `priceOf` adds `price.voiceKchars` per started 1,000 narration characters. `src/explainer.test.ts`: blank clip (frame + work area), playhead start under text, other format letterboxed, spec mismatch refused, timing, price. `npm run check:editor-core` and vitest green (592 tests).
-- C2–C7 are written and checked (with B's pieces stubbed locally) on branch `explainer-track-c`. They import `apps/web/lib/motion/preview.ts` (B1) and need `motion-explainer` in `ai-models.json` (B2), so C merges that branch here right after those land; see the Requests below.
+- C2–C6 (`apps/web/lib/agent/explainer-tool.ts`, wired in `scope.ts`, `eval/run.ts`): `preview_explainer` is a server tool in `SLOW_PLANS`; its stills reach the model as images (`ToolOutcome.images`) and the panel over SSE (not stored). `add_explainer` refuses code not previewed in the same turn, saves it with `save_scene_code`, prices the spec and shows one card line per beat; moderation reads the script plus every string literal and JSX text of the code. Guide `explainer`, `/explain`, prompt routing, `ALWAYS_LOADED`, `PRICED`, both checks, fake provider (`/explain` → script → "go" → preview → card, with `fixtures/showcase.job.json`), two eval tasks (`explain-script`, `explain-make`), spec §4–§5, `THIRD_PARTY_NOTICES.md` + `LICENSE-hyperframes.md`. Editor: "Rendering explainer…" on the layer, no Regenerate (same picture, paid again), "Explain a concept" starter on a blank New edit (opens `/explain `), the editor sends `voice` in the resolved spec.
+- Verified with Track B's pieces stubbed locally (not committed: a `previewMotion` that returns one still, and a `motion-explainer` catalog entry as in Requests): `tsc` for web, `npm run check:contracts` (providers, agent-design, video-usecases… all green), `next build` green, the fake provider's three turns, and prepare → card → op on a blank clip (frame 1920×1080, work area 0–15, one layer `Explainer: …`).
+- C2–C7 were held on `explainer-track-c` until B1 and B2 landed (they import them), then cherry-picked here.
+- C7: `apps/web/e2e/editor-explainer.spec.ts` written (New edit → starter → /explain → go → stills + card → approve → layer renders → pixels at 2 s → Ctrl+Z), `e2e/run.ts` sets `OPENCMO_MOTION=local` and `OPENCMO_MOTION_FAKE_VOICE=1`. Not run yet: it needs B3 (local motion provider) and A's kit.
 
 ---
 

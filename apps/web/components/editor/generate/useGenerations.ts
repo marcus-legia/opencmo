@@ -208,6 +208,8 @@ export function resolve(declaration: Declaration): Resolved {
           duration: declaration.duration ?? 5,
           // 3D Studio: dữ liệu cảnh đi nguyên vào spec (nằm trong hash).
           ...(declaration.scene && typeof declaration.scene === "object" ? { scene: declaration.scene } : {}),
+          // Explainers voice their own script: the voice is part of the spec (and its hash).
+          ...(typeof declaration.voice === "string" ? { voice: declaration.voice } : {}),
           ...pick(declaration, "resolution", "audio", "startFrame", "endFrame", "refs", "sourceVideo", "sourceStart", "after"),
           ...seed,
         },

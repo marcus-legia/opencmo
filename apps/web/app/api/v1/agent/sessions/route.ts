@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EXPLAINER_MODEL } from "@opencmo/editor-core";
 
 import { ApiError } from "@/lib/api/errors";
 import { clipContext } from "@/lib/api/clips";
@@ -60,11 +61,12 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   const jobId = params.get("job_id");
   const sessionId = params.get("session_id");
   const cmo = params.get("scope") === "cmo";
+  let blank = false;
   if (cmo) {
     // Phiên CMO chat không gắn clip/project: RLS theo user_id là đủ.
   } else if (clipId !== null) {
     if (!UUID.test(clipId)) throw new ApiError(422, "clip_id: Invalid");
-    await clipContext(supabase, clipId);
+    blank = (await clipContext(supabase, clipId)).clip.kind === "blank";
   } else if (jobId !== null) {
     if (!UUID.test(jobId)) throw new ApiError(422, "job_id: Invalid");
     await ownJob(supabase, jobId);
@@ -88,6 +90,8 @@ export const GET = withApi({}, async ({ supabase, request }) => {
     models: availableModels(),
     // Gợi ý "Generate B-roll" chỉ hiện khi máy chủ bật model ảnh/video (không gợi ý thứ luôn hỏng).
     broll: generationModels().some((item) => (item.kind === "image" || item.kind === "video") && !item.limits.scene),
+    // "Explain a concept" starts a New edit: only there, and only when explainers can render here.
+    explain: blank && generationModels().some((item) => item.id === EXPLAINER_MODEL),
     sessions: cmo ? await listSessions(supabase, { cmo: true }) : clipId !== null ? await listSessions(supabase, { clipId }) : [],
     session: session ? await sessionView(supabase, session) : null,
   };
