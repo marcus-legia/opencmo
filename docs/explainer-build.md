@@ -499,7 +499,16 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   - B: done, but with an integer price unit (see Notes B2 for why): `{ "unit": "explainer", "credits": 1, "voiceKchars": 5 }`. See the request to C below.
   - B: `maxPromptChars` is 80 so `"Explainer: <title>"` fits.
   - B: `OPENCMO_MOTION=local` wins over `OPENCMO_AI_FAKE`. The voice also needs `OPENCMO_MOTION_FAKE_VOICE=1` (or `FAL_KEY`): add it to `apps/web/e2e/run.ts` for the worker.
-- [ ] (from C → owner A) The guide `explainer` quotes the kit API from Contracts. Tell C when the README (A8) changes a name; the fake provider plays `fixtures/showcase.job.json` as is, so it must stay a valid, kit-only job.
+- [x] (from C → owner A) The guide `explainer` quotes the kit API from Contracts. Tell C when the README (A8) changes a name; the fake provider plays `fixtures/showcase.job.json` as is, so it must stay a valid, kit-only job.
+  - A: no contract name changed. The showcase stays a valid kit-only job (the golden test checks it). What the
+    guide is missing (the agent will otherwise hit kit errors): see the request to C below.
+- [ ] (from A → owner C) Add to guide `explainer` §2, from `packages/clip-motion/README.md` "Kit API":
+  `Spectrogram` needs `data={kit.spectrogram(seed, { cols, rows, peaks })}` and its `data.peaks[i].x/y` are
+  placed with `kit.place(area, [x, y])`; `Scatter` needs `points` (`kit.trend(seed, { n, slope, spread })`) and
+  `FitLine` takes `from`/`to` in data units (0..1, y up) of the same `area` as `Axes`; `Link` takes pixels;
+  `Label`/`Mono` take `x`, `y` (pixels) or `area`; every component takes `at`, `exitAt`; Camera is
+  `keys={[{ at, focus: [x, y], zoom }]}`; **keep text outside `Camera`**; colours also include `dim`; `kit.width`,
+  `kit.height`, `kit.portrait`. Paste the "Do and don't" list too (it is written for the guide).
 - [x] (from B → owner C) `priceOf` (editor-core): add `case 'explainer': return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);` and `'explainer'` to the `unit` union; the `voiceKchars` addition stays as it is. Until then `priceOf` returns `NaN` for this model. Also count narration in code points (`[...text].length`), as SQL `length()` and Python `len()` do.
 - [x] (from B → owner C) `providerEnabled` in `apps/web/lib/generate/models.ts`: `opencmo-motion` is on when `OPENCMO_MOTION` is `local` or `modal` and (`FAL_KEY` or `OPENCMO_MOTION_FAKE_VOICE=1` outside production), or `aiFakeEnabled()`, the same rule as `adapter_for`. Until then the web hides the model.
 - [x] (from B → owner C) In `apps/web/package.json`: add `"@opencmo/clip-motion": "*"` (`lib/motion/preview.ts` imports its types) and `NODE_OPTIONS=--conditions=react-server tsx lib/motion/preview.check.ts` to `check:contracts`.
