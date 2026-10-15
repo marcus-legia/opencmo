@@ -597,9 +597,14 @@ the e2e spec locally.
     ready) → B's starter `assistant-roughcut` → "Rough cut plan … Shall I cut it?" and nothing cut yet → "go"
     → the false start, the first take, "um" and the pause are cut from that video, every kept sentence whole,
     10 s → 5.63 s → `assistant-undo` restores it.
-  - Why the transcript is seeded: the e2e worker's fake transcriber returns one fixed line, so A3's sidecar is
-    still needed for the automatic path (Request to A stays open). When A3 lands, swap the two seeding calls
-    for waiting on `transcript-ready`; the rest of the spec stays.
+  - First version (`4bc7d36`) seeded the transcript (`put_editor_transcript` + `attach_transcript`) because A3
+    had not landed: **1 passed**. A3 then landed (sidecar `fixtures/<name>.transcript.json`), so the spec now
+    runs the real automatic path: upload → free transcript (credits unchanged) → B4 attaches it → /roughcut.
+  - **Current result on the automatic path: fails, on two B4 bugs** (Requests to B above). Track A's part works:
+    probe and free `transcribe_asset` done within a second, `transcript_status` `ready`, no credits. With a
+    page reload after `ready` (to get past the first bug) every step through "Rough cut done" passed, and the
+    Undo step failed on the second bug. The spec asserts the right behaviour with no workaround, so it goes
+    green when B fixes both; a dedicated check names the extra transcript layers.
   - Undo is the Assistant's one-click Undo of the whole request (two writes: remove_words, remove_silence),
     not Ctrl+Z, which steps through them one by one.
   - Ran locally: `E2E_CHANNEL=msedge npm run test:e2e -- editor-roughcut`, 1 passed (13.4 s). The bundled
@@ -628,6 +633,18 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   2. `POST /api/v1/editor/captions/transcript` with body `{ clip_id, media_id, source_in, source_out }` → the
      `use_media_transcript` jsonb as is: `{status:"ready",src,hash}` | `{status:"pending"}` | `{status:"none"}`.
   Until these exist the editor treats 404 as "no automatic transcript" and does nothing.
+- [ ] (from C → owner B) `useAutoTranscripts` never sees a fresh upload become ready. It asks for the status once
+  when the file is stored, which is before the probe has queued the free run, so the answer is `none`; it keeps
+  polling only while `queued`/`running`, so it never asks again. Seen in C6: the route said `none` at upload,
+  the DB said `ready` one second later, and no badge or attach came in 3 minutes (a page reload fixes it). Fix
+  idea: also keep polling a file that is `none` while it is young (or until the probe is done, `has_audio`
+  known), with a cap.
+- [ ] (from C → owner B) `useAutoTranscripts` attaches a transcript to each segment of a cut. After a text cut,
+  the linked video becomes a `text-cut` sequence; its segments are new video nodes with no linked captions, so
+  `unlinked()` sees them and runs `attach_transcript` for each (C6: four extra hidden "Transcript · …" layers
+  after one rough cut). That is an edit after the Assistant's turn, so the Assistant's one-click Undo refuses
+  ("You edited this clip after the Assistant's change"). Fix idea: skip videos inside a sequence that is a
+  speech source (`speechSources(document)` ids, or any ancestor with a `text-cut` mark).
 - [ ] (from B → owner C) `add_captions` (`lib/agent/captions-tool.ts`): when the element is a video (a `video`, or a
   `rect` with a video paint), set `source: <element id>` on the inserted captions node, as the inspector's
   "Generate captions" now does. Linked captions make that video a speech source, so the transcript tools can cut

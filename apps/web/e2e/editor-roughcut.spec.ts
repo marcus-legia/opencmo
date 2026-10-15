@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { FIXTURE_DIR } from "./global-setup";
 import { showAssistant, signIn, state } from "./helpers";
 
 /**
@@ -10,10 +13,10 @@ import { showAssistant, signIn, state } from "./helpers";
  * sentence said twice. "Rough cut my video" → the plan is shown → "go" → the earlier takes, the
  * filler and the pause are cut from THAT video, the last take stays → one Undo restores it.
  *
- * Runs with the fake Assistant (`providers/fake.ts` scripts /roughcut). The transcript is saved with
- * the user's own `put_editor_transcript` and linked with `attach_transcript`, the op the editor runs
- * when an automatic transcript is ready (B4): the fake worker transcriber knows one fixed line only.
- * Not in CI (there is no e2e job); run it with `npm run test:e2e -- editor-roughcut`.
+ * The whole path is the real one: the upload is transcribed automatically and for free (Track A; the
+ * e2e worker's fake transcriber reads `fixtures/<file name>.transcript.json`), the editor links the
+ * transcript to the placed video (Track B4), and the fake Assistant (`providers/fake.ts`) scripts
+ * /roughcut. Not in CI (there is no e2e job); run it with `npm run test:e2e -- editor-roughcut`.
  */
 
 type Word = { text: string; start: number; end: number };
@@ -59,6 +62,11 @@ function nodes(root: unknown): Node[] {
   return out;
 }
 
+const NAME = "roughcut-talk.mp4";
+const balance = async (page: Page) => ((await (await page.request.get("/api/v1/account")).json()) as { credits: number }).credits;
+
+const after0 = (read: { document: unknown }) => read.document;
+
 async function readDocument(page: Page, clipId: string) {
   const response = await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`);
   expect(response.ok(), await response.text()).toBeTruthy();
@@ -87,41 +95,30 @@ test("Rough cut: /roughcut proposes, cuts retakes, filler and pause from the upl
   await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText("Loading media…")).toHaveCount(0, { timeout: 60_000 });
 
-  // The recording: 10 s with sound. Its words come from TALK, not from the audio.
-  const talk = testInfo.outputPath("talk.mp4");
+  // The recording: 10 s with sound. Its words come from TALK (the fake transcriber's sidecar), not the audio.
+  writeFileSync(join(FIXTURE_DIR, `${NAME}.transcript.json`), JSON.stringify(TALK));
+  const talk = testInfo.outputPath(NAME);
   execFileSync("ffmpeg", [
     "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=s=640x360:r=15:d=10", "-f", "lavfi", "-i", "sine=f=220:d=10",
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", talk,
   ]);
+  const credits = await balance(page);
   await page.getByRole("tab", { name: /media/i }).click();
   await page.getByTestId("import-input").setInputFiles(talk);
-  await expect(page.getByTestId("asset-talk.mp4")).toBeVisible();
-  await page.getByTestId("asset-talk.mp4").locator(".ed2-lib-icon").dblclick();
-  const placed = async () => nodes((await readDocument(page, clipId)).document).find((node) => node.paints?.some((paint) => paint.type === "video" && paint.src?.endsWith("talk.mp4")));
+  const row = page.getByTestId(`asset-${NAME}`);
+  await expect(row).toBeVisible();
+  await row.locator(".ed2-lib-icon").dblclick();
+  const placed = async () => nodes((await readDocument(page, clipId)).document).find((node) => node.paints?.some((paint) => paint.type === "video" && paint.src?.endsWith(NAME)));
   await expect.poll(async () => Boolean(await placed()), { timeout: 60_000 }).toBe(true);
   const videoId = (await placed())!.id!;
 
-  // Its transcript, saved and linked the way the editor does when an automatic one is ready.
-  const { url, anon } = state();
-  const token = await page.request.post(`${url}/auth/v1/token?grant_type=password`, {
-    headers: { apikey: anon, "content-type": "application/json" },
-    data: { email: user.email, password: user.password },
-  });
-  const { access_token } = (await token.json()) as { access_token: string };
-  const saved = await page.request.post(`${url}/rest/v1/rpc/put_editor_transcript`, {
-    headers: { apikey: anon, authorization: `Bearer ${access_token}`, "content-type": "application/json" },
-    data: { p_clip_id: clipId, p_body: JSON.stringify(TALK) },
-  });
-  expect(saved.ok(), await saved.text()).toBeTruthy();
-  const hash = (await saved.json()) as string;
-  const before = await readDocument(page, clipId);
-  const attached = await page.request.post("/api/v1/editor/ops", {
-    data: { clip_id: clipId, expected_version: before.version, ops: [{ op: "attach_transcript", element_id: videoId, src: `assets/transcripts/${hash}.json` }] },
-  });
-  expect(attached.status(), await attached.text()).toBe(200);
-  await page.reload();
-  await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Loading media…")).toHaveCount(0, { timeout: 60_000 });
+  // Transcribed with no click and no credits; the editor links it to the placed video on its own.
+  await expect(row.getByTestId("transcript-ready")).toBeVisible({ timeout: 180_000 });
+  await expect
+    .poll(async () => nodes((await readDocument(page, clipId)).document).some((node) => node.kind === "captions" && node.source === videoId), { timeout: 60_000 })
+    .toBe(true);
+  expect(await balance(page), "the automatic transcript is free").toBe(credits);
+  await page.screenshot({ path: testInfo.outputPath("00-transcript-ready.png") });
   const fullLength = (await readDocument(page, clipId)).document.stage.children[0]!.workarea?.[1] ?? 0;
   expect(fullLength).toBeGreaterThanOrEqual(9.9);
 
@@ -139,6 +136,10 @@ test("Rough cut: /roughcut proposes, cuts retakes, filler and pause from the upl
   await expect(page.getByTestId("assistant-reply").last()).toContainText("Rough cut done", { timeout: 120_000 });
   await expect(page.getByTestId("assistant-undo")).toBeVisible({ timeout: 60_000 });
   await page.screenshot({ path: testInfo.outputPath("02-cut.png") });
+
+  // The cut's segments are the same video: no new transcript layers appear for them.
+  const layers = nodes(after0(await readDocument(page, clipId))).filter((node) => node.kind === "captions");
+  expect(layers.length, "one transcript layer for the upload, none for its cut segments").toBe(1);
 
   // 4. Shorter by what went; the earlier takes, the filler and the pause are gone, the last take stays.
   const after = await readDocument(page, clipId);
