@@ -95,6 +95,14 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
   CC BY 4.0). `kit.lotties` lists every name (the Assistant searches them with `find_lotties`). Pops in like the
   other marks; `loop` defaults to true, `speed` 0–4. Costs about 5 ms per frame for three on screen.
 
+### Text board (v2)
+- `<Headline items={[{ text, at, color? }]} y? size? exitAt?>` – the one headline row (≤ 6 words each). Each item
+  has fully left before the next rises in, so headlines never overlap. Use it instead of several `Label`s.
+- `<Board kind="steps|facts|compare" title? lines={['…']} area? lineAt? at exitAt>` – up to 3 lines of ≤ 8 words,
+  revealed one by one; `compare` lines are `"left | right"`.
+- Text `exitAt` (Title, Label, Mono, Counter, Board) is the frame the text is **gone by**; a `swapTo` now replaces
+  the words in turn (old out, then new in).
+
 ### Shapes and motion (v2)
 - `<Shape kind x? y? size? color? color2? fill? label? secondary? breathe? rotate? seed?>` – `kind` is one of
   `kit.shapes`: `circle`, `cell` (membrane + nucleus), `blob` (organic, breathes), `ring` (draws on), `pill`,

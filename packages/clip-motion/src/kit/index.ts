@@ -10,6 +10,7 @@ import { kitError } from './context.tsx';
 import { spectrogram, trend } from './data.ts';
 import { LOTTIE_NAMES } from './lotties.ts';
 import { Lottie } from './lottie.tsx';
+import { Board, BOARD_KINDS, Headline } from './board.tsx';
 import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
@@ -48,6 +49,9 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		Label,
 		Mono,
 		Counter,
+		Headline,
+		Board,
+		boards: BOARD_KINDS,
 		// Data and marks
 		DotField,
 		Spectrogram,

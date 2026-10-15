@@ -206,7 +206,7 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
   list into a generated `src/kit/lotties.ts` with a test that it matches the folder. Frame-exact: driven by
   `useCurrentFrame`, no wall clock. **Measure** render time with 3 Lotties on screen vs without.
 - [x] **A4. Shapes, Path, Arrow, Group, Burst** as in the contract, all with layout tags.
-- [ ] **A5. Text board.** `Headline` (exits always finish before the next entrance) and `Board`. Fix the v1
+- [x] **A5. Text board.** `Headline` (exits always finish before the next entrance) and `Board`. Fix the v1
   overlap: a `Label` swap must never show two texts at full opacity in the same frame.
 - [ ] **A6. Theme `paper`.** Off-white field, flat colours, soft shadows, fonts already in
   `packages/clip-media/fonts` (e.g. Fraunces titles, DM Sans or Figtree text); same meaning-colours. Golden stills for both themes.
@@ -322,6 +322,12 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   the personality. A job without `personality` keeps v1 timings exactly (golden stills unchanged). Looked at stills
   of a `playful` test scene: every shape drawn, the cell's halo, the blob changing outline, the virus group moving
   left at its key, knocked right at the impact and settling, the burst at the impact.
+- A5: `src/kit/board.tsx`: `Headline` (one row; an item leaves fully before the next enters) and `Board`
+  (steps/facts/compare, ≤ 3 lines of ≤ 8 words). Root cause of the 27 s overlap: a text's exit STARTED at `exitAt`
+  while the next text entered at the same frame (the showcase itself does this). Text exits now END at `exitAt`, and
+  `swapTo` is sequential. Golden `showcase-100.png` regenerated on purpose (the title is now gone by the next label;
+  old and new compared side by side); the other three goldens unchanged. Looked at stills at frames 136/140/200:
+  old headline fading, new one rising word by word, no overlap; the steps board reads well.
 
 ### Track B
 

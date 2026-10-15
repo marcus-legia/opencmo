@@ -85,7 +85,7 @@ export type Life = {
  * Shared enter/exit timing for every primitive. Before `at` and after the exit, nothing renders. `base` is the
  * component's v1 entrance length; with a personality it is scaled to the personality's tempo.
  */
-export function useLife({ at = 0, dur, exitAt, exitDur }: LifeProps, curve: Ease = ease.out, base = 18): Life {
+export function useLife({ at = 0, dur, exitAt, exitDur }: LifeProps, curve: Ease = ease.out, base = 18, options: { exitEndsAt?: boolean } = {}): Life {
 	const frame = useCurrentFrame();
 	const motion = useMotion();
 	for (const [name, value] of [['at', at], ['dur', dur], ['exitAt', exitAt], ['exitDur', exitDur]] as const) {
@@ -96,7 +96,12 @@ export function useLife({ at = 0, dur, exitAt, exitDur }: LifeProps, curve: Ease
 	const shape = motion.explicit ? motion.style.curve : curve;
 	const p = enter(frame, { at, dur: length, ease: shape });
 	const linear = length <= 0 ? (frame >= at ? 1 : 0) : Math.min(1, Math.max(0, (frame - at) / length));
-	const out = exitAt === undefined ? 0 : enter(frame, { at: exitAt, dur: exitLength, ease: ease.inOut });
+	// Text is gone BY `exitAt`, so the next text can enter at that frame without the two overlapping.
+	let out = 0;
+	if (exitAt !== undefined) {
+		const start = options.exitEndsAt ? Math.max(at + 1, exitAt - exitLength) : exitAt;
+		out = enter(frame, { at: start, dur: options.exitEndsAt ? Math.max(1, exitAt - start) : exitLength, ease: ease.inOut });
+	}
 	const visible = frame >= at && out < 1;
 	return { frame, visible, p, pop: motion.explicit ? pop(linear, motion.style) : p, out, opacity: p * (1 - out) };
 }

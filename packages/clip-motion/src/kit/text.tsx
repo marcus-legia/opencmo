@@ -30,7 +30,7 @@ export type TitleProps = LifeProps & { text: string; kicker?: string; area?: Are
 export function Title(props: TitleProps) {
 	const text = requireText('Title', props.text);
 	const { width, height } = useVideoConfig();
-	const life = useLife(props, undefined, 24);
+	const life = useLife(props, undefined, 24, { exitEndsAt: true });
 	const color = useColor(props.color, 'text');
 	const kickerColor = useColor(undefined, 'signal');
 	const position = usePosition({ ...props, anchor: 'center' });
@@ -85,7 +85,7 @@ export function Mono(props: MonoProps) {
 function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 	const text = requireText(props.kind, props.text);
 	const mono = props.kind === 'Mono';
-	const life = useLife(props, undefined, 15);
+	const life = useLife(props, undefined, 15, { exitEndsAt: true });
 	const color = useColor(props.color, mono ? 'signal' : 'text');
 	const wrong = useColor(undefined, 'wrong');
 	const noise = useColor(undefined, 'noise');
@@ -93,7 +93,10 @@ function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 	if (!life.visible) return null;
 	const size = props.size ?? (mono ? 44 : 52);
 	const at = props.at ?? 0;
-	const swap = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt, dur: 14, ease: ease.out }) : 0;
+	// Sequential swap: the old words leave in 8 frames, then the new ones arrive in 10; never both at once.
+	const swapOut = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt, dur: 8, ease: ease.inOut }) : 0;
+	const swapIn = props.swapTo !== undefined && props.swapAt !== undefined ? enter(life.frame, { at: props.swapAt + 8, dur: 10, ease: ease.out }) : 0;
+	const swap = swapIn >= 1 ? 1 : swapOut > 0 ? 0.5 : 0;
 	const strike = props.strikeAt !== undefined ? enter(life.frame, { at: props.strikeAt, dur: 12, ease: ease.out }) : 0;
 	const ink = strike > 0 ? mix(color, noise, strike * 0.7) : color;
 	const typed = mono && props.type !== false ? Math.ceil(text.length * enter(life.frame, { at, dur: Math.max(10, text.length * 1.5), ease: ease.linear })) : text.length;
@@ -110,15 +113,12 @@ function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 	const line = (value: string, offset: number, opacity: number) => (
 		<span style={{ display: 'inline-block', transform: `translateY(${offset}px)`, opacity }}>{value}</span>
 	);
-	const shown = props.swapTo !== undefined && swap >= 1 ? props.swapTo : text;
+	const shown = props.swapTo !== undefined && swapOut >= 1 ? props.swapTo : text;
 	return (
 		<div style={{ ...position, opacity: life.opacity, translate: `0 ${(1 - life.p) * 12}px` }}>
 			<TextTag name={shown} size={size} style={{ ...style, position: 'relative' }}>
 				{swap > 0 && swap < 1 && props.swapTo !== undefined ? (
-					<span style={{ display: 'inline-grid' }}>
-						<span style={{ gridArea: '1 / 1' }}>{line(text, -swap * size * 0.6, 1 - swap)}</span>
-						<span style={{ gridArea: '1 / 1' }}>{line(props.swapTo, (1 - swap) * size * 0.6, swap)}</span>
-					</span>
+					swapOut < 1 ? line(text, -swapOut * size * 0.6, 1 - swapOut) : line(props.swapTo, (1 - swapIn) * size * 0.6, swapIn)
 				) : mono ? (
 					<>
 						<span>{shown.slice(0, typed)}</span>
@@ -140,7 +140,7 @@ export type CounterProps = LifeProps & Placed & { to: number; from?: number; cou
 /** A number that counts up over `count` frames (default 45) with ease-out. */
 export function Counter(props: CounterProps) {
 	if (!Number.isFinite(props.to)) throw kitError('Counter needs a numeric `to`.');
-	const life = useLife(props, undefined, 12);
+	const life = useLife(props, undefined, 12, { exitEndsAt: true });
 	const color = useColor(props.color, 'answer');
 	const position = usePosition(props);
 	if (!life.visible) return null;
