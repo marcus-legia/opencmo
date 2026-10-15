@@ -374,7 +374,7 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
 Start from `apps/web/lib/agent/tools.ts` (the transcript tools, `OWN_VIDEO_TOOLS`, `guard`),
 `clip-context.ts`, `guides.ts` (`workflow`, `pacing`, `jlcut`) and `providers/fake.ts`.
 
-- [ ] **C1. Tools take `element_id`.**
+- [x] **C1. Tools take `element_id`.**
   - `get_transcript`, `search_transcript`, `find_filler_words`, `find_silences` and the cut ops pass it through
     (B's contract).
   - Results name the source.
@@ -382,7 +382,7 @@ Start from `apps/web/lib/agent/tools.ts` (the transcript tools, `OWN_VIDEO_TOOLS
     - transcript `pending` → "This video is still being transcribed (about a minute). Wait with wait_for_media or
       try again.";
     - `none` → "offer add_captions" (now free when a transcript exists).
-- [ ] **C2. Blank edits and context.**
+- [x] **C2. Blank edits and context.**
   - Drop `OWN_VIDEO_TOOLS` gating when the clip has at least one speech source; keep it when there is none.
   - `<clip_context>` lists the speech sources (contract).
 - [x] **C3. `find_retakes`** (read-only tool, `apps/web/lib/agent/retakes.ts`, pure, unit-tested):
@@ -411,7 +411,7 @@ Start from `apps/web/lib/agent/tools.ts` (the transcript tools, `OWN_VIDEO_TOOLS
   6. Never cut more than about 1/5 without asking (keep the `pacing` rule); "when in doubt, keep".
   - `/roughcut` in `slash.ts`; route it in `prompt.ts`; starter "Rough cut my video" when the clip has a speech
     source.
-- [ ] **C5. Register everywhere tools are listed:**
+- [x] **C5. Register everywhere tools are listed:**
   - `limits.ts`, `providers/anthropic.ts`, `providers.check.ts`, `agent-design.check.ts`;
   - `providers/fake.ts`, with a scripted `/roughcut`: plan → "go" → `find_retakes` → `remove_words` →
     `remove_silence` → reply;
@@ -457,6 +457,33 @@ the e2e spec locally.
   38/39, with `roughcut` passing on the real editor-core cuts. The one failure, `explain-make`, fails the same
   way on the base commit (not this change).
 - Outside C's files: one line in `apps/web/package.json` adds `retakes.check.ts` to `check:contracts`.
+- 2026-10-15, second round, on B1–B3 (`b986c4c`):
+  - C1: the five transcript read tools take `element_id` (B's `speechElement`) and pass it to
+    `loadCaptions`; results carry `source {element_id, name, main?}` and summaries name the video when there
+    are several. No transcript → `{captions: null, transcript: "pending" | "none", videos, next}` (`speech.ts`):
+    pending when the file's `media_assets.transcript_status` is queued/running, read through the new optional
+    `AgentWorkspace.transcriptStatus` (db: one RLS select; memory: a map). **Depends on A1's column:** until it
+    lands the select fails and every such video reads as "none" (offer add_captions), never as an error.
+    The pending text says "try again shortly" instead of "wait with wait_for_media": that tool waits for
+    generations only, so naming it would send the model into a wait that returns at once.
+  - Fix found on the way: B's `OpFailure` ("several videos with speech: pass element_id", "no video with id")
+    thrown from a read tool reached the model as "This change could not be applied."; `toolFailure` now passes
+    its message through.
+  - C2: `clipScope` reads the document once per turn: a blank New edit keeps the cut tools as soon as it has a
+    speech source (the tool list changes once per session, when the first transcript arrives); `eval/run.ts`
+    gates the same way. `<clip_context>` gets `speech_sources` (name, id, main, duration, words or
+    "transcribing…") when the clip has a video other than its own (a master-only clip is unchanged), and the
+    script falls back to the first upload's words, shifted to where it starts on the timeline, so a New edit
+    with a spoken upload no longer says "Nothing is spoken".
+  - C5: eval task `second-video` (a library video linked to its own transcript next to the main one; the
+    grader wants its fillers cut and the main video untouched). The fake picks the non-main speech source for
+    "second video" and passes the result's `source.element_id` to `remove_words`.
+  - Not done (not asked in C1): `guard()` still protects only the master's timing; a cut non-master video can
+    be trimmed by hand like any rect.
+  - Checked: `npm run typecheck`; `check:contracts` exit 0 (`agent-design.check.ts` §7b: read by id, default
+    to main, named summaries, pending/none, a non-video id stays an error, `speech_sources`, upload script
+    times); fake eval 39/40 (`second-video` and `roughcut` pass; `explain-make` fails on the base too).
+- C6 waits for A3 (fake transcriber sidecar) and B4/B6 (editor wiring, test ids); see Requests.
 
 ---
 

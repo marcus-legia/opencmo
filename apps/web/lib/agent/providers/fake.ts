@@ -40,7 +40,8 @@
  *   "more visual"      → update_plan → add_icon + add_diagram neo bằng quote
  *   "square"/"1:1"     → set_frame 1080×1080
  *   "vertical"/"9:16"  → set_frame 1080×1920
- *   "filler"           → find_filler_words → remove_words các id tìm được
+ *   "filler"           → find_filler_words → remove_words các id tìm được, on the video the result names;
+ *                        "second video" → on the first non-main video of <clip_context> speech_sources
  *   "title"            → add_text
  *   "broken"           → set_frame với input sai (đường lỗi của tool)
  *   "diagram"          → add_diagram hai bước lúc câu "start with the result…" (16–21s mẫu)
@@ -239,11 +240,10 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("media_waveform")) return [text("I listened to the clip.")];
     if (previous.includes("find_filler_words")) {
       const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
-      const ids = ((JSON.parse(raw) as { untrusted_data?: { suggestions?: Array<{ id?: string }> } }).untrusted_data
-        ?.suggestions ?? [])
-        .map((item) => item.id)
-        .filter((value): value is string => Boolean(value));
-      if (ids.length) return [use("remove_words", { word_ids: ids })];
+      const data = (JSON.parse(raw) as { untrusted_data?: { source?: { element_id: string } | null; suggestions?: Array<{ id?: string }> } }).untrusted_data;
+      const ids = (data?.suggestions ?? []).map((item) => item.id).filter((value): value is string => Boolean(value));
+      // Cut the video the words came from: its ids mean nothing on another one.
+      if (ids.length) return [use("remove_words", { word_ids: ids, ...(data?.source ? { element_id: data.source.element_id } : {}) })];
     }
     const images = results.flatMap((block) =>
       Array.isArray(block.content) ? (block.content as Block[]).filter((item) => item.type === "image") : [],
@@ -560,7 +560,13 @@ function script(history: StoredMessage[]): unknown[] {
   }
   if (/side by side with/.test(ask)) return [text("Looking for B-roll."), use("list_library", {})];
   if (/cinematic/.test(ask)) return [text("Reading the project first."), use("get_project_state", {})];
-  if (/filler/.test(ask)) return [text("Looking for filler words."), use("find_filler_words", {})];
+  if (/filler/.test(ask)) {
+    // "the second video": the other video in speech_sources, by its id, as a real model reads it.
+    const context = /<clip_context>(\{.*?\})\n/s.exec(original)?.[1];
+    const sources = context ? ((JSON.parse(context) as { speech_sources?: { id: string; main?: boolean }[] }).speech_sources ?? []) : [];
+    const other = /second video/.test(ask) ? sources.find((source) => !source.main)?.id : undefined;
+    return [text("Looking for filler words."), use("find_filler_words", other ? { element_id: other } : {})];
+  }
   if (/title/.test(ask)) return [use("add_text", { text: "Watch this", start: 0, end: 3 })];
   if (/broken/.test(ask)) return [use("set_frame", { width: 5, height: 1080 })];
   if (/split the screen/.test(ask)) {

@@ -13,6 +13,8 @@ import type { AssetInput, ClipDocument } from "@opencmo/clip-doc";
 import type { Transcript as RenderTranscript } from "@opencmo/clip-render";
 import { applyOps, type OpContext, type OpResult, type Transcript } from "@opencmo/editor-core";
 
+import type { TranscriptStatuses } from "./speech";
+
 export type Snapshot = { version: number; document: ClipDocument; manifest: Manifest };
 
 /**
@@ -28,6 +30,8 @@ export interface AgentWorkspace {
   opContext(document: ClipDocument, manifest: Manifest): Promise<OpContext>;
   /** Áp op theo thứ tự; op hỏng ném `ApiError` 4xx (bản DB) hay `OpError` (bản bộ nhớ). */
   apply(ops: unknown[]): Promise<Applied>;
+  /** `media_assets.transcript_status` of library files by media id (absent: nothing is ever "transcribing"). */
+  transcriptStatus?: TranscriptStatuses;
 }
 
 export type MemoryFiles = {
@@ -36,6 +40,8 @@ export type MemoryFiles = {
   /** Transcript theo đường dẫn (`assets/transcript.json`). */
   transcripts: Record<string, Transcript>;
   master: { width: number; height: number };
+  /** Automatic transcript status by media id, as `media_assets.transcript_status`. */
+  transcriptStatus?: Record<string, string>;
 };
 
 /** Workspace trong bộ nhớ: eval chạy agent thật trên nó mà không cần database. */
@@ -64,6 +70,7 @@ export function memoryWorkspace(start: Snapshot, files: MemoryFiles) {
     snapshot: () => current,
     read: async () => structuredClone(current),
     opContext: async () => context(),
+    transcriptStatus: async (ids) => Object.fromEntries(ids.flatMap((id) => (files.transcriptStatus?.[id] ? [[id, files.transcriptStatus[id]!]] : []))),
     async apply(ops) {
       const before = current.document;
       const applied = await applyOps(before, ops, context());

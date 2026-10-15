@@ -65,6 +65,19 @@ export const ROUGHCUT_TRANSCRIPT: Transcript = [
   line("Try it this week and tell me how it goes", 24.0, 28.0),
 ];
 
+/** A second recording placed from the library (5 s file, 10–15 s on the timeline), linked to its own transcript. */
+export const SECOND_TALK = { id: "talk2", transcript: `assets/transcripts/${"b".repeat(64)}.json` };
+export const SECOND_TRANSCRIPT: Transcript = [line("um so the second take uh matters most", 0.2, 4.6)];
+
+/** Eval setup: the second recording on the timeline, as the editor places it, with its linked transcript. */
+export function addSecondTalk(document: ClipDocument): void {
+  const scene = document.stage.children[0] as unknown as { children: unknown[] };
+  scene.children.push(
+    { kind: "rect", id: SECOND_TALK.id, name: "Second take", x: 0, y: 0, width: 1080, height: 1920, keepAspectRatio: true, start: 10, end: 15, paints: [{ type: "video", src: "assets/broll.mp4" }] },
+    { kind: "captions", id: "talk2cap", src: SECOND_TALK.transcript, source: SECOND_TALK.id, hidden: true, start: 10, end: 15 },
+  );
+}
+
 export function fixtureDocument(): ClipDocument {
   return {
     version: 1,

@@ -109,7 +109,12 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 - Guide `roughcut` and `/roughcut`: look (transcript, fillers, silences, retakes, a contact sheet) → propose in 4–8 sentences and wait for "go" → retakes, then fillers (`balanced`), then `remove_silence {min_pause: 0.6, padding: 0.15}` → re-read the transcript and capture cut edges → report before/after. Rules adapted from MIT/Apache editing skills (`THIRD_PARTY_NOTICES.md`).
 - The fake provider scripts `/roughcut` → plan → "go" (or "just do it") → `find_retakes` + `find_filler_words` → `remove_words` → `remove_silence` → reply; eval task `roughcut` uses `ROUGHCUT_TRANSCRIPT` (a false start, a sentence said twice, fillers, a 2 s pause).
 
-**Bộ tool theo loại clip:** New edit trống không có các tool cắt theo lời (`OWN_VIDEO_TOOLS`), vì không có video gốc để cắt.
+**Any video with speech** (plan `docs/own-video-editing-build.md`, Track C1/C2; `speech.ts`):
+- `get_transcript`, `search_transcript`, `find_filler_words`, `find_silences`, `find_retakes` take `element_id` like the cut ops (editor-core `speechElement`); without it they read the main video, else the only video with speech. Results carry `source {element_id, name, main?}`, and summaries name the video when there are several.
+- A video with no transcript answers `{captions: null, transcript: "pending" | "none", videos, next}`: pending (`media_assets.transcript_status` queued/running, read by `AgentWorkspace.transcriptStatus`) says to try again shortly; none says to offer `add_captions`.
+- `<clip_context>` has `speech_sources` (`name`, `id`, `main`, `duration`, `words` or "transcribing…") when the clip has a video other than its own; the script is the main video's, else the first upload's, in clip seconds from where it starts.
+
+**Bộ tool theo loại clip:** New edit trống không có các tool cắt theo lời (`OWN_VIDEO_TOOLS`) cho tới khi có một video có transcript (`speechSources`); scope dựng lại mỗi lượt nên danh sách tool đổi một lần khi transcript đầu tiên tới.
 
 **Không đưa cho model** (`NOT_OFFERED`): `update_element`, `paste_nodes`, `insert_scene`, `activate_scene`, `move_part`, `move_keyframe`.
 - Op vẫn còn cho UI và cho lịch sử chat cũ.

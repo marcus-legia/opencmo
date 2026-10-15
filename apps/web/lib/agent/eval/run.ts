@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readCaptionState, summarizeProject, type Transcript } from "@opencmo/editor-core";
+import { planStudio3d, planVoiceover, quoteRange, readCaptionState, speechSources, summarizeProject, type Transcript } from "@opencmo/editor-core";
 
 import { clipContextBlock } from "../clip-context";
 import { KEEP_IMAGES } from "../limits";
@@ -102,7 +102,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   task.setup?.(document);
   const workspace = memoryWorkspace(
     { version: 1, document, manifest: fixtureManifest() },
-    { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": task.transcript ?? TRANSCRIPT }, master: FIXTURE_MASTER },
+    { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": task.transcript ?? TRANSCRIPT, ...task.transcripts }, master: FIXTURE_MASTER },
   );
   // Transcript renderer cần (bản gốc và bản sau cắt do op lưu) — nạp lại trước mỗi lần vẽ.
   const cache = new Map<string, Transcript>();
@@ -143,8 +143,8 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // trích, ghép prompt), đặt khai báo lên clip, KHÔNG gọi model sinh. Catalog
   // giả đủ cho việc đó và không tốn gì.
   process.env.OPENCMO_AI_FAKE ??= "1";
-  // Same profile as the app: a blank New edit (no video of its own) has no cut-by-words tools.
-  const blank = !JSON.stringify((await workspace.read()).document).includes(`"${MASTER_SRC}"`);
+  // Same profile as the app: an edit with no video that has a transcript has no cut-by-words tools.
+  const blank = !speechSources((await workspace.read()).document).length;
   const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
   const generations: PreparedGeneration[] = [];
 

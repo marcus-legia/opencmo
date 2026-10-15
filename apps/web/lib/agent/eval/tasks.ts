@@ -26,7 +26,7 @@ import {
 } from "@opencmo/editor-core";
 
 import type { PreparedGeneration } from "../generate-tool";
-import { ROUGHCUT_TRANSCRIPT, TRANSCRIPT } from "./fixture";
+import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
 
 export type Outcome = {
   document: ClipDocument;
@@ -51,6 +51,8 @@ export type EvalTask = {
   setup?: (document: ClipDocument) => void;
   /** The clip's transcript when the task needs other words than the shared fixture's. */
   transcript?: Transcript;
+  /** More transcripts by path, for videos the setup adds. */
+  transcripts?: Record<string, Transcript>;
   /** Câu trả lời khi agent hỏi (`ask_user`). */
   answer?: string;
   grade: (outcome: Outcome) => Grade;
@@ -152,6 +154,26 @@ export const TASKS: EvalTask[] = [
       const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
       const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
       return { pass: retakes && last && rest && fillers && tight && clean, notes };
+    },
+  },
+  {
+    id: "second-video",
+    prompt: "Remove the filler words from the second video only. Leave the main video as it is.",
+    setup: addSecondTalk,
+    transcripts: { [SECOND_TALK.transcript]: SECOND_TRANSCRIPT },
+    grade(outcome) {
+      const notes: string[] = [];
+      const second = readCaptionState(outcome.document, SECOND_TALK.id);
+      const main = state(outcome.document);
+      if (!check(notes, Boolean(second), "the second video lost its transcript link")) return { pass: false, notes };
+      const fillers = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => /^(um|uh)$/.test(word.text));
+      const cut = check(notes, fillers.every((word) => isRemoved(word, second!.removed)), "um/uh still in the second video");
+      const kept = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => !/^(um|uh)$/.test(word.text));
+      const careful = check(notes, kept.every((word) => !isRemoved(word, second!.removed)), "cut words that are not fillers from the second video");
+      const untouched = check(notes, main.removed.length === 0, `the main video was cut too (${main.removed.length} ranges)`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: cut && careful && untouched && clean, notes };
     },
   },
   {
