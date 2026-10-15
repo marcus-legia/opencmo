@@ -16,11 +16,15 @@ import { z } from "zod";
 import {
   EXPLAINER_FORMATS,
   EXPLAINER_MODEL,
+  EXPLAINER_PERSONALITIES,
+  EXPLAINER_THEMES,
   ExplainerBeatSchema,
   explainerSeconds,
   narrationOf,
   type ExplainerBeat,
   type ExplainerFormat,
+  type ExplainerPersonality,
+  type ExplainerTheme,
   type Op,
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
@@ -41,13 +45,27 @@ const FORMATS = Object.keys(EXPLAINER_FORMATS) as [ExplainerFormat, ...Explainer
 const beat = z.object({
   say: ExplainerBeatSchema.shape.say.describe("The narration of this beat, 6-20 words. The voice reads every beat in order."),
   label: ExplainerBeatSchema.shape.label.describe("The main words on screen during this beat, at most 5 words."),
+  visual: z
+    .string()
+    .trim()
+    .min(1)
+    .max(160)
+    .describe('What is drawn in this beat, naming the icons, Lotties or kit shapes, e.g. "a syringe enters left; a virus icon splits into 3 grey fragments".'),
 });
+
+/** A storyboard beat: the spec's `{ say, label? }` plus the picture, which stays out of the spec. */
+export type StoryboardBeat = ExplainerBeat & { visual: string };
 
 const sceneFields = {
   title: z.string().trim().min(1).max(60).describe('Short name of the explainer (price card, layer name), e.g. "How Shazam hears a song".'),
   beats: z.array(beat).min(3).max(16).describe("The script, one entry per beat of about 4 s, in order."),
   code: z.string().min(1).max(EXPLAINER_CODE_CHARS).describe('The body of (React, R, kit) => { …; return function Scene() { … } } with JSX, no imports (read_guide "explainer").'),
   format: z.enum(FORMATS).describe("The video's shape: clip_context.frame on a clip; on a blank New edit what the user asked for (9:16 by default)."),
+  theme: z.enum(EXPLAINER_THEMES).optional().describe("blueprint (navy, glowing: tech, data, software, money) or paper (light, flat colours: science, health, people, how-to). Default blueprint."),
+  personality: z
+    .enum(EXPLAINER_PERSONALITIES)
+    .optional()
+    .describe("The motion of the whole video: premium (calm, smooth), corporate (crisp, clear), playful (bouncy), energetic (fast, punchy). Default premium."),
 };
 
 export const previewExplainerInput = z.object(sceneFields);
@@ -68,6 +86,8 @@ export type MotionJob = {
   duration: number;
   seed: number;
   accent?: string;
+  theme?: ExplainerTheme;
+  personality?: ExplainerPersonality;
 };
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
@@ -94,7 +114,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        'Render stills of an explainer you wrote (beat midpoints and the last frame) and look at them, with a layout report: text overlapping text, anything outside the safe area, text too small, a nearly empty frame. Errors come back with the phase (job/compile/guard/render) and the message. Fix and preview again, up to 3 rounds, until there are no errors and no issues; then add it with add_explainer. Free. read_guide "explainer" first.',
+        'Render stills of an explainer you wrote (beat midpoints, just after each beat starts, and the last frame) and look at them, with a layout report: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion. Errors come back with the phase (job/compile/guard/render) and the message. Then write one line per still, "shows X; the beat says Y", and fix every beat where they differ. Fix and preview again, up to 3 rounds, until there are no errors, no issues and every still shows its beat; then add it with add_explainer. Free. read_guide "explainer" first.',
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -108,18 +128,33 @@ export function explainerToolSpecs(): ToolSpec[] {
   ];
 }
 
+/** The spec's beats: `visual` is for the user and the model, not the render (and the scene must stay ≤ 4000 bytes). */
+const specBeats = (beats: readonly StoryboardBeat[]): ExplainerBeat[] => beats.map((item) => ({ say: item.say, ...(item.label ? { label: item.label } : {}) }));
+
+/** `theme` / `personality` when the model chose them: absent means the v1 look and motion. */
+const lookOf = (input: { theme?: ExplainerTheme; personality?: ExplainerPersonality }) => ({
+  ...(input.theme ? { theme: input.theme } : {}),
+  ...(input.personality ? { personality: input.personality } : {}),
+});
+
 /** The job a preview renders: the duration is estimated from the narration (real timings come with the voice). */
 export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?: string): MotionJob {
+  const beats = specBeats(input.beats);
   return {
     title: input.title,
     code: input.code,
-    beats: input.beats,
+    beats,
     format: input.format,
-    duration: explainerSeconds(input.beats),
+    duration: explainerSeconds(beats),
     seed: 0,
     ...(accent ? { accent } : {}),
+    ...lookOf(input),
   };
 }
+
+/** The subject check the result asks for (guide step 4): the stills against the storyboard. */
+export const SUBJECT_CHECK =
+  'Before anything else, write one line per still: "shows X; the beat says Y" (Y = the things that beat\'s say names). Fix every beat where X is not Y, then preview again.';
 
 export async function runPreviewExplainer(input: unknown, env: { preview: PreviewMotion; accent?: string }): Promise<ToolOutcome> {
   const parsed = previewExplainerInput.safeParse(input);
@@ -149,6 +184,8 @@ export async function runPreviewExplainer(input: unknown, env: { preview: Previe
       images: "one image per still, in order",
       issues: result.issues,
       ...(result.estimated ? { timing: "estimated from the script; the real voice sets the final timing" } : {}),
+      storyboard: parsed.data.beats.map((item, index) => `beat ${index + 1}: ${item.visual}`),
+      check: SUBJECT_CHECK,
     }),
     summary: count ? `Previewed the explainer: ${count} layout ${count === 1 ? "issue" : "issues"}` : "Previewed the explainer",
     images,
@@ -158,7 +195,9 @@ export async function runPreviewExplainer(input: unknown, env: { preview: Previe
 /** The code previewed in this turn, newest first (read under RLS from `agent_tool_calls`). */
 export type PreviewedCodes = () => Promise<string[]>;
 
-export type PreparedExplainer = PreparedGeneration & { explainer: { title: string; beats: ExplainerBeat[]; voice: string } };
+export type PreparedExplainer = PreparedGeneration & {
+  explainer: { title: string; beats: StoryboardBeat[]; voice: string; theme?: ExplainerTheme; personality?: ExplainerPersonality };
+};
 
 /**
  * Checks the code was previewed, saves it (`save_scene_code`), builds and prices the spec. The op
@@ -185,13 +224,15 @@ export async function prepareExplainer(
   } catch (err) {
     return err instanceof ApiError ? err.message : "Could not save the explainer code.";
   }
-  const duration = explainerSeconds(request.beats);
+  const beats = specBeats(request.beats);
+  const duration = explainerSeconds(beats);
   const scene = {
     template: "explainer" as const,
     code_ref: hash,
     title: request.title,
-    beats: request.beats.map((item) => ({ say: item.say, ...(item.label ? { label: item.label } : {}) })),
+    beats,
     ...(env.accent ? { accent: env.accent } : {}),
+    ...lookOf(request),
   };
   let spec: GenerationSpec;
   try {
@@ -214,7 +255,13 @@ export async function prepareExplainer(
     ...(request.start === undefined ? {} : { start: request.start }),
     spec,
   } as unknown as Op;
-  return { model, spec, op, credits: priceOf(model, spec), explainer: { title: request.title, beats: scene.beats, voice: request.voice } };
+  return {
+    model,
+    spec,
+    op,
+    credits: priceOf(model, spec),
+    explainer: { title: request.title, beats: request.beats, voice: request.voice, ...lookOf(request) },
+  };
 }
 
 /** Every string the render can show or say: the code's string literals (labels live in code) and the narration. */
@@ -229,15 +276,18 @@ function codeLiterals(code: string): string {
   return [...literals, ...jsxText].filter((text) => /\p{L}{2}/u.test(text)).join("\n").slice(0, 8000);
 }
 
-/** The price card: one line per beat (Beat / Voice / On screen), the voice and the credits. */
+/** The price card: one line per beat (Voice / On screen / Picture), the look, the voice and the credits. */
 export function explainerCard(prepared: PreparedExplainer, clipId: string) {
   const credits = `${prepared.credits} ${prepared.credits === 1 ? "credit" : "credits"}`;
   const seconds = prepared.spec.duration ?? 0;
+  const look = [prepared.explainer.theme, prepared.explainer.personality].filter(Boolean).join(", ");
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
-      `Explainer “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio} · voice ${prepared.explainer.voice} · ${credits}`,
-      ...prepared.explainer.beats.map((item, index) => `Beat ${index + 1} · Voice: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""}`),
+      `Explainer “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio}${look ? ` · ${look}` : ""} · voice ${prepared.explainer.voice} · ${credits}`,
+      ...prepared.explainer.beats.map(
+        (item, index) => `Beat ${index + 1} · Voice: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
+      ),
     ],
     credits: prepared.credits,
   };

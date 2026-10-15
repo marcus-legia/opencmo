@@ -27,7 +27,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: "explain",
     label: "Explain a concept",
     hint: "A narrated animated explainer, 15-90 s",
-    directive: 'read_guide "explainer" and follow its steps: show the script and ask before writing any code',
+    directive: 'read_guide "explainer" and follow its steps: show the storyboard (say, label and visual of every beat) and ask before writing any code',
   },
 ];
 
