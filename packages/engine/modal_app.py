@@ -260,8 +260,9 @@ motion_image = (
     .env({"OPENCMO_CLIP_MOTION": f"{WEB_ROOT}/packages/clip-motion/src/cli.ts", "OPENCMO_MOTION_CHROME": "/usr/local/bin/chrome-motion"})
     # Bundle the composition into the image (cached by source hash under OPENCMO_MOTION_CACHE)
     # and prove the image renders: a cold container then starts at the render, not at webpack.
+    # The image builder has one core, and Remotion rejects a concurrency above the core count.
     .run_commands(
-        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25"
+        f"cd {WEB_ROOT}/packages/clip-motion && OPENCMO_MOTION_SCALE=0.25 OPENCMO_MOTION_CONCURRENCY=1"
         " node src/cli.ts render fixtures/placeholder.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
     )
 )
