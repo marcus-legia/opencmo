@@ -417,6 +417,17 @@ function followCut(document: ClipDocument, skip: Set<unknown>, before: Range[], 
       // The speaker's captions are rebuilt from the cut transcript above; another video's linked
       // captions are re-timed from their video afterwards (`retimeLinked`).
       if (entity.kind === 'captions' && !isVoiceoverCaptions(entity as unknown as ClipNode)) return true;
+      // Another video's cut moves as one piece: its segments keep their joins and match its mark.
+      if (cutMark(entity as unknown as ClipNode)) {
+        const children = (entity.children as Entity[] | undefined) ?? [];
+        const first = Math.min(...children.map((child) => (typeof child.start === 'number' ? child.start : 0)));
+        const at = move(first, undefined)?.start ?? first;
+        for (const child of children) {
+          if (typeof child.start === 'number') child.start = round(child.start + at - first);
+          if (typeof child.end === 'number') child.end = round(child.end + at - first);
+        }
+        return true;
+      }
       // A row (`B-roll 1`): its clips sit on the clip timeline themselves.
       if (entity.kind === 'sequence' && !entity.start && Array.isArray(entity.children)) {
         entity.children = visit(entity.children as Entity[]);
@@ -465,8 +476,15 @@ function retimeLinked(document: ClipDocument, skip: Set<unknown>): void {
     if (id === null) return;
     const video = byElement.get(id) as Entity | undefined;
     if (!video) orphans.push({ entity, list });
-    // A cut sequence carries no timing of its own; its captions are rewritten by its own cuts.
     else if (video.kind !== 'sequence') for (const key of ['start', 'end']) assign(entity, key, video[key]);
+    else {
+      // A cut video: its captions start with its first segment and keep their length.
+      const starts = ((video.children as Entity[] | undefined) ?? []).map((child) => child.start).filter((value): value is number => typeof value === 'number');
+      if (!starts.length || typeof entity.start !== 'number') return;
+      const shift = Math.min(...starts) - entity.start;
+      entity.start = round(entity.start + shift);
+      if (typeof entity.end === 'number') entity.end = round(entity.end + shift);
+    }
   });
   for (const { entity, list } of orphans) list.splice(list.indexOf(entity), 1);
 }

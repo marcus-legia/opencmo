@@ -158,6 +158,22 @@ describe("speech sources", () => {
     expect(node(document, "talkcap")).toMatchObject({ start: talk.start, end: talk.end });
   });
 
+  it("a master cut moves an already-cut second video as one piece, with its captions", async () => {
+    const ctx = memoryContext();
+    const talkCut = await applyOps(MASTER_CLIP, [{ op: "remove_words", element_id: "talk", word_ids: [talkIds[1]!] }], ctx);
+    const segments = (document: ClipDocument) => (node(document, "talk")!.children as { start: number; end: number; sourceIn: number }[]).map((item) => [item.start, item.end, item.sourceIn]);
+    const before = segments(talkCut.document);
+    // Cut 0.25 s of the master before the second video starts.
+    const masterCut = await applyOps(talkCut.document, [{ op: "remove_words", word_ids: [masterIds[1]!] }], ctx);
+    const after = segments(masterCut.document);
+    const shift = after[0]![0]! - before[0]![0]!;
+    expect(shift).toBeLessThan(0);
+    // Same joins, same source: the whole cut moved by one amount.
+    expect(after).toEqual(before.map(([start, end, sourceIn]) => [Math.round((start! + shift) * 1000) / 1000, Math.round((end! + shift) * 1000) / 1000, sourceIn]));
+    expect(node(masterCut.document, "talkcap")!.start).toBe(after[0]![0]);
+    expect(readCaptionState(masterCut.document, "talk")!.removed).toEqual(readCaptionState(talkCut.document, "talk")!.removed);
+  });
+
   it("names the videos when there are several and no id", async () => {
     const two = structuredClone(BLANK_EDIT);
     const scene = two.stage.children[0] as unknown as { children: Record<string, unknown>[] };
