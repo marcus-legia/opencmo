@@ -240,7 +240,7 @@ Mirror the existing paid captions path: `request_media_captions` / `complete_med
 `packages/engine/opencmo/worker/transcribe_media_task.py`, `steps/transcribe.py` (Scribe, parallel parts), and the
 probe task (`complete_media_probe`).
 
-- [ ] **A1. Migration + contract (push first).**
+- [x] **A1. Migration + contract (push first).**
   - `media_transcripts`, `media_assets.has_audio` and `transcript_status`, `auto_transcript_daily_seconds()`.
   - The RPC signatures from Contracts.
   - RLS: owner select on `media_transcripts`.
@@ -248,7 +248,7 @@ probe task (`complete_media_probe`).
     - RLS: another user cannot read;
     - `use_media_transcript` refuses a clip you do not own and a file of another job.
   - `scripts/dump-schema.sh`.
-- [ ] **A2. Probe reports audio and enqueues.**
+- [x] **A2. Probe reports audio and enqueues.**
   - The probe step reports `has_audio` (ffprobe audio stream count; read with `USER_INPUT`).
   - `complete_media_probe` enqueues the free task, or marks `skipped`:
     - no audio;
@@ -282,6 +282,19 @@ probe task (`complete_media_probe`).
 `npm run check:contracts --workspace @opencmo/web`; a local upload going `none → queued → ready`.
 
 **Notes (A):**
+- A1–A2: migration `20261125090000_media_transcripts.sql`, pgTAP `155_media_transcripts` (30 tests); full suite
+  88 files / 1428 tests green on the pinned CLI 2.117.0; schema dumped. Differences from the first draft of the
+  contract, all inside Track A:
+  - the free run is its own task kind **`transcribe_asset`** (no clip, no credits, its own handler), so the paid
+    `transcribe_media` and its refund trigger stay untouched; `transcript_status` follows the task through a
+    trigger (worker, `fail_task` or the lease reaper);
+  - **new RPC `request_media_transcript(p_media_id) returns text`** (status): the free transcript on demand for a
+    file uploaded before this migration or whose run failed, same eligibility and daily cap. Track B can call it
+    when a placed library video shows `none` and has audio;
+  - `request_media_captions` on a transcribed file returns a task that is already `done` with `output.src` and 0
+    credits, so the inspector's existing polling works unchanged (no client change needed);
+  - `use_media_transcript` with an empty slice returns `ready` with an empty transcript (no words in that window).
+  - The cap counts seconds of `transcribe_asset` tasks queued/running/done since UTC midnight.
 
 ---
 

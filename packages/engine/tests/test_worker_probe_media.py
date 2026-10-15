@@ -92,7 +92,7 @@ def test_anh_png_qua_probe_khong_co_thoi_luong(tmp_path):
 
     probe_media.process(store, task)
 
-    assert store.completed[1] == {"duration": None, "width": 64, "height": 48, "ok": True, "error": None}
+    assert store.completed[1] == {"duration": None, "width": 64, "height": 48, "ok": True, "error": None, "has_audio": False}
     assert sizes == [probe_media.MAX_IMAGE_BYTES]
     assert store.removed == []
 
@@ -200,6 +200,7 @@ def test_audio_the_user_adds_is_stored_so_export_can_mix_it(tmp_path):
     done = store.completed[1]
     assert done["ok"] is True and done["width"] is None and done["height"] is None
     assert abs(done["duration"] - 2) < 0.2
+    assert done["has_audio"] is True
 
 
 def test_a_file_named_like_audio_that_is_not_is_rejected(tmp_path):
@@ -214,3 +215,26 @@ def test_a_file_named_like_audio_that_is_not_is_rejected(tmp_path):
 
     assert store.completed[1]["ok"] is False
     assert store.removed == [("media", ["user-1/job-1/fake.mp3"])]
+
+
+def test_a_video_reports_whether_it_has_audio_so_its_transcript_can_be_queued(tmp_path):
+    import subprocess
+
+    def video(name: str, audio: bool) -> Path:
+        path = tmp_path / name
+        args = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=s=64x48:r=10:d=1"]
+        if audio:
+            args += ["-f", "lavfi", "-i", "sine=f=440:d=1", "-c:a", "aac", "-shortest"]
+        subprocess.run([*args, "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)], check=True)
+        return path
+
+    for name, audio in (("talk.mp4", True), ("mute.mp4", False)):
+        source = video(name, audio)
+        store = FakeStore(tmp_path)
+        store.get_media_asset = lambda _id, n=name: {
+            "id": "asset-1", "user_id": "user-1", "job_id": "job-1", "storage_path": f"media/user-1/job-1/{n}",
+        }
+        store.download_object = lambda _bucket, _path, dest, src=source, **_kwargs: dest.write_bytes(src.read_bytes())
+        probe_media.process(store, Task(id="t", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="a"))
+        assert store.completed[1]["ok"] is True
+        assert store.completed[1]["has_audio"] is audio, name
