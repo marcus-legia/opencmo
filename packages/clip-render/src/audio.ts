@@ -24,7 +24,39 @@ export type AudioClip = {
   sourceIn: number;
   rate: number;
   node: RNode;
+  /**
+   * A cut joins this clip to the one before (`fadeIn`) or after it (`fadeOut`): both renderers
+   * fade the sound over `SEAM_FADE` there, or the butt join clicks. Absent = no fade.
+   */
+  fadeIn?: true;
+  fadeOut?: true;
 };
+
+/** Audio fade at each join of a cut, seconds (video-use rule: 30 ms fades at every cut). */
+export const SEAM_FADE = 0.03;
+
+const isCut = (r: RNode | null): boolean =>
+  r?.node.kind === 'sequence' && Boolean((r.node as { marks?: Record<string, unknown> }).marks?.['text-cut']);
+
+/**
+ * Marks the joins of a cut: the audible segments of one `text-cut` sequence, in time order, meet
+ * end to start. The cut's outer edges keep the sound as it was.
+ */
+function markSeams(clips: AudioClip[]): void {
+  const cuts = new Map<RNode, AudioClip[]>();
+  for (const clip of clips) {
+    const parent = clip.node.parent;
+    if (!parent || !isCut(parent)) continue;
+    cuts.set(parent, [...(cuts.get(parent) ?? []), clip]);
+  }
+  for (const list of cuts.values()) {
+    list.sort((a, b) => a.start - b.start);
+    list.forEach((clip, index) => {
+      if (index > 0) clip.fadeIn = true;
+      if (index < list.length - 1) clip.fadeOut = true;
+    });
+  }
+}
 
 type Audible = ClipNode & { hidden?: boolean; muted?: boolean; src?: AssetInput; paints?: { type: string; src?: AssetInput }[] };
 
@@ -54,6 +86,7 @@ export function audioClips(root: RNode): AudioClip[] {
     r.children.forEach(visit);
   };
   visit(root);
+  markSeams(clips);
   return clips;
 }
 

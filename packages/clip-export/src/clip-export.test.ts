@@ -65,6 +65,28 @@ describe('planMix', () => {
   });
 });
 
+describe('planMix seams', () => {
+  const clip = (over: object) => ({ src: 'a.mp4', start: 0, end: 30, sourceIn: 0, rate: 1, node: null as never, ...over });
+  const source = () => ({ file: 'a.mp4', channels: 2 });
+
+  it('fades 30 ms at the joins of a cut, sample-accurate, and nowhere else', () => {
+    const gains = Array.from({ length: 90 }, () => [1, 1, 1]);
+    const clips = [clip({ fadeOut: true }), clip({ start: 30, end: 60, fadeIn: true, fadeOut: true }), clip({ start: 60, end: 90, fadeIn: true })];
+    const chains = planMix(clips, gains, { start: 0, frames: 90 }, source)!.graph.split(';');
+    expect(chains[0]).toContain('asetpts=PTS-STARTPTS,afade=t=out:st=0.970000:d=0.03,adelay=0');
+    expect(chains[0]).not.toContain('afade=t=in');
+    expect(chains[1]).toContain('afade=t=in:st=0:d=0.03,afade=t=out:st=0.970000:d=0.03,adelay=1000');
+    expect(chains[2]).toContain('afade=t=in:st=0:d=0.03,adelay=2000');
+    expect(planMix([clip({})], [[1]], { start: 0, frames: 1 }, source)!.graph).not.toContain('afade');
+  });
+
+  it('an edge the export range cuts off is not a join', () => {
+    const gains = Array.from({ length: 10 }, () => [1]);
+    const graph = planMix([clip({ start: 30, end: 60, fadeIn: true, fadeOut: true })], gains, { start: 40, frames: 10 }, source)!.graph;
+    expect(graph).not.toContain('afade');
+  });
+});
+
 describe('job', () => {
   it('khoá nguồn không phụ thuộc thứ tự khoá của khai báo asset', () => {
     expect(sourceKey({ generate: 'image', prompt: 'x' })).toBe(sourceKey({ prompt: 'x', generate: 'image' }));
@@ -204,6 +226,33 @@ describe('exportJob (ffmpeg thật)', () => {
     const voice = (file: string) => rms(join(dir, file), 2.2);
     expect(gap('raw.mp4') - gap('clean.mp4')).toBeGreaterThan(10);
     expect(Math.abs(voice('raw.mp4') - voice('clean.mp4'))).toBeLessThan(1);
+  });
+
+  it('a cut fades its joins: no click where two segments meet', async () => {
+    // The 440 Hz sine jumps phase at each join (source jumps of 13/30 and 4/30 s), which is a click
+    // when the segments are butt-joined. Same segments without the cut mark = the old export.
+    const segments = [
+      { start: 0, sourceIn: 0, sourceOut: 0.5 },
+      { start: 0.5, sourceIn: 0.9333, sourceOut: 1.4333 },
+      { start: 1, sourceIn: 1.5667, sourceOut: 2 },
+    ].map((timing) => ({ kind: 'video', width: 360, height: 640, src: 'assets/master.mp4', ...timing }));
+    const mark = { 'text-cut': { transcript: 'assets/transcript.json', window: { start: 0, end: 2 }, removed: [{ start: 0.5, end: 0.9333 }, { start: 1.4333, end: 1.5667 }] } };
+    await exportJob(job('joined.mp4', clip([{ kind: 'sequence', children: segments }]), 1));
+    await exportJob(job('faded.mp4', clip([{ kind: 'sequence', marks: mark, children: segments }]), 1));
+    // Largest sample-to-sample jump over ±20 ms around a join; the sine itself moves ≤ 0.006 a sample.
+    const jump = (file: string, at: number) => {
+      const text = execFileSync(
+        'ffmpeg',
+        ['-v', 'error', '-ss', String(at - 0.02), '-t', '0.04', '-i', join(dir, file), '-af', 'astats=metadata=1:reset=0,ametadata=print:key=lavfi.astats.Overall.Max_difference:file=-', '-f', 'null', '-'],
+        { encoding: 'utf8' },
+      );
+      return Number(text.trim().split('\n').at(-1)!.split('=')[1]);
+    };
+    const joins = [0.5, 1];
+    const before = joins.map((at) => jump('joined.mp4', at));
+    const after = joins.map((at) => jump('faded.mp4', at));
+    for (const value of before) expect(value).toBeGreaterThan(0.03);
+    for (const value of after) expect(value).toBeLessThan(0.012);
   });
 
   it('khung đúng luật DS, phóng theo độ phân giải, tiếng theo volume + gain', async () => {

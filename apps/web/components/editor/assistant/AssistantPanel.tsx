@@ -54,6 +54,9 @@ const EXAMPLES = [
 /** Gợi ý chỉ có khi máy chủ bật model ảnh/video (học starter "Generate B-roll" của Palmier). */
 const BROLL_EXAMPLE = "Generate B-roll: AI shots for the lines that name something concrete";
 
+/** Shown when the clip has a video with speech (`speechSources`): runs the `/roughcut` guide. */
+const ROUGHCUT_STARTER = { label: "Rough cut my video", message: "/roughcut" };
+
 const MODEL_KEY = "opencmo.assistant.model";
 
 const isQuestion = (card: unknown): card is QuestionCard => Boolean(card && typeof card === "object" && "question" in card);
@@ -82,6 +85,7 @@ export function AssistantPanel({
   onBusy,
   notify,
   onTouched,
+  speech = false,
 }: {
   client: AssistantClient;
   /** Chạy một tool phía tab (`capture`, `media_waveform`, `media_grab`). */
@@ -93,6 +97,8 @@ export function AssistantPanel({
   notify: (message: string) => void;
   /** Id lớp agent vừa thêm/sửa/dời — editor nháy chúng trên timeline. */
   onTouched?: (ids: string[]) => void;
+  /** The clip has a video whose words can be cut: offer the rough-cut starter. */
+  speech?: boolean;
 }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
@@ -496,6 +502,17 @@ export function AssistantPanel({
               // Opens /explain with the cursor after it: the user names the concept.
               <button type="button" className="ed2-asst-example" data-testid="assistant-explain" disabled={busy || available === null} onClick={() => pickSlash("explain")}>
                 Explain a concept: a narrated animated explainer
+              </button>
+            ) : null}
+            {speech ? (
+              <button
+                type="button"
+                className="ed2-asst-example"
+                data-testid="assistant-roughcut"
+                disabled={busy || available === null}
+                onClick={() => void send(ROUGHCUT_STARTER.message)}
+              >
+                {ROUGHCUT_STARTER.label}
               </button>
             ) : null}
             {(broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES).map((example) => (

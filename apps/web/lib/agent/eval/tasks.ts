@@ -22,10 +22,11 @@ import {
   walk,
   type CheckReport,
   type Entity,
+  type Transcript,
 } from "@opencmo/editor-core";
 
 import type { PreparedGeneration } from "../generate-tool";
-import { TRANSCRIPT } from "./fixture";
+import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
 
 export type Outcome = {
   document: ClipDocument;
@@ -48,6 +49,10 @@ export type EvalTask = {
   prompt: string;
   /** Sửa document mẫu trước khi chạy (cài sẵn lỗi cho bài "sửa lỗi"). */
   setup?: (document: ClipDocument) => void;
+  /** The clip's transcript when the task needs other words than the shared fixture's. */
+  transcript?: Transcript;
+  /** More transcripts by path, for videos the setup adds. */
+  transcripts?: Record<string, Transcript>;
   /** Câu trả lời khi agent hỏi (`ask_user`). */
   answer?: string;
   grade: (outcome: Outcome) => Grade;
@@ -130,6 +135,47 @@ const srcOf = (entity: Entity): string[] => [
 const masters = (document: ClipDocument) => all(document).filter((item) => item.tag === "video" && item.entity.src === MASTER_SRC);
 
 export const TASKS: EvalTask[] = [
+  {
+    id: "roughcut",
+    prompt: "/roughcut my talk. Just do it, no need to ask.",
+    transcript: ROUGHCUT_TRANSCRIPT,
+    grade(outcome) {
+      const notes: string[] = [];
+      const { window, removed } = state(outcome.document);
+      const line = (index: number) => ROUGHCUT_TRANSCRIPT[index]!.words;
+      const cut = (index: number) => line(index).every((word) => isRemoved(word, removed));
+      const kept = (index: number, skip = "") => line(index).filter((word) => word.text !== skip).every((word) => !isRemoved(word, removed));
+      const retakes = check(notes, cut(2) && cut(4), "the false start or the first take of the repeated sentence is still in");
+      const last = check(notes, kept(3) && kept(5), "a kept take lost words (keep the LAST take whole)");
+      const rest = check(notes, kept(0) && kept(6, "uh") && kept(7), "cut words of a sentence said only once");
+      const fillers = check(notes, cut(1) && line(6).filter((word) => word.text === "uh").every((word) => isRemoved(word, removed)), "um/uh still in the video");
+      const left = findSilences({ transcript: ROUGHCUT_TRANSCRIPT, window, removed }, { minGap: 1 });
+      const tight = check(notes, !left.length, `pauses left: ${left.map((item) => `${item.start}-${item.end}`).join(", ")}`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: retakes && last && rest && fillers && tight && clean, notes };
+    },
+  },
+  {
+    id: "second-video",
+    prompt: "Remove the filler words from the second video only. Leave the main video as it is.",
+    setup: addSecondTalk,
+    transcripts: { [SECOND_TALK.transcript]: SECOND_TRANSCRIPT },
+    grade(outcome) {
+      const notes: string[] = [];
+      const second = readCaptionState(outcome.document, SECOND_TALK.id);
+      const main = state(outcome.document);
+      if (!check(notes, Boolean(second), "the second video lost its transcript link")) return { pass: false, notes };
+      const fillers = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => /^(um|uh)$/.test(word.text));
+      const cut = check(notes, fillers.every((word) => isRemoved(word, second!.removed)), "um/uh still in the second video");
+      const kept = SECOND_TRANSCRIPT.flatMap((segment) => segment.words).filter((word) => !/^(um|uh)$/.test(word.text));
+      const careful = check(notes, kept.every((word) => !isRemoved(word, second!.removed)), "cut words that are not fillers from the second video");
+      const untouched = check(notes, main.removed.length === 0, `the main video was cut too (${main.removed.length} ranges)`);
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: cut && careful && untouched && clean, notes };
+    },
+  },
   {
     id: "filler",
     prompt: "Remove the filler words.",

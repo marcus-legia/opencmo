@@ -49,6 +49,35 @@ export const TRANSCRIPT: Transcript = [
   line("Follow for more tips like this", 26.3, 29.5),
 ];
 
+/**
+ * A self-recorded talk for the rough-cut tasks, on the same 30 s timing: a filler, a 2 s pause, a
+ * false start before its full sentence and a sentence said twice (the last take is the one to keep).
+ */
+export const ROUGHCUT_TRANSCRIPT: Transcript = [
+  line("Here is how I got my first ten customers", 0.3, 3.5),
+  line("um", 3.7, 4.0),
+  // Lặng 4.0 → 6.0
+  line("The trick was to", 6.0, 7.2),
+  line("The trick was to answer every question in my niche", 7.6, 11.5),
+  line("I wrote one helpful reply a day for a month", 12.0, 15.5),
+  line("I wrote one helpful reply every day for a month", 16.0, 19.5),
+  line("uh people started asking what I was building", 20.0, 23.5),
+  line("Try it this week and tell me how it goes", 24.0, 28.0),
+];
+
+/** A second recording placed from the library (5 s file, 10–15 s on the timeline), linked to its own transcript. */
+export const SECOND_TALK = { id: "talk2", transcript: `assets/transcripts/${"b".repeat(64)}.json` };
+export const SECOND_TRANSCRIPT: Transcript = [line("um so the second take uh matters most", 0.2, 4.6)];
+
+/** Eval setup: the second recording on the timeline, as the editor places it, with its linked transcript. */
+export function addSecondTalk(document: ClipDocument): void {
+  const scene = document.stage.children[0] as unknown as { children: unknown[] };
+  scene.children.push(
+    { kind: "rect", id: SECOND_TALK.id, name: "Second take", x: 0, y: 0, width: 1080, height: 1920, keepAspectRatio: true, start: 10, end: 15, paints: [{ type: "video", src: "assets/broll.mp4" }] },
+    { kind: "captions", id: "talk2cap", src: SECOND_TALK.transcript, source: SECOND_TALK.id, hidden: true, start: 10, end: 15 },
+  );
+}
+
 export function fixtureDocument(): ClipDocument {
   return {
     version: 1,

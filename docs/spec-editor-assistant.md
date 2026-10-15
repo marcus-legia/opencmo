@@ -86,6 +86,7 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 | 3D | `add_3d_scene` (đọc guide "3d") |
 | Narrated animated explainer (`/explain`) | `preview_explainer` → `add_explainer` (guide "explainer") |
 | Gọn lời nói | `remove_silence`, `find_filler_words` + `remove_words`, `remove_ranges` |
+| Rough cut of a self-recorded talk (`/roughcut`) | `find_retakes` + `find_filler_words` → `remove_words`, then `remove_silence` (guide "roughcut") |
 | Giọng mới | `add_voiceover` |
 | File để tải | `request_export` |
 
@@ -103,13 +104,23 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 - `add_explainer` refuses code that was not previewed in the same turn, saves the code to `scene_codes`, prices a `motion-explainer` spec (seconds + voice characters) and shows a card with one line per beat. Moderation reads the script and every string in the code. On Approve, op `add_explainer` places one video layer `Explainer: <title>` (one Undo step; it sets the frame on a blank New edit).
 - The fake provider scripts `/explain` → script → "go" → `preview_explainer` → `add_explainer` with Track A's showcase.
 
-**Bộ tool theo loại clip:** New edit trống không có các tool cắt theo lời (`OWN_VIDEO_TOOLS`), vì không có video gốc để cắt.
+**Rough cut** (`retakes.ts`, plan `docs/own-video-editing-build.md` Track C):
+- `find_retakes` is a read tool (parallel-safe, always loaded): sentences from the transcript lines (a line end or . ? ! ends one, cut words skipped, fillers ignored), compared within 60 s by word-gram Dice (4 words, fewer for short sentences), by words in order (5+ words, so one changed word still matches) and by a false start's opening words. Above 0.7 the takes form a group; it suggests keeping the last take and returns the earlier ones as `drop` ranges and `drop_word_ids` for one `remove_words`. Suggestions only: the model reads the lines first.
+- Guide `roughcut` and `/roughcut`: look (transcript, fillers, silences, retakes, a contact sheet) → propose in 4–8 sentences and wait for "go" → retakes, then fillers (`balanced`), then `remove_silence {min_pause: 0.6, padding: 0.15}` → re-read the transcript and capture cut edges → report before/after. Rules adapted from MIT/Apache editing skills (`THIRD_PARTY_NOTICES.md`).
+- The fake provider scripts `/roughcut` → plan → "go" (or "just do it") → `find_retakes` + `find_filler_words` → `remove_words` → `remove_silence` → reply; eval task `roughcut` uses `ROUGHCUT_TRANSCRIPT` (a false start, a sentence said twice, fillers, a 2 s pause).
+
+**Any video with speech** (plan `docs/own-video-editing-build.md`, Track C1/C2; `speech.ts`):
+- `get_transcript`, `search_transcript`, `find_filler_words`, `find_silences`, `find_retakes` take `element_id` like the cut ops (editor-core `speechElement`); without it they read the main video, else the only video with speech. Results carry `source {element_id, name, main?}`, and summaries name the video when there are several.
+- A video with no transcript answers `{captions: null, transcript: "pending" | "none", videos, next}`: pending (`media_assets.transcript_status` queued/running, read by `AgentWorkspace.transcriptStatus`) says to try again shortly; none says to offer `add_captions`.
+- `<clip_context>` has `speech_sources` (`name`, `id`, `main`, `duration`, `words` or "transcribing…") when the clip has a video other than its own; the script is the main video's, else the first upload's, in clip seconds from where it starts.
+
+**Bộ tool theo loại clip:** New edit trống không có các tool cắt theo lời (`OWN_VIDEO_TOOLS`) cho tới khi có một video có transcript (`speechSources`); scope dựng lại mỗi lượt nên danh sách tool đổi một lần khi transcript đầu tiên tới.
 
 **Không đưa cho model** (`NOT_OFFERED`): `update_element`, `paste_nodes`, `insert_scene`, `activate_scene`, `move_part`, `move_keyframe`.
 - Op vẫn còn cho UI và cho lịch sử chat cũ.
 - `set_props` thay `update_element`, và mang cùng quy tắc chặn (`guardProps`).
 
-**Guide** (`guides.ts`, đọc bằng `read_guide`): workflow, script, broll, pacing, hooks, captions, motion, visuals, layout, reframe, jlcut, voiceover, video, blank, brand, 3d, explainer, document…
+**Guide** (`guides.ts`, đọc bằng `read_guide`): workflow, script, broll, pacing, hooks, captions, motion, visuals, layout, reframe, jlcut, roughcut, voiceover, video, blank, brand, 3d, explainer, document…
 
 **Hai cờ, tắt mặc định:**
 - `OPENCMO_AGENT_TOOL_SEARCH=1`: chỉ ~44 tool trong `ALWAYS_LOADED` (`providers/anthropic.ts`) luôn nạp; phần còn lại nạp khi model tìm (BM25 tool search).

@@ -7,7 +7,7 @@
  * duyệt (`apply_to_clips`).
  */
 
-import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, summarizeProject } from "@opencmo/editor-core";
+import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
@@ -37,6 +37,7 @@ import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
 import { clipContextBlock, type ClipAbout } from "./clip-context";
 import { dbWorkspace } from "./db-workspace";
+import { libraryVideos, transcribing } from "./speech";
 import {
   generateCard,
   generateToolSpec,
@@ -138,22 +139,25 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
 }
 
-export function clipScope(
+export async function clipScope(
   supabase: SupabaseClient,
   context: ClipContext,
   clipId: string,
   turn: Turn,
   checkpointed: boolean,
-): Scope {
+): Promise<Scope> {
   const checkpoint = checkpointing(supabase, turn, checkpointed);
   const workspace = dbWorkspace(supabase, context, clipId, {
     take: () => (checkpoint.taken() ? null : { kind: "agent" as const, label: checkpoint.label }),
     mark: checkpoint.mark,
   });
   const env = { workspace };
+  // A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by.
+  const start = await workspace.read();
+  const blank = context.clip.kind === "blank" && !speechSources(start.document).length;
   return {
     kind: "clip",
-    tools: clipToolSpecs({ blank: context.clip.kind === "blank" }),
+    tools: clipToolSpecs({ blank }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -162,7 +166,8 @@ export function clipScope(
         supabase.from("clips").select("hook, reason").eq("id", clipId).maybeSingle().then(({ data }) => data ?? {}),
         skillIndex(supabase).catch(() => ""),
       ]);
-      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout).catch(() => "")}${skills}`;
+      const pending = await transcribing(libraryVideos(snapshot.document, snapshot.manifest), workspace.transcriptStatus);
+      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout, pending).catch(() => "")}${skills}`;
     },
     async state() {
       // One read serves both the summary and the check.

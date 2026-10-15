@@ -14,7 +14,7 @@ class FakeStore:
         self.jobs = deque()
         self.tasks = {
             kind: deque()
-            for kind in ("probe_media", "generate", "prepare_full", "transcribe_media", "render_document", "zip")
+            for kind in ("probe_media", "generate", "prepare_full", "transcribe_media", "transcribe_asset", "render_document", "zip")
         }
         self.claimed_kinds = []
         self.failed_tasks = []
@@ -92,7 +92,7 @@ def test_tasks_are_claimed_in_one_call_in_user_wait_priority():
 
     # Một RPC mỗi lượt, mảng theo đúng thứ tự của task-kinds.json.
     assert store.claimed_kinds[0] == [
-        "probe_media", "generate", "prepare_full", "transcribe_media", "render_document", "zip",
+        "probe_media", "generate", "prepare_full", "transcribe_media", "transcribe_asset", "render_document", "zip",
     ]
     assert handled == ["probe-1", "zip-1"]
     assert len(store.claimed_kinds) == 3

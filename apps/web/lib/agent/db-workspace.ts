@@ -35,6 +35,14 @@ export function dbWorkspace(
       const media = await serverMedia(supabase, context, clipId, document, manifest);
       return serverOpContext(supabase, context, clipId, media);
     },
+    async transcriptStatus(ids) {
+      if (!ids.length) return {};
+      // Track A's automatic transcripts. Under RLS only the user's own files come back; on an error
+      // nothing reads as transcribing and the tools offer add_captions instead.
+      const { data, error } = await supabase.from("media_assets").select("id, transcript_status").in("id", ids);
+      if (error || !data) return {};
+      return Object.fromEntries((data as { id: string; transcript_status: string | null }[]).map((row) => [row.id, row.transcript_status ?? "none"]));
+    },
     async apply(ops) {
       const applied = await applyToClip(supabase, context, clipId, ops, { checkpoint: checkpoint.take() });
       if (applied.checkpoint) await checkpoint.mark(applied.checkpoint.id);

@@ -29,6 +29,8 @@
  *                        ("20-second", "square"; else 15 s and the edit's frame) · "/image …" → generate_media image at 0 s
  *   "/explain …"       → shows the showcase script and asks; then "go" → preview_explainer (showcase code)
  *                        → add_explainer (price card with the beats)
+ *   "/roughcut"        → proposes the cut and asks; then "go" (or "just do it" up front) → find_retakes + find_filler_words → ONE remove_words
+ *                        (earlier takes + fillers) → remove_silence 0.6 s / 0.15 s → reports what went
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
@@ -38,7 +40,8 @@
  *   "more visual"      → update_plan → add_icon + add_diagram neo bằng quote
  *   "square"/"1:1"     → set_frame 1080×1080
  *   "vertical"/"9:16"  → set_frame 1080×1920
- *   "filler"           → find_filler_words → remove_words các id tìm được
+ *   "filler"           → find_filler_words → remove_words các id tìm được, on the video the result names;
+ *                        "second video" → on the first non-main video of <clip_context> speech_sources
  *   "title"            → add_text
  *   "broken"           → set_frame với input sai (đường lỗi của tool)
  *   "diagram"          → add_diagram hai bước lúc câu "start with the result…" (16–21s mẫu)
@@ -78,6 +81,29 @@ const EXPLAINER_SCRIPT = "Explainer script";
 const explainerVoice = () => aiModel("motion-explainer")?.limits.voices?.[0] ?? "Aria";
 const quoteOf = (code: string): string => /^\/\/ quote: (.*)$/m.exec(code)?.[1] ?? "";
 const use = (name: string, input: Record<string, unknown>) => ({ type: "tool_use", id: id(), name, input });
+
+const ROUGHCUT_PLAN = "Rough cut plan";
+const userText = (message: StoredMessage): string =>
+  // Without the <project_state>/<check> blocks that ride along with tool results: only the user's words.
+  (message.role === "user" ? (message.content as Block[]) : [])
+    .filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join(" ")
+    .split(/<clip_context>|<project_state>|<check>/)[0]!;
+/**
+ * A rough cut is running: the user's latest words are "/roughcut … just do it", or say go to the
+ * assistant message right before them that proposed the cut.
+ */
+function roughcutRun(history: StoredMessage[]): boolean {
+  const index = history.findLastIndex((message) => userText(message).trim());
+  if (index < 0) return false;
+  const words = userText(history[index]!);
+  if (/^\s*\/roughcut\b/i.test(words) && /just do it/i.test(words)) return true;
+  if (index < 1 || !/^\s*(go|yes|ok|cut it|do it)\b/i.test(words)) return false;
+  const before = history[index - 1]!;
+  return before.role === "assistant" && (before.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(ROUGHCUT_PLAN));
+}
+const untrusted = <T>(raw: string | undefined): T | undefined => (raw ? (JSON.parse(raw) as { untrusted_data?: T }).untrusted_data : undefined);
 
 function script(history: StoredMessage[]): unknown[] {
   const user = [...history].reverse().find((message) => message.role === "user");
@@ -129,6 +155,27 @@ function script(history: StoredMessage[]): unknown[] {
       const parsed = JSON.parse(raw0) as { ok?: boolean; error?: string; layout?: { issues?: string[] }[] };
       if (!parsed.ok) return [text(`The 3D preview failed: ${parsed.error ?? "unknown error"}`)];
       return [use("add_3d_scene", { title: "Hero moment", code, quote: quoteOf(code) })];
+    }
+    // /roughcut after "go": the reads came back together; cut the earlier takes and the fillers in one
+    // call, then the pauses, then say what went.
+    if (roughcutRun(history) && previous.includes("find_retakes")) {
+      const calls = anthropicFormat.callsIn(assistant?.content ?? []);
+      const resultOf = (name: string) => {
+        const block = results.find((item) => item.tool_use_id === calls.find((call) => call.name === name)?.id);
+        return typeof block?.content === "string" ? block.content : undefined;
+      };
+      const takes = untrusted<{ retakes?: Array<{ drop_word_ids: string[] }> }>(resultOf("find_retakes"))?.retakes ?? [];
+      const fillers = (untrusted<{ suggestions?: Array<{ id?: string; reason: string }> }>(resultOf("find_filler_words"))?.suggestions ?? [])
+        .filter((item) => item.reason === "filler" && item.id)
+        .map((item) => item.id!);
+      const ids = [...new Set([...takes.flatMap((take) => take.drop_word_ids), ...fillers])];
+      return ids.length ? [text(`Cutting ${takes.length} earlier ${takes.length === 1 ? "take" : "takes"} and ${fillers.length} filler ${fillers.length === 1 ? "word" : "words"}.`), use("remove_words", { word_ids: ids })] : [use("remove_silence", { min_pause: 0.6, padding: 0.15 })];
+    }
+    if (roughcutRun(history) && previous.includes("remove_words")) {
+      return results.some((block) => block.is_error) ? [text("That cut did not work — nothing was changed.")] : [text("Now the long pauses."), use("remove_silence", { min_pause: 0.6, padding: 0.15 })];
+    }
+    if (roughcutRun(history) && previous.includes("remove_silence")) {
+      return [text(results.some((block) => block.is_error) ? "The pauses could not be cut." : "Rough cut done: the earlier takes, the filler sounds and the long pauses are gone. You can undo it in one click.")];
     }
     if (previous.includes("find_silences")) {
       const cuts = ((JSON.parse(raw0) as { silences?: Array<{ cut: { start: number; end: number } | null }> }).silences ?? [])
@@ -193,11 +240,10 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("media_waveform")) return [text("I listened to the clip.")];
     if (previous.includes("find_filler_words")) {
       const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
-      const ids = ((JSON.parse(raw) as { untrusted_data?: { suggestions?: Array<{ id?: string }> } }).untrusted_data
-        ?.suggestions ?? [])
-        .map((item) => item.id)
-        .filter((value): value is string => Boolean(value));
-      if (ids.length) return [use("remove_words", { word_ids: ids })];
+      const data = (JSON.parse(raw) as { untrusted_data?: { source?: { element_id: string } | null; suggestions?: Array<{ id?: string }> } }).untrusted_data;
+      const ids = (data?.suggestions ?? []).map((item) => item.id).filter((value): value is string => Boolean(value));
+      // Cut the video the words came from: its ids mean nothing on another one.
+      if (ids.length) return [use("remove_words", { word_ids: ids, ...(data?.source ? { element_id: data.source.element_id } : {}) })];
     }
     const images = results.flatMap((block) =>
       Array.isArray(block.content) ? (block.content as Block[]).filter((item) => item.type === "image") : [],
@@ -342,6 +388,12 @@ function script(history: StoredMessage[]): unknown[] {
   if (/<command name="\/explain">/.test(ask)) {
     const beats = EXPLAINER.beats.map((beat, index) => `${index + 1}. ${beat.say}${"label" in beat && beat.label ? ` [${beat.label}]` : ""}`).join("\n");
     return [text(`${EXPLAINER_SCRIPT} — “${EXPLAINER.title}”:\n${beats}\n\nShall I make it?`)];
+  }
+  if (/<command name="\/roughcut">/.test(ask) && !/just do it/.test(ask)) {
+    return [text(`${ROUGHCUT_PLAN}: I'll cut the earlier takes of repeated sentences and keep the last one, remove the filler sounds, and trim pauses over 0.6 s to about 0.3 s. Laughs, dramatic pauses and the call to action stay. Shall I cut it?`)];
+  }
+  if (roughcutRun(history)) {
+    return [text("Finding the retakes and the fillers."), use("find_retakes", {}), use("find_filler_words", {})];
   }
   const proposed = history.some(
     (message) => message.role === "assistant" && (message.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(EXPLAINER_SCRIPT)),
@@ -508,7 +560,13 @@ function script(history: StoredMessage[]): unknown[] {
   }
   if (/side by side with/.test(ask)) return [text("Looking for B-roll."), use("list_library", {})];
   if (/cinematic/.test(ask)) return [text("Reading the project first."), use("get_project_state", {})];
-  if (/filler/.test(ask)) return [text("Looking for filler words."), use("find_filler_words", {})];
+  if (/filler/.test(ask)) {
+    // "the second video": the other video in speech_sources, by its id, as a real model reads it.
+    const context = /<clip_context>(\{.*?\})\n/s.exec(original)?.[1];
+    const sources = context ? ((JSON.parse(context) as { speech_sources?: { id: string; main?: boolean }[] }).speech_sources ?? []) : [];
+    const other = /second video/.test(ask) ? sources.find((source) => !source.main)?.id : undefined;
+    return [text("Looking for filler words."), use("find_filler_words", other ? { element_id: other } : {})];
+  }
   if (/title/.test(ask)) return [use("add_text", { text: "Watch this", start: 0, end: 3 })];
   if (/broken/.test(ask)) return [use("set_frame", { width: 5, height: 1080 })];
   if (/split the screen/.test(ask)) {

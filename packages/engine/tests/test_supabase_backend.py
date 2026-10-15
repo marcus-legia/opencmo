@@ -305,6 +305,7 @@ def test_complete_media_probe_sends_expected_body():
         "p_height": 1920,
         "p_ok": True,
         "p_error": None,
+        "p_has_audio": None,
     }
 
 

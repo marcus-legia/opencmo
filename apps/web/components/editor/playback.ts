@@ -11,7 +11,7 @@
  */
 
 import type { AssetInput } from "@opencmo/clip-doc";
-import { FPS, type AudioClip, type Renderer } from "@opencmo/clip-render";
+import { FPS, SEAM_FADE, type AudioClip, type Renderer } from "@opencmo/clip-render";
 
 import { shownTime } from "./frames";
 import { mediaKeyOf, type BrowserMedia } from "./media";
@@ -19,7 +19,8 @@ import { mediaKeyOf, type BrowserMedia } from "./media";
 /** Lệch hơn chừng này giữa thẻ và đồng hồ thì tua lại; nhỏ hơn thì tai không nghe ra. */
 const DRIFT = 0.2;
 
-type Want = { src: AssetInput; seconds: number; rate: number; gain: number };
+/** `fade`: this frame is the first (`in`) or last (`out`) of a cut segment, which fades at the join. */
+type Want = { src: AssetInput; seconds: number; rate: number; gain: number; fade?: "in" | "out" };
 
 /**
  * Which media element must run at which source second at `frame`, and how loud. Video sources go
@@ -43,7 +44,8 @@ export function wanted(renderer: Renderer, media: BrowserMedia, frame: number, s
     const kind = clip.node.node.kind;
     const key = kind === "audio" ? mediaKeyOf(clip.src, kind) : media.slotKey(clip.src, seconds, claimed);
     const found = out.get(key);
-    if (!found || gains[index] > found.gain) out.set(key, { src: clip.src, seconds, rate: clip.rate, gain: gains[index] });
+    const fade = clip.fadeIn && frame === clip.start ? "in" : clip.fadeOut && frame === clip.end - 1 ? "out" : undefined;
+    if (!found || gains[index] > found.gain) out.set(key, { src: clip.src, seconds, rate: clip.rate, gain: gains[index], ...(fade ? { fade } : {}) });
   });
   for (const need of renderer.needs(frame)) {
     if (need.kind !== "video") continue;
@@ -168,14 +170,14 @@ export class Playback {
       const el = entry.el;
       if (!target) {
         if (!el.paused) el.pause();
-        if (entry.gain) entry.gain.gain.value = 0;
+        if (entry.gain) this.level(entry.gain.gain, { gain: 0 });
         continue;
       }
       if (this.speed < 0) {
         // Lùi: thẻ đứng, tua từng khung, im tiếng.
         if (!el.paused) el.pause();
         if (!el.seeking) el.currentTime = target.seconds;
-        if (entry.gain) entry.gain.gain.value = 0;
+        if (entry.gain) this.level(entry.gain.gain, { gain: 0 });
         continue;
       }
       const rate = target.rate * this.speed;
@@ -183,12 +185,32 @@ export class Playback {
       const shown = el instanceof HTMLVideoElement ? shownTime(el) : el.currentTime;
       if (!el.seeking && Math.abs(shown - target.seconds) > DRIFT * rate) el.currentTime = target.seconds;
       if (el.paused) void el.play().catch(() => undefined);
-      if (entry.gain) entry.gain.gain.value = target.gain;
+      if (entry.gain) this.level(entry.gain.gain, target);
+    }
+  }
+
+  /**
+   * The frame's gain, ramped over `SEAM_FADE` at the joins of a cut as the export fades them
+   * (`afade`), so a cut sounds the same in preview: no click where two segments meet.
+   */
+  private level(param: AudioParam, target: Pick<Want, "gain" | "fade">): void {
+    const now = this.media.audioContext().currentTime;
+    param.cancelScheduledValues(now);
+    if (target.fade === "in") {
+      param.setValueAtTime(0, now);
+      param.linearRampToValueAtTime(target.gain, now + SEAM_FADE);
+    } else if (target.fade === "out") {
+      const end = now + 1 / (FPS * Math.abs(this.speed || 1));
+      param.setValueAtTime(target.gain, now);
+      param.setValueAtTime(target.gain, Math.max(now, end - SEAM_FADE));
+      param.linearRampToValueAtTime(0, end);
+    } else {
+      param.setValueAtTime(target.gain, now);
     }
   }
 
   private silence(): void {
-    for (const [, entry] of this.elements()) if (entry.gain) entry.gain.gain.value = 0;
+    for (const [, entry] of this.elements()) if (entry.gain) this.level(entry.gain.gain, { gain: 0 });
   }
 
   private *elements() {

@@ -1564,6 +1564,9 @@
               "type": "string",
               "minLength": 1
             },
+            "source": {
+              "$ref": "#/$defs/__schema0"
+            },
             "preset": {
               "type": "string",
               "enum": [
