@@ -7,15 +7,21 @@ import { sceneBox, videoRegionStats } from "./canvas";
 import { showAssistant, signIn, state } from "./helpers";
 
 /**
- * Explainers (docs/explainer-build.md, acceptance test 3 and 4): on a New edit, /explain shows the
- * script; "go" renders preview stills in the panel and then a price card with the beats; Approve
- * places one layer "Explainer: …" that renders (fake agent, OPENCMO_MOTION=local, fake voice) and
- * plays; Ctrl+Z removes it.
+ * Explainers (docs/explainer-build.md acceptance tests 3 and 4, v2 in docs/explainer-v2-build.md C6):
+ * on a New edit, /explain shows the storyboard with a picture per beat; "go" renders preview stills
+ * in the panel and then a price card with the beats and their pictures; Approve places one layer
+ * "Explainer: …" that renders (fake agent, OPENCMO_MOTION=local, fake voice) and plays; Ctrl+Z
+ * removes it. Once the generation has the voice's word timings, the editor adds a visible captions
+ * layer "Captions · …" (one Undo step).
  */
 
-type Doc = { document: { stage: { children: { width: number; height: number; workarea?: number[]; children?: { name?: string; paints?: { src?: { model?: string } }[] }[] }[] } } };
+type Child = { id?: string; kind?: string; name?: string; hidden?: boolean; source?: string; src?: unknown; paints?: { src?: { model?: string } }[] };
+type Doc = { document: { stage: { children: { width: number; height: number; workarea?: number[]; children?: Child[] }[] } } };
 
-test("New edit: /explain → script → go → stills → approve → the explainer renders and plays", async ({ page }, testInfo) => {
+/** The fake vaccine storyboard (`lib/agent/providers/fake-explainers.ts`), in order. */
+const BEAT_WORDS = [12, 15, 12, 12, 12, 10];
+
+test("New edit: /explain → storyboard → go → stills → approve → the explainer renders, plays and gets captions", async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.b);
@@ -30,17 +36,19 @@ test("New edit: /explain → script → go → stills → approve → the explai
   // The New edit starter opens /explain; the user names the concept.
   await page.getByTestId("assistant-explain").click();
   await expect(page.getByLabel("Message the assistant")).toHaveValue("/explain ");
-  await page.getByLabel("Message the assistant").fill("/explain How Shazam recognizes a song in a noisy bar");
+  await page.getByLabel("Message the assistant").fill("/explain How a vaccine teaches your immune system to fight a virus");
   await page.getByTestId("assistant-send").click();
-  await expect(page.getByTestId("assistant-reply").last()).toContainText(/Explainer script[^]*Shall I make it\?/, { timeout: 120_000 });
+  // The storyboard names the picture of every beat before any code.
+  await expect(page.getByTestId("assistant-reply").last()).toContainText(/Explainer script[^]*Picture: a syringe icon[^]*Shall I make it\?/, { timeout: 120_000 });
 
   await page.getByLabel("Message the assistant").fill("go");
   await page.getByTestId("assistant-send").click();
   // Stills come back from the server render and show in the panel, then the price card.
   await expect(page.getByTestId("assistant-approval")).toBeVisible({ timeout: 240_000 });
   await expect(page.locator(".ed2-asst-list img").first()).toBeVisible();
-  await expect(page.getByTestId("assistant-approval")).toContainText(/Explainer “.+” · \d+s · 16:9 · voice .+ · \d+ credits?/);
+  await expect(page.getByTestId("assistant-approval")).toContainText(/Explainer “.+” · \d+s · 16:9 · paper, playful · voice .+ · \d+ credits?/);
   await expect(page.getByTestId("assistant-approval")).toContainText("Beat 1 · Voice:");
+  await expect(page.getByTestId("assistant-approval")).toContainText("Picture: a syringe icon");
   await page.screenshot({ path: testInfo.outputPath("01-explainer-card.png") });
   await page.getByTestId("assistant-approve").click();
   await expect(page.getByTestId("assistant-reply").last()).toContainText(/being generated/, { timeout: 120_000 });
@@ -78,6 +86,11 @@ test("New edit: /explain → script → go → stills → approve → the explai
   // A frame with something drawn on it has contrast; a blank or black frame has std ≈ 0.
   expect(std, `frame at 2 s: mean ${mean.toFixed(1)}, std ${std.toFixed(1)}`).toBeGreaterThan(2);
   execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", "2", "-i", mp4, "-frames:v", "1", testInfo.outputPath("03-explainer-2s.png")]);
+  // The steps board of beat 5: the middle of that beat, with timings spread by words as the fake voice has none.
+  const length = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4], { encoding: "utf8" }));
+  const total = BEAT_WORDS.reduce((sum, value) => sum + value, 0);
+  const boardAt = ((BEAT_WORDS.slice(0, 4).reduce((sum, value) => sum + value, 0) + BEAT_WORDS[4]! * 0.7) / total) * length;
+  execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", boardAt.toFixed(2), "-i", mp4, "-frames:v", "1", testInfo.outputPath("04-explainer-board.png")]);
 
   // In the editor too, at the playhead. The bundled Chromium cannot decode H.264, so only real Chrome.
   if (process.env.E2E_CHANNEL !== "chromium") {
@@ -94,8 +107,35 @@ test("New edit: /explain → script → go → stills → approve → the explai
     await page.screenshot({ path: testInfo.outputPath("02-explainer-playing.png") });
   }
 
-  // Ctrl+Z takes the whole explainer away.
+  // Ctrl+Z takes the whole explainer away; redo brings it back.
   await page.getByTestId("editor-stage").click({ position: { x: 4, y: 4 } });
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => JSON.stringify(await read()), { timeout: 60_000 }).not.toMatch(/"model":"motion-explainer"/);
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect.poll(async () => JSON.stringify(await read()), { timeout: 60_000 }).toMatch(/"model":"motion-explainer"/);
+
+  // Captions: the fake voice has no word timings, so give the generation some, as a real voice would
+  // (`complete_generation` keeps them for explainers). On the next load the editor adds the layer.
+  const words = Array.from({ length: 12 }, (_, index) => ({ text: index === 11 ? "virus." : `word${index}`, start: index * 0.4, end: index * 0.4 + 0.35 }));
+  const patched = await page.request.patch(`${url}/rest/v1/media_assets?id=eq.${generation!.media_asset_id}`, {
+    headers: { apikey: service, authorization: `Bearer ${service}`, "content-type": "application/json", prefer: "return=minimal" },
+    data: { words },
+  });
+  expect(patched.status(), await patched.text()).toBeLessThan(300);
+  await page.reload();
+  await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 120_000 });
+  const captionsOf = async () => ((await read()).document.stage.children[0]!.children ?? []).filter((child) => child.kind === "captions");
+  await expect.poll(async () => (await captionsOf()).map((child) => child.name), { timeout: 60_000 }).toEqual([expect.stringMatching(/^Captions · /)]);
+  const [captions] = await captionsOf();
+  const explainerId = (await read()).document.stage.children[0]!.children!.find((child) => child.paints?.some((paint) => paint.src?.model === "motion-explainer"))!.id;
+  expect(captions!.hidden).toBeUndefined();
+  expect(captions!.source).toBe(explainerId);
+  expect(String(captions!.src)).toMatch(/^assets\/transcripts\/[0-9a-f]{64}\.json$/);
+  await page.screenshot({ path: testInfo.outputPath("05-explainer-captions.png") });
+
+  // The captions are their own Undo step: Ctrl+Z removes them and leaves the explainer.
+  await page.getByTestId("editor-stage").click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(async () => (await captionsOf()).length, { timeout: 60_000 }).toBe(0);
+  expect(JSON.stringify(await read())).toMatch(/"model":"motion-explainer"/);
 });

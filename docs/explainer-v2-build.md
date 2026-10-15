@@ -250,9 +250,9 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 
 ## Track C: Assistant & editor
 
-- [ ] **C1. Storyboard.** `visual` per beat in `preview_explainer` / `add_explainer` inputs; the `/explain` reply
+- [x] **C1. Storyboard.** `visual` per beat in `preview_explainer` / `add_explainer` inputs; the `/explain` reply
   and the approval card show it; `add_explainer` passes `theme`/`personality` into the spec. Fake provider updated.
-- [ ] **C2. Guide v2** (`apps/web/lib/agent/guides.ts`, `explainer`):
+- [x] **C2. Guide v2** (`apps/web/lib/agent/guides.ts`, `explainer`):
   - choose `theme` and `personality` from the topic and the user's words (tables, 4 lines each);
   - **subject first:** for every beat, list the nouns of `say`, find each with `find_icons` / `find_lotties` or
     pick a kit shape, and write that into `visual` before any code; never use an icon whose name does not match
@@ -261,19 +261,19 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
   - every beat has a primary, a secondary and an ambient motion; extend `motion-guide.ts`'s adaptation of the
     LottieFiles skill to beats of 3–6 s (no new text copied from the skill);
   - quote the kit README's v2 API and do/don't list (Track A9).
-- [ ] **C3. Subject check in the preview loop.** After `preview_explainer`, the model writes one line per still:
+- [x] **C3. Subject check in the preview loop.** After `preview_explainer`, the model writes one line per still:
   "shows X; the beat says Y" and fixes any beat where they differ; the tool result reminds it to.
-- [ ] **C4. Captions.** Op `sync_explainer` in editor-core (tests next to `src/voiceover.test.ts`); the editor runs it
+- [x] **C4. Captions.** Op `sync_explainer` in editor-core (tests next to `src/voiceover.test.ts`); the editor runs it
   when an explainer generation lands with words (`useGenerations.ts` / a hook like `useVoiceovers.ts`), and also
   once for explainers placed before v2 when their generation has words.
-- [ ] **C5. Evals.** Fix `explain-make` (the fake honours "go ahead"); add `explain-vaccine`: the grader reads the
+- [x] **C5. Evals.** Fix `explain-make` (the fake honours "go ahead"); add `explain-vaccine`: the grader reads the
   scene code and the storyboard and wants every beat's `visual` to name an icon, Lottie or shape that exists, at
   least 3 subject icons (`virus`, `syringe`, `shield…`, `dna`…) and no `database`/`server` icon, a `Headline`,
   and `theme`/`personality` set.
 - [ ] **C6. e2e.** `editor-explainer.spec.ts`: storyboard shows `visual`; after render a captions layer
   `Captions · …` exists and is visible (fake voice: seed words through the fake transcriber the way
   `editor-roughcut` does); look at one frame with the board.
-- [ ] **C7. Notices.** `THIRD_PARTY_NOTICES.md`: add the explainer files to the motion-design row; add
+- [x] **C7. Notices.** `THIRD_PARTY_NOTICES.md`: add the explainer files to the motion-design row; add
   `@remotion/lottie` (Remotion licence) and the Noto emoji use in explainers.
 
 **Checks:** `npm run typecheck`; `npm run check:contracts --workspace @opencmo/web`;
@@ -368,6 +368,42 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 
 ### Track C
 
+- C1: `visual` (1–160 chars) per beat in `preview_explainer` / `add_explainer`; optional `theme` / `personality`
+  (`EXPLAINER_THEMES`, `EXPLAINER_PERSONALITIES` in editor-core, `ExplainerSceneSchema` accepts them). `visual`
+  never reaches the render job or the spec (checked). The card's first line shows the look
+  (`· paper, playful ·`) and each beat ends with `· Picture: …`. The fake (`providers/fake-explainers.ts`) shows the
+  storyboard with a picture per beat; vaccine topics use a v2 vaccine scene, everything else the v1 showcase.
+- C2: guide `explainer` rewritten: look tables (theme, personality), subject first (nouns → `find_icons` /
+  `find_lotties` / kit shape → `visual`), kit API v2 quoted from the contract above (the README v2 is A9; re-check
+  the wording when it lands), one `Headline`, `Board` for lists. `EXPLAINER_MOTION` in `motion-guide.ts` extends the
+  LottieFiles adaptation to 3–6 s beats (personalities, three layers); no new text from the skill.
+- C3: the preview result carries `storyboard` (beat → visual) and `check` (one line per still "shows X; the beat
+  says Y", fix where they differ); the tool description says the same. The fake writes those lines.
+- C4: op `sync_explainer` (`ops/explainer.ts`, tests in `explainer.test.ts`): visible captions layer
+  `Captions · <title>`, `source` = explainer layer, timed like it, caption style of the clip; an existing layer only
+  gets the new `src` (hidden stays hidden); no words → no change. `useExplainers.ts` runs it (own Undo step,
+  `origin: "system"`) for every explainer layer without captions whose generation has words, so pre-v2 explainers
+  are covered; each layer is captioned once per browser (localStorage), so deleting the captions sticks.
+- C5: `explain-make` fixed (the fake goes straight to the preview on "go ahead" / "no need to show it") and also
+  wants a `visual` per beat; new `explain-vaccine` (visuals name a real icon/Lottie/shape, ≥3 subject icons, no
+  `database`/`server`, a `Headline`, theme + personality set). With `OPENCMO_MOTION=local`, fake voice, on A5:
+  `explain-script`, `explain-make`, `explain-vaccine` 3/3. With the showcase swapped in, `explain-vaccine` failed on
+  exactly the points it should (no subject, no look, no Headline). The fake vaccine scene uses the README's landed
+  API (`Board lineAt`, `Group react`; `Icon` has no `secondary`), and the guide follows the README, not the
+  contract, where they differ. Stills looked at (6, scale 0.25, still blueprint until A6): 1 title + syringe +
+  shield-check; 2 syringe + 3 grey virus fragments, "A harmless piece"; 3 red virus, "Ready for the real virus";
+  4 steps board left + syringe right, "Three steps"; 5–6 check, "Protected". No overlapping text.
+- C6: `editor-explainer.spec.ts` extended (vaccine prompt, `Picture:` in the storyboard and card, `paper, playful`
+  on the card, a frame of the board saved as `04-explainer-board.png`, captions after seeding `media_assets.words`
+  through the service API + reload, captions are one Undo step). **Not run yet:** this container has no Docker
+  daemon. Box stays open until someone runs it.
+- C7: notices: explainer files in the motion-design row, Noto emoji in explainers, Remotion licence (incl.
+  `@remotion/lottie`).
+- Full `agent:eval --provider fake` (local motion, fake voice): 39/41 before A5 (the two explainer tasks could not
+  render `Headline`), then the explainer group 3/3 on A5; re-run the full suite on the final branch.
+- Checks: `npm run typecheck` ✓, editor-core `vitest` 599/599 ✓, `check:contracts` ✓ (new
+  `lib/agent/explainer-tool.check.ts`).
+
 ---
 
 ## Requests
@@ -379,8 +415,12 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   into `outdir` with that browser (`puppeteerInstance`) and print exactly one PreviewResult line (`ok:false` with
   `phase`/`message` where `preview` exits 3/4 today). Reopen the browser if it died; exit on stdin EOF; any other
   failure exits non-zero (the worker starts a new process). stdout carries only these lines, as in `preview`.
-- [ ] (from B → owner C) `apps/web/.env.example`: add `MOTION_PREVIEW_TOKEN=` next to `MOTION_PREVIEW_URL` (B5: the
+- [x] (from B → owner C) `apps/web/.env.example`: add `MOTION_PREVIEW_TOKEN=` next to `MOTION_PREVIEW_URL` (B5: the
   preview endpoint has its own token now; same value as the `opencmo-motion` Modal secret).
+- [ ] (from C → owner A) On `blueprint`, `Board` is a light grey panel with white text: the lines are nearly
+  unreadable (fake vaccine scene, beat 5 still). Dark panel or dark ink on blueprint, please.
+- [ ] (from C → owner A) When A9's `vaccine.job.json` exists, C switches the fake
+  (`apps/web/lib/agent/providers/fake-explainers.ts`) to it; until then the fake has its own vaccine scene.
 
 - [ ] (from A → owner B) B3: copy `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie` into
   `motion_image` at the same relative paths as in the repo (`<root>/packages/clip-icons/data`,

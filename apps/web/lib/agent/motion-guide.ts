@@ -5,6 +5,10 @@
  * https://github.com/LottieFiles/motion-design-skill; see THIRD_PARTY_NOTICES.md) to video intros
  * and to the `IntroSpec` the Builder reads. Durations there are for UI; the Builder doubles them
  * for video, so the agent only picks a personality and beat times.
+ *
+ * EXPLAINER_MOTION extends the same adaptation to explainer beats of 3-6 s
+ * (`docs/explainer-v2-build.md`, C2): the personality, the three pillars and the motion layers,
+ * rewritten for the explainer kit, which applies the timings itself. No new text from the skill.
  */
 
 import { INTRO_ELEMENTS, INTRO_MOTIONS, MAX_MOVING, PERSONALITY, READ_SECONDS, type Personality } from "@opencmo/editor-core";
@@ -38,3 +42,15 @@ Rules the reviewer enforces:
 - background: "gradient" by default (brand colours); "none" only when the user wants the speaker visible behind the words.
 
 Three motion layers make an intro feel alive: primary (title), secondary (accent line, tagline), ambient (a subtle lottie such as sparkle). Two layers are often enough; never more than five elements.`;
+
+/**
+ * Motion for explainers (read_guide "explainer"). The kit turns the personality into frames,
+ * anticipation and settle, so the model chooses intent and layers, not curves.
+ */
+export const EXPLAINER_MOTION = `Motion (one personality for the whole video, set with personality):
+- premium: calm and smooth, long settles; ideas, money, B2B. corporate: crisp and even, no overshoot; process, data, how a product works. playful: bouncy, a small overshoot; science for everyone, health, kids, consumer. energetic: fast and punchy; launches, sport, "3 tips".
+- Decide in this order: what the viewer should feel in this beat → which mark carries that (the primary) → what supports it.
+- Every beat has three layers. Primary: the one mark the narration is about enters or transforms on its cue word. Secondary: something that answers it 3-10 frames later (a halo follows it with secondary, a label or arrow lands, a Group of nearby marks reacts with react). Ambient: the field keeps breathing (Stage ambient, on by default) so no frame is frozen.
+- Setup → action → resolution inside each beat: anticipation before the primary moves, the move, then a settle. The kit adds anticipation and settle to every entrance; don't fake them with extra keyframes.
+- Stagger related marks 3-8 frames apart (kit.stagger); at most three primaries in motion at once; the next starts when the previous has landed.
+- A beat of 3-6 s holds one main change. Let it land and read for at least 1 s before the next beat replaces it; hold the last state still for the final second.`;
