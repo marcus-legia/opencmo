@@ -270,6 +270,18 @@ export function clipScope(
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
       }
       if (call.name === "add_explainer") {
+        // One check of everything the render shows or says: the script, and the words in the code
+        // (the spec only holds the script, so `screen` alone would miss the labels). Before the code
+        // is saved, so refused code never lands in `scene_codes`.
+        const request = addExplainerInput.safeParse(call.input);
+        if (request.success) {
+          try {
+            await moderateText(explainerText(request.data), { kind: "video" });
+          } catch (err) {
+            const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+            return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+          }
+        }
         const snapshot = await workspace.read();
         const accent = readBrand(snapshot.document)?.colors.accent;
         const prepared = await prepareExplainer(call.input, {
@@ -289,14 +301,6 @@ export function clipScope(
         });
         if (typeof prepared === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
-        }
-        // One check of everything the render shows or says: the script, and the words in the code
-        // (the spec only holds the script, so `screen` alone would miss the labels).
-        try {
-          await moderateText(explainerText(addExplainerInput.parse(call.input)), { kind: "video" });
-        } catch (err) {
-          const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
         }
         return { kind: "approval", input: prepared, card: explainerCard(prepared, clipId) };
       }

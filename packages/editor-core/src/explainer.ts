@@ -18,6 +18,19 @@ export const EXPLAINER_MAX_SECONDS = 90;
 /** SQL caps a generation's `scene` at 4000 bytes (`create_generation`). */
 export const EXPLAINER_SCENE_BYTES = 4000;
 
+/** `jsonb::text` of a JSON value: Postgres writes `": "` and `", "`, so it is longer than `JSON.stringify`. */
+function jsonbText(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map(jsonbText).join(', ')}]`;
+	if (value && typeof value === 'object') {
+		const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+		return `{${entries.map(([key, item]) => `${JSON.stringify(key)}: ${jsonbText(item)}`).join(', ')}}`;
+	}
+	return JSON.stringify(value);
+}
+
+/** Bytes of `scene` as SQL measures them (`octet_length((p_spec->'scene')::text)`). */
+export const sceneBytes = (scene: unknown): number => new TextEncoder().encode(jsonbText(scene)).length;
+
 export const ExplainerBeatSchema = z
 	.object({
 		say: z.string().trim().min(1).max(240),

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { validate, type ClipDocument } from '@opencmo/clip-doc';
 
 import { priceOf, specSchema, type AiModel } from './generate';
+import { EXPLAINER_SCENE_BYTES, sceneBytes } from './explainer';
 import { AGENT_OP_INPUTS, applyOps, describeOp, estimateDuration, explainerSeconds, type OpContext } from './ops';
 
 const ctx = { master: null, media: { duration: () => null }, readTranscript: async () => [], saveTranscript: async () => 'x' } as unknown as OpContext;
@@ -133,6 +134,18 @@ describe('explainer timing and price', () => {
 		const tooBig = specSchema(model).safeParse({ ...spec('16:9', 20), scene });
 		expect(tooBig.success).toBe(false);
 		expect(tooBig.error?.issues[0]?.message).toMatch(/too long/);
+	});
+
+	it('measures the scene as SQL does (jsonb text has a space after every : and ,)', () => {
+		expect(sceneBytes({ a: 1, b: ['x', 'y'] })).toBe('{"a": 1, "b": ["x", "y"]}'.length);
+		// Compact JSON under the cap, but SQL's text form over it: refused here, not in SQL.
+		const sceneWith = (length: number) => ({ ...spec('16:9', 20).scene, beats: Array.from({ length: 16 }, () => ({ say: 'x'.repeat(length), label: 'y'.repeat(20) })) });
+		let length = 240;
+		while (JSON.stringify(sceneWith(length)).length > EXPLAINER_SCENE_BYTES) length--;
+		const scene = sceneWith(length);
+		expect(JSON.stringify(scene).length).toBeLessThanOrEqual(EXPLAINER_SCENE_BYTES);
+		expect(sceneBytes(scene)).toBeGreaterThan(EXPLAINER_SCENE_BYTES);
+		expect(specSchema(model).safeParse({ ...spec('16:9', 20), scene }).success).toBe(false);
 	});
 
 	it('price: credits per started 10 s plus the voice per started 1,000 characters', () => {

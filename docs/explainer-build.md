@@ -513,6 +513,11 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [x] (from B → owner C) `priceOf` (editor-core): add `case 'explainer': return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);` and `'explainer'` to the `unit` union; the `voiceKchars` addition stays as it is. Until then `priceOf` returns `NaN` for this model. Also count narration in code points (`[...text].length`), as SQL `length()` and Python `len()` do.
 - [x] (from B → owner C) `providerEnabled` in `apps/web/lib/generate/models.ts`: `opencmo-motion` is on when `OPENCMO_MOTION` is `local` or `modal` and (`FAL_KEY` or `OPENCMO_MOTION_FAKE_VOICE=1` outside production), or `aiFakeEnabled()`, the same rule as `adapter_for`. Until then the web hides the model.
 - [x] (from B → owner C) In `apps/web/package.json`: add `"@opencmo/clip-motion": "*"` (`lib/motion/preview.ts` imports its types) and `NODE_OPTIONS=--conditions=react-server tsx lib/motion/preview.check.ts` to `check:contracts`.
+- [ ] (from review → owner B, with B6) The paid `duration` is the estimate at 2.4 words/s + 1.5 s, rounded up to
+  5 s; `motion.py` cuts a longer real voice at `duration`, losing the last words. With the real voice, read 2–3
+  scripts and log the voice length against the estimate; if ElevenLabs reads slower than ~2.6 words/s with the
+  pauses between beats, lower `WORDS_PER_SECOND` in `packages/clip-motion/src/job.ts` and the same constant in
+  `packages/editor-core/src/explainer.ts` together.
 
 ---
 

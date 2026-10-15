@@ -13,7 +13,7 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
-import { EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, type ExplainerScene } from './explainer';
+import { EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
 
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
@@ -116,7 +116,8 @@ const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
 /** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref, not a 3D template. */
 export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.provider === 'opencmo-motion';
 
-const explainerScene = ExplainerSceneSchema.refine((scene) => new TextEncoder().encode(JSON.stringify(scene)).length <= EXPLAINER_SCENE_BYTES, {
+// Measured like SQL: a script that passes here must not fail there with the 3D wording.
+const explainerScene = ExplainerSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
 	message: 'The script is too long for one explainer. Use fewer or shorter beats.',
 });
 
