@@ -317,10 +317,18 @@ probe task (`complete_media_probe`).
   - `POST /api/v1/editor/captions/transcript` `{clip_id, media_id, source_in, source_out}` → `use_media_transcript`
     as is; `{media_id, request: true}` → `{ transcript_status }`.
   `typecheck` and `check:contracts` green.
-  **Not run end to end here:** this cloud session could not pull the PostgREST image (Docker Hub 429, ghcr
-  forbidden), so the full stack (`npm run dev`) did not start. The SQL behind every route is covered by pgTAP, and
-  the worker by its tests. **For the owner:** `npm run dev`, upload a talking video into a New edit, and watch the
-  library row go `Transcribing…` → `Transcript ready` (no credits charged).
+  **Checked end to end on a local stack** (Supabase with auth, PostgREST and Storage; the e2e worker harness =
+  the real worker code with the fixture transcriber). The steps, all through the HTTP APIs:
+  1. upload a 6 s video with sound to Storage, and add its `media_assets` row and its probe task;
+  2. the asset went `pending/none` → `ready`, `has_audio = true`, `transcript_status = ready`;
+  3. the tasks are `probe_media done` and `transcribe_asset done` with `credits 0`; a `media_transcripts` row
+     exists (`source fake`);
+  4. signed in as the user: `use_media_transcript` → `ready` with `src`; reading `media_assets` under RLS (the
+     editor's status GET) → `ready`; `request_media_captions` → 0 credits; no caption entry in the ledger.
+
+  Not run: the Next routes themselves (a thin layer over these RPCs; typecheck covers them) and a real Scribe call
+  (no key here). **For the owner:** `npm run dev` with a real `ELEVENLABS_API_KEY`, then upload a talking video
+  into a New edit; the library row should go `Transcribing…` → `Transcript ready`, with no credits charged.
 
 ---
 
