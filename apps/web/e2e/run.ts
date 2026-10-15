@@ -61,6 +61,10 @@ function readEnv(): NodeJS.ProcessEnv {
     // Generate cũng bằng model giả (FakeProvider của worker): `check:api` trong
     // api-contract.spec cần danh sách model giả, và E2E không được tốn tiền thật.
     OPENCMO_AI_FAKE: "1",
+    // Explainers render with the real Remotion CLI on this machine and a silent voice: the
+    // editor-explainer spec checks real pixels, and no paid key is used.
+    OPENCMO_MOTION: "local",
+    OPENCMO_MOTION_FAKE_VOICE: "1",
     // `next start` loads `apps/web/.env.local`, and provider keys there turn on REAL models
     // (Generate would pick a real voice over `fake-voice`): tests drift and may cost money.
     // `@next/env` never overrides a variable that is already set, so blank ones block them.

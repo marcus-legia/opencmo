@@ -17,6 +17,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "intro", label: "Intro", hint: "An animated intro for this clip", directive: "call plan_video with recipe \"intro\"" },
   { name: "voiceover", label: "Voice-over", hint: "A voice reading your text", directive: "call add_voiceover" },
   { name: "music", label: "Music", hint: "A music bed or sound effect", directive: 'call generate_media with kind "audio"' },
+  {
+    name: "explain",
+    label: "Explain a concept",
+    hint: "A narrated animated explainer, 15-90 s",
+    directive: 'read_guide "explainer" and follow its steps: show the script and ask before writing any code',
+  },
 ];
 
 /** The command a prompt starts with, if any (`/video make…`). */

@@ -835,3 +835,37 @@ def test_after_is_validated_like_sql():
         validate_spec(model, {**base, "after": "a" * 64, "startImage": "user-1/a.png"})
     with pytest.raises(SpecError, match="does not take"):
         validate_spec(get_model("fal-nano-banana"), {"prompt": "x", "aspectRatio": "1:1", "after": "a" * 64})
+
+
+def test_explainer_tai_code_cua_dung_nguoi(monkeypatch):
+    # Explainers carry only code_ref too; the code is loaded for the task's owner.
+    beats = [{"say": "One."}, {"say": "Two."}, {"say": "Three."}]
+    spec = {
+        "prompt": "Shazam", "aspectRatio": "16:9", "duration": 15, "voice": "Aria",
+        "scene": {"template": "explainer", "code_ref": "d" * 64, "title": "Shazam", "beats": beats},
+    }
+    seen = {}
+
+    class Adapter:
+        def run(self, model, spec, workdir, alive):
+            seen["code"] = spec.get("code")
+            raise generate_task.ProviderError("stop here")
+
+    monkeypatch.setattr(generate_task, "adapter_for", lambda model: Adapter())
+    store = FakeStore(_generation(model="motion-explainer", spec=spec, spec_hash=generate_task.spec_hash("motion-explainer", spec)))
+    store.codes = {("user-2", "d" * 64): "return function Scene() { return null; };"}
+    generate_task.process(store, _task())
+    assert store.failed == ["This explainer code was not found. Preview it again."]
+    assert seen == {}
+
+    store = FakeStore(_generation(model="motion-explainer", spec=spec, spec_hash=generate_task.spec_hash("motion-explainer", spec)))
+    store.codes = {("user-1", "d" * 64): "return function Scene() { return null; };"}
+    generate_task.process(store, _task())
+    assert seen["code"].startswith("return function Scene")
+
+
+def test_kiem_duyet_bo_qua_explainer_cua_minh():
+    from opencmo.ai.catalog import get_model
+    from opencmo.ai.moderation import needs_check
+
+    assert not needs_check(get_model("motion-explainer")), "our own renderer: the script was checked on the web"

@@ -32,6 +32,7 @@ import { deleteMarker, setMarker } from './markers';
 import { insertNode, replaceSrc } from './library';
 import { activateScene, duplicateElements, groupElements, insertScene, pasteNodes, ungroupElements } from './structure';
 import { add3dStudio } from './studio3d';
+import { addExplainer } from './explainer';
 import { createTimeline, deleteTimeline, renameTimeline, setActiveTimeline, STAGE_OPS } from './timelines';
 import { applyBrand } from './brand';
 import { applyColor } from './color';
@@ -68,6 +69,25 @@ export {
 	type VoiceoverInput,
 	type VoiceoverMark,
 } from './voiceover';
+export {
+	addExplainer,
+	estimateDuration,
+	EXPLAINER_FORMATS,
+	EXPLAINER_MAX_SECONDS,
+	EXPLAINER_MIN_SECONDS,
+	EXPLAINER_MODEL,
+	EXPLAINER_SCENE_BYTES,
+	ExplainerBeatSchema,
+	explainerInput,
+	explainerLayerName,
+	ExplainerSceneSchema,
+	explainerSeconds,
+	narrationOf,
+	type ExplainerBeat,
+	type ExplainerFormat,
+	type ExplainerInput,
+	type ExplainerScene,
+} from './explainer';
 export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
 
 const REGISTRY = [
@@ -147,6 +167,7 @@ const REGISTRY = [
 	replaceBackground,
 	createVideo,
 	editVideo,
+	addExplainer,
 ] as const;
 
 type Definition = {

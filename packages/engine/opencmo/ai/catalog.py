@@ -102,24 +102,64 @@ _ALLOWED = {
 }
 
 
-#: Cùng câu với `ai_check_spec` (SQL): code_ref thiếu, sai dạng, hay không phải của người gọi.
+#: Same message as `ai_check_spec` (SQL): code_ref missing, malformed, or not the caller's.
 CODE_NOT_FOUND = "This 3D scene code was not found. Preview it again."
+#: Same rule for an explainer (`template: "explainer"`), worded for it.
+EXPLAINER_CODE_NOT_FOUND = "This explainer code was not found. Preview it again."
+EXPLAINER_INVALID = "This explainer script is not valid. Write it again."
 
-#: Trần cỡ `scene` (JSON) của model 3D Studio — cùng số với `ai_check_spec`.
+#: Size cap of `scene` (JSON) for scene models — same number as `ai_check_spec`.
 SCENE_MAX_BYTES = 4000
+#: Explainer beats: the bounds of `BeatSchema` in packages/clip-motion/src/job.ts.
+BEATS_MIN, BEATS_MAX, SAY_MAX, LABEL_MAX, TITLE_MAX = 3, 16, 240, 40, 60
 
 
-def _check_scene(scene: Any) -> None:
-    """Chỉ kiểm hình dạng: luật đầy đủ là zod `SceneContentSchema` (lớp 1, route)
-    và chính renderer `clip-three` (parse lại, mã thoát 3 = spec hỏng)."""
+def _code_ref_ok(scene: dict[str, Any]) -> bool:
+    return isinstance(scene.get("code_ref"), str) and bool(re.fullmatch(r"[0-9a-f]{64}", scene["code_ref"]))
+
+
+def _check_explainer(scene: dict[str, Any]) -> None:
+    """The script the price and the voice are computed from; the renderer re-parses the full job."""
+    if not _code_ref_ok(scene):
+        raise SpecError(EXPLAINER_CODE_NOT_FOUND)
+    title, beats = scene.get("title"), scene.get("beats")
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= TITLE_MAX:
+        raise SpecError(EXPLAINER_INVALID)
+    if not isinstance(beats, list) or not BEATS_MIN <= len(beats) <= BEATS_MAX:
+        raise SpecError(EXPLAINER_INVALID)
+    for beat in beats:
+        if not isinstance(beat, dict) or set(beat) - {"say", "label"}:
+            raise SpecError(EXPLAINER_INVALID)
+        say, label = beat.get("say"), beat.get("label")
+        if not isinstance(say, str) or not 1 <= len(say.strip()) <= SAY_MAX:
+            raise SpecError(EXPLAINER_INVALID)
+        if label is not None and (not isinstance(label, str) or len(label.strip()) > LABEL_MAX):
+            raise SpecError(EXPLAINER_INVALID)
+    accent = scene.get("accent")
+    if accent is not None and not (isinstance(accent, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", accent)):
+        raise SpecError(EXPLAINER_INVALID)
+
+
+def narration(scene: dict[str, Any]) -> str:
+    """What the voice reads: the beats' `say`, trimmed, joined with one space (same as `ai_price`)."""
+    return " ".join(str(beat["say"]).strip() for beat in scene.get("beats") or [])
+
+
+def _check_scene(model: AiModel, scene: Any) -> None:
+    """Shape only: the full rules are zod on the route (layer 1) and the renderer itself
+    (`clip-three` / `clip-motion` re-parse; exit code 3 = invalid spec)."""
     if not isinstance(scene, dict) or not isinstance(scene.get("template"), str):
         raise SpecError("Describe the 3D scene first.")
     if len(json.dumps(scene, separators=(",", ":"), ensure_ascii=False).encode()) > SCENE_MAX_BYTES:
         raise SpecError("This 3D scene has too much data.")
-    # Cảnh code (spec code-scenes): code nằm ở scene_codes, scene chỉ mang sha256 của nó.
-    if scene["template"] == "code" and not (
-        isinstance(scene.get("code_ref"), str) and re.fullmatch(r"[0-9a-f]{64}", scene["code_ref"])
-    ):
+    # The explainer model takes only explainer scenes, and only it takes them: each renderer
+    # knows one shape, and the price of an explainer depends on its script.
+    if (model.provider == "opencmo-motion") != (scene["template"] == "explainer"):
+        raise SpecError(EXPLAINER_INVALID if model.provider == "opencmo-motion" else "Describe the 3D scene first.")
+    if scene["template"] == "explainer":
+        _check_explainer(scene)
+    # Code scenes (code-scenes spec): the code lives in scene_codes; the scene carries only its sha256.
+    if scene["template"] == "code" and not _code_ref_ok(scene):
         raise SpecError(CODE_NOT_FOUND)
 
 
@@ -168,8 +208,11 @@ def capability_keys(model: AiModel) -> set[str]:
 
 
 def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
-    """Cùng luật với `specSchema` (TS) và `ai_check_spec` (SQL)."""
+    """Same rules as `specSchema` (TS) and `ai_check_spec` (SQL)."""
     allowed = _ALLOWED[model.kind] | ({"scene"} if model.limits.get("scene") else set()) | capability_keys(model)
+    if model.kind == "video" and model.limits.get("voices"):
+        # A narrated video (explainer): the voice is generated inside the render.
+        allowed = allowed | {"voice"}
     extra = set(spec) - allowed
     if extra:
         raise SpecError("This request has settings the model does not take.")
@@ -215,8 +258,8 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
         if not all(media_ref_ok(ref) for ref in refs):
             raise SpecError(MEDIA_NOT_FOUND)
     if model.limits.get("scene"):
-        _check_scene(spec.get("scene"))
-    if model.kind == "voice" and spec.get("voice") not in model.limits.get("voices", []):
+        _check_scene(model, spec.get("scene"))
+    if (model.kind == "voice" or "voice" in allowed) and spec.get("voice") not in model.limits.get("voices", []):
         raise SpecError("Choose one of the listed voices.")
     if model.kind == "audio":
         duration = spec.get("duration")
@@ -226,7 +269,7 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
 
 
 def price_of(model: AiModel, spec: dict[str, Any]) -> int:
-    """Cùng công thức với `priceOf` (TS) và `ai_price` (SQL): giá gốc × hệ số độ phân giải, làm tròn lên."""
+    """Same formula as `priceOf` (TS) and `ai_price` (SQL): base price × resolution factor, rounded up."""
     unit, credits = model.price["unit"], int(model.price["credits"])
     if unit == "generation":
         base = credits
@@ -234,6 +277,10 @@ def price_of(model: AiModel, spec: dict[str, Any]) -> int:
         base = credits * math.ceil(float(spec.get("duration") or 1))
     elif unit == "kchars":
         base = credits * max(1, math.ceil(len(str(spec["prompt"]).strip()) / 1000))
+    elif unit == "explainer":
+        # Render per started 10 s, plus the voice per started 1,000 characters of narration.
+        chars = len(narration(spec.get("scene") or {}))
+        base = credits * math.ceil(int(spec["duration"]) / 10) + int(model.price["voiceKchars"]) * max(1, math.ceil(chars / 1000))
     else:
         raise SpecError("This model is not available.")
     factor = (model.price.get("resolution") or {}).get(spec.get("resolution") or "", 1)

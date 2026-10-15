@@ -143,7 +143,7 @@ export const MAX_STRICT_TOOLS = 20;
 export const MAX_STRICT_OPTIONAL = 24;
 
 /** Tools that spend credits: a malformed call here costs the user money, so they get strict first. */
-const PRICED = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+const PRICED = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
 
 /**
  * Which strict-eligible tools are actually sent as strict. The clip scope has far more eligible
@@ -195,6 +195,7 @@ export const ALWAYS_LOADED = new Set([
   "set_frame", "set_layout", "set_caption_style", "remove_words", "remove_ranges", "remove_silence", "find_filler_words", "find_silences", "undo",
   "add_diagram", "add_chart", "add_shape",
   "create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions",
+  "preview_explainer", "add_explainer",
 ]);
 
 const TOOL_SEARCH = { type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" } as const;

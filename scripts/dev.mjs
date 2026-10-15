@@ -29,6 +29,9 @@ const ENGINE_KEYS = new Set([
   "FAL_KEY", "OPENCMO_AI_FAKE",
   // The standby checker of output moderation when Claude cannot answer.
   "GEMINI_API_KEY", "OPENCMO_MODERATION_GEMINI_MODEL",
+  // Explainers: where clip-motion renders, and the free silent voice for runs without a fal key.
+  "OPENCMO_MOTION", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_MOTION_SCALE", "OPENCMO_MOTION_CHROME",
+  "OPENCMO_MOTION_CONCURRENCY",
 ]);
 /** `OPENCMO_AI_MODEL_<ID>` đổi providerModel — web và worker phải thấy cùng giá trị. */
 const ENGINE_PREFIXES = ["OPENCMO_AI_MODEL_"];
@@ -111,6 +114,15 @@ if (run("npm", ["run", "sandbox:3d"], { stdio: "inherit" }).status !== 0) {
   die("Không dựng được trang sandbox 3D (npm run sandbox:3d trong apps/web).");
 }
 
+// Explainers render with the local clip-motion CLI, and without a fal key the voice is a silent
+// track, so `/explain` works end to end with no paid keys. Web (previews) and worker (renders)
+// must agree. The first render downloads Remotion's headless browser once.
+const motionEnv = {
+  OPENCMO_MOTION: engineEnv.OPENCMO_MOTION ?? process.env.OPENCMO_MOTION ?? "local",
+  OPENCMO_MOTION_FAKE_VOICE:
+    engineEnv.OPENCMO_MOTION_FAKE_VOICE ?? process.env.OPENCMO_MOTION_FAKE_VOICE ?? (engineEnv.FAL_KEY || process.env.FAL_KEY ? "0" : "1"),
+};
+
 // 127.0.0.1 chứ không phải localhost: trên máy có IPv6, `localhost` giải ra ::1
 // còn Supabase local lắng nghe trên 127.0.0.1, và magic link quay về sai host.
 // `detached` cho mỗi tiến trình con tự làm trưởng nhóm, để lúc dừng còn giết
@@ -134,6 +146,7 @@ const children = [
       // already set, so empty strings win over the file.
       MODAL_SUBMIT_URL: "",
       OPENCMO_WORKER_TOKEN: "",
+      ...motionEnv,
     },
   }),
   spawn(venv, ["-m", "opencmo.worker"], {
@@ -142,6 +155,7 @@ const children = [
       ...process.env, ...engineEnv,
       SUPABASE_URL: supabase.API_URL,
       SUPABASE_SERVICE_ROLE_KEY: supabase.SERVICE_ROLE_KEY,
+      ...motionEnv,
     },
   }),
 ];

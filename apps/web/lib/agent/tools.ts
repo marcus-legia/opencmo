@@ -48,6 +48,7 @@ import { nodeFor } from "@/lib/editor/asset-node";
 
 import { GUIDE_NAMES, readGuide } from "./guides";
 import type { AgentWorkspace } from "./workspace";
+import type { Image } from "./providers/types";
 
 /** Một tool ở dạng trung lập: provider nào cũng dựng tool definition của mình từ đây. */
 export type ToolSpec = {
@@ -536,7 +537,7 @@ export function readGroup<T extends { name: string }>(calls: T[], index: number)
   return group;
 }
 
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video"]);
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };
@@ -553,6 +554,8 @@ export type ToolOutcome = {
   documentHash?: string;
   /** Dữ liệu cho UI (plan, câu hỏi) — không gửi model. */
   view?: Record<string, unknown>;
+  /** Images the model sees with the result (a server-rendered preview); not stored in the tool row. */
+  images?: Image[];
 };
 
 const FILLERS = new Set(["um", "umm", "uh", "uhh", "uhm", "erm", "er", "ah", "hmm", "mm", "mhm"]);

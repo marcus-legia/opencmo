@@ -13,6 +13,8 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
+import { EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
+
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
 export type AiModel = {
@@ -26,7 +28,11 @@ export type AiModel = {
 	name: string;
 	description: string;
 	/** `resolution`: hệ số nhân theo độ phân giải (thiếu = 1), làm tròn lên — cùng `ai_price` (SQL). */
-	price: { unit: 'generation' | 'second' | 'kchars'; credits: number; resolution?: Record<string, number> };
+	/**
+	 * `voiceKchars`: credits per 1,000 narration characters added on top (explainers voice their own
+	 * script inside the render), rounded up per started 1,000 — same as `ai_price` (SQL).
+	 */
+	price: { unit: 'generation' | 'second' | 'kchars' | 'explainer'; credits: number; resolution?: Record<string, number>; voiceKchars?: number };
 	limits: {
 		maxPromptChars: number;
 		aspectRatios?: string[];
@@ -76,8 +82,8 @@ export type GenerationSpec = {
 	aspectRatio?: string;
 	duration?: number;
 	voice?: string;
-	/** Model 3D Studio: nội dung cảnh — thứ quyết định hình, nằm trong hash. */
-	scene?: SceneContent;
+	/** Model 3D Studio: nội dung cảnh — thứ quyết định hình, nằm trong hash. Explainer: its script and code ref. */
+	scene?: SceneContent | ExplainerScene;
 	seed?: number;
 	resolution?: string;
 	/** Tên object trong bucket `media` của chính người dùng (`<uid>/…`); SQL kiểm chủ + tồn tại. */
@@ -106,6 +112,14 @@ const mediaRef = z
  */
 /** The clip's own video, or a library video: `<bucket>:<owner>/…` for the first, `<owner>/…` for the second. */
 const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
+
+/** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref, not a 3D template. */
+export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.provider === 'opencmo-motion';
+
+// Measured like SQL: a script that passes here must not fail there with the 3D wording.
+const explainerScene = ExplainerSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+	message: 'The script is too long for one explainer. Use fewer or shorter beats.',
+});
 
 export function specSchema(model: AiModel) {
 	const { limits } = model;
@@ -146,7 +160,9 @@ export function specSchema(model: AiModel) {
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),
-				...(limits.scene ? { scene: SceneContentSchema } : {}),
+				...(limits.scene ? { scene: isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
+				// Explainers voice their narration in the render job: the premade voice is part of the spec.
+				...(isExplainer(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
 				seed,
 			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
 				message: 'A shot that continues the previous one cannot also start from an image.',
@@ -183,8 +199,16 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 				return model.price.credits * Math.ceil(spec.duration ?? 1);
 			case 'kchars':
 				return model.price.credits * Math.max(1, Math.ceil(spec.prompt.trim().length / 1000));
+			case 'explainer':
+				// Integer credits per started 10 s: 0.1 per second rounds differently in JS, SQL and Python.
+				return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);
 		}
 	})();
 	const factor = (spec.resolution && model.price.resolution?.[spec.resolution]) || 1;
-	return Math.ceil(base * factor);
+	const scene = spec.scene as Partial<ExplainerScene> | undefined;
+	const voice = model.price.voiceKchars && Array.isArray(scene?.beats)
+		// Code points, as SQL `length()` and Python `len()` count them.
+		? model.price.voiceKchars * Math.max(1, Math.ceil([...narrationOf(scene.beats)].length / 1000))
+		: 0;
+	return Math.ceil(base * factor) + voice;
 }

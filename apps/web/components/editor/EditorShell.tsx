@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, frameAspect, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, EXPLAINER_MODEL, frameAspect, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -1670,7 +1670,8 @@ function aiMenuItems({
   const found: Record<string, unknown> = entity;
   const items: MenuItem[] = [];
   const declarations = ownDeclarations(found);
-  if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL)) {
+  // Rendered from code (3D Studio, explainers): a new seed would pay for the same picture again.
+  if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL && declaration.model !== EXPLAINER_MODEL)) {
     // Giá theo catalog máy chủ (G5); model đã tắt thì không mời sinh lại.
     // Shots continuing this one are made again from its new last frame: same price, counted here.
     const following = continuationsOf(document, String(found.id), 0).map((link) => link.declaration);
@@ -1825,7 +1826,9 @@ const TRANSITION_PROMPT =
 
 /** Nhãn chờ của phần tử AI: cảnh 3D render trên GPU, còn lại là sinh. */
 function aiLabel(entity: Record<string, unknown>): string {
-  return ownDeclarations(entity).some((declaration) => declaration.model === STUDIO_MODEL) ? "Rendering 3D…" : "Generating…";
+  const models = ownDeclarations(entity).map((declaration) => declaration.model);
+  if (models.includes(STUDIO_MODEL)) return "Rendering 3D…";
+  return models.includes(EXPLAINER_MODEL) ? "Rendering explainer…" : "Generating…";
 }
 
 function download(blob: Blob, name: string): void {

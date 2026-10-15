@@ -836,8 +836,10 @@ begin
     raise exception 'Turn not found.' using errcode = 'P0002';
   end if;
   v_more := public.agent_3d_hold_credits() - v_turn.hold_credits;
+  -- An explainer turn previews its scene like a 3D turn and needs the same bigger hold.
   if v_turn.status <> 'running' or v_more <= 0
-     or not exists (select 1 from public.agent_tool_calls c where c.turn_id = v_turn.id and c.name = 'preview_3d')
+     or not exists (select 1 from public.agent_tool_calls c
+                    where c.turn_id = v_turn.id and c.name in ('preview_3d', 'preview_explainer'))
      or public.credit_balance(v_user) < v_more then
     return v_turn.hold_credits;
   end if;
@@ -1052,7 +1054,7 @@ CREATE TABLE public.ai_models (
 CREATE FUNCTION public.ai_check_spec(p_model public.ai_models, p_spec jsonb) RETURNS void
     LANGUAGE plpgsql STABLE
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_allowed text[] := case p_model.kind
     when 'image' then array['prompt', 'aspectRatio', 'seed']
@@ -1064,6 +1066,10 @@ declare
   v_scene boolean := coalesce((p_model.limits->>'scene')::boolean, false);
   v_max_refs int := coalesce((p_model.limits->>'maxReferences')::int, 0);
   v_source boolean := coalesce((p_model.limits->>'sourceVideo')::boolean, false);
+  -- A narrated video (explainer) takes a voice, like a voiceover.
+  v_voiced boolean := p_model.kind = 'voice' or (p_model.kind = 'video' and p_model.limits ? 'voices');
+  v_explainer boolean := p_model.provider = 'opencmo-motion';
+  v_beat jsonb;
 begin
   if v_scene then
     v_allowed := v_allowed || array['scene'];
@@ -1077,6 +1083,7 @@ begin
     if coalesce((p_model.limits->>'lastFrame')::boolean, false) then v_allowed := v_allowed || array['endImage']; end if;
     if coalesce((p_model.limits->>'audio')::boolean, false) then v_allowed := v_allowed || array['audio']; end if;
     if v_source then v_allowed := v_allowed || array['sourceVideo', 'sourceStart']; end if;
+    if v_voiced then v_allowed := v_allowed || array['voice']; end if;
   end if;
   if p_spec is null or jsonb_typeof(p_spec) <> 'object' then
     raise exception 'Invalid generation request.' using errcode = '22023';
@@ -1155,13 +1162,48 @@ begin
   if v_scene and octet_length((p_spec->'scene')::text) > 4000 then
     raise exception 'This 3D scene has too much data.' using errcode = '22023';
   end if;
+  -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
+  -- script is checked here because the price and the voice are computed from it.
+  if v_scene and v_explainer <> (p_spec->'scene'->>'template' = 'explainer') then
+    if v_explainer then
+      raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+    end if;
+    raise exception 'Describe the 3D scene first.' using errcode = '22023';
+  end if;
+  if v_explainer and (
+      jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
+      or not exists (select 1 from public.scene_codes c
+                     where c.user_id = auth.uid() and c.hash = p_spec->'scene'->>'code_ref')) then
+    raise exception 'This explainer code was not found. Preview it again.' using errcode = '22023';
+  end if;
+  if v_explainer and (
+      jsonb_typeof(p_spec->'scene'->'title') is distinct from 'string'
+      or length(btrim(p_spec->'scene'->>'title')) not between 1 and 60
+      or jsonb_typeof(p_spec->'scene'->'beats') is distinct from 'array'
+      or jsonb_array_length(p_spec->'scene'->'beats') not between 3 and 16
+      or (p_spec->'scene' ? 'accent' and (jsonb_typeof(p_spec->'scene'->'accent') is distinct from 'string'
+          or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))) then
+    raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  end if;
+  if v_explainer then
+    for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
+      if jsonb_typeof(v_beat) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label'))
+          or jsonb_typeof(v_beat->'say') is distinct from 'string'
+          or length(btrim(v_beat->>'say')) not between 1 and 240
+          or (v_beat ? 'label' and (jsonb_typeof(v_beat->'label') is distinct from 'string'
+              or length(btrim(v_beat->>'label')) > 40)) then
+        raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+      end if;
+    end loop;
+  end if;
   if v_scene and p_spec->'scene'->>'template' = 'code' and (
       jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
       or not exists (select 1 from public.scene_codes c
                      where c.user_id = auth.uid() and c.hash = p_spec->'scene'->>'code_ref')) then
     raise exception 'This 3D scene code was not found. Preview it again.' using errcode = '22023';
   end if;
-  if p_model.kind = 'voice' and (jsonb_typeof(p_spec->'voice') is distinct from 'string'
+  if v_voiced and (jsonb_typeof(p_spec->'voice') is distinct from 'string'
       or not coalesce(p_model.limits->'voices' ? (p_spec->>'voice'), false)) then
     raise exception 'Choose one of the listed voices.' using errcode = '22023';
   end if;
@@ -1173,7 +1215,7 @@ begin
       using errcode = '22023';
   end if;
 end;
-$$;
+$_$;
 
 
 --
@@ -1225,6 +1267,11 @@ CREATE FUNCTION public.ai_price(p_model public.ai_models, p_spec jsonb) RETURNS 
       when 'second' then (p_model.price->>'credits')::numeric * ceil(coalesce((p_spec->>'duration')::numeric, 1))
       when 'kchars' then (p_model.price->>'credits')::numeric
         * greatest(1, ceil(length(btrim(p_spec->>'prompt')) / 1000.0))
+      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters.
+      when 'explainer' then (p_model.price->>'credits')::numeric * ceil((p_spec->>'duration')::numeric / 10)
+        + (p_model.price->>'voiceKchars')::numeric * greatest(1, ceil(coalesce((
+            select length(string_agg(btrim(b->>'say'), ' ' order by i))
+            from jsonb_array_elements(p_spec->'scene'->'beats') with ordinality as t(b, i)), 0) / 1000.0))
     end)
     * coalesce((p_model.price->'resolution'->>(p_spec->>'resolution'))::numeric, 1)
   )::int;

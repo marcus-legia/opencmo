@@ -97,6 +97,7 @@ export function AssistantPanel({
   const [available, setAvailable] = useState<boolean | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [broll, setBroll] = useState(false);
+  const [explain, setExplain] = useState(false);
   const [model, setModel] = useState<string | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [session, setSession] = useState<SessionView | null>(null);
@@ -141,6 +142,7 @@ export function AssistantPanel({
         const next = await client.load(wanted ?? readModel(), sessionId);
         setAvailable(next.available);
         setBroll(Boolean(next.broll));
+        setExplain(Boolean(next.explain));
         setModels(next.models);
         setSessions(next.sessions);
         setModel(next.model ?? undefined);
@@ -184,7 +186,9 @@ export function AssistantPanel({
         setTurn({ ...now, actions: [...now.actions, { id: event.data.id, name: event.data.name, ok: true, summary: "Working…", running: true }] });
         break;
       case "tool_result": {
-        const { id, name, ok, summary, view } = event.data;
+        const { id, name, ok, summary, view, images } = event.data;
+        // Server-rendered previews (preview_explainer) arrive with their stills, like a tab capture.
+        if (images?.length) setImagesByTool((all) => ({ ...all, [id]: images.map((jpeg) => `data:image/jpeg;base64,${jpeg}`) }));
         const found = now.actions.some((action) => action.id === id);
         const next: Action = { id, name, ok, summary, view };
         const actions = found ? now.actions.map((action) => (action.id === id ? { ...action, ...next, running: false } : action)) : [...now.actions, next];
@@ -488,6 +492,12 @@ export function AssistantPanel({
               The assistant cuts, adds titles and B-roll, animates, and checks the result frame by frame. Every request can be undone in one
               click.
             </p>
+            {explain ? (
+              // Opens /explain with the cursor after it: the user names the concept.
+              <button type="button" className="ed2-asst-example" data-testid="assistant-explain" disabled={busy || available === null} onClick={() => pickSlash("explain")}>
+                Explain a concept: a narrated animated explainer
+              </button>
+            ) : null}
             {(broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES).map((example) => (
               <button key={example} type="button" className="ed2-asst-example" disabled={busy || available === null} onClick={() => void send(example)}>
                 {example}
@@ -893,6 +903,8 @@ function activityOf(event: AssistantEvent, previous: Activity | undefined): Acti
 
 const TOOL_LABELS: Record<string, string> = {
   preview_3d: "Rendering a 3D preview",
+  preview_explainer: "Rendering explainer stills",
+  add_explainer: "Preparing the explainer",
   add_3d_scene: "Preparing the 3D scene",
   capture_frames: "Looking at frames",
   check: "Checking the edit",

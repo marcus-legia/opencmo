@@ -38,6 +38,8 @@ import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
+import { explainerCard, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "../explainer-tool";
+import { previewMotion } from "@/lib/motion/preview";
 import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, VERIFY_GATE, applyOpTool, checkErrorKeys, failingCheck, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
@@ -143,7 +145,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   process.env.OPENCMO_AI_FAKE ??= "1";
   // Same profile as the app: a blank New edit (no video of its own) has no cut-by-words tools.
   const blank = !JSON.stringify((await workspace.read()).document).includes(`"${MASTER_SRC}"`);
-  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC];
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {
@@ -219,6 +221,34 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         const shots = "images" in answer ? (answer.images as string[]) : [];
         const images: Image[] | undefined = shots.length ? shots.map((data) => ({ data, mimeType: "image/jpeg" as const })) : undefined;
         results.push({ id: call.id, name: call.name, ok: true, content: JSON.stringify({ ok: true, ...(answer.data as object) }), images });
+        continue;
+      }
+      if (call.name === "preview_explainer") {
+        // Same renderer as the app: the local CLI (OPENCMO_MOTION=local) or Modal.
+        const outcome = await runPreviewExplainer(call.input, { preview: previewMotion });
+        results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content, ...(outcome.images ? { images: outcome.images } : {}) });
+        continue;
+      }
+      if (call.name === "add_explainer") {
+        const prepared = await prepareExplainer(call.input, {
+          previewed: async () => calls.filter((item) => item.name === "preview_explainer").map((item) => String((item.input as { code?: unknown }).code ?? "")).reverse(),
+          // Eval has no database: code_ref = sha256, as save_scene_code computes it.
+          save: async (code) => createHash("sha256").update(code, "utf8").digest("hex"),
+        });
+        if (typeof prepared === "string") {
+          results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }) });
+          continue;
+        }
+        generations.push(prepared);
+        const card = explainerCard(prepared, "eval");
+        cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
+        if (options.untilCard) {
+          stopped = "card";
+          break;
+        }
+        const applied = await applyOpTool(prepared.op, env);
+        if (applied.version !== undefined) wrote = true;
+        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });
         continue;
       }
       if (call.name === "plan_video") {

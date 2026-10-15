@@ -18,6 +18,7 @@ from typing import Any
 
 from opencmo.ai.catalog import (
     CODE_NOT_FOUND,
+    EXPLAINER_CODE_NOT_FOUND,
     MEDIA_NOT_FOUND,
     VIDEO_NOT_FOUND,
     SpecError,
@@ -250,12 +251,12 @@ def process(store: Any, task: Task) -> None:
             raise SpecError("Invalid generation request.")
         adapter = adapter_for(model)
         scene = spec.get("scene") if isinstance(spec.get("scene"), dict) else None
-        if scene and scene.get("template") == "code":
-            # Cảnh code: spec (và hash) chỉ mang code_ref; code lấy theo CHỦ task,
-            # nên không render được code của người khác dù đoán đúng hash.
+        if scene and scene.get("template") in ("code", "explainer"):
+            # Code scenes and explainers: the spec (and its hash) carries only code_ref. The code
+            # is loaded for the task's OWNER, so guessing a hash cannot render someone else's code.
             code = store.get_scene_code(task.user_id, scene["code_ref"])
             if not code:
-                raise SpecError(CODE_NOT_FOUND)
+                raise SpecError(CODE_NOT_FOUND if scene["template"] == "code" else EXPLAINER_CODE_NOT_FOUND)
             spec = {**spec, "code": code}
     except SpecError as exc:
         store.fail_task(task.id, task.attempt_id, str(exc))

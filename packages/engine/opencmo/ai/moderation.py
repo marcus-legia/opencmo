@@ -58,8 +58,8 @@ OWN_FOOTAGE_POLICY = _policy("")
 # Fake mode: a prompt containing this mark blocks the "image" — tests the refund path offline.
 FAKE_MARK = "[[flag-output]]"
 
-# Our own renderer (3D) does not draw from a prompt: its text was checked on the web.
-SKIP_PROVIDERS = {"opencmo-3d"}
+# Our own renderers (3D, explainers) do not draw from a prompt: their text was checked on the web.
+SKIP_PROVIDERS = {"opencmo-3d", "opencmo-motion"}
 
 
 def _policy_for(model: AiModel, spec: dict | None = None) -> str:
