@@ -64,7 +64,8 @@ test("New edit: /explain → script → go → stills → approve → the explai
   const [generation] = (await (await rest(`generations?clip_id=eq.${clipId}&model=eq.motion-explainer&select=status,media_asset_id`)).json()) as { status: string; media_asset_id: string }[];
   expect(generation?.status).toBe("done");
   const [asset] = (await (await rest(`media_assets?id=eq.${generation!.media_asset_id}&select=storage_path`)).json()) as { storage_path: string }[];
-  const file = await page.request.get(`${url}/storage/v1/object/media/${asset!.storage_path}`, { headers: { apikey: service, authorization: `Bearer ${service}` } });
+  // `storage_path` carries its bucket ("media/<owner>/…").
+  const file = await page.request.get(`${url}/storage/v1/object/${asset!.storage_path}`, { headers: { apikey: service, authorization: `Bearer ${service}` } });
   expect(file.status()).toBe(200);
   const mp4 = testInfo.outputPath("explainer.mp4");
   writeFileSync(mp4, await file.body());
