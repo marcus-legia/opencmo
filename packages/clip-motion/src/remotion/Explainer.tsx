@@ -52,7 +52,7 @@ class SceneBoundary extends Component<{ children: React.ReactNode }, { error: Er
 
 export function Explainer({ job, compiled, probe }: ExplainerProps) {
 	const { width, height } = useVideoConfig();
-	const palette = useMemo(() => makePalette(job.accent), [job.accent]);
+	const palette = useMemo(() => makePalette(job.accent, job.theme), [job.accent, job.theme]);
 	const motion = useMemo(() => {
 		const personality = job.personality ?? DEFAULT_PERSONALITY;
 		return { personality, style: MOTION[personality], explicit: job.personality !== undefined };

@@ -67,3 +67,36 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 	if (covered / (GRID * GRID) < 1 - EMPTY_LIMIT) issues.push(`The frame is more than ${Math.round(EMPTY_LIMIT * 100)}% empty ${at}: grow or add the visual.`);
 	return issues;
 }
+
+/** Marks that are not a picture of the subject on their own. */
+const FRAMES_ONLY = new Set(['Board', 'Box']);
+/** Marks that move inside their box (canvas fields, Lottie), so an unchanged box does not mean a still beat. */
+const MOVES_INSIDE = /^(DotField|Spectrogram|Waveform|Lottie\b|Shape blob)/;
+
+function signature(boxes: LaidBox[]): string {
+	return boxes
+		.map((box) => `${box.kind}:${box.name}:${Math.round(box.x / 4)}:${Math.round(box.y / 4)}:${Math.round(box.w / 4)}:${Math.round(box.h / 4)}`)
+		.sort()
+		.join('|');
+}
+
+/**
+ * Per-beat issues from the layout samples of each beat (`probeFrames`): a beat with no picture (icon, shape,
+ * Lottie, path, data mark…), and a beat where nothing moves between its two samples.
+ */
+export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[]): string[] {
+	const byBeat = new Map<number, LaidBox[][]>();
+	for (const sample of samples) {
+		if (!sample.boxes) continue;
+		byBeat.set(sample.beat, [...(byBeat.get(sample.beat) ?? []), sample.boxes]);
+	}
+	const issues: string[] = [];
+	for (const [beat, list] of [...byBeat.entries()].sort((a, b) => a[0] - b[0])) {
+		const pictures = list.flat().filter((box) => box.kind === 'mark' && !FRAMES_ONLY.has(box.name));
+		if (!pictures.length) issues.push(`Beat ${beat + 1} shows no icon, shape or Lottie: draw what its narration names.`);
+		else if (list.length > 1 && signature(list[0]!) === signature(list[list.length - 1]!) && !pictures.some((box) => MOVES_INSIDE.test(box.name))) {
+			issues.push(`Nothing moves during beat ${beat + 1}: add a change (a swap, a move, a reaction) or an ambient layer.`);
+		}
+	}
+	return issues;
+}

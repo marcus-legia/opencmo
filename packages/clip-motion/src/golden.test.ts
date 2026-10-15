@@ -1,5 +1,6 @@
 /**
- * Golden stills: the showcase rendered at quarter size must match the stored PNGs, measured like
+ * Golden stills: the showcase (blueprint, v1) and the vaccine scene (paper, v2 kit) rendered at quarter size must match
+ * the stored PNGs, measured like
  * editor-parity (mean channel difference and worst 16×16 tile). Needs Chrome Headless Shell and ffmpeg.
  * UPDATE_GOLDEN=1 rewrites the references; look at them before committing.
  */
@@ -16,7 +17,7 @@ import { parseJob, prepare } from './prepare.ts';
 import { renderStills } from './preview.ts';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-const FRAMES = [100, 330, 520, 860];
+const FIXTURES: Record<string, number[]> = { showcase: [100, 330, 520, 860], vaccine: [75, 244, 569, 725] };
 const LIMIT = { mean: 1.5, tile: 10 };
 
 function pixels(file: string): { data: Buffer; width: number; height: number } {
@@ -54,19 +55,19 @@ function compare(a: string, b: string): { mean: number; tile: number } {
 	return { mean: total / (x.width * x.height * 3), tile };
 }
 
-describe('showcase golden stills', () => {
+describe.each(Object.entries(FIXTURES))('%s golden stills', (name, frames) => {
 	it('keeps the scene file and the job fixture in sync', () => {
-		const job = JSON.parse(readFileSync(join(fixtures, 'showcase.job.json'), 'utf8'));
-		expect(job.code).toBe(readFileSync(join(fixtures, 'showcase.scene.jsx'), 'utf8'));
+		const job = JSON.parse(readFileSync(join(fixtures, `${name}.job.json`), 'utf8'));
+		expect(job.code).toBe(readFileSync(join(fixtures, `${name}.scene.jsx`), 'utf8'));
 	});
 
 	it('matches the reference images', { timeout: 240_000 }, async () => {
-		const parsed = parseJob(JSON.parse(readFileSync(join(fixtures, 'showcase.job.json'), 'utf8')));
+		const parsed = parseJob(JSON.parse(readFileSync(join(fixtures, `${name}.job.json`), 'utf8')));
 		if (!parsed.ok) throw new Error(parsed.message);
 		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-golden-'));
-		const stills = await renderStills(parsed.job, prepare(parsed.job).compiled, FRAMES, dir, { scale: 0.25, format: 'png' });
+		const stills = await renderStills(parsed.job, prepare(parsed.job).compiled, frames, dir, { scale: 0.25, format: 'png' });
 		for (const still of stills) {
-			const reference = join(fixtures, 'golden', `showcase-${still.frame}.png`);
+			const reference = join(fixtures, 'golden', `${name}-${still.frame}.png`);
 			if (process.env.UPDATE_GOLDEN === '1' || !existsSync(reference)) {
 				if (process.env.UPDATE_GOLDEN !== '1') throw new Error(`Missing ${reference}: run with UPDATE_GOLDEN=1 and look at the images.`);
 				copyFileSync(still.file, reference);

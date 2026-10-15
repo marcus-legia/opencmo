@@ -3,16 +3,12 @@ import { useVideoConfig } from 'remotion';
 
 import { FAMILY } from '../remotion/fonts.ts';
 import { plotBox, plotPoint, type Box as BoxShape } from './areas.ts';
-import { kitError, MarkTag, TextTag, useArea, useColor, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
+import { kitError, MarkTag, TextTag, useArea, useColor, useGlow, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import { enter, ease } from './motion.ts';
 import { closestIcons, ICON_NAMES, iconPath } from './icons.ts';
 import { alpha } from './theme.ts';
 
 type XY = [number, number];
-
-export function glow(color: string, strength = 1): string {
-	return `drop-shadow(0 0 ${4 * strength}px ${alpha(color, 0.9)}) drop-shadow(0 0 ${14 * strength}px ${alpha(color, 0.45)})`;
-}
 
 export function requirePoint(name: string, value: unknown): XY {
 	if (!Array.isArray(value) || value.length !== 2 || !value.every(Number.isFinite)) throw kitError(`${name} must be [x, y] in pixels (got ${JSON.stringify(value)}).`);
@@ -49,6 +45,7 @@ export type LinkProps = LifeProps & { from: XY; to: XY; color?: ColorProp; width
 
 /** A line that draws itself between two points. `curve` bends it (fraction of its length). */
 export function Link(props: LinkProps) {
+	const glow = useGlow();
 	const from = requirePoint('Link from', props.from);
 	const to = requirePoint('Link to', props.to);
 	const life = useLife(props, undefined, 20);
@@ -81,6 +78,7 @@ export type BoxProps = LifeProps & { area?: AreaProp; x?: number; y?: number; w?
 
 /** A highlighted region: rounded, dashed by default, with an optional small label. */
 export function Box(props: BoxProps) {
+	const glow = useGlow();
 	const fromArea = useArea(props.area, 'hero');
 	const life = useLife(props, ease.hero, 18);
 	const color = useColor(props.color, 'answer');
@@ -112,6 +110,7 @@ export type CheckProps = LifeProps & { x?: number; y?: number; size?: number; co
 
 /** A ring that draws itself, then a check (or a cross). */
 export function Check(props: CheckProps) {
+	const glow = useGlow();
 	const { width, height } = useVideoConfig();
 	const life = useLife(props, undefined, 26);
 	const cross = props.kind === 'cross';
@@ -143,6 +142,7 @@ export type IconProps = LifeProps & { name: string; x?: number; y?: number; size
 
 /** A line icon that draws itself: any Lucide name (`virus`, `syringe`, `shield-check`…) or a v1 name. */
 export function Icon(props: IconProps) {
+	const glow = useGlow();
 	const { width, height } = useVideoConfig();
 	const d = typeof props.name === 'string' ? iconPath(props.name) : null;
 	if (!d) throw kitError(`unknown icon "${String(props.name)}": closest names are ${closestIcons(String(props.name)).join(', ')} (search with find_icons).`);
@@ -216,6 +216,7 @@ export type ScatterProps = LifeProps & {
 
 /** Points (0..1, y up) popping in one after another inside the plot of `area`. */
 export function Scatter(props: ScatterProps) {
+	const glow = useGlow();
 	if (!Array.isArray(props.points) || props.points.some((p) => !Number.isFinite(p?.x) || !Number.isFinite(p?.y))) throw kitError('Scatter points must be [{ x, y }] between 0 and 1.');
 	const target = useArea(props.area, 'hero');
 	const life = useLife(props, undefined, 30);
@@ -250,6 +251,7 @@ export type FitLineProps = LifeProps & { area?: AreaProp; from: XY; to: XY; colo
 
 /** A line through the plot of `area` (data coordinates, 0..1, y up), drawn left to right. */
 export function FitLine(props: FitLineProps) {
+	const glow = useGlow();
 	const target = useArea(props.area, 'hero');
 	const from = plotPoint(target, requirePoint('FitLine from', props.from));
 	const to = plotPoint(target, requirePoint('FitLine to', props.to));

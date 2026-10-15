@@ -1,14 +1,14 @@
 /** Preview: a few half-size stills plus the layout report, for the Assistant to look at and fix. */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { openBrowser, renderStill, selectComposition } from '@remotion/renderer';
+import { openBrowser, renderStill, selectComposition, type HeadlessBrowser } from '@remotion/renderer';
 
 import { MotionCodeFailure } from './errors.ts';
 import { FPS, frameSize, type MotionJob, type PreviewResult } from './job.ts';
-import { buildTimeline, stillFrames } from './kit/timing.ts';
-import { layoutIssues, type LaidBox } from './layout.ts';
+import { buildTimeline, probeFrames, stillFrames } from './kit/timing.ts';
+import { beatIssues, layoutIssues, type LaidBox } from './layout.ts';
 import { prepare } from './prepare.ts';
 import { browserExecutable, CHROMIUM, getBundle, sceneFailure, type Log } from './render.ts';
 import { LAYOUT_LOG } from './remotion/layout-log.ts';
@@ -21,12 +21,12 @@ export async function renderStills(
 	compiled: string | null,
 	frames: number[],
 	dir: string,
-	options: { log?: Log; scale?: number; format?: 'jpeg' | 'png' } = {},
+	options: { log?: Log; scale?: number; format?: 'jpeg' | 'png'; browser?: HeadlessBrowser } = {},
 ): Promise<Still[]> {
 	mkdirSync(dir, { recursive: true });
 	const serveUrl = await getBundle(options.log);
 	const inputProps = { job, compiled, probe: true };
-	const browser = await openBrowser('chrome', { browserExecutable: browserExecutable(), chromiumOptions: CHROMIUM, logLevel: 'error' });
+	const browser = options.browser ?? (await openPreviewBrowser());
 	const format = options.format ?? 'jpeg';
 	const stills: Still[] = [];
 	try {
@@ -55,25 +55,43 @@ export async function renderStills(
 	} catch (error) {
 		throw sceneFailure(error) ?? error;
 	} finally {
-		// Closing after a failed page can reject with "Target closed"; the render error is what matters.
-		await browser.close({ silent: true }).catch(() => undefined);
+		// A shared browser (serve) stays open. Closing after a failed page can reject with "Target closed".
+		if (!options.browser) await browser.close({ silent: true }).catch(() => undefined);
 	}
 	return stills;
 }
 
-export async function previewJob(job: MotionJob, outdir: string, options: { log?: Log; scale?: number } = {}): Promise<PreviewResult> {
+/** The Chromium a preview renders in, with the kit's offline flags. */
+export function openPreviewBrowser(): Promise<HeadlessBrowser> {
+	return openBrowser('chrome', { browserExecutable: browserExecutable(), chromiumOptions: CHROMIUM, logLevel: 'error' });
+}
+
+export async function previewJob(job: MotionJob, outdir: string, options: { log?: Log; scale?: number; browser?: HeadlessBrowser } = {}): Promise<PreviewResult> {
 	const started = Date.now();
 	const timeline = buildTimeline(job);
 	const { width, height } = frameSize(job.format);
 	let stills: Still[];
+	let probes: Still[];
+	const probeList = probeFrames(timeline);
+	let own: HeadlessBrowser | null = null;
 	try {
 		const { compiled } = prepare(job);
-		stills = await renderStills(job, compiled, stillFrames(timeline), resolve(outdir), options);
+		// One browser for the stills and the layout samples (serve passes its own).
+		const browser = options.browser ?? (own = await openPreviewBrowser());
+		stills = await renderStills(job, compiled, stillFrames(timeline), resolve(outdir), { ...options, browser });
+		// Layout-only samples at quarter size, kept out of the stills the Assistant looks at.
+		probes = await renderStills(job, compiled, probeList.map((probe) => probe.frame), join(resolve(outdir), 'probes'), { ...options, browser, scale: 0.25 });
 	} catch (error) {
 		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
 		throw error;
+	} finally {
+		if (own) await own.close({ silent: true }).catch(() => undefined);
 	}
-	const issues = stills.flatMap((still) => (still.boxes ? layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }) : []));
+	const issues = [...stills, ...probes]
+		.sort((a, b) => a.frame - b.frame)
+		.flatMap((still) => (still.boxes ? layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }) : []));
+	issues.push(...beatIssues(probeList.map((probe, i) => ({ beat: probe.beat, boxes: probes[i]?.boxes ?? null }))));
+	rmSync(join(resolve(outdir), 'probes'), { recursive: true, force: true });
 	options.log?.(`preview: ${stills.length} stills in ${Date.now() - started} ms`);
 	return { ok: true, stills: stills.map((still) => ({ t: Math.round((still.frame / FPS) * 100) / 100, file: still.file })), issues: [...new Set(issues)], estimated: timeline.estimated };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { layoutIssues, type LaidBox } from './layout.ts';
+import { beatIssues, layoutIssues, type LaidBox } from './layout.ts';
 
 const frame = { width: 1920, height: 1080, seconds: 4 };
 const visual: LaidBox = { kind: 'mark', name: 'DotField', x: 200, y: 200, w: 1500, h: 600 };
@@ -28,5 +28,25 @@ describe('layoutIssues', () => {
 
 	it('reports a mostly empty frame', () => {
 		expect(layoutIssues([{ kind: 'text', name: 'Alone', x: 800, y: 400, w: 300, h: 60, size: 52 }], frame)).toEqual(['The frame is more than 85% empty at 4.0 s: grow or add the visual.']);
+	});
+});
+
+describe('beatIssues', () => {
+	const icon: LaidBox = { kind: 'mark', name: 'Icon virus', x: 800, y: 400, w: 200, h: 200 };
+	const label: LaidBox = { kind: 'text', name: 'A harmless piece', x: 800, y: 90, w: 320, h: 60, size: 52 };
+
+	it('passes a beat with a picture that moves', () => {
+		expect(beatIssues([{ beat: 0, boxes: [label, icon] }, { beat: 0, boxes: [label, { ...icon, x: 900 }] }])).toEqual([]);
+	});
+
+	it('reports a beat with text only (a board is not a picture)', () => {
+		const board: LaidBox = { kind: 'mark', name: 'Board', x: 100, y: 300, w: 800, h: 300 };
+		expect(beatIssues([{ beat: 2, boxes: [label, board] }])).toEqual(['Beat 3 shows no icon, shape or Lottie: draw what its narration names.']);
+	});
+
+	it('reports a beat where nothing moves, but not a Lottie or a dot field', () => {
+		expect(beatIssues([{ beat: 1, boxes: [label, icon] }, { beat: 1, boxes: [label, icon] }])).toEqual(['Nothing moves during beat 2: add a change (a swap, a move, a reaction) or an ambient layer.']);
+		const lottie: LaidBox = { kind: 'mark', name: 'Lottie walk', x: 800, y: 400, w: 300, h: 300 };
+		expect(beatIssues([{ beat: 1, boxes: [lottie] }, { beat: 1, boxes: [lottie] }])).toEqual([]);
 	});
 });

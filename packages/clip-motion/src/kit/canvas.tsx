@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { AbsoluteFill, useVideoConfig } from 'remotion';
 
 import type { Box as BoxShape } from './areas.ts';
-import { kitError, MarkTag, useArea, useColor, useLife, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
+import { kitError, MarkTag, useArea, useColor, useLife, useTheme, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import type { Spectrum } from './data.ts';
 import { ease, enter, random } from './motion.ts';
 import { alpha, mix } from './theme.ts';
@@ -73,6 +73,7 @@ export type DotFieldProps = LifeProps & {
 
 /** Thousands of glowing dots: sound, data, people, stars. */
 export function DotField(props: DotFieldProps) {
+	const blend: GlobalCompositeOperation = useTheme() === 'paper' ? 'source-over' : 'lighter';
 	const target = useArea(props.area, 'full');
 	const life = useLife(props, undefined, 36);
 	const color = useColor(props.color, 'signal');
@@ -106,7 +107,7 @@ export function DotField(props: DotFieldProps) {
 	const filter = props.filterAt !== undefined ? enter(life.frame, { at: props.filterAt, dur: 24, ease: ease.inOut }) : 0;
 	const morphTargets = props.morphTo?.length ? props.morphTo : null;
 	const canvas = useCanvas(target, size * 8 * glowScale + 8, (ctx) => {
-		ctx.globalCompositeOperation = 'lighter';
+		ctx.globalCompositeOperation = blend;
 		const signalSprite = sprite(color);
 		const noiseSprite = sprite(noise);
 		const frame = life.frame;
@@ -159,6 +160,7 @@ export type SpectrogramProps = LifeProps & {
 
 /** Time × frequency heat map that sweeps in left to right. Data from kit.spectrogram(seed). */
 export function Spectrogram(props: SpectrogramProps) {
+	const blend: GlobalCompositeOperation = useTheme() === 'paper' ? 'source-over' : 'lighter';
 	const data = props.data;
 	if (!data || !Array.isArray(data.cells) || data.cells.length !== data.cols * data.rows) throw kitError('Spectrogram needs data from kit.spectrogram(seed).');
 	const target = useArea(props.area, 'full');
@@ -194,7 +196,7 @@ export function Spectrogram(props: SpectrogramProps) {
 		}
 		const lit = Math.max(peaks, constellation);
 		if (lit > 0) {
-			ctx.globalCompositeOperation = 'lighter';
+			ctx.globalCompositeOperation = blend;
 			const glowSprite = sprite(answer);
 			for (const peak of data.peaks) {
 				const shown = enter(life.frame, { at: at + (peak.c / data.cols) * sweep, dur: 8 });

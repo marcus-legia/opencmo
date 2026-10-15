@@ -2,6 +2,12 @@
 /**
  *   clip-motion preview <job.json> <outdir>                      → PreviewResult JSON on stdout
  *   clip-motion render  <job.json> <out.mp4> [--audio voice.mp3]  → {"frames","seconds","msPerFrame"}
+ *   clip-motion serve                                            → {"ready":true}, then one PreviewResult line
+ *                                                                  per stdin line {"job": MotionJob, "outdir": "…"}
+ *
+ * `serve` keeps one Chromium and the bundle open for many previews (the Modal preview container). A broken job
+ * or scene comes back as `ok: false` and the loop goes on; it reopens the browser if it died, exits 0 on stdin
+ * EOF, and exits 1 on any other failure (the caller starts a new process).
  *
  * Exit codes (same meaning as clip-three): 0 ok (a preview with layout issues is still 0) ·
  * 2 bad arguments · 3 invalid job · 4 the scene code failed, last stderr line = message for the
@@ -12,10 +18,13 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+
+import type { HeadlessBrowser } from '@remotion/renderer';
 
 import { parseJob, prepare } from './prepare.ts';
-import { previewJob } from './preview.ts';
-import { MotionCodeFailure, renderJob } from './render.ts';
+import { openPreviewBrowser, previewJob } from './preview.ts';
+import { getBundle, MotionCodeFailure, renderJob } from './render.ts';
 
 // stdout carries exactly one JSON line; Remotion prints browser console lines to stdout, so
 // everything else goes to stderr.
@@ -23,10 +32,54 @@ const stdout = process.stdout.write.bind(process.stdout);
 process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write;
 const emit = (value: unknown) => stdout(`${JSON.stringify(value)}\n`);
 
-const USAGE = 'usage: clip-motion preview <job.json> <outdir> | clip-motion render <job.json> <out.mp4> [--audio <voice.mp3>]\n';
+const USAGE = 'usage: clip-motion preview <job.json> <outdir> | clip-motion render <job.json> <out.mp4> [--audio <voice.mp3>] | clip-motion serve\n';
 const log = (line: string) => process.stderr.write(`${line}\n`);
 
 const [command, file, out, ...rest] = process.argv.slice(2);
+
+if (command === 'serve') {
+	if (file !== undefined) {
+		process.stderr.write(USAGE);
+		process.exit(2);
+	}
+	await serve();
+	process.exit(0);
+}
+
+async function serve(): Promise<void> {
+	await getBundle(log);
+	let browser: HeadlessBrowser = await openPreviewBrowser();
+	emit({ ready: true });
+	for await (const line of createInterface({ input: process.stdin, crlfDelay: Infinity })) {
+		if (!line.trim()) continue;
+		let request: { job?: unknown; outdir?: unknown };
+		try {
+			request = JSON.parse(line);
+		} catch {
+			emit({ ok: false, phase: 'job', message: 'The preview request is not valid JSON.' });
+			continue;
+		}
+		if (typeof request.outdir !== 'string' || !request.outdir) {
+			emit({ ok: false, phase: 'job', message: 'The preview request needs an outdir.' });
+			continue;
+		}
+		const parsed = parseJob(request.job);
+		if (!parsed.ok) {
+			emit({ ok: false, phase: 'job', message: parsed.message });
+			continue;
+		}
+		try {
+			emit(await previewJob(parsed.job, request.outdir, { log, browser }));
+		} catch (error) {
+			// The browser may have died under the page: reopen it once and try this preview again.
+			log(`serve: preview failed, reopening the browser: ${String((error as Error)?.message ?? error)}`);
+			await browser.close({ silent: true }).catch(() => undefined);
+			browser = await openPreviewBrowser();
+			emit(await previewJob(parsed.job, request.outdir, { log, browser }));
+		}
+	}
+	await browser.close({ silent: true }).catch(() => undefined);
+}
 let audio: string | undefined;
 if (rest.length) {
 	if (command !== 'render' || rest[0] !== '--audio' || !rest[1] || rest.length !== 2) {

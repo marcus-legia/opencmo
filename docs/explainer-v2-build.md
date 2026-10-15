@@ -208,16 +208,16 @@ The `/explain` reply shows `say`, `label` and `visual` for each beat; the approv
 - [x] **A4. Shapes, Path, Arrow, Group, Burst** as in the contract, all with layout tags.
 - [x] **A5. Text board.** `Headline` (exits always finish before the next entrance) and `Board`. Fix the v1
   overlap: a `Label` swap must never show two texts at full opacity in the same frame.
-- [ ] **A6. Theme `paper`.** Off-white field, flat colours, soft shadows, fonts already in
+- [x] **A6. Theme `paper`.** Off-white field, flat colours, soft shadows, fonts already in
   `packages/clip-media/fonts` (e.g. Fraunces titles, DM Sans or Figtree text); same meaning-colours. Golden stills for both themes.
-- [ ] **A7. Personalities and motion layers.** Map `PERSONALITY` (premium, corporate, playful, energetic) to kit
+- [x] **A7. Personalities and motion layers.** Map `PERSONALITY` (premium, corporate, playful, energetic) to kit
   defaults scaled for beats (entrance/exit frames, overshoot, stagger). Anticipation + settle on entrances,
   `secondary` follow, `Stage ambient`, `kit.react`. Golden stills per personality only where motion is frozen.
-- [ ] **A8. Layout report v2.** Sample beat midpoints + 6 frames after each beat start; add the two new issues.
-- [ ] **A9. Fixture and README.** `fixtures/vaccine.job.json` written only with the v2 kit (the reference scene for
+- [x] **A8. Layout report v2.** Sample beat midpoints + 6 frames after each beat start; add the two new issues.
+- [x] **A9. Fixture and README.** `fixtures/vaccine.job.json` written only with the v2 kit (the reference scene for
   the guide); README documents every v2 component with one example each and the "do and don't" list for the
   guide (Track C quotes it).
-- [ ] **A10. Measure.** 60 s vaccine job at 1080p on 4 vCPU: wall time, ms/frame, peak RSS (< 2 GB). Notes.
+- [x] **A10. Measure.** 60 s vaccine job at 1080p on 4 vCPU: wall time, ms/frame, peak RSS (< 2 GB). Notes.
 
 **Checks:** `npm run check:clip-motion`; CLI render of `vaccine.job.json`; 8 frames looked at.
 
@@ -328,6 +328,36 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   `swapTo` is sequential. Golden `showcase-100.png` regenerated on purpose (the title is now gone by the next label;
   old and new compared side by side); the other three goldens unchanged. Looked at stills at frames 136/140/200:
   old headline fading, new one rising word by word, no overlap; the steps board reads well.
+- A6: `PAPER` palette next to `BLUEPRINT` (same meanings; both gain `ink`, `accent2`, `soft`), `makePalette(accent,
+  theme)`, `ThemeContext`. Paper: off-white `Stage` with a faint grid and a light vignette, soft drop shadows instead
+  of glows (`useGlow`, now used by every mark), no text glow, normal blending for dot fields. This also fixes C's
+  "light grey Board with white text": the fake scene was `paper` while the palette was still blueprint. Fonts stay
+  Fraunces / Inter / Source Code Pro (already bundled).
+- A7: the personality tables are in `src/kit/personality.ts` (from A4); now also `<Stage ambient>`: seeded motes
+  drifting and breathing behind everything, on by default when the job sets a personality, so v1 goldens are
+  unchanged. Secondary layer: `Shape secondary`, `Group react`, `Burst`, the Arrow head.
+- A8: `probeFrames` (6 frames after each beat start + each midpoint) are rendered at quarter size for the report
+  only; the Assistant still gets the midpoint stills. New issues from `beatIssues`: "Beat N shows no icon, shape or
+  Lottie…" (a Board or Box alone is no picture) and "Nothing moves during beat N…" (Lottie, dot fields and blobs are
+  exempt). Stills and samples share one browser per preview.
+- A9: `fixtures/vaccine.scene.jsx` / `vaccine.job.json` (35 s, 16:9, paper, playful; same six beats as C's
+  storyboard): syringe → shield, a virus bursting into three grey fragments, an immune cell pointing at a fragment
+  and a dna icon in a ring, a virus knocked back by a shield with bursts, a steps board with cues, a check and a
+  confetti Lottie. Golden stills `vaccine-{75,244,569,725}.png` (the golden test now covers both fixtures; the
+  showcase ones are unchanged). README: look/personality tables, Stage ambient, the v2 layout report, `serve`,
+  subject-first do/don't. **C's request done here:** `apps/web/lib/agent/providers/fake-explainers.ts` now uses
+  the fixture's code, format, theme and personality (visuals of beats 3, 4 and 6 reworded to what it draws); fake
+  eval with local motion: **41/41**, `explain-vaccine` passes on the fixture.
+- **`clip-motion serve`** (B's request for B4): opens the bundle and one Chromium, prints `{"ready":true}`, then one
+  PreviewResult line per stdin line `{"job","outdir"}`; a bad request, job or scene answers `ok:false` and the loop
+  goes on; the browser is reopened once if a preview throws; EOF exits 0. Checked with 4 requests (vaccine, an
+  invalid job, a `fetch` scene, vaccine again): ready, ok (6 stills), `phase: job`, `phase: guard`, ok; 14.8 s in
+  all, node peak RSS 939 MB.
+- A10 (this laptop, 8 threads, not Modal): vaccine 35 s at 1080p, concurrency 2: 38.1 s wall, 36 ms/frame;
+  concurrency 4: 28.7 s, 27 ms/frame; node peak RSS 721 / 736 MB (Chromium is separate processes; v1 measured
+  ~1.4 GB PSS for everything at concurrency 2). A 60 s job at the same pace is about 49 s at concurrency 4. Looked at
+  frames at 16 s (cell, arrow, three fragments, dna in a ring) and 30 s (check, "Protected") of the full-size MP4.
+  Modal numbers stay with B6.
 
 ### Track B
 
@@ -409,18 +439,18 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
 
-- [ ] (from B → owner A) `clip-motion serve` for B4: open Chromium (`openBrowser`) and the bundle once, print
+- [x] (from B → owner A) `clip-motion serve` for B4: open Chromium (`openBrowser`) and the bundle once, print
   `{"ready":true}` on stdout, then for each stdin line `{"job": MotionJob, "outdir": string}` render the preview stills
   into `outdir` with that browser (`puppeteerInstance`) and print exactly one PreviewResult line (`ok:false` with
   `phase`/`message` where `preview` exits 3/4 today). Reopen the browser if it died; exit on stdin EOF; any other
   failure exits non-zero (the worker starts a new process). stdout carries only these lines, as in `preview`.
 - [x] (from B → owner C) `apps/web/.env.example`: add `MOTION_PREVIEW_TOKEN=` next to `MOTION_PREVIEW_URL` (B5: the
   preview endpoint has its own token now; same value as the `opencmo-motion` Modal secret).
-- [ ] (from C → owner A) On `blueprint`, `Board` is a light grey panel with white text: the lines are nearly
+- [x] (from C → owner A) On `blueprint`, `Board` is a light grey panel with white text: the lines are nearly
   unreadable (fake vaccine scene, beat 5 still). Dark panel or dark ink on blueprint, please.
-- [ ] (from C → owner A) When A9's `vaccine.job.json` exists, C switches the fake
+- [x] (from C → owner A) When A9's `vaccine.job.json` exists, C switches the fake
   (`apps/web/lib/agent/providers/fake-explainers.ts`) to it; until then the fake has its own vaccine scene.
 
-- [ ] (from A → owner B) B3: copy `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie` into
+- [x] (from A → owner B) B3: copy `packages/clip-icons/data/icons.json` and `packages/clip-media/lottie` into
   `motion_image` at the same relative paths as in the repo (`<root>/packages/clip-icons/data`,
   `<root>/packages/clip-media/lottie`); the bundle reads them from there (env overrides in the clip-motion README).

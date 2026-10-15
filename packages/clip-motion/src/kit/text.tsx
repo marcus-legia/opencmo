@@ -2,7 +2,7 @@ import React from 'react';
 import { useVideoConfig } from 'remotion';
 
 import { FAMILY } from '../remotion/fonts.ts';
-import { useArea, useColor, useLife, kitError, TextTag, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
+import { useArea, useColor, useLife, useTheme, kitError, TextTag, type AreaProp, type ColorProp, type LifeProps } from './context.tsx';
 import { enter, ease } from './motion.ts';
 import { alpha, mix } from './theme.ts';
 
@@ -28,6 +28,8 @@ export type TitleProps = LifeProps & { text: string; kicker?: string; area?: Are
 
 /** Big serif headline; words rise in one after another. */
 export function Title(props: TitleProps) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	const text = requireText('Title', props.text);
 	const { width, height } = useVideoConfig();
 	const life = useLife(props, undefined, 24, { exitEndsAt: true });
@@ -45,7 +47,7 @@ export function Title(props: TitleProps) {
 					{props.kicker}
 				</div>
 			) : null}
-			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.title, fontSize: size, lineHeight: 1.08, color, letterSpacing: '-0.015em', textShadow: `0 0 ${size * 0.4}px ${alpha(color, 0.25)}` }}>
+			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.title, fontSize: size, lineHeight: 1.08, color, letterSpacing: '-0.015em', textShadow: shadow(size * 0.4, color, 0.25) }}>
 				{words.map((word, i) => {
 					const p = enter(life.frame, { at: at + 4 + i * 4, dur: 22, ease: ease.out });
 					return (
@@ -83,6 +85,8 @@ export function Mono(props: MonoProps) {
 }
 
 function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	const text = requireText(props.kind, props.text);
 	const mono = props.kind === 'Mono';
 	const life = useLife(props, undefined, 15, { exitEndsAt: true });
@@ -107,7 +111,7 @@ function TextLine(props: MonoProps & { kind: 'Label' | 'Mono' }) {
 		letterSpacing: mono ? '0.02em' : '-0.01em',
 		lineHeight: 1.15,
 		color: ink,
-		textShadow: `0 0 ${size * 0.45}px ${alpha(ink, 0.35)}`,
+		textShadow: shadow(size * 0.45, ink, 0.35),
 		fontVariantNumeric: 'tabular-nums',
 	};
 	const line = (value: string, offset: number, opacity: number) => (
@@ -139,6 +143,8 @@ export type CounterProps = LifeProps & Placed & { to: number; from?: number; cou
 
 /** A number that counts up over `count` frames (default 45) with ease-out. */
 export function Counter(props: CounterProps) {
+	const theme = useTheme();
+	const shadow = (blur: number, color: string, a: number) => (theme === 'paper' ? 'none' : `0 0 ${blur}px ${alpha(color, a)}`);
 	if (!Number.isFinite(props.to)) throw kitError('Counter needs a numeric `to`.');
 	const life = useLife(props, undefined, 12, { exitEndsAt: true });
 	const color = useColor(props.color, 'answer');
@@ -150,7 +156,7 @@ export function Counter(props: CounterProps) {
 	const text = `${props.prefix ?? ''}${value.toLocaleString('en-US', { minimumFractionDigits: props.decimals ?? 0, maximumFractionDigits: props.decimals ?? 0 })}${props.suffix ?? ''}`;
 	return (
 		<div style={{ ...position, opacity: life.opacity }}>
-			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.text, fontWeight: 700, fontSize: size, color, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', textShadow: `0 0 ${size * 0.4}px ${alpha(color, 0.4)}` }}>
+			<TextTag name={text} size={size} style={{ fontFamily: FAMILY.text, fontWeight: 700, fontSize: size, color, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', textShadow: shadow(size * 0.4, color, 0.4) }}>
 				{text}
 			</TextTag>
 		</div>

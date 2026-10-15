@@ -1,9 +1,13 @@
-// Embeds fixtures/showcase.scene.jsx into fixtures/showcase.job.json (a test keeps them equal).
+// Embeds fixtures/<name>.scene.jsx into fixtures/<name>.job.json for the showcase and vaccine fixtures
+// (a test keeps them equal).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-const job = JSON.parse(readFileSync(join(fixtures, 'showcase.job.json'), 'utf8'));
-job.code = readFileSync(join(fixtures, 'showcase.scene.jsx'), 'utf8');
-writeFileSync(join(fixtures, 'showcase.job.json'), `${JSON.stringify(job, null, 2)}\n`);
+for (const name of ['showcase', 'vaccine']) {
+	const file = join(fixtures, `${name}.job.json`);
+	const job = JSON.parse(readFileSync(file, 'utf8'));
+	job.code = readFileSync(join(fixtures, `${name}.scene.jsx`), 'utf8');
+	writeFileSync(file, `${JSON.stringify(job, null, 2)}\n`);
+}

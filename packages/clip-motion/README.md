@@ -8,6 +8,8 @@ editable in the editor.
 ```
 clip-motion preview <job.json> <outdir>                      → PreviewResult JSON (half-size JPEG stills + layout issues)
 clip-motion render  <job.json> <out.mp4> [--audio voice.mp3]  → {"frames","seconds","msPerFrame"}
+clip-motion serve                                            → {"ready":true}, then one PreviewResult line per
+                                                               stdin line {"job": MotionJob, "outdir": "…"}
 ```
 
 Exit codes: 0 ok (a preview with layout issues is still 0) · 2 bad arguments · 3 invalid job · 4 the scene
@@ -28,8 +30,7 @@ Fonts, icon data and Lottie files are copied into one public dir of the Remotion
 scenes load them from the local bundle server and never from the network.
 
 The job contract (`MotionJob`, `PreviewResult`, `estimateDuration`) is in `src/job.ts` and
-`docs/explainer-build.md`. `fixtures/showcase.job.json` is the reference scene (edit
-`fixtures/showcase.scene.jsx`, then `node scripts/build-showcase.ts`).
+`docs/explainer-build.md`. `fixtures/showcase.job.json` (v1) and `fixtures/vaccine.job.json` (v2) are the reference scenes.
 
 ## Scene code
 
@@ -51,7 +52,10 @@ All positions are pixels in the composition (1920×1080, 1080×1920 or 1080×108
 length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothing.
 
 ### Layout
-- `<Stage grid?>` – the navy field (gradient, drifting grid, bloom, vignette). Wrap the whole scene in it.
+- `<Stage grid? ambient?>` – the field of the job's theme: `blueprint` (navy, drifting grid, bloom, vignette) or
+  `paper` (warm off-white, faint grid, soft shadows instead of glows). Wrap the whole scene in it. `ambient`
+  adds soft motes drifting behind everything (the ambient motion layer); on by default when the job sets a
+  personality.
 - `<Camera keys={[{ at, focus: [x, y], zoom, dur? }]}>` – slow push-ins and pans of everything inside; each key
   eases (critically damped) from the previous framing. Keep text outside the Camera.
 - `kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom')` → `{ x, y, w, h, cx, cy }` inside the safe
@@ -131,9 +135,41 @@ anything placed with these helpers lands on the narration in both.
 - `kit.ease.out` (power3), `kit.ease.hero` (critically damped spring), `kit.ease.inOut`, `kit.ease.linear`. Nothing
   bounces.
 - `kit.color.signal` gold (what we follow) · `answer` teal (the result; the Brand Kit accent replaces it) ·
-  `wrong` red · `noise` grey-blue · `text` · `dim` · `field` navy. Pass a name (`color="answer"`) or `#rrggbb`.
+  `wrong` red · `noise` grey-blue · `text` · `dim` · `field` · `ink` (outlines) · `accent2` (a second neutral
+  highlight) · `soft` (panels). Each theme has its own values with the same meanings. Pass a name
+  (`color="answer"`) or `#rrggbb`.
+
+### Look and personality (v2)
+The job's `theme` and `personality` set the look and the tempo for the whole video; the scene code never picks
+easing or durations.
+
+| theme | for |
+|---|---|
+| `blueprint` | tech, data, software, signals, money flows |
+| `paper` | science, health, people, how-to, everyday topics |
+
+| personality | entrances | for |
+|---|---|---|
+| `premium` | 22 frames, no overshoot | serious, finance, B2B |
+| `corporate` | 16 frames, 3% overshoot | business, product walkthroughs |
+| `playful` | 15 frames, wind-up + 14% overshoot | consumer, science for everyone |
+| `energetic` | 10 frames, 20% overshoot | launches, sport, sales |
+
+Every entrance gets the personality's wind-up (anticipation) and overshoot for scale and position, while
+opacity and drawing stay monotone. Marks keep three motion layers: the primary entrance, a `secondary` halo or
+follow on shapes, and the Stage's ambient layer. A job without `personality` keeps v1 timings exactly.
+
+### Preview layout report (v2)
+Stills at beat midpoints are returned to the Assistant; extra layout samples (6 frames after each beat starts,
+and every beat's midpoint, at quarter size) are only measured. Issues: text over text, outside the safe area,
+text under 36 px, a frame more than 85% empty, **a beat with no picture** (no icon, shape, Lottie, path or data
+mark; a Board alone does not count) and **a beat where nothing moves** (Lottie, dot fields and blobs move inside
+their box and are not reported).
 
 ## Example
+
+The full v2 reference scene is `fixtures/vaccine.scene.jsx` (paper, playful: icons, a cell shape, a Group that
+is knocked back, bursts, a steps Board, a Lottie). A short one:
 
 ```jsx
 const { Stage, Title, Label, DotField, Check } = kit;
@@ -157,7 +193,12 @@ return function Scene() {
 - **One continuous scene.** Transform what is on screen (swap a label, filter the dots, morph, push the
   camera) instead of cutting to something new. About one change per beat.
 - **At most three things move at once.** Start the next only when the previous has landed.
-- **Labels are at most 5 words**, one main label at a time, in the headline row (`area('full').y + ~7%`).
+- **Subject first.** Every beat shows the things its narration names: an icon (`find_icons`), a built-in Lottie
+  (`find_lotties`) or a kit shape. Never an icon whose name does not match the noun.
+- **One `Headline`** for the headline row (≤ 6 words an item); a `Board` when a beat lists steps, facts or a
+  comparison. Text `exitAt` is when the text is gone, so the next one can enter at that frame.
+- **Three motion layers** each beat: the primary change, a secondary reaction (a halo, a `Group react`, a
+  `Burst`), and the ambient Stage.
 - **Colour has meaning**: gold = signal, teal = answer, red = wrong, grey = noise. Do not pick other colours.
 - Place every change on the narration with `kit.cue` / `kit.at`, never with hard-coded frame numbers.
 - Keep text outside `Camera`, and visuals inside the safe area (the preview reports what leaves it).
@@ -167,8 +208,10 @@ return function Scene() {
 
 ## Development
 
-- `npm run check:clip-motion`: typecheck, unit tests and golden stills (needs ffmpeg and Chrome Headless Shell
-  1194; `UPDATE_GOLDEN=1` rewrites `fixtures/golden/`, look at the images before committing).
+- `npm run check:clip-motion`: typecheck, unit tests and golden stills of the showcase (blueprint) and the vaccine
+  scene (paper) (needs ffmpeg and Chrome Headless Shell 1194; `UPDATE_GOLDEN=1` rewrites `fixtures/golden/`, look
+  at the images before committing).
+- Edit `fixtures/<name>.scene.jsx`, then `node scripts/build-showcase.ts` embeds it into `<name>.job.json`.
 - `node scripts/bench.ts <job.json> <from> <to> [gl] [concurrency]`: ms/frame for a frame range, to compare GL
   backends or concurrency before changing the defaults.
 
