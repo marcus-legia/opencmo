@@ -9,6 +9,7 @@ from opencmo.ai.providers.base import NOT_SET_UP, ProviderAdapter, ProviderError
 from opencmo.ai.providers.elevenlabs import ElevenLabsProvider
 from opencmo.ai.providers.fake import FakeProvider
 from opencmo.ai.providers.fal import FalProvider
+from opencmo.ai.providers.motion import MotionLocalProvider, MotionModalProvider, fake_voice
 from opencmo.ai.providers.three import ThreeLocalProvider, ThreeModalProvider
 
 __all__ = ["ProviderAdapter", "ProviderError", "Result", "adapter_for"]
@@ -46,6 +47,19 @@ def adapter_for(model: AiModel) -> ProviderAdapter:
             return ThreeModalProvider()
         if mode == "local":
             return ThreeLocalProvider()
+        if fake_allowed():
+            return FakeProvider()
+        raise SpecError(NOT_SET_UP)
+    if model.provider == "opencmo-motion":
+        # Explainers: our own renderer plus the voice. The voice needs the fal key unless it is
+        # faked for local runs; without a renderer, the fake model (when enabled) stands in.
+        mode = os.environ.get("OPENCMO_MOTION", "")
+        if mode in ("modal", "local") and not fake_voice() and not os.environ.get("FAL_KEY"):
+            raise SpecError(NOT_SET_UP)
+        if mode == "modal":
+            return MotionModalProvider()
+        if mode == "local":
+            return MotionLocalProvider()
         if fake_allowed():
             return FakeProvider()
         raise SpecError(NOT_SET_UP)
