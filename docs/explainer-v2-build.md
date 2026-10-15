@@ -399,8 +399,7 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   daemon. Box stays open until someone runs it.
 - C7: notices: explainer files in the motion-design row, Noto emoji in explainers, Remotion licence (incl.
   `@remotion/lottie`).
-- Full `agent:eval --provider fake` (local motion, fake voice): 39/41 before A5 (the two explainer tasks could not
-  render `Headline`), then the explainer group 3/3 on A5; re-run the full suite on the final branch.
+- Full `agent:eval --provider fake` (`OPENCMO_MOTION=local`, fake voice) on A5 + B1–B5: **41/41**.
 - Checks: `npm run typecheck` ✓, editor-core `vitest` 599/599 ✓, `check:contracts` ✓ (new
   `lib/agent/explainer-tool.check.ts`).
 
