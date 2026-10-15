@@ -344,6 +344,11 @@ is cut, the five acceptance points (yes/no each), and the Modal cost of `render_
   `OPENCMO_MOTION_ICONS` / `OPENCMO_MOTION_LOTTIE` (the Lottie pack was already in via `clip-media`). Concurrency:
   `cli_env()` sets `OPENCMO_MOTION_CONCURRENCY = min(os.cpu_count(), 4)` unless set; the image build uses
   `min(nproc, 4)`. The warm-up renders `fixtures/vaccine.job.json` at 0.25, so **the image builds only once A9 lands**.
+  Checked locally through the worker's `render_local` with the image's env (`OPENCMO_MOTION_ICONS`, `_LOTTIE`,
+  `_CHROME` = Playwright headless shell, scale 0.5): a 15 s v2 job rendered in 24.2 s at concurrency 4 (from
+  `cli_env`). Frames at 3, 7 and 12 s show the Lucide `virus` and `syringe` icons drawn and the `heart-beat` Lottie
+  playing, so the icon data and Lottie pack reach the bundle. The field was still navy for `theme: "paper"`
+  (A6 not landed yet).
 - B4 (code; waits on the `serve` Request to A, not measured yet): `motion_preview` is now a method of the Modal class
   `MotionPreview` with the same URL (`label="opencmo-motion-preview"`). `@modal.enter` opens one `PreviewSession`
   (`opencmo/ai/providers/motion.py`): a long-lived `clip-motion serve`, one JSON line each way, killed and
