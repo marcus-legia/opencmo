@@ -116,7 +116,10 @@ function script(history: StoredMessage[]): unknown[] {
       return [text(`You chose: ${[...(parsed.user_answer?.choices ?? []), parsed.user_answer?.text].filter(Boolean).join(", ")}.`)];
     }
     if (previous.includes("preview_explainer")) {
-      const parsed = JSON.parse(raw0) as { ok?: boolean; error?: string; issues?: string[] };
+      // A result with stills is a list of blocks (text + images); the JSON is in the text block.
+      const content = results[0]!.content;
+      const raw = typeof content === "string" ? content : ((content as Block[]).find((item) => item.type === "text")?.text ?? "{}");
+      const parsed = JSON.parse(raw) as { ok?: boolean; error?: string; issues?: string[] };
       if (!parsed.ok) return [text(`The explainer preview failed: ${parsed.error ?? "unknown error"}`)];
       return [text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}. Here is the price.`), use("add_explainer", { ...EXPLAINER, voice: explainerVoice() })];
     }

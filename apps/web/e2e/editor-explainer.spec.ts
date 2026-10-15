@@ -1,3 +1,6 @@
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { sceneBox, videoRegionStats } from "./canvas";
@@ -54,15 +57,40 @@ test("New edit: /explain → script → go → stills → approve → the explai
   await expect(page.locator('[data-testid^="clip-ai-pending-"]')).toHaveCount(0, { timeout: 600_000 });
   await expect(page.locator('[data-testid^="clip-ai-retry-"]')).toHaveCount(0);
   await expect(page.getByText("Loading media…")).toHaveCount(0, { timeout: 60_000 });
-  // Playhead at 2 s: a click on the ruler at 2 s of the work area.
-  const area = (await page.getByTestId("workarea").boundingBox())!;
-  const seconds = scene.workarea?.[1] ?? 30;
-  await page.getByTestId("timeline-ruler").click({ position: { x: area.x - (await page.getByTestId("timeline-ruler").boundingBox())!.x + (area.width * 2) / seconds, y: 4 } });
-  await expect(page.getByTestId("playhead-time")).toContainText(/^0:02/);
-  const box = await sceneBox(page, { width: 1920, height: 1080 });
-  // A real frame has texture; an empty or black canvas has std ≈ 0.
-  await expect.poll(async () => (await videoRegionStats(page, box)).std, { timeout: 60_000 }).toBeGreaterThan(2);
-  await page.screenshot({ path: testInfo.outputPath("02-explainer-playing.png") });
+
+  // Verify by looking (CLAUDE.md): the full-size MP4 itself has a picture at 2 s and the voice track.
+  const { url, service } = state();
+  const rest = (path: string) => page.request.get(`${url}/rest/v1/${path}`, { headers: { apikey: service, authorization: `Bearer ${service}` } });
+  const [generation] = (await (await rest(`generations?clip_id=eq.${clipId}&model=eq.motion-explainer&select=status,media_asset_id`)).json()) as { status: string; media_asset_id: string }[];
+  expect(generation?.status).toBe("done");
+  const [asset] = (await (await rest(`media_assets?id=eq.${generation!.media_asset_id}&select=storage_path`)).json()) as { storage_path: string }[];
+  const file = await page.request.get(`${url}/storage/v1/object/media/${asset!.storage_path}`, { headers: { apikey: service, authorization: `Bearer ${service}` } });
+  expect(file.status()).toBe(200);
+  const mp4 = testInfo.outputPath("explainer.mp4");
+  writeFileSync(mp4, await file.body());
+  const probe = execFileSync("ffprobe", ["-v", "error", "-show_entries", "stream=codec_type,width,height", "-of", "csv=p=0", mp4], { encoding: "utf8" });
+  expect(probe).toMatch(/video,1920,1080/);
+  expect(probe).toMatch(/audio/);
+  const gray = execFileSync("ffmpeg", ["-v", "error", "-ss", "2", "-i", mp4, "-frames:v", "1", "-vf", "scale=96:54", "-f", "rawvideo", "-pix_fmt", "gray", "-"]);
+  const mean = gray.reduce((sum, value) => sum + value, 0) / gray.length;
+  const std = Math.sqrt(gray.reduce((sum, value) => sum + (value - mean) ** 2, 0) / gray.length);
+  // A frame with something drawn on it has contrast; a blank or black frame has std ≈ 0.
+  expect(std, `frame at 2 s: mean ${mean.toFixed(1)}, std ${std.toFixed(1)}`).toBeGreaterThan(2);
+  execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", "2", "-i", mp4, "-frames:v", "1", testInfo.outputPath("03-explainer-2s.png")]);
+
+  // In the editor too, at the playhead. The bundled Chromium cannot decode H.264, so only real Chrome.
+  if (process.env.E2E_CHANNEL !== "chromium") {
+    // Playhead at 2 s: a click on the ruler at 2 s of the work area.
+    const area = (await page.getByTestId("workarea").boundingBox())!;
+    const ruler = (await page.getByTestId("timeline-ruler").boundingBox())!;
+    const seconds = scene.workarea?.[1] ?? 30;
+    await page.getByTestId("timeline-ruler").click({ position: { x: area.x - ruler.x + (area.width * 2) / seconds, y: 4 } });
+    await expect(page.getByTestId("playhead-time")).toContainText(/^0:02/);
+    const box = await sceneBox(page, { width: 1920, height: 1080 });
+    // A real frame has texture; an empty or black canvas has std ≈ 0.
+    await expect.poll(async () => (await videoRegionStats(page, box)).std, { timeout: 60_000 }).toBeGreaterThan(2);
+    await page.screenshot({ path: testInfo.outputPath("02-explainer-playing.png") });
+  }
 
   // Ctrl+Z takes the whole explainer away.
   await page.getByTestId("editor-stage").click({ position: { x: 4, y: 4 } });
