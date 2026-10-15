@@ -24,17 +24,27 @@ const unavailable = (error: unknown): never => {
   throw error;
 };
 
-/** `transcript_status` of each library file; files the server does not know are left out. */
-export async function transcriptStatuses(mediaIds: string[]): Promise<Map<string, TranscriptStatus>> {
-  const out = new Map<string, TranscriptStatus>();
+export type FileTranscript = { status: TranscriptStatus; probed: boolean; hasAudio: boolean | null };
+
+/** The automatic transcript of each library file; files the server does not know are left out. */
+export async function transcriptStatuses(mediaIds: string[]): Promise<Map<string, FileTranscript>> {
+  const out = new Map<string, FileTranscript>();
   for (let index = 0; index < mediaIds.length; index += BATCH) {
     const ids = mediaIds.slice(index, index + BATCH);
-    const page = await api<{ media?: { id: string; transcript_status: TranscriptStatus }[] }>(
+    const page = await api<{ media?: { id: string; transcript_status: TranscriptStatus; probed?: boolean; has_audio?: boolean | null }[] }>(
       `/editor/captions?media_ids=${ids.map(encodeURIComponent).join(",")}`,
     ).catch(unavailable);
-    for (const item of page.media ?? []) out.set(item.id, item.transcript_status);
+    for (const item of page.media ?? []) {
+      out.set(item.id, { status: item.transcript_status, probed: item.probed ?? true, hasAudio: item.has_audio ?? null });
+    }
   }
   return out;
+}
+
+/** Asks for the free transcript of a file that has none (uploaded before automatic transcripts, or failed). */
+export async function requestTranscript(mediaId: string): Promise<TranscriptStatus> {
+  const out = await api<{ transcript_status: TranscriptStatus }>("/editor/captions/transcript", jsonBody({ media_id: mediaId, request: true })).catch(unavailable);
+  return out.transcript_status;
 }
 
 /** The file's transcript for `[sourceIn, sourceOut)`, stored for this clip (file seconds). */

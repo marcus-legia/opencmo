@@ -32,7 +32,9 @@ export const POST = withApi(
     }),
 );
 
-export type TranscriptStatuses = { media: { id: string; transcript_status: string }[] };
+export type TranscriptStatuses = {
+  media: { id: string; transcript_status: string; probed: boolean; has_audio: boolean | null }[];
+};
 
 /** Ids per status request: the editor polls a library's files in pages of this size. */
 const MAX_MEDIA_IDS = 50;
@@ -41,7 +43,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /**
  * Two reads under RLS:
  * - `?task=<id>`: a captions task; `done` carries `output.src` for the captions layer, `failed` an English error.
- * - `?media_ids=<id>,…`: the automatic transcript status of library files (own-video editing, Track A).
+ * - `?media_ids=<id>,…`: the automatic transcript status of library files (own-video editing, Track A), with
+ *   whether the probe is done (`probed`) and the file has audio.
  *   Unknown or foreign ids are left out.
  */
 export const GET = withApi({}, async ({ supabase, request }) => {
@@ -52,9 +55,13 @@ export const GET = withApi({}, async ({ supabase, request }) => {
       throw new ApiError(400, `Send up to ${MAX_MEDIA_IDS} file ids.`);
     }
     if (!ids.length) return { media: [] } satisfies TranscriptStatuses;
-    const { data, error } = await supabase.from("media_assets").select("id, transcript_status").in("id", ids);
+    const { data, error } = await supabase.from("media_assets").select("id, status, has_audio, transcript_status").in("id", ids);
     if (error) throw error;
-    return { media: (data ?? []) as TranscriptStatuses["media"] } satisfies TranscriptStatuses;
+    const rows = (data ?? []) as { id: string; status: string; has_audio: boolean | null; transcript_status: string }[];
+    // `probed`: the worker has measured the file; until then `none` only means "not decided yet".
+    return {
+      media: rows.map((row) => ({ id: row.id, transcript_status: row.transcript_status, probed: row.status !== "pending", has_audio: row.has_audio })),
+    } satisfies TranscriptStatuses;
   }
   const taskId = request.nextUrl.searchParams.get("task") ?? "";
   if (!/^[0-9a-f-]{36}$/.test(taskId)) throw notFound("Task not found.");

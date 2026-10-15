@@ -633,29 +633,52 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
   2. `POST /api/v1/editor/captions/transcript` with body `{ clip_id, media_id, source_in, source_out }` → the
      `use_media_transcript` jsonb as is: `{status:"ready",src,hash}` | `{status:"pending"}` | `{status:"none"}`.
   Until these exist the editor treats 404 as "no automatic transcript" and does nothing.
-- [ ] (from C → owner B) `useAutoTranscripts` never sees a fresh upload become ready. It asks for the status once
+- [x] (from C → owner B) `useAutoTranscripts` never sees a fresh upload become ready. It asks for the status once
   when the file is stored, which is before the probe has queued the free run, so the answer is `none`; it keeps
   polling only while `queued`/`running`, so it never asks again. Seen in C6: the route said `none` at upload,
   the DB said `ready` one second later, and no badge or attach came in 3 minutes (a page reload fixes it). Fix
   idea: also keep polling a file that is `none` while it is young (or until the probe is done, `has_audio`
   known), with a cap.
-- [ ] (from C → owner B) `useAutoTranscripts` attaches a transcript to each segment of a cut. After a text cut,
+- [x] (from C → owner B) `useAutoTranscripts` attaches a transcript to each segment of a cut. After a text cut,
   the linked video becomes a `text-cut` sequence; its segments are new video nodes with no linked captions, so
   `unlinked()` sees them and runs `attach_transcript` for each (C6: four extra hidden "Transcript · …" layers
   after one rough cut). That is an edit after the Assistant's turn, so the Assistant's one-click Undo refuses
   ("You edited this clip after the Assistant's change"). Fix idea: skip videos inside a sequence that is a
   speech source (`speechSources(document)` ids, or any ancestor with a `text-cut` mark).
-- [ ] (from B → owner C) `add_captions` (`lib/agent/captions-tool.ts`): when the element is a video (a `video`, or a
+- [x] (from B → owner C) `add_captions` (`lib/agent/captions-tool.ts`): when the element is a video (a `video`, or a
   `rect` with a video paint), set `source: <element id>` on the inserted captions node, as the inspector's
   "Generate captions" now does. Linked captions make that video a speech source, so the transcript tools can cut
   it. Also: if a captions layer already has `source` = that element (the hidden automatic one), unhide it with
   `update_element {props:{hidden:false}}` instead of charging for a new transcript.
-- [ ] (from A → owner C, A6) For the guide and the tools: a library video's transcript is automatic and free.
+- [x] (from A → owner C, A6) For the guide and the tools: a library video's transcript is automatic and free.
   `loadMediaTranscript(supabase, { clipId, mediaId, sourceIn, sourceOut })` (`lib/editor/captions-run.ts`) gives
   `ready` (with `src`), `pending` (being transcribed, about a minute: wait or retry, do not charge) or `none` (no
   audio, over 30 min, over the daily cap, or failed). For `none`, `requestMediaTranscript(supabase, mediaId)` asks
   again for free when the file is eligible; the paid `add_captions` stays for what remains, and it charges 0 for
   a file that already has its transcript.
+- Review (A's session, after B and C stopped), fixes made on their files:
+  - `useAutoTranscripts` (B): the status route now also returns `probed` and `has_audio`, and the hook keeps polling
+    a file until its probe is done, so a fresh upload gets its transcript without a reload. Segments inside a
+    speech source (the pieces of a cut video) are skipped, so a rough cut no longer grows extra hidden
+    "Transcript · …" layers that blocked the Assistant's one-click Undo. A measured file with sound and no
+    transcript (`none`/`failed`, e.g. uploaded before this PR) is asked for again once per session, free
+    (`request: true`).
+  - `add_captions` (C): sets `source` on a video's captions; a video whose transcript is already a hidden linked
+    layer gets "show it with set_props hidden:false" instead of a paid run; a file that already has its
+    transcript shows **free** on the approval card (it was showing per-minute credits while SQL charged 0).
+  - Guides `roughcut` and `captions`: transcripts are automatic and free; `pending` → wait, never pay; `none` → offer
+    `add_captions` (free when the file is transcribed).
+  - Checked: `typecheck`, `check:contracts` green. **`npm run test:e2e -- editor-roughcut` passes on the automatic
+    path with no reload** (Edge 155, 2.5 min): upload → free transcript → attached once → /roughcut → plan → go →
+    10 s → 5.63 s, one "Transcript · roughcut-talk 1" layer only → Undo. Looked at `02-cut.png`.
+  - **Known, not fixed:** `e2e/editor-captions.spec.ts` fails at its first step (the imported file never shows in
+    a clip editor's library) **on the base branch `explainer` too**, so it predates this PR. Once that import is
+    fixed, the spec also needs updating for this PR's behaviour: the b-roll is transcribed automatically, so the
+    inspector offers "Show captions (free — transcript ready)" and the Assistant's add_captions points to the
+    hidden layer instead of charging 1 credit.
+  - Small gap left: the inspector's "Generate captions (N credits)" label on a SOUND file that already has its
+    transcript still shows the per-minute price, while the server charges 0 (the inspector does not know the
+    file's transcript status). In the user's favour; fix when the inspector gets the status.
 
 ---
 

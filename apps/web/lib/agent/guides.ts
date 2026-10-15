@@ -101,7 +101,7 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 
 - Presets: classic (one word highlighted at a time, clean), spotlight (bold, colored active word), stark (white boxed), cascade, whisper, paper, guinea. For talking heads on TikTok/Reels, spotlight or classic read best.
 - set_caption_style {preset, colors, color?, font?, weight?}: applies to EVERY caption layer of the clip (video and voiceover captions share one style). colors are up to 3 hex values; the preset decides what each color does (usually highlight). color = the main text color, font = one of the editor fonts, weight 100-900; null resets to the preset, leaving a field out keeps it.
-- Captions for OTHER media (B-roll, an uploaded talk, a song): add_captions {element_id} transcribes what that element plays (1 credit/min, user approves). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
+- Captions for OTHER media (B-roll, an uploaded talk, a song): uploads are transcribed automatically for free, and a video's transcript is a hidden captions layer linked to it: show it with set_props {hidden: false}. add_captions {element_id} covers the rest (free when the file is already transcribed, otherwise 1 credit/min; the user approves the price). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
 - highlight: "block" (box behind the spoken word) or "pop" (the spoken word grows and turns yellow) with set_props on the captions element; censor: true masks swear words on screen (the transcript keeps them).
 - Fix misheard words with edit_words; split long lines with split_line and join short ones with merge_lines.
 - Keep captions off faces: they sit at the bottom by default; move them with set_props on the captions element (verticalAlign, offsetY).
@@ -164,7 +164,7 @@ A straight cut changes picture and sound on the same frame; at a jump between tw
 The user recorded themselves and wants the mistakes out: retakes, false starts, filler and dead air. Keep their words; remove only what a viewer would not miss. When in doubt, keep: a repeat left in costs a second pass, a lost sentence costs the video.
 
 ## 1. Look, in ONE step
-get_transcript, find_filler_words, find_silences, find_retakes, then one capture contact sheet (count 6). When <clip_context> lists several speech_sources, pass the element_id of the video to cut to every read and every cut (ask which one if the user did not say). If a video is still transcribing, say so and stop; if it has no transcript, offer add_captions.
+get_transcript, find_filler_words, find_silences, find_retakes, then one capture contact sheet (count 6). When <clip_context> lists several speech_sources, pass the element_id of the video to cut to every read and every cut (ask which one if the user did not say). Uploaded videos are transcribed automatically and for free, usually within a minute; the editor links the transcript as a hidden captions layer. If a video is still transcribing, say so and wait (wait_for_media) or ask the user to try again in a minute; never pay for it. If it has no transcript at all (no audio, longer than 30 minutes, or over today's free minutes), offer add_captions, which costs nothing when the file already has its transcript.
 
 ## 2. Propose in 4-8 sentences, then wait
 Say what goes and what stays, with counts and seconds:
