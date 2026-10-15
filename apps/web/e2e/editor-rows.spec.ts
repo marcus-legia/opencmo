@@ -21,7 +21,7 @@ async function sceneChildren(page: Page, clipId: string): Promise<Node[]> {
 const shape = (children: Node[]) =>
   children.map((node) => (node.kind === "sequence" ? `${String(node.name)}[${(node.children ?? []).length}]` : node.kind)).join(" ");
 
-test("New project, b-roll chung một hàng, kéo bar giữa các hàng", async ({ page }, testInfo) => {
+test("New project, b-roll sharing one row, dragging bars between rows", async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.a);

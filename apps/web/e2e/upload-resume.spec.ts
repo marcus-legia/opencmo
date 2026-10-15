@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { RESUME_VIDEO } from "./global-setup";
 import { openClipsPanel, signIn, state } from "./helpers";
 
-test("TUS tiếp tục sau khi một chunk bị ngắt", async ({ page }) => {
+test("TUS resumes after a chunk is cut off", async ({ page }) => {
   const { users, url, service } = state();
   await signIn(page, users.b);
   await openClipsPanel(page);

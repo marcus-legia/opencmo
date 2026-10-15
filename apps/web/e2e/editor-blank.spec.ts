@@ -11,7 +11,7 @@ import { showAssistant, signIn, state } from "./helpers";
  * thêm chữ, export → MP4 có hình đúng ảnh đã thêm. Đổi tên bản sửa; bấm lại Editor mở đúng bản đó.
  */
 
-test("New edit trống: nhập media, thêm chữ, export — không cần project", async ({ page }, testInfo) => {
+test("Blank New edit: import media, add text, export, with no project", async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   // User b: các spec khác không tạo project cho user này.
