@@ -291,12 +291,12 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
 `packages/editor-core/src/ops/captions.ts` (`loadCaptions`, the cut ops), and the library flow in
 `apps/web/components/editor/library/useLibrary.ts`.
 
-- [ ] **B1. Document contract (push first).**
+- [x] **B1. Document contract (push first).**
   - `CaptionsNode.source` in clip-doc, with a migration that sets `source` on existing master captions.
   - `speechSources()`, and `element_id` on every cut op's zod input.
   - The default still selects the master, so existing behaviour does not change.
   - `npm run check:clip-doc` regenerates the JSON Schema; `npm run documents:check`.
-- [ ] **B2. Locate by element.**
+- [x] **B2. Locate by element.**
   - `locate(document, elementId?)` finds the element (video or cut sequence) and its linked captions layer
     (`source`), then falls back as in Contracts.
   - Cutting a non-master video turns it into a cut sequence exactly like the master today: `text-cut` mark,
@@ -307,7 +307,7 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
     - one Undo step per op;
     - the "several sources, no id" error;
     - a master clip still behaves exactly as before (existing tests stay green unchanged).
-- [ ] **B3. `attach_transcript` op** (`agent: false`): inserts the hidden, linked captions layer (contract). Tests:
+- [x] **B3. `attach_transcript` op** (`agent: false`): inserts the hidden, linked captions layer (contract). Tests:
   - timing matches `add_captions`;
   - attaching twice is a no-op;
   - Undo removes it.
@@ -334,6 +334,38 @@ Start from `packages/editor-core/src/captions.ts` (`locate`, `readCaptionState`,
 `npm run dev`, described in Notes.
 
 **Notes (B):**
+
+- B1 (contract change, B-owned): `CaptionsNode.source` landed **without a document version bump or migration step**.
+  An optional field is backward compatible (`migrate.ts` header rule). A version bump would have broken every stored
+  v1 document, the engine (`process_job.py` writes v1) and the parity samples. The rule "video captions with no
+  `source` belong to the master" gives old documents exactly today's behaviour.
+- B1/B2: what landed:
+  - `speechSources(document)` (master first);
+  - `readCaptionState(document, elementId?, strict?)`, `cutPoints(document, elementId?)` and `speechOffset`;
+  - `loadCaptions(document, ctx, elementId?)`;
+  - `element_id` (zod `speechElement`) on `remove_words`, `restore_words`, `restore_all`, `remove_ranges`,
+    `remove_silence`, `edit_words`, `split_line`, `merge_lines`, `nudge_word` and `set_audio_roll`.
+
+  How it behaves:
+  - A speech source is a `video`, or a library `rect` painted with a video, or its `text-cut` sequence, with a
+    linked captions layer.
+  - Passing a segment's id selects its cut.
+  - A linked video keeps its id through cut, re-cut and restore, so `element_id` and `source` stay valid. The
+    master keeps today's fresh ids; the golden tests pin that.
+  - A library rect with no `sourceOut` gets its window from `start`/`end`.
+  - Timeline follow:
+    - in a master clip, cutting a second video leaves the rest of the timeline alone;
+    - in an edit with no master, the cut video is the spine: what comes after it shifts by the change in length,
+      and so does the workarea end;
+    - after any spine cut, linked captions are re-timed to their video, or removed with it.
+  - With several sources and no id, ops fail with "This clip has several videos with speech: pass element_id
+    (name: id, …)"; readers (summary) get `null`.
+- B3: `attach_transcript { element_id, src }` (`agent: false`, last in `REGISTRY`):
+  - adds a hidden captions layer, `name` "Transcript · <video>", in the video's scene or group (not inside a row);
+  - copies `start`/`end`/`sourceIn`/`sourceOut`/`playbackRate` from the video, like `captionsNode`;
+  - is a no-op when a layer with that `source` already exists.
+- Tests: `packages/editor-core/src/speech-sources.test.ts` (9). The existing 585 editor-core tests pass unchanged.
+  `check:clip-doc`, `typecheck` and `check:contracts` are green.
 
 ---
 

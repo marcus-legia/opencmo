@@ -13,6 +13,7 @@ import { timingIssues, type ClipDocument, type ClipNode, type SceneNode } from '
 
 import { activeView, clone, mergeView, nodes, same, stamp, timelinesOf, viewOf } from '../doc';
 import {
+	attachTranscript,
 	editWords,
 	mergeLines,
 	nudgeWordOp,
@@ -52,7 +53,7 @@ export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDE
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
-export { loadCaptions, type CaptionModel } from './captions';
+export { loadCaptions, speechElement, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
 export { CAPTION_PRESETS, FONTS, guardProps } from './project';
 export { BRAND_SRC_PREFIX, LOGO_MARK, logoBox } from './brand';
@@ -168,6 +169,7 @@ const REGISTRY = [
 	createVideo,
 	editVideo,
 	addExplainer,
+	attachTranscript,
 ] as const;
 
 type Definition = {

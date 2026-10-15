@@ -19,9 +19,10 @@ import { z } from 'zod';
 
 import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
-import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, writeCaptionState } from '../captions';
+import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, speechOffset, writeCaptionState } from '../captions';
 import { clone, isMasterSound, sceneOf, type Entity } from '../doc';
-import { keptRanges } from '../transcript';
+import { keptRanges, round } from '../transcript';
+import { speechElement } from './captions';
 import { OpFailure, type OpContext } from './context';
 import { nodeById, parentOrigin, placeOf, timesOf } from './timeline';
 
@@ -280,7 +281,7 @@ export const cleanAudio = {
   },
 };
 
-type SetAudioRoll = { at?: number; seconds: number };
+type SetAudioRoll = { at?: number; seconds: number; element_id?: string };
 
 /** Chỗ cắt gần `at` nhất (giây CLIP), trong nửa giây. */
 const CUT_SNAP = 0.5;
@@ -289,6 +290,7 @@ export const setAudioRoll = {
   name: 'set_audio_roll',
   input: z.object({
     op: z.literal('set_audio_roll'),
+    element_id: speechElement,
     at: z
       .number()
       .finite()
@@ -304,14 +306,16 @@ export const setAudioRoll = {
   describe: (input: SetAudioRoll) =>
     input.seconds === 0 ? 'Make the cut straight again' : `${input.seconds > 0 ? 'L-cut' : 'J-cut'} of ${Math.abs(input.seconds)}s`,
   async apply(document: ClipDocument, input: SetAudioRoll) {
-    const state = readCaptionState(document);
+    const elementId = input.element_id;
+    const state = readCaptionState(document, elementId, true);
     if (!state?.window || !state.removed.length) throw new OpFailure('This clip has no cuts yet: cut words or pauses first, then shape the cut.');
     const kept = keptRanges(state.window, state.removed);
-    const starts = segmentStarts(kept);
-    const roll = { ...readCutRoll(document) };
+    const offset = speechOffset(document, elementId);
+    const starts = segmentStarts(kept).map((start) => round(start + offset));
+    const roll = { ...readCutRoll(document, elementId) };
     if (input.at === undefined) {
       if (input.seconds !== 0) throw new OpFailure('Give the clip second of the cut.');
-      return writeCaptionState(document, { base: state.base, removed: state.removed, roll: null });
+      return writeCaptionState(document, { elementId, base: state.base, removed: state.removed, roll: null });
     }
     let best = -1;
     for (let index = 1; index < kept.length; index++) {
@@ -323,6 +327,6 @@ export const setAudioRoll = {
     else roll[key] = input.seconds;
     const applied = activeRoll(kept, state.window, roll).get(best) ?? 0;
     if (input.seconds !== 0 && applied === 0) throw new OpFailure('The shots around this cut are too short to overlap their sound.');
-    return writeCaptionState(document, { base: state.base, removed: state.removed, roll });
+    return writeCaptionState(document, { elementId, base: state.base, removed: state.removed, roll });
   },
 };
