@@ -45,7 +45,8 @@ export const MAX_REPEATED_FAILURES = 3;
  */
 export const SLOW_PLAN_CUTOFF_MS = 110_000;
 // wait_for_media waits up to a minute: started late, it would outlast the request too.
-export const SLOW_PLANS = new Set(["create_video", "plan_video", "wait_for_media"]);
+// preview_explainer renders stills for up to a minute (`previewMotion` times out at 60 s).
+export const SLOW_PLANS = new Set(["create_video", "plan_video", "wait_for_media", "preview_explainer"]);
 
 /** Nhịp hỏi trạng thái lượt khi model đang nói — Stop cắt luồng trong chừng này. */
 export const STOP_POLL_MS = 2_000;

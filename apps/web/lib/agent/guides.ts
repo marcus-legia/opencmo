@@ -259,6 +259,43 @@ Fix and preview again — up to 3 rounds — until there are no errors and no la
 add_3d_scene { title, code (exactly what you last previewed), quote, theme? }. Duration comes from the quote (3-10 s); use the same duration in preview_3d. The video always takes the shape of the area it fills, so preview in that shape: full screen = clip_context.frame (a 16:9 clip is landscape); the panel of a split = 1:1 or 4:5.
 After it renders (about half a minute) capture a frame in its middle to confirm it sits well on the clip.`,
 
+  explainer: `# Animated explainers (/explain → preview_explainer → add_explainer)
+
+An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene: a navy field of glowing dots, lines, grids and short labels that keeps transforming, each beat changing what is already on screen. It renders as one video layer with its own voice (credits after the user approves).
+
+## 1. The script first — show it and ask
+Write the beats in your reply and ask "Shall I make it?" before writing any code. Wait for the user's go.
+- Pick one structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
+- Beat 1 is the hook: the surprising question or fact, never "In this video…".
+- Each beat: say = 6-20 words of narration (about 4 s); label = the main words on screen, at most 5 words. 4-12 beats.
+- Each beat transforms the picture: a dot becomes a line, noise is filtered to peaks, a grid gets a match. No slideshow of separate pictures.
+- Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
+- Colour has meaning and the kit applies it: signal = gold, answer = teal (the brand accent), wrong = red, noise = grey.
+
+## 2. The code
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. R is remotion (useCurrentFrame, interpolate, spring, Sequence, AbsoluteFill…), kit is the motion kit. Not available (the guard rejects them): fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage. Randomness: kit.random(seed).
+Compose ONLY kit primitives — never pick colours, fonts or easing yourself.
+- Layout: wrap everything in <kit.Stage> (field, vignette, grid, bloom). kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') gives safe boxes for the format; place things inside them.
+- Text: kit.Title; kit.Label({ text, at, swapTo?, swapAt?, strikeAt? }); kit.Mono for data text such as "f1 | f2 | gap".
+- Data and marks: kit.DotField({ count, seed, area, glow, filterAt?, threshold? }), kit.Spectrogram, kit.Waveform, kit.Axes, kit.Scatter, kit.FitLine, kit.Link (draws on between points), kit.Box (dashed region), kit.Counter, kit.Check, kit.Icon.
+- Camera: kit.Camera({ focus, zoom, at }) for slow push-ins between beats.
+- Timing — never hard-code frames: kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word is spoken in beat i; kit.at(i, 0..1) → a frame inside beat i. They follow the real voice when it is rendered.
+- Motion: kit.enter(frame, opts), kit.morph(a, b, progress) (point sets), kit.stagger, kit.ease.out, kit.ease.hero. No bounce.
+- Colours: kit.color.signal | answer | wrong | noise | text | field.
+Keep elements alive across beats and change them (filterAt, swapTo, strikeAt, morph) instead of cutting to a new picture. Hold the last state still for the final second.
+
+## 3. Preview and fix — required
+preview_explainer { title, beats, code, format } returns stills (beat midpoints and the last frame) and a layout report. Look at every still AND read the issues:
+- an error (phase compile/guard/render + message) → fix the code;
+- "overlaps" → move one label to another area or time;
+- "outside the safe area" → place it with kit.area;
+- "text under 36 px" → fewer words, bigger primitive;
+- "more than 85% empty" → the beat needs its picture.
+Check that each still reads at a glance on a phone. Fix and preview again — at most 3 rounds.
+
+## 4. Add it
+add_explainer { title, beats, code (exactly what you last previewed), format, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+
   voiceover: `# Voiceover (add_voiceover, when available)
 
 A new AI voice on the clip. It costs credits (the user approves the price) and arrives in a few seconds to a minute. Only when the user asks for a voiceover, narration, a new script or to "repurpose" the clip.

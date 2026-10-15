@@ -102,7 +102,7 @@ function blankEdit(document: ClipDocument): void {
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
-  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene"].includes(call.name));
+  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer"].includes(call.name));
   const first = priced[0];
   if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
   const input = first!.input as { seconds?: number; aspect?: string };
@@ -566,6 +566,50 @@ export const TASKS: EvalTask[] = [
       const noLoop = check(notes, tries <= 2, `create_video tried ${tries} times`);
       const told = check(notes, /new edit|\/broll|b-roll/i.test(outcome.reply ?? ""), `the user is not told what to do instead: ${(outcome.reply ?? "").slice(0, 200)}`);
       return { pass: placed && noLoop && told, notes };
+    },
+  },
+  // Explainers (docs/explainer-build.md): the script is shown and approved before any code or credit.
+  {
+    id: "explain-script",
+    prompt: "/explain How Shazam recognizes a song in a noisy bar",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const reply = outcome.reply ?? "";
+      const waited = check(notes, !outcome.tools.some((name) => ["preview_explainer", "add_explainer"].includes(name)), `tools before the user said go: ${outcome.tools.join(", ")}`);
+      const beats = reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
+      const scripted = check(notes, beats.length >= 3, `script has ${beats.length} beats: ${reply.slice(0, 300)}`);
+      const asked = check(notes, /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
+      return { pass: waited && scripted && asked, notes };
+    },
+  },
+  {
+    id: "explain-make",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. I trust your script, no need to show it: go ahead and make it.",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const previewed = outcome.tools.indexOf("preview_explainer");
+      const added = outcome.tools.lastIndexOf("add_explainer");
+      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
+      if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
+      const scene = gen!.spec.scene as { template?: string; code_ref?: string; beats?: { say: string; label?: string }[] } | undefined;
+      const ref = check(notes, scene?.template === "explainer" && /^[0-9a-f]{64}$/.test(scene.code_ref ?? ""), `scene: ${JSON.stringify(scene).slice(0, 200)}`);
+      const beats = scene?.beats ?? [];
+      const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+      const paced = check(notes, beats.length >= 3 && beats.every((beat) => words(beat.say) >= 4 && words(beat.say) <= 24), `beat lengths: ${beats.map((beat) => words(beat.say)).join(", ")}`);
+      const labels = check(notes, beats.every((beat) => !beat.label || words(beat.label) <= 5), "a label is longer than 5 words");
+      const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
+      const placed = check(
+        notes,
+        all(outcome.document).some((item) => ((item.entity.paints as { src?: { model?: string } }[] | undefined) ?? []).some((paint) => paint.src?.model === "motion-explainer")),
+        "the explainer is not on the clip",
+      );
+      // Not `sane`: a blank edit is exactly as long as its explainer, which may be under 21 s.
+      const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
+      const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
+      return { pass: order && ref && paced && labels && shape && placed && clean, notes };
     },
   },
   {

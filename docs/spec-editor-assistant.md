@@ -84,11 +84,12 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
 | Media AI mới | `generate_media`, rồi `wait_for_media` |
 | Giải thích ý | `add_diagram`, `add_chart`, `add_graph`, `add_shape`, `add_icon`, `add_lottie`, `set_layout` |
 | 3D | `add_3d_scene` (đọc guide "3d") |
+| Narrated animated explainer (`/explain`) | `preview_explainer` → `add_explainer` (guide "explainer") |
 | Gọn lời nói | `remove_silence`, `find_filler_words` + `remove_words`, `remove_ranges` |
 | Giọng mới | `add_voiceover` |
 | File để tải | `request_export` |
 
-**Tool tốn credit** (luôn qua thẻ giá): `generate_media`, `create_video`, `edit_video`, `replace_background`, `add_voiceover`, `add_3d_scene`, `add_captions`.
+**Tool tốn credit** (luôn qua thẻ giá): `generate_media`, `create_video`, `edit_video`, `replace_background`, `add_voiceover`, `add_3d_scene`, `add_explainer`, `add_captions`.
 
 **Tool cấp cao do PR 45 thêm:**
 - `place_broll` (`tools.ts`):
@@ -97,13 +98,18 @@ packages/clip-export            document → MP4 (ffmpeg streaming), chạy trê
   - một cảnh sai thì không đặt cảnh nào.
 - `wait_for_media` (`wait-tool.ts`): chờ tối đa 60 giây các bản ghi `generations` của clip; trả về xong / lỗi (đã hoàn credit) / còn đang sinh.
 
+**Explainers** (`explainer-tool.ts`, plan `docs/explainer-build.md`):
+- `preview_explainer` is a server tool (not a tab tool): `previewMotion` renders 4–6 stills of the Remotion scene code and a layout report; the stills go to the model as images and to the panel over SSE (not stored with the call). It is in `SLOW_PLANS`.
+- `add_explainer` refuses code that was not previewed in the same turn, saves the code to `scene_codes`, prices a `motion-explainer` spec (seconds + voice characters) and shows a card with one line per beat. Moderation reads the script and every string in the code. On Approve, op `add_explainer` places one video layer `Explainer: <title>` (one Undo step; it sets the frame on a blank New edit).
+- The fake provider scripts `/explain` → script → "go" → `preview_explainer` → `add_explainer` with Track A's showcase.
+
 **Bộ tool theo loại clip:** New edit trống không có các tool cắt theo lời (`OWN_VIDEO_TOOLS`), vì không có video gốc để cắt.
 
 **Không đưa cho model** (`NOT_OFFERED`): `update_element`, `paste_nodes`, `insert_scene`, `activate_scene`, `move_part`, `move_keyframe`.
 - Op vẫn còn cho UI và cho lịch sử chat cũ.
 - `set_props` thay `update_element`, và mang cùng quy tắc chặn (`guardProps`).
 
-**Guide** (`guides.ts`, đọc bằng `read_guide`): workflow, script, broll, pacing, hooks, captions, motion, visuals, layout, reframe, jlcut, voiceover, video, blank, brand, 3d, document…
+**Guide** (`guides.ts`, đọc bằng `read_guide`): workflow, script, broll, pacing, hooks, captions, motion, visuals, layout, reframe, jlcut, voiceover, video, blank, brand, 3d, explainer, document…
 
 **Hai cờ, tắt mặc định:**
 - `OPENCMO_AGENT_TOOL_SEARCH=1`: chỉ ~44 tool trong `ALWAYS_LOADED` (`providers/anthropic.ts`) luôn nạp; phần còn lại nạp khi model tìm (BM25 tool search).
@@ -123,6 +129,8 @@ Tất cả đi qua `structured()` (`lib/cmo/jobs/llm.ts`):
 - **Intro team** (`video-team.ts`, tool `plan_video`):
   - Writer (tier `check`) viết tiêu đề; Motion director lên các nhịp;
   - reviewer là code (`reviewIntro`), sửa tối đa một vòng.
+
+**Not a team: explainers.** The Assistant writes the explainer code and is its own visual critic: it looks at the `preview_explainer` stills and fixes the code, at most 3 rounds. There is no director sub-agent in v1.
 
 **Hai team chạy trong `scope.plan()`**, trước khi hiện thẻ duyệt: người dùng duyệt đúng thứ sẽ được áp. Chi phí của team ghi vào lượt. Vì một lần lên kế hoạch có thể mất tới ~3 phút, các tool trong `SLOW_PLANS` không được bắt đầu sau 110 giây của request.
 
