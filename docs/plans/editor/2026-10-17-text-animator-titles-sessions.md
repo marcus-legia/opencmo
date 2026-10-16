@@ -96,10 +96,17 @@ measurement but does not change it (a needed change goes to "Requests" for Marcu
       the edge. Tests: the mask contains the rendered ink of "Nguyễn", "Hương", "Nguyễn Thị Hương" and NFD "Ỗ ặ";
       mid reveal never draws outside the box. Full-size 1080×1920 export looked at: line / word / letter masks, all
       marks intact at rest.
-- [ ] **A5 — Inspector (E4).** "By", "Order", "Gap" (Tight/Normal/Loose), "Mask" in `inspector/parts.tsx`, shown
+- [x] **A5 — Inspector (E4).** "By", "Order", "Gap" (Tight/Normal/Loose), "Mask" in `inspector/parts.tsx`, shown
       only for text nodes and `UNIT_ANIMATION_TYPES`; writes through the existing inspector op path. Post the guide
       text for the new `animations` fields under "Requests" for B (B owns `guides.ts`). Accept: typecheck, an
       inspector unit test if `inspector.test.ts` covers the panel, a screenshot in the PR.
+      _Done:_ "Dur" shows the default the renderer will use (`unitTiming`, exported from `clip-render`) when none is
+      written; changing the type drops unit fields the new type cannot carry, so a `set_props` never makes the
+      document invalid. `inspector.test.ts` tests editor-core ops, not the panel, and no e2e covers Animations, so the
+      real `AnimationsSection` was bundled into a page with `edit` → editor-core `applyOps` and driven in Chromium:
+      Gap → Loose writes `step` 0.088 (word), By → Letter keeps the gap (0.048), type → Fade drops `mask`, type → Spin
+      drops all unit fields and hides the rows, By → Whole clears them; no op error. Not tried in the full running
+      app (no Docker for local Supabase in this session); screenshot in the PR.
 - [ ] **A6 — Parity + budget.** `samples/anim-units.json` + references approved by eye (README rule); export a 60 s
       1080×1920 document with 10 `unit: 'char'` text nodes through `clip-export` with `/usr/bin/time -v` before
       (main) and after; numbers in this file under A6. Accept: wall time +< 10 %, peak RSS far below 2 GB, frames
@@ -151,7 +158,20 @@ Until A1 lands, B1–B3 need nothing from A.
 
 ## Requests (append-only; `[A→B]` or `[B→A]`, date, what, status)
 
-_(none yet)_
+- **[A→B] 2026-10-16 — A3 + A4 pushed (`fe87f22`): B4 can start.** `unit` / `order` / `step` / `mask` draw in
+  `clip-render`. For titles: `{ type: 'slideUp', unit: 'word', mask: true }` (default step 0.055 s, duration
+  0.5 s + step × (words − 1)); out: the same with `phase: 'out'` and a shorter `duration`. A masked slide travels the
+  line box and does not fade. Status: open.
+- **[A→B] 2026-10-16 — guide text for the `animations:` line in `apps/web/lib/agent/guides.ts` (A5).** Append after
+  the sentence on `perWord` (wording is ours, use as is or trim):
+  > fade, slideUp, slideDown, slideLeft, slideRight, pop, blur and grow can run per unit on a text element:
+  > {unit: "char"|"word"|"line", order?: "first"|"center"|"last"|"random", step?: seconds between two units' starts
+  > (0.02–0.5; defaults 0.03 letters, 0.055 words, 0.08 lines), mask?: true (slideUp/slideDown only: each unit rises
+  > from behind its line's edge instead of fading)}. Without duration it lasts 0.5 s + step × (units − 1) (0.9 s for
+  > lines). Letters for short words (≲ 20 characters), words for a tagline, lines for a paragraph; text over 200
+  > letters animates by word. Captions ignore unit.
+
+  Status: open.
 
 ## How to verify before ready for review
 

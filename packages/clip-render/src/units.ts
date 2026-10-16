@@ -4,9 +4,31 @@
  * Shared by the renderer, its tests and the editor, so preview, export and the inspector agree.
  */
 
-import type { ANIMATION_ORDERS } from '@opencmo/clip-doc';
+import type { ANIMATION_ORDERS, ANIMATION_UNITS } from '@opencmo/clip-doc';
 
 export type UnitOrder = (typeof ANIMATION_ORDERS)[number];
+
+/** Default seconds between two units' starts: letters ripple fast, lines read as a sequence. */
+export const UNIT_STEP = { char: 0.03, word: 0.055, line: 0.08 } as const satisfies Record<(typeof ANIMATION_UNITS)[number], number>;
+
+/** Above this many letters a per-letter animation runs per word: cost, and nobody reads it anyway. */
+export const MAX_CHAR_UNITS = 200;
+
+/**
+ * The unit a text really animates by, its default step, and its default length in seconds: each
+ * unit gets 0.5 s after the last one starts; lines are only known after layout, so they take 0.9 s.
+ */
+export function unitTiming(text: string, unit: (typeof ANIMATION_UNITS)[number], step?: number) {
+  let by = unit;
+  let count = 0;
+  if (by === 'char') {
+    count = graphemes(text).filter((char) => char.trim()).length;
+    if (count > MAX_CHAR_UNITS) by = 'word';
+  }
+  if (by === 'word') count = text.split(/\s+/).filter(Boolean).length;
+  const gap = step ?? UNIT_STEP[by];
+  return { unit: by, step: gap, duration: by === 'line' ? 0.9 : 0.5 + gap * Math.max(0, count - 1) };
+}
 
 type Segmenter = { segment(text: string): Iterable<{ segment: string }> };
 let segmenter: Segmenter | null | undefined;
