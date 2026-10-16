@@ -35,6 +35,7 @@ import {
   loadCaptions,
   quoteRange,
   readMarkers,
+  styleReceipt,
   searchSpoken,
   speechElement,
   summarizeProject,
@@ -51,6 +52,7 @@ import { nodeFor } from "@/lib/editor/asset-node";
 import { GUIDE_NAMES, readGuide } from "./guides";
 import { FILLERS, bare, findRetakes } from "./retakes";
 import { noTranscript, sourceOf, speechCount } from "./speech";
+import { readyStyles } from "./styles";
 import type { AgentWorkspace } from "./workspace";
 import type { Image } from "./providers/types";
 
@@ -434,6 +436,8 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Turn numbers the speaker says into an animated chart: bar (bars grow), line (line draws on), pie, donut (sweeps round; shows the first share in the middle), stat (one big number with a label). Values are raw numbers; unit is a suffix like % or k.",
   add_graph:
     "Plot y = f(x) on axes, drawn on like a 3Blue1Brown animation. expr uses x, + - * / ^, brackets, sin cos tan exp log sqrt abs, pi, e (e.g. 2^x, x^2, sin(x)). Optional x and y ranges.",
+  apply_style:
+    "Apply a style from <styles> as ONE change and one undo, after read_skill on it: write an Edit Plan (hook lines, words to emphasize, chapters, an optional list, proofs from ready page captures) where every beat quotes exact words from <clip_context>, never seconds. The style's preset sets captions, punch-in, transitions and colours. Beats whose words are not found, and parts that are not available, are skipped and listed in the result's receipt; tell the user about them.",
   add_title:
     "Add a title card in the brand's colors and font: kind lowerThird (a name and role when a speaker appears), nameTag (the compact version), chapter (a centered section title; sub = \"Chapter 2\" or \"Episode 12\"). title = the name or chapter title (≤ 60 characters), sub = role, company or episode. look: bar (accent bar, no panel), kicker (sub on an accent band above the name), card (panel with an accent line). side left/right/center, motion calm/standard/punchy. Pass quote = the words the speaker says when it should appear (often their introduction): it starts there and holds 5.5-8 s. It is placed inside title-safe, above the captions, clear of the phone's buttons. One name tag per speaker, at their first appearance; chapters where the topic changes. read_guide \"titles\".",
   update_visual:
@@ -492,6 +496,8 @@ export const TOOL_SPECS: ToolSpec[] = [
   PLACE_BROLL,
   ...Object.keys(AGENT_OP_INPUTS)
     .filter((name) => !NOT_OFFERED.has(name))
+    // A style needs a ready style to apply; until one is, the tool would only invite a degraded run.
+    .filter((name) => name !== "apply_style" || readyStyles().length > 0)
     .sort()
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
@@ -867,6 +873,7 @@ export async function runTool(name: string, input: unknown, env: ToolEnv): Promi
     const blocked = guard(parsed.data as Record<string, unknown>, (await env.workspace.read()).document);
     if (blocked) return invalid(op as Op, blocked);
 
+    if (name === "apply_style") return await applyStyleOutcome(parsed.data as Op, env);
     return await applyOpOutcome(parsed.data as Op, env);
   } catch (err) {
     return toolFailure(name, err);
@@ -1010,6 +1017,18 @@ export async function applyOpTool(op: Op, env: ToolEnv): Promise<ToolOutcome> {
   } catch (err) {
     return toolFailure(op.op, err);
   }
+}
+
+/**
+ * `apply_style` with its receipt: what was applied, skipped (and why) and not available. The op
+ * returns only the document, so the receipt comes from the same run on the same snapshot first.
+ */
+async function applyStyleOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
+  const snapshot = await env.workspace.read();
+  const receipt = await styleReceipt(snapshot.document, op as never, await env.workspace.opContext(snapshot.document, snapshot.manifest));
+  const outcome = await applyOpOutcome(op, env);
+  if (!outcome.ok) return outcome;
+  return { ...outcome, content: JSON.stringify({ ...(JSON.parse(outcome.content) as object), receipt }) };
 }
 
 async function applyOpOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {

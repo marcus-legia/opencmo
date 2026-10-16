@@ -1,5 +1,6 @@
 ---
 name: content-calendar
+kind: playbook
 description: Planning a week of marketing for a solo founder — pillars, mix, cadence, and learning from last week. Used by the Planner.
 agents: [planner, cmo]
 source: marketingskills/content-strategy, marketingskills/social (pillars, calendar, batching), marketingskills/marketing-loops

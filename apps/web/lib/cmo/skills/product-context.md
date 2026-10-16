@@ -1,5 +1,6 @@
 ---
 name: product-context
+kind: playbook
 description: What a complete product marketing context contains, and how to fill gaps by asking the founder. Used by the CMO.
 agents: [cmo, onboarding]
 source: marketingskills/product-marketing

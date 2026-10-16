@@ -35,6 +35,8 @@ import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, runCmoTool, type CmoT
 import { CMO_SYSTEM_PROMPT, PROJECT_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
+import { styleIndex } from "./styles";
+import { CAPTURE_TOOLS, captureToolSpecs, runCaptureTool } from "./capture-tool";
 import { clipContextBlock, type ClipAbout } from "./clip-context";
 import { dbWorkspace } from "./db-workspace";
 import { libraryVideos, transcribing } from "./speech";
@@ -136,7 +138,7 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
-  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
+  return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs(), ...captureToolSpecs()];
 }
 
 export async function clipScope(
@@ -167,7 +169,7 @@ export async function clipScope(
         skillIndex(supabase).catch(() => ""),
       ]);
       const pending = await transcribing(libraryVideos(snapshot.document, snapshot.manifest), workspace.transcriptStatus);
-      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout, pending).catch(() => "")}${skills}`;
+      return `${await clipContextBlock(snapshot.document, ctx, about as ClipAbout, pending).catch(() => "")}${styleIndex()}${skills}`;
     },
     async state() {
       // One read serves both the summary and the check.
@@ -383,16 +385,18 @@ export async function clipScope(
         ? runBrandTool(supabase, call.input, (op) => applyOpTool(op as never, env))
         : SKILL_TOOLS.has(call.name)
           ? runSkillTool(supabase, call)
-          : TURN_TOOLS.has(call.name)
-            ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
-            : call.name === WAIT_TOOL_SPEC.name
-              ? runWaitForMedia(call.input, { supabase, clipId })
-              : call.name === "preview_explainer"
-                ? workspace.read().then(({ document }) => {
-                    const accent = readBrand(document)?.colors.accent;
-                    return runPreviewExplainer(call.input, { preview: previewMotion, ...(accent ? { accent } : {}) });
-                  })
-                : runTool(call.name, call.input, env),
+          : CAPTURE_TOOLS.has(call.name)
+            ? runCaptureTool(supabase, call)
+            : TURN_TOOLS.has(call.name)
+              ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
+              : call.name === WAIT_TOOL_SPEC.name
+                ? runWaitForMedia(call.input, { supabase, clipId })
+                : call.name === "preview_explainer"
+                  ? workspace.read().then(({ document }) => {
+                      const accent = readBrand(document)?.colors.accent;
+                      return runPreviewExplainer(call.input, { preview: previewMotion, ...(accent ? { accent } : {}) });
+                    })
+                  : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
       if (call.name === "plan_video") {
         if (!approved) {

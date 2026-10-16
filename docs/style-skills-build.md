@@ -264,29 +264,29 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ## Track A: Skill library & director
 
-- [ ] **A1. Contracts.** `capabilities.ts`, `style/preset.ts`, `style/plan.ts`, and the skill frontmatter zod in
+- [x] **A1. Contracts.** `capabilities.ts`, `style/preset.ts`, `style/plan.ts`, and the skill frontmatter zod in
   `packages/skills/src/format.ts`. Unit tests: the example preset and plan above parse; unknown keys fail.
   **Push this first.**
-- [ ] **A2. `packages/skills` package.** Workspace package, `styles/` folder, `scripts/build-skills.mts` →
+- [x] **A2. `packages/skills` package.** Workspace package, `styles/` folder, `scripts/build-skills.mts` →
   `src/index.gen.ts`, `--check` wired into `check:contracts`. Check rules: unique names, `requires` ids exist in
   `CAPABILITIES`, `preset` passes `StylePresetSchema`, body ≤ 12k chars.
-- [ ] **A3. Capability check.** `capabilities.check.ts`: every op named in `CAPABILITIES` exists in `REGISTRY` when
+- [x] **A3. Capability check.** `capabilities.check.ts`: every op named in `CAPABILITIES` exists in `REGISTRY` when
   `ready`; `npm run skills:gaps` prints, per style, the capabilities it still waits for.
-- [ ] **A4. First style `senior-dev-listicle`.** Preset as in the contract. The body covers: what to emphasize
+- [x] **A4. First style `senior-dev-listicle`.** Preset as in the contract. The body covers: what to emphasize
   (numbers, names, promises; ≤ 1 per 2 s; never filler), how to write the hook (the speaker's strongest phrase,
   3–8 words, line 2 is the promise), when a claim earns a proof (a number, a repo, a person's title), chapters for
   "number one/two…". No copied text from the reference reel.
-- [ ] **A5. `apply_style` op.** Resolve → validate → one revision → receipt, exactly as the contract says. Tests in
+- [x] **A5. `apply_style` op.** Resolve → validate → one revision → receipt, exactly as the contract says. Tests in
   `style/apply.test.ts`: a plan with a missing quote is skipped and reported; an unready capability shows up in
   `unavailable`; a second run replaces the first (no duplicate titles, emphasis or punch-ins); one undo restores the
   document byte-for-byte (compare JSON).
-- [ ] **A6. Assistant wiring.** `<styles>` index in the context (ready styles only; name + description), `read_skill`
+- [x] **A6. Assistant wiring.** `<styles>` index in the context (ready styles only; name + description), `read_skill`
   reads styles too, `/style <name>` slash command (`slash.ts`), tools `capture_page` and `capture_status` calling
   C's routes (code against the contract until C2 lands), `apply_style` exposed through `AGENT_OP_INPUTS`. The
   directive: read the style, capture any proof URLs first, wait for `ready`, then write the plan and call
   `apply_style` once, then run `check` and capture a frame at the hook and at each proof.
-- [ ] **A7. CMO playbooks get `kind: playbook`** in frontmatter through `build-cmo-skills.mts`; no file moves.
-- [ ] **A8. Evals.** `style-listicle` in `apps/web/lib/agent/eval` with the fake provider: the grader wants one
+- [x] **A7. CMO playbooks get `kind: playbook`** in frontmatter through `build-cmo-skills.mts`; no file moves.
+- [x] **A8. Evals.** `style-listicle` in `apps/web/lib/agent/eval` with the fake provider: the grader wants one
   `apply_style` call, every quote present in the transcript, emphasis ≤ 1 per 2 s, hook ≤ 8 words per line, proofs
   only with ready captures, and the receipt reported to the user (including skipped items).
 
@@ -383,6 +383,40 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ### Track A
 
+- **Branch.** `claude/video-editing-review-hrrmqx` had been deleted with PR #61 (docs only, already in `main`);
+  recreated from `main`. B and C have not pushed yet, so every Track B/C capability is still `ready: false`.
+- **A1.** `capabilities.ts`, `style/preset.ts`, `style/plan.ts`, `packages/skills/src/format.ts` as in the contracts.
+  Nested plan items are `.strict()` too, so an unknown key fails at every level. `StylePresetSchema` takes
+  `chapters.transition: whip` before B1 lands (`STYLE_TRANSITIONS` = `TRANSITION_TYPES` + `whip`); `apply_style`
+  reports `transition.whip` as unavailable until B flips it.
+- **A2.** `packages/skills` is a workspace package (`@opencmo/skills`). Folders per kind (`styles/`, later
+  `playbooks/`, `guides/`); the kind must match the folder. YAML is parsed at build time only (`yaml`, ISC,
+  dev dependency); the runtime reads `src/index.gen.ts`. `--check` runs in `check:contracts`; CI runs
+  `check:skills` + `test:skills`.
+- **A3.** The registry check lives in `capabilities.test.ts` (editor-core tests, so CI runs it) on top of
+  `capabilityIssues()`. `npm run skills:gaps` today: `senior-dev-listicle` waits for `caption.emphasis`,
+  `title.hook`, `speaker.punchIn`, `proof.card`, `transition.whip`.
+- **A4.** `styles/senior-dev-listicle.md`: preset as in the contract; examples are our own, nothing from the reel.
+- **A5.** `apply_style` is one registry op, so the batch is one revision and one undo. It runs the other ops
+  through the registry by name (`styleOp(deps)`); a sub-op's `OpFailure` becomes a skipped item, a quote not in
+  the transcript too. Rerun: the groups an earlier run placed (`marks.visual.op` of `add_hook_title`, `add_list`,
+  `add_proof`) are removed first and named in `applied` ("Replaced 1 earlier hook title"); emphasis is written
+  with `clear: true`, also when the new plan has none and the captions still carry some. Chapter transitions go on
+  the left piece of the cut within 0.6 s of the chapter's first word; no cut there → skipped with that reason.
+  The tests fake B's and C's ops at their contract. Measured: well under the 300 ms budget (the test asserts it).
+- **A6.** `<styles>` (ready styles only) in the clip context; `read_skill` reads ready styles before user skills;
+  `/style` appears in the menu, and `apply_style` in the tool list, only while a style is ready (the eval calls the op directly); `capture_page` / `capture_status`
+  (`lib/agent/capture-tool.ts`) are offered only while `proof.capture` is ready and call `capture_create` /
+  read `page_captures` under RLS; `serverOpContext` gives `apply_style` the capture reader. The tool result of
+  `apply_style` carries its receipt (same run on the same snapshot first: `styleReceipt`).
+- **A7.** The 7 CMO playbooks have `kind: playbook`; `build-cmo-skills.mts` requires it. `index.gen.ts` unchanged.
+- **A8.** Eval `style-listicle` (fake provider) passes: one `apply_style`, quotes in the transcript, emphasis
+  ≥ 2 s apart, hook ≤ 8 words a line, no proof without a checked capture, receipt in the reply. Full fake run:
+  41/43; the two misses (`explain-make`, `explain-vaccine`) fail the same way on `main` in a container without
+  explainer previews.
+- **Not checked by looking yet:** nothing renders differently until B and C land; the acceptance run (frames at
+  the hook and the proof) belongs after B9 / C7.
+
 ### Track B
 
 ### Track C
@@ -390,3 +424,13 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 ## Requests
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
+
+- [ ] (from A → owner B) `add_hook_title`: also take the preset's look — `accent_line`, `accent_box`,
+  `font_family`, `accent_font_family`, `accent_font_style` — so `apply_style` can pass `preset.hookTitle`. Today it
+  passes only `lines`, `start`, `end` (the contract).
+- [ ] (from A → owner B) `emphasize_words`: accept `quotes: []` with `clear: true` (a rerun whose plan has no
+  emphasis clears the old one), and keep a visual's `marks.visual.op` on the groups `add_hook_title` / `add_list`
+  place: `apply_style` finds its earlier output by it.
+- [ ] (from A → owner C) `page_captures` needs `status` and `error` columns readable under RLS
+  (`lib/agent/captures.ts` selects them), and `capture_create(p_url)` returns the capture id; refusals in plain
+  English (they reach the user verbatim). `add_proof`'s groups also need `marks.visual.op = 'add_proof'`.
