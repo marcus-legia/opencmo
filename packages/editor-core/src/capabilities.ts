@@ -24,7 +24,7 @@ export const CAPABILITIES = {
 	'caption.reveal': { track: 'B', ready: true, ops: ['set_props'] },
 	'title.hook': { track: 'B', ready: true, ops: ['add_hook_title'] },
 	'speaker.punchIn': { track: 'B', ready: true, ops: ['punch_in'] },
-	'list.reveal': { track: 'B', ready: false, ops: ['add_list'] },
+	'list.reveal': { track: 'B', ready: true, ops: ['add_list'] },
 	// The transition sits on the left clip of a cut.
 	'transition.whip': { track: 'B', ready: false, ops: ['set_props'] },
 	'layout.split': { track: 'B', ready: true, ops: ['set_layout'] },
