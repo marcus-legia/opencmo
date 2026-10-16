@@ -4,7 +4,7 @@
  * nhưng op thì chỉ có một bản.
  */
 
-import type { AssetInput } from '@opencmo/clip-doc';
+import type { AssetInput, ClipDocument } from '@opencmo/clip-doc';
 import type { Transcript as RenderTranscript } from '@opencmo/clip-render';
 
 import type { Viewport } from '../reframe';
@@ -38,6 +38,22 @@ export type OpContext = {
  */
 export class OpFailure extends Error {
 	override name = 'OpFailure';
+}
+
+/**
+ * An op's document plus a report of what it did (`apply_style`'s receipt). `applyOps` puts the
+ * detail on the op's result, so the report comes from the run that was written, not a second run.
+ */
+export class OpOutcome {
+	constructor(
+		readonly document: ClipDocument,
+		readonly detail: unknown,
+	) {}
+}
+
+/** The document of an op's return value, and its detail when it reported one. */
+export function unwrapOutcome(value: ClipDocument | OpOutcome): { document: ClipDocument; detail?: unknown } {
+	return value instanceof OpOutcome ? { document: value.document, detail: value.detail } : { document: value };
 }
 
 /** Op thứ `index` hỏng; không có document nửa vời nào được trả về. */

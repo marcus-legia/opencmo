@@ -78,7 +78,14 @@ def _local_capture(spec: dict[str, Any]) -> dict[str, Any]:
 
 def capture_page(spec: dict[str, Any]) -> dict[str, Any]:
     """`{url, width, max_height}` → `{png, boxes}` from wherever captures run here."""
-    target = _remote_capture if os.environ.get("OPENCMO_CAPTURE") == "modal" else _local_capture
+    from opencmo.ai import moderation
+
+    remote = os.environ.get("OPENCMO_CAPTURE") == "modal"
+    # Fail closed: a live worker never runs a page's JavaScript next to its own secrets.
+    if not remote and moderation.production():
+        log.error("capture_page: OPENCMO_CAPTURE is not 'modal' on a production worker; refusing")
+        raise TaskError(NOT_CHECKED)
+    target = _remote_capture if remote else _local_capture
     try:
         result = target({key: spec[key] for key in ("url", "width", "max_height")})
     except Exception as exc:

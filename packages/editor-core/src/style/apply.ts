@@ -10,9 +10,10 @@
  * beat whose quote is not in the transcript (or whose sub-op refuses it) lands in `skipped` with the
  * reason. Only a wrong style name or a broken preset fails the whole op.
  *
- * A second run replaces the first: the hook, list and proof groups an earlier run left are removed
- * before the new ones are placed, emphasis is cleared before it is written, and punch-in, caption
- * and transition settings overwrite themselves.
+ * A second run replaces the first: the hook, list and proof groups an earlier run placed (tagged
+ * `marks.style`) are removed before the new ones are placed; ones the user or the Assistant added by
+ * hand stay. Emphasis is cleared before it is written, and punch-in, caption and transition
+ * settings overwrite themselves.
  */
 
 import { z } from 'zod';
@@ -25,7 +26,7 @@ import { readBrand } from '../brand';
 import { readCaptionStyle } from '../captions';
 import { CAPABILITIES, isReady, type Capability, type CapabilityInfo } from '../capabilities';
 import { clone, nodes, walk, type Entity } from '../doc';
-import { OpFailure, type OpContext } from '../ops/context';
+import { OpFailure, OpOutcome, type OpContext } from '../ops/context';
 import { timesOf } from '../ops/timeline';
 import { quoteRange } from '../ops/visuals';
 import { EditPlanSchema, type EditPlan } from './plan';
@@ -110,13 +111,15 @@ function cutNear(document: ClipDocument, ctx: StyleContext, at: number): string 
 	return best?.id ?? null;
 }
 
-/** Removes the visual groups an earlier style run placed; returns how many of each went. */
+const visualOp = (entity: Entity) => ((entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op ?? '') as string;
+
+/** Removes the visual groups an earlier style run placed (never hand-made ones); returns how many of each went. */
 function removeStyleVisuals(document: ClipDocument): Record<string, number> {
 	const removed: Record<string, number> = {};
 	const doomed: { entity: Entity; list: Entity[] }[] = [];
 	walk(document, ({ entity, list }) => {
-		const op = ((entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op ?? '') as string;
-		if (list && Object.hasOwn(STYLE_VISUALS, op)) {
+		const op = visualOp(entity);
+		if (list && Object.hasOwn(STYLE_VISUALS, op) && (entity.marks as { style?: string } | undefined)?.style) {
 			doomed.push({ entity, list });
 			removed[op] = (removed[op] ?? 0) + 1;
 		}
@@ -140,6 +143,31 @@ type Step = {
 	 */
 	group?: 'reveal' | 'chapters';
 };
+
+/**
+ * The groups of this visual op, as JSON. New groups have no id until `applyOps` stamps them, so a
+ * group the sub-op just placed is told apart by content: the others come out of it unchanged.
+ */
+function visualPrints(document: ClipDocument, op: string): string[] {
+	const prints: string[] = [];
+	walk(document, ({ entity }) => {
+		if (visualOp(entity) === op) prints.push(JSON.stringify(entity));
+	});
+	return prints;
+}
+
+/** Tags the groups `op` just placed (not among `before`) as this style's, so a rerun can replace them. */
+function tagStyleVisuals(document: ClipDocument, op: string, before: string[], style: string): void {
+	const left = new Map<string, number>();
+	for (const print of before) left.set(print, (left.get(print) ?? 0) + 1);
+	walk(document, ({ entity }) => {
+		if (visualOp(entity) !== op) return;
+		const print = JSON.stringify(entity);
+		const count = left.get(print) ?? 0;
+		if (count > 0) left.set(print, count - 1);
+		else entity.marks = { ...(entity.marks as object), style };
+	});
+}
 
 /**
  * Resolves the plan, applies it, and returns the new document with its receipt. The input document
@@ -324,16 +352,22 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 				continue;
 			}
 			if (!(await locate(item, proof.quote))) continue;
-			steps.push({ item, op: { op: 'add_proof', capture_id: proof.capture_id, focus: proof.focus, quote: proof.quote }, done: `Proof card on ${quoted(proof.focus)}` });
+			const look = preset.proof ?? {};
+			steps.push({
+				item,
+				op: { op: 'add_proof', capture_id: proof.capture_id, focus: proof.focus, quote: proof.quote, ...(look.zoom !== undefined ? { zoom: look.zoom } : {}), ...(look.mark ? { mark: look.mark } : {}) },
+				done: `Proof card on ${quoted(proof.focus)}`,
+			});
 		}
 	}
 
 	// ---- Apply: one document, one revision.
 	let document = clone(input);
 	const removed = removeStyleVisuals(document);
-	for (const [op, count] of Object.entries(removed)) receipt.applied.push(`Replaced ${plural(count, `earlier ${STYLE_VISUALS[op]}`)}`);
+	for (const [op, count] of Object.entries(removed)) receipt.applied.push(`Removed ${plural(count, STYLE_VISUALS[op]!)} from the last style run`);
 	const grouped = new Map<string, { done: string; count: number }>();
 	for (const step of steps) {
+		const before = Object.hasOwn(STYLE_VISUALS, step.op.op) ? visualPrints(document, step.op.op) : null;
 		try {
 			document = await deps.run(document, step.op, ctx);
 		} catch (error) {
@@ -341,6 +375,7 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 			skip(step.item, error.message);
 			continue;
 		}
+		if (before) tagStyleVisuals(document, step.op.op, before, style.name);
 		if (!step.group) {
 			if (step.done) receipt.applied.push(step.done);
 			continue;
@@ -378,8 +413,10 @@ export function styleOp(deps: StyleDeps) {
 		name: 'apply_style' as const,
 		input: applyStyleInput,
 		describe: describeStyle,
+		/** The receipt rides on the op's result (`OpResult.detail`), from this run. */
 		async apply(document: ClipDocument, input: ApplyStyle, ctx: OpContext) {
-			return (await runStyle(document, input, ctx, deps)).document;
+			const { document: next, receipt } = await runStyle(document, input, ctx, deps);
+			return new OpOutcome(next, receipt);
 		},
 	};
 }

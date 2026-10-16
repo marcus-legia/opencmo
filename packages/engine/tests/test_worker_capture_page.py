@@ -142,6 +142,16 @@ def test_a_bad_spec_is_refused(tmp_path: Path) -> None:
     assert store.failed == capture_page_task.UNAVAILABLE
 
 
+def test_production_never_captures_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    from opencmo.ai import moderation
+
+    monkeypatch.delenv("OPENCMO_CAPTURE", raising=False)
+    monkeypatch.setattr(moderation, "production", lambda: True)
+    monkeypatch.setattr(capture_page_task, "_local_capture", lambda spec: pytest.fail("ran Chromium in the worker"))
+    with pytest.raises(capture_page_task.TaskError, match=capture_page_task.NOT_CHECKED):
+        capture_page_task.capture_page({"url": "https://x.example.org/", "width": 1280, "max_height": 8000})
+
+
 def test_remote_errors_keep_their_sentence_and_others_become_not_opened(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENCMO_CAPTURE", "modal")
     monkeypatch.setattr(capture_page_task, "_remote_capture", lambda spec: (_ for _ in ()).throw(Exception(NOT_ALLOWED)))

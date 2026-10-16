@@ -5,8 +5,7 @@
  * with the model's thinking, so the directive is the reliable path.)
  */
 
-import { missingCapabilities } from "@opencmo/editor-core/capabilities";
-import { STYLES } from "@opencmo/skills";
+import { readyStyles } from "./styles";
 
 export type SlashCommand = { name: string; label: string; hint: string; directive: string };
 
@@ -22,7 +21,7 @@ const STYLE_COMMAND: SlashCommand = {
     'read_skill the style the user names (one of <styles>; if they name none, pick the one that fits and say which), then follow the steps it returns',
 };
 
-const styleReady = STYLES.some((style) => !missingCapabilities(style.requires).length);
+const styleReady = readyStyles().length > 0;
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "video", label: "Create a video", hint: "A full AI video from a prompt", directive: "call create_video" },

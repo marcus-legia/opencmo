@@ -77,6 +77,7 @@ const STYLE = {
 		hookTitle: { seconds: 3 },
 		speaker: { punchIn: { scales: [1, 1.15], minShot: 1.2 } },
 		chapters: { transition: 'dissolve' },
+		proof: { zoom: 2.5, mark: 'box' },
 		palette: { accent: '#FF5500' },
 	},
 };
@@ -173,6 +174,7 @@ describe('apply_style', () => {
 		expect(calls.find((call) => call.op === 'emphasize_words')).toEqual({ op: 'emphasize_words', quotes: ['24', 'free'], clear: true });
 		expect(calls.find((call) => call.op === 'add_hook_title')).toMatchObject({ lines: ['Three tools', 'that pay for themselves'], start: 0, end: 3, accent_color: '#FF5500' });
 		expect(calls.find((call) => call.op === 'add_list')).toMatchObject({ reveal_quotes: ['24', 'skills'] });
+		expect(calls.find((call) => call.op === 'add_proof')).toMatchObject({ zoom: 2.5, mark: 'box' });
 		// The chapter's transition sits on the left piece of the cut where "the thing" starts.
 		const sequence = nodes(document).find((node) => node.kind === 'sequence') as unknown as { children: Record<string, unknown>[] };
 		expect(sequence.children[0]!.transition).toEqual({ type: 'dissolve' });
@@ -242,7 +244,8 @@ describe('apply_style', () => {
 		const once = await runStyle(await cutClip(ctx), plan, ctx, fakeDeps([], ALL_READY, state));
 		const twice = await runStyle(once.document, plan, ctx, fakeDeps([], ALL_READY, state));
 		for (const op of ['add_hook_title', 'add_list', 'add_proof']) expect(groups(twice.document, op)).toHaveLength(1);
-		expect(twice.receipt.applied.slice(0, 3)).toEqual(['Replaced 1 earlier hook title', 'Replaced 1 earlier list', 'Replaced 1 earlier proof card']);
+		expect(twice.receipt.applied.slice(0, 3)).toEqual(['Removed 1 hook title from the last style run', 'Removed 1 list from the last style run', 'Removed 1 proof card from the last style run']);
+		for (const op of ['add_hook_title', 'add_list', 'add_proof']) expect((groups(twice.document, op)[0] as { marks?: unknown }).marks).toMatchObject({ style: STYLE.name });
 		expect(twice.receipt.skipped).toEqual([]);
 		expect(state.emphasis).toEqual(['24']);
 		// A plan without emphasis still clears the emphasis an earlier run wrote.
@@ -251,6 +254,16 @@ describe('apply_style', () => {
 		const third: Call[] = [];
 		await runStyle(emphasized, request({}), ctx, fakeDeps(third));
 		expect(third.find((call) => call.op === 'emphasize_words')).toEqual({ op: 'emphasize_words', quotes: [], clear: true });
+	});
+
+	it('visuals added by hand survive a style run, even one that places none of its own', async () => {
+		const ctx = memoryContext();
+		const clip = structuredClone(await cutClip(ctx));
+		const scene = clip.stage.children[0] as unknown as { children: Record<string, unknown>[] };
+		scene.children.push({ kind: 'group', id: 'mine', name: 'Hook title', marks: { visual: { op: 'add_hook_title', input: { lines: ['Mine'] } } }, children: [] });
+		const { document, receipt } = await runStyle(clip, request({}), ctx, fakeDeps());
+		expect(groups(document, 'add_hook_title').map((node) => node.id)).toEqual(['mine']);
+		expect(receipt.applied.some((line) => line.startsWith('Removed'))).toBe(false);
 	});
 
 	it('a wrong style or a plan for another style fails the whole op', async () => {

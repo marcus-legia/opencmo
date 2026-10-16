@@ -24,7 +24,7 @@ import {
 	restoreWordsOp,
 	splitLine,
 } from './captions';
-import { OpError, OpFailure, type OpContext } from './context';
+import { OpError, OpFailure, unwrapOutcome, type OpContext } from './context';
 import { addGenerated, addText, deleteElement, enhanceGenerated, pickVariant, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
 import { moveElements, moveKeyframe, moveLayer, setWorkarea, splitElements, trimElement } from './timeline';
 import { addPart, copySettings, movePart, setKeyframe, setProps } from './inspector';
@@ -48,11 +48,11 @@ import { createVideo } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
-import { runStyle, styleOp, type ApplyStyle, type StyleContext, type StyleDeps, type StyleReceipt } from '../style/apply';
+import { styleOp, type StyleDeps } from '../style/apply';
 // Track C: proof B-roll.
 import { addProof } from '../proof';
 
-export { OpError, OpFailure, type OpContext } from './context';
+export { OpError, OpFailure, OpOutcome, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
 export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
@@ -108,14 +108,6 @@ const STYLE_DEPS: StyleDeps = {
 	has: (name: string): boolean => byName.has(name),
 };
 const applyStyle = styleOp(STYLE_DEPS);
-
-/**
- * What `apply_style` would apply, skip and leave out on this document, without writing: the
- * Assistant reports it with the result. Same view and same ops as the real run, so the same receipt.
- */
-export async function styleReceipt(document: ClipDocument, input: ApplyStyle, ctx: StyleContext): Promise<StyleReceipt> {
-	return (await runStyle(activeView(document), input, ctx, STYLE_DEPS)).receipt;
-}
 
 const REGISTRY = [
 	removeWords,
@@ -231,7 +223,7 @@ async function runOne(document: ClipDocument, op: { op: string }, ctx: OpContext
 		const issue = parsed.error.issues[0];
 		throw new OpFailure(`${issue?.path.length ? `${issue.path.join('.')}: ` : ''}${issue?.message ?? 'Invalid input.'}`);
 	}
-	return definition.apply(document, parsed.data as never, ctx);
+	return unwrapOutcome(await definition.apply(document, parsed.data as never, ctx)).document;
 }
 
 /**
@@ -261,7 +253,8 @@ export function describeOp(op: Op): string {
 	return definition ? definition.describe(op as never) : op.op;
 }
 
-export type OpResult = { op: string; summary: string; changed: boolean };
+/** `detail`: what the op reported about its run (`apply_style`'s receipt), when it reports one. */
+export type OpResult = { op: string; summary: string; changed: boolean; detail?: unknown };
 
 /**
  * Kiểm một op theo schema của nó. Lỗi thành `OpError` với câu đọc được — lỗi
@@ -348,21 +341,24 @@ export async function applyOps(
 	for (const [index, op] of valid.entries()) {
 		const definition = byName.get(op.op)!;
 		let next: ClipDocument;
+		let detail: unknown;
 		try {
-			if (STAGE_OPS.has(op.op)) next = await definition.apply(current, op as never, ctx);
+			if (STAGE_OPS.has(op.op)) ({ document: next, detail } = unwrapOutcome(await definition.apply(current, op as never, ctx)));
 			else {
 				// Op thường chỉ thấy timeline đang mở (E2-a): mọi op viết cho "scene đầu"
 				// sửa đúng tab người dùng đang xem, các timeline khác giữ nguyên.
 				const view = activeView(current);
 				const scene = timelinesOf(view)[0]!;
-				next = mergeView(current, scene, view, await definition.apply(view, op as never, ctx));
+				const applied = unwrapOutcome(await definition.apply(view, op as never, ctx));
+				detail = applied.detail;
+				next = mergeView(current, scene, view, applied.document);
 			}
 		} catch (error) {
 			if (error instanceof OpFailure) throw new OpError(index, op.op, error.message);
 			console.error(`[editor-core] ${op.op} failed`, error);
 			throw new OpError(index, op.op, 'This change could not be applied to the project.');
 		}
-		results.push({ op: op.op, summary: definition.describe(op as never), changed: !same(next, current) });
+		results.push({ op: op.op, summary: definition.describe(op as never), changed: !same(next, current), ...(detail !== undefined ? { detail } : {}) });
 		current = next;
 		steps.push({ op: op.op, document: current });
 	}

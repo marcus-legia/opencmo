@@ -26,6 +26,7 @@ import {
   type Transcript,
 } from "@opencmo/editor-core";
 
+import { CAPABILITY_IDS, isReady } from "@opencmo/editor-core/capabilities";
 import icons from "../../../../../packages/clip-icons/data/icons.json";
 
 import type { PreparedGeneration } from "../generate-tool";
@@ -946,8 +947,14 @@ export const TASKS: EvalTask[] = [
       // A proof needs a capture the Assistant saw ready; this clip cites no page.
       const unproven = (plan.proofs ?? []).filter((proof) => !calls.some((call) => call.name === "capture_status" && (call.input as { capture_id?: string }).capture_id === proof.capture_id));
       const proofs = check(notes, !unproven.length, `${unproven.length} proofs without a checked capture`);
-      // The receipt reaches the user: what was skipped and what is not available.
-      const reported = check(notes, /skipped/i.test(outcome.reply ?? "") && /not available|unavailable/i.test(outcome.reply ?? ""), "the reply does not report the receipt (skipped, unavailable)");
+      // The receipt reaches the user: what was skipped, and what is not available while a capability isn't ready.
+      const unready = CAPABILITY_IDS.some((id) => !isReady(id));
+      const reply = outcome.reply ?? "";
+      const reported = check(
+        notes,
+        /skipped/i.test(reply) && (!unready || /not available|unavailable/i.test(reply)),
+        `the reply does not report the receipt (skipped${unready ? ", unavailable" : ""})`,
+      );
       return { pass: quoted && sparse && hook && proofs && reported && sane(outcome, notes), notes };
     },
   },

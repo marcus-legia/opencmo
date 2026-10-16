@@ -383,8 +383,11 @@ export const updateVisual = {
 		const kept = Object.fromEntries(
 			KEPT_ON_UPDATE.filter((key) => target.entity[key] !== undefined).map((key) => [key, target.entity[key]]),
 		);
+		// A style's visual stays the style's after an edit, so the next apply_style still replaces it.
+		const style = (target.entity.marks as { style?: string } | undefined)?.style;
+		const marks = style ? { ...(fresh.marks as object), style } : fresh.marks;
 		const list = target.list!;
-		list.splice(list.indexOf(target.entity), 1, { ...fresh, ...kept, id: input.id } as Entity);
+		list.splice(list.indexOf(target.entity), 1, { ...fresh, ...kept, ...(marks ? { marks } : {}), id: input.id } as Entity);
 		return checked(next, 'That visual cannot be updated');
 	},
 };

@@ -2797,6 +2797,11 @@
           ],
           "additionalProperties": false
         },
+        "style": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
         "studio3d": {
           "type": "object",
           "properties": {

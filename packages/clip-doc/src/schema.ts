@@ -618,6 +618,8 @@ export const MarksSchema = z
     markers: z.array(MarkerSchema).optional(),
     /** Visual sinh từ op: `input` là của op đó, op tự kiểm. */
     visual: z.object({ op: z.string().min(1), input: z.unknown() }).strict().optional(),
+    /** The style skill whose `apply_style` placed this visual: a rerun replaces only these. */
+    style: z.string().min(1).max(64).optional(),
     /** Câu nói mà cảnh 3D neo vào. */
     studio3d: z.object({ quote: z.string() }).strict().optional(),
     /** Seed variants of the shown AI media that are not on screen; `pick_variant` swaps one in. */

@@ -35,7 +35,6 @@ import {
   loadCaptions,
   quoteRange,
   readMarkers,
-  styleReceipt,
   searchSpoken,
   speechElement,
   summarizeProject,
@@ -438,6 +437,14 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Plot y = f(x) on axes, drawn on like a 3Blue1Brown animation. expr uses x, + - * / ^, brackets, sin cos tan exp log sqrt abs, pi, e (e.g. 2^x, x^2, sin(x)). Optional x and y ranges.",
   apply_style:
     "Apply a style from <styles> as ONE change and one undo, after read_skill on it: write an Edit Plan (hook lines, words to emphasize, chapters, an optional list, proofs from ready page captures) where every beat quotes exact words from <clip_context>, never seconds. The style's preset sets captions, punch-in, transitions and colours. Beats whose words are not found, and parts that are not available, are skipped and listed in the result's receipt; tell the user about them.",
+  emphasize_words:
+    "Style chosen keywords in the captions (the captions' emphasis style: font, italic, colour) — not the word being spoken, which highlight already marks. quotes = exact words from <clip_context>, one to three words each: numbers, names, promises; at most one every 2 seconds, never filler. Emphasis follows the words through later cuts. remove: true takes those words out; clear: true removes all emphasis first (with no quotes: removes it all).",
+  add_hook_title:
+    "Add the opening hook: one or two short lines (≤ 40 characters each) in the upper third, clear of the face and captions — line 1 the topic, line 2 the promise on an accent box (accent_line picks the boxed line; accent_font_style italic for a serif accent). Without start/end/quote it shows from 0 to 3 s; it stays up 1.5–8 s. Use the speaker's strongest phrase. One hook per clip.",
+  punch_in:
+    "Alternate the speaker's zoom at every cut (scales = [wide, close], default [1, 1.15]) so jump cuts read as deliberate; shots shorter than min_shot (default 1.2 s) keep the zoom before them. The zoom stays centred on the face. Running it again replaces the earlier punch-ins.",
+  add_list:
+    "Show a numbered list (2–7 items: label, optional short meta like \"12.4k\", blur: true hides a label the speaker is teasing) in the visual panel of a split layout or the upper region. reveal_quotes, one per item in order, light each row when the speaker reaches it (exact words from <clip_context>). Pass quote or start/end for when the list appears.",
   add_proof:
     "Show a captured web page as proof while the speaker makes a claim: a browser frame with the page's real address slides in, eases in on focus (words copied from the page) and marks them as quote (the speaker's words) starts. capture_id must be a ready capture from capture_page. One card per claim; it ends before the next card. read_guide \"proof\".",
   add_title:
@@ -1023,14 +1030,10 @@ export async function applyOpTool(op: Op, env: ToolEnv): Promise<ToolOutcome> {
 
 /**
  * `apply_style` with its receipt: what was applied, skipped (and why) and not available. The op
- * returns only the document, so the receipt comes from the same run on the same snapshot first.
+ * reports it on its result, from the run that was written.
  */
 async function applyStyleOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
-  const snapshot = await env.workspace.read();
-  const receipt = await styleReceipt(snapshot.document, op as never, await env.workspace.opContext(snapshot.document, snapshot.manifest));
-  const outcome = await applyOpOutcome(op, env);
-  if (!outcome.ok) return outcome;
-  return { ...outcome, content: JSON.stringify({ ...(JSON.parse(outcome.content) as object), receipt }) };
+  return applyOpsOutcome([op], env, undefined, { receipt: true });
 }
 
 async function applyOpOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
@@ -1038,16 +1041,17 @@ async function applyOpOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
 }
 
 /** Several ops as one write (one revision, one undo); `label` sums them up for the panel. */
-async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string): Promise<ToolOutcome> {
+async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string, options: { receipt?: boolean } = {}): Promise<ToolOutcome> {
   const op = ops[0]!;
   const applied = await env.workspace.apply(ops);
   const result = ops.length === 1 ? applied.results[0] : { summary: label ?? `${ops.length} changes` };
+  const receipt = options.receipt && ops.length === 1 ? applied.results[0]?.detail : undefined;
   // Trả phần đổi thay cho cả project (học Palmier §A1): model tự cập nhật, không đọc lại.
   const delta = applied.changed ? diffDocuments(applied.before, applied.after) : null;
   const touched = delta ? [...delta.added.map((item) => item.id), ...delta.changed.map((item) => item.id), ...delta.shifted.flatMap((rule) => rule.ids)] : [];
   return {
     ok: true,
-    content: JSON.stringify({ ok: true, changed: applied.changed, version: applied.version, summary: result?.summary, ...(delta ? { delta } : {}) }),
+    content: JSON.stringify({ ok: true, changed: applied.changed, version: applied.version, summary: result?.summary, ...(delta ? { delta } : {}), ...(receipt !== undefined ? { receipt } : {}) }),
     summary: result?.summary ?? describeOp(op),
     version: applied.changed ? applied.version : undefined,
     documentHash: applied.changed ? applied.documentHash : undefined,

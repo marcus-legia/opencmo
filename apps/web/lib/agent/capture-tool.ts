@@ -12,7 +12,8 @@ import { z } from "zod";
 import { isReady } from "@opencmo/editor-core/capabilities";
 
 import { ApiError } from "@/lib/api/errors";
-import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
+import type { SupabaseClient } from "@/lib/api/handler";
+import { createCapture } from "@/lib/capture";
 
 import { readCaptureState } from "./captures";
 import { spec, type ToolOutcome, type ToolSpec } from "./tools";
@@ -49,16 +50,16 @@ export async function runCaptureTool(supabase: SupabaseClient, call: { name: str
   if (call.name === "capture_page") {
     const parsed = captureInput.safeParse(call.input);
     if (!parsed.success) return invalid(parsed.error.issues[0]?.message ?? "Invalid address.", "Could not capture the page");
-    let id: string;
+    let created: { capture_id: string; status: string };
     try {
-      id = await rpcOrThrow<string>(supabase, "capture_create", { p_url: parsed.data.url });
+      // Same path as the route: the RPC, then a wake so the capture starts now, not at the next sweep.
+      created = await createCapture(supabase, parsed.data.url);
     } catch (err) {
       // The RPC's refusals (address not allowed, daily limit) are written for the user.
       const message = err instanceof ApiError ? err.message : "The page could not be captured. Please try again.";
       return { ok: false, content: JSON.stringify({ error: message }), summary: "Page not captured" };
     }
-    const state = await readCaptureState(supabase, id);
-    return { ok: true, content: JSON.stringify({ capture_id: id, status: state?.status ?? "pending" }), summary: `Capturing ${new URL(parsed.data.url).hostname}` };
+    return { ok: true, content: JSON.stringify(created), summary: `Capturing ${new URL(parsed.data.url).hostname}` };
   }
   const parsed = captureStatusInput.safeParse(call.input);
   if (!parsed.success) return invalid("capture_id is the id capture_page returned.", "Unknown capture");
