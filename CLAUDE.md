@@ -162,5 +162,5 @@ $100k MRR, so every answer weighs what moves activation, retention and revenue f
   Disagree with the owner when the evidence says so.
 - **Research reports** go in `docs/research/<track>/` — `security/`, `editor/`, `agents/`, `growth/` (see
   `docs/research/README.md` for the format, and each track's README for its index). Four scheduled tasks, one per
-  track, each open one report PR every Wednesday morning; read the latest reports of a track before proposing
+  track, each open one report PR a week (security and growth on Monday, editor and agents on Wednesday); read the latest reports of a track before proposing
   work in it.

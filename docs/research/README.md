@@ -9,8 +9,9 @@ câu trích và URL. Commit message vẫn bằng tiếng Anh; tiêu đề và m�
 
 ## Các mảng
 
-Mỗi mảng chạy một lần mỗi tuần, sáng Thứ 4 (~5h giờ Việt Nam), mỗi lượt mở đúng một PR chỉ sửa thư mục của mảng
-đó.
+Mỗi mảng chạy một lần mỗi tuần (giờ Việt Nam): Bảo mật và Tăng trưởng sáng Thứ 2 (~6h); Editor & motion và
+AI agent & automation sáng Thứ 4 (~5h), sau đó một task khác viết plan triển khai từ hai báo cáo này (~6h30). Mỗi
+lượt mở đúng một PR chỉ sửa thư mục của mảng đó.
 
 | Mảng | Thư mục | Phạm vi |
 |---|---|---|
