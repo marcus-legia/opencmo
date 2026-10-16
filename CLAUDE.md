@@ -160,6 +160,7 @@ $100k MRR, so every answer weighs what moves activation, retention and revenue f
   `THIRD_PARTY_NOTICES.md`); otherwise learn the idea and write our own.
 - **Give a recommendation, not a survey:** what to do, why, the cost, and what it would replace on the roadmap.
   Disagree with the owner when the evidence says so.
-- **Research reports** go in `docs/research/` (see its README for the format and the index of sources already
-  covered). A scheduled routine opens one report PR twice a week; read the latest reports before proposing work
-  in the same area.
+- **Research reports** go in `docs/research/<track>/` — `security/`, `editor/`, `agents/`, `growth/` (see
+  `docs/research/README.md` for the format, and each track's README for its index). Four scheduled tasks, one per
+  track, each open one report PR every Wednesday morning; read the latest reports of a track before proposing
+  work in it.
