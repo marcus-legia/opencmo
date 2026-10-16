@@ -89,7 +89,7 @@ def test_gia_theo_thoi_luong_va_loi_doc() -> None:
 
 
 def test_adapter_theo_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in ("OPENCMO_MOTION", "OPENCMO_AI_FAKE", "OPENCMO_MOTION_FAKE_VOICE", "FAL_KEY", "OPENCMO_ENV"):
+    for key in ("OPENCMO_MOTION", "OPENCMO_AI_FAKE", "OPENCMO_MOTION_FAKE_VOICE", "ELEVENLABS_API_KEY", "OPENCMO_ENV"):
         monkeypatch.delenv(key, raising=False)
     with pytest.raises(SpecError, match="not set up"):
         adapter_for(model())
@@ -97,13 +97,13 @@ def test_adapter_theo_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(adapter_for(model()), FakeProvider)
     monkeypatch.setenv("OPENCMO_MOTION", "local")
     with pytest.raises(SpecError, match="not set up"):
-        adapter_for(model())  # no voice: neither a fal key nor the fake voice
+        adapter_for(model())  # no voice: neither an ElevenLabs key nor the fake voice
     monkeypatch.setenv("OPENCMO_MOTION_FAKE_VOICE", "1")
     assert isinstance(adapter_for(model()), MotionLocalProvider)
     monkeypatch.setenv("OPENCMO_ENV", "production")
     with pytest.raises(SpecError, match="not set up"):
         adapter_for(model())  # the fake voice never runs in production
-    monkeypatch.setenv("FAL_KEY", "k")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k")
     assert isinstance(adapter_for(model()), MotionLocalProvider)
 
 
@@ -322,9 +322,10 @@ def test_preview_loi_code_tra_ve_cho_agent(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_cli_khong_nhan_khoa_cua_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "secret")
     monkeypatch.setenv("FAL_KEY", "secret")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "secret")
     monkeypatch.setenv("OPENCMO_MOTION_SCALE", "0.5")
     env = motion.cli_env()
-    assert "SUPABASE_SERVICE_ROLE_KEY" not in env and "FAL_KEY" not in env
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in env and "FAL_KEY" not in env and "ELEVENLABS_API_KEY" not in env
     assert env["OPENCMO_MOTION_SCALE"] == "0.5" and "PATH" in env
 
 

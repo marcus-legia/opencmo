@@ -51,10 +51,10 @@ def adapter_for(model: AiModel) -> ProviderAdapter:
             return FakeProvider()
         raise SpecError(NOT_SET_UP)
     if model.provider == "opencmo-motion":
-        # Explainers: our own renderer plus the voice. The voice needs the fal key unless it is
-        # faked for local runs; without a renderer, the fake model (when enabled) stands in.
+        # Explainers: our own renderer plus the voice. The voice needs the ElevenLabs key unless
+        # it is faked for local runs; without a renderer, the fake model (when enabled) stands in.
         mode = os.environ.get("OPENCMO_MOTION", "")
-        if mode in ("modal", "local") and not fake_voice() and not os.environ.get("FAL_KEY"):
+        if mode in ("modal", "local") and not fake_voice() and not os.environ.get("ELEVENLABS_API_KEY"):
             raise SpecError(NOT_SET_UP)
         if mode == "modal":
             return MotionModalProvider()

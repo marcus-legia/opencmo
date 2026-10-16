@@ -5,29 +5,27 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
-from dataclasses import replace
 
 import httpx
 import pytest
 
-from opencmo.ai.catalog import AiModel
-from opencmo.ai.catalog import get_model as catalog_model
+from opencmo.ai.catalog import get_model
 from opencmo.ai.providers import adapter_for
 from opencmo.ai.providers.base import ProviderError
 from opencmo.ai.providers.elevenlabs import ElevenLabsProvider, words_from_alignment
 from opencmo.ai.providers.fake import FakeProvider
 from opencmo.worker import generate_task
 
-# The catalog routes these models through fal; the direct adapter stays so switching back is a
-# catalog change, and these tests pin it to its own endpoints.
+# Voice, sound effects and music call ElevenLabs directly (not through fal): one bill for all
+# audio, and the captions read ElevenLabs' own alignment.
 DIRECT = {"elevenlabs-voice": "eleven_multilingual_v2", "elevenlabs-sfx": "eleven_text_to_sound_v2", "elevenlabs-music": "music_v1"}
 
 
-def get_model(model_id: str) -> AiModel:
-    model = catalog_model(model_id)
-    if model_id not in DIRECT:
-        return model
-    return replace(model, provider="elevenlabs", provider_model=DIRECT[model_id], provider_models=None)
+def test_catalog_routes_elevenlabs_models_directly():
+    for model_id, remote in DIRECT.items():
+        model = get_model(model_id)
+        assert (model.provider, model.remote_id()) == ("elevenlabs", remote)
+
 
 TEXT = "Hi there, world"
 

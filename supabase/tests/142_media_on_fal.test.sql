@@ -1,4 +1,5 @@
 -- 20261112090000: generated media routes through fal; ids, prices and limits stay the same.
+-- ElevenLabs audio moved back to the direct API in 20261127090000 (test 157).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -8,13 +9,12 @@ select plan(5);
 
 select is(
   (select count(*)::int from public.ai_models
-   where id in ('gemini-image', 'gemini-video', 'gemini-voice', 'elevenlabs-voice', 'elevenlabs-sfx', 'elevenlabs-music')
-     and provider = 'fal'),
-  6, 'the six Gemini and ElevenLabs models route to fal'
+   where id in ('gemini-image', 'gemini-video', 'gemini-voice') and provider = 'fal'),
+  3, 'the three Gemini models route to fal'
 );
 select is(
-  (select count(*)::int from public.ai_models where provider in ('gemini', 'elevenlabs')),
-  0, 'no model calls Gemini or ElevenLabs directly'
+  (select count(*)::int from public.ai_models where provider = 'gemini'),
+  0, 'no model calls Gemini directly'
 );
 select is(
   public.ai_price((select x from public.ai_models x where id = 'elevenlabs-voice'), '{"prompt":"Hello there","voice":"Aria"}'),
