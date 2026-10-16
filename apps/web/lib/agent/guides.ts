@@ -99,6 +99,18 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 - Give it motion: an "in" animation (fade, slideUp, grow, appearWord) of 0.3-0.5s, and an "out" fade before it ends.
 - Always capture a frame at 1s to confirm it reads well.`,
 
+  titles: `# Titles: name tags, lower thirds, chapters (add_title)
+
+- Name tag or lower third: one per speaker, the first time they appear or introduce themselves. title = the name as they say it, sub = role and company ("Founder, Paylane"). Pass quote = the words where they introduce themselves; it holds 5.5-8 s, long enough to read twice. Never guess a name or role the speaker or the user did not give.
+- Chapter titles (kind chapter) where the topic changes in a longer clip: 2-5 words, sub = "Chapter 2" or the episode. Not on a short clip with one idea.
+- One title on screen at a time, never on top of a hook title or a diagram. A name tag in the first 2-3 seconds competes with the hook: start it after the hook unless the introduction is the hook.
+- Looks: bar for clean interviews, kicker when the role or episode matters, card over busy or bright footage (the panel keeps it readable). Use one look for every title in a clip.
+- Placement is automatic: inside title-safe, above the captions, clear of the platform's top bar and bottom buttons on vertical video. Change the side (left/right/center) with update_visual instead of moving it with set_props. check reports text-unsafe for any text in those zones.
+- Motion: calm for serious or slow talks, standard by default, punchy for fast edits. Titles move only while they build in (under a second) and out (faster than in); they stay still while read.
+- Rhythm for any animated text (titles, add_text, hooks): reveal very short text (up to about 20 characters) by letters, a tagline by words, a paragraph by lines. Gaps between units: letters 0.02-0.04 s, words 0.04-0.07 s, lines 0.06-0.1 s; the whole reveal stays under about 0.8 s, and the exit is quicker than the entrance. Text over busy video needs a panel or a strong shadow behind it.
+- Fix a typo or role with update_visual {id, changes: {title, sub}}; do not delete and re-add.
+- After adding, capture a frame in the middle of the title: the name readable, accents intact (ễ, ươ), nothing under the captions.`,
+
   captions: `# Captions
 
 - Presets: classic (one word highlighted at a time, clean), spotlight (bold, colored active word), stark (white boxed), cascade, whisper, paper, guinea. For talking heads on TikTok/Reels, spotlight or classic read best.

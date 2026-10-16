@@ -43,6 +43,7 @@
  *   "vertical"/"9:16"  → set_frame 1080×1920
  *   "filler"           → find_filler_words → remove_words các id tìm được, on the video the result names;
  *                        "second video" → on the first non-main video of <clip_context> speech_sources
+ *   "introduce myself" / "name tag" / "lower third" → add_title on the line with the speaker's name
  *   "title"            → add_text
  *   "broken"           → set_frame với input sai (đường lỗi của tool)
  *   "diagram"          → add_diagram hai bước lúc câu "start with the result…" (16–21s mẫu)
@@ -582,6 +583,18 @@ function script(history: StoredMessage[]): unknown[] {
     const sources = context ? ((JSON.parse(context) as { speech_sources?: { id: string; main?: boolean }[] }).speech_sources ?? []) : [];
     const other = /second video/.test(ask) ? sources.find((source) => !source.main)?.id : undefined;
     return [text("Looking for filler words."), use("find_filler_words", other ? { element_id: other } : {})];
+  }
+  // Before the plain "title" route: a name tag is add_title on the line where the speaker introduces themselves.
+  if (/introduce myself|name tag|lower third/.test(ask)) {
+    const said = original.split(/<clip_context>|<project_state>/)[0]!;
+    const who = /\b[Ii]'?m ([A-Z][\p{L}-]*)(?:,\s*([^.<\n]+))?/u.exec(said);
+    const name = who?.[1] ?? "Your name";
+    const role = who?.[2]?.trim();
+    const intro = lines.find((line) => line.toLowerCase().includes(name.toLowerCase())) ?? lines[0] ?? "";
+    return [
+      text("Adding a name tag when you introduce yourself."),
+      use("add_title", { kind: "lowerThird", title: name, ...(role ? { sub: role[0]!.toUpperCase() + role.slice(1) } : {}), quote: intro.split(" ").slice(0, 6).join(" ") }),
+    ];
   }
   if (/title/.test(ask)) return [use("add_text", { text: "Watch this", start: 0, end: 3 })];
   if (/broken/.test(ask)) return [use("set_frame", { width: 5, height: 1080 })];
