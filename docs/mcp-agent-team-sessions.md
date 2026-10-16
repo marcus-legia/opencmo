@@ -133,9 +133,26 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
       `/intro` (the slash directive + the MCP steps + the guide); resources
       `opencmo://guides/{name}` (22) and `opencmo://kit/explainer` (the code section of the
       explainer guide); template `opencmo://skills/mine/{name}` + `read_skill`/`save_skill`.
-- [ ] **A8 — OAuth 2.1.** Protected-resource metadata, authorization server (verify Supabase
-      OAuth server support first; write findings here), token → user → RLS JWT. API keys keep
-      working for Claude Code. Verify: add the connector from claude.ai.
+- [x] **A8 — OAuth 2.1.** Findings (Supabase CLI 2.117 / auth-js 2.117, checked locally): Supabase
+      Auth has an OAuth 2.1 server — authorization code + PKCE (S256), dynamic client
+      registration, refresh tokens; issuer `<supabase>/auth/v1`, metadata at
+      `<supabase>/auth/v1/.well-known/oauth-authorization-server` and `…/openid-configuration`
+      (the RFC 8414 path-inserted URL is 404; the MCP SDK's client tries the appended OIDC URL
+      third and finds it). Access tokens are ordinary user JWTs (`role: authenticated`) plus
+      `client_id`, so they work under RLS as they are. The app hosts the consent screen.
+      Built: `/.well-known/oauth-protected-resource` + `WWW-Authenticate: Bearer
+      resource_metadata=…` on the MCP server; tokens checked with Supabase Auth on every request
+      and refused without `client_id` (a web session token is not an MCP credential);
+      `/oauth/consent` (sign-in kept through `next`, client name, what it may do, Allow / Deny →
+      `POST /api/v1/oauth/consent`, then a script navigation: the CSP's `form-action 'self'`
+      blocks a form redirect to another site); Settings → Connected apps (list, Disconnect);
+      the API-keys card shows `OPENCMO_MCP_URL`. API keys keep working. Verified locally: the
+      SDK's OAuth client from 401 to tools (DCR, PKCE, consent, code, token, `new_edit`), the
+      consent page in Chromium (signed out → login → Allow → callback with code and state),
+      cross-site POST 403, revoke → 401 at once. Production: Authentication → OAuth Server: on,
+      authorization path `/oauth/consent`, dynamic registration on (`supabase/config.toml` has
+      the same for local). Not checked here: adding the connector from claude.ai itself (needs
+      the deployed server).
 - [x] **A9 — Preview cap.** `rate_limit_hit` bucket `mcp_preview`, 30 per user per hour, in
       `20261129090000_mcp_server.sql` with `mcp_confirm_use`; pgTAP `160_mcp_server.test.sql`;
       schema dump refreshed. `rate_limit_hit` is copied from its latest definition (G5) plus the

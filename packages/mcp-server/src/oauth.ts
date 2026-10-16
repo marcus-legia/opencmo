@@ -47,7 +47,7 @@ export function protectedResourceMetadata(request: Request) {
     authorization_servers: [authorizationServer()],
     bearer_methods_supported: ["header"],
     resource_name: "OpenCMO",
-    resource_documentation: `${process.env.OPENCMO_WEB_URL ?? "https://opencmo.io"}/settings/api-keys`,
+    resource_documentation: `${(process.env.OPENCMO_WEB_URL ?? "https://opencmo.io").replace(/\/+$/, "")}/app/settings`,
   };
 }
 

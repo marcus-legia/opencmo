@@ -6764,6 +6764,30 @@ html[data-theme] .ed2-zoom {
   user-select: all;
   font-size: 12px;
 }
+/* Connected apps (Settings): the app's name first, then when, then Disconnect at the end. */
+.connected-app-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: var(--ds-text-13);
+}
+.connected-app-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  color: var(--ds-muted);
+}
+.connected-app-list li strong {
+  /* Not the label/value layout of .settings-card lists: the name leads. */
+  margin-left: 0;
+  text-align: left;
+  color: var(--ds-fg-2);
+  font-weight: 500;
+}
+.connected-app-list li .link-button {
+  margin-left: auto;
+}
 
 /* Báo trước luật xoá tài khoản free (09/10/2026). */
 .retention-banner {

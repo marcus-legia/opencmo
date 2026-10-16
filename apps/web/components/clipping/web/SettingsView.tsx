@@ -9,6 +9,7 @@ import { formatBytes } from "@/lib/upload";
 
 import { type AccountSummary } from "./AccountUsage";
 import { ApiKeys } from "./ApiKeys";
+import { ConnectedApps } from "./ConnectedApps";
 
 type KitRow = { id: string; name: string; is_default: boolean };
 
@@ -20,7 +21,7 @@ type KitRow = { id: string; name: string; is_default: boolean };
  * Quota và credit nằm ở Billing — ở đây chỉ còn danh tính, dung lượng và một
  * lối sang Billing, để hai trang không lặp cùng một bảng số.
  */
-export function SettingsView() {
+export function SettingsView({ mcpEndpoint }: { mcpEndpoint?: string }) {
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [kits, setKits] = useState<KitRow[] | null>(null);
@@ -112,7 +113,8 @@ export function SettingsView() {
           </Link>
         </div>
 
-        <ApiKeys />
+        <ApiKeys endpoint={mcpEndpoint} />
+        <ConnectedApps />
       </div>
     </section>
   );

@@ -295,3 +295,7 @@ html:has(.marketing), body:has(.marketing) { overflow-x: clip; }
   .usage-table td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; margin-top: 4px; font-size: 13px; }
   .legal-page { padding: 40px 0 64px; }
 }
+
+/* OAuth consent (/oauth/consent): what the connected app may do, before Allow / Deny. */
+.auth-consent { margin-top: 24px; display: grid; gap: 10px; padding-left: 18px; color: var(--ds-text); font-size: 15px; line-height: 1.5; }
+.auth-consent-note { margin-top: 16px; color: var(--ds-muted); font-size: 13px; }
