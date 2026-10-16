@@ -15,14 +15,15 @@
  *   trước); trong sequence thì là thứ nằm dưới cả sequence.
  */
 
-import { alignPaths, morphAligned, parsePath, type Animation, type CaptionsNode, type ClipNode, type PathSegment, type TextNode, type Track } from '@opencmo/clip-doc';
+import { alignPaths, morphAligned, parsePath, UNIT_ANIMATION_TYPES, type Animation, type CaptionsNode, type ClipNode, type PathSegment, type TextNode, type Track } from '@opencmo/clip-doc';
 
 import { captionFrame, placeCaption, stateAt } from './captions.ts';
 
 import { mixColor, parseColor } from './color.ts';
 import { curve, easing } from './easing.ts';
 import { layoutText, revealChars, revealWords, scramble, type Measurer, type TextLayout } from './text.ts';
-import { authored, FPS, IDENTITY, multiply, toFrames, type Mat, type RNode, type SubValues, type Values } from './tree.ts';
+import { authored, FPS, IDENTITY, multiply, toFrames, type Mat, type RNode, type SubValues, type UnitFx, type Values } from './tree.ts';
+import { graphemes, hashSeed } from './units.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -93,6 +94,7 @@ function motion(root: RNode, frame: number, playFrom: number): void {
     r.subs = new Map();
     r.chars = null;
     r.wordFx = null;
+    r.unitFx = null;
     r.caption = null;
     r.shape = null;
     if (!r.visible || node.hidden) return;
@@ -286,7 +288,54 @@ const PER_WORD = new Set(['typewriter', 'wordSlide', 'highlightPop']);
 /** Màu nhấn mặc định của highlightPop (cùng Palmier). */
 const HIGHLIGHT = '#FFD900';
 
+/** Default seconds between two units' starts: letters ripple fast, lines read as a sequence. */
+const UNIT_STEP = { char: 0.03, word: 0.055, line: 0.08 } as const;
+/** Above this many letters a per-letter animation runs per word: cost, and nobody reads it anyway. */
+const MAX_CHAR_UNITS = 200;
+const UNIT_TYPES = new Set<string>(UNIT_ANIMATION_TYPES);
+
+/**
+ * A per-unit animation on a text node: node values stay put, `drawText` moves each unit. The
+ * whole animation lasts `duration`; without it, each unit gets 0.5 s after the last one starts
+ * (lines are only known after layout, so they default to 0.9 s in total).
+ */
+function applyUnitAnimation(r: RNode, animation: Animation & { unit: NonNullable<Animation['unit']> }): void {
+  const text = (r.node as TextNode).text ?? '';
+  let unit = animation.unit;
+  let count = 0;
+  if (unit === 'char') {
+    count = graphemes(text).filter((char) => char.trim()).length;
+    if (count > MAX_CHAR_UNITS) unit = 'word';
+  }
+  if (unit === 'word') count = text.split(/\s+/).filter(Boolean).length;
+  const step = animation.step ?? UNIT_STEP[unit];
+  const seconds = animation.duration ?? (unit === 'line' ? 0.9 : 0.5 + step * Math.max(0, count - 1));
+  const duration = toFrames(seconds);
+  if (duration <= 0) return;
+  const delay = toFrames(animation.delay ?? 0);
+  const out = animation.phase === 'out';
+  const window = localWindow(r);
+  const from = out ? window.out - duration - delay : window.in + delay;
+  if (out ? r.local < from : r.local >= from + duration) return;
+  r.unitFx = {
+    type: animation.type as UnitFx['type'],
+    unit,
+    order: animation.order ?? 'first',
+    step: step * FPS,
+    t: r.local - from,
+    total: duration,
+    out,
+    mask: animation.mask ?? false,
+    seed: hashSeed(`${r.node.id ?? text}|${animation.id ?? ''}`),
+  };
+}
+
 function applyAnimation(r: RNode, animation: Animation): void {
+  // Captions keep their own highlight system: there `unit` is ignored and the animation runs on the node.
+  if (animation.unit && r.node.kind === 'text' && UNIT_TYPES.has(animation.type)) {
+    applyUnitAnimation(r, animation as Animation & { unit: NonNullable<Animation['unit']> });
+    return;
+  }
   const perWord = PER_WORD.has(animation.type) ? toFrames(animation.perWord ?? 0.2) : 0;
   const duration = animation.duration !== undefined || !perWord ? toFrames(animation.duration ?? 1) : Math.max(1, perWord * Math.max(1, wordCount(r)));
   if (duration <= 0) return;

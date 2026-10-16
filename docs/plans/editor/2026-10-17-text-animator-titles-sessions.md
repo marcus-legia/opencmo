@@ -78,14 +78,24 @@ measurement but does not change it (a needed change goes to "Requests" for Marcu
       samples before and after on the same machine: 0 frames differ (mean 0.00, tile 0.00); CI parity stays the
       gate. Full-size 1080×1920 export of typewriter / appearChar / scramble with "👋🏽" and "Nguyễn": the emoji
       appears whole with its skin tone, scramble swaps it as one character.
-- [ ] **A3 — Unit animator (E2).** `r.unitFx` in `frame.ts` / `tree.ts`; `unitTweaks` in `text.ts` with char / word /
+- [x] **A3 — Unit animator (E2).** `r.unitFx` in `frame.ts` / `tree.ts`; `unitTweaks` in `text.ts` with char / word /
       line domains, the four orders, seeded random, default steps and durations, the 200-grapheme cap, captions
       ignored. `wordSlide` / `highlightPop` / caption `pop` unchanged. Accept: rank/progress tests per order;
       random identical across two renders; `slideUp + unit: 'word'` with `step = perWord` matches `wordSlide` within
       the parity threshold at three times; all existing parity samples pass.
-- [ ] **A4 — Masked line reveal (E3).** Clip to the line box from `actualBoundingBox*`, fallback `fontBoundingBox*`.
+      _Done:_ units ease with `wordSlide`'s cubic ease-out instead of `SOFT`, which makes `slideUp + unit: 'word'`
+      pixel-identical to `wordSlide` (diff 0 at frames 3, 9, 16) and the later migration exact. `blur` runs per unit
+      through `ctx.filter` on Node too (`@napi-rs/canvas` has it; a test records it), so no alpha fallback. `grow`
+      and `blur` keep units visible before they start, as the node-level presets do. Letter x offsets come from
+      prefix widths cached by font + text across frames. Existing samples: 0 frames differ before/after.
+- [x] **A4 — Masked line reveal (E3).** Clip to the line box from `actualBoundingBox*`, fallback `fontBoundingBox*`.
       Accept: test that the mask box contains the measured box of "ễ" and "Hương"; a full-size frame mid reveal of
       "Nguyễn Thị Hương" looked at (marks intact).
+      _Done:_ `lineMasks` (exported from `text.ts`) joins the font box with `actualBoundingBox*` measured at the
+      draw anchor, + 0.08 em. A masked slide travels the whole line box and does not fade, so text rises from behind
+      the edge. Tests: the mask contains the rendered ink of "Nguyễn", "Hương", "Nguyễn Thị Hương" and NFD "Ỗ ặ";
+      mid reveal never draws outside the box. Full-size 1080×1920 export looked at: line / word / letter masks, all
+      marks intact at rest.
 - [ ] **A5 — Inspector (E4).** "By", "Order", "Gap" (Tight/Normal/Loose), "Mask" in `inspector/parts.tsx`, shown
       only for text nodes and `UNIT_ANIMATION_TYPES`; writes through the existing inspector op path. Post the guide
       text for the new `animations` fields under "Requests" for B (B owns `guides.ts`). Accept: typecheck, an

@@ -16,7 +16,7 @@
  *   không biết độ dài nguồn (ảnh, rect…) thì 16 giây.
  */
 
-import { FRAME_RATE, type ClipNode, type PathSegment, type SceneNode } from '@opencmo/clip-doc';
+import { FRAME_RATE, type ANIMATION_ORDERS, type ANIMATION_UNITS, type ClipNode, type PathSegment, type SceneNode, type UNIT_ANIMATION_TYPES } from '@opencmo/clip-doc';
 
 import { parseColor } from './color.ts';
 import { censorTranscript } from './profanity.ts';
@@ -29,9 +29,26 @@ export const DEFAULT_FRAMES = 16 * FPS;
 
 export const toFrames = (seconds: number | undefined): number => Math.round((seconds ?? 0) * FPS);
 
-/** Ma trận affine theo thứ tự của canvas: [a, b, c, d, e, f]. */
-/** `t`: khung đã chạy kể từ đầu animation; `per`: số khung mỗi từ. */
+/** `t`: frames since the animation started; `per`: frames per word. */
 export type WordFx = { type: 'wordSlide' | 'highlightPop'; t: number; per: number; out: boolean; color: string };
+
+/**
+ * A per-unit animation (`unit` on a text node's animation) at this frame. Times are in frames:
+ * `t` since the animation started, `step` between two units' starts, `total` the whole animation.
+ */
+export type UnitFx = {
+  type: (typeof UNIT_ANIMATION_TYPES)[number];
+  unit: (typeof ANIMATION_UNITS)[number];
+  order: (typeof ANIMATION_ORDERS)[number];
+  step: number;
+  t: number;
+  total: number;
+  out: boolean;
+  mask: boolean;
+  seed: number;
+};
+
+/** Ma trận affine theo thứ tự của canvas: [a, b, c, d, e, f]. */
 
 export type Mat = [number, number, number, number, number, number];
 export const IDENTITY: Mat = [1, 0, 0, 1, 0, 0];
@@ -103,6 +120,8 @@ export type RNode = {
   chars: string | null;
   /** Animation theo từ (E4): tiến độ để `drawText` dời/phóng/đổi màu từng từ. */
   wordFx: WordFx | null;
+  /** Per-unit animation of a text node: `drawText` moves each char/word/line on its own. */
+  unitFx: UnitFx | null;
   layout: TextLayout | null;
   /** Path đang morph (track `d`): hình của khung này, toạ độ của `d`; null = `node.d`. */
   shape: PathSegment[] | null;
@@ -149,6 +168,7 @@ export function buildTree(scene: SceneNode, media: MediaHost): RNode {
       worldMatrix: IDENTITY,
       chars: null,
       wordFx: null,
+      unitFx: null,
       layout: null,
       shape: null,
       groups: null,

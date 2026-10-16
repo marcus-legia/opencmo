@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { captionFrame } from './captions.ts';
 import { evaluate } from './frame.ts';
 import { createRenderer, type MediaHost } from './index.ts';
-import { revealChars, scramble } from './text.ts';
+import { lineMasks, revealChars, scramble } from './text.ts';
 import { buildTree } from './tree.ts';
 import { graphemes, hashSeed, unitProgress, unitRanks } from './units.ts';
 
@@ -297,5 +297,222 @@ describe('grapheme-safe appearChar / typewriter / scramble (A2)', () => {
     for (const text of ['Words appear one by one', 'OpenCMO 2026!', 'a']) {
       for (const ratio of ratios) expect(scramble(text, ratio)).toBe(legacyScramble(text, ratio));
     }
+  });
+});
+
+describe('unit animator (A3)', () => {
+  const W = 600;
+  const H = 160;
+  const doc = (nodes: Record<string, unknown>[]) =>
+    validate({
+      version: 1,
+      stage: { children: [{ kind: 'scene', name: 'S', width: W, height: H, fill: '#000000', active: true, children: nodes }] },
+    });
+  const pixels = (nodes: Record<string, unknown>[], frame: number) => {
+    const renderer = createRenderer(doc(nodes), NO_MEDIA);
+    const canvas = createCanvas(W, H);
+    renderer.render(canvas.getContext('2d') as never, frame);
+    return canvas.getContext('2d').getImageData(0, 0, W, H).data;
+  };
+  const same = (a: Uint8ClampedArray, b: Uint8ClampedArray) => Buffer.compare(Buffer.from(a.buffer), Buffer.from(b.buffer)) === 0;
+  /** White ink per third of the text's own width at rest ([20, 20 + width of the line]), left to right. */
+  const thirds = (data: Uint8ClampedArray) => {
+    const ctx = createCanvas(10, 10).getContext('2d');
+    ctx.font = '48px Inter';
+    const span = ctx.measureText('AAAA BBBB CCCC').width;
+    const out = [0, 0, 0];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (data[(y * W + x) * 4]! > 128) out[Math.max(0, Math.min(2, Math.floor(((x - 20) * 3) / span)))]!++;
+      }
+    }
+    return out;
+  };
+  const words = (animation: Record<string, unknown>, extra: Record<string, unknown> = {}) => [
+    { kind: 'text', id: 't', x: 20, y: 40, end: 4, text: 'AAAA BBBB CCCC', color: '#FFFFFF', fontSize: 48, animations: [animation], ...extra },
+  ];
+  const evaluateAt = (nodes: Record<string, unknown>[], frame: number) => {
+    const root = buildTree(doc(nodes).stage.children[0] as never, NO_MEDIA);
+    evaluate(root, frame, [1, 0, 0, 1, 0, 0]);
+    return root.children[0]!;
+  };
+
+  it('slideUp + unit word with step = perWord draws what wordSlide draws', () => {
+    // wordSlide: 6-frame steps, 12 frames per word. Same window for both: 6 × 2 + 12 = 24 frames.
+    const legacy = { type: 'wordSlide', perWord: 0.2, duration: 0.8 };
+    const unit = { type: 'slideUp', unit: 'word', step: 0.2, duration: 0.8 };
+    for (const frame of [3, 9, 16]) {
+      const a = pixels(words(legacy), frame);
+      const b = pixels(words(unit), frame);
+      let diff = 0;
+      for (let index = 0; index < a.length; index++) diff = Math.max(diff, Math.abs(a[index]! - b[index]!));
+      expect(diff, `frame ${frame}`).toBe(0);
+    }
+  });
+
+  it('first order reveals left to right, last right to left, center from the middle', () => {
+    const first = thirds(pixels(words({ type: 'fade', unit: 'char', order: 'first', duration: 1 }), 10));
+    expect(first[0]).toBeGreaterThan(first[2]! * 2);
+    const last = thirds(pixels(words({ type: 'fade', unit: 'char', order: 'last', duration: 1 }), 10));
+    expect(last[2]).toBeGreaterThan(last[0]! * 2);
+    const center = thirds(pixels(words({ type: 'fade', unit: 'word', order: 'center', step: 0.3, duration: 1 }), 8));
+    expect(center[1]).toBeGreaterThan(center[0]! * 2);
+    expect(center[1]).toBeGreaterThan(center[2]! * 2);
+  });
+
+  it('random order draws the same frame twice and differs from first', () => {
+    const random = { type: 'pop', unit: 'char', order: 'random', duration: 1 };
+    expect(same(pixels(words(random), 9), pixels(words(random), 9))).toBe(true);
+    expect(same(pixels(words(random), 9), pixels(words({ ...random, order: 'first' }), 9))).toBe(false);
+  });
+
+  it('every unit type reaches the text at rest, out empties it', () => {
+    const rest = pixels(words({ type: 'fade', duration: 0.1 }), 30);
+    for (const type of ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop', 'blur', 'grow']) {
+      for (const unit of ['char', 'word', 'line']) {
+        const done = pixels(words({ type, unit, duration: 1 }), 60);
+        expect(same(done, rest), `${type} ${unit}`).toBe(true);
+        // Last frame of an out animation: nothing left (grow/blur keep the text visible, as at node level).
+        const gone = thirds(pixels(words({ type, unit, phase: 'out', duration: 1 }), 119));
+        if (type !== 'grow' && type !== 'blur') expect(gone[0]! + gone[1]! + gone[2]!, `${type} ${unit} out`).toBe(0);
+      }
+    }
+  });
+
+  it('blur runs per unit through ctx.filter on Node too (@napi-rs/canvas has it; no alpha fallback needed)', () => {
+    expect('filter' in createCanvas(1, 1).getContext('2d')).toBe(true);
+    const mid = pixels(words({ type: 'blur', unit: 'word', order: 'last', step: 0.3, duration: 1 }), 14);
+    // Last word settled (sharp), first word still blurred: soft grey pixels only on the left.
+    const grey = [0, 0, 0];
+    const ctx = createCanvas(10, 10).getContext('2d');
+    ctx.font = '48px Inter';
+    const span = ctx.measureText('AAAA BBBB CCCC').width;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const v = mid[(y * W + x) * 4]!;
+        if (v > 20 && v < 100) grey[Math.max(0, Math.min(2, Math.floor(((x - 20) * 3) / span)))]!++;
+      }
+    }
+    expect(grey[0]).toBeGreaterThan(grey[2]! * 3);
+  });
+
+  it('defaults: step per unit, duration from the unit count, 200-letter cap', () => {
+    const fx = evaluateAt(words({ type: 'fade', unit: 'char' }), 0).unitFx!;
+    expect(fx.step).toBeCloseTo(0.03 * 30);
+    // 12 letters: 0.5 + 0.03 × 11 = 0.83 s.
+    expect(fx.total).toBe(Math.round(0.83 * 30));
+    expect(evaluateAt(words({ type: 'fade', unit: 'line' }), 0).unitFx!.total).toBe(27);
+    const long = evaluateAt(words({ type: 'fade', unit: 'char' }, { text: 'word '.repeat(60) }), 0).unitFx!;
+    expect(long.unit).toBe('word');
+    expect(long.step).toBeCloseTo(0.055 * 30);
+  });
+
+  it('captions ignore unit and run the animation on the node', () => {
+    const root = buildTree(
+      validate({
+        version: 1,
+        stage: {
+          children: [
+            {
+              kind: 'scene',
+              name: 'S',
+              width: 400,
+              height: 400,
+              active: true,
+              children: [{ kind: 'captions', src: 'x.json', end: 4, animations: [{ type: 'fade', unit: 'word', duration: 1 }] }],
+            },
+          ],
+        },
+      }).stage.children[0] as never,
+      NO_MEDIA,
+    );
+    evaluate(root, 10, [1, 0, 0, 1, 0, 0]);
+    const captions = root.children[0]!;
+    expect(captions.unitFx).toBeNull();
+    expect(captions.values.opacity).toBeGreaterThan(0);
+    expect(captions.values.opacity).toBeLessThan(1);
+  });
+});
+
+describe('masked line reveal (A4)', () => {
+  it('the mask box of each line contains the real ink of "ễ" and "Hương"', () => {
+    for (const text of ['Nguyễn', 'Hương', 'Nguyễn Thị Hương', 'Ỗ ặ'.normalize('NFD')]) {
+      const W = 900;
+      const H = 300;
+      const document = validate({
+        version: 1,
+        stage: {
+          children: [
+            {
+              kind: 'scene',
+              name: 'S',
+              width: W,
+              height: H,
+              fill: '#000000',
+              active: true,
+              children: [{ kind: 'text', x: 40, y: 80, text, color: '#FFFFFF', fontSize: 96, fontWeight: 700 }],
+            },
+          ],
+        },
+      });
+      const canvas = createCanvas(W, H);
+      const ctx = canvas.getContext('2d');
+      createRenderer(document, NO_MEDIA).render(ctx as never, 0);
+      const data = ctx.getImageData(0, 0, W, H).data;
+      let top = H;
+      let bottom = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (data[(y * W + x) * 4]! > 16) (top = Math.min(top, y)), (bottom = Math.max(bottom, y));
+
+      const root = buildTree(document.stage.children[0] as never, NO_MEDIA);
+      evaluate(root, 0, [1, 0, 0, 1, 0, 0], ctx as never);
+      const node = root.children[0]!;
+      const masks = [...lineMasks(ctx as never, node.layout!.words, 'top').values()];
+      expect(masks).toHaveLength(1);
+      const [, maskTop, , maskHeight] = masks[0]!;
+      // Node space → scene space: the node sits at y = 80.
+      expect(80 + maskTop, `${text} top`).toBeLessThanOrEqual(top);
+      expect(80 + maskTop + maskHeight, `${text} bottom`).toBeGreaterThanOrEqual(bottom + 1);
+    }
+  });
+
+  it('a masked slide never draws outside its line box, mid reveal', () => {
+    const W = 900;
+    const H = 400;
+    const text = 'Nguyễn Thị Hương';
+    const nodes = (animations: unknown[]) =>
+      validate({
+        version: 1,
+        stage: {
+          children: [
+            {
+              kind: 'scene',
+              name: 'S',
+              width: W,
+              height: H,
+              fill: '#000000',
+              active: true,
+              children: [{ kind: 'text', id: 'm', x: 40, y: 120, end: 4, text, color: '#FFFFFF', fontSize: 80, fontWeight: 700, animations }],
+            },
+          ],
+        },
+      });
+    const canvas = createCanvas(W, H);
+    const ctx = canvas.getContext('2d');
+    createRenderer(nodes([{ type: 'slideUp', unit: 'word', mask: true, duration: 1 }]), NO_MEDIA).render(ctx as never, 8);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const root = buildTree(nodes([]).stage.children[0] as never, NO_MEDIA);
+    evaluate(root, 0, [1, 0, 0, 1, 0, 0], ctx as never);
+    const [[, maskTop, , maskHeight]] = [...lineMasks(ctx as never, root.children[0]!.layout!.words, 'top').values()] as [number, number, number, number][];
+    let ink = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (data[(y * W + x) * 4]! <= 16) continue;
+        ink++;
+        expect(y).toBeGreaterThanOrEqual(Math.floor(120 + maskTop!));
+        expect(y).toBeLessThanOrEqual(Math.ceil(120 + maskTop! + maskHeight!));
+      }
+    }
+    // Mid reveal: some text is drawn, not all of it.
+    expect(ink).toBeGreaterThan(100);
   });
 });
