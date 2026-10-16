@@ -153,8 +153,8 @@ export type ClipHost = {
   previewed: () => Promise<string[]>;
   /** False once the request is cancelled: a generation stops before it spends credits. */
   alive?: () => Promise<boolean>;
-  /** The Assistant turn, for undo; absent over MCP, where undo is not offered. */
-  turnId?: string;
+  /** The Assistant turn, for undo, read when the tool runs; absent over MCP, where undo is not offered. */
+  readonly turnId?: string;
 };
 
 export async function clipScope(
@@ -191,7 +191,11 @@ export async function clipScope(
       return ((data ?? []) as { input: { code?: unknown } }[]).map((row) => String(row.input?.code ?? ""));
     },
     alive: async () => (await turnStatus(supabase, turn.id))?.status === "running",
-    turnId: turn.id,
+    // Read when a tool runs, like the hooks above: `startTurn` builds the scope before the turn
+    // exists and fills its id in afterwards.
+    get turnId() {
+      return turn.id || undefined;
+    },
   });
 }
 

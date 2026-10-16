@@ -342,6 +342,17 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
   but the committed `package-lock.json` did not, so `npm ci` would refuse it; `npm install`
   added the one line and B committed it. Status: done, FYI.
 
+- `[A→B]` 2026-10-16 — **e2e `cmo.spec.ts` red on this branch (green on `main`).** "Plan the
+  week" never fills the calendar: e2e runs the fake model (`OPENCMO_AGENT_FAKE=1`) with
+  `ANTHROPIC_API_KEY=""`, so `providersUp()` in `lib/cmo/brain.ts` counts 0 providers and
+  `decideBrain` returns `claude` / `llm_down` for every e2e user — the job goes to the inbox.
+  Suggested: count the fake provider as up when `fakeAllowed()` (never in production). Yours
+  (`lib/cmo/**`). Status: open.
+- `[A→B]` 2026-10-16 — **e2e run (Chrome for Testing 141, full suite).** 29/33 pass. Besides
+  `cmo.spec.ts` above: `editor-captions.spec.ts` and `editor-rows.spec.ts` fail the same way on
+  `main` (pre-existing, not this PR); `editor-generate.spec.ts` was Session A's (undo had no
+  turn id) and is fixed. Status: FYI.
+
 ## Out of scope for this PR
 
 - Moving `select.py` (clip picking) off the server; only an optional manual `pick_moments` later.
