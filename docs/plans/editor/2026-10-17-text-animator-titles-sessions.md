@@ -188,6 +188,14 @@ Until A1 lands, B1–B3 need nothing from A.
       looking" pass from the plan (both aspect ratios, dark and bright shots, all four phases, "Nguyễn Thị Hương" and
       "Episode 12"). Accept: `agent:eval -- --provider fake` green including `name-tag`; one real run
       `agent:eval -- --provider anthropic --task name-tag --yes` noted here with its cost; frames attached to the PR.
+      _Done:_ `add_title` tool text and `update_visual` text (`tools.ts`), a "titles" guide plus Session A's unit
+      fields in the `animations:` line (`guides.ts`), the routing line in `prompt.ts`, eval task `name-tag` (and the
+      fake model's answer for it in `providers/fake.ts`, which no session owns). `agent:eval -- --provider fake`:
+      40/42 with `name-tag` passing; `explain-make` and `explain-vaccine` fail identically on the branch without B6
+      in this container. "Verify by looking": done in B4 (both aspect ratios, dark and bright, all four phases,
+      "Nguyễn Thị Hương" and "Episode 12"), re-rendered after A6 with the same result.
+      **Open:** the real run `agent:eval -- --provider anthropic --task name-tag --yes` needs `ANTHROPIC_API_KEY`,
+      which this container does not have — for Marcus (or a session with the key) to run and note the cost here.
 
 ## Sync points
 
