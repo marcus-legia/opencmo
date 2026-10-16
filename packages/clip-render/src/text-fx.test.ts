@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { captionFrame } from './captions.ts';
 import { evaluate } from './frame.ts';
 import { createRenderer, type MediaHost } from './index.ts';
+import { revealChars, scramble } from './text.ts';
 import { buildTree } from './tree.ts';
 import { graphemes, hashSeed, unitProgress, unitRanks } from './units.ts';
 
@@ -219,5 +220,82 @@ describe('unit helpers (graphemes, ranks, progress)', () => {
     expect(unitProgress(0.25, 2, 0.1, 0.5)).toBeCloseTo(0.1);
     expect(unitProgress(0.1, 3, 0.1, 0.5)).toBe(0);
     expect(unitProgress(9, 3, 0.1, 0.5)).toBe(1);
+  });
+});
+
+describe('grapheme-safe appearChar / typewriter / scramble (A2)', () => {
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const ratios = Array.from({ length: 101 }, (_, index) => index / 100);
+
+  it('never shows half an emoji', () => {
+    for (const ratio of ratios) {
+      expect(revealChars('Xin chào 👋🏽', ratio)).not.toMatch(loneSurrogate);
+      expect(scramble('Xin chào 👋🏽', ratio)).not.toMatch(loneSurrogate);
+    }
+    // Skin tone stays with its hand: the last grapheme appears in one piece.
+    expect(revealChars('Xin chào 👋🏽', 0.95)).toBe('Xin chào ');
+  });
+
+  it('never shows a decomposed Vietnamese letter before its marks', () => {
+    const nfd = 'Nguyễn Thị Hương'.normalize('NFD');
+    for (const ratio of ratios) {
+      const shown = revealChars(nfd, ratio);
+      expect(nfd.startsWith(shown)).toBe(true);
+      // The next code point after the visible prefix is never a combining mark of the last letter.
+      expect(/^\p{M}/u.test(nfd.slice(shown.length))).toBe(false);
+    }
+  });
+
+  it('typewriter cuts by grapheme too', () => {
+    const doc = validate({
+      version: 1,
+      stage: {
+        children: [
+          {
+            kind: 'scene',
+            name: 'S',
+            width: 400,
+            height: 100,
+            active: true,
+            children: [{ kind: 'text', end: 4, text: '👋🏽👋🏽', animations: [{ type: 'typewriter', duration: 1 }] }],
+          },
+        ],
+      },
+    });
+    const root = buildTree(doc.stage.children[0] as never, NO_MEDIA);
+    for (let frame = 0; frame < 30; frame++) {
+      evaluate(root, frame, [1, 0, 0, 1, 0, 0]);
+      const text = root.children[0]!.chars ?? '';
+      expect(text).not.toMatch(loneSurrogate);
+    }
+  });
+
+  // The scramble before graphemes, kept to prove ASCII output did not move (anim-scramble).
+  function legacyScramble(text: string, ratio: number): string {
+    const set = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!%#_';
+    if (!text.length) return '';
+    if (ratio >= 1) return text;
+    const step = Math.floor(ratio * 30);
+    let seed = 0;
+    for (const char of text) seed = (seed * 31 + char.charCodeAt(0)) >>> 0;
+    let out = '';
+    for (let index = 0; index < text.length; index++) {
+      const settle = Math.ceil(((index * 0.7) / text.length + 0.3) * 30) / 30;
+      if (ratio >= settle || text[index] === ' ') {
+        out += text[index];
+        continue;
+      }
+      let h = (seed + index * 7919 + step * 104729) >>> 0;
+      h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+      h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+      out += set[((h ^ (h >>> 16)) >>> 0) % set.length];
+    }
+    return out;
+  }
+
+  it('scrambles ASCII exactly as before', () => {
+    for (const text of ['Words appear one by one', 'OpenCMO 2026!', 'a']) {
+      for (const ratio of ratios) expect(scramble(text, ratio)).toBe(legacyScramble(text, ratio));
+    }
   });
 });

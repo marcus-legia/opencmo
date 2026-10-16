@@ -68,10 +68,16 @@ measurement but does not change it (a needed change goes to "Requests" for Marcu
       _Done:_ helpers live in `clip-render/src/units.ts` (plus `hashSeed`, the FNV-1a seed from a node id).
       `center` ranks use `floor(|i − (n − 1)/2|)`, not `round`, so an even count starts with its two middle units
       (with `round` no unit has rank 0). No drawing change, so parity is untouched.
-- [ ] **A2 — Graphemes (E1).** `revealChars`, `scramble`, `typewriter` on graphemes; seed unchanged for ASCII.
+- [x] **A2 — Graphemes (E1).** `revealChars`, `scramble`, `typewriter` on graphemes; seed unchanged for ASCII.
       Accept: tests "Xin chào 👋🏽" (no lone surrogate at 100 ratios), NFD "Nguyễn" (no base letter without its
       combining mark), `anim-scramble` / `anim-text` parity samples still pass; one frame mid-typewriter with an
       emoji from a full-size export looked at.
+      _Done:_ ASCII `scramble` output is proven identical to the old code at 101 ratios (test keeps the old function);
+      whitespace graphemes (also `\n`, `\t`) now stay, where `\n` used to be scrambled into a letter. Parity: this
+      machine's Skia draws 31 text frames off the references on `main` too, so A2 was checked by rendering all 70
+      samples before and after on the same machine: 0 frames differ (mean 0.00, tile 0.00); CI parity stays the
+      gate. Full-size 1080×1920 export of typewriter / appearChar / scramble with "👋🏽" and "Nguyễn": the emoji
+      appears whole with its skin tone, scramble swaps it as one character.
 - [ ] **A3 — Unit animator (E2).** `r.unitFx` in `frame.ts` / `tree.ts`; `unitTweaks` in `text.ts` with char / word /
       line domains, the four orders, seeded random, default steps and durations, the 200-grapheme cap, captions
       ignored. `wordSlide` / `highlightPop` / caption `pop` unchanged. Accept: rank/progress tests per order;

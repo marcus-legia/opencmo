@@ -29,6 +29,7 @@ import { hex, parseColor } from './color.ts';
 import { FONTS } from './fonts.ts';
 import type { RNode } from './tree.ts';
 import type { Ctx2D } from './types.ts';
+import { graphemes } from './units.ts';
 
 /** Những gì dàn dòng cần từ canvas: đặt font và đo. */
 export type Measurer = Pick<Ctx2D, 'save' | 'restore'> & {
@@ -565,10 +566,12 @@ export function revealWords(text: string, ratio: number): string {
   return pieces.slice(0, shown * 2 - 1).join('');
 }
 
+/** Reveal by user-perceived character, so an emoji or a decomposed "ễ" never shows half-drawn. */
 export function revealChars(text: string, ratio: number): string {
   if (ratio >= 1) return text;
   if (ratio <= 0) return '';
-  return text.slice(0, Math.floor(ratio * text.length));
+  const chars = graphemes(text);
+  return chars.slice(0, Math.floor(ratio * chars.length)).join('');
 }
 
 const SCRAMBLE_SET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!%#_';
@@ -577,10 +580,11 @@ const ACTIVE = 0.3;
 const REFRESHES = 30;
 
 /**
- * Ký tự ngẫu nhiên ổn định dần từ trái sang. Nhịp giống fork: ký tự thứ c ổn
- * định ở `ceil((c · (1 − 0.3) / n + 0.3) · 30) / 30`, dấu cách giữ nguyên.
- * Còn ký tự ngẫu nhiên thì khác: thuật toán băm của fork không phải thứ chép
- * được (clean-room), và cũng không ai dựa vào nó. Ảnh vàng chỉ so lúc đã ổn định.
+ * Random characters settling left to right. Same rhythm as the fork: grapheme c of n settles at
+ * `ceil((c · (1 − 0.3) / n + 0.3) · 30) / 30`; whitespace stays. The random characters differ: the
+ * fork's hash was not ours to copy (clean-room) and nobody relies on it; the golden images only
+ * compare settled text. Works per grapheme, so an emoji or a decomposed "ễ" is replaced or shown
+ * whole; for ASCII that is per code unit, so the output is what it was before graphemes.
  */
 export function scramble(text: string, ratio: number): string {
   if (!text.length) return '';
@@ -588,14 +592,16 @@ export function scramble(text: string, ratio: number): string {
   const step = Math.floor(ratio * REFRESHES);
   let seed = 0;
   for (const char of text) seed = (seed * 31 + char.charCodeAt(0)) >>> 0;
+  const chars = graphemes(text);
   let out = '';
-  for (let index = 0; index < text.length; index++) {
-    const settle = Math.ceil(((index * (1 - ACTIVE)) / text.length + ACTIVE) * REFRESHES) / REFRESHES;
-    if (ratio >= settle || text[index] === ' ') {
-      out += text[index];
+  for (let index = 0; index < chars.length; index++) {
+    const char = chars[index]!;
+    const settle = Math.ceil(((index * (1 - ACTIVE)) / chars.length + ACTIVE) * REFRESHES) / REFRESHES;
+    if (ratio >= settle || !char.trim()) {
+      out += char;
       continue;
     }
-    // Xáo có hạt giống: cùng chữ, cùng vị trí, cùng nhịp → cùng ký tự (tua lại vẫn y hệt).
+    // Seeded shuffle: same text, position and tick → same character, so scrubbing back repeats it.
     let h = (seed + index * 7919 + step * 104729) >>> 0;
     h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
     h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
