@@ -44,5 +44,8 @@ và thuộc doc/PR/track nào. "Không làm gì" cũng là một khuyến nghị
 Mọi URL đã dùng, kèm ngày đọc.
 ```
 
+Hai mảng Editor & motion và AI agent & automation có thêm mục `## Gắn vào OpenCMO` sau "Repo đáng học", và giữ
+bảng "Repo đã đọc" trong README của thư mục (xem README của từng mảng).
+
 Quy tắc: tiếng Việt; dẫn nguồn mọi thứ; không chép code vào báo cáo; dữ kiện cũ hơn 6 tháng phải ghi rõ; nhận định
 không có nguồn phải gắn nhãn là ý kiến.
