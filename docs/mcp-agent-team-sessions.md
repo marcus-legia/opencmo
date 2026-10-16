@@ -72,11 +72,19 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
       `@modelcontextprotocol/sdk` Streamable HTTP (stateless, JSON responses), API-key auth
       reused from `lib/mcp/auth.ts`, `initialize` instructions, empty `cmo`/`inbox`/`account`
       group files for B. Local run with `tsx`; MCP Inspector lists zero tools cleanly.
-- [ ] **A2 — Extract `packages/agent-tools`.** Move what MCP needs out of `apps/web/lib/agent`
-      (tools, scope, explainer-tool, generate-tool, create-video, video-team, guides, skills) with
-      the Supabase client injected; no `server-only`, no `@/` aliases. The Next.js Assistant
-      imports the package; behavior unchanged. Verify: `check:contracts`, Assistant eval
-      (`agent:eval` offline/fake), `tsc`.
+- [x] **A2 — One tool layer for the Assistant and MCP.** Done in place, not as a moved package:
+      the Assistant's clip scope takes an injected host (`clipScopeWith(supabase, context, clip,
+      host)` in `lib/agent/scope.ts`: checkpoint, model usage, previewed code, liveness, turn), so
+      the MCP server runs every clip tool through the exact code the Assistant uses. Why not
+      `packages/agent-tools`: the import closure of the tools is 95 files (lib/api, lib/editor,
+      lib/generate, and Session B's `lib/cmo/**`); moving them would touch most of the app and B's
+      paths for no change in behavior. The MCP server imports them through the `@/` path alias and
+      the `react-server` condition (`server-only` is empty there), and its Modal build bundles them
+      (A3). Fixed on the way: signed URLs for transcripts and exports took the cookie client, so
+      they failed with no browser session; they now use the caller's client. `create_video` and
+      `plan_video` accept a finished plan from the caller (reviewed the same way, no model call;
+      `lib/agent/client-plans.check.ts`). Verified: `check:contracts`, `agent:eval` (fake, 41/41
+      with the local motion CLI), `tsc`.
 - [ ] **A3 — Modal app.** `opencmo-mcp`: Node image built from the repo, `@modal.web_server`,
       `@modal.concurrent`, `min_containers=1`, secrets (`opencmo`, `opencmo-voice`, `fal-secret`).
       `callModal`/`spawnModal` call `render_motion` / `motion_preview` / `run_task` directly.

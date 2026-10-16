@@ -17,6 +17,7 @@ import { previewMotion } from "@/lib/motion/preview";
 import { moderateText, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
+import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import {
   applyInput,
@@ -36,7 +37,7 @@ import { CMO_SYSTEM_PROMPT, PROJECT_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBl
 import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
 import { clipContextBlock, type ClipAbout } from "./clip-context";
-import { dbWorkspace } from "./db-workspace";
+import { dbWorkspace, type CheckpointHooks } from "./db-workspace";
 import { libraryVideos, transcribing } from "./speech";
 import {
   generateCard,
@@ -139,6 +140,23 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
 }
 
+/**
+ * What a clip session needs from whoever drives it. The Assistant ties all of it to its turn
+ * (`agent_turns`); the MCP server has no turn, so it brings its own (`packages/mcp-server`).
+ */
+export type ClipHost = {
+  /** The checkpoint taken before the first write of the request, and where it is recorded. */
+  checkpoint: CheckpointHooks;
+  /** Charges the model calls of the video team (plan_video, create_video) to the request. */
+  recordUsage: (usage: LlmUsage) => Promise<void>;
+  /** Scene code previewed in this request: add_explainer only takes code that was looked at. */
+  previewed: () => Promise<string[]>;
+  /** False once the request is cancelled: a generation stops before it spends credits. */
+  alive?: () => Promise<boolean>;
+  /** The Assistant turn, for undo; absent over MCP, where undo is not offered. */
+  turnId?: string;
+};
+
 export async function clipScope(
   supabase: SupabaseClient,
   context: ClipContext,
@@ -147,10 +165,38 @@ export async function clipScope(
   checkpointed: boolean,
 ): Promise<Scope> {
   const checkpoint = checkpointing(supabase, turn, checkpointed);
-  const workspace = dbWorkspace(supabase, context, clipId, {
-    take: () => (checkpoint.taken() ? null : { kind: "agent" as const, label: checkpoint.label }),
-    mark: checkpoint.mark,
+  return clipScopeWith(supabase, context, clipId, {
+    checkpoint: {
+      take: () => (checkpoint.taken() ? null : { kind: "agent" as const, label: checkpoint.label }),
+      mark: checkpoint.mark,
+    },
+    recordUsage: async (usage) => {
+      await rpcOrThrow<number>(supabase, "agent_record_usage", {
+        p_turn_id: turn.id,
+        p_model: usage.model,
+        p_input: usage.input,
+        p_output: usage.output,
+        p_cache_read: usage.cacheRead,
+        p_cache_write: usage.cacheWrite,
+      });
+    },
+    previewed: async () => {
+      const { data } = await supabase
+        .from("agent_tool_calls")
+        .select("input")
+        .eq("turn_id", turn.id)
+        .eq("name", "preview_explainer")
+        .eq("status", "done")
+        .order("created_at", { ascending: false });
+      return ((data ?? []) as { input: { code?: unknown } }[]).map((row) => String(row.input?.code ?? ""));
+    },
+    alive: async () => (await turnStatus(supabase, turn.id))?.status === "running",
+    turnId: turn.id,
   });
+}
+
+export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
+  const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
   const env = { workspace };
   // A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by.
   const start = await workspace.read();
@@ -203,16 +249,7 @@ export async function clipScope(
         // applied. Its model calls are charged on this turn like the Assistant's own steps.
         const snapshot = await workspace.read();
         const clipContext = await clipContextBlock(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest)).catch(() => "");
-        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext }, async (usage) => {
-          await rpcOrThrow<number>(supabase, "agent_record_usage", {
-            p_turn_id: turn.id,
-            p_model: usage.model,
-            p_input: usage.input,
-            p_output: usage.output,
-            p_cache_read: usage.cacheRead,
-            p_cache_write: usage.cacheWrite,
-          });
-        });
+        const planned = await prepareVideo(call.input, { document: snapshot.document, clipContext }, host.recordUsage);
         if (typeof planned === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the intro" };
         }
@@ -291,16 +328,7 @@ export async function clipScope(
         const accent = readBrand(snapshot.document)?.colors.accent;
         const prepared = await prepareExplainer(call.input, {
           // Code previewed in this turn: add_explainer only takes code the model has looked at.
-          previewed: async () => {
-            const { data } = await supabase
-              .from("agent_tool_calls")
-              .select("input")
-              .eq("turn_id", turn.id)
-              .eq("name", "preview_explainer")
-              .eq("status", "done")
-              .order("created_at", { ascending: false });
-            return ((data ?? []) as { input: { code?: unknown } }[]).map((row) => String(row.input?.code ?? ""));
-          },
+          previewed: host.previewed,
           save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
           ...(accent ? { accent } : {}),
         });
@@ -312,16 +340,7 @@ export async function clipScope(
       if (call.name === "create_video") {
         // The director plans here, before the card; its model calls are charged on this turn.
         const snapshot = await workspace.read();
-        const planned = await prepareCreateVideo(call.input, { document: snapshot.document }, async (usage) => {
-          await rpcOrThrow<number>(supabase, "agent_record_usage", {
-            p_turn_id: turn.id,
-            p_model: usage.model,
-            p_input: usage.input,
-            p_output: usage.output,
-            p_cache_read: usage.cacheRead,
-            p_cache_write: usage.cacheWrite,
-          });
-        });
+        const planned = await prepareCreateVideo(call.input, { document: snapshot.document }, host.recordUsage);
         if (typeof planned === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not plan the video" };
         }
@@ -384,7 +403,7 @@ export async function clipScope(
         : SKILL_TOOLS.has(call.name)
           ? runSkillTool(supabase, call)
           : TURN_TOOLS.has(call.name)
-            ? runTurnTool(call.name, call.input, { supabase, clipId, turnId: turn.id })
+            ? runTurnTool(call.name, call.input, { supabase, clipId, ...(host.turnId ? { turnId: host.turnId } : {}) })
             : call.name === WAIT_TOOL_SPEC.name
               ? runWaitForMedia(call.input, { supabase, clipId })
               : call.name === "preview_explainer"
@@ -444,7 +463,7 @@ export async function clipScope(
           jobId: context.clip.job_id,
           clipId,
           applyOp: (op) => applyOpTool(op, env),
-          alive: async () => (await turnStatus(supabase, turn.id))?.status === "running",
+          ...(host.alive ? { alive: host.alive } : {}),
         },
         prepared as Parameters<typeof runGeneration>[1],
       );
