@@ -39,9 +39,14 @@ export type CmoMcpResource = { uri: string; name: string; mimeType: "text/markdo
 
 export type CmoMcpGroup = { tools?: CmoMcpTool[]; prompts?: CmoMcpPrompt[]; resources?: CmoMcpResource[] };
 
+/**
+ * A result for the model. Clients may show the model only `structuredContent` when it is there
+ * (Claude Code does), so it repeats the whole text as `message`: the fields are for programs,
+ * the message is what the model must read.
+ */
 export const ok = (text: string, structured?: Record<string, unknown>): McpResult => ({
   content: [{ type: "text", text }],
-  ...(structured ? { structuredContent: structured } : {}),
+  ...(structured ? { structuredContent: { message: text, ...structured } } : {}),
 });
 
 /** An error the model should read and act on: one English sentence. */

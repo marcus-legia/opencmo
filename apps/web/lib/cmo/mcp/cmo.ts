@@ -68,12 +68,16 @@ function annotations(name: string): McpAnnotations {
 /** The tool's own content, which already wraps outside text in `untrusted_data`. */
 const fromOutcome = (outcome: ToolOutcome): McpResult => (outcome.ok ? ok(outcome.content) : { ...fail(outcome.content) });
 
+/** The chat's credit prices hold in the app only: over MCP these tasks think with the caller, for free. */
+const withoutPrices = (text: string): string => text.replace(/\((\d+) credits?; /g, "(").replace(/ \((\d+) credits?\)/g, "").replace(/; (\d+) credits?\)/g, ")");
+
 function toMcp(spec: ToolSpec): CmoMcpTool {
   const note = MCP_NOTES[spec.name];
+  const description = spec.name === "create_task" ? withoutPrices(spec.description) : spec.description;
   return {
     name: MCP_NAME[spec.name] ?? spec.name,
     title: TITLES[spec.name] ?? spec.name,
-    description: note ? `${spec.description} ${note}` : spec.description,
+    description: note ? `${description} ${note}` : description,
     // The chat's JSON Schema is the contract; the tool parses its input again with its own zod.
     inputSchema: z.fromJSONSchema(spec.schema as Parameters<typeof z.fromJSONSchema>[0]),
     annotations: annotations(spec.name),

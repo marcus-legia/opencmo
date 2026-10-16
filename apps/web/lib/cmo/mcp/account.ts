@@ -53,7 +53,7 @@ export const ACCOUNT_TOOLS: CmoMcpTool[] = [
     title: "Get credits",
     description: "The founder's credit balance and plan. Media (images, video, voice, renders) costs credits; thinking in Claude does not.",
     inputSchema: empty,
-    outputSchema: z.object({ credits: z.number(), plan: z.string(), billing_url: z.string() }),
+    outputSchema: z.object({ message: z.string(), credits: z.number(), plan: z.string(), billing_url: z.string() }),
     annotations: { readOnlyHint: true, openWorldHint: false },
     async run(_input, { supabase, userId }) {
       const account = await balance(supabase, userId);
@@ -66,7 +66,7 @@ export const ACCOUNT_TOOLS: CmoMcpTool[] = [
     title: "Who is thinking",
     description: "Whether OpenCMO's own AI or you (the founder's Claude) does the CMO thinking right now, and why. When it is you, scheduled work waits in the inbox.",
     inputSchema: empty,
-    outputSchema: z.object({ brain: z.enum(["opencmo", "claude"]), reason: z.string(), credits: z.number() }),
+    outputSchema: z.object({ message: z.string(), brain: z.enum(["opencmo", "claude"]), reason: z.string(), credits: z.number() }),
     annotations: { readOnlyHint: true, openWorldHint: false },
     async run(_input, { supabase, userId }) {
       try {

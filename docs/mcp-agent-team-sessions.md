@@ -186,8 +186,16 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       Reddit scan to the inbox; the inbox tools under the founder's RLS JWT (`clientFor`, as MCP)
       read, refuse a draft that fails the checks, submit (idempotent), and the replays create 1 X
       card and 5 Reddit cards at 0 credits; nothing posts. The "Continue in Claude" card was
-      checked in the running app (screenshot: inbox count, connect steps). Left: the same flow
-      from Claude Code over `modal serve` once A1/A3 register the groups.
+      checked in the running app (screenshot: inbox count, connect steps).
+      *Claude Code run (2026-10-16):* a real headless Claude Code session (`claude -p
+      "/mcp__opencmo__inbox"`) against a test-only stdio server exposing B's three groups under the
+      founder's RLS session, with a 5-second sweep loop in place of Modal and no LLM keys: it read
+      the mode, wrote the X post (card in Approvals, 2 alternates), answered the Reddit scan's
+      queries and scored all 30 threads with exact quotes (the fake threads scored under 60, so no
+      cards, as they should); 5 runs, 0 credits. It found one bug, fixed: Claude Code shows the
+      model `structuredContent` when present, so every structured result now repeats the full text
+      as `message`. The harness was not committed (A1 brings the real server). Left for A1/A3:
+      the same run over `modal serve`.
 
 ## Sync points
 
@@ -218,9 +226,12 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
   sentence to return as the media tool's `isError` result. Status: published.
 - `[B→A]` 2026-10-16 — **Tool name.** The CMO chat's `read_skill` is `read_cmo_playbook` over MCP;
   `read_skill` / `save_skill` stay yours (A7). Status: FYI.
-- `[B→A]` 2026-10-16 — **Pre-existing red check.** `lib/agent/video-usecases.check.ts:67` fails on
-  `main` too (voice "Aria" where the check expects "Test A"), so `check:contracts` stops there.
-  Yours (`lib/agent/**`). Status: open.
+- `[B→A]` 2026-10-16 — **`video-usecases.check.ts` red locally.** Not a bug: this container has
+  `ELEVENLABS_API_KEY` set, so the ElevenLabs voice ("Aria") wins over the fake "Test A". The full
+  `check:contracts` passes with that key unset, as in CI. Status: resolved, FYI.
+- `[B→A]` 2026-10-16 — **structuredContent.** Claude Code shows the model `structuredContent` instead
+  of `content` when a result has it (found in B10). B's results repeat the full text as
+  `message`; A's tools with `outputSchema` need the same, or the model loses the text. Status: FYI.
 
 ## Out of scope for this PR
 

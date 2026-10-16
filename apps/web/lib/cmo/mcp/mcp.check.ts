@@ -10,6 +10,7 @@ import { INBOX_STEP_NAMES, INBOX_STEPS, parseAnswer, stepsFor } from "../jobs/st
 import { CMO_SKILLS } from "../skills/index.gen";
 
 import { ACCOUNT_GROUP, CMO_GROUP, INBOX_GROUP } from "./index";
+import { ok } from "./contract";
 import { requestId } from "./inbox";
 
 const tools = [...CMO_GROUP.tools!, ...INBOX_GROUP.tools!, ...ACCOUNT_GROUP.tools!];
@@ -26,6 +27,7 @@ for (const tool of tools) {
 assert.equal(tools.find((t) => t.name === "search_reddit")!.annotations.openWorldHint, true, "social reads reach the outside world");
 assert.equal(tools.find((t) => t.name === "create_task")!.annotations.readOnlyHint, false);
 assert.ok(tools.find((t) => t.name === "create_task")!.description.includes("inbox"), "create_task says where the work comes back");
+assert.ok(!/\d+ credits?/.test(tools.find((t) => t.name === "create_task")!.description), "no in-app prices on create_task over MCP");
 
 // Input schemas converted from the chat's JSON Schema still accept and refuse what they should.
 const input = (name: string) => tools.find((t) => t.name === name)!.inputSchema;
@@ -52,6 +54,9 @@ const a = requestId("i1", "draft_post", { x: 1 });
 assert.equal(a, requestId("i1", "draft_post", { x: 1 }));
 assert.notEqual(a, requestId("i1", "draft_post", { x: 2 }));
 assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+
+// Clients that show the model only structuredContent still get the whole text.
+assert.equal(ok("Read this.", { id: "x" }).structuredContent!.message, "Read this.");
 
 // Prompts and resources.
 const prompts = CMO_GROUP.prompts!;
