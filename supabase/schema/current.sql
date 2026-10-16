@@ -5239,6 +5239,29 @@ $$;
 
 
 --
+-- Name: mcp_confirm_use(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_confirm_use(p_nonce uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_count int;
+begin
+  if p_nonce is null then
+    raise exception 'That confirm code is not valid. Ask for the price again.' using errcode = '22023';
+  end if;
+  delete from public.mcp_confirms where user_id = v_user and used_at < now() - interval '1 day';
+  insert into public.mcp_confirms (user_id, nonce) values (v_user, p_nonce) on conflict do nothing;
+  get diagnostics v_count = row_count;
+  return v_count = 1;
+end;
+$$;
+
+
+--
 -- Name: orphan_keep_paths(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5928,16 +5951,17 @@ begin
       or (p_bucket = 'zip' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
-      or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600);
+      or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
+      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then
     raise exception 'Invalid rate limit.' using errcode = '22023';
   end if;
 
-  -- Cửa sổ ngắn của preview/export đếm ở hàng riêng: phút đầu sau nửa đêm UTC,
-  -- cửa sổ 60 giây và cửa sổ ngày có cùng `window_start` nên từng cộng dồn vào
-  -- hạn mức ngày (CI đỏ lúc 00:00:24 UTC 04/10).
+  -- The short preview/export window counts in its own row: in the first minute after UTC
+  -- midnight the 60-second and the daily window share a `window_start`, and used to add up
+  -- into the daily quota (CI red at 00:00:24 UTC on 04/10).
   if v_bucket in ('preview', 'export') and p_window_seconds <> 86400 then
     v_bucket := v_bucket || ':' || p_window_seconds;
   end if;
@@ -8092,6 +8116,17 @@ CREATE VIEW public.marketing_documents_latest WITH (security_invoker='true') AS
 
 
 --
+-- Name: mcp_confirms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_confirms (
+    user_id uuid NOT NULL,
+    nonce uuid NOT NULL,
+    used_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: media_transcripts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8692,6 +8727,14 @@ ALTER TABLE ONLY public.marketing_documents
 
 
 --
+-- Name: mcp_confirms mcp_confirms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_confirms
+    ADD CONSTRAINT mcp_confirms_pkey PRIMARY KEY (user_id, nonce);
+
+
+--
 -- Name: media_assets media_assets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9174,6 +9217,13 @@ CREATE INDEX jobs_user_created_idx ON public.jobs USING btree (user_id, created_
 --
 
 CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_at DESC, id DESC);
+
+
+--
+-- Name: mcp_confirms_used_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mcp_confirms_used_at ON public.mcp_confirms USING btree (user_id, used_at);
 
 
 --
@@ -9761,6 +9811,14 @@ ALTER TABLE ONLY public.marketing_documents
 
 
 --
+-- Name: mcp_confirms mcp_confirms_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_confirms
+    ADD CONSTRAINT mcp_confirms_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: media_assets media_assets_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10181,6 +10239,12 @@ ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.marketing_documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_confirms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mcp_confirms ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets; Type: ROW SECURITY; Schema: public; Owner: -
