@@ -68,6 +68,8 @@ jobs:
       - run: npm run check:editor-core
       - run: npm run test:editor-core
       - run: npm run typecheck
+      - run: npm run check:mcp-server
+      - run: npm run test:mcp-server
       - run: npm run build
 
   motion:

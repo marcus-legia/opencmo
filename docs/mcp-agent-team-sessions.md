@@ -68,10 +68,14 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
 `packages/engine/modal_app.py` (only the new `opencmo-mcp` function block),
 `apps/web/lib/motion/**`, editor guides in `apps/web/lib/agent/guides.ts`.
 
-- [ ] **A1 — Contracts + skeleton.** `packages/mcp-server` with the registry above, official
-      `@modelcontextprotocol/sdk` Streamable HTTP (stateless, JSON responses), API-key auth
-      reused from `lib/mcp/auth.ts`, `initialize` instructions, empty `cmo`/`inbox`/`account`
-      group files for B. Local run with `tsx`; MCP Inspector lists zero tools cleanly.
+- [x] **A1 — Contracts + skeleton.** `packages/mcp-server`: the registry above (additive:
+      `McpTool.price`, `inputJsonSchema`, `McpGroup.toolsFor`, `McpResourceTemplate`), the official
+      SDK's Web-standard Streamable HTTP transport (stateless, JSON responses, one `Server` per
+      request), API keys through `lib/mcp/auth.ts`, `initialize` instructions, the `cmo` / `inbox` /
+      `account` group files (B's, empty until B registers its groups). The registry refuses a name
+      registered twice. Local: `npm run dev --workspace @opencmo/mcp-server` (tsx, port 8787);
+      checked with the SDK's own client (initialize, every list, calls). `npm run test:mcp-server`
+      checks the contract without a database.
 - [x] **A2 — One tool layer for the Assistant and MCP.** Done in place, not as a moved package:
       the Assistant's clip scope takes an injected host (`clipScopeWith(supabase, context, clip,
       host)` in `lib/agent/scope.ts`: checkpoint, model usage, previewed code, liveness, turn), so
@@ -89,26 +93,41 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
       `@modal.concurrent`, `min_containers=1`, secrets (`opencmo`, `opencmo-voice`, `fal-secret`).
       `callModal`/`spawnModal` call `render_motion` / `motion_preview` / `run_task` directly.
       `modal serve` URL works with the Inspector and Claude Code (`claude mcp add --transport http`).
-- [ ] **A4 — Studio tools.** Find/read tools, all editor-core ops with `clip_id`, support tools
-      (`find_filler_words`, `find_silences`, `find_retakes`, `find_icons`, `find_lotties`,
-      `insert_asset`, `place_broll`, `check`…), annotations + output schemas, MCP checkpoint per
-      write (as today).
-- [ ] **A5 — Media + explainer tools.** `generate_media`, `create_video` (accepts Claude's
-      script/shot list), `edit_video`, `replace_background`, `add_voiceover`, `plan_video`
-      (accepts a full intro plan; the code Reviewer stays), `get_explainer_kit`,
-      `preview_explainer` (stills as image content + layout report), `add_explainer`,
-      `get_generation`, `wait_for_media` (≤ 50 s per call). Two-step price → confirm for every
-      `costsCredits` tool. Scene code only ever runs in the render containers.
-- [ ] **A6 — Export + account basics.** `export_clip` (async) → `get_export` (signed URL),
-      `open_in_editor` (URL). (Credits read is B's `account` group.)
-- [ ] **A7 — Editor prompts + resources.** Prompts `/explain`, `/video`, `/roughcut`, `/broll`,
-      `/intro` (same directives as `lib/agent/slash.ts`); resources `opencmo://guides/{name}` (20)
-      and `opencmo://kit/explainer`; user editor skills `opencmo://skills/mine/{name}` +
-      `read_skill`/`save_skill`.
+- [x] **A4 — Studio tools.** Every Assistant clip tool with `clip_id` (`groups/studio.ts`), run
+      through the Assistant's own scope; each write is a checkpoint "MCP" in Version history. Left
+      out: the six browser tools (capture, waveform, 3D preview, save frame, grab, color),
+      `ask_user`, `update_plan`, `undo`. Clip-free: `find_icons`, `find_lotties`, `read_guide`,
+      `read_skill`, `save_skill`. Find: `list_projects` (also lists New edits, which the app's
+      project list leaves out), `list_clips`, `new_edit`, `open_in_editor`. Annotations on every
+      tool; output schemas on the tools whose result has a fixed shape (find, kit, generation,
+      export); clip tools return the Assistant's JSON. A clip never opened in the editor gets its
+      project on the first call, as the editor does.
+- [x] **A5 — Media + explainer tools.** `generate_media`, `add_3d_scene`, `add_voiceover`,
+      `replace_background`, `edit_video`, `add_captions`, `translate_captions`, `create_video`
+      (requires Claude's director plan; the reviewer's notes come back to fix), `plan_video`
+      (requires Claude's IntroSpec; the code Reviewer stays), `add_explainer`, `export_clip`: price
+      → confirm enforced by the server for all of them. A confirm code is signed (user, tool,
+      clip, 10 minutes, deflated payload) and works once (`mcp_confirm_use`: a replay would place
+      the same generation twice). When the balance is short the price step returns B6's top-up
+      sentence. `preview_explainer` returns the stills as image content plus the layout report and
+      a `preview_token`; `add_explainer` takes only code with a token for that exact code.
+      `get_explainer_kit`, `get_generation`, `wait_for_media` (≤ 50 s). Scene code runs only in
+      `motion_preview` / `render_motion`. Checked locally: vaccine explainer preview (6 stills,
+      looked at), price 9 credits, confirm → generation queued; replay refused.
+- [x] **A6 — Export + account basics.** `export_clip` (price card: frames, resolution, the plan's
+      daily exports) → task ids → `get_export` (status, progress, signed download link),
+      `open_in_editor`. Checked locally up to the queued render task.
+- [x] **A7 — Editor prompts + resources.** Prompts `/explain`, `/video`, `/roughcut`, `/broll`,
+      `/intro` (the slash directive + the MCP steps + the guide); resources
+      `opencmo://guides/{name}` (22) and `opencmo://kit/explainer` (the code section of the
+      explainer guide); template `opencmo://skills/mine/{name}` + `read_skill`/`save_skill`.
 - [ ] **A8 — OAuth 2.1.** Protected-resource metadata, authorization server (verify Supabase
       OAuth server support first; write findings here), token → user → RLS JWT. API keys keep
       working for Claude Code. Verify: add the connector from claude.ai.
-- [ ] **A9 — Preview cap.** `rate_limit_hit` bucket `mcp_preview` (per user per hour), tests.
+- [x] **A9 — Preview cap.** `rate_limit_hit` bucket `mcp_preview`, 30 per user per hour, in
+      `20261129090000_mcp_server.sql` with `mcp_confirm_use`; pgTAP `160_mcp_server.test.sql`;
+      schema dump refreshed. `rate_limit_hit` is copied from its latest definition (G5) plus the
+      new bucket: a later migration that replaces it must start from this one.
 - [ ] **A10 — End-to-end.** Claude Code over `modal serve`: vaccine explainer from storyboard to
       clip; `/video` 15 s; rough cut on an uploaded clip. Extract a frame from the full-size file
       and look at it (CLAUDE.md "Verify by looking").
@@ -240,6 +259,30 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
 - `[B→A]` 2026-10-16 — **structuredContent.** Claude Code shows the model `structuredContent` instead
   of `content` when a result has it (found in B10). B's results repeat the full text as
   `message`; A's tools with `outputSchema` need the same, or the model loses the text. Status: FYI.
+
+- `[A→B]` 2026-10-16 — **A1 landed; your groups fit.** `McpResult` is the SDK's
+  `CallToolResult`; yours is a subset. `registerGroup(CMO_GROUP)` / `INBOX_GROUP` /
+  `ACCOUNT_GROUP` type-check as they are (tried in a scratch file). The server also accepts
+  image content, `outputSchema` and `annotations`. Status: answered.
+- `[A→B]` 2026-10-16 — **Name clash: `get_transcript`.** The CMO group's `get_transcript` (a
+  video's transcript) and the editor's `get_transcript` (the clip's words, named in every editor
+  guide) cannot both exist; the registry throws at the first `tools/list`. Please rename yours
+  (e.g. `get_video_transcript`) before registering `CMO_GROUP`. That was the only clash (tools,
+  prompts, resources compared). Status: open.
+- `[A→B]` 2026-10-16 — **B's imports under A2.** Carried as they are: the server imports
+  `@/lib/**` through the path alias with the `react-server` condition (`server-only` is empty
+  there); the Modal bundle (A3) does the same and maps `next/server` / `next/headers` to small
+  stand-ins (`after()` runs the task without waiting; `cookies()` throws). Nothing to move.
+  Status: answered.
+- `[A→B]` 2026-10-16 — **Top-up helper used.** Every priced studio tool calls
+  `mediaCreditsShort` in its price step and returns your sentence when the balance is short.
+  Status: done.
+- `[A→B]` 2026-10-16 — **`video-usecases.check.ts` fixed.** It picked the real voice when
+  `ELEVENLABS_API_KEY` was set in the shell; it now clears the provider keys like the fake
+  catalog it claims to use. Status: done.
+- `[A→B]` 2026-10-16 — **Migrations.** Mine is `20261129090000_mcp_server.sql` (after both of
+  yours) and redefines `rate_limit_hit` from G5 + `mcp_preview`; yours does not touch it. pgTAP
+  file `160_mcp_server.test.sql`. Status: FYI.
 
 ## Out of scope for this PR
 

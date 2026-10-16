@@ -11,7 +11,8 @@
     "packages/clip-render",
     "packages/clip-export",
     "packages/clip-three",
-    "packages/clip-motion"
+    "packages/clip-motion",
+    "packages/mcp-server"
   ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -42,7 +43,9 @@
     "test:clip-icons": "npm run test --workspace @opencmo/clip-icons",
     "check:clip-three": "npm run check --workspace @opencmo/clip-three",
     "test:clip-three": "npm run test --workspace @opencmo/clip-three",
-    "check:clip-motion": "npm run check --workspace @opencmo/clip-motion"
+    "check:clip-motion": "npm run check --workspace @opencmo/clip-motion",
+    "check:mcp-server": "npm run check --workspace @opencmo/mcp-server",
+    "test:mcp-server": "npm run test --workspace @opencmo/mcp-server"
   },
   "overrides": {
     "postcss": "8.5.28"
