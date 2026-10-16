@@ -14,6 +14,9 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 
 process.env.OPENCMO_AGENT_FAKE = "1";
 process.env.OPENCMO_AI_FAKE = "1";
+// Only the fake catalog: with a real key in the shell, the real voice or video model would be picked.
+delete process.env.ELEVENLABS_API_KEY;
+delete process.env.FAL_KEY;
 
 type Scene = { width: number; height: number; workarea?: number[]; children: unknown[] };
 const sceneOf = (document: ClipDocument) => document.stage.children[0] as unknown as Scene;
