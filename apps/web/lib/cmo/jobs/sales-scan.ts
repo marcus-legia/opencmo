@@ -14,7 +14,7 @@ import { z } from "zod";
 import { searchReddit, SocialReadError, type RedditThread } from "../social/reddit";
 import { avoidList, documentsBlock, recall } from "./context";
 import { skillText } from "../skills";
-import { fakeAllowed, LlmError, structured } from "./llm";
+import { LlmError } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import type { Documents, Opportunity, ScorePart } from "./types";
 
@@ -139,8 +139,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   );
 
   const queries = await ctx.step("make_queries", "Writing searches from your customers' pains", async () => {
-    if (fakeAllowed()) return fakeQueries(docs);
-    const out = await structured({
+    const out = await ctx.think({
+      title: "Write Reddit search queries from the founder's customer pains",
+      fake: () => ({ queries: fakeQueries(docs) }),
       agent: "checker",
       system: QUERY_SYSTEM,
       prompt: `${documentsBlock(docs)}\n\n${brief ? `Your CMO's brief for this scan: "${brief}"\n\n` : ""}Write the search queries.`,
@@ -180,7 +181,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     // Mọi truy vấn đều hỏng: là lỗi (credit hoàn qua lượt failed), không phải "không có gì".
     if (list.length && failed === list.length) throw new LlmError(lastError);
     return [...found.values()].slice(0, MAX_THREADS);
-  }, (t) => (t.length ? `${t.length} new threads found` : "No new threads found"));
+  }, (t) => (t.length ? `${t.length} new threads found` : "No new threads found"), { memo: "reddit_search" });
 
   if (!threads.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
@@ -188,10 +189,10 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   }
 
   const ranked = await ctx.step("score_thread", "Scoring each thread", async () => {
-    const scores = fakeAllowed()
-      ? fakeScores(threads)
-      : (
-          await structured({
+    const scores = (
+          await ctx.think({
+            title: `Score ${threads.length} Reddit threads for pain, fit and evidence, quoting their exact words`,
+            fake: () => ({ scores: fakeScores(threads) }),
             agent: "checker",
             system: SCORE_SYSTEM,
             prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy })}\n\n${threads.map(threadBlock).join("\n\n")}\n\nScore every thread.`,
@@ -215,17 +216,16 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   }
 
   const replies = await ctx.step("draft_reply", `Drafting ${ranked.length} replies`, async () => {
-    if (fakeAllowed()) {
-      return ranked.map(
-        (_, index) => ({
-          index,
-          reply: "What helped most people I know: put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14 so it feels like a process, not a personal chase.",
-        }),
-      );
-    }
     const avoid = avoidList(docs);
     return (
-      await structured({
+      await ctx.think({
+        title: `Draft a helpful reply for each of ${ranked.length} Reddit threads (the founder posts them)`,
+        fake: () => ({
+          replies: ranked.map((_, index) => ({
+            index,
+            reply: "What helped most people I know: put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14 so it feels like a process, not a personal chase.",
+          })),
+        }),
         agent: "sales",
         system: REPLY_SYSTEM,
         prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${ranked

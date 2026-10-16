@@ -30,7 +30,7 @@ export function llmReady(agent: AgentId = "planner"): boolean {
   return fakeAllowed() || Boolean(resolveAgent(agent).apiKey);
 }
 
-type Options<S extends z.ZodType> = {
+export type StructuredOptions<S extends z.ZodType> = {
   /** Agent trong sổ (`lib/cmo/agents/registry.ts`) — quyết định provider, model, khoá. */
   agent: AgentId;
   system: string;
@@ -49,7 +49,7 @@ type Options<S extends z.ZodType> = {
 
 export type LlmUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
 
-async function structuredGemini<S extends z.ZodType>(opts: Options<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
+async function structuredGemini<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
   let response;
   try {
     response = await new GoogleGenAI({ apiKey: agent.apiKey }).models.generateContent({
@@ -98,7 +98,7 @@ async function structuredGemini<S extends z.ZodType>(opts: Options<S>, agent: Re
  * credit, a bad key, rate limits, an outage) and the server has a key for the other one, the call
  * runs there on that provider's model of the same tier.
  */
-export async function structured<S extends z.ZodType>(opts: Options<S>): Promise<z.infer<S>> {
+export async function structured<S extends z.ZodType>(opts: StructuredOptions<S>): Promise<z.infer<S>> {
   const configured = resolveAgent(opts.agent);
   const other = resolveAgent(opts.agent, process.env, configured.provider === "anthropic" ? "gemini" : "anthropic");
   const candidates = [configured, other].filter((agent) => agent.apiKey);
@@ -118,7 +118,7 @@ export async function structured<S extends z.ZodType>(opts: Options<S>): Promise
   }
 }
 
-async function structuredAnthropic<S extends z.ZodType>(opts: Options<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
+async function structuredAnthropic<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
   const client = new Anthropic({ apiKey: agent.apiKey });
   // Opus and Sonnet 5.5 have server-side fallback; Haiku has none. Haiku 5.5 thinks by default
   // (effort medium): a check runs at low. Haiku 4.5 rejects `effort`.

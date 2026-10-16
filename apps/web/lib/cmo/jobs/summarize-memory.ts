@@ -10,7 +10,6 @@
 
 import { z } from "zod";
 
-import { fakeAllowed, structured } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import { isoDay, MEMORY_TOPICS, type ItemRow, type MemoryEvent, type MemoryTopic } from "./types";
 
@@ -63,8 +62,10 @@ export async function summarizeMemory(ctx: JobContext): Promise<JobOutput> {
   }
 
   const out = await ctx.step("summarize", "Writing this week's lessons", async () => {
-    if (fakeAllowed()) return { lessons: fakeLessons(events) };
-    return structured({
+    return ctx.think({
+      title: "Turn this week's notes and decisions into lessons for next week",
+      // The fake may write a `general` lesson, as before; the store accepts every topic.
+      fake: () => ({ lessons: fakeLessons(events) }) as z.infer<typeof LessonSchema>,
       agent: "checker",
       system: SYSTEM,
       prompt: `<notes>\n${events.map((e) => `- [${e.topic}/${e.kind}] ${e.body}`).join("\n") || "(none)"}\n</notes>\n\n<decisions>\n${decisionsBlock(decisions)}\n</decisions>\n\nWrite the lessons for next week.`,

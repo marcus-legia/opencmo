@@ -308,7 +308,76 @@ async function main() {
   assert.ok(goalBlock(mem9.goals[0]!).includes("Approve 3 posts on X"));
   assert.equal(goalBlock(proposal ?? null), "", "a goal still proposed does not steer the plan");
 
-  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, vòng lặp, kiểm bài, lease, hoãn đều đúng.");
+  // Inbox ("Continue in Claude"): the run stops at its model call, Claude's answer replays it.
+  const memIn = memoryStore(docs);
+  const ask = memIn.enqueue("post_draft", { brain: "claude", idea: "The 3-7-14 reminder rule" });
+  await drainCmoQueue(memIn.store);
+  assert.equal(ask.status, "done", `the inbox run ends cleanly (${ask.error})`);
+  assert.equal(memIn.inbox.length, 1, "one inbox item");
+  const waiting = memIn.inbox[0]!;
+  assert.equal(waiting.step, "draft_post", "it waits for the draft");
+  assert.ok(waiting.request.prompt.includes("3-7-14") && waiting.request.system.includes("posts on X"), "with the prompt the job would have sent");
+  assert.equal((waiting.request.schema as { type?: string }).type, "object", "and the answer's JSON schema");
+  assert.equal(memIn.items.filter((i) => i.status === "in_review").length, 0, "no card before the answer");
+  assert.equal(ask.steps.at(-1)!.status, "skipped", "Activity shows the waiting step");
+
+  // A bad answer: every version breaks a rule. The item reopens with the reasons.
+  const bad = memIn.submit(waiting.id, "draft_post", { versions: [{ text: "A revolutionary way to invoice", angle: "a" }], rationale: "r" });
+  await drainCmoQueue(memIn.store);
+  assert.equal(bad.status, "failed");
+  assert.equal(waiting.status, "open", "a failed check reopens the item");
+  assert.ok(waiting.feedback?.includes("revolutionary"), `with the reason (${waiting.feedback})`);
+  assert.ok(!("draft_post" in waiting.answers), "without the failed answer");
+
+  const good = memIn.submit(waiting.id, "draft_post", {
+    versions: [
+      { text: "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.", angle: "rule" },
+      { text: "Late invoices are a process problem.", angle: "contrarian" },
+      { text: "A revolutionary reminder", angle: "bad" },
+    ],
+    rationale: "From today's item.",
+  });
+  await drainCmoQueue(memIn.store);
+  assert.equal(good.status, "done", `the replay makes the card (${good.error})`);
+  assert.equal(waiting.status, "done");
+  const fromClaude = memIn.items.find((i) => i.status === "in_review")!;
+  assert.equal(fromClaude.body.text, "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.");
+  assert.deepEqual(fromClaude.body.alternates, ["Late invoices are a process problem."], "a version that breaks a rule is dropped");
+  assert.ok(!good.steps.some((s) => s.tool === "fix_post"), "no second model call to fix");
+
+  // Sales: three rounds; the Reddit search runs once and its threads stay the same.
+  const memS = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["late invoice payments"] } });
+  memS.enqueue("sales_scan", { brain: "claude" });
+  await drainCmoQueue(memS.store);
+  const scan = memS.inbox[0]!;
+  assert.equal(scan.step, "make_queries");
+  memS.submit(scan.id, "make_queries", { queries: ["clients pay late", "chasing invoices"] });
+  await drainCmoQueue(memS.store);
+  assert.equal(scan.step, "score_thread", "round two: scoring");
+  const found = scan.memo.reddit_search as { title: string; text: string }[];
+  assert.ok(found.length > 0, "the threads are kept for the replays");
+  memS.submit(scan.id, "score_thread", {
+    scores: found.map((t, index) => ({ index, exclude: false, pain: { score: 24, quote: t.title }, fit: { score: 24, why: "Fits." }, evidence: { score: 14, quote: t.title } })),
+  });
+  await drainCmoQueue(memS.store);
+  assert.equal(scan.step, "draft_reply", "round three: replies");
+  assert.deepEqual(scan.memo.reddit_search, found, "the same threads");
+  const toReply = (scan.request.prompt.match(/<thread index=/g) ?? []).length;
+  memS.submit(scan.id, "draft_reply", { replies: Array.from({ length: toReply }, (_, index) => ({ index, reply: "Put the due date on the invoice and remind on day 3, 7 and 14." })) });
+  await drainCmoQueue(memS.store);
+  assert.equal(scan.status, "done", `the scan finishes (${scan.feedback})`);
+  assert.equal(memS.opps.length, toReply, "one card per reply");
+
+  // An answer that does not match the schema fails the replay, not the server.
+  const memX = memoryStore(docs);
+  memX.enqueue("plan_week", { brain: "claude" });
+  await drainCmoQueue(memX.store);
+  const badPlan = memX.submit(memX.inbox[0]!.id, "plan_week", { items: "soon" });
+  await drainCmoQueue(memX.store);
+  assert.equal(badPlan.status, "failed");
+  assert.ok(memX.inbox[0]!.feedback?.startsWith("The answer does not match"), `${memX.inbox[0]!.feedback}`);
+
+  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn đều đúng.");
 }
 
 main().catch((error) => {

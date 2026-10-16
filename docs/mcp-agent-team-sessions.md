@@ -115,17 +115,27 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
 
 Until A1 lands, start with B1–B3 (no dependency on the registry).
 
-- [ ] **B1 — Inbox schema.** Migration: `cmo_inbox` (user, kind, input, context snapshot, status
+- [x] **B1 — Inbox schema.** Migration: `cmo_inbox` (user, kind, input, context snapshot, status
       `open|claimed|submitted|expired`, created/claimed/submitted at), RLS owner-only, RPCs
       `inbox_list`, `inbox_claim`, `inbox_submit` (ownership-checked, idempotent by request id);
       pgTAP; `scripts/dump-schema.sh`.
-- [ ] **B2 — Mode switch.** One server function `brainMode(supabase, userId)` → `"opencmo" |
+- [x] **B2 — Mode switch.** One server function `brainMode(supabase, userId)` → `"opencmo" |
       "claude"`: balance below `AGENT_HOLD_CREDITS`, or `llm-health` `account` outage on both
       providers. Unit check file.
-- [ ] **B3 — Cron writes to the inbox in mode B.** `lib/cmo/loops.ts` / runner: same `LoopRun`,
+- [x] **B3 — Cron writes to the inbox in mode B.** `lib/cmo/loops.ts` / runner: same `LoopRun`,
       but a mode-B user gets an inbox item instead of an LLM call. Jobs: `plan_week`,
       `review_week`, `post_draft`, `sales_scan` (threads fetched server-side first),
       `video_pack`, `summarize_memory`, `competitor_research`. Existing job checks stay green.
+      *Done as:* every job's model call goes through `ctx.think()` (`lib/cmo/jobs/think.ts`). An
+      inbox run (`input.brain = "claude"`, 0 credits) reads server-side as usual and stops at its
+      first model call: `cmo_inbox_open` stores the request (system, prompt, JSON schema) and ends
+      the run in one transaction. `inbox_submit` stores Claude's answer under the step's label and
+      queues a replay that feeds it back through the same zod schema and deterministic checks;
+      a failed check reopens the item with the reason (`cmo_inbox_finish`). Jobs with several
+      calls go round once per call (sales scan: queries → scores → replies); outside reads are
+      memoized between rounds (`ctx.step(..., { memo })`). Checker calls are skipped in mode B.
+      Step labels: `plan_week`, `review_week`, `summarize_memory`, `draft_post`, `make_queries`,
+      `score_thread`, `draft_reply`, `write_captions`, `competitor_research`.
 - [ ] **B4 — CMO group.** The 20 CMO tools (`read_doc`, `update_document`, `read_site`,
       `search_reddit`, `reddit_thread`, `subreddit_posts`, `find_outliers`, `x_profile`,
       `search_videos`, `search_threads`, `get_transcript`, `create_task`, `create_video_brief`,

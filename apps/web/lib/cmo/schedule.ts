@@ -2,7 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isoDay } from "@/lib/cmo/jobs/types";
+import { brainModes } from "@/lib/cmo/brain";
+import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
 
@@ -14,7 +15,10 @@ import { socialReaderReady } from "@/lib/cmo/social/reddit";
  * still queued or running, so calling this more often would re-run a loop whose run already
  * finished (the Monday plan, for one).
  */
-export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number }> {
+/** Loops that call a model: for a founder in mode B they go to the inbox instead. */
+const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "video_pack", "competitor_research", "summarize_memory", "review_week"]);
+
+export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number; inbox: number }> {
   const today = isoDay();
   const weekday = new Date().getUTCDay();
 
@@ -41,8 +45,10 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
   const publishedBy = new Map<string, number>();
   for (const p of (published ?? []) as { user_id: string }[]) publishedBy.set(p.user_id, (publishedBy.get(p.user_id) ?? 0) + 1);
   const socialReader = socialReaderReady();
+  const modes = await brainModes(admin, users);
 
   let queued = 0;
+  let inbox = 0;
   for (const user of users) {
     const firstDue = (department: string) => {
       const row = dueRows.find((d) => d.user_id === user && d.department === department);
@@ -56,12 +62,19 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
       publishedRecently: publishedBy.get(user) ?? 0,
       socialReader,
     };
+    // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
+    const claude = modes.get(user)?.brain === "claude";
     for (const run of dueLoops(state)) {
-      const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: { ...run.input, loop: run.loop } });
+      const toInbox = claude && THINKING.has(run.kind);
+      const input = { ...run.input, loop: run.loop, ...(toInbox ? { brain: "claude" } : {}) };
+      const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: input });
       // Out of credits or at the daily cap: skip this user, keep going for the others.
       if (enqueueError) console.warn("[cron] cmo: skipped", run.loop, enqueueError.message);
-      else queued += 1;
+      else {
+        queued += 1;
+        if (toInbox) inbox += 1;
+      }
     }
   }
-  return { users: users.length, queued };
+  return { users: users.length, queued, inbox };
 }

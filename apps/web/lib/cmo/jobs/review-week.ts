@@ -12,7 +12,6 @@
 import { z } from "zod";
 
 import { documentsBlock, lessonsBlock } from "./context";
-import { fakeAllowed, structured } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import { decisionsBlock, mondayOf } from "./summarize-memory";
 import { isoDay, type Goal, type GoalMetric, type WeekResults } from "./types";
@@ -73,10 +72,9 @@ export async function reviewWeek(ctx: JobContext): Promise<JobOutput> {
   }
 
   const review = await ctx.step("review", "Writing the review and next week's goal", async () => {
-    if (fakeAllowed()) {
-      return { lesson: `${goalLine(goal, results)} Results: ${results.posts} posts, ${results.replies} replies, ${results.clips} clip packs, ${results.views} views.`, next_goal: nextGoalFallback(goal, results) };
-    }
-    return structured({
+    return ctx.think({
+      title: "Review the founder's week and propose next week's goal",
+      fake: () => ({ lesson: `${goalLine(goal, results)} Results: ${results.posts} posts, ${results.replies} replies, ${results.clips} clip packs, ${results.views} views.`, next_goal: nextGoalFallback(goal, results) }),
       agent: "planner",
       system: SYSTEM,
       prompt: `${documentsBlock(docs)}\n\n${lessonsBlock(lessons)}\n\n<week start="${week}">\n${goalLine(goal, results)}\nPosts approved: ${results.posts}\nReddit replies: ${results.replies}\nClip packs approved: ${results.clips}\nViews on posts: ${results.views}\n\nDecisions:\n${decisionsBlock(decisions)}\n</week>\n\nReview the week and propose next week's goal.`,
