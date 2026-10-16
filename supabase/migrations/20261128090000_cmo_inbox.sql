@@ -121,10 +121,10 @@ begin
   v_inbox := nullif(v_run.input->>'inbox', '')::uuid;
 
   if v_inbox is null then
-    -- A fresh scheduled item replaces the founder's older unclaimed one of the same kind:
+    -- A fresh scheduled item replaces the founder's older unanswered one of the same kind:
     -- yesterday's draft request is stale once today's exists.
     update public.cmo_inbox set status = 'expired', finished_at = now()
-    where user_id = v_run.user_id and kind = v_run.kind and status = 'open';
+    where user_id = v_run.user_id and kind = v_run.kind and status in ('open', 'claimed');
     insert into public.cmo_inbox (user_id, kind, input, step, request, memo, run_id)
     values (v_run.user_id, v_run.kind, v_run.input - 'brain', p_step, p_request, coalesce(p_memo, '{}'), v_run.id)
     returning * into v_item;
@@ -199,11 +199,26 @@ returns public.cmo_inbox
 language plpgsql security definer set search_path = public
 as $$
 declare
+  v_user uuid := public.require_user();
   v_item public.cmo_inbox;
+  v_run public.cmo_runs;
 begin
-  select * into v_item from public.cmo_inbox where id = p_id and user_id = public.require_user() for update;
+  select * into v_item from public.cmo_inbox where id = p_id and user_id = v_user for update;
   if not found then
     raise exception 'Inbox item not found.' using errcode = 'P0002';
+  end if;
+  -- A replay that ended without reporting back (claim_cmo_run gives up on a run that kept
+  -- dying): the item would wait for it forever.
+  if v_item.status = 'submitted' then
+    select * into v_run from public.cmo_runs where id = v_item.run_id;
+    if not found or v_run.status = 'failed' then
+      update public.cmo_inbox
+      set status = 'open', answers = answers - step, claimed_at = null,
+          feedback = left(coalesce(v_run.error, 'The check stopped before it finished.') || ' Answer again.', 1000)
+      where id = p_id returning * into v_item;
+    elsif v_run.status = 'done' and not (v_run.output ? 'inbox_id') then
+      update public.cmo_inbox set status = 'done', finished_at = now() where id = p_id returning * into v_item;
+    end if;
   end if;
   if v_item.status in ('open', 'claimed') and v_item.expires_at <= now() then
     update public.cmo_inbox set status = 'expired', finished_at = now() where id = p_id returning * into v_item;

@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(31);
+select plan(33);
 
 insert into auth.users (id, email) values
   ('e1580000-0000-4000-8000-00000000000a', 'inbox-a@test.local'),
@@ -86,11 +86,20 @@ select is((select feedback from public.cmo_inbox where id = (select id from i)),
 
 select public.complete_cmo_run((select id from r2), (select attempt from r2), false, null, 'The drafts did not pass our checks.');
 
--- A fresh scheduled item replaces an unclaimed one of the same kind.
+-- A replay that died without reporting back does not leave the item waiting forever.
+update public.cmo_inbox set status = 'submitted', answers = answers || '{"draft_post":{}}' where id = (select id from i);
+update public.cmo_runs set status = 'failed', error = 'This task stopped too many times.' where id = (select id from r2);
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e1580000-0000-4000-8000-00000000000a"}';
+select is((select status from public.inbox_claim((select id from i))), 'claimed', 'a dead replay reopens the item on the next read');
+select is((select feedback from public.cmo_inbox where id = (select id from i)), 'This task stopped too many times. Answer again.', 'with the reason');
+reset role;
+
+-- A fresh scheduled item replaces an unanswered one of the same kind.
 select public.enqueue_cmo_run_for('e1580000-0000-4000-8000-00000000000a', 'post_draft', '{"brain":"claude"}');
 create temp table r3 as select * from public.claim_cmo_run(null, 300);
 select public.cmo_inbox_open((select id from r3), (select attempt from r3), 'draft_post', '{"title":"t"}', '{}');
-select is((select status from public.cmo_inbox where id = (select id from i)), 'expired', 'the older open item expires');
+select is((select status from public.cmo_inbox where id = (select id from i)), 'expired', 'the older unanswered item expires');
 select is((select count(*)::int from public.cmo_inbox where status = 'open'), 1, 'one open item per kind');
 
 select * from finish();
