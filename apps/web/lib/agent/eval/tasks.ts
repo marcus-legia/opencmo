@@ -31,6 +31,15 @@ import icons from "../../../../../packages/clip-icons/data/icons.json";
 import type { PreparedGeneration } from "../generate-tool";
 import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
 
+/** The shared clip with an introduction as its first line, for the name-tag task. */
+const INTRO_TRANSCRIPT: Transcript = [
+  {
+    text: "Hi I'm Linh founder of Paylane and this is how we grow",
+    words: "Hi I'm Linh founder of Paylane and this is how we grow".split(" ").map((text, index) => ({ text, start: Math.round((0.3 + index * 0.31) * 100) / 100, end: Math.round((0.3 + index * 0.31 + 0.26) * 100) / 100 })),
+  },
+  ...TRANSCRIPT.slice(1),
+];
+
 export type Outcome = {
   document: ClipDocument;
   report: CheckReport;
@@ -879,6 +888,28 @@ export const TASKS: EvalTask[] = [
         ok = check(notes, item.start >= 3, `${item.op} covers the hook (starts ${item.start}s)`) && ok;
       }
       return { pass: ok && sane(outcome, notes), notes };
+    },
+  },
+  {
+    id: "name-tag",
+    prompt: "Add my name and role when I introduce myself: I'm Linh, founder of Paylane",
+    transcript: INTRO_TRANSCRIPT,
+    grade(outcome) {
+      const notes: string[] = [];
+      const titles = visuals(outcome.document).filter((item) => item.op === "add_title");
+      if (!check(notes, titles.length === 1, `${titles.length} add_title visuals, want exactly one`)) return { pass: false, notes };
+      const title = titles[0]!;
+      const { window, removed } = state(outcome.document);
+      const hit = title.quote ? findQuote(clipWords(INTRO_TRANSCRIPT, window, removed), title.quote) : null;
+      const quoted = check(notes, Boolean(hit), `quote not in transcript: ${title.quote ?? "(none)"}`);
+      // On screen when the introduction is spoken, not at a time the model made up.
+      const timed = check(notes, hit !== null && Math.abs(title.start - hit.start) <= 0.6, `starts ${title.start}s, introduction at ${hit?.start ?? "?"}s`);
+      const named = check(notes, /\blinh\b/i.test(String(title.input.title ?? "")), `title: ${String(title.input.title)}`);
+      const role = check(notes, /founder|paylane/i.test(`${String(title.input.sub ?? "")} ${String(title.input.title ?? "")}`), `no role: ${String(title.input.sub)}`);
+      const inside = check(notes, title.start >= 0 && title.end <= state(outcome.document).duration + 0.01, `shown ${title.start}-${title.end}s, outside the clip`);
+      const unsafe = outcome.report.issues.filter((issue) => issue.code === "text-unsafe" || issue.code === "caption-overlap" || issue.code === "captions-covered");
+      const safe = check(notes, !unsafe.length, `check: ${unsafe.map((issue) => issue.code).join(", ")}`);
+      return { pass: quoted && timed && named && role && inside && safe && sane(outcome, notes), notes };
     },
   },
 ];

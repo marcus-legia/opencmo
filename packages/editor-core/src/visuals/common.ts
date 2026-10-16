@@ -243,7 +243,7 @@ export function placePath(node: Node): Node {
  * Group ở gốc scene (toạ độ con = pixel của scene), sống từ `start` tới
  * `end`, mờ đi ở cuối. Mark `visual` giữ op + input để `update_visual` sinh lại.
  */
-export function visualGroup(name: string, children: Node[], timing: { start: number; end: number }, _frame: { width: number; height: number }, mark: { op: string; input: unknown }): Node {
+export function visualGroup(name: string, children: Node[], timing: { start: number; end: number }, _frame: { width: number; height: number }, mark: { op: string; input: unknown }, options: { ownExit?: boolean } = {}): Node {
 	const duration = round(timing.end - timing.start);
 	return {
 		kind: 'group',
@@ -252,7 +252,9 @@ export function visualGroup(name: string, children: Node[], timing: { start: num
 		y: 0,
 		start: round(timing.start),
 		end: round(timing.end),
-		animations: [{ type: 'fade', phase: 'out', duration: Math.min(0.3, duration / 4) }],
+		// A builder with its own staggered exit (titles) skips the group fade: the two multiply and
+		// the exit would read as a cut.
+		...(options.ownExit ? {} : { animations: [{ type: 'fade', phase: 'out', duration: Math.min(0.3, duration / 4) }] }),
 		marks: { visual: mark },
 		children: children.map((child) => ({ start: 0, end: duration, ...placePath(child) })),
 	};

@@ -46,7 +46,7 @@ ${kinds}
 - strokes: {color, width?, join?: miter|round|bevel, opacity?}
 - shadows: {color, blur?, offsetX?, offsetY?, opacity?}
 - effects: {type, value} with type one of ${EFFECT_TYPES.join(", ")} (blur in px; brightness/contrast/saturate 0-1 only lower; color grading: exposure in stops -2..2 (0.3 = a bit brighter), vibrance -1..1 (more or less color), temperature -1 cool..1 warm, tint -1 green..1 magenta, vignette 0..1; small values look natural, e.g. exposure 0.3, temperature 0.15). Curves, wheels, hue curves, chroma key, glow, grain and vignette shape take a params object — set them with apply_color (read_guide "color"), not by hand
-- animations: {type, phase?: "in"|"out", duration?, delay?} with type one of ${ANIMATION_TYPES.join(", ")}. appearWord/appearChar/scramble/typewriter/wordSlide/highlightPop are for text (and captions). typewriter types the text with a caret; wordSlide slides the words up one after another; highlightPop pops each word in turn in a highlight color ({perWord: seconds per word, default 0.2; color}); without duration they last words × perWord. "in" plays from the element's start, "out" ends at its end.
+- animations: {type, phase?: "in"|"out", duration?, delay?} with type one of ${ANIMATION_TYPES.join(", ")}. appearWord/appearChar/scramble/typewriter/wordSlide/highlightPop are for text (and captions). typewriter types the text with a caret; wordSlide slides the words up one after another; highlightPop pops each word in turn in a highlight color ({perWord: seconds per word, default 0.2; color}); without duration they last words × perWord. fade, slideUp, slideDown, slideLeft, slideRight, pop, blur and grow can run per unit on a text element: {unit: "char"|"word"|"line", order?: "first"|"center"|"last"|"random", step?: seconds between two units' starts (0.02-0.5; defaults 0.03 letters, 0.055 words, 0.08 lines), mask?: true (slideUp/slideDown only: each unit rises from behind its line's edge instead of fading)}. Without duration it lasts 0.5 s + step × (units − 1) (0.9 s for lines). Letters for short words (up to about 20 characters), words for a tagline, lines for a paragraph; text over 200 letters animates by word. Captions ignore unit. "in" plays from the element's start, "out" ends at its end.
 - ranges (text only): {start, end?, color?, fontWeight?, ...} character indexes into the text, for highlighting words.
 - masks: rect nodes; the element shows only inside them.
 
@@ -98,6 +98,18 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 - Make it readable on a phone: fontSize 70-100 on a 1080-wide frame, weight 800, white or a brand color, with a stroke (add_part strokes {color: "#000000", width: 8}) or a shadow for contrast over video.
 - Give it motion: an "in" animation (fade, slideUp, grow, appearWord) of 0.3-0.5s, and an "out" fade before it ends.
 - Always capture a frame at 1s to confirm it reads well.`,
+
+  titles: `# Titles: name tags, lower thirds, chapters (add_title)
+
+- Name tag or lower third: one per speaker, the first time they appear or introduce themselves. title = the name as they say it, sub = role and company ("Founder, Paylane"). Pass quote = the words where they introduce themselves; it holds 5.5-8 s, long enough to read twice. Never guess a name or role the speaker or the user did not give.
+- Chapter titles (kind chapter) where the topic changes in a longer clip: 2-5 words, sub = "Chapter 2" or the episode. Not on a short clip with one idea.
+- One title on screen at a time, never on top of a hook title or a diagram. A name tag in the first 2-3 seconds competes with the hook: start it after the hook unless the introduction is the hook.
+- Looks: bar for clean interviews, kicker when the role or episode matters, card over busy or bright footage (the panel keeps it readable). Use one look for every title in a clip.
+- Placement is automatic: inside title-safe, above the captions, clear of the platform's top bar and bottom buttons on vertical video. Change the side (left/right/center) with update_visual instead of moving it with set_props. check reports text-unsafe for any text in those zones.
+- Motion: calm for serious or slow talks, standard by default, punchy for fast edits. Titles move only while they build in (under a second) and out (faster than in); they stay still while read.
+- Rhythm for any animated text (titles, add_text, hooks): reveal very short text (up to about 20 characters) by letters, a tagline by words, a paragraph by lines. Gaps between units: letters 0.02-0.04 s, words 0.04-0.07 s, lines 0.06-0.1 s; the whole reveal stays under about 0.8 s, and the exit is quicker than the entrance. Text over busy video needs a panel or a strong shadow behind it.
+- Fix a typo or role with update_visual {id, changes: {title, sub}}; do not delete and re-add.
+- After adding, capture a frame in the middle of the title: the name readable, accents intact (ễ, ươ), nothing under the captions.`,
 
   captions: `# Captions
 

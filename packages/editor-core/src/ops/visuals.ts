@@ -9,6 +9,7 @@
 import { z } from 'zod';
 
 import { ANIMATION_TYPES, type ClipDocument } from '@opencmo/clip-doc';
+import { createRenderer, FPS, type LayoutBox } from '@opencmo/clip-render';
 
 import { byId, clone, sceneOf, type Entity } from '../doc';
 import { readBrand, rebrand, themeFromBrand } from '../brand';
@@ -22,6 +23,7 @@ import { buildIcon, IconError, iconInput, type IconInput } from '../visuals/icon
 import { buildLottie, LottieError, lottieInput, type LottieInput } from '../visuals/lottie';
 import { buildShape, SHAPE_NAMES, shapeInput, type ShapeInput } from '../visuals/shape';
 import { buildThree, threeInput, type ThreeInput } from '../visuals/three';
+import { buildTitle, measureTitle, titleInput, titleName, titleSafe, type TitleInput } from '../visuals/title';
 import { OpFailure, type OpContext } from './context';
 import { loadCaptions } from './captions';
 import { checked } from './project';
@@ -96,12 +98,80 @@ async function built(make: () => Node[] | Promise<Node[]>): Promise<Node[]> {
 	}
 }
 
+type Frame = { width: number; height: number };
+
 type Builder = {
 	name: string;
 	schema: z.ZodType;
-	build(input: never, frame: { width: number; height: number }, area: Box, duration: number): Node[] | Promise<Node[]>;
+	build(input: never, frame: Frame, area: Box, duration: number): Node[] | Promise<Node[]>;
 	title(input: never): string;
+	/** Pixel area the builder draws in, when it is not the usual region/panel (titles keep clear of captions). */
+	area?(input: never, frame: Frame, document: ClipDocument, when: Timing, ctx: Pick<OpContext, 'media'> | undefined): Box;
+	/** Children animate their own exit; the group does not fade on top of it. */
+	ownExit?: boolean;
 };
+
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+
+function rectOf(box: LayoutBox): Rect {
+	const [ox, oy, w, h] = box.box;
+	const m = box.matrix;
+	const points = [[ox, oy], [ox + w, oy], [ox + w, oy + h], [ox, oy + h]].map(([x, y]) => [m[0] * x! + m[2] * y! + m[4], m[1] * x! + m[3] * y! + m[5]] as const);
+	const xs = points.map((point) => point[0]);
+	const ys = points.map((point) => point[1]);
+	return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+
+/** Caption boxes on screen while a visual is up (start, middle, end): the same boxes `check` reads. */
+function captionRects(document: ClipDocument, when: Timing, ctx: Pick<OpContext, 'media'> | undefined): Rect[] {
+	const renderer = createRenderer(document, {
+		image: () => null,
+		video: () => null,
+		duration: (src) => ctx?.media?.duration(src) ?? null,
+		transcript: (src) => ctx?.media?.transcript?.(src) ?? null,
+	});
+	const rects: Rect[] = [];
+	for (const second of [when.start, (when.start + when.end) / 2, Math.max(when.start, when.end - 0.05)]) {
+		for (const box of renderer.layout(Math.round(second * FPS))) {
+			if (box.node.kind !== 'captions' || !box.visible || box.values.opacity <= 0 || (box.node as { hidden?: boolean }).hidden) continue;
+			rects.push(rectOf(box));
+		}
+	}
+	return rects;
+}
+
+/**
+ * Where a title goes: lower thirds and name tags on the bottom of the title-safe box, moved up
+ * above the captions when they would meet; with no room left in the lower part of the frame, the
+ * upper safe band. Chapter titles are centred unless captions sit there.
+ */
+function titleArea(input: TitleInput, frame: Frame, document: ClipDocument, when: Timing, ctx: Pick<OpContext, 'media'> | undefined): Box {
+	const safe = titleSafe(frame);
+	const rects = captionRects(document, when, ctx);
+	const { height } = measureTitle(input, frame, safe.width);
+	const gap = Math.round(Math.min(frame.width, frame.height) * 0.03);
+	const hits = (top: number, bottom: number) => rects.filter((rect) => rect.y0 < bottom + gap && rect.y1 > top - gap);
+	const band = (top: number): Box => ({ x: safe.x, y: r2(top), width: safe.width, height: r2(height) });
+	if (input.kind === 'chapter') {
+		const top = safe.y + (safe.height - height) / 2;
+		if (!hits(top, top + height).length) return safe;
+	} else {
+		let bottom = safe.y + safe.height;
+		for (let guard = 0; guard < 8; guard++) {
+			const found = hits(bottom - height, bottom);
+			if (!found.length) break;
+			bottom = Math.min(...found.map((rect) => rect.y0)) - gap;
+		}
+		if (bottom - height >= Math.max(safe.y, frame.height * 0.45)) return band(bottom - height);
+	}
+	let top = safe.y;
+	for (let guard = 0; guard < 8; guard++) {
+		const found = hits(top, top + height);
+		if (!found.length) break;
+		top = Math.max(...found.map((rect) => rect.y1)) + gap;
+	}
+	return band(Math.min(top, safe.y + safe.height - height));
+}
 
 const BUILDERS: Record<string, Builder> = {
 	add_shape: {
@@ -146,10 +216,18 @@ const BUILDERS: Record<string, Builder> = {
 		build: (input: GraphInput, frame, area, duration) => buildGraph(input, frame, area, duration),
 		title: (input: GraphInput) => `Graph of ${input.expr}`,
 	},
+	add_title: {
+		name: 'add_title',
+		schema: titleInput,
+		build: (input: TitleInput, frame, area, duration) => buildTitle(input, frame, area, duration),
+		title: (input: TitleInput) => titleName(input),
+		area: titleArea,
+		ownExit: true,
+	},
 };
 
 /** Dựng group của một visual từ op + input đã kiểm. */
-async function visualNode(op: string, input: Record<string, unknown>, when: Timing, frame: { width: number; height: number }, document: ClipDocument): Promise<Node> {
+async function visualNode(op: string, input: Record<string, unknown>, when: Timing, frame: Frame, document: ClipDocument, ctx: Pick<OpContext, 'media'> | undefined): Promise<Node> {
 	const builder = BUILDERS[op]!;
 	// Trong khoảng chia đôi, visual không nói chỗ nào thì vào panel, không đè người nói.
 	const panel = panelRegionAt(document, when.start);
@@ -158,8 +236,9 @@ async function visualNode(op: string, input: Record<string, unknown>, when: Timi
 		input = { ...input, at: [r2(panel.x + panel.width / 2), r2(panel.y + panel.height / 2)] };
 	}
 	// Brand Kit đã áp vào clip: màu/font mặc định của builder đổi sang của kit.
-	const children = rebrand(await built(() => builder.build(input as never, frame, toPixels(region, frame), when.end - when.start)), themeFromBrand(readBrand(document)));
-	return visualGroup(builder.title(input as never), children, when, frame, { op, input });
+	const area = builder.area ? builder.area(input as never, frame, document, when, ctx) : toPixels(region, frame);
+	const children = rebrand(await built(() => builder.build(input as never, frame, area, when.end - when.start)), themeFromBrand(readBrand(document)));
+	return visualGroup(builder.title(input as never), children, when, frame, { op, input }, { ownExit: builder.ownExit });
 }
 
 function addTo(document: ClipDocument, node: Node): ClipDocument {
@@ -175,7 +254,7 @@ function addTo(document: ClipDocument, node: Node): ClipDocument {
  * `z.intersection` ra `allOf` không có. Luật chéo trường (`refine`) của module
  * chạy lại trong `superRefine`.
  */
-function visualOp<T extends z.ZodObject>(name: keyof typeof BUILDERS, schema: T, describe: (input: z.infer<T>) => string) {
+function visualOp<T extends z.ZodObject>(name: keyof typeof BUILDERS, schema: T, describe: (input: z.infer<T>) => string, limits?: { min?: number; max?: number }) {
 	return {
 		name,
 		input: z.object({ op: z.literal(name), ...timing, ...schema.shape }).superRefine((value, ctx) => {
@@ -186,10 +265,10 @@ function visualOp<T extends z.ZodObject>(name: keyof typeof BUILDERS, schema: T,
 		describe,
 		async apply(document: ClipDocument, input: z.infer<T> & { start?: number; end?: number; quote?: string; op: string }, ctx?: OpContext) {
 			const frame = frameOf(document);
-			const when = clamp(await resolveTiming(document, ctx, input), frame.duration);
+			const when = clamp(await resolveTiming(document, ctx, input, limits), frame.duration);
 			// `quote` đi vào mark cùng input: update_visual dựng lại vẫn biết visual minh hoạ câu nào.
 			const { op: _op, start: _start, end: _end, ...spec } = input as Record<string, unknown>;
-			return addTo(document, await visualNode(name, spec, when, frame, document));
+			return addTo(document, await visualNode(name, spec, when, frame, document, ctx));
 		},
 	};
 }
@@ -199,6 +278,8 @@ export const addDiagram = visualOp('add_diagram', diagramInput, (input) => `Add 
 export const addChart = visualOp('add_chart', chartInput, (input) => `Add a ${input.type} chart${input.title ? `: ${input.title}` : ''}`);
 export const addGraph = visualOp('add_graph', graphInput, (input) => `Plot y = ${input.expr}`);
 export const addIcon = visualOp('add_icon', iconInput, (input) => `Add the ${input.name} icon${input.motion && input.motion !== 'none' ? ` (${input.motion})` : ''}`);
+// A title stays up long enough to read a name and role (5.5 s), never longer than 8 s.
+export const addTitle = visualOp('add_title', titleInput, (input) => `Add a ${input.kind === 'chapter' ? 'chapter title' : input.kind === 'nameTag' ? 'name tag' : 'lower third'}: ${input.title}`, { min: 5.5, max: 8 });
 export const addLottie = visualOp('add_lottie', lottieInput, (input) => `Add the ${input.animation.split('/').pop()} animation`);
 // 3D phẳng vẽ CPU: agent không dùng nữa (spec code-scenes: 3D của agent là code
 // three.js qua add_3d_scene). Op giữ nguyên cho document cũ và update_visual.
@@ -222,22 +303,24 @@ export const updateVisual = {
 		end: z.number().finite().min(0).optional(),
 	}),
 	describe: () => 'Update a visual',
-	async apply(document: ClipDocument, input: UpdateVisual) {
+	async apply(document: ClipDocument, input: UpdateVisual, ctx?: OpContext) {
 		const found = byId(document, input.id);
 		const mark = (found?.entity.marks as { visual?: { op?: string; input?: Record<string, unknown> } } | undefined)?.visual;
 		if (!found || found.tag !== 'group' || !mark?.op || !BUILDERS[mark.op]) {
-			throw new OpFailure(`"${input.id}" is not a visual made with add_shape, add_icon, add_lottie, add_diagram, add_chart, add_graph or add_3d.`);
+			throw new OpFailure(`"${input.id}" is not a visual made with add_shape, add_icon, add_lottie, add_diagram, add_chart, add_graph, add_title or add_3d.`);
 		}
 		const builder = BUILDERS[mark.op]!;
 		const merged = { ...(mark.input ?? {}), ...input.changes };
-		const parsed = builder.schema.safeParse(merged);
+		// `quote` rides in the mark next to the builder's input; strict schemas (add_title) reject it.
+		const { quote: _quote, ...spec } = merged;
+		const parsed = builder.schema.safeParse(spec);
 		if (!parsed.success) throw new OpFailure(parsed.error.issues[0]?.message ?? 'Those changes are not valid for this visual.');
 		const frame = frameOf(document);
 		const when = clamp({ start: input.start ?? (found.entity.start as number), end: input.end ?? (found.entity.end as number) }, frame.duration);
 		const next = clone(document);
 		const target = byId(next, input.id)!;
 		const quote = typeof merged.quote === 'string' ? { quote: merged.quote } : {};
-		const fresh = await visualNode(mark.op, { ...(parsed.data as Record<string, unknown>), ...quote }, when, frame, document);
+		const fresh = await visualNode(mark.op, { ...(parsed.data as Record<string, unknown>), ...quote }, when, frame, document, ctx);
 		// Giữ danh tính, chỗ trong cây, và mọi thứ người dùng đã đặt trên group
 		// (kéo, đổi cỡ, xoay, keyframe riêng): chỉ thay nội dung bên trong.
 		const kept = Object.fromEntries(

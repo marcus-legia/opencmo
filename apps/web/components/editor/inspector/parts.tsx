@@ -6,7 +6,8 @@
  * `delete_element`; lên/xuống = `move_part`.
  */
 
-import { ANIMATION_TYPES } from "@opencmo/clip-doc";
+import { ANIMATION_TYPES, UNIT_ANIMATION_TYPES, type ANIMATION_UNITS } from "@opencmo/clip-doc";
+import { UNIT_STEP, unitTiming } from "@opencmo/clip-render";
 
 import { EffectParams, ScopesPanel } from "./adjust";
 import {
@@ -387,8 +388,116 @@ const ANIMATION_LABEL: Record<string, string> = {
   highlightPop: "Highlight word",
 };
 const TEXT_ONLY = new Set(["appearWord", "appearChar", "scramble", "typewriter", "wordSlide", "highlightPop"]);
-/** Animation theo từ (E4): thời lượng mặc định = số từ × giây mỗi từ. */
+/** Per-word animations (E4): default duration = words × seconds per word. */
 const PER_WORD = new Set(["typewriter", "wordSlide", "highlightPop"]);
+
+// Per-unit animation of a text node: by letter/word/line, in an order, with a named gap (never seconds).
+type Unit = (typeof ANIMATION_UNITS)[number];
+const UNIT_TYPES = new Set<string>(UNIT_ANIMATION_TYPES);
+const MASKABLE = new Set(["slideUp", "slideDown"]);
+const UNIT_OPTIONS = [
+  { value: "whole", label: "Whole" },
+  { value: "char", label: "Letter" },
+  { value: "word", label: "Word" },
+  { value: "line", label: "Line" },
+] as const;
+const ORDER_OPTIONS = [
+  { value: "first", label: "First" },
+  { value: "center", label: "Middle" },
+  { value: "last", label: "Last" },
+  { value: "random", label: "Random" },
+] as const;
+const GAPS = { tight: 0.6, normal: 1, loose: 1.6 } as const;
+type Gap = keyof typeof GAPS;
+const GAP_OPTIONS = [
+  { value: "tight", label: "Tight" },
+  { value: "normal", label: "Normal" },
+  { value: "loose", label: "Loose" },
+] as const;
+const UNIT_FIELDS = { unit: null, order: null, step: null, mask: null };
+
+/** What plays when no duration is written: 1 s, or for a per-unit text animation the renderer's default. */
+function defaultDuration(ctx: InspectorContext, animation: Entity): number {
+  const unit = animation.unit as Unit | undefined;
+  if (!unit || ctx.node.kind !== "text") return 1;
+  const seconds = unitTiming(String(ctx.node.text ?? ""), unit, animation.step as number | undefined).duration;
+  return Math.round(seconds * 100) / 100;
+}
+
+/** `step` for a named gap; Normal is the renderer's default, so it is left unwritten. */
+function gapStep(unit: Unit, gap: Gap): number | null {
+  if (gap === "normal") return null;
+  return Math.min(0.5, Math.max(0.02, Math.round(UNIT_STEP[unit] * GAPS[gap] * 1000) / 1000));
+}
+
+/** The named gap closest to a written `step` (the Assistant may write any value in range). */
+function gapOf(unit: Unit, step: unknown): Gap {
+  if (typeof step !== "number") return "normal";
+  const ratio = step / UNIT_STEP[unit];
+  return (Object.keys(GAPS) as Gap[]).reduce((best, gap) => (Math.abs(GAPS[gap] - ratio) < Math.abs(GAPS[best] - ratio) ? gap : best), "normal");
+}
+
+/** Changing the type drops unit fields the new type cannot carry, so the document stays valid. */
+function typeProps(animation: Entity, type: string): Record<string, unknown> {
+  if (!animation.unit) return { type };
+  if (!UNIT_TYPES.has(type)) return { type, ...UNIT_FIELDS };
+  return MASKABLE.has(type) ? { type } : { type, mask: null };
+}
+
+function UnitRows({ ctx, animation, index }: { ctx: InspectorContext; animation: Entity; index: number }) {
+  const unit = animation.unit as Unit | undefined;
+  return (
+    <>
+      <Row label="By">
+        <SelectField
+          label="Animate by"
+          testid={`animation-${index}-unit`}
+          value={unit ?? "whole"}
+          options={UNIT_OPTIONS}
+          onChange={(value) =>
+            setProps(ctx, animation, value === "whole" ? UNIT_FIELDS : { unit: value, step: gapStep(value, unit ? gapOf(unit, animation.step) : "normal") })
+          }
+        />
+      </Row>
+      {unit ? (
+        <>
+          <Row label="Order">
+            <SelectField
+              label="Order"
+              testid={`animation-${index}-order`}
+              value={(animation.order as string | undefined) ?? "first"}
+              options={ORDER_OPTIONS}
+              onChange={(value) => setProps(ctx, animation, { order: value === "first" ? null : value })}
+            />
+          </Row>
+          <Row label="Gap">
+            <SelectField
+              label="Gap between units"
+              testid={`animation-${index}-gap`}
+              value={gapOf(unit, animation.step)}
+              options={GAP_OPTIONS}
+              onChange={(value) => setProps(ctx, animation, { step: gapStep(unit, value) })}
+            />
+          </Row>
+          {MASKABLE.has(String(animation.type)) ? (
+            <Row label="Mask">
+              <SelectField
+                label="Mask each line"
+                testid={`animation-${index}-mask`}
+                value={animation.mask === true ? "on" : "off"}
+                options={[
+                  { value: "off", label: "Off" },
+                  { value: "on", label: "Reveal from line edge" },
+                ]}
+                onChange={(value) => setProps(ctx, animation, { mask: value === "on" })}
+              />
+            </Row>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
 
 export function AnimationsSection({ ctx }: { ctx: InspectorContext }) {
   const animations = list(ctx.node, "animations");
@@ -411,7 +520,7 @@ export function AnimationsSection({ ctx }: { ctx: InspectorContext }) {
               testid={`animation-${index}-type`}
               value={String(animation.type)}
               options={options}
-              onChange={(value) => setProps(ctx, animation, { type: value })}
+              onChange={(value) => setProps(ctx, animation, typeProps(animation, value))}
             />
           </PartHead>
           <Row label="Phase">
@@ -424,9 +533,10 @@ export function AnimationsSection({ ctx }: { ctx: InspectorContext }) {
             />
           </Row>
           <Row label="Timing">
-            <NumberField label="Dur" value={Number(animation.duration ?? 1)} step={0.1} min={0} unit="s" onCommit={(value) => setProps(ctx, animation, { duration: value })} />
+            <NumberField label="Dur" value={Number(animation.duration ?? defaultDuration(ctx, animation))} step={0.1} min={0} unit="s" onCommit={(value) => setProps(ctx, animation, { duration: value })} />
             <NumberField label="Delay" value={Number(animation.delay ?? 0)} step={0.1} min={0} unit="s" onCommit={(value) => setProps(ctx, animation, { delay: value || null })} />
           </Row>
+          {kind === "text" && UNIT_TYPES.has(String(animation.type)) ? <UnitRows ctx={ctx} animation={animation} index={index} /> : null}
           {PER_WORD.has(String(animation.type)) ? (
             <Row label="Per word">
               <NumberField

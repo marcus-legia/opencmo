@@ -2,6 +2,7 @@ import { validate, type ClipDocument } from "@opencmo/clip-doc";
 import { describe, expect, it } from "vitest";
 
 import { readCaptionState, readCaptionStyle } from "./captions";
+import { checkDocument } from "./check";
 import { nodes, sceneOf } from "./doc";
 import { OpError, applyOps, captionsOnTop, describeOp, type OpContext } from "./ops";
 import { fitCamera, readFrame } from "./reframe";
@@ -928,6 +929,52 @@ describe("quote: visual neo vào câu người nói", () => {
     const range = (document.stage.children[0] as unknown as { marks: { layout: { ranges: { start: number; end: number }[] } } }).marks.layout.ranges[0]!;
     expect(range.start).toBeCloseTo(8, 1);
     expect(range.end - range.start).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("add_title", () => {
+  type Child = Record<string, unknown> & { name?: string; x: number; y: number; width: number; height: number };
+  const titleIn = (document: ClipDocument) =>
+    (document.stage.children[0] as unknown as { children: Record<string, unknown>[] }).children.find((node) => (node.marks as { visual?: { op: string } } | undefined)?.visual?.op === "add_title")!;
+
+  it("quote: starts when the words are spoken and holds 5.5 s; a missing quote fails like other visuals", async () => {
+    const { document } = await applyOps(SOURCE, [{ op: "add_title", title: "Linh", sub: "Founder, Paylane", quote: "you need" }] as never, memoryContext());
+    const group = titleIn(document);
+    expect(group.start).toBeCloseTo(8, 1);
+    expect((group.end as number) - (group.start as number)).toBeCloseTo(5.5, 1);
+    expect((group.marks as { visual: { input: { quote: string } } }).visual.input.quote).toBe("you need");
+    await expect(applyOps(SOURCE, [{ op: "add_title", title: "Linh", quote: "compound interest wins" }] as never, memoryContext())).rejects.toThrow(/not in this clip's transcript/);
+  });
+
+  it("moves above captions in the lower third (16:9) and stays clean in check", async () => {
+    const wide = variant((scene) => {
+      scene.width = 1920;
+      scene.height = 1080;
+    });
+    const { document } = await applyOps(wide, [{ op: "add_title", start: 4, end: 10, title: "Nguyễn Thị Hương", sub: "Founder, Episode 12", look: "card" }] as never, memoryContext());
+    const children = titleIn(document).children as Child[];
+    // Classic captions at the bottom of a 1080-high frame start at y = 880.
+    const bottom = Math.max(...children.map((child) => child.y + child.height));
+    expect(bottom).toBeLessThan(880);
+    expect(Math.min(...children.map((child) => child.y))).toBeGreaterThan(1080 * 0.45);
+    const report = checkDocument(document, { duration: () => 30, transcript: () => normalize(TRANSCRIPT) });
+    const bad = report.issues.filter((issue) => ["text-unsafe", "caption-overlap", "captions-covered", "covers-speaker"].includes(issue.code));
+    expect(bad).toEqual([]);
+  });
+
+  it("lower third and chapter on a vertical clip: no text-unsafe, caption-overlap, captions-covered or covers-speaker", async () => {
+    const { document } = await applyOps(
+      SOURCE,
+      [
+        { op: "add_title", start: 1, end: 7, title: "Nguyễn Thị Hương", sub: "Founder, Episode 12" },
+        { op: "add_title", start: 9, end: 15, kind: "chapter", title: "Why pricing matters", sub: "Chapter 2", look: "kicker" },
+        { op: "add_title", start: 16, end: 22, kind: "nameTag", title: "Linh", sub: "Founder, Paylane", look: "kicker", side: "right" },
+      ] as never,
+      memoryContext(),
+    );
+    const report = checkDocument(document, { duration: () => 30, transcript: () => normalize(TRANSCRIPT) });
+    const bad = report.issues.filter((issue) => ["text-unsafe", "caption-overlap", "captions-covered", "covers-speaker"].includes(issue.code));
+    expect(bad).toEqual([]);
   });
 });
 

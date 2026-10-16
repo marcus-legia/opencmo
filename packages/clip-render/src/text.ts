@@ -27,8 +27,10 @@ import type { Paint, Shadow, Stroke, TextNode, TextRange } from '@opencmo/clip-d
 
 import { hex, parseColor } from './color.ts';
 import { FONTS } from './fonts.ts';
-import type { RNode } from './tree.ts';
+import { curve } from './easing.ts';
+import { FPS, type RNode, type UnitFx } from './tree.ts';
 import type { Ctx2D } from './types.ts';
+import { graphemes, unitProgress, unitRanks } from './units.ts';
 
 /** Những gì dàn dòng cần từ canvas: đặt font và đo. */
 export type Measurer = Pick<Ctx2D, 'save' | 'restore'> & {
@@ -42,6 +44,9 @@ export type TextMetricsLike = {
   width: number;
   fontBoundingBoxAscent: number;
   fontBoundingBoxDescent: number;
+  /** Real glyph bounds (marks above "ễ" reach past the font box); both canvases provide them. */
+  actualBoundingBoxAscent?: number;
+  actualBoundingBoxDescent?: number;
 };
 
 type Style = {
@@ -358,32 +363,50 @@ export function drawText(
     ctx.restore();
   }
 
-  // Animation theo từ (E4): mỗi từ có thể dời, phóng quanh tâm, mờ, đổi màu — áp ở mọi lượt vẽ.
-  const tweakOf = wordTweaks(r, layout);
+  // Per-word / per-unit animation: each word (or letter) can move, scale around a centre, fade,
+  // blur, change color or be clipped to its line — applied in every pass below.
+  const fx = r.unitFx;
+  const words = fx?.unit === 'char' ? letters(ctx, layout.words, baseline) : layout.words;
+  const tweakOf = fx ? unitTweaks(ctx, fx, words, layout.words, baseline) : wordTweaks(r, layout);
   const enter = (word: Word): { alpha: number; color?: string } | null => {
     const tweak = tweakOf(word);
     if (!tweak) return null;
     const top = word.y - (baseline === 'middle' ? word.height / 2 : baseline === 'bottom' ? word.height : baseline === 'alphabetic' ? word.ascent : 0);
-    const cx = word.x + word.width / 2;
-    const cy = top + word.height / 2;
+    const cx = tweak.cx ?? word.x + word.width / 2;
+    const cy = tweak.cy ?? top + word.height / 2;
     ctx.save();
+    if (tweak.clip) {
+      ctx.beginPath();
+      ctx.rect(...tweak.clip);
+      ctx.clip();
+    }
+    if (tweak.blur) ctx.filter = `${ctx.filter && ctx.filter !== 'none' ? `${ctx.filter} ` : ''}blur(${tweak.blur}px)`;
     ctx.translate(cx + tweak.dx, cy + tweak.dy);
     ctx.scale(tweak.scale, tweak.scale);
     ctx.translate(-cx, -cy);
     return tweak;
   };
 
+  // The font is set outside each word's save/restore and only when the style changes: setting it
+  // parses a CSS font string, and per-letter animation would otherwise do that for every letter.
+  let current: Style | null = null;
+  const font = (style: Style) => {
+    if (style !== current) applyFont(ctx, (current = style), baseline);
+  };
+
   // Lượt 1: bóng.
   ctx.save();
-  for (const word of layout.words) {
+  current = null;
+  for (const word of words) {
+    const shadows = override<Shadow>(node, word.style.ranges, 'shadows');
+    if (!shadows.some((shadow) => !shadow.hidden)) continue;
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
     if (fade <= 0) {
       if (tweak) ctx.restore();
       continue;
     }
-    applyFont(ctx, word.style, baseline);
-    const shadows = override<Shadow>(node, word.style.ranges, 'shadows');
     const strokes = override<Stroke>(node, word.style.ranges, 'strokes').filter((stroke) => !stroke.hidden);
     const widest = strokes.reduce<Stroke | null>(
       (best, stroke) => (best === null || live(stroke, 'width', 1) > live(best, 'width', 1) ? stroke : best),
@@ -412,12 +435,13 @@ export function drawText(
 
   // Lượt 2: viền.
   ctx.save();
-  for (const word of layout.words) {
+  current = null;
+  for (const word of words) {
     const strokes = override<Stroke>(node, word.style.ranges, 'strokes');
     if (!strokes.length) continue;
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
-    applyFont(ctx, word.style, baseline);
     for (const stroke of strokes) {
       if (stroke.hidden || fade <= 0) continue;
       const composite = ctx.globalCompositeOperation;
@@ -434,12 +458,14 @@ export function drawText(
 
   // Lượt 3: màu chữ, rồi paint.
   ctx.save();
-  for (const word of layout.words) {
+  current = null;
+  for (const word of words) {
     let color: number | null = r.values.color;
     for (const range of word.style.ranges) {
       if (typeof range.color === 'string') color = live(range, 'color', parseColor(range.color));
     }
     let paints = override<Paint>(node, word.style.ranges, 'paints');
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
     // highlightPop: từ đang tới đổi hẳn sang màu nhấn (paint của node không đè lên).
@@ -451,7 +477,6 @@ export function drawText(
       if (tweak) ctx.restore();
       continue;
     }
-    applyFont(ctx, word.style, baseline);
     if (color !== null) {
       ctx.globalAlpha = saved * fade;
       ctx.fillStyle = hex(color);
@@ -487,7 +512,165 @@ export function drawText(
   }
 }
 
-type Tweak = { dx: number; dy: number; scale: number; alpha: number; color?: string };
+type Tweak = {
+  dx: number;
+  dy: number;
+  scale: number;
+  alpha: number;
+  color?: string;
+  /** Centre to scale around when the unit is wider than the word (a whole line). */
+  cx?: number;
+  cy?: number;
+  /** px of blur on this unit only. */
+  blur?: number;
+  /** Clip box in the node's space, before the unit moves (masked reveal). */
+  clip?: [number, number, number, number];
+};
+
+const wordTop = (word: Word, baseline: string) =>
+  word.y - (baseline === 'middle' ? word.height / 2 : baseline === 'bottom' ? word.height : baseline === 'alphabetic' ? word.ascent : 0);
+
+/**
+ * Prefix widths of each word's graphemes, keyed by font and text: export draws the same title for
+ * hundreds of frames, and `measureText` per letter per frame is the cost of `unit: 'char'`.
+ */
+const PREFIXES = new Map<string, { chars: string[]; prefix: number[] }>();
+
+/** Words split into letters (graphemes), each at its kerned x inside the word; whitespace dropped. */
+function letters(ctx: Measurer, words: Word[], baseline: string): Word[] {
+  const out: Word[] = [];
+  ctx.save();
+  for (const word of words) {
+    if (!word.chars.trim()) continue;
+    applyFont(ctx, word.style, baseline);
+    const key = `${ctx.font}|${ctx.letterSpacing}|${word.chars}`;
+    let cached = PREFIXES.get(key);
+    if (!cached) {
+      const chars = graphemes(word.chars);
+      const prefix = [0];
+      let text = '';
+      for (const char of chars) prefix.push(ctx.measureText((text += char)).width);
+      if (PREFIXES.size >= 2048) PREFIXES.delete(PREFIXES.keys().next().value!);
+      PREFIXES.set(key, (cached = { chars, prefix }));
+    }
+    const { chars, prefix } = cached;
+    chars.forEach((char, index) => {
+      if (!char.trim()) return;
+      out.push({ ...word, chars: char, x: word.x + prefix[index]!, width: prefix[index + 1]! - prefix[index]! });
+    });
+  }
+  ctx.restore();
+  return out;
+}
+
+/**
+ * Clip box of each line (keyed by `word.y`) for a masked reveal: the font box joined with the real
+ * glyph box, so the marks of "ễ" or "Ỗ" that rise above the font's ascent are not cut, plus 0.08 em.
+ * Falls back to the font box where the canvas has no `actualBoundingBox*`.
+ */
+export function lineMasks(ctx: Measurer, words: Word[], baseline: string): Map<number, [number, number, number, number]> {
+  const boxes = new Map<number, { x0: number; x1: number; top: number; bottom: number; em: number }>();
+  ctx.save();
+  for (const word of words) {
+    if (!word.chars.trim()) continue;
+    applyFont(ctx, word.style, baseline);
+    const metrics = ctx.measureText(word.chars);
+    const anchor = Math.round(word.y + word.drop);
+    const fontTop = wordTop(word, baseline);
+    const top = Math.min(fontTop, metrics.actualBoundingBoxAscent === undefined ? fontTop : anchor - metrics.actualBoundingBoxAscent);
+    const bottom = Math.max(fontTop + word.height, metrics.actualBoundingBoxDescent === undefined ? -Infinity : anchor + metrics.actualBoundingBoxDescent);
+    const box = boxes.get(word.y);
+    if (box) {
+      box.x0 = Math.min(box.x0, word.x);
+      box.x1 = Math.max(box.x1, word.x + word.width);
+      box.top = Math.min(box.top, top);
+      box.bottom = Math.max(box.bottom, bottom);
+      box.em = Math.max(box.em, word.style.size);
+    } else boxes.set(word.y, { x0: word.x, x1: word.x + word.width, top, bottom, em: word.style.size });
+  }
+  ctx.restore();
+  const out = new Map<number, [number, number, number, number]>();
+  for (const [y, box] of boxes) {
+    const pad = box.em * 0.08;
+    out.set(y, [box.x0 - pad, box.top - pad, box.x1 - box.x0 + 2 * pad, box.bottom - box.top + 2 * pad]);
+  }
+  return out;
+}
+
+const POP_IN = curve(0.34, 1.56, 0.64, 1);
+const POP_OUT = curve(0.36, 0, 0.66, -0.56);
+/** Same ease-out as `wordSlide`, so `slideUp` + `unit: 'word'` can replace it frame for frame. */
+const easeOut = (p: number) => 1 - (1 - p) ** 3;
+
+/**
+ * Per-unit tweaks of a `unitFx` animation. Units are letters, non-blank words, or lines (words
+ * sharing a `y`); each starts `rank × step` after the first and runs `total − step × (n − 1)`
+ * (at least 0.15 s). Moves are 0.6 × the unit's height, like `wordSlide`; a masked slide travels
+ * the whole line box instead and does not fade, so the text rises from behind an edge.
+ */
+function unitTweaks(ctx: Measurer, fx: UnitFx, words: Word[], all: Word[], baseline: string): (word: Word) => Tweak | null {
+  const units: Word[][] = [];
+  const unitOf = new Map<Word, number>();
+  if (fx.unit === 'line') {
+    const rows = new Map<number, number>();
+    for (const word of words) {
+      if (!word.chars.trim()) continue;
+      let index = rows.get(word.y);
+      if (index === undefined) rows.set(word.y, (index = units.push([]) - 1));
+      units[index]!.push(word);
+      unitOf.set(word, index);
+    }
+  } else {
+    for (const word of words) if (word.chars.trim()) unitOf.set(word, units.push([word]) - 1);
+  }
+  const n = units.length;
+  const ranks = unitRanks(n, fx.order, fx.seed);
+  const length = Math.max(fx.total - fx.step * (n - 1), 0.15 * FPS);
+  const masks = fx.mask ? lineMasks(ctx, all, baseline) : null;
+  const centres = units.map((unit) => {
+    const x0 = Math.min(...unit.map((word) => word.x));
+    const x1 = Math.max(...unit.map((word) => word.x + word.width));
+    const top = Math.min(...unit.map((word) => wordTop(word, baseline)));
+    const height = Math.max(...unit.map((word) => word.height));
+    return { cx: (x0 + x1) / 2, cy: top + height / 2, height };
+  });
+  return (word) => {
+    const index = unitOf.get(word);
+    if (index === undefined) return null;
+    const p = unitProgress(fx.t, ranks[index]!, fx.step, length);
+    // At rest (done coming in, or not yet leaving) a unit draws as is: no save/transform per letter.
+    if (fx.out ? p <= 0 : p >= 1) return null;
+    const { cx, cy, height } = centres[index]!;
+    const base = { dx: 0, dy: 0, scale: 1, alpha: 1, cx, cy };
+    // far: 1 = the preset's far state, 0 = the node at rest.
+    const e = easeOut(p);
+    const far = fx.out ? e : 1 - e;
+    switch (fx.type) {
+      case 'fade':
+        return { ...base, alpha: 1 - far };
+      case 'grow':
+        return { ...base, scale: 1 - 0.5 * far };
+      case 'blur':
+        return { ...base, blur: 24 * far };
+      case 'pop': {
+        const t = fx.out ? 1 - POP_OUT(p) : POP_IN(p);
+        return { ...base, scale: 0.6 + 0.4 * t, alpha: Math.min(1, Math.max(0, fx.out ? 1 - p : p * 2)) };
+      }
+      default: {
+        const clip = masks?.get(word.y);
+        const travel = clip ? clip[3] : height * 0.6;
+        const sign = fx.out ? -1 : 1;
+        const shift = sign * travel * far;
+        const move =
+          fx.type === 'slideUp' ? { dy: shift }
+          : fx.type === 'slideDown' ? { dy: -shift }
+          : fx.type === 'slideLeft' ? { dx: shift }
+          : { dx: -shift };
+        return { ...base, ...move, alpha: clip ? 1 : 1 - far, clip };
+      }
+    }
+  };
+}
 
 /**
  * Biến đổi của từng từ ở khung này (E4, học Palmier TextAnimation theo từ):
@@ -562,10 +745,12 @@ export function revealWords(text: string, ratio: number): string {
   return pieces.slice(0, shown * 2 - 1).join('');
 }
 
+/** Reveal by user-perceived character, so an emoji or a decomposed "ễ" never shows half-drawn. */
 export function revealChars(text: string, ratio: number): string {
   if (ratio >= 1) return text;
   if (ratio <= 0) return '';
-  return text.slice(0, Math.floor(ratio * text.length));
+  const chars = graphemes(text);
+  return chars.slice(0, Math.floor(ratio * chars.length)).join('');
 }
 
 const SCRAMBLE_SET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!%#_';
@@ -574,10 +759,11 @@ const ACTIVE = 0.3;
 const REFRESHES = 30;
 
 /**
- * Ký tự ngẫu nhiên ổn định dần từ trái sang. Nhịp giống fork: ký tự thứ c ổn
- * định ở `ceil((c · (1 − 0.3) / n + 0.3) · 30) / 30`, dấu cách giữ nguyên.
- * Còn ký tự ngẫu nhiên thì khác: thuật toán băm của fork không phải thứ chép
- * được (clean-room), và cũng không ai dựa vào nó. Ảnh vàng chỉ so lúc đã ổn định.
+ * Random characters settling left to right. Same rhythm as the fork: grapheme c of n settles at
+ * `ceil((c · (1 − 0.3) / n + 0.3) · 30) / 30`; whitespace stays. The random characters differ: the
+ * fork's hash was not ours to copy (clean-room) and nobody relies on it; the golden images only
+ * compare settled text. Works per grapheme, so an emoji or a decomposed "ễ" is replaced or shown
+ * whole; for ASCII that is per code unit, so the output is what it was before graphemes.
  */
 export function scramble(text: string, ratio: number): string {
   if (!text.length) return '';
@@ -585,14 +771,16 @@ export function scramble(text: string, ratio: number): string {
   const step = Math.floor(ratio * REFRESHES);
   let seed = 0;
   for (const char of text) seed = (seed * 31 + char.charCodeAt(0)) >>> 0;
+  const chars = graphemes(text);
   let out = '';
-  for (let index = 0; index < text.length; index++) {
-    const settle = Math.ceil(((index * (1 - ACTIVE)) / text.length + ACTIVE) * REFRESHES) / REFRESHES;
-    if (ratio >= settle || text[index] === ' ') {
-      out += text[index];
+  for (let index = 0; index < chars.length; index++) {
+    const char = chars[index]!;
+    const settle = Math.ceil(((index * (1 - ACTIVE)) / chars.length + ACTIVE) * REFRESHES) / REFRESHES;
+    if (ratio >= settle || !char.trim()) {
+      out += char;
       continue;
     }
-    // Xáo có hạt giống: cùng chữ, cùng vị trí, cùng nhịp → cùng ký tự (tua lại vẫn y hệt).
+    // Seeded shuffle: same text, position and tick → same character, so scrubbing back repeats it.
     let h = (seed + index * 7919 + step * 104729) >>> 0;
     h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
     h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;

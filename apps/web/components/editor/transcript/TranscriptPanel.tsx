@@ -10,6 +10,9 @@
  * editor-core. Mỗi nút là một op của registry — cùng op mà route
  * `/editor/ops`, Assistant và panel của fork dùng — nên mỗi lượt là một bước
  * Undo và đi qua autosave như mọi lượt sửa khác.
+ *
+ * "Add title" turns selected words into a name tag or lower third that appears when they are
+ * spoken: the title is pre-filled with the words, the quote is the same words.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -34,6 +37,16 @@ import {
 
 type At = [number, number];
 const key = (at: At) => `${at[0]}:${at[1]}`;
+
+/** Selected words → a title: no surrounding punctuation, at most 60 characters on a word boundary. */
+function titleFrom(text: string): string {
+  const clean = text.replace(/^[\s"'“”‘’.,;:!?…-]+|[\s"'“”‘’.,;:!?…-]+$/g, "");
+  if (clean.length <= 60) return clean;
+  const cut = clean.slice(0, 60);
+  return cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : 60).trim();
+}
+
+type TitleDraft = { title: string; sub: string; quote: string };
 
 export function TranscriptPanel({
   doc,
@@ -73,6 +86,7 @@ export function TranscriptPanel({
   // Độ chặt khi cắt chữ (học Palmier §B2): "words" chỉ cắt chữ, còn lại ăn luôn khoảng lặng hai bên.
   const [tightness, setTightness] = useState<"words" | "tight" | "balanced" | "loose">("balanced");
   const [minPause, setMinPause] = useState("0.5");
+  const [titleDraft, setTitleDraft] = useState<TitleDraft | null>(null);
 
   // Đọc lại mỗi khi document đổi — kể cả Undo, sửa từ timeline hay Assistant.
   useEffect(() => {
@@ -180,6 +194,22 @@ export function TranscriptPanel({
   const nudge = (edge: "start" | "end", seconds: number) =>
     single && act([{ op: "nudge_word", word_id: single.word.id, edge, seconds }], true);
 
+  // The quote locates the words in the clip's own transcript, so titles come from the main video only.
+  const canTitle = !elementId && selected.length > 0 && !anyRemoved;
+  const startTitle = () => {
+    const words = selected.map((entry) => entry.word.text);
+    // The first dozen words are enough to find the line; the title starts on the first one.
+    setTitleDraft({ title: titleFrom(words.join(" ")), sub: "", quote: words.slice(0, 12).join(" ").slice(0, 300) });
+  };
+  const addTitle = () => {
+    if (busy || !titleDraft || !titleDraft.title.trim()) return;
+    const sub = titleDraft.sub.trim();
+    void run([{ op: "add_title", kind: "lowerThird", title: titleDraft.title.trim().slice(0, 60), ...(sub ? { sub: sub.slice(0, 80) } : {}), quote: titleDraft.quote }]);
+    setTitleDraft(null);
+    setAnchor(null);
+    setFocus(null);
+  };
+
   const commitEdit = (word: Word, text: string) => {
     setEditing(null);
     if (text.trim() && text !== word.text) act([{ op: "edit_words", edits: [{ word_id: word.id, text }] }], true);
@@ -201,6 +231,7 @@ export function TranscriptPanel({
         } else if (event.key === "Escape") {
           setAnchor(null);
           setFocus(null);
+          setTitleDraft(null);
         }
       }}
     >
@@ -294,6 +325,45 @@ export function TranscriptPanel({
       </div>
 
       <footer className="ed2-trn-foot">
+        {titleDraft ? (
+          <div className="ed2-row ed2-wrap" data-testid="transcript-title-form">
+            <input
+              className="ed2-select ed2-grow"
+              aria-label="Title"
+              placeholder="Name or title"
+              maxLength={60}
+              autoFocus
+              data-testid="transcript-title-text"
+              value={titleDraft.title}
+              onChange={(event) => setTitleDraft({ ...titleDraft, title: event.target.value })}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Enter") addTitle();
+                if (event.key === "Escape") setTitleDraft(null);
+              }}
+            />
+            <input
+              className="ed2-select ed2-grow"
+              aria-label="Role (optional)"
+              placeholder="Role, e.g. Founder, Paylane (optional)"
+              maxLength={80}
+              data-testid="transcript-title-sub"
+              value={titleDraft.sub}
+              onChange={(event) => setTitleDraft({ ...titleDraft, sub: event.target.value })}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Enter") addTitle();
+                if (event.key === "Escape") setTitleDraft(null);
+              }}
+            />
+            <button type="button" className="ed2-btn ed2-primary" disabled={busy || !titleDraft.title.trim()} data-testid="transcript-title-add" onClick={addTitle}>
+              Add
+            </button>
+            <button type="button" className="ed2-btn" onClick={() => setTitleDraft(null)}>
+              Cancel
+            </button>
+          </div>
+        ) : null}
         {selected.length ? (
           <div className="ed2-row ed2-wrap">
             {anyKept ? (
@@ -306,6 +376,11 @@ export function TranscriptPanel({
               <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-restore"
                 onClick={() => act([{ op: "restore_words", word_ids: ids() }])}>
                 Restore
+              </button>
+            ) : null}
+            {canTitle && !titleDraft ? (
+              <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-add-title" title="A name tag that appears when these words are spoken" onClick={startTitle}>
+                Add title
               </button>
             ) : null}
             {single && !removed(single.word) ? (

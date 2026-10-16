@@ -17,6 +17,7 @@ import { createRenderer, FPS, type LayoutBox, type Mat, type Measurer, type Tran
 import { MASTER_SRC } from './doc';
 import { speakerBandAt } from './layout';
 import { activeScene } from './ops/timeline';
+import { UI_BOTTOM, UI_TOP } from './visuals/title';
 
 export type CheckIssue = {
 	severity: 'error' | 'warning';
@@ -30,6 +31,7 @@ export type CheckIssue = {
 		| 'offscreen'
 		| 'covers-speaker'
 		| 'text-overflow'
+		| 'text-unsafe'
 		| 'caption-overlap'
 		| 'captions-empty'
 		| 'captions-covered'
@@ -60,6 +62,11 @@ export type CheckMedia = {
 	/** Nguồn có tồn tại không (thư viện/manifest). Thiếu hàm thì không kiểm `missing-source`. */
 	exists?(src: string): boolean;
 };
+
+/** Title-safe inset for `text-unsafe`: a little looser than the 6 % titles are built with. */
+const SAFE_INSET = 0.05;
+/** Text outside the safe area this long is reported; a slide crossing the edge on its way in is not. */
+const UNSAFE_SECONDS = 0.5;
 
 /** Nhịp lấy mẫu: 6 frame = 0.2 giây. */
 const STEP = 6;
@@ -247,6 +254,15 @@ export function checkDocument(document: ClipDocument, media: CheckMedia, options
 	const lost: { start: number; end: number }[] = [];
 	const overlaps = new Map<string, { a: ClipNode; b: ClipNode; start: number; end: number }>();
 	const overflow = new Map<ClipNode, { start: number; end: number }>();
+	// Text in the platform UI zones (vertical) or outside title-safe: it renders, but phones cover it.
+	const vertical = scene.height > scene.width;
+	const safeRect: Rect = {
+		x0: scene.width * SAFE_INSET,
+		y0: scene.height * (vertical ? UI_TOP : SAFE_INSET),
+		x1: scene.width * (1 - SAFE_INSET),
+		y1: scene.height * (1 - (vertical ? UI_BOTTOM : SAFE_INSET)),
+	};
+	const unsafe = new Map<ClipNode, { start: number; end: number; samples: number }>();
 	// Visual đè lên dải người nói khi đang chia đôi khung (`layout.ts`).
 	const onSpeaker = new Map<ClipNode, { start: number; end: number }>();
 	// Phụ đề trống là lỗi im lặng nhất của editor: lớp vẫn nằm trên timeline, khung
@@ -292,6 +308,14 @@ export function checkDocument(document: ClipDocument, media: CheckMedia, options
 					const run = overflow.get(box.node);
 					if (run) run.end = frame + STEP;
 					else overflow.set(box.node, { start: frame, end: frame + STEP });
+				}
+				const out = rect.x0 < safeRect.x0 || rect.x1 > safeRect.x1 || rect.y0 < safeRect.y0 || rect.y1 > safeRect.y1;
+				if (out && inside > 0) {
+					const run = unsafe.get(box.node);
+					if (run) {
+						run.end = frame + STEP;
+						run.samples++;
+					} else unsafe.set(box.node, { start: frame, end: frame + STEP, samples: 1 });
 				}
 			}
 			if (box.node.kind === 'captions' && area(rect) > 0) captions.push({ node: box.node, rect });
@@ -376,6 +400,19 @@ export function checkDocument(document: ClipDocument, media: CheckMedia, options
 			start: seconds(run.start),
 			end: seconds(Math.min(run.end, end)),
 			message: `${label(node)} runs past the edge of the frame.`,
+		});
+	}
+	for (const [node, run] of unsafe) {
+		if (run.samples * STEP < UNSAFE_SECONDS * FPS) continue;
+		issues.push({
+			severity: 'warning',
+			code: 'text-unsafe',
+			node_id: idOf(node),
+			start: seconds(run.start),
+			end: seconds(Math.min(run.end, end)),
+			message: vertical
+				? `${label(node)} sits where the platform's buttons or captions cover it on phones.`
+				: `${label(node)} sits outside the title-safe area, where players and TVs crop or cover it.`,
 		});
 	}
 	for (const node of captionLayers) {

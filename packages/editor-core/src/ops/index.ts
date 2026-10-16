@@ -45,7 +45,7 @@ import { addIntro } from '../motion/intro';
 import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
 import { createVideo } from './create-video';
-import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, stagger, updateVisual } from './visuals';
+import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
@@ -176,6 +176,7 @@ const REGISTRY = [
 	addExplainer,
 	attachTranscript,
 	syncExplainer,
+	addTitle,
 ] as const;
 
 type Definition = {

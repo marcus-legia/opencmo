@@ -965,6 +965,22 @@
       ],
       "fixtures": [],
       "oracle": "opencmo"
+    },
+    {
+      "id": "anim-units",
+      "checklist": [
+        "ANI-05"
+      ],
+      "phase": "A3",
+      "text": true,
+      "times": [
+        0.25,
+        0.5,
+        1.5
+      ],
+      "fixtures": [],
+      "oracle": "opencmo",
+      "perTarget": true
     }
   ]
 }

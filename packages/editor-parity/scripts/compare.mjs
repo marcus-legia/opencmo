@@ -139,7 +139,10 @@ for (const sample of samples) {
     console.log(`bỏ   ${sample.id}: ${sample.oracleBroken}`);
     continue;
   }
-  const refFolder = join(referenceDir, sample.id);
+  // `perTarget`: an OpenCMO-drawn sample whose text moves at sub-pixel positions. Skia and Chromium
+  // rasterize it further apart (tile 20-44) than a real regression is from either (tile 50+), so one
+  // reference cannot gate both targets: each target has its own, approved by eye.
+  const refFolder = sample.perTarget ? join(referenceDir, sample.id, flags.target ?? 'browser') : join(referenceDir, sample.id);
   const candFolder = join(candidateDir, sample.id);
   if (!existsSync(refFolder)) {
     failed++;
