@@ -657,6 +657,25 @@
       ]
     },
     {
+      "id": "transition-whip",
+      "checklist": [
+        "TRN-01",
+        "SEQ-01"
+      ],
+      "phase": "A2",
+      "times": [
+        1.9,
+        1.95,
+        2,
+        2.05,
+        2.1
+      ],
+      "fixtures": [
+        "poster.png"
+      ],
+      "oracle": "opencmo"
+    },
+    {
       "id": "adjustment",
       "checklist": [
         "ADJ-01"

@@ -26,7 +26,7 @@ export const CAPABILITIES = {
 	'speaker.punchIn': { track: 'B', ready: true, ops: ['punch_in'] },
 	'list.reveal': { track: 'B', ready: true, ops: ['add_list'] },
 	// The transition sits on the left clip of a cut.
-	'transition.whip': { track: 'B', ready: false, ops: ['set_props'] },
+	'transition.whip': { track: 'B', ready: true, ops: ['set_props'] },
 	'layout.split': { track: 'B', ready: true, ops: ['set_layout'] },
 	// The Assistant's `capture_page` tool; no document op.
 	'proof.capture': { track: 'C', ready: false, ops: [] },

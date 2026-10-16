@@ -71,6 +71,10 @@ Hai cờ trong manifest:
   the sample keeps one reference per target, `references/anim-units/{node,browser}/`, both drawn by
   clip-render and approved by eye. Browser: tile 14, because Chromium 141 in this repo's dev sandbox drew
   plain text samples up to tile 8.25 off the CI-drawn references; Node: the usual text threshold.
+- `transition-whip` (`oracle: "opencmo"`): the whip draws each shot six times at alpha 1/(i+1) for its
+  motion blur, and Chromium and Node round those translucent passes differently: a uniform mean of
+  1.0–1.2 over the whole frame with no edge out of place (diff looked at, 2026-10-16). Its own
+  `mean: 1.3`; the tile threshold stays 4, so a moved or missing shot still fails.
 - Drawing references on a dev machine: hide system copies of the bundled fonts first (a system Inter,
   e.g. `/usr/share/fonts/opentype/inter`, wins over `inter.woff2` in `@napi-rs/canvas` and widens text by
   tile ~100). The bundled brand fonts are Latin subsets: Vietnamese letters (ư, ơ, ễ…) come from a

@@ -755,6 +755,10 @@ function gradeOverlays(ctx: Ctx2D, r: RNode): void {
 
 // ------------------------------------------------------------------ chuyển cảnh
 
+/** Whip: motion-blur samples per shot (the budget: at most 6), and the smear at mid-way as a share of the width. */
+const WHIP_TAPS = 6;
+const WHIP_BLUR = 0.18;
+
 function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
   const right = partnerOf(left);
   if (!right) return;
@@ -774,6 +778,28 @@ function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
       ctx.translate(((1 - completion) ** 2 * width * direction) | 0, 0);
       drawNode(scope, right);
       ctx.restore();
+      break;
+    }
+    case 'whip': {
+      // Both shots travel left together, fastest mid-way, smeared along the motion. Each shot is
+      // drawn at up to WHIP_TAPS offsets as a running average (tap i at alpha 1/(i+1)), so opaque
+      // footage stays opaque and the smear is a true mean of the taps.
+      const travel = completion < 0.5 ? 4 * completion ** 3 : 1 - (-2 * completion + 2) ** 3 / 2;
+      const smear = width * WHIP_BLUR * Math.sin(Math.PI * completion);
+      const taps = smear < 1 ? 1 : WHIP_TAPS;
+      const alpha = ctx.globalAlpha;
+      const shot = (node: RNode, shift: number) => {
+        for (let tap = 0; tap < taps; tap++) {
+          ctx.save();
+          // Whole pixels, as the slides: sub-pixel shifts rasterize differently in Chromium and Node.
+          ctx.translate(Math.round(shift + (taps > 1 ? (tap / (taps - 1) - 0.5) * smear : 0)), 0);
+          ctx.globalAlpha = alpha / (tap + 1);
+          drawNode(scope, node);
+          ctx.restore();
+        }
+      };
+      shot(left, -travel * width);
+      shot(right, (1 - travel) * width);
       break;
     }
     case 'fadeToBlack':
