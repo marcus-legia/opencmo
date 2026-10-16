@@ -298,6 +298,11 @@ describe('add_title', () => {
 			expect(inLength(byName('Title')).at).toBeLessThan(inLength(byName('Subtitle')).at);
 			expect(outOf(byName('Subtitle')).delay!).toBeGreaterThan(outOf(byName('Title')).delay!);
 			expect(outOf(byName('Panel')).delay ?? 0).toBeLessThan(outOf(byName('Title')).delay!);
+			// The children own the exit; a group fade on top would multiply with theirs.
+			expect(group.animations).toBeUndefined();
+			// Title and sub rise per word / line inside their line boxes (clip-render unit + mask).
+			expect((byName('Title').animations as Anim[])[0]).toMatchObject({ type: 'slideUp', unit: 'word', mask: true });
+			expect((byName('Subtitle').animations as Anim[])[0]).toMatchObject({ type: 'slideUp', unit: 'line', mask: true });
 			const reveal = Math.max(...(group.children as Child[]).map((child) => inLength(child).at + inLength(child).length));
 			expect(reveal).toBeLessThanOrEqual(motion === 'calm' ? 1.2 : 0.85);
 		}

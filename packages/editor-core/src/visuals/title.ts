@@ -6,12 +6,13 @@
  * with the width estimate below, and the exported-frame review is where real glyphs are checked.
  *
  * Motion only at build-in and build-out, still while it is read: in staggered (panel, accent,
- * title, sub), out faster and in reverse order.
+ * title, sub), out faster and in reverse order. Title and sub rise per word / line inside their
+ * line boxes (`unit` + `mask` of clip-render), so no text crosses the panel or the captions.
  */
 
 import { z } from 'zod';
 
-import { r2, strokePath, textNode, THEME, tint, wrapLabel, type Box, type Node } from './common';
+import { r2, SHADOW, strokePath, textNode, THEME, tint, wrapLabel, type Box, type Node } from './common';
 
 export const TITLE_KINDS = ['lowerThird', 'nameTag', 'chapter'] as const;
 export const TITLE_LOOKS = ['bar', 'kicker', 'card'] as const;
@@ -175,7 +176,6 @@ export function buildTitle(input: TitleInput, frame: { width: number; height: nu
 	// A short title compresses its motion so in + hold + out still fit.
 	const f = MOTION[input.motion] * Math.min(1, Math.max(0.4, duration / 2.5));
 	const place = (box: Box): Box => ({ x: left + box.x, y: top + box.y, width: box.width, height: box.height });
-	const fadeIn = (delay: number, length: number): Node => ({ type: 'fade', duration: at(length * f), ...(delay > 0 ? { delay: at(delay * f) } : {}) });
 	// Out runs from the end backwards: the larger the delay, the earlier it leaves.
 	const fadeOut = (delay: number): Node => ({ type: 'fade', phase: 'out', duration: at(0.2 * f), ...(delay > 0 ? { delay: at(delay * f) } : {}) });
 	// Grows a rect from its anchored edge (a wipe): left side grows right, right side grows left, centre from the middle.
@@ -189,6 +189,10 @@ export function buildTitle(input: TitleInput, frame: { width: number; height: nu
 		];
 	};
 
+	// The bar look has no panel behind the text: a tighter, darker shadow keeps white text readable
+	// on bright shots (looked at on a near-white frame; the default shadow washed out).
+	// A function, not a shared object: ids are stamped onto each node's own shadow.
+	const shadows = () => (input.look === 'bar' ? { shadows: [{ ...SHADOW, blur: 10, offsetY: 2, opacity: 0.85 }] } : {});
 	const out: Node[] = [];
 	for (const part of layout.parts) {
 		const box = place(part.box);
@@ -214,21 +218,25 @@ export function buildTitle(input: TitleInput, frame: { width: number; height: nu
 			const d = layout.align === 'center' ? `M ${r2(rect.x + rect.width / 2)} ${r2(y)} L ${r2(rect.x)} ${r2(y)} M ${r2(rect.x + rect.width / 2)} ${r2(y)} L ${r2(rect.x + rect.width)} ${r2(y)}` : `M ${r2(x0)} ${r2(y)} L ${r2(x1)} ${r2(y)}`;
 			out.push({ ...strokePath(d, THEME.accent, rect.height, { drawAt: at(0.1 * f), drawFor: at(0.35 * f), shadow: false }), name: 'Accent line', animations: [fadeOut(0)] });
 		} else if (part.role === 'title') {
-			// Before the unit animator lands: a short slide (0.4 em, not the preset's 100 px, which
-			// would cross the captions just below) plus a fade.
-			const rise = r2(layout.size * 0.4);
+			// Word by word, each word rising inside its own line box (the mask): the name builds without
+			// crossing the panel edge or the captions below. Steps shrink on long titles so the
+			// reveal stays short.
+			const words = Math.max(1, part.lines!.join(' ').split(/\s+/).filter(Boolean).length);
+			const step = r2(Math.max(0.02, Math.min(0.055 * f, (0.35 * f) / Math.max(1, words - 1))));
 			out.push({
 				...textNode(part.lines!.join('\n'), rect, { size: part.size!, align: layout.align, weight: 800 }),
+				...shadows(),
 				name: 'Title',
-				tracks: [{ property: 'offsetY', keyframes: [{ time: at(0.32 * f), value: rise, easing: 'easeOut' }, { time: at(0.72 * f), value: 0 }] }],
-				animations: [fadeIn(0.32, 0.4), fadeOut(0.05)],
+				animations: [{ type: 'slideUp', unit: 'word', mask: true, step, duration: at(0.3 * f + step * (words - 1)), delay: at(0.32 * f) }, fadeOut(0.05)],
 			});
 		} else {
 			const onBand = input.look === 'kicker';
 			out.push({
 				...textNode(part.lines!.join('\n'), rect, { size: part.size!, align: layout.align, weight: 600, color: onBand ? THEME.panel : THEME.text, shadow: !onBand }),
+				...(onBand ? {} : shadows()),
 				name: 'Subtitle',
-				animations: [fadeIn(0.5, 0.3), fadeOut(0.1)],
+				// Line by line from behind its line box, after the title (on the kicker: out of the band).
+				animations: [{ type: 'slideUp', unit: 'line', mask: true, duration: at(0.3 * f), delay: at(0.5 * f) }, fadeOut(0.1)],
 			});
 		}
 	}

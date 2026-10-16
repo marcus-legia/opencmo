@@ -107,6 +107,8 @@ type Builder = {
 	title(input: never): string;
 	/** Pixel area the builder draws in, when it is not the usual region/panel (titles keep clear of captions). */
 	area?(input: never, frame: Frame, document: ClipDocument, when: Timing, ctx: Pick<OpContext, 'media'> | undefined): Box;
+	/** Children animate their own exit; the group does not fade on top of it. */
+	ownExit?: boolean;
 };
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -220,6 +222,7 @@ const BUILDERS: Record<string, Builder> = {
 		build: (input: TitleInput, frame, area, duration) => buildTitle(input, frame, area, duration),
 		title: (input: TitleInput) => titleName(input),
 		area: titleArea,
+		ownExit: true,
 	},
 };
 
@@ -235,7 +238,7 @@ async function visualNode(op: string, input: Record<string, unknown>, when: Timi
 	// Brand Kit đã áp vào clip: màu/font mặc định của builder đổi sang của kit.
 	const area = builder.area ? builder.area(input as never, frame, document, when, ctx) : toPixels(region, frame);
 	const children = rebrand(await built(() => builder.build(input as never, frame, area, when.end - when.start)), themeFromBrand(readBrand(document)));
-	return visualGroup(builder.title(input as never), children, when, frame, { op, input });
+	return visualGroup(builder.title(input as never), children, when, frame, { op, input }, { ownExit: builder.ownExit });
 }
 
 function addTo(document: ClipDocument, node: Node): ClipDocument {

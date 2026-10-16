@@ -133,9 +133,19 @@ Until A1 lands, B1–B3 need nothing from A.
 - [x] **B3 — `text-unsafe` (E6).** New code in `check.ts` from the layout box (no measurer needed). Accept:
       `check.test.ts` — text at the top edge of 1080×1920 → `text-unsafe`; an `add_title` lower third and chapter →
       no `text-unsafe`, `caption-overlap`, `captions-covered`, `covers-speaker`.
-- [ ] **B4 — Titles on the unit animator (after A3 + A4).** Title text uses `slideUp` + `unit: 'word'` + `mask: true`;
+- [x] **B4 — Titles on the unit animator (after A3 + A4).** Title text uses `slideUp` + `unit: 'word'` + `mask: true`;
       kicker band reveals with a mask. Accept: tests updated; a full-size frame mid build-in looked at on a dark and a
       bright shot.
+      _Done:_ title text `slideUp` + `unit: 'word'` + `mask: true` (step 0.055 s × motion, shrunk on long titles so
+      the reveal stays short), the sub (and the kicker's text on its band) `unit: 'line'` + mask; no text crosses the
+      panel or the captions any more. Looking at the full-size exports found two problems, both fixed: the group's
+      own fade multiplied with the children's exit, so the out read as a cut (titles now own their exit; frames at
+      end − 0.2 s show sub → title → accent leaving in order), and white text in the `bar` look washed out on a
+      bright shot (tighter, darker shadow; the guide sends bright footage to `card`). Frames: 1080×1920 and
+      1920×1080, dark and bright, mid build-in / hold / mid build-out / first frame after out, in
+      [`2026-10-17-text-animator-titles-frames/`](2026-10-17-text-animator-titles-frames/) (`b-title-*`); marks of
+      "Nguyễn Thị Hương" intact at full size (`b-title-marks-fullsize.jpg`). Known nit: in the card/centred-bar
+      looks the accent line draws while the last words are still rising, so for ~0.2 s a rising descender crosses it.
 - [ ] **B5 — Editor UI (E7).** "Title" kind in `VisualsPanel.tsx` (form + edit through `update_visual`); "Add title"
       from a transcript selection in `TranscriptPanel.tsx`. Accept: typecheck, build, a Playwright step in the
       existing editor e2e if one covers the Visuals panel (otherwise a screenshot), both flows tried in the running
