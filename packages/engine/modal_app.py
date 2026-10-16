@@ -174,6 +174,8 @@ cpu_image = (
             "OPENCMO_3D": "modal",
             # Explainers: the worker makes the voice, then spawns `render_motion` below.
             "OPENCMO_MOTION": "modal",
+            # Proof B-roll: task `capture_page` calls `page_capture` below; no Chromium here.
+            "OPENCMO_CAPTURE": "modal",
         }
     )
 )
@@ -276,6 +278,19 @@ motion_image = (
         " node src/cli.ts render fixtures/vaccine.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
     )
 )
+
+# Page captures (docs/style-skills-build.md, C3): Chromium opens pages the user names and runs their
+# JavaScript, so it gets an image and a function of its own with no secrets. Only the engine's
+# `opencmo.capture` and Playwright's Chromium are in it; no Node, no ffmpeg, no fonts beyond
+# what Playwright's `--with-deps` installs plus Noto for non-Latin pages.
+CAPTURE_PLAYWRIGHT = "1.56.0"
+capture_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install("fonts-noto-core", "fonts-noto-cjk", "fonts-noto-color-emoji")
+    .pip_install(f"playwright=={CAPTURE_PLAYWRIGHT}")
+    .run_commands("playwright install --with-deps chromium")
+)
+capture_image = _with_engine(capture_image, face=False)
 
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
@@ -432,6 +447,28 @@ def render_motion(payload: dict) -> bytes:
 
     with tempfile.TemporaryDirectory(prefix="opencmo-motion-") as tmp:
         return render_bytes(payload, Path(tmp))
+
+
+@app.function(
+    image=capture_image,
+    timeout=90,
+    cpu=2,
+    memory=2048,
+    max_containers=8,
+    # No secrets: the page's JavaScript runs here. Network stays on (the page has to load), but
+    # every connection goes through `opencmo.capture.guard`, which refuses private, loopback,
+    # link-local and metadata addresses. Not `block_network=True`: the page could not load.
+)
+def page_capture(spec: dict) -> dict:
+    """`{url, width, max_height}` → `{png: bytes, boxes: dict}`. The worker's `capture_page`
+    task calls this, then moderates and stores the result itself.
+
+    Refusals leave as `CaptureError` with one of the contract's English sentences (Modal pickles
+    the message), so the worker writes the right one for the user.
+    """
+    from opencmo.capture.page import capture
+
+    return capture(spec)
 
 
 @app.cls(

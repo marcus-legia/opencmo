@@ -165,6 +165,24 @@ class TasksMixin(_Http):
         )
         return _first_task(resp.json())
 
+    def get_page_capture(self, capture_id: str) -> dict[str, Any] | None:
+        """A page capture (`page_captures`); the task checks it is its own before capturing."""
+        resp = self._send(
+            "GET", "/rest/v1/page_captures", idempotent=True, params={"id": f"eq.{capture_id}", "select": "*"}
+        )
+        return _first_row(resp.json())
+
+    def complete_page_capture(
+        self, task_id: str, attempt_id: str | None, title: str, width: int, height: int
+    ) -> bool:
+        """The capture is ready and its task done, in one transaction (paths are fixed by the RPC)."""
+        resp = self._rpc(
+            "complete_page_capture",
+            {"p_task_id": task_id, "p_attempt_id": attempt_id, "p_title": title, "p_width": width, "p_height": height},
+            idempotent=True,
+        )
+        return resp.json() is True
+
     def get_clip(self, clip_id: str) -> dict[str, Any] | None:
         resp = self._send(
             "GET", "/rest/v1/clips", idempotent=True, params={"id": f"eq.{clip_id}", "select": "*"}

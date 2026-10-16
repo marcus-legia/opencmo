@@ -1419,7 +1419,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text, 'transcribe_asset'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -1627,6 +1627,60 @@ CREATE FUNCTION public.captions_credits(p_seconds numeric) RETURNS integer
 CREATE FUNCTION public.captions_max_seconds() RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$ select 1800 $$;
+
+
+--
+-- Name: capture_create(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.capture_create(p_url text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_url text := public.normalize_capture_url(p_url);
+  v_id uuid;
+  v_task uuid;
+  v_used integer;
+begin
+  -- One lock per user: two requests at once can neither both slip under the cap nor both
+  -- create the same capture.
+  perform public.lock_credit_owner(v_user);
+  select id into v_id from public.page_captures
+  where user_id = v_user and url = v_url and status in ('pending', 'ready')
+    and created_at > now() - interval '24 hours'
+  order by created_at desc
+  limit 1;
+  if found then
+    return v_id;
+  end if;
+  select count(*) into v_used from public.page_captures
+  where user_id = v_user and created_at > now() - interval '24 hours';
+  if v_used >= public.capture_daily_limit() then
+    raise exception 'You have captured % pages in the last 24 hours, the most there is. Try again tomorrow.',
+      public.capture_daily_limit() using errcode = 'P0001';
+  end if;
+  v_id := gen_random_uuid();
+  insert into public.page_captures (id, user_id, url) values (v_id, v_user, v_url);
+  insert into public.tasks (user_id, kind, payload, status, request_id)
+  values (v_user, 'capture_page',
+          jsonb_build_object('capture_id', v_id, 'url', v_url, 'width', 1280, 'max_height', 8000),
+          'queued', gen_random_uuid())
+  returning id into v_task;
+  update public.page_captures set task_id = v_task where id = v_id;
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: capture_daily_limit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.capture_daily_limit() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 30 $$;
 
 
 --
@@ -3523,6 +3577,50 @@ $$;
 
 
 --
+-- Name: complete_page_capture(uuid, uuid, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.complete_page_capture(p_task_id uuid, p_attempt_id uuid, p_title text, p_width integer, p_height integer) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_task public.tasks;
+  v_capture public.page_captures;
+  v_prefix text;
+begin
+  select * into v_task from public.tasks
+  where id = p_task_id and kind = 'capture_page' and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then return false; end if;
+  if v_task.status = 'done' then return true; end if;
+  if v_task.status <> 'running' then return false; end if;
+  select * into v_capture from public.page_captures
+  where id = (v_task.payload ->> 'capture_id')::uuid and user_id = v_task.user_id and task_id = v_task.id
+  for update;
+  if not found then
+    raise exception 'This capture no longer exists.' using errcode = 'P0002';
+  end if;
+  if p_width is null or p_width < 1 or p_height is null or p_height < 1 then
+    raise exception 'Invalid capture size.' using errcode = '22023';
+  end if;
+  v_prefix := v_task.user_id::text || '/' || v_capture.id::text || '/';
+  update public.page_captures
+  set status = 'ready', error = null, title = left(nullif(btrim(coalesce(p_title, '')), ''), 300),
+      width = p_width, height = p_height,
+      image_path = v_prefix || 'page.png', boxes_path = v_prefix || 'page.boxes.json',
+      finished_at = now()
+  where id = v_capture.id;
+  update public.tasks
+  set status = 'done', error = null, finished_at = now(), lease_until = null,
+      output = jsonb_build_object('capture_id', v_capture.id, 'width', p_width, 'height', p_height)
+  where id = v_task.id;
+  return true;
+end;
+$$;
+
+
+--
 -- Name: complete_task(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4965,6 +5063,76 @@ $$;
 
 
 --
+-- Name: normalize_capture_url(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.normalize_capture_url(p_url text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_url text := btrim(coalesce(p_url, ''));
+  v_parts text[];
+  v_scheme text;
+  v_authority text;
+  v_rest text;
+  v_host text;
+  v_port text;
+  v_ip inet;
+begin
+  if v_url = '' then
+    raise exception 'Give the address of the page to capture.' using errcode = '22023';
+  end if;
+  if char_length(v_url) > 2048 then
+    raise exception 'That address is too long.' using errcode = '22023';
+  end if;
+  if v_url ~ '[[:space:][:cntrl:]]' then
+    raise exception 'That address is not allowed.' using errcode = '22023';
+  end if;
+  v_parts := regexp_match(v_url, '^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^#]*)');
+  if v_parts is null or lower(v_parts[1]) not in ('http', 'https') then
+    raise exception 'Only http and https pages can be captured.' using errcode = '22023';
+  end if;
+  v_scheme := lower(v_parts[1]);
+  v_authority := lower(v_parts[2]);
+  v_rest := coalesce(nullif(v_parts[3], ''), '/');
+  if v_rest !~ '^[/?]' then
+    v_rest := '/' || v_rest;
+  end if;
+  -- No credentials in the address, no IPv6 literals (a public page has a name).
+  if v_authority = '' or position('@' in v_authority) > 0 or position('[' in v_authority) > 0 then
+    raise exception 'That address is not allowed.' using errcode = '22023';
+  end if;
+  v_host := split_part(v_authority, ':', 1);
+  v_port := nullif(substr(v_authority, char_length(v_host) + 2), '');
+  if v_port is not null and v_port <> (case when v_scheme = 'http' then '80' else '443' end) then
+    raise exception 'That address is not allowed.' using errcode = '22023';
+  end if;
+  v_host := rtrim(v_host, '.');
+  if v_host ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' then
+    begin
+      v_ip := v_host::inet;
+    exception when others then
+      raise exception 'That address is not allowed.' using errcode = '22023';
+    end;
+    if v_ip << '0.0.0.0/8' or v_ip << '10.0.0.0/8' or v_ip << '100.64.0.0/10' or v_ip << '127.0.0.0/8'
+       or v_ip << '169.254.0.0/16' or v_ip << '172.16.0.0/12' or v_ip << '192.0.0.0/24'
+       or v_ip << '192.0.2.0/24' or v_ip << '192.168.0.0/16' or v_ip << '198.18.0.0/15'
+       or v_ip << '198.51.100.0/24' or v_ip << '203.0.113.0/24' or v_ip << '224.0.0.0/3' then
+      raise exception 'That address is not allowed.' using errcode = '22023';
+    end if;
+  -- A name with a dot and a real top-level label: no `localhost`, no single-label intranet names,
+  -- no numeric tricks like `0x7f.1` that browsers read as an IP address.
+  elsif v_host !~ '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$'
+     or v_host ~ '(^|\.)(localhost|local|internal|intranet|lan|home\.arpa|onion|test|invalid|example)$' then
+    raise exception 'That address is not allowed.' using errcode = '22023';
+  end if;
+  return v_scheme || '://' || v_host || v_rest;
+end;
+$_$;
+
+
+--
 -- Name: orphan_keep_paths(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5436,7 +5604,7 @@ begin
     from public.profiles p
     where p.retention_from + interval '30 days' < now()
       and not public.account_is_paid(p.id)
-      -- Đang có việc chạy dở (worker giữ lease): để lượt cron sau.
+      -- Work still running (the worker holds a lease): leave it to the next cron run.
       and not exists (
         select 1 from public.tasks t
         where t.user_id = p.id and t.status in ('queued', 'running')
@@ -5448,7 +5616,7 @@ begin
     insert into public.storage_deletions (bucket, path, user_id)
     select o.bucket_id, o.name, v_user
     from storage.objects o
-    where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand')
+    where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand', 'captures')
       and o.name like v_user::text || '/%'
       and not exists (
         select 1 from public.storage_deletions d where d.bucket = o.bucket_id and d.path = o.name
@@ -7471,6 +7639,28 @@ $$;
 
 
 --
+-- Name: sync_page_capture_from_task(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sync_page_capture_from_task() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind <> 'capture_page' or new.status is not distinct from old.status
+     or new.status not in ('failed', 'cancelled') then
+    return new;
+  end if;
+  update public.page_captures
+  set status = 'failed', finished_at = now(),
+      error = left(coalesce(nullif(new.error, ''), 'That page could not be opened.'), 500)
+  where task_id = new.id and status = 'pending';
+  return new;
+end;
+$$;
+
+
+--
 -- Name: sync_profile_email(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7863,6 +8053,34 @@ CREATE TABLE public.orphan_scan_cursors (
 
 
 --
+-- Name: page_captures; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.page_captures (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    url text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    error text,
+    task_id uuid,
+    title text,
+    width integer,
+    height integer,
+    image_path text,
+    boxes_path text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT page_captures_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT page_captures_height_check CHECK ((height > 0)),
+    CONSTRAINT page_captures_ready_check CHECK (((status <> 'ready'::text) OR ((image_path IS NOT NULL) AND (boxes_path IS NOT NULL) AND (width IS NOT NULL) AND (height IS NOT NULL)))),
+    CONSTRAINT page_captures_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'failed'::text]))),
+    CONSTRAINT page_captures_title_check CHECK ((char_length(title) <= 300)),
+    CONSTRAINT page_captures_url_check CHECK (((char_length(url) >= 1) AND (char_length(url) <= 2048))),
+    CONSTRAINT page_captures_width_check CHECK ((width > 0))
+);
+
+
+--
 -- Name: polar_customers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8021,7 +8239,7 @@ CREATE TABLE public.storage_deletions (
     attempts integer DEFAULT 0 NOT NULL,
     queued_at timestamp with time zone DEFAULT now() NOT NULL,
     deferred_at timestamp with time zone,
-    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text]))),
+    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text, 'captures'::text]))),
     CONSTRAINT storage_deletions_path_check CHECK (((path <> ''::text) AND (path !~~ '%..%'::text)))
 );
 
@@ -8474,6 +8692,14 @@ ALTER TABLE ONLY public.orphan_scan_cursors
 
 
 --
+-- Name: page_captures page_captures_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.page_captures
+    ADD CONSTRAINT page_captures_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: polar_customers polar_customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8916,6 +9142,20 @@ CREATE INDEX opportunities_user_status_idx ON public.opportunities USING btree (
 
 
 --
+-- Name: page_captures_task_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX page_captures_task_idx ON public.page_captures USING btree (task_id);
+
+
+--
+-- Name: page_captures_user_recent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: polar_subscriptions_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9109,6 +9349,13 @@ CREATE TRIGGER tasks_sync_asset_transcript AFTER UPDATE OF status ON public.task
 --
 
 CREATE TRIGGER tasks_sync_generation AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.sync_generation_from_task();
+
+
+--
+-- Name: tasks tasks_sync_page_capture; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tasks_sync_page_capture AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.sync_page_capture_from_task();
 
 
 --
@@ -9512,6 +9759,22 @@ ALTER TABLE ONLY public.opportunities
 
 
 --
+-- Name: page_captures page_captures_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.page_captures
+    ADD CONSTRAINT page_captures_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: page_captures page_captures_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.page_captures
+    ADD CONSTRAINT page_captures_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: polar_customers polar_customers_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9902,6 +10165,12 @@ ALTER TABLE public.opportunities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orphan_scan_cursors ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: page_captures; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: polar_customers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -9968,6 +10237,13 @@ CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authent
 --
 
 CREATE POLICY "read own media transcripts" ON public.media_transcripts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: page_captures read own page captures; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

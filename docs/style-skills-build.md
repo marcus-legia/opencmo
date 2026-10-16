@@ -327,20 +327,20 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ## Track C: Proof B-roll
 
-- [ ] **C1. Migration** `supabase/migrations/<ts>_page_captures.sql` + pgTAP test: `page_captures` table (owner,
+- [x] **C1. Migration** `supabase/migrations/<ts>_page_captures.sql` + pgTAP test: `page_captures` table (owner,
   normalized URL, status, error, storage paths, created_at) under RLS; `tasks_kind_check` gains `capture_page`;
   RPC `capture_create` (ownership, URL length ≤ 2048, http/https only, 30/day, 24 h cache);
   `scripts/dump-schema.sh`. Task kind in `task-kinds.json`. **Push this first.**
 - [ ] **C2. Routes.** `POST /api/v1/captures` (zod → RPC) and `GET /api/v1/captures/:id` (read under RLS, signed URLs).
   `check:api` contract updated.
-- [ ] **C3. Capture function.** A Modal function `page_capture` with **no secrets**, Chromium via Playwright, one page per
+- [x] **C3. Capture function.** A Modal function `page_capture` with **no secrets**, Chromium via Playwright, one page per
   call: `width` 1280 viewport, device scale 2, 15 s navigation timeout, full-page screenshot capped at `max_height`,
   then `runs` from the DOM (text nodes split into words with `Range.getClientRects`). Every request (document,
   subresource, redirect, websocket) goes through interception that allows only http/https on default ports and
   resolves the host, rejecting private, loopback, link-local and metadata addresses (port the rules of
   `apps/web/lib/cmo/site.ts` to Python). No downloads, no cookies kept, no permissions granted. Measure the image
   size, cold start, warm capture time and peak RSS (Notes).
-- [ ] **C4. Worker task.** `opencmo/worker/capture_page_task.py`: calls `page_capture`, runs the PNG through
+- [x] **C4. Worker task.** `opencmo/worker/capture_page_task.py`: calls `page_capture`, runs the PNG through
   `opencmo/ai/moderation.py`, uploads `page.png` + `page.boxes.json`, marks the capture ready; English errors from
   the contract. Tests with a local HTTP fixture page (served by the test); SSRF tests: `127.0.0.1`, `169.254.169.254`,
   a redirect to a private IP, a subresource on a private IP: all blocked.
@@ -420,6 +420,45 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 ### Track B
 
 ### Track C
+
+- **C1.** `20261128090000_page_captures.sql` + `158_page_captures.test.sql` (32 assertions). `page_captures`
+  (owner-only `select` under RLS; no client writes), `tasks_kind_check` + `task-kinds.json` gain `capture_page`.
+  `capture_create(p_url)` normalizes the address first (`normalize_capture_url`: lowercase scheme and host, no
+  fragment, default port dropped) and refuses in plain English anything that is not a public http(s) name on its
+  default port (`localhost`, IP literals in private ranges, `0x7f.1`-style tricks, IPv6 literals, credentials,
+  single-label names). That is only the fast first layer; the capture itself checks every connection (C3). Cache:
+  the same normalized URL, same user, pending or ready, < 24 h → the same id, not counted again. Cap: 30 captures
+  per rolling 24 h (failed ones count too). The worker finishes with `complete_page_capture` (capture ready + task
+  done in one transaction, paths fixed by the RPC to `<user>/<capture>/page.png|page.boxes.json`); a task that
+  fails or is cancelled fails its capture with the task's sentence (trigger). Private `captures` bucket (PNG +
+  JSON, 25 MB), owner reads their own folder; `storage_deletions` and `purge_unpaid_accounts` include it.
+  Docker Hub/ECR/GHCR refused the Supabase image in this container, so the pgTAP run was on a local Postgres 16
+  with a minimal Supabase shim over `schema/current.sql` (32/32); CI runs it on the real stack.
+  `current.sql` was updated from the before/after dump diff of that database.
+- **C3.** `opencmo/capture/`: `page.py` (Playwright, 1280 viewport, device scale 2, 15 s navigation, full-page PNG
+  clipped to `max_height`, one run per word from `Range.getClientRects`, in document CSS pixels, hidden text
+  skipped), `guard.py` (a forward proxy every connection of Chromium goes through: it resolves each host once,
+  refuses unless every answer is public and the port is 80/443, then connects to the address it checked, so DNS
+  rebinding and redirects cannot slip past; plain HTTP is one request per connection), `addresses.py` (the rules of
+  `site.ts` plus `ipaddress` and IPv4 inside IPv6). Also: only http(s) URLs routed, service workers blocked, no
+  downloads, no permissions, popups and dialogs closed, fresh context, WebRTC/QUIC off. Modal function
+  `page_capture` on its own `capture_image` with **no secrets** (cpu 2, 2 GB, 90 s); the worker image sets
+  `OPENCMO_CAPTURE=modal`. Measured here (`/usr/bin/time -v`, warm, 4 vCPU, this container's slow egress):
+  `pypi.org/project/httpx` 6.8 s, 4471 px tall, 1.27 MB PNG, 786 words, 191 MB peak RSS; the
+  `anthropics/claude-code` GitHub page 16–18 s, 7785 px tall, 2.0 MB, 817 words, 263 MB peak — of that, ~5.5 s is
+  this container reaching GitHub and ~6 s is Chromium encoding the 2560×15570 PNG. Cold start of the Modal image
+  is not measured (no Modal credentials here). Looked at both PNGs: PyPI renders fully styled; GitHub rendered
+  unstyled here only because this container's DNS cannot resolve `github.githubassets.com` (the guard then
+  refuses the tunnel, as it should); production DNS resolves it.
+- **C4.** `opencmo/worker/capture_page_task.py`: checks the capture is this task's own pending row with the same
+  URL, calls `page_capture`, validates `boxes`, moderates the whole page as ≤ 5 JPEG tiles of 1600 CSS px
+  (streaming ffmpeg, `png_pipe` named) under a new `CAPTURE_POLICY` (safety rules only: a quoted page's logos and
+  people are what it is), stores both files with upsert at the fixed paths, then `complete_page_capture`.
+  Production without moderation keys refuses ("Page captures are not set up on this server yet."). Tests
+  (`test_capture_page.py`, `test_worker_capture_page.py`, 52, real Chromium on a fixture server the test serves):
+  `127.0.0.1`, `169.254.169.254`, `localhost:3000`, redirects to `169.254.169.254` / `10.0.0.1` /
+  `https://127.0.0.1`, a redirect to another local port (which receives zero requests), and an `<img>`, `fetch`
+  and `WebSocket` to local addresses on a page that still captures — all refused.
 
 ## Requests
 
