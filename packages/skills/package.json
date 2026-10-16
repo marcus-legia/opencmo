@@ -1,0 +1,25 @@
+{
+  "name": "@opencmo/skills",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsx scripts/build-skills.mts",
+    "check": "tsc --noEmit && tsx scripts/build-skills.mts --check",
+    "gaps": "tsx scripts/gaps.mts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@opencmo/editor-core": "*",
+    "@types/node": "^22.20.5",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.4",
+    "yaml": "^2.8.1",
+    "zod": "^4.6.7"
+  }
+}

@@ -113,6 +113,7 @@ packages/clip-export/   server export: document → MP4 (task `render_document`)
 packages/clip-three/    3D scenes rendered on a GPU worker
 packages/clip-motion/   explainer animations (Remotion) rendered on the worker
 packages/clip-icons/, clip-media/, clip-assets/, editor-parity/
+packages/skills/       style skills: markdown + frontmatter → generated index; gated by editor-core/capabilities.ts
 apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes via RPC)
   lib/agent/            the editor assistant (tools = editor-core ops)
   lib/generate/         AI media generation

@@ -46,6 +46,7 @@ import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
 import { createVideo } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
+import { runStyle, styleOp, type ApplyStyle, type StyleContext, type StyleDeps, type StyleReceipt } from '../style/apply';
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
@@ -95,6 +96,22 @@ export {
 	type ExplainerScene,
 } from './explainer';
 export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
+
+// Style skills (Track A): runs the other ops of this registry, so it reaches them by name. The
+// annotations break the type cycle with REGISTRY.
+const STYLE_DEPS: StyleDeps = {
+	run: (document: ClipDocument, op: { op: string }, ctx: OpContext): Promise<ClipDocument> => runOne(document, op, ctx),
+	has: (name: string): boolean => byName.has(name),
+};
+const applyStyle = styleOp(STYLE_DEPS);
+
+/**
+ * What `apply_style` would apply, skip and leave out on this document, without writing: the
+ * Assistant reports it with the result. Same view and same ops as the real run, so the same receipt.
+ */
+export async function styleReceipt(document: ClipDocument, input: ApplyStyle, ctx: StyleContext): Promise<StyleReceipt> {
+	return (await runStyle(activeView(document), input, ctx, STYLE_DEPS)).receipt;
+}
 
 const REGISTRY = [
 	removeWords,
@@ -177,6 +194,7 @@ const REGISTRY = [
 	attachTranscript,
 	syncExplainer,
 	addTitle,
+	applyStyle,
 ] as const;
 
 type Definition = {
@@ -186,9 +204,24 @@ type Definition = {
 	apply: (document: ClipDocument, input: never, ctx: OpContext) => Promise<ClipDocument>;
 };
 
-const byName = new Map<string, Definition>(REGISTRY.map((op) => [op.name, op as unknown as Definition]));
+const byName: Map<string, Definition> = new Map(REGISTRY.map((op) => [op.name, op as unknown as Definition]));
 
 export const OP_NAMES = REGISTRY.map((op) => op.name);
+
+/**
+ * One op inside another (`apply_style`): schema-checked like a batch, and its refusal stays an
+ * `OpFailure` so the outer op can report it instead of failing as a whole.
+ */
+async function runOne(document: ClipDocument, op: { op: string }, ctx: OpContext): Promise<ClipDocument> {
+	const definition = byName.get(op.op);
+	if (!definition) throw new OpFailure(`Unknown operation "${op.op}".`);
+	const parsed = definition.input.safeParse(op);
+	if (!parsed.success) {
+		const issue = parsed.error.issues[0];
+		throw new OpFailure(`${issue?.path.length ? `${issue.path.join('.')}: ` : ''}${issue?.message ?? 'Invalid input.'}`);
+	}
+	return definition.apply(document, parsed.data as never, ctx);
+}
 
 /**
  * Schema đầu vào của từng op, theo tên. Assistant sinh tool definition từ

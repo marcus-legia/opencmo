@@ -138,7 +138,7 @@ const config: NextConfig = {
    * server, shell editor vẽ preview bằng chúng trong trình duyệt — Next phải
    * transpile.
    */
-  transpilePackages: ["@opencmo/editor-core", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons", "@opencmo/clip-three"],
+  transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons", "@opencmo/clip-three"],
   /**
    * CanvasKit là bản Emscripten có nhánh Node (`require("fs")`) không bao giờ
    * chạy trong trình duyệt; bundle phía client bỏ hai module đó.

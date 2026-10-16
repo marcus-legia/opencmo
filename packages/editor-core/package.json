@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./transcript": "./src/transcript.ts",
-    "./generate": "./src/generate.ts"
+    "./generate": "./src/generate.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./style": "./src/style/index.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",
@@ -19,6 +21,7 @@
     "@opencmo/clip-icons": "*",
     "@opencmo/clip-render": "*",
     "@opencmo/clip-three": "*",
+    "@opencmo/skills": "*",
     "zod": "^4.6.7"
   },
   "devDependencies": {

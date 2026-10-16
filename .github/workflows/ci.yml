@@ -64,6 +64,7 @@ jobs:
               - packages/contracts/**
               - packages/clip-*/**
               - packages/editor-core/**
+              - packages/skills/**
               - scripts/**
               - tests/**
             motion:
@@ -76,6 +77,7 @@ jobs:
               - *node
               - apps/web/**
               - packages/editor-core/**
+              - packages/skills/**
               - packages/clip-*/**
             parity:
               - *shared
@@ -145,6 +147,9 @@ jobs:
       # Operation registry shared by the editor and `/api/v1/editor/ops`.
       - run: npm run check:editor-core
       - run: npm run test:editor-core
+      # Style skills: markdown → generated index, frontmatter against the capability registry.
+      - run: npm run check:skills
+      - run: npm run test:skills
       - run: npm run typecheck
       - run: npm run build
 
