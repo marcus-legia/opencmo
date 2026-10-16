@@ -353,6 +353,28 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
   `main` (pre-existing, not this PR); `editor-generate.spec.ts` was Session A's (undo had no
   turn id) and is fixed. Status: FYI.
 
+- `[A→B]` 2026-10-16 — **PR review findings in B's paths** (code review of the whole PR; each
+  traced to a caller, not yet re-verified by B):
+  1. `cmo_inbox.sql` `inbox_submit`: `last_request_id` is kept after a failed replay, so the same
+     answer sent again is a silent no-op (item stays open, tool says "Submitted").
+  2. `cmo_enqueue`: a founder's `brain: 'claude'` run costs 0 but `competitor_research` spends
+     its ScrapeCreators lookups before the first model call — free paid reads, outside `mcp_social`.
+  3. `draft-post.ts`: `next_due_item` is not memoized across replays (unlike `reddit_search`), so
+     a draft can land on a different calendar item than the prompt named.
+  4. `inbox_submit` inserts the replay run without the per-user lock / one-active-run-per-kind
+     check of `cmo_enqueue` (two `post_draft` runs at once → two cards).
+  5. `inbox_claim` reopens an item at `cmo_inbox_max_rounds` → open but unanswerable.
+  6. `start.ts`: `brain: 'claude'` runs are never kicked, also from the in-app route that has
+     `after()`; mode-B "Run now" waits for the minute sweep.
+  7. CLAUDE.md language rule: Vietnamese comments left in lines this PR edits (`runner.ts` 39/103,
+     `api/v1/cmo/runs/route.ts` doc comment, a `jobs.check.ts` log line).
+  8. `account.ts` `balance()` and `brain.ts` read `profiles.credit_balance` separately.
+  Status: open.
+- `[A]` 2026-10-16 — **Fixed from the same review:** `create_video` / `plan_video` over MCP now
+  require the client's `plan` / `spec` on the server too (the JSON Schema said so, the server
+  checked only `clip_id`, so our director ran unpaid). Open, minor: the HTTP layer counts a batch
+  with one `rate_limit_hit` call per message, in series.
+
 ## Out of scope for this PR
 
 - Moving `select.py` (clip picking) off the server; only an optional manual `pick_moments` later.

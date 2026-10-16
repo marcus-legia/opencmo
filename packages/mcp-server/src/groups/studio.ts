@@ -170,6 +170,15 @@ async function previewAllowed(ctx: McpToolContext): Promise<boolean> {
 
 const input = z.looseObject({ clip_id: clipId });
 
+/**
+ * What the server itself requires, beyond clip_id. The thinking is the client's: without its plan
+ * these two would run OpenCMO's own director or motion team, which no agent credits pay for here.
+ */
+const REQUIRED: Record<string, z.ZodType> = {
+  create_video: input.extend({ plan: directorSchema }),
+  plan_video: input.extend({ spec: introSpecSchema }),
+};
+
 function toMcp(spec: ToolSpec): McpTool {
   const name = RENAME[spec.name] ?? spec.name;
   const shape = mcpShape(spec);
@@ -183,7 +192,7 @@ function toMcp(spec: ToolSpec): McpTool {
     name,
     title: title(name),
     description: shape.description,
-    inputSchema: input,
+    inputSchema: REQUIRED[spec.name] ?? input,
     inputJsonSchema: shape.schema,
     annotations: {
       readOnlyHint: !writes && !["save_skill", "send_feedback", "manage_exports"].includes(spec.name),

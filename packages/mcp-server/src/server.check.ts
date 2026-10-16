@@ -93,6 +93,15 @@ assert.equal(byName.remove_words!.annotations?.destructiveHint, true, "cuts are 
 assert.equal(byName.add_text!.annotations?.readOnlyHint, false, "writes are not read-only");
 assert.match(INSTRUCTIONS, /Never confirm on your own/);
 
+// ------------------------------------------------------------ the client's plan is required
+
+{
+  const planVideo = tools.find((tool) => tool.name === "plan_video")!;
+  const missing = await callTool(planVideo, { clip_id: "11111111-1111-4111-8111-111111111111", recipe: "intro", brief: "calm" }, ctx);
+  assert.equal(missing.isError, true, "plan_video without spec never reaches our motion team");
+  assert.match(String((missing.content[0] as { text: string }).text), /^spec: /);
+}
+
 // ------------------------------------------------------------ price → confirm, enforced by the server
 
 {
