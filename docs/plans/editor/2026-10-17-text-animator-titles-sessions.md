@@ -103,12 +103,12 @@ measurement but does not change it (a needed change goes to "Requests" for Marcu
 
 Until A1 lands, B1–B3 need nothing from A.
 
-- [ ] **B1 — Title builder.** `visuals/title.ts` per the plan (kinds, looks, side, motion factors, sizes with
+- [x] **B1 — Title builder.** `visuals/title.ts` per the plan (kinds, looks, side, motion factors, sizes with
       `fitSize` bold factor, 6 % title-safe, vertical UI zones, staggered in / faster reversed out, node-level
       `slideUp` for the title for now). Accept: `visuals.test.ts` — longest allowed name (60 chars) fits its panel by
       the estimate; every child inside title-safe on 1080×1920 and 1920×1080; every out animation shorter than its in;
       brand theme colors and font used.
-- [ ] **B2 — `add_title` op.** `BUILDERS.add_title`, `addTitle = visualOp(...)` with the `limits` argument (quote →
+- [x] **B2 — `add_title` op.** `BUILDERS.add_title`, `addTitle = visualOp(...)` with the `limits` argument (quote →
       hold 5.5–8 s), `REGISTRY` entry, captions-box avoidance via `createRenderer(document).layout(...)`,
       `update_visual` round trip. Accept: `ops.test.ts` / `visuals.test.ts` — quote found → times from the
       transcript; quote missing → `OpFailure` with today's message; with captions in the lower third the title sits

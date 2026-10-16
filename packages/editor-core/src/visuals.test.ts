@@ -218,3 +218,116 @@ describe('add_lottie', () => {
 		expect(missing).toEqual([]);
 	});
 });
+
+describe('add_title', () => {
+	type Child = Entity & { kind: string; x: number; y: number; width: number; height: number; fontSize?: number; text?: string };
+	type Anim = { type: string; phase?: string; duration?: number; delay?: number };
+	type Track = { property: string; keyframes: { time: number; value: number }[] };
+	const LONGEST = 'Maximilian Alexander Featherstonehaugh-Wolfeschlegelsteinhau';
+	const frames = [
+		{ width: 1080, height: 1920 },
+		{ width: 1920, height: 1080 },
+	];
+	const docOf = (frame: { width: number; height: number }) =>
+		({ ...base, stage: { children: [{ ...(base.stage.children[0] as object), ...frame }] } }) as unknown as ClipDocument;
+	const titleOf = async (frame: { width: number; height: number }, input: Record<string, unknown>) =>
+		lastChild((await applyOps(docOf(frame), [{ op: 'add_title', start: 1, end: 7, ...input }] as never, ctx)).document);
+
+	it('the longest allowed name fits its panel by the estimate, on both aspect ratios', async () => {
+		expect(LONGEST).toHaveLength(60);
+		for (const frame of frames) {
+			for (const look of ['card', 'kicker']) {
+				const group = await titleOf(frame, { title: LONGEST, sub: 'Founder and CEO, Episode 12', look });
+				const panel = group.children!.find((child) => child.name === 'Panel') as Child;
+				const title = group.children!.find((child) => child.name === 'Title') as Child;
+				const longest = Math.max(...title.text!.split('\n').map((line) => line.length));
+				expect(longest * title.fontSize! * 0.62).toBeLessThanOrEqual(panel.width);
+				expect(title.x).toBeGreaterThanOrEqual(panel.x);
+			}
+		}
+	});
+
+	it('every child sits inside title-safe and clear of the vertical UI zones, for every kind, look and side', async () => {
+		for (const frame of frames) {
+			const vertical = frame.height > frame.width;
+			const safe = { x0: frame.width * 0.06, x1: frame.width * 0.94, y0: frame.height * (vertical ? 0.1 : 0.06), y1: frame.height * (vertical ? 0.84 : 0.94) };
+			for (const kind of ['lowerThird', 'nameTag', 'chapter'])
+				for (const look of ['bar', 'kicker', 'card'])
+					for (const side of ['left', 'right', 'center']) {
+						const group = await titleOf(frame, { kind, look, side, title: 'Nguyễn Thị Hương', sub: 'Founder, Episode 12' });
+						for (const child of group.children as Child[]) {
+							const where = `${frame.width}×${frame.height} ${kind}/${look}/${side} ${String(child.name)}`;
+							expect(child.x, where).toBeGreaterThanOrEqual(safe.x0 - 0.5);
+							expect(child.y, where).toBeGreaterThanOrEqual(safe.y0 - 0.5);
+							expect(child.x + child.width, where).toBeLessThanOrEqual(safe.x1 + 0.5);
+							expect(child.y + child.height, where).toBeLessThanOrEqual(safe.y1 + 0.5);
+						}
+					}
+		}
+	});
+
+	it('lower thirds sit in the lower part, chapters in the middle; right side mirrors', async () => {
+		const frame = frames[0]!;
+		const lower = await titleOf(frame, { title: 'Linh', sub: 'Founder, Paylane' });
+		const chapter = await titleOf(frame, { kind: 'chapter', title: 'Why pricing matters' });
+		const right = await titleOf(frame, { title: 'Linh', sub: 'Founder, Paylane', side: 'right' });
+		const top = (group: Entity) => Math.min(...(group.children as Child[]).map((child) => child.y));
+		expect(top(lower)).toBeGreaterThan(frame.height * 0.66);
+		expect(top(chapter)).toBeGreaterThan(frame.height * 0.35);
+		expect(top(chapter)).toBeLessThan(frame.height * 0.55);
+		const title = (group: Entity) => (group.children as Child[]).find((child) => child.name === 'Title')!;
+		expect(title(lower).textAlign).toBe('left');
+		expect(title(right).textAlign).toBe('right');
+		expect(title(right).x).toBeGreaterThan(frame.width / 2);
+	});
+
+	it('motion: staggered in, every out shorter than its in and in reverse order', async () => {
+		for (const motion of ['calm', 'standard', 'punchy']) {
+			const group = await titleOf(frames[0]!, { title: 'Linh', sub: 'Founder', look: 'card', motion });
+			const inLength = (child: Child) => {
+				const anim = ((child.animations as Anim[] | undefined) ?? []).find((a) => (a.phase ?? 'in') === 'in');
+				if (anim) return { at: anim.delay ?? 0, length: anim.duration! };
+				const track = (child.tracks as Track[]).find((t) => ['width', 'height', 'trimEnd'].includes(t.property))!;
+				return { at: track.keyframes[0]!.time, length: track.keyframes.at(-1)!.time - track.keyframes[0]!.time };
+			};
+			const outOf = (child: Child) => (child.animations as Anim[]).find((a) => a.phase === 'out')!;
+			const byName = (name: string) => (group.children as Child[]).find((child) => child.name === name)!;
+			for (const child of group.children as Child[]) expect(outOf(child).duration!, String(child.name)).toBeLessThan(inLength(child).length);
+			// In: panel, then the accent line, the title, the sub. Out: the sub leaves first (largest delay from the end).
+			expect(inLength(byName('Panel')).at).toBeLessThan(inLength(byName('Title')).at);
+			expect(inLength(byName('Title')).at).toBeLessThan(inLength(byName('Subtitle')).at);
+			expect(outOf(byName('Subtitle')).delay!).toBeGreaterThan(outOf(byName('Title')).delay!);
+			expect(outOf(byName('Panel')).delay ?? 0).toBeLessThan(outOf(byName('Title')).delay!);
+			const reveal = Math.max(...(group.children as Child[]).map((child) => inLength(child).at + inLength(child).length));
+			expect(reveal).toBeLessThanOrEqual(motion === 'calm' ? 1.2 : 0.85);
+		}
+	});
+
+	it('uses the brand kit colours and heading font', async () => {
+		const kit = { version: 1, colors: { primary: '#112233', secondary: '#223344', accent: '#FF5500', text: '#FAFAFA', background: '#101010' }, fonts: { heading: 'Montserrat', body: 'Inter' }, captions: { preset: 'spotlight' }, layout: { aspect: '9:16', fit: 'fill' }, logo: null };
+		const branded = structuredClone(base) as unknown as { stage: { children: Entity[] } };
+		branded.stage.children[0]!.marks = { brand: kit };
+		const { document } = await applyOps(branded as unknown as ClipDocument, [{ op: 'add_title', start: 1, end: 7, title: 'Linh', sub: 'Founder', look: 'kicker' }] as never, ctx);
+		const children = lastChild(document).children as Child[];
+		const panel = children.find((child) => child.name === 'Panel')!;
+		expect((panel.paints as { color: string }[])[0]!.color).toBe('#101010');
+		expect(children.find((child) => child.name === 'Kicker')!.fill).toBe('#FF5500');
+		expect(children.find((child) => child.name === 'Title')!.fontFamily).toBe('Montserrat');
+		expect(children.find((child) => child.name === 'Title')!.color).toBe('#FAFAFA');
+		// The sub on the accent band is dark text: the kit's background colour.
+		expect(children.find((child) => child.name === 'Subtitle')!.color).toBe('#101010');
+	});
+
+	it('valid document; update_visual changes the name and keeps id, time and hand edits', async () => {
+		const first = await applyOps(base, [{ op: 'add_title', start: 1, end: 7, title: 'Linh', sub: 'Founder' }] as never, ctx);
+		expect(() => validate(first.document)).not.toThrow();
+		const id = lastChild(first.document).id as string;
+		const moved = await applyOps(first.document, [{ op: 'set_props', element_id: id, props: { y: -60 } }] as never, ctx);
+		const { document } = await applyOps(moved.document, [{ op: 'update_visual', id, changes: { title: 'Linh Tran' } }] as never, ctx);
+		const group = lastChild(document);
+		expect(group).toMatchObject({ id, start: 1, end: 7, y: -60 });
+		expect((group.children as Child[]).find((child) => child.name === 'Title')!.text).toBe('Linh Tran');
+		await expect(applyOps(base, [{ op: 'add_title', start: 1, end: 7, title: '' }] as never, ctx)).rejects.toThrow();
+		await expect(applyOps(base, [{ op: 'add_title', start: 1, end: 7, title: 'x'.repeat(61) }] as never, ctx)).rejects.toThrow();
+	});
+});

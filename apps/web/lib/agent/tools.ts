@@ -434,8 +434,10 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Turn numbers the speaker says into an animated chart: bar (bars grow), line (line draws on), pie, donut (sweeps round; shows the first share in the middle), stat (one big number with a label). Values are raw numbers; unit is a suffix like % or k.",
   add_graph:
     "Plot y = f(x) on axes, drawn on like a 3Blue1Brown animation. expr uses x, + - * / ^, brackets, sin cos tan exp log sqrt abs, pi, e (e.g. 2^x, x^2, sin(x)). Optional x and y ranges.",
+  add_title:
+    "Add a title card in the brand's colors and font: kind lowerThird (a name and role when a speaker appears), nameTag (the compact version), chapter (a centered section title; sub = \"Chapter 2\" or \"Episode 12\"). title = the name or chapter title (≤ 60 characters), sub = role, company or episode. look: bar (accent bar, no panel), kicker (sub on an accent band above the name), card (panel with an accent line). side left/right/center, motion calm/standard/punchy. Pass quote = the words the speaker says when it should appear (often their introduction): it starts there and holds 5.5-8 s. It is placed inside title-safe, above the captions, clear of the phone's buttons. One name tag per speaker, at their first appearance; chapters where the topic changes.",
   update_visual:
-    "Change a visual made with add_shape/add_diagram/add_chart/add_graph by its group id: changes are merged into its original input (labels, data, layout, colors, region) and it is rebuilt in place. Optional new start/end.",
+    "Change a visual made with add_shape/add_diagram/add_chart/add_graph/add_title by its group id: changes are merged into its original input (labels, data, layout, colors, region; a title's title, sub, look, side) and it is rebuilt in place. Optional new start/end.",
   stagger:
     "Animate several elements one after another (like a list appearing item by item): same animation type, each delayed by step seconds.",
   make_room:
