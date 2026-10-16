@@ -10,6 +10,10 @@ departments — **Video** (your own long-form video → captioned vertical clips
 per-platform captions), **Post** (X drafts you approve and publish), and **Sales** (Reddit
 threads scored with evidence and draft replies the user posts themselves).
 
+**The repository is closed source (private) since 2026-10-16.** Internal docs — costs, plans,
+specs, provider comparisons — go straight into `docs/` here; there is no separate public repo to
+keep them out of. The language rule below still applies.
+
 One system: Next.js web app + Supabase + a Modal worker. There is no second runtime; do not
 build one. Generated-media renderers (`clip-three`, `clip-motion`) run on the worker and produce
 video files; the editor itself has one runtime (`clip-render`).

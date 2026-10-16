@@ -1,8 +1,8 @@
 """Provider `opencmo-motion`: narrated explainers (docs/explainer-build.md, Track B).
 
 No third party draws the picture: the Assistant's Remotion scene code renders in headless
-Chromium through the `clip-motion` CLI. The voice is generated first (ElevenLabs on fal, premade
-voices only) because its word timings drive every beat and cue; the CLI muxes it into the MP4,
+Chromium through the `clip-motion` CLI. The voice is generated first (ElevenLabs, premade voices
+only, through whatever provider the `elevenlabs-voice` catalog row names) because its word timings drive every beat and cue; the CLI muxes it into the MP4,
 so the explainer is one layer and nothing can drift.
 
 Two places to render, like 3D Studio:
@@ -125,16 +125,20 @@ def make_voice(spec: dict[str, Any], workdir: Path, voice: ProviderAdapter | Non
     if fake_voice():
         return _silence(duration, workdir / "voice.m4a"), None
     text = narration(spec["scene"])
+    model = get_model(VOICE_MODEL)
     if voice is None:
-        from opencmo.ai.providers.fal import FalProvider
+        # Same adapter as a voiceover: the catalog row decides the provider, so narration and
+        # voiceovers can never drift onto different keys.
+        from opencmo.ai.catalog import SpecError
+        from opencmo.ai.providers import adapter_for
 
-        key = os.environ.get("FAL_KEY", "")
-        if not key:
-            raise ProviderError("Generation is not set up on the server yet. Your credits were refunded.")
-        voice = FalProvider(key)
+        try:
+            voice = adapter_for(model)
+        except SpecError as exc:
+            raise ProviderError(str(exc)) from exc
     voice_dir = workdir / "voice"
     voice_dir.mkdir(exist_ok=True)
-    result = voice.run(get_model(VOICE_MODEL), {"prompt": text, "voice": spec["voice"]}, voice_dir)
+    result = voice.run(model, {"prompt": text, "voice": spec["voice"]}, voice_dir)
     if result is None:
         raise ProviderError(FAILED)
     words = result.words or []

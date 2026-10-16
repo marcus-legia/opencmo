@@ -13,7 +13,7 @@ insert into public.jobs (id, user_id, source_url, duration_seconds, status) valu
 insert into public.credit_ledger(user_id, delta, reason) values
   ('e9900000-0000-4000-8000-00000000000a', 30, 'test grant');
 
-select is((select count(*) from public.ai_models where id in ('gemini-image', 'gemini-video', 'gemini-voice') and enabled), 3::bigint, 'three Gemini models (served through fal since 20261112)');
+select is((select count(*) from public.ai_models where id in ('gemini-image', 'gemini-video') and enabled), 2::bigint, 'Gemini image and video (served through fal since 20261112; the Gemini voice is off since 20261127)');
 select is(public.ai_price((select m from public.ai_models m where id = 'gemini-video'), '{"prompt":"x","aspectRatio":"9:16","duration":8}'), 24, 'Veo: 3 credit mỗi giây');
 
 set local role authenticated;
@@ -30,9 +30,9 @@ select throws_ok(
   '22023', 'Veo 3.1 Fast does not support that duration.', 'Veo không nhận 5 giây'
 );
 select throws_ok(
-  $$ select public.create_generation('e9910000-0000-4000-8000-00000000000a', null, 'gemini-voice',
-       '{"prompt":"x","voice":"Aria"}', repeat('a', 64), gen_random_uuid()) $$,
-  '22023', 'Choose one of the listed voices.', 'giọng của model khác bị chặn'
+  $$ select public.create_generation('e9910000-0000-4000-8000-00000000000a', null, 'elevenlabs-voice',
+       '{"prompt":"x","voice":"Kore"}', repeat('a', 64), gen_random_uuid()) $$,
+  '22023', 'Choose one of the listed voices.', 'a voice from another model is refused'
 );
 select is(
   (select (public.create_generation('e9910000-0000-4000-8000-00000000000a', null, 'gemini-video',

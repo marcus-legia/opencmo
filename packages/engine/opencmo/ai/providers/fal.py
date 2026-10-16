@@ -8,9 +8,9 @@ Hàng đợi: POST `queue.fal.run/<endpoint>` → `status_url` + `response_url`;
 Ảnh của người dùng (frame đầu/cuối, tham chiếu) đến đây là FILE ĐÃ TẢI về và đã kiểm
 duyệt (`generate_task`); gửi đi dạng data URI — bucket không phải mở ra ngoài.
 
-Voice and audio go through fal too (ElevenLabs and Gemini TTS endpoints), so one key covers
-every generated medium. ElevenLabs on fal returns the same per-character alignment as the
-direct API, so voiceover captions keep real word timings.
+Voice and audio can go through fal too (ElevenLabs and Gemini TTS endpoints). The catalog sends
+ElevenLabs voice, sound effects and music to ElevenLabs directly; these payloads stay as a
+fallback, and ElevenLabs on fal returns the same per-character alignment as the direct API.
 """
 
 from __future__ import annotations

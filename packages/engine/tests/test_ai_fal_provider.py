@@ -6,15 +6,30 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import pytest
 
-from opencmo.ai.catalog import SpecError, get_model, price_of, validate_spec
+from opencmo.ai.catalog import AiModel, SpecError, price_of, validate_spec
+from opencmo.ai.catalog import get_model as catalog_model
 from opencmo.ai.providers.fal import FalProvider, build_payload, endpoint_for
 
 UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+# The catalog sends ElevenLabs audio to ElevenLabs directly; the fal endpoints stay as a fallback
+# (switching back is a catalog row), and these tests pin them.
+ON_FAL = {
+    "elevenlabs-voice": "fal-ai/elevenlabs/tts/multilingual-v2",
+    "elevenlabs-sfx": "fal-ai/elevenlabs/sound-effects/v2",
+    "elevenlabs-music": "fal-ai/elevenlabs/music",
+}
+
+
+def get_model(model_id: str) -> AiModel:
+    model = catalog_model(model_id)
+    return replace(model, provider="fal", provider_model=ON_FAL[model_id]) if model_id in ON_FAL else model
 
 
 def _png(path: Path) -> Path:
