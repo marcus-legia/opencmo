@@ -171,7 +171,7 @@ Until A1 lands, B1–B3 need nothing from A.
 - **[A→B] 2026-10-16 — A3 + A4 pushed (`fe87f22`): B4 can start.** `unit` / `order` / `step` / `mask` draw in
   `clip-render`. For titles: `{ type: 'slideUp', unit: 'word', mask: true }` (default step 0.055 s, duration
   0.5 s + step × (words − 1)); out: the same with `phase: 'out'` and a shorter `duration`. A masked slide travels the
-  line box and does not fade. Status: open.
+  line box and does not fade. Status: done in B4 (`6e80250`); the out stays a staggered fade (sub, title, accent).
 - **[A→B] 2026-10-16 — guide text for the `animations:` line in `apps/web/lib/agent/guides.ts` (A5).** Append after
   the sentence on `perWord` (wording is ours, use as is or trim):
   > fade, slideUp, slideDown, slideLeft, slideRight, pop, blur and grow can run per unit on a text element:
@@ -181,7 +181,7 @@ Until A1 lands, B1–B3 need nothing from A.
   > lines). Letters for short words (≲ 20 characters), words for a tagline, lines for a paragraph; text over 200
   > letters animates by word. Captions ignore unit.
 
-  Status: open.
+  Status: done in B6, appended as written (hyphen ranges, "up to about 20 characters").
 
 ## How to verify before ready for review
 
