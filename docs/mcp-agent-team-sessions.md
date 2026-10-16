@@ -163,9 +163,13 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       (38, with `LIBRARY_PREAMBLE`).
       *Status:* code done in `apps/web/lib/cmo/mcp/prompts.ts` (on `CMO_GROUP`). Registration waits
       for A1.
-- [ ] **B8 — "Continue in Claude".** In mode B the Assistant panel and CMO chat show a card:
+- [x] **B8 — "Continue in Claude".** In mode B the Assistant panel and CMO chat show a card:
       what happened, how to connect (connector URL, Claude Code command), and the inbox count.
       Copy follows CLAUDE.md product rules (describes software; no model names as features).
+      *Done as:* `GET /api/v1/cmo/mode` (brain, reason, credits, open inbox count, MCP URL from
+      `OPENCMO_MCP_URL`, default `${SITE_URL}/api/mcp`); `ContinueInClaude` card under the
+      Assistant header (the one entry point in `AssistantPanel.tsx`) and the CMO chat header. In
+      mode B "Plan my week" / "Run now" go to the inbox instead of failing for credits.
 - [ ] **B9 — Claude-side bundle.** `plugins/opencmo-claude/`: `skills/opencmo/SKILL.md`
       (workflows, price etiquette, "drafts only, you post", Inbox routine) + plugin manifest with
       the MCP server config. Zip for claude.ai skill upload. Verify by installing locally.

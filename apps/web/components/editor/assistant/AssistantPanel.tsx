@@ -38,6 +38,7 @@ import type { RenderTask } from "@/lib/api/tasks";
 import type { ToolAnswer } from "./capture";
 import { SLASH_COMMANDS } from "@/lib/agent/slash";
 
+import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
 
@@ -490,6 +491,7 @@ export function AssistantPanel({
           ＋
         </button>
       </header>
+      <ContinueInClaude where="assistant" />
       <div ref={list} className="ed2-asst-list">
         {!turns.length ? (
           <div className="ed2-asst-empty">
