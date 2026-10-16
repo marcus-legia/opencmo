@@ -387,17 +387,26 @@ export function drawText(
     return tweak;
   };
 
+  // The font is set outside each word's save/restore and only when the style changes: setting it
+  // parses a CSS font string, and per-letter animation would otherwise do that for every letter.
+  let current: Style | null = null;
+  const font = (style: Style) => {
+    if (style !== current) applyFont(ctx, (current = style), baseline);
+  };
+
   // Lượt 1: bóng.
   ctx.save();
+  current = null;
   for (const word of words) {
+    const shadows = override<Shadow>(node, word.style.ranges, 'shadows');
+    if (!shadows.some((shadow) => !shadow.hidden)) continue;
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
     if (fade <= 0) {
       if (tweak) ctx.restore();
       continue;
     }
-    applyFont(ctx, word.style, baseline);
-    const shadows = override<Shadow>(node, word.style.ranges, 'shadows');
     const strokes = override<Stroke>(node, word.style.ranges, 'strokes').filter((stroke) => !stroke.hidden);
     const widest = strokes.reduce<Stroke | null>(
       (best, stroke) => (best === null || live(stroke, 'width', 1) > live(best, 'width', 1) ? stroke : best),
@@ -426,12 +435,13 @@ export function drawText(
 
   // Lượt 2: viền.
   ctx.save();
+  current = null;
   for (const word of words) {
     const strokes = override<Stroke>(node, word.style.ranges, 'strokes');
     if (!strokes.length) continue;
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
-    applyFont(ctx, word.style, baseline);
     for (const stroke of strokes) {
       if (stroke.hidden || fade <= 0) continue;
       const composite = ctx.globalCompositeOperation;
@@ -448,12 +458,14 @@ export function drawText(
 
   // Lượt 3: màu chữ, rồi paint.
   ctx.save();
+  current = null;
   for (const word of words) {
     let color: number | null = r.values.color;
     for (const range of word.style.ranges) {
       if (typeof range.color === 'string') color = live(range, 'color', parseColor(range.color));
     }
     let paints = override<Paint>(node, word.style.ranges, 'paints');
+    font(word.style);
     const tweak = enter(word);
     const fade = tweak?.alpha ?? 1;
     // highlightPop: từ đang tới đổi hẳn sang màu nhấn (paint của node không đè lên).
@@ -465,7 +477,6 @@ export function drawText(
       if (tweak) ctx.restore();
       continue;
     }
-    applyFont(ctx, word.style, baseline);
     if (color !== null) {
       ctx.globalAlpha = saved * fade;
       ctx.fillStyle = hex(color);
@@ -523,7 +534,7 @@ const wordTop = (word: Word, baseline: string) =>
  * Prefix widths of each word's graphemes, keyed by font and text: export draws the same title for
  * hundreds of frames, and `measureText` per letter per frame is the cost of `unit: 'char'`.
  */
-const PREFIXES = new Map<string, number[]>();
+const PREFIXES = new Map<string, { chars: string[]; prefix: number[] }>();
 
 /** Words split into letters (graphemes), each at its kerned x inside the word; whitespace dropped. */
 function letters(ctx: Measurer, words: Word[], baseline: string): Word[] {
@@ -532,16 +543,17 @@ function letters(ctx: Measurer, words: Word[], baseline: string): Word[] {
   for (const word of words) {
     if (!word.chars.trim()) continue;
     applyFont(ctx, word.style, baseline);
-    const chars = graphemes(word.chars);
     const key = `${ctx.font}|${ctx.letterSpacing}|${word.chars}`;
-    let prefix = PREFIXES.get(key);
-    if (!prefix) {
-      prefix = [0];
+    let cached = PREFIXES.get(key);
+    if (!cached) {
+      const chars = graphemes(word.chars);
+      const prefix = [0];
       let text = '';
       for (const char of chars) prefix.push(ctx.measureText((text += char)).width);
       if (PREFIXES.size >= 2048) PREFIXES.delete(PREFIXES.keys().next().value!);
-      PREFIXES.set(key, prefix);
+      PREFIXES.set(key, (cached = { chars, prefix }));
     }
+    const { chars, prefix } = cached;
     chars.forEach((char, index) => {
       if (!char.trim()) return;
       out.push({ ...word, chars: char, x: word.x + prefix[index]!, width: prefix[index + 1]! - prefix[index]! });
@@ -626,6 +638,8 @@ function unitTweaks(ctx: Measurer, fx: UnitFx, words: Word[], all: Word[], basel
     const index = unitOf.get(word);
     if (index === undefined) return null;
     const p = unitProgress(fx.t, ranks[index]!, fx.step, length);
+    // At rest (done coming in, or not yet leaving) a unit draws as is: no save/transform per letter.
+    if (fx.out ? p <= 0 : p >= 1) return null;
     const { cx, cy, height } = centres[index]!;
     const base = { dx: 0, dy: 0, scale: 1, alpha: 1, cx, cy };
     // far: 1 = the preset's far state, 0 = the node at rest.

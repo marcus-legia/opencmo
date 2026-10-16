@@ -9,7 +9,7 @@ DS là **oracle**: fork Diffusion Studio (đã xoá ở C3) vẽ từng mẫu ra
 phải do người duyệt bằng mắt, không có đáp án tự động.
 
 ```
-samples/           70 mẫu document JSON (<id>.json) + manifest.json — đã chốt cùng references/
+samples/           71 mẫu document JSON (<id>.json) + manifest.json — đã chốt cùng references/
 fixtures/          ảnh, video VP9, transcript dùng chung (nhỏ, có trong git)
 references/        PNG tham chiếu do DS vẽ — <id>/<giây>s.png, dấu . thành _
 thresholds.json    ngưỡng so ảnh (mặc định + ghi đè theo mẫu)
@@ -64,6 +64,17 @@ Hai cờ trong manifest:
   `three-scene` (3D chiếu CPU) có ngưỡng tile 6: lưới 1.5 px trên mặt cong khử
   răng cưa khác nhau giữa hai bản Skia (đã xem ảnh diff: chỉ nét lưới, hình học
   trùng, mean 0.14).
+
+- `perTarget: true` (only `anim-units`): letters moving at sub-pixel positions rasterize further apart
+  between Skia (Node) and Chromium (tile 20–44 on this sample) than a real regression lands from either
+  (orders swapped, mask off, unit removed: tile 50–84, measured 2026-10-16). One image cannot gate both, so
+  the sample keeps one reference per target, `references/anim-units/{node,browser}/`, both drawn by
+  clip-render and approved by eye. Browser: tile 14, because Chromium 141 in this repo's dev sandbox drew
+  plain text samples up to tile 8.25 off the CI-drawn references; Node: the usual text threshold.
+- Drawing references on a dev machine: hide system copies of the bundled fonts first (a system Inter,
+  e.g. `/usr/share/fonts/opentype/inter`, wins over `inter.woff2` in `@napi-rs/canvas` and widens text by
+  tile ~100). The bundled brand fonts are Latin subsets: Vietnamese letters (ư, ơ, ễ…) come from a
+  fallback font, so keep them out of golden samples.
 
 `references/` không vẽ lại được nữa (DS đã gỡ). Đổi `times` của một mẫu là đổi
 ảnh tham chiếu của nó — chỉ làm khi đã xem ảnh ứng viên và chấp nhận nó làm chuẩn.

@@ -16,8 +16,8 @@ describe('kho mẫu', () => {
     expect(validate(document)).toEqual(document);
   });
 
-  it('phủ đủ 70 mẫu (67 của DS + 3 của OpenCMO)', () => {
-    expect(manifest.samples.length).toBe(70);
+  it('covers all 71 samples (67 from DS + 4 from OpenCMO)', () => {
+    expect(manifest.samples.length).toBe(71);
   });
 });
 

@@ -107,10 +107,32 @@ measurement but does not change it (a needed change goes to "Requests" for Marcu
       Gap → Loose writes `step` 0.088 (word), By → Letter keeps the gap (0.048), type → Fade drops `mask`, type → Spin
       drops all unit fields and hides the rows, By → Whole clears them; no op error. Not tried in the full running
       app (no Docker for local Supabase in this session); screenshot in the PR.
-- [ ] **A6 — Parity + budget.** `samples/anim-units.json` + references approved by eye (README rule); export a 60 s
+- [x] **A6 — Parity + budget.** `samples/anim-units.json` + references approved by eye (README rule); export a 60 s
       1080×1920 document with 10 `unit: 'char'` text nodes through `clip-export` with `/usr/bin/time -v` before
       (main) and after; numbers in this file under A6. Accept: wall time +< 10 %, peak RSS far below 2 GB, frames
       attached.
+      _Done:_ `samples/anim-units.json`: 12 text nodes (char / word / line × first / center / last / random, with
+      slideUp, pop, fade, slideLeft) plus a masked two-line reveal, at 0.25 / 0.5 / 1.5 s. It carries Latin-1 marks
+      ("Ångström Peña"), not Vietnamese: the bundled fonts have no Vietnamese glyphs (see Requests), so those come
+      from whatever fallback a machine has. Skia and Chromium draw this sample tile 20–44 apart, while real regressions
+      (orders swapped, mask off, unit removed) land at tile 50–84, so it keeps one reference per target
+      (`perTarget` in the manifest, read by `compare.mjs`; README explains), both approved by eye. Parity on this
+      branch, with the dev sandbox's system Inter moved aside (it overrode `inter.woff2`): Node 71/71; browser
+      identical to `main` on all 70 old samples, `anim-units` exact.
+
+      **Export budget** (`clip-export` CLI under `/usr/bin/time -v`, 60 s 1080×1920, 10 text rows each re-entering
+      every 6 s with 1.2 s in / 0.8 s out, 4 vCPU; process-tree PSS sampled every 100 ms):
+
+      | | wall (s), runs | mean | max RSS, one process | tree PSS |
+      |---|---|---|---|---|
+      | `main`, node-level `slideUp` | 28.22 · 28.82 · 27.90 · 28.75 | 28.4 | 576–594 MB | 1187 MB |
+      | branch, `slideUp` + `unit: 'char'` (4 orders) | 29.58 · 29.35 · 29.09 · 30.08 | 29.5 (+3.9 %) | 566–575 MB | 1145 MB |
+      | branch, node-level (old documents) | 28.26 | — | 564 MB | — |
+
+      The first version cost +11.6 %; three changes brought it under 10 % without changing a pixel (parity
+      re-run): the font is set once per style outside each letter's save/restore, words without shadows skip the
+      shadow pass, graphemes and letter counts are cached, and a unit at rest draws without its own transform.
+      Frames: `2026-10-17-text-animator-titles-frames/A*.jpg|png`.
 
 ## Session B — Titles
 
@@ -182,6 +204,11 @@ Until A1 lands, B1–B3 need nothing from A.
   > letters animates by word. Captions ignore unit.
 
   Status: done in B6, appended as written (hyphen ranges, "up to about 20 characters").
+- **[A→Marcus] 2026-10-16 — the bundled brand fonts have no Vietnamese.** `packages/clip-media/fonts/*.woff2`
+  (Inter, Montserrat, Figtree, DM Sans, Manrope… checked with fontTools) are Latin subsets: no ư, ơ, đ, ă, ễ, ị. A
+  name tag "Nguyễn Thị Hương" exports with those letters from DejaVu (the export's Latin fallback) inside Inter
+  words: readable, visibly mixed (frame `A4-mask-reveal.jpg`). Fix outside this plan's paths: ship the
+  `vietnamese` (and `latin-ext`) subsets of the brand fonts, then re-check the parity references. Status: open.
 
 ## How to verify before ready for review
 

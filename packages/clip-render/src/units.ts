@@ -22,12 +22,24 @@ export function unitTiming(text: string, unit: (typeof ANIMATION_UNITS)[number],
   let by = unit;
   let count = 0;
   if (by === 'char') {
-    count = graphemes(text).filter((char) => char.trim()).length;
+    count = letterCount(text);
     if (count > MAX_CHAR_UNITS) by = 'word';
   }
   if (by === 'word') count = text.split(/\s+/).filter(Boolean).length;
   const gap = step ?? UNIT_STEP[by];
   return { unit: by, step: gap, duration: by === 'line' ? 0.9 : 0.5 + gap * Math.max(0, count - 1) };
+}
+
+/** Non-blank graphemes of a text, cached: the renderer asks every frame of an animation. */
+const LETTERS = new Map<string, number>();
+function letterCount(text: string): number {
+  let count = LETTERS.get(text);
+  if (count === undefined) {
+    count = graphemes(text).filter((char) => char.trim()).length;
+    if (LETTERS.size >= 1024) LETTERS.delete(LETTERS.keys().next().value!);
+    LETTERS.set(text, count);
+  }
+  return count;
 }
 
 type Segmenter = { segment(text: string): Iterable<{ segment: string }> };

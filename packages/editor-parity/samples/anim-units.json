@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "stage": {
+    "children": [
+      {
+        "kind": "scene",
+        "name": "Sample",
+        "width": 540,
+        "height": 960,
+        "fill": "#0F172A",
+        "active": true,
+        "children": [
+          {
+            "kind": "text",
+            "id": "char-first",
+            "x": 30,
+            "y": 24,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideUp",
+                "unit": "char",
+                "order": "first",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "char-center",
+            "x": 30,
+            "y": 80,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "pop",
+                "unit": "char",
+                "order": "center",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "char-last",
+            "x": 30,
+            "y": 136,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "fade",
+                "unit": "char",
+                "order": "last",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "char-random",
+            "x": 30,
+            "y": 192,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideLeft",
+                "unit": "char",
+                "order": "random",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "word-first",
+            "x": 30,
+            "y": 248,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideUp",
+                "unit": "word",
+                "order": "first",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "word-center",
+            "x": 30,
+            "y": 304,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "pop",
+                "unit": "word",
+                "order": "center",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "word-last",
+            "x": 30,
+            "y": 360,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "fade",
+                "unit": "word",
+                "order": "last",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "word-random",
+            "x": 30,
+            "y": 416,
+            "start": 0,
+            "end": 4,
+            "text": "Founders ship faster",
+            "color": "#FFFFFF",
+            "fontSize": 34,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideLeft",
+                "unit": "word",
+                "order": "random",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "line-first",
+            "x": 30,
+            "y": 472,
+            "width": 480,
+            "start": 0,
+            "end": 4,
+            "text": "Drafts you approve,\nposts you publish",
+            "color": "#FFFFFF",
+            "fontSize": 26,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideUp",
+                "unit": "line",
+                "order": "first",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "line-center",
+            "x": 30,
+            "y": 550,
+            "width": 480,
+            "start": 0,
+            "end": 4,
+            "text": "Drafts you approve,\nposts you publish",
+            "color": "#FFFFFF",
+            "fontSize": 26,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "pop",
+                "unit": "line",
+                "order": "center",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "line-last",
+            "x": 30,
+            "y": 628,
+            "width": 480,
+            "start": 0,
+            "end": 4,
+            "text": "Drafts you approve,\nposts you publish",
+            "color": "#FFFFFF",
+            "fontSize": 26,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "fade",
+                "unit": "line",
+                "order": "last",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "line-random",
+            "x": 30,
+            "y": 706,
+            "width": 480,
+            "start": 0,
+            "end": 4,
+            "text": "Drafts you approve,\nposts you publish",
+            "color": "#FFFFFF",
+            "fontSize": 26,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideLeft",
+                "unit": "line",
+                "order": "random",
+                "duration": 1
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "id": "mask-line",
+            "x": 30,
+            "y": 792,
+            "width": 480,
+            "start": 0,
+            "end": 4,
+            "leading": 1.1,
+            "text": "Ångström Peña\nFounder, Episode 12",
+            "color": "#FFFFFF",
+            "fontSize": 40,
+            "fontWeight": 700,
+            "animations": [
+              {
+                "type": "slideUp",
+                "unit": "line",
+                "mask": true,
+                "duration": 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
