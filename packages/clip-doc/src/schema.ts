@@ -212,7 +212,14 @@ export const EffectParamsSchema = z
   })
   .strict();
 
-export const TRANSITION_TYPES = ['dissolve', 'slideFromRight', 'slideFromLeft', 'fadeToBlack', 'fadeToWhite'] as const;
+// `whip`: the outgoing shot shifts out and the incoming one shifts in, with directional motion blur.
+export const TRANSITION_TYPES = ['dissolve', 'slideFromRight', 'slideFromLeft', 'fadeToBlack', 'fadeToWhite', 'whip'] as const;
+
+/** How a captions layer brings each word in: `fade` from a muted ink to full ink as it is spoken. */
+export const CAPTION_REVEALS = ['fade'] as const;
+
+/** At most this many emphasized ranges per captions layer. */
+export const MAX_EMPHASIS = 500;
 
 export const CAPTION_PRESETS = ['classic', 'whisper', 'cascade', 'spotlight', 'paper', 'guinea', 'stark'] as const;
 
@@ -984,6 +991,19 @@ export const CaptionsSchema = z
     highlight: z.enum(['block', 'pop']).optional(),
     // E4-e: che từ tục trên màn (chữ đầu + *), transcript không đổi.
     censor: z.boolean().optional(),
+    // Keyword emphasis (style skills): words picked by meaning, not the word being spoken. Ranges are
+    // SOURCE seconds, the time base of removed words, so a cut does not move them onto other words.
+    emphasis: z.array(z.object({ start: num, end: num }).strict()).max(MAX_EMPHASIS).optional(),
+    emphasisStyle: z
+      .object({
+        fontFamily: z.string().min(1).max(80).optional(),
+        fontStyle: fontStyle.optional(),
+        color: color.optional(),
+        scale: z.number().min(1).max(1.6).optional(),
+      })
+      .strict()
+      .optional(),
+    reveal: z.enum(CAPTION_REVEALS).optional(),
     seed: num.optional(),
     offsetX: num.optional(),
     offsetY: num.optional(),
