@@ -469,6 +469,42 @@ async function main(): Promise<void> {
     assert.equal((await callApi(a, `/brand-kits/${row.id}`, { method: "DELETE" })).status, 200);
   });
 
+  await check("Page captures: addresses refused in English, cache, owner-only reads, ready capture signs its files", async () => {
+    for (const url of ["http://localhost:3000", "http://169.254.169.254/latest/meta-data/"]) {
+      const refused = await callApi(a, "/captures", { method: "POST", body: JSON.stringify({ url }) });
+      assert.equal(refused.status, 422, url);
+      assert.equal((refused.body as { detail: string }).detail, "That address is not allowed.");
+    }
+    const created = await callApi(a, "/captures", { method: "POST", body: JSON.stringify({ url: "https://github.com/owner/repo" }) });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    const { capture_id, status } = created.body as { capture_id: string; status: string };
+    assert.equal(status, "pending");
+    const again = await callApi(a, "/captures", { method: "POST", body: JSON.stringify({ url: "https://GITHUB.com/owner/repo#readme" }) });
+    assert.equal((again.body as { capture_id: string }).capture_id, capture_id, "same page within 24 h: same capture");
+    assert.equal(((await callApi(a, `/captures/${capture_id}`)).body as { status: string }).status, "pending");
+    assert.equal((await callApi(b, `/captures/${capture_id}`)).status, 404);
+    assert.equal((await callApi(a, `/captures/${capture_id}/image?resolve=1`)).status, 404, "nothing to show before it is ready");
+
+    // The worker's side, by hand: files at the fixed paths, then the completion RPC.
+    const { data: row } = await admin.from("page_captures").select("task_id").eq("id", capture_id).single();
+    const attempt = crypto.randomUUID();
+    assert.ifError((await admin.from("tasks").update({ status: "running", attempt_id: attempt }).eq("id", row!.task_id)).error);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==", "base64");
+    const boxes = { url: "https://github.com/owner/repo", title: "owner/repo", width: 1280, height: 900, scale: 2, runs: [{ text: "24", rect: [10, 20, 18, 20] }] };
+    assert.ifError((await admin.storage.from("captures").upload(`${a.userId}/${capture_id}/page.png`, png, { contentType: "image/png" })).error);
+    assert.ifError((await admin.storage.from("captures").upload(`${a.userId}/${capture_id}/page.boxes.json`, JSON.stringify(boxes), { contentType: "application/json" })).error);
+    const done = await admin.rpc("complete_page_capture", { p_task_id: row!.task_id, p_attempt_id: attempt, p_title: "owner/repo", p_width: 1280, p_height: 900 });
+    assert.equal(done.data, true, JSON.stringify(done.error));
+
+    const ready = (await callApi(a, `/captures/${capture_id}`)).body as { status: string; image_url: string; boxes_url: string; width: number };
+    assert.equal(ready.status, "ready");
+    assert.equal(ready.width, 1280);
+    assert.deepEqual(await (await fetch(ready.boxes_url)).json(), boxes);
+    assert.equal((await callApi(a, `/captures/${capture_id}/image?resolve=1`)).status, 200);
+    assert.equal((await callApi(b, `/captures/${capture_id}/image?resolve=1`)).status, 404);
+    await admin.storage.from("captures").remove([`${a.userId}/${capture_id}/page.png`, `${a.userId}/${capture_id}/page.boxes.json`]);
+  });
+
   // ------------------------------------------------- cách ly giữa hai người
   await check("B không đọc được project của A", async () => {
     assert.equal((await callApi(b, `/projects/${jobId}`)).status, 404);

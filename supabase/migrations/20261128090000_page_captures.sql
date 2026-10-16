@@ -158,8 +158,8 @@ begin
   select count(*) into v_used from public.page_captures
   where user_id = v_user and created_at > now() - interval '24 hours';
   if v_used >= public.capture_daily_limit() then
-    raise exception 'You have captured % pages in the last 24 hours, the most there is. Try again tomorrow.',
-      public.capture_daily_limit() using errcode = 'P0001';
+    -- This exact sentence is on the API's 429 allowlist (lib/api/errors.ts).
+    raise exception 'You have reached today''s limit for this task. Try again tomorrow.' using errcode = 'P0001';
   end if;
   v_id := gen_random_uuid();
   insert into public.page_captures (id, user_id, url) values (v_id, v_user, v_url);

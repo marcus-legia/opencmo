@@ -72,7 +72,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1580000-0000-4000-8000-00000000000a"}';
 select lives_ok($$ select public.capture_create('https://github.com/owner/repo-' || n) from generate_series(1, 28) n $$, '30 captures a day are allowed');
 select throws_ok($$ select public.capture_create('https://github.com/owner/one-more') $$, 'P0001',
-  'You have captured 30 pages in the last 24 hours, the most there is. Try again tomorrow.', 'the 31st is refused');
+  'You have reached today''s limit for this task. Try again tomorrow.', 'the 31st is refused');
 select is(public.capture_create('https://github.com/owner/repo'), (select id from first_capture), 'the cache still answers at the cap');
 
 -- Another user sees none of it.

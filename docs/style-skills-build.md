@@ -331,7 +331,7 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
   normalized URL, status, error, storage paths, created_at) under RLS; `tasks_kind_check` gains `capture_page`;
   RPC `capture_create` (ownership, URL length ≤ 2048, http/https only, 30/day, 24 h cache);
   `scripts/dump-schema.sh`. Task kind in `task-kinds.json`. **Push this first.**
-- [ ] **C2. Routes.** `POST /api/v1/captures` (zod → RPC) and `GET /api/v1/captures/:id` (read under RLS, signed URLs).
+- [x] **C2. Routes.** `POST /api/v1/captures` (zod → RPC) and `GET /api/v1/captures/:id` (read under RLS, signed URLs).
   `check:api` contract updated.
 - [x] **C3. Capture function.** A Modal function `page_capture` with **no secrets**, Chromium via Playwright, one page per
   call: `width` 1280 viewport, device scale 2, 15 s navigation timeout, full-page screenshot capped at `max_height`,
@@ -459,6 +459,15 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
   `127.0.0.1`, `169.254.169.254`, `localhost:3000`, redirects to `169.254.169.254` / `10.0.0.1` /
   `https://127.0.0.1`, a redirect to another local port (which receives zero requests), and an `<img>`, `fetch`
   and `WebSocket` to local addresses on a page that still captures — all refused.
+- **C2.** `POST /api/v1/captures` (`{ url }` → `{ capture_id, status }`), `GET /api/v1/captures/:id` (status, error,
+  title, size, and signed `image_url` / `boxes_url` once ready) and `GET /api/v1/captures/:id/image` (303 to the
+  signed PNG, `?resolve=1` → `{ url }`, for `capture:<id>` image sources, like `brand:` logos). All reads are under
+  RLS; `lib/capture` holds the shared code (`createCapture` wakes the worker, `readCapture`, `captureUrls`,
+  `readCaptureBoxes` with a zod schema of `page.boxes.json`). `captures` joined `BUCKETS` in `lib/storage.ts`.
+  The daily cap uses the API's existing 429 sentence ("You have reached today's limit for this task. Try again
+  tomorrow."). `check:api` has a new check (refusals, cache, owner-only reads, signed files once ready); it needs
+  the full local stack, which could not start in this container, so it has not run yet. `check:contracts`:
+  `video-usecases.check` and `agent-design.check` fail here exactly as they do without these changes.
 
 ## Requests
 
@@ -473,3 +482,6 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [ ] (from A → owner C) `page_captures` needs `status` and `error` columns readable under RLS
   (`lib/agent/captures.ts` selects them), and `capture_create(p_url)` returns the capture id; refusals in plain
   English (they reach the user verbatim). `add_proof`'s groups also need `marks.visual.op = 'add_proof'`.
+- [ ] (from C → owner A) `capture-tool.ts`: call `createCapture(supabase, url)` from `@/lib/capture` instead of the
+  RPC directly. It runs the same RPC and then wakes the worker; without the wake a capture waits for the next
+  one-minute sweep, which breaks the < 20 s budget.
