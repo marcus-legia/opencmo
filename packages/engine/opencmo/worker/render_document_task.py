@@ -73,6 +73,11 @@ _SPEC_FIELDS = (
 BRAND_PREFIX = "brand:"
 BRAND_OBJECT = re.compile(r"^[0-9a-f-]{36}/logo-[0-9a-f-]{36}\.png$")
 MAX_LOGO_BYTES = 2 * 1024 * 1024
+# Proof B-roll (`add_proof`): `capture:<id>` is the screenshot of a page capture of the job's owner.
+CAPTURE_PREFIX = "capture:"
+CAPTURE_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+MAX_CAPTURE_BYTES = 25 * 1024 * 1024
+CAPTURE_GONE = "A page capture in this clip is no longer available. Remove the proof card, then export."
 
 
 class SourceError(TaskError):
@@ -263,6 +268,8 @@ class _Sources:
             return dest
         if isinstance(src, str) and src.startswith(BRAND_PREFIX):
             return self._brand(src[len(BRAND_PREFIX):])
+        if isinstance(src, str) and src.startswith(CAPTURE_PREFIX):
+            return self._capture(src[len(CAPTURE_PREFIX):])
         if isinstance(src, dict) and "transform" in src:
             raise SourceError("Editing an existing file with AI is not available yet.")
         record = _library_record(self.manifest, src)
@@ -320,6 +327,21 @@ class _Sources:
             self.store.download_object("brand", object_name, dest, max_bytes=MAX_LOGO_BYTES)
         except Exception as exc:
             raise SourceError("The brand logo is not available. Apply your brand kit again, then export.") from exc
+        return dest
+
+    def _capture(self, capture_id: str) -> Path:
+        """A page capture's screenshot. The id comes from the document, so the row must be this
+        job owner's own ready capture; the path is the one the completion RPC fixed."""
+        row = self.store.get_page_capture(capture_id) if CAPTURE_ID.match(capture_id) else None
+        expected = f"{self.task.user_id}/{capture_id}/page.png"
+        if not row or row.get("user_id") != self.task.user_id or row.get("status") != "ready" \
+                or row.get("image_path") != expected:
+            raise SourceError(CAPTURE_GONE)
+        dest = self._path(".png")
+        try:
+            self.store.download_object("captures", expected, dest, max_bytes=MAX_CAPTURE_BYTES)
+        except Exception as exc:
+            raise SourceError(CAPTURE_GONE) from exc
         return dest
 
     def transcript(self, src: str) -> Path:

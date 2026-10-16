@@ -396,6 +396,36 @@ def test_brand_logo_outside_the_owners_folder_is_refused(tmp_path, object_name):
     assert store.downloads == []
 
 
+CAPTURE = "3c519a71-93a7-412e-8274-2444a7343a08"
+
+
+def _capture_sources(tmp_path, **row):
+    store, sources = _brand_sources(tmp_path)
+    capture = {"id": CAPTURE, "user_id": UID, "status": "ready", "image_path": f"{UID}/{CAPTURE}/page.png", **row}
+    store.get_page_capture = lambda capture_id: capture if capture_id == CAPTURE else None
+    return store, sources
+
+
+def test_capture_comes_from_the_owners_ready_capture(tmp_path):
+    store, sources = _capture_sources(tmp_path)
+    assert sources.media(f"capture:{CAPTURE}").exists()
+    assert store.downloads == [("captures", f"{UID}/{CAPTURE}/page.png")]
+
+
+@pytest.mark.parametrize("row, src", [
+    ({"user_id": "0b519a71-93a7-412e-8274-2444a7343a08"}, f"capture:{CAPTURE}"),  # someone else's
+    ({"status": "pending"}, f"capture:{CAPTURE}"),
+    ({"image_path": "elsewhere/page.png"}, f"capture:{CAPTURE}"),
+    ({}, "capture:../../secret"),
+    ({}, "capture:0b519a71-93a7-412e-8274-2444a7343a08"),  # no such capture
+])
+def test_captures_of_others_or_not_ready_are_refused(tmp_path, row, src):
+    store, sources = _capture_sources(tmp_path, **row)
+    with pytest.raises(rd.SourceError, match="page capture in this clip is no longer available"):
+        sources.media(src)
+    assert store.downloads == []
+
+
 def test_node_run_reads_progress_lines_and_keeps_stdout(tmp_path, monkeypatch):
     # Exporter giả: in tiến độ ra stderr xen dòng log, JSON kết quả ra stdout.
     script = tmp_path / "fake-export.mjs"

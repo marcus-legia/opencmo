@@ -344,15 +344,15 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
   `opencmo/ai/moderation.py`, uploads `page.png` + `page.boxes.json`, marks the capture ready; English errors from
   the contract. Tests with a local HTTP fixture page (served by the test); SSRF tests: `127.0.0.1`, `169.254.169.254`,
   a redirect to a private IP, a subresource on a private IP: all blocked.
-- [ ] **C5. Op `add_proof`.** `packages/editor-core/src/proof/`: find `focus` in `runs` (case and whitespace
+- [x] **C5. Op `add_proof`.** `packages/editor-core/src/proof/`: find `focus` in `runs` (case and whitespace
   insensitive, across consecutive runs; not found → op error naming the closest run); build the card (browser frame
   with the real URL, image cropped around the focus region, rounded mask); tracks: slide in, ease to `zoom` centred
   on the focus rect, then a marker rect grows across it at the quote's start; out before the next proof or
   chapter. Works in the visual panel of `split-top` and full frame. Tests on a fixture `boxes.json`. Flip
   `proof.capture` and `proof.card`.
-- [ ] **C6. Guide `proof`** in `guides.ts`: when a claim earns a proof, capture first, pick `focus` from text that is
+- [x] **C6. Guide `proof`** in `guides.ts`: when a claim earns a proof, capture first, pick `focus` from text that is
   actually on the page, one proof per claim, ≤ 6 per clip.
-- [ ] **C7. Look and measure.** Capture a real GitHub README, place a proof on a test clip, export, and look at the
+- [x] **C7. Look and measure.** Capture a real GitHub README, place a proof on a test clip, export, and look at the
   zoomed and marked frame at full size; Notes.
 
 **Checks:** `npm run db:reset && npm run db:test`; engine `pytest` + `ruff`; `npm run check:contracts --workspace
@@ -468,6 +468,36 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
   tomorrow."). `check:api` has a new check (refusals, cache, owner-only reads, signed files once ready); it needs
   the full local stack, which could not start in this container, so it has not run yet. `check:contracts`:
   `video-usecases.check` and `agent-design.check` fail here exactly as they do without these changes.
+- **C5.** `packages/editor-core/src/proof/`: `find.ts` matches `focus` across consecutive word runs (NFKC, case,
+  spacing and punctuation at word edges forgiven, never the words) and names the closest page text when it is
+  not there; `card.ts` builds the card from existing nodes — card rect with shadow, browser bar, window buttons,
+  address pill with the page's real (post-redirect) URL, and a `Page` group masked to the viewport holding the
+  screenshot (`capture:<id>` image paint) and the marker. The page eases from full width (focus at 40 % height)
+  to `zoom` (default 1.8, never so close that the focus leaves the frame) with the focus centred where the page
+  edge allows, via x/y/width/height keyframes; the marker (`marker`: accent, multiply, grows in width; `box`:
+  accent outline, fades in) lands as the quote starts. The card comes up 1.4 s before the quote, stays ≥ 1.2 s
+  after the line and ≥ 2.5 s after the mark, at most 9 s, and ends before the next proof card. In split layouts
+  it goes in the visual panel (`panelRegionAt`), full frame in the upper region. Group mark
+  `marks.visual.op = 'add_proof'` (A's rerun finds it). `ProofContext.proofCapture` reads the capture;
+  `serverOpContext` provides it under RLS (`readProofCapture`: status, then `page.boxes.json` through a signed
+  URL; unreadable boxes count as failed). Export resolves `capture:<id>` in `render_document_task.py` only for
+  the job owner's ready capture at its fixed path; the editor resolves it through `/api/v1/captures/:id/image`.
+  10 tests in `proof.test.ts` on fixture boxes (zoom lands inside the viewport, vertically centred; marker at the
+  quote; split panel; next-card cut-off; refusals). `proof.capture` and `proof.card` flipped to ready; editor-core
+  648/648. Agent eval (fake): 40/43, same three failures as before these changes (`style-listicle` "receipt not
+  reported", `explain-make`, `explain-vaccine`).
+- **C6.** `proof` guide in `guides.ts` (when a claim earns a proof, capture first, wait for ready, focus copied from
+  the page, quote from the transcript, one per claim, ≤ 6, look at the marked frame, never edit or fake a page),
+  and the `add_proof` line in `OP_DESCRIPTIONS` (otherwise its tool goes out with no description).
+- **C7.** Not a GitHub README: this container cannot resolve `github.githubassets.com`, so a GitHub capture here
+  is unstyled (see C3). Used a real capture of `pypi.org/project/httpx` instead (its CSS is on the same host),
+  placed two proofs with `add_proof` on a 30 s 1080×1920 test clip (one full frame with `marker`, one in a
+  `split-top` panel with `box`), and exported with `clip-export` (`/usr/bin/time -v`: 45 s wall, 701 MB peak RSS;
+  the 3 ops took 73 ms). Full-size frames: 8.9 s — the card in the upper region, whole page width, real address
+  `pypi.org/project/httpx` in the bar; 9.5 s — mid-zoom, text growing toward the focus; 10.8 s — zoomed, "sync and
+  async APIs." under the yellow marker, readable, card clear of the captions; 22.0 s — split-top, card inside the
+  visual panel below the speaker band, "100% test coverage." boxed in the accent colour. The test clip is a colour
+  pattern, not a face, so face clearance is checked in the acceptance run.
 
 ## Requests
 
@@ -485,3 +515,10 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [ ] (from C → owner A) `capture-tool.ts`: call `createCapture(supabase, url)` from `@/lib/capture` instead of the
   RPC directly. It runs the same RPC and then wakes the worker; without the wake a capture waits for the next
   one-minute sweep, which breaks the < 20 s budget.
+- [x] (from C → owner B) `components/editor/media.ts`: C added the `capture:<id>` branch next to `brand:` (two
+  lines, resolving to `/api/v1/captures/<id>/image`), since without it a proof card's page is blank in the editor
+  once `proof.card` is ready. Please keep it when you next touch that file.
+- [ ] (from C → owner B) `agent-design.check` fails "every tool says what it does": `add_hook_title`, `add_list`,
+  `emphasize_words` and `punch_in` have no line in `OP_DESCRIPTIONS` (`lib/agent/tools.ts`).
+- [ ] (from C → owner A) `apply_style`: pass `preset.proof` to `add_proof` as `zoom` and `mark` (the op takes both,
+  optional); today every proof uses the defaults (1.8, marker).

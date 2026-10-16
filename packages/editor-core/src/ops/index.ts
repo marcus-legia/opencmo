@@ -49,6 +49,8 @@ import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, 
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
 import { runStyle, styleOp, type ApplyStyle, type StyleContext, type StyleDeps, type StyleReceipt } from '../style/apply';
+// Track C: proof B-roll.
+import { addProof } from '../proof';
 
 export { OpError, OpFailure, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
@@ -202,6 +204,8 @@ const REGISTRY = [
 	addHookTitle,
 	punchIn,
 	addList,
+	// Style skills, Track C.
+	addProof,
 ] as const;
 
 type Definition = {

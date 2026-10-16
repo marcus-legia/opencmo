@@ -29,8 +29,8 @@ export const CAPABILITIES = {
 	'transition.whip': { track: 'B', ready: true, ops: ['set_props'] },
 	'layout.split': { track: 'B', ready: true, ops: ['set_layout'] },
 	// The Assistant's `capture_page` tool; no document op.
-	'proof.capture': { track: 'C', ready: false, ops: [] },
-	'proof.card': { track: 'C', ready: false, ops: ['add_proof'] },
+	'proof.capture': { track: 'C', ready: true, ops: [] },
+	'proof.card': { track: 'C', ready: true, ops: ['add_proof'] },
 } as const satisfies Record<string, CapabilityInfo>;
 
 export type Capability = keyof typeof CAPABILITIES;

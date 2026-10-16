@@ -9,6 +9,8 @@
 
 import { z } from "zod";
 
+import type { ProofCapture } from "@opencmo/editor-core";
+
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { wakeWorker } from "@/lib/modal";
 import { signedObjectUrl } from "@/lib/storage";
@@ -92,4 +94,19 @@ export async function readCaptureBoxes(row: CaptureRow): Promise<CaptureBoxes | 
   } catch {
     return null;
   }
+}
+
+/**
+ * What `add_proof` reads (`ProofContext.proofCapture`): status, and once ready the page size and its
+ * word boxes. A ready capture whose boxes cannot be read counts as failed, never as empty.
+ */
+export async function readProofCapture(supabase: SupabaseClient, id: string): Promise<ProofCapture | null> {
+  const row = await readCapture(supabase, id);
+  if (!row) return null;
+  if (row.status !== "ready") {
+    return { status: row.status, ...(row.error ? { error: row.error } : {}), url: row.url, width: row.width ?? 1280, height: row.height ?? 1, runs: [] };
+  }
+  const boxes = await readCaptureBoxes(row);
+  if (!boxes) return { status: "failed", error: "The captured page could not be read. Capture it again.", url: row.url, width: 1280, height: 1, runs: [] };
+  return { status: "ready", url: boxes.url, width: boxes.width, height: boxes.height, runs: boxes.runs };
 }

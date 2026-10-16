@@ -454,6 +454,19 @@ edit_video redraws one range of the user's own video from a short instruction: l
 3. To change only what is behind the speaker, use replace_background instead: it keeps the speaker exactly as filmed.
 4. The user approves the price. After it is placed, wait_for_media, then capture a frame in the middle of the range: the speaker is in the same place and the edit covers the whole range.`,
 
+  proof: `# Proof B-roll (capture_page → add_proof)
+
+A claim lands harder when the viewer sees it: the repo with "24 lifecycle skills", the pricing page that says "free", the speaker's title on a team page. Only a public page the speaker cites earns a proof; an opinion or a story does not.
+
+1. Capture first: capture_page with the page's address (a GitHub repo, a README, a docs or pricing page). Free, 30 a day; the same page within 24 h comes from the cache. Local and private addresses are refused.
+2. Wait: capture_status until it says ready (a few seconds). If it failed, say why in one line and go on without that proof; never invent one.
+3. Pick focus from text that is actually on the page, a few words copied exactly: the number with its noun ("24 lifecycle skills"), the price, the title. If add_proof says the words are not on the page, use the closest text it names, or skip the proof.
+4. Pick quote from the transcript: the words where the speaker says the claim. The card comes up just before them, zooms to the focus and marks it as they start.
+5. One proof per claim, at most 6 in a clip, never two at once. In a split layout the card goes in the visual panel; full frame, the upper part, clear of the face and the captions.
+6. Capture a frame at the mark and look: the marked words are readable and inside the frame.
+
+The page is shown as captured, with its real address: never edit, fake or generate a page.`,
+
   document: "",
 } as const;
 
