@@ -1,6 +1,6 @@
 # Plan: unit text animator + `add_title` (lower third, name tag, chapter)  (2026-10-17)
 
-Track: Editor & motion · Work split: [`2026-10-17-text-animator-titles-sessions.md`](2026-10-17-text-animator-titles-sessions.md)
+Track: Editor & motion · PR: [#65](https://github.com/marcus-legia/opencmo/pull/65) · Work split: [`2026-10-17-text-animator-titles-sessions.md`](2026-10-17-text-animator-titles-sessions.md)
 
 Source research: `docs/research/editor/2026-10-17-text-animator-lower-thirds.md` (PR #63, branch
 `research/editor/2026-10-17-text-animator-lower-thirds`, not merged when this plan was written). Marcus left no

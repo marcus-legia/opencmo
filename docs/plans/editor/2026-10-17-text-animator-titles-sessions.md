@@ -1,8 +1,8 @@
 # Unit text animator + titles: work split for two sessions, one PR
 
 Plan: [`2026-10-17-text-animator-titles-plan.md`](2026-10-17-text-animator-titles-plan.md) — read it first, all of it.
-Branch: **`plan/editor/2026-10-17-text-animator-titles`** · PR: the draft PR that added these two files, shared by
-both sessions.
+Branch: **`plan/editor/2026-10-17-text-animator-titles`** · PR: [#65](https://github.com/marcus-legia/opencmo/pull/65) (draft), shared
+by both sessions.
 
 Two Claude Code sessions build this in parallel on the same branch:
 
