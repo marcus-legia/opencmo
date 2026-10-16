@@ -60,11 +60,14 @@ export function unitProgress(t: number, rank: number, step: number, unitLength: 
 `packages/editor-parity/**`, `apps/web/components/editor/inspector/**`. Reads `packages/clip-export/**` for the
 measurement but does not change it (a needed change goes to "Requests" for Marcus).
 
-- [ ] **A1 — Contracts.** The schema fields, constants and refinements; `graphemes`, `unitRanks`, `unitProgress`
+- [x] **A1 — Contracts.** The schema fields, constants and refinements; `graphemes`, `unitRanks`, `unitProgress`
       implemented (they are small and pure) and exported; `TextMetricsLike` optional fields; JSON schema regenerated.
       Accept: `npm run check:clip-doc`, `test:clip-doc` (new refinement tests: `unit` on `spin` rejected, `mask` on
       `fade` rejected, valid combos accepted), `check:clip-render`, `test:clip-render` green; existing parity
       thresholds unchanged. Push this first.
+      _Done:_ helpers live in `clip-render/src/units.ts` (plus `hashSeed`, the FNV-1a seed from a node id).
+      `center` ranks use `floor(|i − (n − 1)/2|)`, not `round`, so an even count starts with its two middle units
+      (with `round` no unit has rank 0). No drawing change, so parity is untouched.
 - [ ] **A2 — Graphemes (E1).** `revealChars`, `scramble`, `typewriter` on graphemes; seed unchanged for ASCII.
       Accept: tests "Xin chào 👋🏽" (no lone surrogate at 100 ratios), NFD "Nguyễn" (no base letter without its
       combining mark), `anim-scramble` / `anim-text` parity samples still pass; one frame mid-typewriter with an

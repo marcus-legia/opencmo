@@ -42,6 +42,9 @@ export type TextMetricsLike = {
   width: number;
   fontBoundingBoxAscent: number;
   fontBoundingBoxDescent: number;
+  /** Real glyph bounds (marks above "ễ" reach past the font box); both canvases provide them. */
+  actualBoundingBoxAscent?: number;
+  actualBoundingBoxDescent?: number;
 };
 
 type Style = {

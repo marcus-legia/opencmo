@@ -25,6 +25,7 @@ export { toFrames } from './tree.ts';
 import type { Measurer } from './text.ts';
 export type { Measurer } from './text.ts';
 export { setFallbackFamilies } from './text.ts';
+export { graphemes, hashSeed, unitProgress, unitRanks, type UnitOrder } from './units.ts';
 import type { Transcript } from './captions.ts';
 export { parseSubtitles, readTranscriptText, subtitleMime, SUBTITLE_TYPES } from './subtitles.ts';
 import type { Ctx2D, MediaHost, MediaNeed } from './types.ts';

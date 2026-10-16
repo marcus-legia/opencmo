@@ -6,6 +6,7 @@ import { captionFrame } from './captions.ts';
 import { evaluate } from './frame.ts';
 import { createRenderer, type MediaHost } from './index.ts';
 import { buildTree } from './tree.ts';
+import { graphemes, hashSeed, unitProgress, unitRanks } from './units.ts';
 
 const NO_MEDIA: MediaHost = { image: () => null, video: () => null, duration: () => null };
 
@@ -184,5 +185,39 @@ describe('kiểu chữ (E4-b/c)', () => {
       return max - min;
     };
     expect(width(60)).toBeLessThan(width(0) * 0.7);
+  });
+});
+
+describe('unit helpers (graphemes, ranks, progress)', () => {
+  it('keeps emoji with skin tone and decomposed marks whole', () => {
+    expect(graphemes('Xin chào 👋🏽')).toEqual(['X', 'i', 'n', ' ', 'c', 'h', 'à', 'o', ' ', '👋🏽']);
+    const nfd = 'Nguyễn'.normalize('NFD');
+    expect(graphemes(nfd)).toHaveLength(6);
+    expect(graphemes(nfd).join('')).toBe(nfd);
+  });
+
+  it('ranks units for each order', () => {
+    expect(unitRanks(5, 'first', 0)).toEqual([0, 1, 2, 3, 4]);
+    expect(unitRanks(5, 'last', 0)).toEqual([4, 3, 2, 1, 0]);
+    expect(unitRanks(5, 'center', 0)).toEqual([2, 1, 0, 1, 2]);
+    expect(unitRanks(4, 'center', 0)).toEqual([1, 0, 0, 1]);
+    expect(unitRanks(0, 'random', 1)).toEqual([]);
+  });
+
+  it('shuffles random order deterministically by seed', () => {
+    const seed = hashSeed('node-1');
+    const a = unitRanks(12, 'random', seed);
+    expect(unitRanks(12, 'random', seed)).toEqual(a);
+    expect([...a].sort((x, y) => x - y)).toEqual([...Array(12).keys()]);
+    expect(a).not.toEqual([...Array(12).keys()]);
+    expect(unitRanks(12, 'random', hashSeed('node-2'))).not.toEqual(a);
+  });
+
+  it('progresses each unit after its rank × step', () => {
+    expect(unitProgress(0, 0, 0.1, 0.5)).toBe(0);
+    expect(unitProgress(0.25, 0, 0.1, 0.5)).toBeCloseTo(0.5);
+    expect(unitProgress(0.25, 2, 0.1, 0.5)).toBeCloseTo(0.1);
+    expect(unitProgress(0.1, 3, 0.1, 0.5)).toBe(0);
+    expect(unitProgress(9, 3, 0.1, 0.5)).toBe(1);
   });
 });

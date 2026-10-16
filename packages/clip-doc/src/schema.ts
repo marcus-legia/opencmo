@@ -134,6 +134,14 @@ export const ANIMATION_TYPES = [
   'highlightPop',
 ] as const;
 
+/** What a per-unit animation steps through on a `text` node. */
+export const ANIMATION_UNITS = ['char', 'word', 'line'] as const;
+/** Which unit moves first: `center` starts from the middle outwards, `random` is seeded by the node id. */
+export const ANIMATION_ORDERS = ['first', 'center', 'last', 'random'] as const;
+/** Animations that can run per unit (char/word/line) on a text node. */
+export const UNIT_ANIMATION_TYPES = ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop', 'blur', 'grow'] as const;
+const MASKABLE = new Set<string>(['slideUp', 'slideDown']);
+
 export const EFFECT_TYPES = [
   'blur',
   'hueRotate',
@@ -314,12 +322,34 @@ export const AnimationSchema = z
     phase: z.enum(['in', 'out']).optional(),
     duration: time.optional(),
     delay: time.optional(),
-    /** typewriter/wordSlide/highlightPop: giây cho mỗi từ (mặc định 0.2); thiếu `duration` thì = số từ × perWord. */
+    /** typewriter/wordSlide/highlightPop: seconds per word (default 0.2); without `duration` it runs words × perWord. */
     perWord: z.number().min(0.03).max(2).optional(),
-    /** highlightPop: màu nhấn của từ đang tới (mặc định #FFD900). */
+    /** highlightPop: accent color of the word being reached (default #FFD900). */
     color: color.optional(),
+    /** Runs the animation per character, word or line of a text node instead of on the whole node. */
+    unit: z.enum(ANIMATION_UNITS).optional(),
+    /** With `unit`: which unit starts first (default `first`). */
+    order: z.enum(ANIMATION_ORDERS).optional(),
+    /** With `unit`: seconds between two units' starts. */
+    step: z.number().min(0.02).max(0.5).optional(),
+    /** With `unit` on slideUp/slideDown: each unit slides inside its own line box instead of across it. */
+    mask: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((animation, ctx) => {
+    const issue = (key: string, message: string) => ctx.addIssue({ code: 'custom', path: [key], message });
+    if (animation.unit !== undefined && !(UNIT_ANIMATION_TYPES as readonly string[]).includes(animation.type)) {
+      issue('unit', `unit works with ${UNIT_ANIMATION_TYPES.join(', ')}; not with ${animation.type}.`);
+    }
+    if (animation.unit === undefined) {
+      for (const key of ['order', 'step', 'mask'] as const) {
+        if (animation[key] !== undefined) issue(key, `${key} needs unit (char, word or line).`);
+      }
+    }
+    if (animation.mask !== undefined && !MASKABLE.has(animation.type)) {
+      issue('mask', `mask works with slideUp and slideDown; not with ${animation.type}.`);
+    }
+  });
 
 const tracks = z.array(TrackSchema).optional();
 const paintCommon = {

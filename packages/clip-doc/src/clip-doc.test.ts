@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { documentHash, DocumentInvalidError, migrate, parseTime, timingIssues, validate, type ClipDocument } from './index.ts';
+import { AnimationSchema, documentHash, DocumentInvalidError, migrate, parseTime, timingIssues, validate, type ClipDocument } from './index.ts';
 
 const SAMPLES = join(import.meta.dirname, '../../editor-parity/samples');
 const manifest = JSON.parse(readFileSync(join(SAMPLES, 'manifest.json'), 'utf8')) as { samples: { id: string }[] };
@@ -261,5 +261,59 @@ describe('timingIssues', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]!.key).toBe('text@3,1,,,');
     expect(issues[0]!.message).toBe('Text "Title": start (3s) must be before end (1s).');
+  });
+});
+
+describe('unit animations (unit / order / step / mask)', () => {
+  const ok = (animation: unknown) => AnimationSchema.safeParse(animation).success;
+  const messages = (animation: unknown) => AnimationSchema.safeParse(animation).error?.issues.map((issue) => issue.message) ?? [];
+
+  it('accepts valid combinations', () => {
+    expect(ok({ type: 'fade', unit: 'char' })).toBe(true);
+    expect(ok({ type: 'slideUp', unit: 'word', order: 'center', step: 0.05, mask: true })).toBe(true);
+    expect(ok({ type: 'slideDown', unit: 'line', mask: false })).toBe(true);
+    expect(ok({ type: 'pop', unit: 'char', order: 'random', phase: 'out' })).toBe(true);
+    expect(ok({ type: 'blur', unit: 'word', order: 'last' })).toBe(true);
+    expect(ok({ type: 'spin' })).toBe(true);
+  });
+
+  it('rejects unit on animations that cannot run per unit', () => {
+    expect(messages({ type: 'spin', unit: 'word' })).toEqual([
+      'unit works with fade, slideUp, slideDown, slideLeft, slideRight, pop, blur, grow; not with spin.',
+    ]);
+    expect(ok({ type: 'typewriter', unit: 'char' })).toBe(false);
+  });
+
+  it('rejects order, step and mask without unit', () => {
+    expect(messages({ type: 'fade', order: 'last' })).toEqual(['order needs unit (char, word or line).']);
+    expect(messages({ type: 'slideUp', step: 0.05 })).toEqual(['step needs unit (char, word or line).']);
+    expect(ok({ type: 'slideUp', mask: true })).toBe(false);
+  });
+
+  it('rejects mask on anything but slideUp/slideDown', () => {
+    expect(messages({ type: 'fade', unit: 'line', mask: true })).toEqual(['mask works with slideUp and slideDown; not with fade.']);
+  });
+
+  it('keeps step inside 0.02–0.5 s', () => {
+    expect(ok({ type: 'fade', unit: 'char', step: 0.01 })).toBe(false);
+    expect(ok({ type: 'fade', unit: 'char', step: 0.6 })).toBe(false);
+  });
+
+  it('validates inside a document', () => {
+    const doc = {
+      version: 1,
+      stage: {
+        children: [
+          {
+            kind: 'scene',
+            name: 'S',
+            width: 100,
+            height: 100,
+            children: [{ kind: 'text', text: 'Hi', animations: [{ type: 'twist', unit: 'char' }] }],
+          },
+        ],
+      },
+    };
+    expect(() => validate(doc)).toThrow(DocumentInvalidError);
   });
 });
