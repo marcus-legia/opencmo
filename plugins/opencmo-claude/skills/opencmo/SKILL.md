@@ -70,7 +70,7 @@ character from the thread — the server checks every one, and a missing quote s
   steps. Replies help first, mention the product at most once at the end and say plainly it is
   the founder's own; under 120 words, no links.
 - **Research**: `search_reddit`, `subreddit_posts`, `reddit_thread`, `x_profile`,
-  `find_outliers`, `search_videos`, `search_threads`, `get_transcript`. They are capped per hour;
+  `find_outliers`, `search_videos`, `search_threads`, `get_video_transcript`. They are capped per hour;
   quote what you use with its URL. Playbooks: `read_cmo_playbook` or the
   `opencmo://skills/cmo/…` and `opencmo://skills/library/…` resources.
 - **Clips and explainers**: find the clip (`list_projects`, `list_clips`), read the matching

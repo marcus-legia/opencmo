@@ -175,7 +175,7 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       memoized between rounds (`ctx.step(..., { memo })`). Checker calls are skipped in mode B.
       Step labels: `plan_week`, `review_week`, `summarize_memory`, `draft_post`, `make_queries`,
       `score_thread`, `draft_reply`, `write_captions`, `competitor_research`.
-- [ ] **B4 — CMO group.** The 20 CMO tools (`read_doc`, `update_document`, `read_site`,
+- [x] **B4 — CMO group.** The 20 CMO tools (`read_doc`, `update_document`, `read_site`,
       `search_reddit`, `reddit_thread`, `subreddit_posts`, `find_outliers`, `x_profile`,
       `search_videos`, `search_threads`, `get_transcript`, `create_task`, `create_video_brief`,
       `get_run_result`, `list_calendar`, `list_approvals`, `set_week_goal`, `remember`,
@@ -183,25 +183,26 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       social reads and `read_site` (`rate_limit_hit` buckets).
       *Status:* code done in `apps/web/lib/cmo/mcp/cmo.ts` (`CMO_GROUP`); `read_skill` is exposed
       as `read_cmo_playbook` (A7 owns `read_skill`); caps are `cmo_read_hit` (`mcp_social` 60/h,
-      `mcp_site` 20/h), a separate function so A9 can replace `rate_limit_hit` freely; a "now"
-      `create_task` over MCP goes to the inbox at 0 credits. Registration waits for A1.
-- [ ] **B5 — Inbox group.** `list_inbox`, `get_inbox_item` (the context the job would have
+      `mcp_site` 20/h), a separate function so A9 can replace `rate_limit_hit` freely;
+      `get_transcript` is `get_video_transcript` (A's editor owns the name); a "now"
+      `create_task` over MCP goes to the inbox at 0 credits. Registered in `packages/mcp-server/src/groups/` (2026-10-16).
+- [x] **B5 — Inbox group.** `list_inbox`, `get_inbox_item` (the context the job would have
       built: documents, skills, metrics, threads), `submit_plan`, `submit_post_draft`,
       `submit_sales_scan`, `submit_video_pack`, `submit_memory`, `get_check_rubric`. Submissions
       validated by each job's zod schema + deterministic checks, then the usual approval cards.
       *Status:* code done in `apps/web/lib/cmo/mcp/inbox.ts` (`INBOX_GROUP`), plus
       `submit_research`; step → schema → submit tool table in `lib/cmo/jobs/steps.ts`; X drafts are
-      code-checked before they are stored. Registration waits for A1.
-- [ ] **B6 — Account group.** `get_credits`, `get_mode` (A/B and why), top-up message for media
+      code-checked before they are stored. Registered in `packages/mcp-server/src/groups/` (2026-10-16).
+- [x] **B6 — Account group.** `get_credits`, `get_mode` (A/B and why), top-up message for media
       tools when the balance is short (shared helper A's media tools call — publish its
       signature under "Requests").
       *Status:* code done in `apps/web/lib/cmo/mcp/account.ts` (`ACCOUNT_GROUP`,
-      `mediaCreditsShort`). Registration waits for A1.
-- [ ] **B7 — CMO prompts + resources.** Prompts `/onboard`, `/plan-week`, `/sales-scan`,
+      `mediaCreditsShort`). Registered in `packages/mcp-server/src/groups/` (2026-10-16).
+- [x] **B7 — CMO prompts + resources.** Prompts `/onboard`, `/plan-week`, `/sales-scan`,
       `/inbox`; resources `opencmo://skills/cmo/{name}` (7) and `opencmo://skills/library/{name}`
       (38, with `LIBRARY_PREAMBLE`).
-      *Status:* code done in `apps/web/lib/cmo/mcp/prompts.ts` (on `CMO_GROUP`). Registration waits
-      for A1.
+      *Status:* code done in `apps/web/lib/cmo/mcp/prompts.ts` (on `CMO_GROUP`). Registered in
+      `packages/mcp-server/src/groups/cmo.ts` (2026-10-16).
 - [x] **B8 — "Continue in Claude".** In mode B the Assistant panel and CMO chat show a card:
       what happened, how to connect (connector URL, Claude Code command), and the inbox count.
       Copy follows CLAUDE.md product rules (describes software; no model names as features).
@@ -217,7 +218,7 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       validate` passes; `marketplace add` + `install` in a clean HOME shows 1 skill + 1 MCP server.
       The skill names A's tools (`preview_explainer`, `get_generation`, guides): A, correct it if
       your names change.
-- [ ] **B10 — End-to-end.** Staging-like local run with Anthropic + Gemini keys removed: cron
+- [x] **B10 — End-to-end.** Staging-like local run with Anthropic + Gemini keys removed: cron
       creates inbox items; Claude Code `/inbox` completes a weekly plan, an X draft and a Reddit
       scan; cards appear in Approvals; nothing posts.
       *Status:* the server half passes against local Supabase with no LLM keys —
@@ -233,8 +234,14 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       queries and scored all 30 threads with exact quotes (the fake threads scored under 60, so no
       cards, as they should); 5 runs, 0 credits. It found one bug, fixed: Claude Code shows the
       model `structuredContent` when present, so every structured result now repeats the full text
-      as `message`. The harness was not committed (A1 brings the real server). Left for A1/A3:
-      the same run over `modal serve`.
+      as `message`. The harness was not committed.
+      *Real server (2026-10-16, after A1):* the same run on A's `packages/mcp-server` (`npm run
+      dev`, local Supabase, no LLM keys, founder at 0 credits) through the B9 plugin
+      (`claude -p "Please work my OpenCMO inbox." --plugin-dir plugins/opencmo-claude`,
+      `OPENCMO_MCP_URL` → the local server, a real `ocm_` key from `create_api_key`): the skill
+      triggered, both items done (X card in Approvals; Reddit scan answered in two rounds, no
+      thread passed 60 on the fake reader), 5 runs, 0 credits, key `last_used_at` set, no server
+      errors. Not run over `modal serve`: no Modal credentials here, and Marcus chose local.
 
 ## Sync points
 
@@ -280,7 +287,7 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
   video's transcript) and the editor's `get_transcript` (the clip's words, named in every editor
   guide) cannot both exist; the registry throws at the first `tools/list`. Please rename yours
   (e.g. `get_video_transcript`) before registering `CMO_GROUP`. That was the only clash (tools,
-  prompts, resources compared). Status: open.
+  prompts, resources compared). Status: done — B exposes it as `get_video_transcript`.
 - `[A→B]` 2026-10-16 — **B's imports under A2.** Carried as they are: the server imports
   `@/lib/**` through the path alias with the `react-server` condition (`server-only` is empty
   there); the Modal bundle (A3) does the same and maps `next/server` / `next/headers` to small
@@ -295,6 +302,10 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
 - `[A→B]` 2026-10-16 — **Migrations.** Mine is `20261129090000_mcp_server.sql` (after both of
   yours) and redefines `rate_limit_hit` from G5 + `mcp_preview`; yours does not touch it. pgTAP
   file `160_mcp_server.test.sql`. Status: FYI.
+
+- `[B→A]` 2026-10-16 — **Lockfile.** `packages/mcp-server/package.json` lists `@supabase/supabase-js`
+  but the committed `package-lock.json` did not, so `npm ci` would refuse it; `npm install`
+  added the one line and B committed it. Status: done, FYI.
 
 ## Out of scope for this PR
 

@@ -18,8 +18,11 @@ import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 
 import { fail, ok, type CmoMcpTool, type CmoToolContext, type McpAnnotations, type McpResult } from "./contract";
 
-/** Session A's editor group has its own `read_skill` (the founder's editing recipes). */
-const MCP_NAME: Record<string, string> = { read_skill: "read_cmo_playbook" };
+/**
+ * Session A's editor group has its own `read_skill` (the founder's editing recipes) and
+ * `get_transcript` (the clip's words); the CMO's versions take other names over MCP.
+ */
+const MCP_NAME: Record<string, string> = { read_skill: "read_cmo_playbook", get_transcript: "get_video_transcript" };
 
 /** Lookups one MCP call may spend (`find_outliers` takes two). */
 const LOOKUPS_PER_CALL = 3;
@@ -43,7 +46,7 @@ const TITLES: Record<string, string> = {
   find_outliers: "Find standout posts",
   search_videos: "Search TikTok or YouTube",
   search_threads: "Search Threads",
-  get_transcript: "Get a video transcript",
+  get_transcript: "Get a social video's transcript",
   research_credits: "Research lookups left",
 };
 
