@@ -89,10 +89,22 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
       `plan_video` accept a finished plan from the caller (reviewed the same way, no model call;
       `lib/agent/client-plans.check.ts`). Verified: `check:contracts`, `agent:eval` (fake, 41/41
       with the local motion CLI), `tsc`.
-- [ ] **A3 — Modal app.** `opencmo-mcp`: Node image built from the repo, `@modal.web_server`,
-      `@modal.concurrent`, `min_containers=1`, secrets (`opencmo`, `opencmo-voice`, `fal-secret`).
-      `callModal`/`spawnModal` call `render_motion` / `motion_preview` / `run_task` directly.
-      `modal serve` URL works with the Inspector and Claude Code (`claude mcp add --transport http`).
+- [x] **A3 — Modal app.** `opencmo-mcp` in `modal_app.py`: a Node 22 image with one bundled file
+      (`npm run build:mcp-server` → `packages/mcp-server/dist/server.cjs`, esbuild, `react-server`
+      condition, `next/server`/`next/headers` stand-ins), `@modal.web_server(8000)`,
+      `@modal.concurrent(max_inputs=50)`, `min_containers=1`, 0.25 core / 512 MB, secrets
+      `opencmo`, `opencmo-voice`, `fal-secret` + `opencmo-mcp` (the web-side variables; listed in
+      the block's comment). Without the bundle the app deploys without this function, so the
+      worker's own deploy never depends on it. `callModal` / `spawnModal` use Modal's JS client
+      (`modal` npm, `functions.fromName("opencmo", …)`, allowlist `render_motion`, `render_three`,
+      `run_task`); today's tools go through the task queue and `motion_preview` exactly like the
+      app, so none of them needs it yet. Checked: the bundle alone in a clean `node:22-slim`
+      container (no repo, no node_modules) serves every flow against local Supabase; `modal_app.py`
+      imports with modal 1.6.2 and registers `mcp_server`. Not checked here: `modal serve` itself
+      (no Modal token in this session); first run: `npm run build:mcp-server`, create the
+      `opencmo-mcp` secret, `modal serve packages/engine/modal_app.py`, then
+      `claude mcp add --transport http opencmo https://<workspace>--opencmo-mcp-dev.modal.run/mcp
+      --header "Authorization: Bearer ocm_…"`.
 - [x] **A4 — Studio tools.** Every Assistant clip tool with `clip_id` (`groups/studio.ts`), run
       through the Assistant's own scope; each write is a checkpoint "MCP" in Version history. Left
       out: the six browser tools (capture, waveform, 3D preview, save frame, grab, color),

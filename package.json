@@ -45,7 +45,8 @@
     "test:clip-three": "npm run test --workspace @opencmo/clip-three",
     "check:clip-motion": "npm run check --workspace @opencmo/clip-motion",
     "check:mcp-server": "npm run check --workspace @opencmo/mcp-server",
-    "test:mcp-server": "npm run test --workspace @opencmo/mcp-server"
+    "test:mcp-server": "npm run test --workspace @opencmo/mcp-server",
+    "build:mcp-server": "npm run build --workspace @opencmo/mcp-server"
   },
   "overrides": {
     "postcss": "8.5.28"
