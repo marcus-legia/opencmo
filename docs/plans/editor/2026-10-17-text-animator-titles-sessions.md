@@ -168,10 +168,21 @@ Until A1 lands, B1–B3 need nothing from A.
       [`2026-10-17-text-animator-titles-frames/`](2026-10-17-text-animator-titles-frames/) (`b-title-*`); marks of
       "Nguyễn Thị Hương" intact at full size (`b-title-marks-fullsize.jpg`). Known nit: in the card/centred-bar
       looks the accent line draws while the last words are still rising, so for ~0.2 s a rising descender crosses it.
-- [ ] **B5 — Editor UI (E7).** "Title" kind in `VisualsPanel.tsx` (form + edit through `update_visual`); "Add title"
+- [x] **B5 — Editor UI (E7).** "Title" kind in `VisualsPanel.tsx` (form + edit through `update_visual`); "Add title"
       from a transcript selection in `TranscriptPanel.tsx`. Accept: typecheck, build, a Playwright step in the
       existing editor e2e if one covers the Visuals panel (otherwise a screenshot), both flows tried in the running
       app.
+      _Done:_ no e2e covers the Visuals panel, so both flows were tried in the running app (local Supabase via the
+      pinned CLI, `next build && next start`, the e2e fixture worker) with a throwaway Playwright script, not
+      committed: Title → Nguyễn Thị Hương / Founder, Episode 12 / Kicker → "Add at playhead" wrote one `add_title`
+      group 0–5.5 s; Transcript → shift-select "built this in" → "Add title" pre-filled the name, role typed, Add →
+      a lower third with `quote: "built this in"` at 0.8–6.3 s (when the words are spoken), above the captions.
+      Trying it found two layout bugs, fixed: the ninth kind chip ran under the canvas toolbar (the kind row wraps
+      now), and the form was taller than a 720 px-high window (look and side share a row; the hint moved to the
+      Add button's tooltip). Limits: bundled Chromium has no H.264 and Chrome could not be downloaded here, so the
+      script passed the editor's codec check by stubbing `canPlayType` (preview video is a flat frame; panels and
+      ops are real); logflare was excluded from `supabase start` because it fails to boot in this container.
+      Screenshots: `b5-*.jpg` in the frames folder. Typecheck and `npm run build` green.
 - [ ] **B6 — Assistant (E8) + final look.** `tools.ts` description, `update_visual` text, `prompt.ts` mention,
       `guides.ts` paragraph (+ A's animation text from Requests), eval task `name-tag`. Then the full "Verify by
       looking" pass from the plan (both aspect ratios, dark and bright shots, all four phases, "Nguyễn Thị Hương" and

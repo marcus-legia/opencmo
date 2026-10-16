@@ -303,7 +303,8 @@ export function VisualsPanel({
 
   return (
     <div className="ed2-gen" data-testid="visuals-panel" onPointerDown={(event) => event.stopPropagation()}>
-      <div className="ed2-row">
+      {/* Nine kinds no longer fit one line of the panel: wrap instead of running under the canvas toolbar. */}
+      <div className="ed2-row ed2-wrap">
         {KINDS.filter((entry) => entry.kind !== "studio" || studio).map((entry) => (
           <button key={entry.kind} type="button" className="ed2-chip" aria-pressed={kind === entry.kind} data-testid={`visuals-kind-${entry.kind}`} onClick={() => setKind(entry.kind)}>
             {entry.label}
@@ -511,16 +512,16 @@ export function VisualsPanel({
             onChange={(event) => setTitleSub(event.target.value)}
             onKeyDown={(event) => event.stopPropagation()}
           />
-          <div className="ed2-row ed2-wrap" aria-label="Look">
+          {/* Look and side share a row: the panel has no max height and must fit a 720 px-high window. */}
+          <div className="ed2-row ed2-wrap">
             {TITLE_LOOKS.map((value) => (
               <button key={value} type="button" className="ed2-chip" aria-pressed={titleLook === value} data-testid={`visuals-title-look-${value}`} onClick={() => setTitleLook(value)}>
                 {TITLE_LOOK_LABELS[value]}
               </button>
             ))}
-          </div>
-          <div className="ed2-row ed2-wrap" aria-label="Side">
+            <span className="ed2-grow" />
             {TITLE_SIDES.map((entry) => (
-              <button key={entry.side} type="button" className="ed2-chip" aria-pressed={titleSide === entry.side} data-testid={`visuals-title-side-${entry.side}`} onClick={() => setTitleSide(entry.side)}>
+              <button key={entry.side} type="button" className="ed2-chip" aria-pressed={titleSide === entry.side} aria-label={`Side: ${entry.label}`} data-testid={`visuals-title-side-${entry.side}`} onClick={() => setTitleSide(entry.side)}>
                 {entry.label}
               </button>
             ))}
@@ -532,7 +533,6 @@ export function VisualsPanel({
               </button>
             ))}
           </div>
-          <p className="ed2-muted">In your brand colors, inside the safe area and above the captions.</p>
         </>
       ) : null}
 
@@ -653,6 +653,7 @@ export function VisualsPanel({
             className="ed2-btn ed2-primary"
             disabled={busy || !spec()}
             data-testid="visuals-add"
+            title={kind === "title" ? "In your brand colors, inside the safe area and above the captions" : undefined}
             onClick={() => {
               const extra = spec();
               if (extra) add(opFor[kind], extra);
