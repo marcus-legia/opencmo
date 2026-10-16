@@ -4,7 +4,7 @@ import { validate, type ClipDocument } from '@opencmo/clip-doc';
 
 import { CAPABILITIES, type CapabilityInfo } from '../capabilities';
 import { nodes } from '../doc';
-import { OpError, OpFailure, applyOps, type OpContext } from '../ops';
+import { OP_NAMES, OpError, OpFailure, applyOps, type OpContext } from '../ops';
 import { normalize, type Transcript } from '../transcript';
 import { runStyle, type ApplyStyle, type CaptureState, type StyleContext, type StyleDeps } from './apply';
 import type { EditPlanInput } from './plan';
@@ -287,14 +287,29 @@ describe('apply_style through the registry', () => {
 	it('degrades to what works today and reports the rest', async () => {
 		const ctx = memoryContext({ cap: { status: 'ready' } });
 		const deps: StyleDeps = {
-			has: (name) => ['set_caption_style', 'set_caption_breaks', 'set_props', 'set_layout'].includes(name),
-			run: async (document, op) => (await applyOps(document, [op], ctx)).document,
+			has: (name) => OP_NAMES.includes(name as never),
+			run: async (document, op) => {
+				try {
+					return (await applyOps(document, [op], ctx)).document;
+				} catch (error) {
+					if (error instanceof OpError) throw new OpFailure(error.message);
+					throw error;
+				}
+			},
 		};
 		const { document, receipt } = await runStyle(await cutClip(ctx), { op: 'apply_style', style: 'senior-dev-listicle', plan } as ApplyStyle, ctx, deps);
 		const captions = nodes(document).find((node) => node.kind === 'captions') as unknown as Record<string, unknown>;
 		expect(captions).toMatchObject({ preset: 'spotlight', maxWords: 2 });
-		expect(receipt.unavailable).toEqual(['caption.reveal', 'caption.emphasis', 'title.hook', 'speaker.punchIn', 'transition.whip', 'proof.capture', 'proof.card']);
-		expect(receipt.applied).toEqual(['Captions: spotlight style', 'Captions show at most 2 words at a time']);
+		// Every capability this plan touches is applied when ready and reported when not.
+		const touched = ['caption.reveal', 'caption.emphasis', 'title.hook', 'speaker.punchIn', 'transition.whip', 'proof.capture', 'proof.card'] as const;
+		expect(receipt.unavailable).toEqual(touched.filter((id) => !CAPABILITIES[id].ready));
+		expect(receipt.applied.slice(0, 2)).toEqual(['Captions: spotlight style', 'Captions show at most 2 words at a time']);
+		if (CAPABILITIES['caption.reveal'].ready) expect(captions.reveal).toBe('fade');
+		if (CAPABILITIES['caption.emphasis'].ready) {
+			expect(captions.emphasis).toEqual([{ start: 10.8, end: 10.8 }]);
+			expect(captions.emphasisStyle).toEqual({ fontFamily: 'Fraunces', fontStyle: 'italic', color: '#FFD400' });
+			expect(receipt.skipped.map((item) => item.item)).toContain('Emphasis "nowhere in the clip"');
+		}
 	});
 
 	it('stays inside its budget (< 300 ms on the document, no worker)', async () => {
