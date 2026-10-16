@@ -235,6 +235,25 @@ export const NOT_COMPLETED = "Not completed: the turn was stopped before this to
  * leaves them unanswered in the stored history, and every later turn in that chat would fail.
  * Answer them here as not completed; the stored history is left as it is.
  */
+/**
+ * A server tool call (tool search) must be followed by its result block in the same message. When the
+ * model calls a client tool and searches in one response, the response stops for the client tool and
+ * the search never runs: the stored message keeps a `server_tool_use` with no result, and the API
+ * rejects every later request of that chat ("…tool use with id … was found without a corresponding
+ * tool_search_tool_result block"). Drop those calls before sending; the stored history is left as it is.
+ */
+export function dropUnansweredServerToolUses(history: StoredMessage[]): StoredMessage[] {
+  type Item = { type?: string; id?: string; tool_use_id?: string };
+  return history.map((message) => {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) return message;
+    const blocks = message.content as Item[];
+    const answered = new Set(blocks.filter((block) => block.type?.endsWith("_tool_result") && block.tool_use_id).map((block) => block.tool_use_id));
+    const kept = blocks.filter((block) => block.type !== "server_tool_use" || answered.has(block.id));
+    if (kept.length === blocks.length) return message;
+    return { ...message, content: kept.length ? kept : [{ type: "text", text: "…" }] };
+  });
+}
+
 /** Ids of `tool_use` blocks no `tool_result` answers: what `closeDanglingToolUses` fills in. */
 export function danglingToolUses(history: StoredMessage[]): string[] {
   type Item = { type?: string; id?: string; tool_use_id?: string };
@@ -319,7 +338,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           // Breakpoint thứ hai: đuôi hội thoại, để bước sau chỉ trả phần mới.
           cache_control: { type: "ephemeral" },
           tools: toolDefinitions(specs, useStrict, search),
-          messages: closeDanglingToolUses(history, ran) as Anthropic.Beta.Messages.BetaMessageParam[],
+          messages: closeDanglingToolUses(dropUnansweredServerToolUses(history), ran) as Anthropic.Beta.Messages.BetaMessageParam[],
           betas: [FALLBACK_BETA, THINKING_BINDING_BETA, ...(editing ? [editing.beta] : [])],
           fallbacks: "default",
           ...(editing ? { context_management: editing.context_management } : {}),

@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, dropUnansweredServerToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
 import type { GoogleGenAI } from "@google/genai";
 
 import { closeDanglingCalls, geminiProvider } from "./providers/gemini";
@@ -98,6 +98,29 @@ assert.deepEqual([reported[0]!.content, reported[0]!.is_error], ['{"ok":true,"pa
 assert.deepEqual([reported[1]!.content, reported[1]!.is_error], [NOT_COMPLETED, true]);
 // A clean history is passed through unchanged.
 assert.deepEqual(closeDanglingToolUses([stopped[0]!, { role: "assistant" as const, content: [{ type: "text", text: "hi" }] }]).length, 2);
+
+// A tool search the response never ran (it stopped for a client tool in the same message) is dropped
+// before sending; an answered search and every other block stay.
+const unrun = [
+  { role: "user" as const, content: [{ type: "text", text: "make it" }] },
+  {
+    role: "assistant" as const,
+    content: [
+      { type: "server_tool_use", id: "srv1", name: "tool_search_tool_bm25", input: { query: "frame" } },
+      { type: "tool_search_tool_result", tool_use_id: "srv1", content: { type: "tool_search_tool_search_result", tool_references: [] } },
+      { type: "tool_use", id: "t9", name: "set_frame", input: {} },
+      { type: "server_tool_use", id: "srv2", name: "tool_search_tool_bm25", input: { query: "explainer" } },
+    ],
+  },
+  { role: "user" as const, content: [{ type: "tool_result", tool_use_id: "t9", content: "ok" }] },
+];
+const cleaned = dropUnansweredServerToolUses(unrun);
+assert.deepEqual((cleaned[1]!.content as { type: string; id?: string }[]).map((block) => block.id ?? block.type), ["srv1", "tool_search_tool_result", "t9"]);
+assert.equal(cleaned[0], unrun[0]);
+assert.equal(cleaned[2], unrun[2]);
+assert.equal(dropUnansweredServerToolUses(cleaned)[1], cleaned[1]);
+const onlySearch = dropUnansweredServerToolUses([{ role: "assistant" as const, content: [{ type: "server_tool_use", id: "s", name: "tool_search_tool_bm25", input: {} }] }]);
+assert.deepEqual(onlySearch[0]!.content, [{ type: "text", text: "…" }]);
 
 // ---------------------------------------------------------------- bớt ảnh cũ
 // Ba tin nhắn có ảnh: chỉ hai cái mới nhất giữ ảnh; đầu vào không bị sửa.
