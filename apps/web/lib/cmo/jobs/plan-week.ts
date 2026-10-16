@@ -12,7 +12,7 @@ import { skillText } from "../skills";
 import type { JobContext, JobOutput } from "./runner";
 import { isoDay, type Documents, type PlanItem } from "./types";
 
-const PlanSchema = z.object({
+export const PlanSchema = z.object({
   items: z
     .array(
       z.object({

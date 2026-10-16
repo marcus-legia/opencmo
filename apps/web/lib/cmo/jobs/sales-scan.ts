@@ -24,11 +24,11 @@ const MAX_THREADS = 30;
 const MAX_CARDS = 5;
 const MAX_AGE_DAYS = 30;
 
-const QueriesSchema = z.object({
+export const QueriesSchema = z.object({
   queries: z.array(z.string()).describe("Six to eight Reddit search queries, each 2 to 6 words"),
 });
 
-const ScoreSchema = z.object({
+export const ScoreSchema = z.object({
   scores: z.array(
     z.object({
       index: z.number().int(),
@@ -40,7 +40,7 @@ const ScoreSchema = z.object({
   ),
 });
 
-const ReplySchema = z.object({
+export const ReplySchema = z.object({
   replies: z.array(z.object({ index: z.number().int(), reply: z.string().describe("The reply, under 120 words") })),
 });
 

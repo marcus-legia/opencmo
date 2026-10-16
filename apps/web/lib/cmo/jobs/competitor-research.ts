@@ -19,7 +19,7 @@ import type { CompetitorInsight, Documents } from "./types";
 
 const MAX_ACCOUNTS = 4;
 
-const InsightSchema = z.object({
+export const InsightSchema = z.object({
   hooks: z
     .array(z.object({ pattern: z.string().describe("The hook pattern in a few words"), url: z.string().describe("URL of the outlier post that shows it, copied from the data"), why: z.string() }))
     .describe("Three to six hook patterns that beat the baseline"),

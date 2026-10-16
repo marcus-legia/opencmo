@@ -29,7 +29,7 @@ const MAX_CLIPS = 10;
 
 const PLATFORMS: Platform[] = ["tiktok", "reels", "shorts", "facebook", "threads"];
 
-const CaptionSchema = z.object({
+export const CaptionSchema = z.object({
   clips: z.array(
     z.object({
       index: z.number().int(),

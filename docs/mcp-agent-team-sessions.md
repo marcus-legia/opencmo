@@ -142,16 +142,27 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       `get_run_result`, `list_calendar`, `list_approvals`, `set_week_goal`, `remember`,
       `research_credits`, `read_skill`), annotated; no tool posts anything. Per-user caps on
       social reads and `read_site` (`rate_limit_hit` buckets).
+      *Status:* code done in `apps/web/lib/cmo/mcp/cmo.ts` (`CMO_GROUP`); `read_skill` is exposed
+      as `read_cmo_playbook` (A7 owns `read_skill`); caps are `cmo_read_hit` (`mcp_social` 60/h,
+      `mcp_site` 20/h), a separate function so A9 can replace `rate_limit_hit` freely; a "now"
+      `create_task` over MCP goes to the inbox at 0 credits. Registration waits for A1.
 - [ ] **B5 — Inbox group.** `list_inbox`, `get_inbox_item` (the context the job would have
       built: documents, skills, metrics, threads), `submit_plan`, `submit_post_draft`,
       `submit_sales_scan`, `submit_video_pack`, `submit_memory`, `get_check_rubric`. Submissions
       validated by each job's zod schema + deterministic checks, then the usual approval cards.
+      *Status:* code done in `apps/web/lib/cmo/mcp/inbox.ts` (`INBOX_GROUP`), plus
+      `submit_research`; step → schema → submit tool table in `lib/cmo/jobs/steps.ts`; X drafts are
+      code-checked before they are stored. Registration waits for A1.
 - [ ] **B6 — Account group.** `get_credits`, `get_mode` (A/B and why), top-up message for media
       tools when the balance is short (shared helper A's media tools call — publish its
       signature under "Requests").
+      *Status:* code done in `apps/web/lib/cmo/mcp/account.ts` (`ACCOUNT_GROUP`,
+      `mediaCreditsShort`). Registration waits for A1.
 - [ ] **B7 — CMO prompts + resources.** Prompts `/onboard`, `/plan-week`, `/sales-scan`,
       `/inbox`; resources `opencmo://skills/cmo/{name}` (7) and `opencmo://skills/library/{name}`
       (38, with `LIBRARY_PREAMBLE`).
+      *Status:* code done in `apps/web/lib/cmo/mcp/prompts.ts` (on `CMO_GROUP`). Registration waits
+      for A1.
 - [ ] **B8 — "Continue in Claude".** In mode B the Assistant panel and CMO chat show a card:
       what happened, how to connect (connector URL, Claude Code command), and the inbox count.
       Copy follows CLAUDE.md product rules (describes software; no model names as features).
@@ -174,7 +185,26 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
 
 ## Requests (append-only; `[A→B]` or `[B→A]`, date, what, status)
 
-- _none yet_
+- `[B→A]` 2026-10-16 — **Group files.** B's groups are ready as plain objects in
+  `apps/web/lib/cmo/mcp/index.ts`: `CMO_GROUP`, `INBOX_GROUP`, `ACCOUNT_GROUP` (tools, prompts,
+  resources in the contract's shapes; `run(input, ctx)` only reads `ctx.supabase` and
+  `ctx.userId`; results are `{ content: [{ type: "text", text }], structuredContent?, isError? }`
+  — tell me if `McpResult` differs). Once A1 lands, B's group files are one line each:
+  `registerGroup(CMO_GROUP)`. Status: open.
+- `[B→A]` 2026-10-16 — **A2 must carry B's imports.** `lib/cmo/mcp/*` imports `@/lib/agent/cmo-tools`,
+  `@/lib/agent/cmo-research`, `@/lib/cmo/**`, `@/lib/site`, `@/lib/llm-health`; `cmo-tools.ts`
+  imports `server-only` and `startCmoRun` (`next/server` `after()`; inbox runs skip the kick, but
+  the import stays). Either `agent-tools` takes these as they are, or tell me where to move
+  them. Status: open.
+- `[B→A]` 2026-10-16 — **Top-up helper (B6).**
+  `mediaCreditsShort(supabase: SupabaseClient, userId: string, needed: number): Promise<string | null>`
+  from `apps/web/lib/cmo/mcp/account.ts`: null when the balance covers `needed`, else the
+  sentence to return as the media tool's `isError` result. Status: published.
+- `[B→A]` 2026-10-16 — **Tool name.** The CMO chat's `read_skill` is `read_cmo_playbook` over MCP;
+  `read_skill` / `save_skill` stay yours (A7). Status: FYI.
+- `[B→A]` 2026-10-16 — **Pre-existing red check.** `lib/agent/video-usecases.check.ts:67` fails on
+  `main` too (voice "Aria" where the check expects "Test A"), so `check:contracts` stops there.
+  Yours (`lib/agent/**`). Status: open.
 
 ## Out of scope for this PR
 

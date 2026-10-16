@@ -179,10 +179,10 @@ $$;
 -- The founder's items still waiting for an answer (or for the replay), newest first. The request
 -- itself is large: inbox_claim returns it for one item.
 create or replace function public.inbox_list()
-returns table (id uuid, kind text, step text, status text, feedback text, rounds integer, created_at timestamptz, expires_at timestamptz, run_id uuid)
+returns table (id uuid, kind text, step text, title text, status text, feedback text, rounds integer, created_at timestamptz, expires_at timestamptz, run_id uuid)
 language sql stable security definer set search_path = public
 as $$
-  select i.id, i.kind, i.step,
+  select i.id, i.kind, i.step, left(i.request->>'title', 200),
          case when i.status in ('open', 'claimed') and i.expires_at <= now() then 'expired' else i.status end,
          i.feedback, i.rounds, i.created_at, i.expires_at, i.run_id
   from public.cmo_inbox i

@@ -2793,6 +2793,43 @@ $$;
 
 
 --
+-- Name: cmo_read_hit(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_read_hit(p_bucket text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_limit integer := public.cmo_read_limit(p_bucket);
+  v_window timestamptz := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  v_count integer;
+begin
+  if v_limit <= 0 then
+    raise exception 'Invalid rate limit.' using errcode = '22023';
+  end if;
+  insert into public.rate_limits (user_id, bucket, window_start, count)
+  values (v_user, p_bucket, v_window, 1)
+  on conflict (user_id, bucket, window_start) do update set count = public.rate_limits.count + 1
+  returning count into v_count;
+  return v_count <= v_limit;
+end;
+$$;
+
+
+--
+-- Name: cmo_read_limit(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_read_limit(p_bucket text) RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select case p_bucket when 'mcp_social' then 60 when 'mcp_site' then 20 else 0 end
+$$;
+
+
+--
 -- Name: cmo_record_goal_result(uuid, date, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5028,11 +5065,11 @@ $$;
 -- Name: inbox_list(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.inbox_list() RETURNS TABLE(id uuid, kind text, step text, status text, feedback text, rounds integer, created_at timestamp with time zone, expires_at timestamp with time zone, run_id uuid)
+CREATE FUNCTION public.inbox_list() RETURNS TABLE(id uuid, kind text, step text, title text, status text, feedback text, rounds integer, created_at timestamp with time zone, expires_at timestamp with time zone, run_id uuid)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select i.id, i.kind, i.step,
+  select i.id, i.kind, i.step, left(i.request->>'title', 200),
          case when i.status in ('open', 'claimed') and i.expires_at <= now() then 'expired' else i.status end,
          i.feedback, i.rounds, i.created_at, i.expires_at, i.run_id
   from public.cmo_inbox i

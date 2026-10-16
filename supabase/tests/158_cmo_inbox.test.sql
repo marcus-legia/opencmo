@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(30);
+select plan(31);
 
 insert into auth.users (id, email) values
   ('e1580000-0000-4000-8000-00000000000a', 'inbox-a@test.local'),
@@ -47,6 +47,7 @@ set local request.jwt.claims = '{"sub":"e1580000-0000-4000-8000-00000000000a"}';
 
 select is((select count(*)::int from public.inbox_list()), 1, 'the founder sees the item');
 select is((select status from public.inbox_list()), 'open', 'open until claimed');
+select is((select title from public.inbox_list()), 'Write today''s X post', 'with the task in one line');
 select throws_ok($$ insert into public.cmo_inbox (user_id, kind, step, request) values ('e1580000-0000-4000-8000-00000000000a', 'plan_week', 'x', '{}') $$,
   '42501', null, 'no direct writes');
 select is((select status from public.inbox_claim((select id from i))), 'claimed', 'Claude claims it');
