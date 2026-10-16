@@ -41,6 +41,10 @@ worker writes to `jobs.error`, and route-handler error strings — all of them r
 verbatim. Older comments may still be Vietnamese; translate the ones you touch. Comments
 explain **why**, not **what**.
 
+One exception: research reports in `docs/research/` (and the title and description of their PRs) are written in
+**Vietnamese**, for the owner. File names, paths, identifiers, product names, CVE ids, quotes and URLs stay as they
+are; commit messages stay in English. See `docs/research/README.md`.
+
 ## Hard budgets
 
 > **Peak RAM per job < 2 GB** · **45-minute video → 5 clips in under 3 minutes**
