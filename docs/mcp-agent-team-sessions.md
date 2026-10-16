@@ -157,9 +157,27 @@ export function registerGroup(group: { tools?: McpTool[]; prompts?: McpPrompt[];
       `20261129090000_mcp_server.sql` with `mcp_confirm_use`; pgTAP `160_mcp_server.test.sql`;
       schema dump refreshed. `rate_limit_hit` is copied from its latest definition (G5) plus the
       new bucket: a later migration that replaces it must start from this one.
-- [ ] **A10 — End-to-end.** Claude Code over `modal serve`: vaccine explainer from storyboard to
-      clip; `/video` 15 s; rough cut on an uploaded clip. Extract a frame from the full-size file
-      and look at it (CLAUDE.md "Verify by looking").
+- [x] **A10 — End-to-end.** Run with Claude Code (2.1, headless, its own config) connected by
+      `claude mcp add --transport http … --header "Authorization: Bearer ocm_…"` to the server on
+      `127.0.0.1:8787` (tsx; the same code the Modal bundle serves), local Supabase and the local
+      worker (fake media models, local clip-motion, silent voice; uploads through
+      `tests/e2e_worker.py`, which only replaces transcription and moment picking):
+      - Explainer: "how a vaccine trains the immune system", 30 s 16:9 — guide → kit →
+        `find_icons` ×8 → `preview_explainer` ×3 (fixed empty frames, an off-safe-area group, a
+        still beat; third preview clean) → price 8 credits → confirm → `wait_for_media` → done.
+        Full-size file 1920×1080, 30 s with audio; frames at 3/8/15/20/27 s show each beat's
+        subject. Layer "Explainer: …" on the edit, checkpoint "MCP".
+      - `/video` 15 s: Claude wrote the director plan → `create_video` priced 31 credits →
+        confirm → 3 shots + voice + music done → `export_clip` → `get_export` → 1280×720 MP4,
+        15 s; frames show each shot at its time and the on-screen text.
+      - Rough cut of an uploaded talk (API upload → clip): guide → state → transcript → fillers,
+        silences, retakes → `remove_words` + `remove_silence` → `check` clean; 8.0 s → 2.95 s;
+        the export's captions read "we built this in a weekend" (the cut word gone).
+      Found and fixed on the way: a generation's note called a `/video`'s pieces "variants"
+      (Claude told the user to pick a variant that does not exist). Not run here: `modal serve`
+      (no Modal token), claude.ai's connector UI (needs the deployed server), real fal /
+      ElevenLabs output (no keys reachable), the Playwright e2e suite (needs Google Chrome for
+      H.264; its download host is blocked in this session).
 
 ## Session B — CMO, Inbox & Claude-side
 
