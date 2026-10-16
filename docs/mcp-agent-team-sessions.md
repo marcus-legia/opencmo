@@ -181,6 +181,13 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
 - [ ] **B10 — End-to-end.** Staging-like local run with Anthropic + Gemini keys removed: cron
       creates inbox items; Claude Code `/inbox` completes a weekly plan, an X draft and a Reddit
       scan; cards appear in Approvals; nothing posts.
+      *Status:* the server half passes against local Supabase with no LLM keys —
+      `lib/cmo/mcp/inbox.e2e.ts`: a founder at 0 credits; the cron sends the day's X draft and
+      Reddit scan to the inbox; the inbox tools under the founder's RLS JWT (`clientFor`, as MCP)
+      read, refuse a draft that fails the checks, submit (idempotent), and the replays create 1 X
+      card and 5 Reddit cards at 0 credits; nothing posts. The "Continue in Claude" card was
+      checked in the running app (screenshot: inbox count, connect steps). Left: the same flow
+      from Claude Code over `modal serve` once A1/A3 register the groups.
 
 ## Sync points
 

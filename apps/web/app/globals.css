@@ -6785,6 +6785,7 @@ html[data-theme] .ed2-zoom {
 
 /* "Continue in Claude" card (Assistant panel, CMO chat). */
 .cic {
+  flex: none;
   margin: 10px;
   padding: 12px 14px;
   border: 1px solid var(--ds-line);
@@ -6807,6 +6808,7 @@ html[data-theme] .ed2-zoom {
 .cic-steps {
   margin: 0 0 8px;
   padding-left: 18px;
+  list-style: decimal;
   display: grid;
   gap: 6px;
 }
