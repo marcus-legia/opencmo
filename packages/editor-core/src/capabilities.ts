@@ -23,7 +23,7 @@ export const CAPABILITIES = {
 	'caption.emphasis': { track: 'B', ready: true, ops: ['emphasize_words'] },
 	'caption.reveal': { track: 'B', ready: true, ops: ['set_props'] },
 	'title.hook': { track: 'B', ready: true, ops: ['add_hook_title'] },
-	'speaker.punchIn': { track: 'B', ready: false, ops: ['punch_in'] },
+	'speaker.punchIn': { track: 'B', ready: true, ops: ['punch_in'] },
 	'list.reveal': { track: 'B', ready: false, ops: ['add_list'] },
 	// The transition sits on the left clip of a cut.
 	'transition.whip': { track: 'B', ready: false, ops: ['set_props'] },

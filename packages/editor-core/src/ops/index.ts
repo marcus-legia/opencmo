@@ -47,6 +47,7 @@ import { editVideo } from './edit-video';
 import { createVideo } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
+import { punchIn } from './punch-in';
 import { runStyle, styleOp, type ApplyStyle, type StyleContext, type StyleDeps, type StyleReceipt } from '../style/apply';
 
 export { OpError, OpFailure, type OpContext } from './context';
@@ -199,6 +200,7 @@ const REGISTRY = [
 	// Style skills, Track B.
 	emphasizeWords,
 	addHookTitle,
+	punchIn,
 ] as const;
 
 type Definition = {
