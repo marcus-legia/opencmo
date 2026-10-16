@@ -16,19 +16,19 @@
     "check": "tsc --noEmit && vitest run"
   },
   "dependencies": {
-    "@remotion/bundler": "4.0.530",
-    "@remotion/lottie": "4.0.530",
-    "@remotion/renderer": "4.0.530",
+    "@remotion/bundler": "4.0.535",
+    "@remotion/lottie": "4.0.535",
+    "@remotion/renderer": "4.0.535",
     "esbuild": "^0.28.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.530",
-    "zod": "^4.6.5"
+    "remotion": "4.0.535",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "typescript": "~6.0.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.4"
   }
 }
