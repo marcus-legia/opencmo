@@ -245,10 +245,23 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 	}
 
 	if (plan.hook && ready('title.hook')) {
-		const seconds = preset.hookTitle?.seconds ?? DEFAULT_HOOK_SECONDS;
+		const look = preset.hookTitle ?? {};
+		const seconds = look.seconds ?? DEFAULT_HOOK_SECONDS;
 		steps.push({
 			item: `Hook title ${quoted(plan.hook.lines.join(' / '))}`,
-			op: { op: 'add_hook_title', lines: plan.hook.lines, start: 0, end: seconds },
+			op: {
+				op: 'add_hook_title',
+				lines: plan.hook.lines,
+				start: 0,
+				end: seconds,
+				// The accent line is the last one when the style's line is not there (a one-line hook).
+				...(look.accentLine !== undefined ? { accent_line: Math.min(look.accentLine, plan.hook.lines.length) } : {}),
+				...(look.accentBox !== undefined ? { accent_box: look.accentBox } : {}),
+				...(look.fontFamily ? { font_family: look.fontFamily } : {}),
+				...(look.accentFontFamily ? { accent_font_family: look.accentFontFamily } : {}),
+				...(look.accentFontStyle ? { accent_font_style: look.accentFontStyle } : {}),
+				accent_color: colors.accent,
+			},
 			done: `Hook title: ${plan.hook.lines.map(quoted).join(' / ')}`,
 		});
 	}

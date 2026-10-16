@@ -24,6 +24,7 @@ import { buildLottie, LottieError, lottieInput, type LottieInput } from '../visu
 import { buildShape, SHAPE_NAMES, shapeInput, type ShapeInput } from '../visuals/shape';
 import { buildThree, threeInput, type ThreeInput } from '../visuals/three';
 import { buildTitle, measureTitle, titleInput, titleName, titleSafe, type TitleInput } from '../visuals/title';
+import { buildHook, hookArea, hookInput, type HookInput } from '../visuals/hook';
 import { OpFailure, type OpContext } from './context';
 import { loadCaptions } from './captions';
 import { checked } from './project';
@@ -216,6 +217,13 @@ const BUILDERS: Record<string, Builder> = {
 		build: (input: GraphInput, frame, area, duration) => buildGraph(input, frame, area, duration),
 		title: (input: GraphInput) => `Graph of ${input.expr}`,
 	},
+	add_hook_title: {
+		name: 'add_hook_title',
+		schema: hookInput,
+		build: (input: HookInput, _frame, area) => buildHook(input, area),
+		title: () => 'Hook title',
+		area: (_input: never, frame) => hookArea(frame, titleSafe(frame)),
+	},
 	add_title: {
 		name: 'add_title',
 		schema: titleInput,
@@ -280,6 +288,18 @@ export const addGraph = visualOp('add_graph', graphInput, (input) => `Plot y = $
 export const addIcon = visualOp('add_icon', iconInput, (input) => `Add the ${input.name} icon${input.motion && input.motion !== 'none' ? ` (${input.motion})` : ''}`);
 // A title stays up long enough to read a name and role (5.5 s), never longer than 8 s.
 export const addTitle = visualOp('add_title', titleInput, (input) => `Add a ${input.kind === 'chapter' ? 'chapter title' : input.kind === 'nameTag' ? 'name tag' : 'lower third'}: ${input.title}`, { min: 5.5, max: 8 });
+/**
+ * The opening hook of a talking head. Without start/end/quote it opens the clip: 0–3 s. A hook is
+ * read in one glance, so it stays up 1.5–8 s.
+ */
+const hookOp = visualOp('add_hook_title', hookInput, (input) => `Add a hook title: ${input.lines.join(' / ')}`, { min: 1.5, max: 8 });
+export const addHookTitle = {
+	...hookOp,
+	async apply(document: ClipDocument, input: Parameters<typeof hookOp.apply>[1], ctx?: OpContext) {
+		const opening = input.start === undefined && input.end === undefined && input.quote === undefined;
+		return hookOp.apply(document, opening ? { ...input, start: 0, end: 3 } : input, ctx);
+	},
+};
 export const addLottie = visualOp('add_lottie', lottieInput, (input) => `Add the ${input.animation.split('/').pop()} animation`);
 // 3D phẳng vẽ CPU: agent không dùng nữa (spec code-scenes: 3D của agent là code
 // three.js qua add_3d_scene). Op giữ nguyên cho document cũ và update_visual.

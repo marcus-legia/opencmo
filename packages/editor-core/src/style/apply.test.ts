@@ -171,7 +171,7 @@ describe('apply_style', () => {
 			{ op: 'set_props', element_id: layer, props: { emphasisStyle: { fontStyle: 'italic', color: '#FF5500' } } },
 		]);
 		expect(calls.find((call) => call.op === 'emphasize_words')).toEqual({ op: 'emphasize_words', quotes: ['24', 'free'], clear: true });
-		expect(calls.find((call) => call.op === 'add_hook_title')).toMatchObject({ lines: ['Three tools', 'that pay for themselves'], start: 0, end: 3 });
+		expect(calls.find((call) => call.op === 'add_hook_title')).toMatchObject({ lines: ['Three tools', 'that pay for themselves'], start: 0, end: 3, accent_color: '#FF5500' });
 		expect(calls.find((call) => call.op === 'add_list')).toMatchObject({ reveal_quotes: ['24', 'skills'] });
 		// The chapter's transition sits on the left piece of the cut where "the thing" starts.
 		const sequence = nodes(document).find((node) => node.kind === 'sequence') as unknown as { children: Record<string, unknown>[] };
