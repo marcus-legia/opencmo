@@ -7,12 +7,14 @@
  *
  * Chọn sẵn một visual trên canvas thì bảng mở ở chế độ sửa: đổi nhãn/số/công
  * thức rồi "Update" là `update_visual` — sinh lại tại chỗ, giữ id và thời gian.
+ *
+ * Titles (lower third, name tag, chapter) stay up 5.5 s so a name and role can be read.
  */
 
 import { useEffect, useState } from "react";
 
 import { findIcons, iconPath, type IconMatch } from "@opencmo/clip-icons";
-import { EMOJI_PACK, findLotties, LOTTIE_PACK, STUDIO_MODEL } from "@opencmo/editor-core";
+import { EMOJI_PACK, findLotties, LOTTIE_PACK, STUDIO_MODEL, TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from "@opencmo/editor-core";
 import { PRODUCTS, THEMES, TEMPLATES } from "@opencmo/clip-three";
 import { aiModel, priceOf } from "@opencmo/editor-core/generate";
 
@@ -35,7 +37,7 @@ function IconTile({ name, onPick }: { name: string; onPick: () => void }) {
   );
 }
 
-type Kind = "icon" | "animation" | "pointer" | "diagram" | "chart" | "graph" | "3d" | "studio";
+type Kind = "icon" | "animation" | "pointer" | "diagram" | "chart" | "graph" | "title" | "3d" | "studio";
 
 const KINDS: { kind: Kind; label: string }[] = [
   { kind: "icon", label: "Icon" },
@@ -44,6 +46,7 @@ const KINDS: { kind: Kind; label: string }[] = [
   { kind: "diagram", label: "Diagram" },
   { kind: "chart", label: "Chart" },
   { kind: "graph", label: "Graph" },
+  { kind: "title", label: "Title" },
   { kind: "3d", label: "3D" },
   { kind: "studio", label: "3D Studio" },
 ];
@@ -81,6 +84,15 @@ const POINTERS = [
 ] as const;
 
 const LAYOUTS = ["column", "row", "cycle", "tree", "compare"] as const;
+const TITLE_KIND_LABELS: Record<TitleInput["kind"], string> = { lowerThird: "Lower third", nameTag: "Name tag", chapter: "Chapter" };
+const TITLE_LOOK_LABELS: Record<TitleInput["look"], string> = { bar: "Bar", kicker: "Kicker", card: "Card" };
+const TITLE_MOTION_LABELS: Record<TitleInput["motion"], string> = { calm: "Calm", standard: "Standard", punchy: "Punchy" };
+const TITLE_SIDES = [
+  { side: "left", label: "Left" },
+  { side: "center", label: "Center" },
+  { side: "right", label: "Right" },
+] as const;
+type TitleSide = (typeof TITLE_SIDES)[number]["side"];
 const CHARTS = ["stat", "bar", "line", "donut", "pie"] as const;
 const SHAPES3D = [
   { id: "surface", label: "Wave surface" },
@@ -185,6 +197,11 @@ export function VisualsPanel({
   const [studioLabel, setStudioLabel] = useState("");
   const [object, setObject] = useState<(typeof PRODUCTS)[number]>("trophy");
   const [theme, setTheme] = useState<(typeof THEMES)[number]>("midnight");
+  const [titleKind, setTitleKind] = useState<TitleInput["kind"]>("lowerThird");
+  const [titleSub, setTitleSub] = useState("");
+  const [titleLook, setTitleLook] = useState<TitleInput["look"]>("bar");
+  const [titleSide, setTitleSide] = useState<TitleSide>("left");
+  const [titleMotion, setTitleMotion] = useState<TitleInput["motion"]>("standard");
 
   // Sửa visual đang chọn: nạp input của nó vào form.
   useEffect(() => {
@@ -202,6 +219,14 @@ export function VisualsPanel({
     } else if (selected.op === "add_graph") {
       setKind("graph");
       setExpr(String(input.expr ?? "x"));
+    } else if (selected.op === "add_title") {
+      setKind("title");
+      const kindOf = (input.kind as TitleInput["kind"] | undefined) ?? "lowerThird";
+      setTitleKind(kindOf);
+      setTitleSub(typeof input.sub === "string" ? input.sub : "");
+      setTitleLook((input.look as TitleInput["look"] | undefined) ?? "bar");
+      setTitleSide((input.side as TitleSide | undefined) ?? (kindOf === "chapter" ? "center" : "left"));
+      setTitleMotion((input.motion as TitleInput["motion"] | undefined) ?? "standard");
     }
     setTitle(typeof input.title === "string" ? input.title : "");
   }, [selected]);
@@ -215,9 +240,9 @@ export function VisualsPanel({
     };
   }, [kind, iconQuery]);
 
-  const at = () => {
+  const at = (seconds = 4) => {
     const start = Math.round(playhead() * 100) / 100;
-    return { start, end: Math.round((start + 4) * 100) / 100 };
+    return { start, end: Math.round((start + seconds) * 100) / 100 };
   };
   const titled = { ...(title.trim() ? { title: title.trim() } : {}), ...(REGIONS[region] ? { region: REGIONS[region] } : {}) };
 
@@ -237,6 +262,10 @@ export function VisualsPanel({
       return { type: chart, data: chart === "stat" ? values.slice(0, 1) : values.slice(0, 12), ...(unit ? { unit } : {}), ...titled };
     }
     if (kind === "graph") return expr.trim() ? { expr: expr.trim(), label: `y = ${expr.trim()}`, ...titled } : null;
+    if (kind === "title") {
+      if (!title.trim()) return null;
+      return { kind: titleKind, title: title.trim().slice(0, 60), ...(titleSub.trim() ? { sub: titleSub.trim().slice(0, 80) } : {}), look: titleLook, side: titleSide, motion: titleMotion };
+    }
     return null;
   };
 
@@ -268,8 +297,8 @@ export function VisualsPanel({
   const studioModel = liveModel(STUDIO_MODEL) ?? aiModel(STUDIO_MODEL);
   const studioCredits = studioModel ? priceOf(studioModel, { prompt: "x" }) : 1;
 
-  const add = (op: string, extra: Record<string, unknown>) => onRun([{ op, ...at(), ...extra }]);
-  const opFor: Record<Kind, string> = { icon: "add_icon", animation: "add_lottie", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", "3d": "add_3d", studio: "add_3d_studio" };
+  const add = (op: string, extra: Record<string, unknown>) => onRun([{ op, ...at(op === "add_title" ? 5.5 : 4), ...extra }]);
+  const opFor: Record<Kind, string> = { icon: "add_icon", animation: "add_lottie", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", title: "add_title", "3d": "add_3d", studio: "add_3d_studio" };
   const editing = selected && selected.op === opFor[kind] ? selected : null;
 
   return (
@@ -439,6 +468,74 @@ export function VisualsPanel({
         <input className="ed2-select" aria-label="Formula in x" placeholder="y = …  e.g. 2^x, x^2, sin(x)" data-testid="visuals-expr" value={expr} onChange={(event) => setExpr(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
       ) : null}
 
+      {kind === "title" ? (
+        <>
+          <div className="ed2-row ed2-wrap" aria-label="Kind">
+            {TITLE_KINDS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="ed2-chip"
+                aria-pressed={titleKind === value}
+                data-testid={`visuals-title-kind-${value}`}
+                onClick={() => {
+                  setTitleKind(value);
+                  // A chapter title reads best centred; switching back to a name puts it on the left.
+                  if (value === "chapter") setTitleSide("center");
+                  else if (titleKind === "chapter") setTitleSide("left");
+                }}
+              >
+                {TITLE_KIND_LABELS[value]}
+              </button>
+            ))}
+          </div>
+          <input
+            className="ed2-select"
+            style={{ flex: "none" }}
+            aria-label={titleKind === "chapter" ? "Title" : "Name"}
+            placeholder={titleKind === "chapter" ? "Chapter title" : "Name"}
+            maxLength={60}
+            data-testid="visuals-title-text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
+          <input
+            className="ed2-select"
+            style={{ flex: "none" }}
+            aria-label={titleKind === "chapter" ? "Subtitle (optional)" : "Role (optional)"}
+            placeholder={titleKind === "chapter" ? "Subtitle, e.g. Episode 12 (optional)" : "Role, e.g. Founder, Paylane (optional)"}
+            maxLength={80}
+            data-testid="visuals-title-sub"
+            value={titleSub}
+            onChange={(event) => setTitleSub(event.target.value)}
+            onKeyDown={(event) => event.stopPropagation()}
+          />
+          <div className="ed2-row ed2-wrap" aria-label="Look">
+            {TITLE_LOOKS.map((value) => (
+              <button key={value} type="button" className="ed2-chip" aria-pressed={titleLook === value} data-testid={`visuals-title-look-${value}`} onClick={() => setTitleLook(value)}>
+                {TITLE_LOOK_LABELS[value]}
+              </button>
+            ))}
+          </div>
+          <div className="ed2-row ed2-wrap" aria-label="Side">
+            {TITLE_SIDES.map((entry) => (
+              <button key={entry.side} type="button" className="ed2-chip" aria-pressed={titleSide === entry.side} data-testid={`visuals-title-side-${entry.side}`} onClick={() => setTitleSide(entry.side)}>
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          <div className="ed2-row ed2-wrap" aria-label="Motion">
+            {TITLE_MOTIONS.map((value) => (
+              <button key={value} type="button" className="ed2-chip" aria-pressed={titleMotion === value} data-testid={`visuals-title-motion-${value}`} onClick={() => setTitleMotion(value)}>
+                {TITLE_MOTION_LABELS[value]}
+              </button>
+            ))}
+          </div>
+          <p className="ed2-muted">In your brand colors, inside the safe area and above the captions.</p>
+        </>
+      ) : null}
+
       {kind === "3d" ? (
         <>
           <input className="ed2-select" aria-label="Surface formula in x and y" placeholder="z = …  e.g. sin(x) cos(y)" value={surface} onChange={(event) => setSurface(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
@@ -501,7 +598,7 @@ export function VisualsPanel({
         </>
       ) : null}
 
-      {kind !== "pointer" && kind !== "icon" ? (
+      {kind !== "pointer" && kind !== "icon" && kind !== "title" ? (
         <div className="ed2-row ed2-wrap" aria-label="Region">
           {(Object.keys(REGIONS) as RegionName[]).map((name) => (
             <button key={name} type="button" className="ed2-chip" aria-pressed={region === name} data-testid={`visuals-region-${name}`} onClick={() => setRegion(name)}>
@@ -530,9 +627,13 @@ export function VisualsPanel({
         </div>
       ) : null}
 
-      {kind === "diagram" || kind === "chart" || kind === "graph" ? (
+      {kind === "diagram" || kind === "chart" || kind === "graph" || kind === "title" ? (
         <div className="ed2-row">
-          <input className="ed2-select ed2-grow" aria-label="Title (optional)" placeholder="Title (optional)" value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
+          {kind === "title" ? (
+            <span className="ed2-grow" />
+          ) : (
+            <input className="ed2-select ed2-grow" aria-label="Title (optional)" placeholder="Title (optional)" value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
+          )}
           {editing ? (
             <button
               type="button"

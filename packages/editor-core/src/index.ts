@@ -20,6 +20,7 @@ export { checkDocument, type CheckIssue, type CheckMedia, type CheckReport } fro
 export { findSilences, type Silence } from './silences';
 export { BUILTIN_LOTTIES, findLotties, LOTTIE_PACK, type LottieEntry } from './visuals/lottie';
 export { EMOJI_PACK, type EmojiEntry } from './visuals/emoji';
+export { TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from './visuals/title';
 export { LAYOUT_MODES, panelRegionAt, readLayout, speakerBandAt, type LayoutMode, type LayoutRange } from './layout';
 export { anchorPoint, LAYOUT_ANCHOR_NAMES, LAYOUT_LABEL, layoutSlots, layoutsFor, slotBox, VIDEO_LAYOUTS, type LayoutSlot, type VideoLayout } from './layouts';
 export { clipScript, clipTranscript, clipWords, findQuote, formatScript, quoteTiming, type QuoteHit, type ScriptLine } from './script';
