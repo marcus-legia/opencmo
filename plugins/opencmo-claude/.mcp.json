@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "opencmo": {
+      "type": "http",
+      "url": "${OPENCMO_MCP_URL:-https://opencmo.io/api/mcp}",
+      "headers": { "Authorization": "Bearer ${OPENCMO_API_KEY}" }
+    }
+  }
+}

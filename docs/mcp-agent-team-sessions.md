@@ -170,9 +170,14 @@ Until A1 lands, start with B1–B3 (no dependency on the registry).
       `OPENCMO_MCP_URL`, default `${SITE_URL}/api/mcp`); `ContinueInClaude` card under the
       Assistant header (the one entry point in `AssistantPanel.tsx`) and the CMO chat header. In
       mode B "Plan my week" / "Run now" go to the inbox instead of failing for credits.
-- [ ] **B9 — Claude-side bundle.** `plugins/opencmo-claude/`: `skills/opencmo/SKILL.md`
+- [x] **B9 — Claude-side bundle.** `plugins/opencmo-claude/`: `skills/opencmo/SKILL.md`
       (workflows, price etiquette, "drafts only, you post", Inbox routine) + plugin manifest with
       the MCP server config. Zip for claude.ai skill upload. Verify by installing locally.
+      *Done as:* `plugins/opencmo-claude` (plugin + one-plugin marketplace, `.mcp.json` reads
+      `OPENCMO_API_KEY` and `OPENCMO_MCP_URL`, `scripts/zip-skill.sh` for claude.ai). `claude plugin
+      validate` passes; `marketplace add` + `install` in a clean HOME shows 1 skill + 1 MCP server.
+      The skill names A's tools (`preview_explainer`, `get_generation`, guides): A, correct it if
+      your names change.
 - [ ] **B10 — End-to-end.** Staging-like local run with Anthropic + Gemini keys removed: cron
       creates inbox items; Claude Code `/inbox` completes a weekly plan, an X draft and a Reddit
       scan; cards appear in Approvals; nothing posts.
