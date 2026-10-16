@@ -113,7 +113,7 @@ Until A1 lands, B1–B3 need nothing from A.
       `update_visual` round trip. Accept: `ops.test.ts` / `visuals.test.ts` — quote found → times from the
       transcript; quote missing → `OpFailure` with today's message; with captions in the lower third the title sits
       above them; `update_visual {changes: {title}}` keeps position and time; golden op fixtures unchanged.
-- [ ] **B3 — `text-unsafe` (E6).** New code in `check.ts` from the layout box (no measurer needed). Accept:
+- [x] **B3 — `text-unsafe` (E6).** New code in `check.ts` from the layout box (no measurer needed). Accept:
       `check.test.ts` — text at the top edge of 1080×1920 → `text-unsafe`; an `add_title` lower third and chapter →
       no `text-unsafe`, `caption-overlap`, `captions-covered`, `covers-speaker`.
 - [ ] **B4 — Titles on the unit animator (after A3 + A4).** Title text uses `slideUp` + `unit: 'word'` + `mask: true`;

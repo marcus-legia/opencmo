@@ -239,4 +239,24 @@ describe('phụ đề trống / bị đè', () => {
 		expect(issue?.node_id).toBe('c');
 		expect(report.ok).toBe(false);
 	});
+
+  it('text-unsafe: text in the top UI zone of a vertical frame for more than half a second', () => {
+    const backdrop = { kind: 'video', id: 'v', src: 'a.mp4', width: 1080, height: 1920 };
+    const top = { kind: 'text', id: 't', text: 'Subscribe', x: 100, y: 20, width: 600, height: 120, fontSize: 60 };
+    const report = checkDocument(doc([backdrop, top]), media({ 'a.mp4': 5 }));
+    const issue = report.issues.find((item) => item.code === 'text-unsafe')!;
+    expect(issue).toMatchObject({ severity: 'warning', node_id: 't' });
+    expect(issue.message).toMatch(/platform's buttons/);
+    // A brief pass through the zone (under 0.5 s) is not reported.
+    const brief = checkDocument(doc([backdrop, { ...top, end: 0.3 }]), media({ 'a.mp4': 5 }));
+    expect(codes(brief)).not.toContain('text-unsafe');
+    // Inside the safe area: clean.
+    const fine = checkDocument(doc([backdrop, { ...top, y: 600 }]), media({ 'a.mp4': 5 }));
+    expect(codes(fine)).not.toContain('text-unsafe');
+    // 16:9 has no platform zones, only the 5 % title-safe inset.
+    const wide = checkDocument(doc([{ ...backdrop, width: 1920, height: 1080 }, { ...top, y: 120 }], { width: 1920, height: 1080 }), media({ 'a.mp4': 5 }));
+    expect(codes(wide)).not.toContain('text-unsafe');
+    const edge = checkDocument(doc([{ ...backdrop, width: 1920, height: 1080 }, { ...top, x: 10 }], { width: 1920, height: 1080 }), media({ 'a.mp4': 5 }));
+    expect(edge.issues.find((item) => item.code === 'text-unsafe')!.message).toMatch(/title-safe/);
+  });
 });
