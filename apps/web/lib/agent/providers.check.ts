@@ -274,3 +274,10 @@ void main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+// The explainer guide sends the model to find_icons / find_lotties for every beat: they must be loaded
+// with the explainer tools, or each /explain starts with a tool search.
+for (const name of ["preview_explainer", "add_explainer", "find_icons", "find_lotties"]) {
+  assert.ok(ALWAYS_LOADED.has(name), `${name} is always loaded`);
+}
+assert.ok(TOOL_SPECS.some((tool) => tool.name === "find_icons") && TOOL_SPECS.some((tool) => tool.name === "find_lotties"), "find_icons and find_lotties are real tools");

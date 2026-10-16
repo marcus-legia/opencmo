@@ -195,7 +195,9 @@ export const ALWAYS_LOADED = new Set([
   "set_frame", "set_layout", "set_caption_style", "remove_words", "remove_ranges", "remove_silence", "find_filler_words", "find_silences", "find_retakes", "undo",
   "add_diagram", "add_chart", "add_shape",
   "create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions",
-  "preview_explainer", "add_explainer",
+  // The explainer guide finds every noun's picture with these: deferred, every /explain would need a
+  // tool search first.
+  "preview_explainer", "add_explainer", "find_icons", "find_lotties",
 ]);
 
 const TOOL_SEARCH = { type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" } as const;
