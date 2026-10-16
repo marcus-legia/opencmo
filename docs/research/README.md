@@ -46,4 +46,5 @@ Newest first. Each run adds one line and checks this list so it does not repeat 
 
 | Date | Area | Report | Key sources |
 |---|---|---|---|
+| 2026-10-17 | Security | [2026-10-17-security-agent-injection-mcp.md](2026-10-17-security-agent-injection-mcp.md) — untrusted reads can write founder memory; MCP tokens not audience-bound | Next.js Jul/Aug/Sep 2026 security releases; MCP spec 2026-07-28; supabase/auth #2610; arXiv 2607.06595; Unit 42 in-the-wild injection; CaMeL, LlamaFirewall, llm-guard, MCP TS SDK, mcp-scan, splinter |
 | 2026-10-16 | Video editing | (seed) reference reel review, led to `docs/style-skills-build.md` | Instagram reel "5 Plugins To Code Like A Senior Dev" |
