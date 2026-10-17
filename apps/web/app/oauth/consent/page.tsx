@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Brand } from "@/components/brand/Brand";
-import { PAID_PLAN_CONSENT, paidUser } from "@/lib/auth/consent";
+import { allowedRedirectHost, PAID_PLAN_CONSENT, paidUser, UNKNOWN_APP_CONSENT } from "@/lib/auth/consent";
 import { createServerClient } from "@/lib/supabase/server";
 
 import { ConsentButtons } from "./ConsentButtons";
@@ -30,13 +30,24 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
 
   const { data, error: detailsError } = await supabase.auth.oauth.getAuthorizationDetails(id);
   if (detailsError || !data) return <Consent title="This request has expired" text="Start connecting again from the app that sent you here." />;
-  // Already approved for these scopes: Supabase answers with the way back straight away.
+  // Already approved for these scopes: Supabase answers with the way back straight away. An
+  // approval made through this page recorded its grant; for an app approved before grants existed,
+  // Connected apps asks the founder to disconnect and connect again.
   if (!("authorization_id" in data)) redirect(data.redirect_url);
 
+  // The client names itself; the redirect host is the part it cannot fake, so the title shows both.
   const client = data.client.name || "An app";
+  const host = allowedRedirectHost(data.redirect_uri);
+  if (!host) {
+    return (
+      <Consent title={UNKNOWN_APP_CONSENT} text={`${client} wants to send you to ${hostOf(data.redirect_uri)}, which OpenCMO does not support.`}>
+        <ConsentButtons authorizationId={data.authorization_id} denyOnly />
+      </Consent>
+    );
+  }
   if (!(await paidUser(supabase, user.id))) {
     return (
-      <Consent title={`Connect ${client} to OpenCMO`} text={PAID_PLAN_CONSENT}>
+      <Consent title={`Connect ${client} (${host})`} text={PAID_PLAN_CONSENT}>
         <p className="auth-consent-note">
           <Link href="/app/billing">See plans</Link>
         </p>
@@ -45,7 +56,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
     );
   }
   return (
-    <Consent title={`Connect ${client} to OpenCMO`} text={`${client} wants to use OpenCMO as ${data.user.email}.`}>
+    <Consent title={`Connect ${client} (${host})`} text={`${client} wants to use OpenCMO as ${data.user.email}.`}>
       <ul className="auth-consent">
         <li>Read your projects, clips and editing skills.</li>
         <li>Edit your clips. Every change is saved in Version history.</li>
@@ -54,10 +65,18 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
       </ul>
       <ConsentButtons authorizationId={data.authorization_id} />
       <p className="auth-consent-note">
-        Redirects to {new URL(data.redirect_uri).host}. You can disconnect it any time in Settings.
+        Redirects to {hostOf(data.redirect_uri)}. You can disconnect it any time in Settings.
       </p>
     </Consent>
   );
+}
+
+function hostOf(uri: string): string {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return "an unknown site";
+  }
 }
 
 function Consent({ title, text, children }: { title: string; text: string; children?: React.ReactNode }) {

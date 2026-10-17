@@ -5614,6 +5614,47 @@ $$;
 
 
 --
+-- Name: mcp_grant_record(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_grant_record(p_client_id text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_client_id is null or char_length(p_client_id) not between 1 and 200 then
+    raise exception 'This request is not valid.' using errcode = '22023';
+  end if;
+  -- The consent route checks this too; here it holds for any caller.
+  if not public.is_paid(v_user) then
+    raise exception 'Connecting apps to OpenCMO is part of the paid plans.' using errcode = 'P0001';
+  end if;
+  insert into public.mcp_grants (user_id, client_id) values (v_user, p_client_id)
+  on conflict (user_id, client_id) do update set created_at = now(), revoked_at = null;
+end;
+$$;
+
+
+--
+-- Name: mcp_grant_revoke(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_grant_revoke(p_client_id text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  update public.mcp_grants set revoked_at = now()
+  where user_id = v_user and client_id = p_client_id and revoked_at is null;
+end;
+$$;
+
+
+--
 -- Name: normalize_capture_url(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8733,6 +8774,19 @@ CREATE TABLE public.mcp_confirms (
 
 
 --
+-- Name: mcp_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_grants (
+    user_id uuid NOT NULL,
+    client_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT mcp_grants_client_id_check CHECK (((char_length(client_id) >= 1) AND (char_length(client_id) <= 200)))
+);
+
+
+--
 -- Name: media_transcripts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9382,6 +9436,14 @@ ALTER TABLE ONLY public.marketing_documents
 
 ALTER TABLE ONLY public.mcp_confirms
     ADD CONSTRAINT mcp_confirms_pkey PRIMARY KEY (user_id, nonce);
+
+
+--
+-- Name: mcp_grants mcp_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_grants
+    ADD CONSTRAINT mcp_grants_pkey PRIMARY KEY (user_id, client_id);
 
 
 --
@@ -10520,6 +10582,14 @@ ALTER TABLE ONLY public.mcp_confirms
 
 
 --
+-- Name: mcp_grants mcp_grants_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_grants
+    ADD CONSTRAINT mcp_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: media_assets media_assets_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10968,6 +11038,19 @@ ALTER TABLE public.marketing_documents ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.mcp_confirms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_grants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mcp_grants ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_grants mcp_grants_select_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY mcp_grants_select_own ON public.mcp_grants FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
 
 --
 -- Name: media_assets; Type: ROW SECURITY; Schema: public; Owner: -

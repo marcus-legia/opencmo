@@ -150,7 +150,8 @@ Checklist:
 Checklist:
 
 - [x] **B1 — Contracts.** `is_paid` migration plus pgTAP; `isPaidPlan()`. Push this first.
-- [ ] **B2 — Open redirect (fix 3).** `lib/auth/next.ts` `safeNext` plus `next.check.ts` with the plan's table, then
+- [x] **B2 — Open redirect (fix 3).** (The route only calls `safeNext` now; the callback itself was not driven end to
+  end, because a real `code` needs the SSR client's per-flow PKCE verifier cookie. `next.check.ts` covers the table.) `lib/auth/next.ts` `safeNext` plus `next.check.ts` with the plan's table, then
   `auth/callback/route.ts` uses it.
   - **Accept:** the check fails on today's logic (copy the old expression into the test as the "before" case) and
     passes with `safeNext`; `/auth/callback?code=…&next=/.//evil.example` redirects to `/app`.
@@ -167,7 +168,10 @@ Checklist:
   - Settings shows the upgrade CTA in API keys and Connected apps.
   - The MCP e2e (`inbox.e2e.ts`) sets plan `starter`.
   - **Accept:** pgTAP for all three SQL changes; typecheck; the e2e on Settings shows the CTA for a free user.
-- [ ] **B5 — OAuth (fix 6).**
+- [x] **B5 — OAuth (fix 6).** (The check is `packages/mcp-server/src/oauth.check.ts`, wired into the package's
+  `test` script. Supabase skips the consent screen for an app approved before, and that answer carries no client id,
+  so an app connected before grants existed cannot get a row by reconnecting alone: Connected apps marks it "needs
+  reconnecting", and Disconnect then connect again fixes it.)
   - Redirect host allowlist on the consent page and route; title shows the host.
   - `mcp_grants`, `mcp_grant_record` and `mcp_grant_revoke`, with pgTAP.
   - The consent route records the grant on approve; ConnectedApps revokes both.

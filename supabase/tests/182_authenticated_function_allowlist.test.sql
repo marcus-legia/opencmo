@@ -98,6 +98,8 @@ insert into allowed values
   ('list_projects(timestamp with time zone,uuid,text,integer)'),
   ('mcp_admit(integer)'),
   ('mcp_confirm_use(uuid)'),
+  ('mcp_grant_record(text)'),
+  ('mcp_grant_revoke(text)'),
   ('normalize_capture_url(text)'),
   ('purge_in_progress()'),
   ('put_editor_transcript(uuid,text)'),
