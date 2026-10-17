@@ -6,6 +6,8 @@
  * sai lặng lẽ.
  */
 
+import { checkUrl, refused } from "@/lib/net/address";
+
 export function sourceProblem(source: string, userId: string): string | null {
   if (source.startsWith("storage://")) {
     // ĐÂY là chỗ chặn quan trọng nhất của cả tính năng (chép từ
@@ -27,25 +29,17 @@ export function sourceProblem(source: string, userId: string): string | null {
   } catch {
     return "The link must start with https://";
   }
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    return "Paste a public HTTP or HTTPS video link.";
-  }
-  if (parsed.username || parsed.password) {
-    return "Paste a public HTTP or HTTPS video link without a username or password.";
-  }
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-  ) {
+  // No DNS here: the worker resolves and pins every hop (`validate_public_url` + GuardProxy).
+  // This is the early refusal, before credits are held: literal private addresses (which
+  // `new URL` has already normalized, so `2130706433` arrives as 127.0.0.1) and never-public names.
+  const check = checkUrl(parsed);
+  if (refused(check)) {
+    if (check.refused === "scheme") return "Paste a public HTTP or HTTPS video link.";
+    if (check.refused === "userinfo") return "Paste a public HTTP or HTTPS video link without a username or password.";
+    if (check.refused === "port") return "Paste a public HTTP or HTTPS video link without a port number.";
     return "This link points to a private or local network. Use a public video URL.";
   }
+  const host = check.host;
   if (isVimeoHost(host)) return VIMEO_UNSUPPORTED;
   return null;
 }

@@ -15,6 +15,7 @@ import { agentChatProvider, kindOf, providerForModel } from "./model";
 import type { Provider } from "./providers/types";
 import { loadCatalog } from "@/lib/generate/models";
 
+import { serviceLedger, type Ledger } from "./ledger";
 import { clipScope, cmoScope, projectScope, type Scope } from "./scope";
 import { sseResponse } from "./sse";
 import { slashDirective } from "./slash";
@@ -40,6 +41,7 @@ export async function scopeFor(
   supabase: SupabaseClient,
   session: SessionRow,
   turn: { id: string; prompt: string; checkpoint_id?: string | null },
+  ledger: Ledger,
 ): Promise<Scope> {
   const checkpointed = Boolean(turn.checkpoint_id);
   // Tool sinh media mang giá trên thẻ duyệt: nạp catalog DB (G5) trước khi dựng scope.
@@ -47,7 +49,7 @@ export async function scopeFor(
   if (session.scope === "cmo") return cmoScope(supabase);
   if (session.clip_id) {
     const context = await clipContext(supabase, session.clip_id);
-    return clipScope(supabase, context, session.clip_id, turn, checkpointed);
+    return clipScope(supabase, context, session.clip_id, turn, checkpointed, ledger);
   }
   return projectScope(supabase, session.job_id!, turn, checkpointed);
 }
@@ -69,14 +71,15 @@ function attachmentText(attachments: Attachments | undefined): string {
   return parts.length ? `<attached>${parts.join("; ")}</attached>` : "";
 }
 
-/** Bắt đầu một lượt và stream nó. */
-export async function startTurn(supabase: SupabaseClient, sessionId: string | undefined, prompt: string, attachments?: Attachments) {
+/** Starts a turn and streams it. `userId` is the user `withApi` verified; the ledger writes for them. */
+export async function startTurn(supabase: SupabaseClient, userId: string, sessionId: string | undefined, prompt: string, attachments?: Attachments) {
   const { session, provider } = await loadSession(supabase, sessionId);
+  const ledger = serviceLedger(userId);
   // One scope for the whole request (catalog, clip context and tools load once). It reads the
   // opening state before the turn exists; the turn's id is filled in once it does, and nothing
   // uses it before then.
   const pending = { id: "", prompt };
-  const scope = await scopeFor(supabase, session, pending);
+  const scope = await scopeFor(supabase, session, pending, ledger);
   // Kịch bản clip đi trước trạng thái: agent đọc người nói nói gì trước khi sửa.
   const state = `${(await scope.context?.()) ?? ""}${await scope.state()}`;
   const images = attachments?.frame ? [{ data: attachments.frame, mimeType: "image/jpeg" as const }] : undefined;
@@ -88,7 +91,7 @@ export async function startTurn(supabase: SupabaseClient, sessionId: string | un
   pending.id = turn.id;
   return sseResponse(async (emit) => {
     emit("turn", { number: turn.number });
-    await runTurn({ supabase, provider, scope, turn, emit });
+    await runTurn({ supabase, ledger, provider, scope, turn, emit });
   });
 }
 
@@ -99,6 +102,7 @@ export async function startTurn(supabase: SupabaseClient, sessionId: string | un
  */
 export async function continueTurn(
   supabase: SupabaseClient,
+  userId: string,
   sessionId: string | undefined,
   answers: Answer[],
   options: { extend?: boolean } = {},
@@ -107,9 +111,10 @@ export async function continueTurn(
   const turn = await rpcOrThrow<Turn>(supabase, options.extend ? "agent_extend_hold" : "agent_resume_turn", {
     p_session_id: session.id,
   });
-  const scope = await scopeFor(supabase, session, turn);
+  const ledger = serviceLedger(userId);
+  const scope = await scopeFor(supabase, session, turn, ledger);
   return sseResponse(async (emit) => {
     emit("turn", { number: turn.number });
-    await resumeTurn({ supabase, provider, scope, turn, emit, extended: options.extend === true }, answers);
+    await resumeTurn({ supabase, ledger, provider, scope, turn, emit, extended: options.extend === true }, answers);
   });
 }

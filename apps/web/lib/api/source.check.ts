@@ -8,6 +8,7 @@
  * vẫn ra, chỉ là từ nguồn đáng lẽ không được chạm tới.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { sourceProblem } from "./source";
 import { rejectReason, storageExtension } from "../upload";
@@ -68,6 +69,27 @@ check("IP và host nội bộ bị chặn trước khi tạo job", () => {
     "https://192.168.1.20/video.mp4",
   ]) {
     assert.match(sourceProblem(url, ME) ?? "", /private|local/);
+  }
+});
+
+type Case = { input: string; blocked: boolean; why: string };
+const CASES: Case[] = JSON.parse(
+  readFileSync(new URL("../../../../packages/contracts/private-addresses.json", import.meta.url), "utf8"),
+);
+
+for (const { input, blocked, why } of CASES) {
+  check(`shared case ${input} (${why})`, () => {
+    for (const url of [`https://${input}/video.mp4`, `http://${input}/video.mp4`]) {
+      if (blocked) assert.match(sourceProblem(url, ME) ?? "", /private|local/, url);
+      else assert.equal(sourceProblem(url, ME), null, url);
+    }
+  });
+}
+
+check("only ports 80 and 443", () => {
+  assert.equal(sourceProblem("https://cdn.example.com:443/v.mp4", ME), null);
+  for (const url of ["https://cdn.example.com:8443/v.mp4", "http://cdn.example.com:6379/"]) {
+    assert.notEqual(sourceProblem(url, ME), null, url);
   }
 });
 

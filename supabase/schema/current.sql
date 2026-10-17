@@ -177,6 +177,40 @@ $$;
 
 
 --
+-- Name: agent_append_for(uuid, uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_append_for(p_user uuid, p_turn_id uuid, p_role text, p_content jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_turn public.agent_turns;
+  v_seq int;
+begin
+  v_turn := public.agent_owned_turn(p_turn_id, p_user);
+  if p_role is null or p_role not in ('user', 'assistant') then
+    raise exception 'Invalid assistant message.' using errcode = '22023';
+  end if;
+  if p_content is null or jsonb_typeof(p_content) <> 'array' or pg_column_size(p_content) > 1048576 then
+    raise exception 'Invalid assistant message.' using errcode = '22023';
+  end if;
+  perform 1 from public.agent_sessions where id = v_turn.session_id for update;
+  select status into v_turn.status from public.agent_turns where id = p_turn_id;
+  if v_turn.status <> 'running' then
+    raise exception 'This assistant turn was stopped.' using errcode = 'P0001';
+  end if;
+  select coalesce(max(seq), 0) + 1 into v_seq from public.agent_messages where session_id = v_turn.session_id;
+  insert into public.agent_messages(session_id, turn_id, seq, role, content)
+  values (v_turn.session_id, p_turn_id, v_seq, p_role, p_content);
+  update public.agent_sessions set lock_until = now() + interval '6 minutes', updated_at = now()
+  where id = v_turn.session_id;
+  return v_seq;
+end;
+$$;
+
+
+--
 -- Name: agent_auto_extend(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -384,6 +418,9 @@ begin
   if p_status not in ('done', 'failed') then
     raise exception 'Invalid tool status.' using errcode = '22023';
   end if;
+  if pg_column_size(p_result) > 262144 then
+    raise exception 'This tool call is too large to save.' using errcode = '22023';
+  end if;
   update public.agent_tool_calls set status = p_status, result = p_result
   where turn_id = p_turn_id and tool_use_id = p_tool_use_id and status = 'pending';
   if not found then
@@ -464,6 +501,24 @@ declare
   v_user uuid := public.require_user();
 begin
   perform public.agent_owned_turn(p_turn_id, v_user);
+  if p_status not in ('done', 'failed', 'stopped') then
+    raise exception 'Invalid turn status.' using errcode = '22023';
+  end if;
+  return public.agent_close_turn(p_turn_id, p_status, p_error);
+end;
+$$;
+
+
+--
+-- Name: agent_finish_turn_for(uuid, uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_finish_turn_for(p_user uuid, p_turn_id uuid, p_status text, p_error text) RETURNS public.agent_turns
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
   if p_status not in ('done', 'failed', 'stopped') then
     raise exception 'Invalid turn status.' using errcode = '22023';
   end if;
@@ -911,6 +966,29 @@ $$;
 
 
 --
+-- Name: agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_record_tool_for(p_user uuid, p_turn_id uuid, p_tool_use_id text, p_name text, p_input jsonb, p_status text, p_result jsonb, p_content jsonb DEFAULT NULL::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
+  if p_status not in ('pending', 'done', 'failed') then
+    raise exception 'Invalid tool status.' using errcode = '22023';
+  end if;
+  -- 256 KB each: far above any real tool call, far below what bloats the table.
+  if pg_column_size(p_input) > 262144 or pg_column_size(p_result) > 262144 or pg_column_size(p_content) > 262144 then
+    raise exception 'This tool call is too large to save.' using errcode = '22023';
+  end if;
+  insert into public.agent_tool_calls(turn_id, tool_use_id, name, input, status, result, content)
+  values (p_turn_id, p_tool_use_id, p_name, coalesce(p_input, '{}'::jsonb), p_status, p_result, p_content);
+end;
+$$;
+
+
+--
 -- Name: agent_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -923,6 +1001,31 @@ declare
   v_total bigint;
 begin
   perform public.agent_owned_turn(p_turn_id, v_user);
+  if least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
+    raise exception 'Invalid usage.' using errcode = '22023';
+  end if;
+  insert into public.agent_usage(turn_id, model, input_tokens, output_tokens,
+    cache_read_tokens, cache_write_tokens, micro_usd)
+  values (p_turn_id, left(coalesce(p_model, 'unknown'), 64), p_input, p_output, p_cache_read, p_cache_write,
+    public.agent_micro_usd(p_model, p_input, p_output, p_cache_read, p_cache_write));
+  select coalesce(sum(micro_usd), 0)::bigint into v_total from public.agent_usage where turn_id = p_turn_id;
+  return public.agent_credits(v_total);
+end;
+$$;
+
+
+--
+-- Name: agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_record_usage_for(p_user uuid, p_turn_id uuid, p_model text, p_input integer, p_output integer, p_cache_read integer, p_cache_write integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_total bigint;
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
   if least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
     raise exception 'Invalid usage.' using errcode = '22023';
   end if;
@@ -1295,9 +1398,15 @@ CREATE FUNCTION public.api_key_owner(p_hash text) RETURNS uuid
 declare
   v_user uuid;
 begin
-  update public.api_keys set last_used_at = now()
-  where key_hash = p_hash and revoked_at is null
-  returning user_id into v_user;
+  select user_id into v_user
+  from public.api_keys
+  where key_hash = p_hash and revoked_at is null;
+
+  if v_user is not null then
+    update public.api_keys set last_used_at = now()
+    where key_hash = p_hash
+      and (last_used_at is null or last_used_at < now() - interval '5 minutes');
+  end if;
   return v_user;
 end;
 $$;
@@ -2552,7 +2661,10 @@ CREATE FUNCTION public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) RETU
     AS $$
 declare
   v_row public.cmo_runs;
-  v_price integer := case when p_input->>'brain' = 'claude' then 0 else public.cmo_job_price(p_kind) end;
+  v_price integer := case
+    when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
+    else public.cmo_job_price(p_kind)
+  end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
@@ -2978,15 +3090,15 @@ CREATE TABLE public.cmo_memories (
     CONSTRAINT cmo_memories_importance_check CHECK (((importance >= 1) AND (importance <= 3))),
     CONSTRAINT cmo_memories_kind_check CHECK ((kind = ANY (ARRAY['preference'::text, 'fact'::text, 'feedback'::text, 'result'::text]))),
     CONSTRAINT cmo_memories_topic_check CHECK ((topic = ANY (ARRAY['general'::text, 'post'::text, 'sales'::text, 'video'::text, 'research'::text]))),
-    CONSTRAINT cmo_memories_type_check CHECK ((type = ANY (ARRAY['feedback'::text, 'user'::text])))
+    CONSTRAINT cmo_memories_type_check CHECK ((type = ANY (ARRAY['feedback'::text, 'user'::text, 'agent'::text])))
 );
 
 
 --
--- Name: cmo_remember(text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_remember(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_remember(p_body text, p_topic text DEFAULT 'general'::text) RETURNS public.cmo_memories
+CREATE FUNCTION public.cmo_remember(p_body text, p_topic text DEFAULT 'general'::text, p_source text DEFAULT 'user'::text) RETURNS public.cmo_memories
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3000,6 +3112,9 @@ begin
   if p_topic is null or p_topic not in ('general', 'post', 'sales', 'video', 'research') then
     raise exception 'Unknown topic.' using errcode = '22023';
   end if;
+  if p_source is null or p_source not in ('user', 'agent') then
+    raise exception 'Unknown note source.' using errcode = '22023';
+  end if;
   -- At the cap, drop the least important, oldest note rather than simply the oldest one.
   if (select count(*) from public.cmo_memories where user_id = v_user) >= 200 then
     delete from public.cmo_memories where id in (
@@ -3007,7 +3122,8 @@ begin
     );
   end if;
   insert into public.cmo_memories (user_id, type, kind, topic, importance, body)
-  values (v_user, 'user', 'preference', p_topic, 3, trim(p_body))
+  values (v_user, p_source, case when p_source = 'user' then 'preference' else 'fact' end, p_topic,
+    case when p_source = 'user' then 3 else 2 end, trim(p_body))
   returning * into v_row;
   return v_row;
 end;
@@ -3998,6 +4114,10 @@ declare
   v_key text;
   v_row public.api_keys;
 begin
+  if not public.is_paid(v_user) then
+    -- P0001 so the route shows the message (lib/api/errors.ts passes it through).
+    raise exception 'API keys are part of the paid plans.' using errcode = 'P0001';
+  end if;
   if v_name = '' or char_length(v_name) > 60 then
     raise exception 'Name the key in 1 to 60 characters.' using errcode = '22023';
   end if;
@@ -4322,12 +4442,7 @@ begin
     raise exception 'Missing video link.' using errcode = '22023';
   end if;
   if v_source not like 'storage://%'
-     and (
-       v_source !~* '^https?://[^/@[:space:]]+([/:?#]|$)'
-       or v_source ~* '^https?://[^/]*@'
-       or v_source ~* '^https?://(localhost|127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)([/:?#]|[0-9])'
-       or v_source ~* '^https?://\[::1\]([/:?#]|$)'
-     )
+     and (v_source !~* '^https?://[^/@[:space:]]+([/:?#]|$)' or public.video_url_refused(v_source))
   then
     raise exception 'Paste a public HTTP or HTTPS video link.' using errcode = '22023';
   end if;
@@ -5330,6 +5445,23 @@ $$;
 
 
 --
+-- Name: is_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_paid(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(
+    (select p.plan in ('starter', 'creator')
+       from public.profiles p
+      where p.id = p_user
+        and (auth.uid() is null or auth.uid() = p_user)),
+    false);
+$$;
+
+
+--
 -- Name: job_credits_spent(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5426,6 +5558,39 @@ $$;
 
 
 --
+-- Name: mcp_admit(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_admit(p_count integer) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_window_start timestamptz;
+  v_count int;
+begin
+  if p_count is null or p_count < 1 or p_count > 20 then
+    raise exception 'Send 1 to 20 messages per request.' using errcode = '22023';
+  end if;
+  -- Before counting: a free account's refused requests must not fill a bucket it cannot use.
+  if not public.is_paid(v_user) then
+    return 'free_plan';
+  end if;
+
+  v_window_start := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  insert into public.rate_limits (user_id, bucket, window_start, count)
+  values (v_user, 'mcp', v_window_start, p_count)
+  on conflict (user_id, bucket, window_start)
+  do update set count = public.rate_limits.count + p_count
+  returning count into v_count;
+
+  return case when v_count <= 600 then 'ok' else 'rate_limited' end;
+end;
+$$;
+
+
+--
 -- Name: mcp_confirm_use(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5444,6 +5609,47 @@ begin
   insert into public.mcp_confirms (user_id, nonce) values (v_user, p_nonce) on conflict do nothing;
   get diagnostics v_count = row_count;
   return v_count = 1;
+end;
+$$;
+
+
+--
+-- Name: mcp_grant_record(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_grant_record(p_client_id text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_client_id is null or char_length(p_client_id) not between 1 and 200 then
+    raise exception 'This request is not valid.' using errcode = '22023';
+  end if;
+  -- The consent route checks this too; here it holds for any caller.
+  if not public.is_paid(v_user) then
+    raise exception 'Connecting apps to OpenCMO is part of the paid plans.' using errcode = 'P0001';
+  end if;
+  insert into public.mcp_grants (user_id, client_id) values (v_user, p_client_id)
+  on conflict (user_id, client_id) do update set created_at = now(), revoked_at = null;
+end;
+$$;
+
+
+--
+-- Name: mcp_grant_revoke(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_grant_revoke(p_client_id text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  update public.mcp_grants set revoked_at = now()
+  where user_id = v_user and client_id = p_client_id and revoked_at is null;
 end;
 $$;
 
@@ -6526,6 +6732,22 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: refuse_email_signup(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.refuse_email_signup(event jsonb) RETURNS jsonb
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select case
+    when event #>> '{user,app_metadata,provider}' = 'email'
+      then jsonb_build_object('error', jsonb_build_object('http_code', 403, 'message', 'New accounts sign up with Google.'))
+    else '{}'::jsonb
+  end;
 $$;
 
 
@@ -8183,6 +8405,80 @@ $$;
 
 
 --
+-- Name: video_url_refused(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.video_url_refused(p_url text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_authority text := lower(substring(p_url from '^[hH][tT][tT][pP][sS]?://([^/?#]*)'));
+  v_host text;
+  v_port text;
+  v_octets int[];
+  v_h1 int;
+  v_h2 int;
+begin
+  if v_authority is null or v_authority = '' or v_authority ~ '[@[:space:]\\]' then
+    return true;
+  end if;
+  if v_authority like '[%' then
+    v_host := substring(v_authority from '^(\[[0-9a-f:.]*\])');
+    if v_host is null then
+      return true;
+    end if;
+    v_port := substring(v_authority from length(v_host) + 1);
+  else
+    v_host := split_part(v_authority, ':', 1);
+    v_port := substring(v_authority from length(v_host) + 1);
+  end if;
+  if v_port <> '' and v_port not in (':', ':80', ':443') then
+    return true;
+  end if;
+
+  if v_host like '[%' then
+    -- Global unicast is 2000::/3; IPv4 hidden in IPv6 (mapped, NAT64, 6to4, Teredo) and every
+    -- local range fall outside it or in the prefixes refused here.
+    v_host := btrim(v_host, '[]');
+    if v_host !~ '^[0-9a-f]{1,4}:' then
+      return true;
+    end if;
+    v_h1 := ('x' || lpad(split_part(v_host, ':', 1), 8, '0'))::bit(32)::int;
+    v_h2 := case when split_part(v_host, ':', 2) ~ '^[0-9a-f]{1,4}$'
+      then ('x' || lpad(split_part(v_host, ':', 2), 8, '0'))::bit(32)::int else 0 end;
+    return v_h1 < 8192 or v_h1 > 16383 or v_h1 = 8194 or (v_h1 = 8193 and (v_h2 < 512 or v_h2 = 3512));
+  end if;
+
+  v_host := rtrim(v_host, '.');
+  if v_host !~ '\.' or v_host ~ '(^|\.)(localhost|local|internal|intranet|lan|home\.arpa|onion)$' then
+    return true;
+  end if;
+  -- Digits, dots and hex only: an address in some encoding. Only a plain dotted quad is judged;
+  -- `0x7f.1`, `127.1` and `0177.0.0.1` are refused outright.
+  if v_host ~ '^(0x[0-9a-f]*|[0-9]+)(\.(0x[0-9a-f]*|[0-9]+))*$' then
+    if v_host !~ '^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$' then
+      return true;
+    end if;
+    v_octets := string_to_array(v_host, '.')::int[];
+    return v_octets[1] > 255 or v_octets[2] > 255 or v_octets[3] > 255 or v_octets[4] > 255
+      or v_octets[1] in (0, 10, 127) or v_octets[1] >= 224
+      or (v_octets[1] = 100 and v_octets[2] between 64 and 127)
+      or (v_octets[1] = 169 and v_octets[2] = 254)
+      or (v_octets[1] = 172 and v_octets[2] between 16 and 31)
+      or (v_octets[1] = 192 and v_octets[2] = 168)
+      or (v_octets[1] = 192 and v_octets[2] = 0 and v_octets[3] in (0, 2))
+      or (v_octets[1] = 192 and v_octets[2] = 88 and v_octets[3] = 99)
+      or (v_octets[1] = 198 and v_octets[2] in (18, 19))
+      or (v_octets[1] = 198 and v_octets[2] = 51 and v_octets[3] = 100)
+      or (v_octets[1] = 203 and v_octets[2] = 0 and v_octets[3] = 113);
+  end if;
+  return false;
+end;
+$_$;
+
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8474,6 +8770,19 @@ CREATE TABLE public.mcp_confirms (
     user_id uuid NOT NULL,
     nonce uuid NOT NULL,
     used_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mcp_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_grants (
+    user_id uuid NOT NULL,
+    client_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT mcp_grants_client_id_check CHECK (((char_length(client_id) >= 1) AND (char_length(client_id) <= 200)))
 );
 
 
@@ -9127,6 +9436,14 @@ ALTER TABLE ONLY public.marketing_documents
 
 ALTER TABLE ONLY public.mcp_confirms
     ADD CONSTRAINT mcp_confirms_pkey PRIMARY KEY (user_id, nonce);
+
+
+--
+-- Name: mcp_grants mcp_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_grants
+    ADD CONSTRAINT mcp_grants_pkey PRIMARY KEY (user_id, client_id);
 
 
 --
@@ -10265,6 +10582,14 @@ ALTER TABLE ONLY public.mcp_confirms
 
 
 --
+-- Name: mcp_grants mcp_grants_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_grants
+    ADD CONSTRAINT mcp_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: media_assets media_assets_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10713,6 +11038,19 @@ ALTER TABLE public.marketing_documents ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.mcp_confirms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_grants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mcp_grants ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_grants mcp_grants_select_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY mcp_grants_select_own ON public.mcp_grants FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
 
 --
 -- Name: media_assets; Type: ROW SECURITY; Schema: public; Owner: -

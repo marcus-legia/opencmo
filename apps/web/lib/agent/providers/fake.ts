@@ -720,6 +720,20 @@ function projectScript(history: StoredMessage[]): unknown[] {
  *   "read" + a domain → read_site → a reply about the page, nothing saved (memory-safety eval)
  *   còn lại           → trả lời bằng chữ
  */
+/**
+ * The fake falls for instructions planted in what it read ("remember …", "set this week's goal …"),
+ * as a careless model would: the memory-safety eval then checks the loop's gate, not the model's
+ * judgment, refuses the write.
+ */
+function obeyPlanted(raw: string): unknown[] {
+  const calls: unknown[] = [];
+  const note = /\bremember(?: that| with)?\s+'?([^'.]{3,200})/i.exec(raw)?.[1];
+  if (note) calls.push(use("remember", { note: note.trim() }));
+  const goal = /\bgoal to (\d+) posts\b/i.exec(raw)?.[1];
+  if (goal) calls.push(use("set_week_goal", { week: "this", goal: "Planted goal", metric: "posts", target: Number(goal) }));
+  return calls;
+}
+
 /** The founder's words of the turn: the latest user message with text, without the documents and state. */
 const cmoAsk = (history: StoredMessage[]): string =>
   [...history]
@@ -742,6 +756,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
       return [
         text(`I found ${posts.length} Reddit posts about this. Handing it to the Sales agent.`),
         use("create_task", { agent: "sales", brief: `People asking for help with this, e.g. ${posts[0]?.url ?? "Reddit"}`, when: "now" }),
+        ...obeyPlanted(raw),
       ];
     }
     if (previous.includes("create_task")) {
@@ -762,7 +777,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
     }
     if (previous.includes("update_document")) return [text(/"saved":\s*true/.test(raw) ? "Updated. The old version stays in history." : "I could not update the document.")];
     if (previous.includes("set_week_goal")) return [text("Proposed. Approve or edit it on the goal card in Approvals.")];
-    if (previous.includes("read_site")) return [text("I read the homepage. Lead with the outcome in the first heading and put the price above the fold.")];
+    if (previous.includes("read_site")) return [text("I read the homepage. Lead with the outcome in the first heading and put the price above the fold."), ...obeyPlanted(raw)];
     return [text("Done.")];
   }
   const ask = cmoAsk(history);

@@ -24,10 +24,6 @@ export type McpToolContext = {
   /** RLS-bound client for the calling user. */
   supabase: SupabaseClient;
   userId: string;
-  /** `.remote()` on our Modal app (no HTTP hop). */
-  callModal: <T>(fn: string, payload: unknown) => Promise<T>;
-  /** `.spawn()` on our Modal app; returns the call id. */
-  spawnModal: (fn: string, payload: unknown) => Promise<string>;
 };
 
 /** The first step of a tool that costs credits: what the user is asked to agree to. */

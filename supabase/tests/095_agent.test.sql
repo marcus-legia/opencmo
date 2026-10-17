@@ -11,6 +11,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select no_plan();
 
 -- --------------------------------------------------------------- fixture
@@ -68,7 +75,7 @@ select throws_ok(
 );
 
 select is(
-  public.agent_append((select id from t1), 'assistant', '[{"type":"text","text":"Done."}]'),
+  public.agent_append_for(auth.uid(), (select id from t1), 'assistant', '[{"type":"text","text":"Done."}]'),
   2, 'tin nhắn nối thêm theo seq'
 );
 reset role;
@@ -79,19 +86,19 @@ select throws_ok(
 set local role authenticated;
 
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t1), 'toolu_1', 'set_frame',
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t1), 'toolu_1', 'set_frame',
        '{"width":1080,"height":1080}', 'done', '{"ok":true}') $$,
   'ghi tool call'
 );
 
 -- 10 000 token vào + 2 000 ra = 50 000 + 50 000 = 100 000 micro-USD = 2 credit.
 select is(
-  public.agent_record_usage((select id from t1), 'claude-opus-5', 10000, 2000, 0, 0),
+  public.agent_record_usage_for(auth.uid(), (select id from t1), 'claude-opus-5', 10000, 2000, 0, 0),
   2, 'credit tính từ usage thật'
 );
 
 create temporary table f1 as
-  select * from public.agent_finish_turn((select id from t1), 'done', null);
+  select * from public.agent_finish_turn_for(auth.uid(), (select id from t1), 'done', null);
 select is((select credits from f1), 2, 'chốt 2 credit');
 select is(public.credit_balance('e9500000-0000-4000-8000-00000000000a'), 10, 'hoàn 3 credit dư');
 select is(
@@ -99,7 +106,7 @@ select is(
   'gỡ khoá khi chốt'
 );
 select is(
-  (select credits from public.agent_finish_turn((select id from t1), 'failed', 'x')), 2,
+  (select credits from public.agent_finish_turn_for(auth.uid(), (select id from t1), 'failed', 'x')), 2,
   'chốt lại lượt đã chốt không đổi gì'
 );
 select is(public.credit_balance('e9500000-0000-4000-8000-00000000000a'), 10, 'không hoàn hai lần');
@@ -109,12 +116,12 @@ create temporary table t2 as
   select * from public.agent_begin_turn((select id from s), 'Big job', '[{"type":"text","text":"Big job"}]');
 grant select on t2 to authenticated;
 select is(
-  public.agent_record_usage((select id from t2), 'claude-opus-5', 400000, 0, 0, 0),
+  public.agent_record_usage_for(auth.uid(), (select id from t2), 'claude-opus-5', 400000, 0, 0, 0),
   40, 'usage vượt khoản giữ vẫn được ghi'
 );
 select is((select credits from public.agent_stop((select id from s))), 5, 'Stop chốt, credit không vượt khoản giữ');
 select throws_ok(
-  $$ select public.agent_append((select id from t2), 'assistant', '[{"type":"text","text":"late"}]') $$,
+  $$ select public.agent_append_for(auth.uid(), (select id from t2), 'assistant', '[{"type":"text","text":"late"}]') $$,
   'P0001', 'This assistant turn was stopped.', 'lượt đã Stop từ chối tin nhắn mới'
 );
 
@@ -162,7 +169,7 @@ select throws_ok(
   'P0002', 'Assistant session not found.', 'B không chạy lượt trên phiên của A'
 );
 select throws_ok(
-  $$ select public.agent_append((select id from t1), 'user', '[]') $$,
+  $$ select public.agent_append_for(auth.uid(), (select id from t1), 'user', '[]') $$,
   'P0002', 'Assistant turn not found.', 'B không nối tin nhắn vào lượt của A'
 );
 select throws_ok(

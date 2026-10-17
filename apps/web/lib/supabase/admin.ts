@@ -12,7 +12,8 @@ import { createClient } from "@supabase/supabase-js";
  * Polar (cộng credit), các cron, bộ chạy việc CMO (`lib/cmo/jobs/start.ts`,
  * như worker Python — gọi RPC chỉ-service kèm user id tường minh), và bước tra
  * chủ khoá API của MCP (`lib/mcp/auth.ts`: chỉ `api_key_owner`; mọi tool sau đó
- * chạy dưới RLS bằng JWT ngắn hạn của chính user). Không bao giờ
+ * chạy dưới RLS bằng JWT ngắn hạn của chính user), and the Assistant's ledger (`lib/agent/ledger.ts`:
+ * usage, messages, tool calls and settlement for the user the route verified). Không bao giờ
  * import từ component, kể cả server component: chỉ cần một lần lỡ tay bọc nó
  * vào code chạy phía client là khóa này ra ngoài. `server-only` ở trên là chốt
  * cứng cho đúng câu đó.

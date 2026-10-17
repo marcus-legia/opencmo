@@ -10,6 +10,8 @@ select plan(33);
 insert into auth.users (id, email) values
   ('e1580000-0000-4000-8000-00000000000a', 'inbox-a@test.local'),
   ('e1580000-0000-4000-8000-00000000000b', 'inbox-b@test.local');
+-- API keys and the free `brain = 'claude'` are paid-plan features (20261210101000).
+update public.profiles set plan = 'starter' where id in ('e1580000-0000-4000-8000-00000000000a', 'e1580000-0000-4000-8000-00000000000b');
 
 -- An inbox run holds no credits, even for a founder with none.
 select is(

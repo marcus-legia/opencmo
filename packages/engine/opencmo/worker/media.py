@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import json
 import logging
 import re
@@ -17,6 +16,7 @@ from urllib.parse import unquote, urlsplit
 
 from opencmo.backends.retry import PermanentError, TransientError
 from opencmo.backends.supabase import SOURCES_BUCKET, Job, Task
+from opencmo.capture.addresses import DEFAULT_PORTS, blocked_host, literal_address, private_address
 from opencmo.config import Config
 from opencmo.media.ffmpeg import run
 from opencmo.media.probe import probe_file
@@ -79,23 +79,26 @@ def upload_object_name(job: Job) -> str:
 
 
 def validate_public_url(value: str) -> None:
-    """Chỉ nhận URL HTTP(S) có DNS trỏ hoàn toàn tới địa chỉ public."""
+    """Only HTTP(S) links on port 80/443 whose host is public and resolves only to public addresses.
+
+    The same rules as the guard yt-dlp then goes through (`capture.addresses`, cases shared with the
+    web app in `packages/contracts/private-addresses.json`). This check refuses early, in plain
+    words; the guard is what stops redirects and DNS rebinding later.
+    """
     try:
         parsed = urlsplit(value)
         hostname = parsed.hostname
         if (
-            parsed.scheme not in {"http", "https"}
+            parsed.scheme not in DEFAULT_PORTS
             or not hostname
             or parsed.username is not None
             or parsed.password is not None
-            or hostname.lower() == "localhost"
-            or hostname.lower().endswith(".localhost")
+            or (parsed.port or DEFAULT_PORTS[parsed.scheme]) not in DEFAULT_PORTS.values()
+            or blocked_host(hostname)
         ):
             raise UnsafeSourceError(UNSAFE_SOURCE)
-        addresses = socket.getaddrinfo(hostname, parsed.port, type=socket.SOCK_STREAM)
-        if not addresses or any(
-            not ipaddress.ip_address(item[4][0]).is_global for item in addresses
-        ):
+        addresses = socket.getaddrinfo(literal_address(hostname) or hostname, parsed.port, type=socket.SOCK_STREAM)
+        if not addresses or any(private_address(item[4][0]) for item in addresses):
             raise UnsafeSourceError(UNSAFE_SOURCE)
     except (OSError, ValueError) as exc:
         raise UnsafeSourceError(UNSAFE_SOURCE) from exc

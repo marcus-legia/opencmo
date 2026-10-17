@@ -12,6 +12,7 @@
  */
 
 import { isProduction } from "@/lib/production";
+import { cleanUntrusted } from "../untrusted";
 
 export const SC_BASE = "https://api.scrapecreators.com";
 const TIMEOUT_MS = 20_000;
@@ -138,7 +139,8 @@ export function safeUrl(raw: string, hosts: RegExp): string | null {
   }
 }
 
-const clean = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max);
+/** Posts are someone else's text: invisible characters go before anything reads them (untrusted.ts). */
+const clean = (s: string, max: number) => cleanUntrusted(s).replace(/\s+/g, " ").trim().slice(0, max);
 
 // ----------------------------------------------------------------- chuẩn hoá theo nền tảng
 

@@ -9,6 +9,8 @@ select plan(11);
 insert into auth.users (id, email) values
   ('e1370000-0000-4000-8000-00000000000a', 'mcp-a@test.local'),
   ('e1370000-0000-4000-8000-00000000000b', 'mcp-b@test.local');
+-- API keys and the free `brain = 'claude'` are paid-plan features (20261210101000).
+update public.profiles set plan = 'starter' where id in ('e1370000-0000-4000-8000-00000000000a', 'e1370000-0000-4000-8000-00000000000b');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1370000-0000-4000-8000-00000000000a"}';

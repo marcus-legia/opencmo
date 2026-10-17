@@ -1,12 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { safeNext } from "@/lib/auth/next";
 import { createServerClient } from "@/lib/supabase/server";
-
-/**
- * Base giả để phân tích `next`. Chỉ dùng cho việc đối chiếu origin bên dưới —
- * không bao giờ đi vào header `Location`.
- */
-const PARSE_BASE = "http://redirect.invalid";
 
 /**
  * Chuyển hướng bằng `Location` TƯƠNG ĐỐI.
@@ -32,7 +27,6 @@ function redirectTo(path: string): NextResponse {
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") || "/app";
   const url = searchParams.get("url");
   const site = searchParams.get("site");
 
@@ -51,27 +45,11 @@ export async function GET(request: NextRequest) {
     return redirectTo("/login?error=link-het-han");
   }
 
-  // `next` tới từ query của người dùng (`/login?next=…` đi thẳng vào
-  // `redirectTo` của OAuth), nên nó là dữ liệu KHÔNG tin được. `new URL(next, base)`
-  // bỏ qua base ngay khi next là URL tuyệt đối: `https://evil.com`, `//evil.com`
-  // và `/\evil.com` đều thoát ra ngoài miền. Đó là open redirect ngay sau lúc
-  // đăng nhập thành công — chỗ đắt nhất để lừa, vì người dùng vừa tự tay xác
-  // thực nên tin trang kế tiếp.
-  //
-  // Danh sách chặn tiền tố ("//", "/\", …) rất dễ sót một biến thể của bộ phân
-  // tích URL. Nên dựng xong rồi ĐỐI CHIẾU origin: một bất biến duy nhất, đúng
-  // với mọi cách viết. Đối chiếu với `PARSE_BASE` cố định chứ không với origin
-  // của request, vì origin đó có thể sai (xem `redirectTo`). Redirect URLs của
-  // Supabase không đỡ được — nó duyệt địa chỉ callback, không duyệt query của
-  // callback.
-  let target = new URL(next, PARSE_BASE);
-  if (target.origin !== PARSE_BASE) {
-    console.warn("[auth] chặn next ra ngoài miền:", next);
-    target = new URL("/app", PARSE_BASE);
-  }
+  // `next` is untrusted user input; `safeNext` keeps it on this site (security fixes plan, fix 3).
+  const target = new URL(safeNext(searchParams.get("next")), "http://redirect.invalid");
   if (url) target.searchParams.set("url", url);
-  // Website nhập ở hero → `/app` (AI CMO), nơi W0 Onboarding đọc nó. KHÔNG trộn vào
-  // `url` — `url` là link video và app sẽ tạo job clip từ nó.
+  // A website typed in the hero goes to `/app` (AI CMO), where W0 Onboarding reads it. Never fold it
+  // into `url`: `url` is a video link, and the app would start a clip job from it.
   if (site) target.searchParams.set("site", site);
   return redirectTo(`${target.pathname}${target.search}`);
 }

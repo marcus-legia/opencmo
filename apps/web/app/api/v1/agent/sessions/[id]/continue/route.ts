@@ -17,7 +17,7 @@ const body = z.object({ extend: z.boolean().optional() });
  * - paused because the held credits ran out ('budget'): runs only with `extend: true`, after the
  *   user pressed "Continue for N credits" and SQL held more.
  */
-export const POST = withApi({ body }, async ({ supabase, body, params }) => {
+export const POST = withApi({ body }, async ({ supabase, user, body, params }) => {
   if (body.extend !== true) {
     // Only a turn paused at a request limit continues without anyone: a turn waiting for an answer
     // or an approval card would get here with the question skipped and the card cancelled.
@@ -33,5 +33,5 @@ export const POST = withApi({ body }, async ({ supabase, body, params }) => {
       throw new ApiError(409, "The assistant is not waiting to continue.");
     }
   }
-  return continueTurn(supabase, params.id, [], { extend: body.extend === true });
+  return continueTurn(supabase, user.id, params.id, [], { extend: body.extend === true });
 });

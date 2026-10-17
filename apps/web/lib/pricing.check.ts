@@ -13,12 +13,16 @@ import { createClient } from "@supabase/supabase-js";
 import { localSupabaseCredentials } from "./local-supabase";
 import { AI_MODELS } from "@opencmo/editor-core/generate";
 
-import { PLANS } from "./pricing";
+import { isPaidPlan, PLANS } from "./pricing";
 
 const { url, serviceRoleKey } = localSupabaseCredentials({ cwd: process.cwd() });
 const supabase = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
 
 async function main(): Promise<void> {
+  // Must match SQL `is_paid()` (supabase/tests/175_is_paid.test.sql).
+  assert.deepEqual(PLANS.filter((plan) => isPaidPlan(plan.id)).map((plan) => plan.id), ["starter", "creator"]);
+  for (const odd of ["free", "pro", "", null, undefined]) assert.equal(isPaidPlan(odd), false, `isPaidPlan(${odd})`);
+
   for (const plan of PLANS) {
     const { data, error } = await supabase.rpc("plan_quota", { p_plan: plan.id });
     if (error) throw new Error(`Không đọc được quota ${plan.id}: ${error.message}`);

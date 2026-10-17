@@ -44,6 +44,8 @@ import {
   STOP_POLL_MS,
 } from "./limits";
 import { canSwitchFrom } from "./model";
+import { TAINT_GATED_TOOLS, TAINT_MESSAGE, TAINTING_TOOLS } from "./cmo-tools";
+import type { Ledger } from "./ledger";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
 import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
@@ -57,6 +59,8 @@ export type Turn = { id: string; session_id: string; number: number; prompt: str
 
 export type TurnEnv = {
   supabase: SupabaseClient;
+  /** Usage, messages, tool calls and the settlement go here, never through `supabase` (ledger.ts). */
+  ledger: Ledger;
   provider: Provider;
   scope: Scope;
   turn: Turn;
@@ -116,11 +120,11 @@ export async function turnStatus(supabase: SupabaseClient, turnId: string) {
 }
 
 async function finish(env: TurnEnv, status: "done" | "failed" | "stopped", error: string | null) {
-  const turn = await rpcOrThrow<{ status: string; credits: number | null; error: string | null }>(
-    env.supabase,
-    "agent_finish_turn",
-    { p_turn_id: env.turn.id, p_status: status, p_error: error },
-  );
+  const turn = await env.ledger<{ status: string; credits: number | null; error: string | null }>("agent_finish_turn", {
+    p_turn_id: env.turn.id,
+    p_status: status,
+    p_error: error,
+  });
   env.emit("done", { status: turn.status, credits: turn.credits, error: turn.error });
 }
 
@@ -135,7 +139,7 @@ async function recordTool(
   result: Record<string, unknown> | null,
   content: string | null,
 ) {
-  await rpcOrThrow(env.supabase, "agent_record_tool", {
+  await env.ledger("agent_record_tool", {
     p_turn_id: env.turn.id,
     p_tool_use_id: call.id,
     p_name: call.name,
@@ -209,12 +213,27 @@ async function spentCredits(supabase: SupabaseClient, turnId: string): Promise<n
   return micro <= 0 ? 0 : Math.max(1, Math.ceil(micro / 50_000));
 }
 
+/**
+ * Whether this turn already read outside content (fix 10). Read from the turn's own tool calls,
+ * not kept in memory: a turn that paused and continues in a new request is still the same turn.
+ */
+async function turnTainted(supabase: SupabaseClient, turnId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("agent_tool_calls")
+    .select("name")
+    .eq("turn_id", turnId)
+    .eq("status", "done")
+    .in("name", [...TAINTING_TOOLS])
+    .limit(1);
+  return Boolean(data?.length);
+}
+
 async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "time" | "steps" | "budget") {
   await rpcOrThrow(env.supabase, "agent_pause_turn", { p_turn_id: env.turn.id, p_reason: reason });
 }
 
 export async function runTurn(env: TurnEnv): Promise<void> {
-  const { supabase, turn, emit, provider, scope } = env;
+  const { supabase, ledger, turn, emit, provider, scope } = env;
   const started = Date.now();
   // The session's messages, read once per request: this loop is the only writer while the turn
   // runs, so each step appends here what it appends to the database.
@@ -228,6 +247,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
   // only when it may be stale (first step, or a step whose tools ran sub-agents that record their own).
   let spent: number | null = null;
   const streak = failureStreak();
+  // Outside content read in this turn: memory writes wait for the founder's next message.
+  let tainted: boolean | undefined;
 
   try {
     for (let step = 0; ; step++) {
@@ -298,7 +319,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         watch.done();
       }
 
-      spent = await rpcOrThrow<number>(supabase, "agent_record_usage", {
+      spent = await ledger<number>("agent_record_usage", {
         p_turn_id: turn.id,
         p_model: result.model,
         p_input: result.usage.input,
@@ -309,7 +330,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
 
       // Nguyên khối native: lịch sử phải giữ từng byte để khối suy nghĩ
       // (thinking block / thoughtSignature) và cache còn hợp lệ ở bước sau.
-      await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "assistant", p_content: result.content });
+      await ledger("agent_append", { p_turn_id: turn.id, p_role: "assistant", p_content: result.content });
       past?.push({ role: "assistant", content: result.content as unknown[] });
 
       if (result.stop === "refusal") {
@@ -321,7 +342,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           // Finishing with errors the check reported: one more step to fix or explain them.
           gated = true;
           const nudge = provider.userTurn(VERIFY_GATE, openCheck);
-          await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: nudge });
+          await ledger("agent_append", { p_turn_id: turn.id, p_role: "user", p_content: nudge });
           past?.push({ role: "user", content: nudge });
           continue;
         }
@@ -370,6 +391,13 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           deferred = true;
           continue;
         }
+        if (TAINT_GATED_TOOLS.has(call.name) && (tainted ??= await turnTainted(supabase, turn.id))) {
+          const content = JSON.stringify({ error: TAINT_MESSAGE });
+          await recordTool(env, call, "failed", { summary: "Waiting for the founder to confirm" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Waiting for the founder to confirm" });
+          results.push({ id: call.id, name: call.name, ok: false, content });
+          continue;
+        }
         const ready = early.get(call.id);
         const plan = ready?.plan ?? (await scope.plan(call));
         if (plan.kind === "browser") {
@@ -395,6 +423,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           continue;
         }
         const outcome = ready?.outcome ?? (await scope.run(call));
+        if (outcome.ok && TAINTING_TOOLS.has(call.name)) tainted = true;
         let content = outcome.content;
         if (outcome.ok) streak.succeeded();
         else {
@@ -460,7 +489,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const state = wrote && result.toolCalls.some((call) => scope.isWrite(call.name)) ? await scope.state() : undefined;
       if (state !== undefined) openCheck = failingCheck(state, baseline);
       const answer = provider.toolResults(results, state);
-      await rpcOrThrow(supabase, "agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
+      await ledger("agent_append", { p_turn_id: turn.id, p_role: "user", p_content: answer });
       past?.push({ role: "user", content: answer as unknown[] });
       if (runaway) {
         await finish(env, "failed", REPEATED_FAILURE_MESSAGE);
@@ -567,7 +596,7 @@ function browserResult(call: ToolCall, input: unknown, answer: Answer | undefine
  * chạy tiếp luôn.
  */
 export async function resumeTurn(env: TurnEnv, answers: Answer[]): Promise<void> {
-  const { supabase, turn, provider, emit, scope } = env;
+  const { supabase, ledger, turn, provider, emit, scope } = env;
   try {
     const { data: lastMessage } = await supabase
       .from("agent_messages")
@@ -658,7 +687,7 @@ export async function resumeTurn(env: TurnEnv, answers: Answer[]): Promise<void>
       results.push({ id: call.id, name: call.name, ok: outcome.ok, content: outcome.content, images: outcome.images });
     }
 
-    await rpcOrThrow(supabase, "agent_append", {
+    await ledger("agent_append", {
       p_turn_id: turn.id,
       p_role: "user",
       // Trạng thái (kèm `check`) chỉ khi có ghi: sau một lần chụp không có gì mới để đọc lại.

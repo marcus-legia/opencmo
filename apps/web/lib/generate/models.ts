@@ -22,6 +22,12 @@ export const aiFakeEnabled = (): boolean =>
   process.env.OPENCMO_AI_FAKE === "1" && !isProduction();
 
 /**
+ * Voice runs on the worker, which holds the ElevenLabs key. `OPENCMO_VOICE_ENABLED=1` lists the voice
+ * tools on a server that must not hold the key (the MCP server on Modal).
+ */
+const voiceEnabled = (): boolean => Boolean(process.env.ELEVENLABS_API_KEY) || process.env.OPENCMO_VOICE_ENABLED === "1";
+
+/**
  * Provider nào bật được trên máy chủ này. Khoá nằm ở worker (Modal secret) chứ
  * không ở đây — nhưng web và worker dùng CHUNG một bộ biến, nên có khoá ở web
  * là dấu hiệu worker cũng có. Thiếu ở worker thì task hỏng và credit được hoàn.
@@ -31,7 +37,7 @@ function providerEnabled(provider: string): boolean {
     case "fake":
       return aiFakeEnabled();
     case "elevenlabs":
-      return Boolean(process.env.ELEVENLABS_API_KEY);
+      return voiceEnabled();
     case "fal":
       // Aggregator nhiều lab (plan Palmier P1): một khoá cho mọi model `provider: fal`.
       return Boolean(process.env.FAL_KEY);
@@ -45,7 +51,7 @@ function providerEnabled(provider: string): boolean {
       // the worker.
       return (
         (["modal", "local"].includes(process.env.OPENCMO_MOTION ?? "") &&
-          (Boolean(process.env.ELEVENLABS_API_KEY) || (process.env.OPENCMO_MOTION_FAKE_VOICE === "1" && !isProduction()))) ||
+          (voiceEnabled() || (process.env.OPENCMO_MOTION_FAKE_VOICE === "1" && !isProduction()))) ||
         aiFakeEnabled()
       );
     default:
