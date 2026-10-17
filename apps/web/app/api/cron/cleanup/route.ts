@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { bearerMatches } from "@/lib/cron-auth";
 import { BUCKETS, SOURCES_BUCKET, type Bucket } from "@/lib/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   sweepOrphanPages,
   type CleanupQueueEntry,
 } from "@/lib/cleanup";
+
+import { cleanupAuthorized } from "./auth";
 
 /** Supabase Storage nhận tối đa 1000 key một lần; 100 giữ mỗi lượt đủ ngắn. */
 const REMOVE_BATCH = 100;
@@ -20,7 +21,7 @@ const RESERVE_MS = 10_000;
 export const maxDuration = 60;
 
 /**
- * Dọn dữ liệu hết hạn. Vercel Cron gọi mỗi ngày (xem vercel.json).
+ * Clean up expired data. Modal's `cleanup()` calls it daily with `CRON_CLEANUP_SECRET`.
  *
  * Thứ tự là cả thiết kế, không phải thói quen:
  *
@@ -35,19 +36,7 @@ export const maxDuration = 60;
  * sau chạy tiếp từ đúng chỗ đó.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-
-  // Đóng khi THIẾU secret, không phải chỉ khi sai secret. Route này chạy bằng
-  // service role và XOÁ dữ liệu, mà `.env.example` để `CRON_SECRET=` rỗng —
-  // nên "chưa đặt thì cho qua" nghĩa là quên điền một dòng env là endpoint xoá
-  // nằm công khai trên production. Bỏ trống chỉ được chấp nhận lúc chạy local.
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      console.error("[cron] thiếu CRON_SECRET — từ chối để không mở endpoint xoá");
-      return NextResponse.json({ error: "Forbidden." }, { status: 401 });
-    }
-    console.warn("[cron] không có CRON_SECRET — chỉ chấp nhận vì đang chạy local");
-  } else if (!bearerMatches(request.headers.get("authorization"), secret)) {
+  if (!cleanupAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
 

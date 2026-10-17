@@ -107,7 +107,8 @@ Checklist:
   - `api_key_owner` writes `last_used_at` at most every 5 minutes.
   - **Accept:** pgTAP green; `npm run test --workspace @opencmo/mcp-server` has a case "batch of 20 → one admission
     call" and the 403 body.
-- [ ] **A2 — Secrets out of the MCP container (fix 1).**
+- [x] **A2 — Secrets out of the MCP container (fix 1).** `modal serve` was not run: the session container has no
+  Modal credentials; the deploy steps are in the PR body.
   - The MCP app lives in its own file and Modal workspace, with only the `opencmo-mcp` secret.
   - Confirm-code key `OPENCMO_MCP_CONFIRM_KEY`, fail closed when missing.
   - The worker's `wake` endpoint plus `OPENCMO_WAKE_TOKEN`; `wakeWorker` uses it when it has no worker token.
@@ -119,7 +120,7 @@ Checklist:
     - The cleanup route refuses `CRON_SECRET`.
     - `modal serve` (dev workspace) of both apps starts.
     - The deploy steps for O2 are written in the PR body.
-- [ ] **A3 — Flood cap (fix 2).** `max_containers=3` on `mcp_server`, with the reason (workspace quota) in a comment.
+- [x] **A3 — Flood cap (fix 2).** `max_containers=3` on `mcp_server`, with the reason (workspace quota) in a comment.
   - **Accept:** `test_modal_secrets.py` also asserts `max_containers`.
 - [ ] **A4 — Retire `/api/mcp` (fix 8).**
   - The route returns 410 with the new URL.

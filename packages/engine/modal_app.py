@@ -5,7 +5,9 @@ Deploy:
         ANTHROPIC_API_KEY=... \
         SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
         OPENCMO_WORKER_TOKEN=...   # cùng giá trị với biến của web app
-        OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule + cleanup; same CRON_SECRET as Vercel
+        OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule; same CRON_SECRET as Vercel
+        CRON_CLEANUP_SECRET=...   # cleanup only; same value as Vercel's CRON_CLEANUP_SECRET
+        OPENCMO_WAKE_TOKEN=...    # `wake`; same value as the MCP server's OPENCMO_WAKE_TOKEN
     modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # transcripts (Scribe); same key as Vercel
     modal secret create fal-secret FAL_KEY=...                  # media + output moderation; same key as Vercel
     modal secret create opencmo-motion MOTION_PREVIEW_TOKEN=... # explainer previews; same as Vercel, not the worker token
@@ -29,6 +31,8 @@ Hai đường vào, cố ý:
      It also dispatches queued AI CMO runs to the web app (`_dispatch_cmo`).
   3. `cmo_schedule()` and `cleanup()` — daily crons that call the web app's cron routes.
      Modal is the only scheduler; `apps/web/vercel.json` has no crons.
+  4. `wake` — the MCP server (`mcp_app.py`, its own workspace) asks for an early `sweep()` with a
+     token that can do nothing else.
 
 Nhờ có (2), (1) được phép hỏng: web app coi lỗi gọi `submit` là chuyện nhỏ, job
 vẫn nằm ở 'queued' và chạy chậm nhất một phút sau.
@@ -581,6 +585,28 @@ def submit(payload: dict) -> dict:
     return {"ok": True, "call_id": call.object_id}
 
 
+@app.function(secrets=[secret], timeout=30)
+@modal.fastapi_endpoint(method="POST")
+def wake(payload: dict) -> dict:
+    """Wake the worker without the worker token: runs one `sweep()` early.
+
+    For callers that create work but must not hold `OPENCMO_WORKER_TOKEN` (the MCP server, which
+    faces the internet). It takes no job id, so the token can only make the sweep come sooner:
+    the sweep claims through the same leases, and a spare run finds an empty queue.
+    The token travels in the body for the same reason as in `submit`.
+    """
+    import hmac
+
+    from fastapi import HTTPException
+
+    expected = os.environ.get("OPENCMO_WAKE_TOKEN", "")
+    given = str(payload.get("token") or "")
+    if not expected or not hmac.compare_digest(expected, given):
+        raise HTTPException(status_code=401, detail="Invalid wake token.")
+    sweep.spawn()
+    return {"ok": True}
+
+
 @app.function(secrets=[secret], schedule=modal.Period(minutes=1), timeout=60)
 def sweep() -> None:
     """Lưới an toàn: phục hồi lease rồi nhặt job/task còn kẹt ở queued.
@@ -684,65 +710,19 @@ def cmo_schedule() -> None:
 
 @app.function(secrets=[secret], schedule=modal.Cron("0 3 * * *"), timeout=90)
 def cleanup() -> None:
-    """Daily cleanup of expired files and free accounts (the web route does the work)."""
+    """Daily cleanup of expired files and free accounts (the web route does the work).
+
+    The route deletes users, so it takes its own secret, `CRON_CLEANUP_SECRET`: a leak of the
+    `CRON_SECRET` that the CMO routes share cannot delete accounts.
+    """
     from opencmo.worker import cmo_dispatch
 
-    web = cmo_dispatch.web_config(dict(os.environ))
-    if web is None:
-        log.error("OPENCMO_WEB_URL or CRON_SECRET missing: cleanup did not run")
+    url = os.environ.get("OPENCMO_WEB_URL", "").strip().rstrip("/")
+    token = os.environ.get("CRON_CLEANUP_SECRET", "").strip()
+    if not url or not token:
+        log.error("OPENCMO_WEB_URL or CRON_CLEANUP_SECRET missing: cleanup did not run")
         return
-    log.info("Cleanup: %s", cmo_dispatch.call_cron(*web, "/api/cron/cleanup", timeout=75.0))
-
-
-# --------------------------------------------------------------------------- MCP server
-# `opencmo-mcp` (docs/mcp-on-modal-plan.md): the TypeScript MCP server (packages/mcp-server) that
-# lets the user's own Claude drive OpenCMO. One small always-warm container answers every session:
-# the server is stateless, waits on the database and Modal, and never runs scene code (previews go
-# to `motion_preview`, renders through the task queue to `render_motion`).
-#
-# Build the bundle first; without it the app deploys without this function:
-#     npm run build --workspace @opencmo/mcp-server
-#     modal secret create opencmo-mcp \
-#         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... SUPABASE_JWT_SECRET=... \
-#         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... MODAL_SUBMIT_URL=... \
-#         OPENCMO_WEB_URL=https://opencmo.io \
-#         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.modal.run \
-#         MODAL_TOKEN_ID=... MODAL_TOKEN_SECRET=...  # optional: tools that call Modal directly
-# The other secrets are the web app's own keys: the service key for `api_key_owner`, the worker
-# token to wake the worker, and the provider keys, without which the model catalog hides the
-# generation tools exactly as on Vercel.
-MCP_PORT = 8000
-_MCP_BUNDLE = _PACKAGES / "mcp-server" / "dist" / "server.cjs"
-_MCP_ROOT = "/root/mcp"
-
-if _MCP_BUNDLE.exists():
-    mcp_image = _with_node(
-        modal.Image.debian_slim(python_version="3.12").apt_install("curl", "xz-utils")
-    ).add_local_file(_MCP_BUNDLE, remote_path=f"{_MCP_ROOT}/server.cjs")
-
-    @app.function(
-        image=mcp_image,
-        secrets=[secret, voice_secret, fal_secret, modal.Secret.from_name("opencmo-mcp")],
-        # Warm for a snappy connector (0.25 core, 0.5 GiB). Modal cuts web requests at 150 s,
-        # which is why every slow tool is async.
-        min_containers=1,
-        cpu=0.25,
-        memory=512,
-        timeout=150,
-    )
-    @modal.concurrent(max_inputs=50)
-    @modal.web_server(port=MCP_PORT, startup_timeout=60, label=f"{APP_NAME}-mcp")
-    def mcp_server() -> None:
-        import subprocess
-
-        env = {**os.environ, "PORT": str(MCP_PORT), "HOST": "0.0.0.0"}
-        # The worker's secret names the database SUPABASE_URL; the web code reads the public name.
-        env.setdefault("NEXT_PUBLIC_SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
-        subprocess.Popen(["node", "--enable-source-maps", f"{_MCP_ROOT}/server.cjs"], env=env)
-else:
-    log.warning(
-        "opencmo-mcp not deployed: build it first (npm run build --workspace @opencmo/mcp-server)."
-    )
+    log.info("Cleanup: %s", cmo_dispatch.call_cron(url, token, "/api/cron/cleanup", timeout=75.0))
 
 
 @app.local_entrypoint()

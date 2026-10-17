@@ -11,7 +11,6 @@
  */
 
 import { authenticate, type Caller } from "./auth";
-import { callModal, spawnModal } from "./modal";
 import { protectedResourceMetadata, resourceMetadataUrl } from "./oauth";
 import type { McpToolContext } from "./registry";
 import { handleMcp } from "./server";
@@ -67,7 +66,7 @@ async function readBody(request: Request): Promise<{ body: unknown } | { error: 
 }
 
 export function contextFor(caller: Caller): McpToolContext {
-  return { supabase: caller.supabase, userId: caller.userId, callModal, spawnModal };
+  return { supabase: caller.supabase, userId: caller.userId };
 }
 
 /** Counts every JSON-RPC message of the body against the user's hourly limit. */

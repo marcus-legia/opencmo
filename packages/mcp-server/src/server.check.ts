@@ -15,6 +15,7 @@ import { callTool, describeTool, INSTRUCTIONS } from "./server";
 
 // Read when called, not at import: set before anything runs.
 process.env.SUPABASE_JWT_SECRET = "check-secret-check-secret-check-secret";
+process.env.OPENCMO_MCP_CONFIRM_KEY = "check-confirm-key-check-confirm-key";
 process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
 delete process.env.OPENCMO_MCP_URL;
@@ -39,12 +40,6 @@ const chain: unknown = new Proxy(() => undefined, {
 const ctx = {
   supabase: offline as never,
   userId: "11111111-1111-4111-8111-111111111111",
-  callModal: async () => {
-    throw new Error("no modal in checks");
-  },
-  spawnModal: async () => {
-    throw new Error("no modal in checks");
-  },
 };
 
 async function main() {
@@ -60,6 +55,12 @@ async function main() {
   const [body, signature] = code.split(".");
   assert.throws(() => read(`${body}A.${signature}`, ctx.userId, "tool:a"), ConfirmError, "a changed body");
   assert.throws(() => read(sign(ctx.userId, "tool:a", 1, 600, Date.now() - 601_000), ctx.userId, "tool:a"), /expired/, "an old price");
+  // Its own key, no fallback to the JWT secret: without it nothing is signed or read.
+  const confirmKey = process.env.OPENCMO_MCP_CONFIRM_KEY;
+  delete process.env.OPENCMO_MCP_CONFIRM_KEY;
+  assert.throws(() => sign(ctx.userId, "tool:a", 1), /OPENCMO_MCP_CONFIRM_KEY/, "signing fails closed without the confirm key");
+  assert.throws(() => read(code, ctx.userId, "tool:a"), /OPENCMO_MCP_CONFIRM_KEY/, "reading fails closed without the confirm key");
+  process.env.OPENCMO_MCP_CONFIRM_KEY = confirmKey;
 }
 
 // ------------------------------------------------------------ the tool list
