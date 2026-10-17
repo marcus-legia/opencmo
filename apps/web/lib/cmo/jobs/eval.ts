@@ -16,6 +16,7 @@
  *   --out path     report JSON (default .cmo-eval/report.json)
  *   --compare p    pair this run with an earlier report: McNemar exact, BETTER / WORSE / INCONCLUSIVE
  *   --max-usd X    stop starting cases once X USD is spent (also EVAL_MAX_USD)
+ *   --list-jobs    print the registered jobs, comma-separated, and exit
  *
  * Pending cases (guarding something not built yet) are listed apart and never fail a run. A fake
  * run fails on any scored fail; a real run only reports.
@@ -52,6 +53,7 @@ function args() {
     out: resolve(value("--out") ?? join(process.cwd(), ".cmo-eval", "report.json")),
     compare: value("--compare") ? resolve(value("--compare")!) : null,
     maxUsd: number("--max-usd", value("--max-usd") ?? process.env.EVAL_MAX_USD),
+    listJobs: argv.includes("--list-jobs"),
   };
 }
 
@@ -83,6 +85,10 @@ async function main() {
 
   const all = await loadCases();
   const known = [...new Set(all.map((c) => c.job))];
+  if (options.listJobs) {
+    console.log(known.join(","));
+    return;
+  }
   const unknown = (options.jobs ?? []).filter((job) => !known.includes(job));
   if (unknown.length) throw new Error(`Unknown job ${unknown.join(", ")}; use ${known.join(", ")}.`);
   const cases = options.jobs ? all.filter((c) => options.jobs!.includes(c.job)) : all;
