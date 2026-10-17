@@ -4,7 +4,20 @@
  */
 
 import { latestPerTopic } from "./context";
-import { isoDay, type ClipJob, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PlatformCaptions, type QueuedRun, type Step, type WeekResults } from "./types";
+import { isoDay, type ClipJob, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PlatformCaptions, type QueuedRun, type Step, type WeekResults } from "./types";
+
+export type InboxItem = {
+  id: string;
+  kind: QueuedRun["kind"];
+  input: Record<string, unknown>;
+  step: string;
+  request: InboxRequest;
+  answers: Record<string, unknown>;
+  memo: Record<string, unknown>;
+  status: "open" | "claimed" | "submitted" | "done" | "expired";
+  feedback: string | null;
+  rounds: number;
+};
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
@@ -19,6 +32,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const packs: Array<{ id: string; runId: string; jobId: string; clips: unknown[]; captions: Record<string, PlatformCaptions> }> = [];
   const insights: CompetitorInsight[] = [];
   const metrics: MetricRow[] = [];
+  const inbox: InboxItem[] = [];
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -115,11 +129,47 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       metrics.push(...ok);
       return ok.length;
     },
+    inbox: async (_u, inboxId) => {
+      const item = inbox.find((i) => i.id === inboxId);
+      return item ? { answers: { ...item.answers }, memo: { ...item.memo } } : null;
+    },
+    async openInbox(run, step, request, memo) {
+      const r = runs.find((x) => x.id === run.id)!;
+      if (r.attempt !== run.attempt || r.status !== "running") return null;
+      const inboxId = typeof run.input.inbox === "string" ? run.input.inbox : null;
+      let item = inboxId ? inbox.find((i) => i.id === inboxId) : undefined;
+      if (!item) {
+        const { brain: _brain, ...input } = run.input;
+        item = { id: id(), kind: run.kind, input, step, request, answers: {}, memo: {}, status: "open", feedback: null, rounds: 0 };
+        inbox.push(item);
+      }
+      Object.assign(item, { step, request, memo: { ...item.memo, ...memo }, status: "open", feedback: null });
+      Object.assign(r, { status: "done", output: { inbox_id: item.id, waiting_for: step }, error: null });
+      return item.id;
+    },
+    async finishInbox(run, ok, feedback) {
+      const item = inbox.find((i) => i.id === run.input.inbox);
+      if (!item || item.status !== "submitted") return;
+      if (ok) Object.assign(item, { status: "done", feedback: null });
+      else {
+        delete item.answers[item.step];
+        Object.assign(item, { status: "open", feedback });
+      }
+    },
+  };
+  /** What `inbox_submit` does: stores the answer and queues the replay. */
+  const submit = (inboxId: string, step: string, answer: unknown) => {
+    const item = inbox.find((i) => i.id === inboxId);
+    if (!item || item.status !== "open" || item.step !== step) throw new Error(`inbox ${inboxId} is not waiting for ${step}`);
+    item.answers[step] = answer;
+    item.status = "submitted";
+    item.rounds += 1;
+    return enqueue(item.kind, { ...item.input, brain: "claude", inbox: item.id });
   };
   const enqueue = (kind: QueuedRun["kind"], input: Record<string, unknown> = {}) => {
     const run: RunState = { id: id(), user_id: "u1", kind, input, attempt: 0, status: "queued", steps: [], error: null, output: null };
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, jobs, packs, insights, metrics, lessons, goals, results, enqueue };
+  return { store, runs, items, opps, jobs, packs, insights, metrics, lessons, goals, results, enqueue, inbox, submit };
 }

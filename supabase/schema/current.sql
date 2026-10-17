@@ -2508,12 +2508,16 @@ CREATE FUNCTION public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) RETU
     AS $$
 declare
   v_row public.cmo_runs;
-  v_price integer := public.cmo_job_price(p_kind);
+  v_price integer := case when p_input->>'brain' = 'claude' then 0 else public.cmo_job_price(p_kind) end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
   end if;
   if p_input is null or jsonb_typeof(p_input) <> 'object' or octet_length(p_input::text) > 4096 then
+    raise exception 'This request is not valid.' using errcode = '22023';
+  end if;
+  -- Replays are started by inbox_submit only, for an item the founder owns.
+  if p_input ? 'inbox' then
     raise exception 'This request is not valid.' using errcode = '22023';
   end if;
 
@@ -2528,7 +2532,8 @@ begin
   end if;
 
   if (select count(*) from public.cmo_runs
-      where user_id = p_user and kind = p_kind and created_at > now() - interval '1 day') >= public.cmo_job_daily_limit(p_kind) then
+      where user_id = p_user and kind = p_kind and created_at > now() - interval '1 day'
+        and not (input ? 'inbox')) >= public.cmo_job_daily_limit(p_kind) then
     raise exception 'You have reached today''s limit for this task. Try again tomorrow.' using errcode = 'P0001';
   end if;
   if v_price > 0 and public.credit_balance(p_user) < v_price then
@@ -2542,6 +2547,132 @@ begin
     perform public.credit_hold(p_user, 'cmo_run', v_row.id, v_price, 'CMO hold');
   end if;
   return v_row;
+end;
+$$;
+
+
+--
+-- Name: cmo_inbox; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cmo_inbox (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    input jsonb DEFAULT '{}'::jsonb NOT NULL,
+    step text NOT NULL,
+    request jsonb NOT NULL,
+    answers jsonb DEFAULT '{}'::jsonb NOT NULL,
+    memo jsonb DEFAULT '{}'::jsonb NOT NULL,
+    status text DEFAULT 'open'::text NOT NULL,
+    feedback text,
+    rounds integer DEFAULT 0 NOT NULL,
+    last_request_id uuid,
+    run_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    claimed_at timestamp with time zone,
+    submitted_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    expires_at timestamp with time zone DEFAULT (now() + '3 days'::interval) NOT NULL,
+    CONSTRAINT cmo_inbox_answers_check CHECK (((jsonb_typeof(answers) = 'object'::text) AND (octet_length((answers)::text) <= 262144))),
+    CONSTRAINT cmo_inbox_feedback_check CHECK ((char_length(feedback) <= 1000)),
+    CONSTRAINT cmo_inbox_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
+    CONSTRAINT cmo_inbox_kind_check CHECK ((kind = ANY (ARRAY['plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'video_pack'::text, 'competitor_research'::text, 'summarize_memory'::text, 'review_week'::text]))),
+    CONSTRAINT cmo_inbox_memo_check CHECK (((jsonb_typeof(memo) = 'object'::text) AND (octet_length((memo)::text) <= 1048576))),
+    CONSTRAINT cmo_inbox_request_check CHECK (((jsonb_typeof(request) = 'object'::text) AND (octet_length((request)::text) <= 1048576))),
+    CONSTRAINT cmo_inbox_rounds_check CHECK ((rounds >= 0)),
+    CONSTRAINT cmo_inbox_status_check CHECK ((status = ANY (ARRAY['open'::text, 'claimed'::text, 'submitted'::text, 'done'::text, 'expired'::text]))),
+    CONSTRAINT cmo_inbox_step_check CHECK ((step ~ '^[a-z_]{1,40}$'::text))
+);
+
+
+--
+-- Name: cmo_inbox_finish(uuid, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_inbox_finish(p_run uuid, p_ok boolean, p_feedback text DEFAULT NULL::text) RETURNS public.cmo_inbox
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_run public.cmo_runs;
+  v_item public.cmo_inbox;
+begin
+  select * into v_run from public.cmo_runs where id = p_run;
+  if not found or nullif(v_run.input->>'inbox', '') is null then
+    return null;
+  end if;
+  if p_ok then
+    update public.cmo_inbox set status = 'done', finished_at = now(), feedback = null
+    where id = (v_run.input->>'inbox')::uuid and user_id = v_run.user_id and status = 'submitted' and run_id = p_run
+    returning * into v_item;
+  else
+    update public.cmo_inbox
+    set status = case when rounds >= public.cmo_inbox_max_rounds() then 'expired' else 'open' end,
+        answers = answers - step, claimed_at = null,
+        finished_at = case when rounds >= public.cmo_inbox_max_rounds() then now() end,
+        feedback = left(coalesce(p_feedback, 'The answer did not pass our checks.'), 1000)
+    where id = (v_run.input->>'inbox')::uuid and user_id = v_run.user_id and status = 'submitted' and run_id = p_run
+    returning * into v_item;
+  end if;
+  return v_item;
+end;
+$$;
+
+
+--
+-- Name: cmo_inbox_max_rounds(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_inbox_max_rounds() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 8 $$;
+
+
+--
+-- Name: cmo_inbox_open(uuid, integer, text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_inbox_open(p_run uuid, p_attempt integer, p_step text, p_request jsonb, p_memo jsonb DEFAULT '{}'::jsonb) RETURNS public.cmo_inbox
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_run public.cmo_runs;
+  v_item public.cmo_inbox;
+  v_inbox uuid;
+begin
+  select * into v_run from public.cmo_runs where id = p_run and attempt = p_attempt and status = 'running' for update;
+  if not found then
+    return null;
+  end if;
+  if v_run.input->>'brain' is distinct from 'claude' then
+    raise exception 'This run does not use the inbox.' using errcode = '22023';
+  end if;
+  v_inbox := nullif(v_run.input->>'inbox', '')::uuid;
+
+  if v_inbox is null then
+    -- A fresh scheduled item replaces the founder's older unanswered one of the same kind:
+    -- yesterday's draft request is stale once today's exists.
+    update public.cmo_inbox set status = 'expired', finished_at = now()
+    where user_id = v_run.user_id and kind = v_run.kind and status in ('open', 'claimed');
+    insert into public.cmo_inbox (user_id, kind, input, step, request, memo, run_id)
+    values (v_run.user_id, v_run.kind, v_run.input - 'brain', p_step, p_request, coalesce(p_memo, '{}'), v_run.id)
+    returning * into v_item;
+  else
+    update public.cmo_inbox
+    set step = p_step, request = p_request, memo = memo || coalesce(p_memo, '{}'), status = 'open',
+        feedback = null, claimed_at = null, run_id = v_run.id
+    where id = v_inbox and user_id = v_run.user_id and status = 'submitted'
+    returning * into v_item;
+    if not found then
+      raise exception 'This inbox item is no longer waiting.' using errcode = 'P0001';
+    end if;
+  end if;
+
+  perform public.complete_cmo_run(p_run, p_attempt, true,
+    jsonb_build_object('inbox_id', v_item.id, 'waiting_for', p_step), null);
+  return v_item;
 end;
 $$;
 
@@ -2712,6 +2843,43 @@ begin
   returning * into v_row;
   return v_row;
 end;
+$$;
+
+
+--
+-- Name: cmo_read_hit(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_read_hit(p_bucket text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_limit integer := public.cmo_read_limit(p_bucket);
+  v_window timestamptz := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  v_count integer;
+begin
+  if v_limit <= 0 then
+    raise exception 'Invalid rate limit.' using errcode = '22023';
+  end if;
+  insert into public.rate_limits (user_id, bucket, window_start, count)
+  values (v_user, p_bucket, v_window, 1)
+  on conflict (user_id, bucket, window_start) do update set count = public.rate_limits.count + 1
+  returning count into v_count;
+  return v_count <= v_limit;
+end;
+$$;
+
+
+--
+-- Name: cmo_read_limit(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_read_limit(p_bucket text) RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select case p_bucket when 'mcp_social' then 60 when 'mcp_site' then 20 else 0 end
 $$;
 
 
@@ -4967,6 +5135,112 @@ $$;
 
 
 --
+-- Name: inbox_claim(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inbox_claim(p_id uuid) RETURNS public.cmo_inbox
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_item public.cmo_inbox;
+  v_run public.cmo_runs;
+begin
+  select * into v_item from public.cmo_inbox where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Inbox item not found.' using errcode = 'P0002';
+  end if;
+  -- A replay that ended without reporting back (claim_cmo_run gives up on a run that kept
+  -- dying): the item would wait for it forever.
+  if v_item.status = 'submitted' then
+    select * into v_run from public.cmo_runs where id = v_item.run_id;
+    if not found or v_run.status = 'failed' then
+      update public.cmo_inbox
+      set status = 'open', answers = answers - step, claimed_at = null,
+          feedback = left(coalesce(v_run.error, 'The check stopped before it finished.') || ' Answer again.', 1000)
+      where id = p_id returning * into v_item;
+    elsif v_run.status = 'done' and not (v_run.output ? 'inbox_id') then
+      update public.cmo_inbox set status = 'done', finished_at = now() where id = p_id returning * into v_item;
+    end if;
+  end if;
+  if v_item.status in ('open', 'claimed') and v_item.expires_at <= now() then
+    update public.cmo_inbox set status = 'expired', finished_at = now() where id = p_id returning * into v_item;
+  elsif v_item.status in ('open', 'claimed') then
+    update public.cmo_inbox set status = 'claimed', claimed_at = now() where id = p_id returning * into v_item;
+  end if;
+  return v_item;
+end;
+$$;
+
+
+--
+-- Name: inbox_list(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inbox_list() RETURNS TABLE(id uuid, kind text, step text, title text, status text, feedback text, rounds integer, created_at timestamp with time zone, expires_at timestamp with time zone, run_id uuid)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select i.id, i.kind, i.step, left(i.request->>'title', 200),
+         case when i.status in ('open', 'claimed') and i.expires_at <= now() then 'expired' else i.status end,
+         i.feedback, i.rounds, i.created_at, i.expires_at, i.run_id
+  from public.cmo_inbox i
+  where i.user_id = public.require_user()
+    and (i.status in ('open', 'claimed', 'submitted') or i.finished_at > now() - interval '1 day')
+  order by i.created_at desc
+  limit 50;
+$$;
+
+
+--
+-- Name: inbox_submit(uuid, uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inbox_submit(p_id uuid, p_request_id uuid, p_step text, p_answer jsonb) RETURNS public.cmo_inbox
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_item public.cmo_inbox;
+  v_run public.cmo_runs;
+begin
+  if p_request_id is null or p_answer is null or jsonb_typeof(p_answer) <> 'object' or octet_length(p_answer::text) > 131072 then
+    raise exception 'This answer is not valid.' using errcode = '22023';
+  end if;
+  select * into v_item from public.cmo_inbox where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Inbox item not found.' using errcode = 'P0002';
+  end if;
+  if v_item.last_request_id = p_request_id then
+    return v_item;
+  end if;
+  if v_item.status not in ('open', 'claimed') or v_item.expires_at <= now() then
+    raise exception 'This inbox item is no longer waiting for an answer.' using errcode = 'P0001';
+  end if;
+  if v_item.step <> p_step then
+    raise exception 'This inbox item now waits for step "%". Read it again.', v_item.step using errcode = 'P0001';
+  end if;
+  if v_item.rounds >= public.cmo_inbox_max_rounds() then
+    raise exception 'This inbox item took too many answers. It will come back with the next schedule.' using errcode = 'P0001';
+  end if;
+
+  insert into public.cmo_runs (user_id, kind, status, input, credits)
+  values (v_user, v_item.kind, 'queued', v_item.input || jsonb_build_object('brain', 'claude', 'inbox', v_item.id), 0)
+  returning * into v_run;
+
+  update public.cmo_inbox
+  set answers = answers || jsonb_build_object(p_step, p_answer), status = 'submitted', submitted_at = now(),
+      rounds = rounds + 1, last_request_id = p_request_id, feedback = null, run_id = v_run.id
+  where id = p_id
+  returning * into v_item;
+  return v_item;
+end;
+$$;
+
+
+--
 -- Name: job_credits_spent(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5058,6 +5332,29 @@ CREATE FUNCTION public.lock_credit_owner(p_user_id uuid) RETURNS void
     AS $$
 begin
   perform 1 from public.profiles where id = p_user_id for update;
+end;
+$$;
+
+
+--
+-- Name: mcp_confirm_use(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_confirm_use(p_nonce uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_count int;
+begin
+  if p_nonce is null then
+    raise exception 'That confirm code is not valid. Ask for the price again.' using errcode = '22023';
+  end if;
+  delete from public.mcp_confirms where user_id = v_user and used_at < now() - interval '1 day';
+  insert into public.mcp_confirms (user_id, nonce) values (v_user, p_nonce) on conflict do nothing;
+  get diagnostics v_count = row_count;
+  return v_count = 1;
 end;
 $$;
 
@@ -5822,16 +6119,17 @@ begin
       or (p_bucket = 'zip' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
-      or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600);
+      or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
+      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then
     raise exception 'Invalid rate limit.' using errcode = '22023';
   end if;
 
-  -- Cửa sổ ngắn của preview/export đếm ở hàng riêng: phút đầu sau nửa đêm UTC,
-  -- cửa sổ 60 giây và cửa sổ ngày có cùng `window_start` nên từng cộng dồn vào
-  -- hạn mức ngày (CI đỏ lúc 00:00:24 UTC 04/10).
+  -- The short preview/export window counts in its own row: in the first minute after UTC
+  -- midnight the 60-second and the daily window share a `window_start`, and used to add up
+  -- into the daily quota (CI red at 00:00:24 UTC on 04/10).
   if v_bucket in ('preview', 'export') and p_window_seconds <> 86400 then
     v_bucket := v_bucket || ':' || p_window_seconds;
   end if;
@@ -8008,6 +8306,17 @@ CREATE VIEW public.marketing_documents_latest WITH (security_invoker='true') AS
 
 
 --
+-- Name: mcp_confirms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mcp_confirms (
+    user_id uuid NOT NULL,
+    nonce uuid NOT NULL,
+    used_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: media_transcripts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8476,6 +8785,14 @@ ALTER TABLE ONLY public.cmo_goals
 
 
 --
+-- Name: cmo_inbox cmo_inbox_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_inbox
+    ADD CONSTRAINT cmo_inbox_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cmo_insights cmo_insights_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8625,6 +8942,14 @@ ALTER TABLE ONLY public.marketing_documents
 
 ALTER TABLE ONLY public.marketing_documents
     ADD CONSTRAINT marketing_documents_user_id_kind_version_key UNIQUE (user_id, kind, version);
+
+
+--
+-- Name: mcp_confirms mcp_confirms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_confirms
+    ADD CONSTRAINT mcp_confirms_pkey PRIMARY KEY (user_id, nonce);
 
 
 --
@@ -8946,6 +9271,13 @@ CREATE INDEX cmo_goals_user_idx ON public.cmo_goals USING btree (user_id, week D
 
 
 --
+-- Name: cmo_inbox_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_inbox_user_idx ON public.cmo_inbox USING btree (user_id, status, created_at DESC);
+
+
+--
 -- Name: cmo_insights_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9111,6 +9443,13 @@ CREATE INDEX jobs_user_created_idx ON public.jobs USING btree (user_id, created_
 --
 
 CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_at DESC, id DESC);
+
+
+--
+-- Name: mcp_confirms_used_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mcp_confirms_used_at ON public.mcp_confirms USING btree (user_id, used_at);
 
 
 --
@@ -9495,6 +9834,22 @@ ALTER TABLE ONLY public.cmo_goals
 
 
 --
+-- Name: cmo_inbox cmo_inbox_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_inbox
+    ADD CONSTRAINT cmo_inbox_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.cmo_runs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cmo_inbox cmo_inbox_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_inbox
+    ADD CONSTRAINT cmo_inbox_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: cmo_insights cmo_insights_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9700,6 +10055,14 @@ ALTER TABLE ONLY public.jobs
 
 ALTER TABLE ONLY public.marketing_documents
     ADD CONSTRAINT marketing_documents_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mcp_confirms mcp_confirms_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mcp_confirms
+    ADD CONSTRAINT mcp_confirms_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -10045,6 +10408,12 @@ ALTER TABLE public.clips ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cmo_goals ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cmo_inbox; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_inbox ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cmo_insights; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10133,6 +10502,12 @@ ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.marketing_documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_confirms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.mcp_confirms ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets; Type: ROW SECURITY; Schema: public; Owner: -
@@ -10230,6 +10605,13 @@ CREATE POLICY "read own CMO goals" ON public.cmo_goals FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: cmo_inbox read own inbox; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own inbox" ON public.cmo_inbox FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

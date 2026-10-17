@@ -344,6 +344,8 @@ button.cmo-chip { font: inherit; font-size: 12.5px; cursor: pointer; }
 
 /* Your CMO */
 .cmo-chat { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; }
+/* "Continue in Claude" sits between the header and the messages, which keep the flexible row. */
+.cmo-chat:has(> .cic) { grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
 .cmo-chat-head { display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 10px 0 18px; border-bottom: 1px solid var(--cmo-gold-soft); background: var(--ds-marble-50); }
 .cmo-chat-tab { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .cmo-chat-tab .ds-icon { color: var(--ds-gold-text); flex: none; }

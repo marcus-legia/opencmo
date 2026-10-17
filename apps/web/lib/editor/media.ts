@@ -18,6 +18,7 @@
  */
 
 import { signedObjectUrl, type Bucket } from "@/lib/storage";
+import type { SupabaseClient as SignClient } from "@/lib/api/handler";
 import type { ClipContext } from "@/lib/api/clips";
 
 import type { EditorFocus } from "@/lib/editor/generate-project";
@@ -87,11 +88,11 @@ export function editorSource(context: ClipContext, clipId: string): {
 }
 
 /** URL đã ký cho nguồn video. TTL mặc định của `signedObjectUrl` là một giờ. */
-export async function signedSourceUrl(source: {
-  bucket: Bucket;
-  entry: MasterEntry;
-}): Promise<string> {
-  return signedObjectUrl(source.bucket, source.entry.object);
+export async function signedSourceUrl(
+  source: { bucket: Bucket; entry: MasterEntry },
+  client?: SignClient,
+): Promise<string> {
+  return signedObjectUrl(source.bucket, source.entry.object, client ? { client } : {});
 }
 
 /**
@@ -101,10 +102,10 @@ export async function signedSourceUrl(source: {
  * transcript từ artifact qua `GET /api/v1/editor/transcript`. Người gọi rơi về
  * route đó, và chỉ khi cả hai đều trống mới thật sự là không có phụ đề.
  */
-export async function signedTranscriptUrl(source: {
-  bucket: Bucket;
-  entry: MasterEntry;
-}): Promise<string | null> {
+export async function signedTranscriptUrl(
+  source: { bucket: Bucket; entry: MasterEntry },
+  client?: SignClient,
+): Promise<string | null> {
   if (!source.entry.transcript) return null;
-  return signedObjectUrl(source.bucket, source.entry.transcript);
+  return signedObjectUrl(source.bucket, source.entry.transcript, client ? { client } : {});
 }

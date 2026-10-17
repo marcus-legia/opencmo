@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { readStream } from "@/components/clipping/agent-stream";
+import { ContinueInClaude } from "@/components/editor/assistant/ContinueInClaude";
 import { Markdown } from "@/components/editor/assistant/Markdown";
 import { Icon } from "@/components/icons";
 import type { ChatMessage, Workspace } from "@/lib/cmo/workspace";
@@ -261,6 +262,7 @@ export function ChatPanel({ ws, onToast, onWorkStarted }: { ws: Workspace; onToa
           </div>
         ) : null}
       </header>
+      <ContinueInClaude where="cmo" />
 
       <ol className="cmo-messages" aria-live="polite" ref={listRef}>
         {loading ? (

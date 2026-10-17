@@ -1,4 +1,4 @@
--- 20261128090000: page captures for proof B-roll — address checks, the 24 h cache, the 30-a-day
+-- 20261130090000: page captures for proof B-roll — address checks, the 24 h cache, the 30-a-day
 -- cap, owner-only reads, the worker's completion and a failed task failing its capture.
 create extension if not exists pgtap with schema extensions;
 

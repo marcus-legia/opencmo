@@ -32,7 +32,7 @@ export const createVideoToolInput = z.object({
   model: z.string().trim().max(100).optional().describe("A video model id, only when the user named one."),
 });
 
-const directorSchema = z.object({
+export const directorSchema = z.object({
   title: z.string().min(1).max(80),
   script: z.string().min(1).max(3000),
   style: z.enum(STYLES),
@@ -56,7 +56,7 @@ const directorSchema = z.object({
 });
 type DirectorPlan = z.infer<typeof directorSchema>;
 
-const DIRECTOR = `You direct a short marketing video made entirely of AI video shots, with a voice-over.
+export const DIRECTOR = `You direct a short marketing video made entirely of AI video shots, with a voice-over.
 Write:
 - script: what the voice says, plain spoken English, about ${WORDS_PER_SECOND} words per second of video. Use only facts the user gave; never invent numbers, prices, names or results.
 - shots: in order, each with seconds (how long it stays on screen) and a concrete visual: idea (what the viewer should understand), subject, action (the motion), setting, camera, mood. Shot seconds add up to the video length. Every shot is paid for at one of the model's shot lengths (shot_seconds), so give each shot one of those lengths; only the last shot may be shorter. Each shot shows something a camera can film: no text, screens full of words, logos, charts or real, identifiable people.
@@ -179,6 +179,15 @@ function timeShots(plan: DirectorPlan, durations: number[]) {
 const credits = (value: number) => `${value} ${value === 1 ? "credit" : "credits"}`;
 const minutes = (value: number) => (value < 90 ? `about ${Math.max(1, Math.round(value / 30) / 2)} min`.replace(".5 min", "½ min") : `about ${Math.round(value / 60)} min`);
 
+/**
+ * The input `prepareCreateVideo` reads: the tool's input plus, from an outside client (MCP), a
+ * finished director plan. The Assistant's schema does not offer `plan`, so its own model never
+ * skips the director; a given plan still goes through the same review and the same price card.
+ */
+export const createVideoInput = createVideoToolInput.extend({
+  plan: directorSchema.optional().describe("A finished plan in the director's format. The server checks it the same way and sends back what to fix."),
+});
+
 export function createVideoToolSpec(): ToolSpec | null {
   if (!availableModels().some((model) => model.kind === "video" && !model.limits.scene && !model.limits.sourceVideo)) return null;
   return {
@@ -196,7 +205,7 @@ export async function prepareCreateVideo(
   context: { document: ClipDocument },
   onUsage: (usage: LlmUsage) => Promise<void>,
 ): Promise<{ prepared: PreparedGeneration; storyboard: Storyboard } | string> {
-  const parsed = createVideoToolInput.safeParse(input);
+  const parsed = createVideoInput.safeParse(input);
   if (!parsed.success) return `${parsed.error.issues[0]?.path.join(".") ?? ""}: ${parsed.error.issues[0]?.message ?? "Invalid input."}`;
   const request = parsed.data;
   // /video makes a new video: on a clip of the user's own footage it would reframe and cover it.
@@ -205,7 +214,7 @@ export async function prepareCreateVideo(
   }
   const scene = activeScene(context.document) as unknown as { width: number; height: number };
   const aspect = request.aspect ?? frameAspect(Number(scene.width), Number(scene.height));
-  let seconds = request.seconds ?? 30;
+  let seconds = request.seconds ?? (request.plan ? Math.round(request.plan.shots.reduce((sum, shot) => sum + shot.seconds, 0)) : 30);
   const video = pickVideoModel(aspect, request.model);
   if (typeof video === "string") return video;
   const durations = [...(video.limits.durations ?? [5])].sort((a, b) => a - b);
@@ -215,7 +224,12 @@ export async function prepareCreateVideo(
 
   let plan: DirectorPlan;
   try {
-    if (fakeAllowed()) {
+    if (request.plan) {
+      // The caller wrote the plan: the reviewer's notes go back to it instead of to our director.
+      const issues = review(request.plan, seconds, durations);
+      if (issues.length) return `Fix the plan and send it again: ${issues.join(" ")}`;
+      plan = request.plan;
+    } else if (fakeAllowed()) {
       plan = fakePlan(seconds);
     } else {
       if (!llmReady("director")) return "The video director is not set up on this server yet.";

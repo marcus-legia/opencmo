@@ -6764,6 +6764,30 @@ html[data-theme] .ed2-zoom {
   user-select: all;
   font-size: 12px;
 }
+/* Connected apps (Settings): the app's name first, then when, then Disconnect at the end. */
+.connected-app-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: var(--ds-text-13);
+}
+.connected-app-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  color: var(--ds-muted);
+}
+.connected-app-list li strong {
+  /* Not the label/value layout of .settings-card lists: the name leads. */
+  margin-left: 0;
+  text-align: left;
+  color: var(--ds-fg-2);
+  font-weight: 500;
+}
+.connected-app-list li .link-button {
+  margin-left: auto;
+}
 
 /* Báo trước luật xoá tài khoản free (09/10/2026). */
 .retention-banner {
@@ -6782,3 +6806,51 @@ html[data-theme] .ed2-zoom {
 .retention-banner strong { color: var(--ds-fg-1); }
 .retention-banner a { font-weight: 600; white-space: nowrap; }
 .retention-banner.is-urgent { color: var(--ds-danger-fg); }
+
+/* "Continue in Claude" card (Assistant panel, CMO chat). */
+.cic {
+  flex: none;
+  margin: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-line);
+  border-radius: 10px;
+  background: var(--ds-raised);
+  color: var(--ds-text);
+  font-size: var(--ds-text-12);
+}
+.cic-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.cic-text {
+  margin: 0 0 8px;
+  color: var(--ds-muted);
+}
+.cic-text strong {
+  color: var(--ds-text);
+}
+.cic-steps {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  list-style: decimal;
+  display: grid;
+  gap: 6px;
+}
+.cic-code {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ds-line);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.cic-copy {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ds-line);
+  background: transparent;
+  color: var(--ds-text);
+  cursor: pointer;
+}

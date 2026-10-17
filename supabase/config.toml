@@ -393,14 +393,14 @@ enabled = false
 # Obtain from https://clerk.com/setup/supabase
 # domain = "example.clerk.accounts.dev"
 
-# OAuth server configuration
+# OAuth server (docs/mcp-on-modal-plan.md, A8): claude.ai's connector registers itself (dynamic
+# client registration), the user approves on the web app's /oauth/consent, and the MCP server
+# accepts the access token. Production: the same three settings in the dashboard
+# (Authentication → OAuth Server), with the Site URL of the web app.
 [auth.oauth_server]
-# Enable OAuth server functionality
-enabled = false
-# Path for OAuth consent flow UI
+enabled = true
 authorization_url_path = "/oauth/consent"
-# Allow dynamic client registration
-allow_dynamic_registration = false
+allow_dynamic_registration = true
 
 [edge_runtime]
 # TẮT có chủ ý. Repo này không có `supabase/functions/` — không một edge

@@ -421,7 +421,7 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ### Track C
 
-- **C1.** `20261128090000_page_captures.sql` + `158_page_captures.test.sql` (32 assertions). `page_captures`
+- **C1.** `20261130090000_page_captures.sql` + `161_page_captures.test.sql` (32 assertions). `page_captures`
   (owner-only `select` under RLS; no client writes), `tasks_kind_check` + `task-kinds.json` gain `capture_page`.
   `capture_create(p_url)` normalizes the address first (`normalize_capture_url`: lowercase scheme and host, no
   fragment, default port dropped) and refuses in plain English anything that is not a public http(s) name on its

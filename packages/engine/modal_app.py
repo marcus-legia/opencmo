@@ -694,6 +694,57 @@ def cleanup() -> None:
     log.info("Cleanup: %s", cmo_dispatch.call_cron(*web, "/api/cron/cleanup", timeout=75.0))
 
 
+# --------------------------------------------------------------------------- MCP server
+# `opencmo-mcp` (docs/mcp-on-modal-plan.md): the TypeScript MCP server (packages/mcp-server) that
+# lets the user's own Claude drive OpenCMO. One small always-warm container answers every session:
+# the server is stateless, waits on the database and Modal, and never runs scene code (previews go
+# to `motion_preview`, renders through the task queue to `render_motion`).
+#
+# Build the bundle first; without it the app deploys without this function:
+#     npm run build --workspace @opencmo/mcp-server
+#     modal secret create opencmo-mcp \
+#         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... SUPABASE_JWT_SECRET=... \
+#         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... MODAL_SUBMIT_URL=... \
+#         OPENCMO_WEB_URL=https://opencmo.io \
+#         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.modal.run \
+#         MODAL_TOKEN_ID=... MODAL_TOKEN_SECRET=...  # optional: tools that call Modal directly
+# The other secrets are the web app's own keys: the service key for `api_key_owner`, the worker
+# token to wake the worker, and the provider keys, without which the model catalog hides the
+# generation tools exactly as on Vercel.
+MCP_PORT = 8000
+_MCP_BUNDLE = _PACKAGES / "mcp-server" / "dist" / "server.cjs"
+_MCP_ROOT = "/root/mcp"
+
+if _MCP_BUNDLE.exists():
+    mcp_image = _with_node(
+        modal.Image.debian_slim(python_version="3.12").apt_install("curl", "xz-utils")
+    ).add_local_file(_MCP_BUNDLE, remote_path=f"{_MCP_ROOT}/server.cjs")
+
+    @app.function(
+        image=mcp_image,
+        secrets=[secret, voice_secret, fal_secret, modal.Secret.from_name("opencmo-mcp")],
+        # Warm for a snappy connector (0.25 core, 0.5 GiB). Modal cuts web requests at 150 s,
+        # which is why every slow tool is async.
+        min_containers=1,
+        cpu=0.25,
+        memory=512,
+        timeout=150,
+    )
+    @modal.concurrent(max_inputs=50)
+    @modal.web_server(port=MCP_PORT, startup_timeout=60, label=f"{APP_NAME}-mcp")
+    def mcp_server() -> None:
+        import subprocess
+
+        env = {**os.environ, "PORT": str(MCP_PORT), "HOST": "0.0.0.0"}
+        # The worker's secret names the database SUPABASE_URL; the web code reads the public name.
+        env.setdefault("NEXT_PUBLIC_SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
+        subprocess.Popen(["node", "--enable-source-maps", f"{_MCP_ROOT}/server.cjs"], env=env)
+else:
+    log.warning(
+        "opencmo-mcp not deployed: build it first (npm run build --workspace @opencmo/mcp-server)."
+    )
+
+
 @app.local_entrypoint()
 def main(url: str, clips: int = 3, transcribe: bool = False) -> None:
     """Chạy thử một video mà không cần database.

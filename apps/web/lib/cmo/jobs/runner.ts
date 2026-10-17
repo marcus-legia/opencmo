@@ -6,6 +6,8 @@
  * Không `server-only`: `jobs.check.ts` chạy runner với store trong bộ nhớ.
  */
 
+import type { z } from "zod";
+
 import { competitorResearch } from "./competitor-research";
 import { draftPost } from "./draft-post";
 import { LlmError } from "./llm-error";
@@ -14,8 +16,9 @@ import { pullMetrics } from "./pull-metrics";
 import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
 import { summarizeMemory } from "./summarize-memory";
+import { NeedsClaude, think, type ThinkOptions } from "./think";
 import { videoPack } from "./video-pack";
-import type { CmoJobKind, CmoStore, QueuedRun, Step } from "./types";
+import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
 
 /**
  * Việc chưa làm tiếp được (vd W5 chờ worker cắt clip): ném cái này, lượt về
@@ -30,8 +33,17 @@ export class Deferred extends Error {
 export type JobContext = {
   store: CmoStore;
   run: QueuedRun;
-  /** Chạy một bước có tên tool + nhãn; `fn` trả về nhãn kết quả (hoặc giữ nhãn cũ). */
-  step<T>(tool: string, label: string, fn: () => Promise<T>, done?: (value: T) => string): Promise<T>;
+  /** Who thinks for this run. With `claude`, model calls go to the inbox and checker calls are skipped. */
+  brain: Brain;
+  /**
+   * Chạy một bước có tên tool + nhãn; `fn` trả về nhãn kết quả (hoặc giữ nhãn cũ).
+   * `memo`: a key under which an inbox run keeps the result for its replays, so a step that reads
+   * the outside world (a Reddit search) runs once and the answers given about what it found stay
+   * valid. The result must be plain JSON.
+   */
+  step<T>(tool: string, label: string, fn: () => Promise<T>, done?: (value: T) => string, opts?: { memo?: string }): Promise<T>;
+  /** One structured model call (`think.ts`). */
+  think<S extends z.ZodType>(opts: ThinkOptions<S>): Promise<z.infer<S>>;
 };
 
 export type JobOutput = Record<string, unknown>;
@@ -51,40 +63,65 @@ export const JOBS: Record<CmoJobKind, Job> = {
 /** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */
 class LeaseLost extends Error {}
 
-export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boolean; error: string | null; deferred?: boolean }> {
+export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boolean; error: string | null; deferred?: boolean; inbox?: string }> {
   const steps: Step[] = [];
   const write = async () => {
     if (!(await store.step(run, steps))) throw new LeaseLost();
   };
+  const brain: Brain = run.input.brain === "claude" ? "claude" : "opencmo";
+  const inboxId = brain === "claude" && typeof run.input.inbox === "string" ? run.input.inbox : null;
+  const finish = async (ok: boolean, feedback: string | null) => {
+    if (inboxId) await store.finishInbox(run, ok, feedback).catch((e) => console.error("[cmo] cmo_inbox_finish", e));
+  };
+  let inbox: InboxState = { answers: {}, memo: {} };
+  if (inboxId) {
+    const found = await store.inbox(run.user_id, inboxId);
+    if (!found) {
+      await store.complete(run, false, null, "This inbox item is gone.");
+      return { ok: false, error: "This inbox item is gone." };
+    }
+    inbox = found;
+  }
+  const memo: Record<string, unknown> = { ...inbox.memo };
+
   const ctx: JobContext = {
     store,
     run,
-    async step(tool, label, fn, done) {
+    brain,
+    async step(tool, label, fn, done, opts) {
       steps.push({ tool, label, status: "running" });
       const index = steps.length - 1;
       await write();
       try {
-        const value = await fn();
+        const key = brain === "claude" ? opts?.memo : undefined;
+        const value = key && Object.hasOwn(memo, key) ? (memo[key] as Awaited<ReturnType<typeof fn>>) : await fn();
+        if (key) memo[key] = value;
         steps[index] = { tool, label: done ? done(value) : label, status: "done" };
         await write();
         return value;
       } catch (error) {
-        // Đang chờ (Deferred) không phải hỏng: bước giữ "running" để Activity nói đúng.
-        steps[index] = { tool, label, status: error instanceof Deferred ? "running" : "failed" };
+        // Đang chờ (Deferred, the inbox) không phải hỏng: Activity nói đúng.
+        steps[index] =
+          error instanceof NeedsClaude
+            ? { tool, label: "Waiting for your Claude (Inbox)", status: "skipped" }
+            : { tool, label, status: error instanceof Deferred ? "running" : "failed" };
         await store.step(run, steps).catch(() => false);
         throw error;
       }
     },
+    think: (opts) => think(opts, brain, inbox.answers),
   };
 
   const job = JOBS[run.kind];
   if (!job) {
     await store.complete(run, false, null, "Unknown task.");
+    await finish(false, "Unknown task.");
     return { ok: false, error: "Unknown task." };
   }
   try {
     const output = await job(ctx);
     await store.complete(run, true, output, null);
+    await finish(true, null);
     return { ok: true, error: null };
   } catch (error) {
     if (error instanceof LeaseLost) return { ok: false, error: null };
@@ -92,9 +129,22 @@ export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boo
       await store.defer(run, error.seconds, steps).catch((e) => console.error("[cmo] cmo_defer_run", e));
       return { ok: true, error: null, deferred: true };
     }
+    if (error instanceof NeedsClaude) {
+      // Ends the run in the same call: nothing else is written for it.
+      try {
+        const id = await store.openInbox(run, error.step, error.request, memo);
+        return id ? { ok: true, error: null, inbox: id } : { ok: false, error: null };
+      } catch (openError) {
+        console.error(`[cmo] ${run.kind} ${run.id}: cmo_inbox_open`, openError);
+        const message = "Could not send this task to your Claude inbox. Try again in a minute.";
+        await store.complete(run, false, null, message).catch((e) => console.error("[cmo] complete_cmo_run", e));
+        return { ok: false, error: message };
+      }
+    }
     const message = error instanceof LlmError ? error.message : "Something went wrong. Try again in a minute.";
     if (!(error instanceof LlmError)) console.error(`[cmo] ${run.kind} ${run.id} thất bại`, error);
     await store.complete(run, false, null, message).catch((e) => console.error("[cmo] complete_cmo_run", e));
+    await finish(false, message);
     return { ok: false, error: message };
   }
 }

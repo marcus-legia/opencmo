@@ -151,6 +151,10 @@ jobs:
       - run: npm run check:skills
       - run: npm run test:skills
       - run: npm run typecheck
+      - run: npm run check:mcp-server
+      - run: npm run test:mcp-server
+      # The Modal image runs this bundle: a module it cannot resolve fails here, not at deploy.
+      - run: npm run build:mcp-server
       - run: npm run build
 
   motion:

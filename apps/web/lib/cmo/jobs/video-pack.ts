@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import { avoidList, documentsBlock, knownNumbers, recall } from "./context";
-import { fakeAllowed, LlmError, structured } from "./llm";
+import { fakeAllowed, LlmError } from "./llm";
 import { skillText } from "../skills";
 import { VIDEO_LIMITS, type Platform } from "./playbook-video";
 import { Deferred, type JobContext, type JobOutput } from "./runner";
@@ -29,7 +29,7 @@ const MAX_CLIPS = 10;
 
 const PLATFORMS: Platform[] = ["tiktok", "reels", "shorts", "facebook", "threads"];
 
-const CaptionSchema = z.object({
+export const CaptionSchema = z.object({
   clips: z.array(
     z.object({
       index: z.number().int(),
@@ -123,13 +123,14 @@ export async function videoPack(ctx: JobContext): Promise<JobOutput> {
 
   const captions = await ctx.step("write_captions", "Writing captions for TikTok, Reels, Shorts, Facebook and Threads", async () => {
     const byClip: Record<string, PlatformCaptions> = {};
-    if (fakeAllowed()) {
+    if (fakeAllowed() && ctx.brain === "opencmo") {
       for (const clip of clips) byClip[clip.id] = fakeCaptions(clip);
       return byClip;
     }
     const avoid = avoidList(docs);
     const known = knownNumbers(docs);
-    const out = await structured({
+    const out = await ctx.think({
+      title: "Write TikTok, Reels, Shorts, Facebook and Threads captions for each clip",
       agent: "video",
       system: SYSTEM,
       prompt: `${documentsBlock(docs as Documents)}\n\n${memories}\n\n${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${clips

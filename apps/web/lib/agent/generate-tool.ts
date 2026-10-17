@@ -540,6 +540,9 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
     return { outcome: applied };
   }
   const credits = `${generation.credits_reserved} ${generation.credits_reserved === 1 ? "credit" : "credits"}`;
+  // Variants are alternatives of one piece; `extra` are other pieces (a /video's shots, voice, music).
+  const variants = 1 + (prepared.variants?.length ?? 0);
+  const pieces = started.length;
   return {
     generationId: generation.id,
     outcome: {
@@ -548,11 +551,14 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         ok: true,
         generation_id: generation.id,
         credits: generation.credits_reserved,
-        ...(started.length > 1 ? { variants: started.length } : {}),
+        ...(variants > 1 ? { variants } : {}),
+        ...(pieces > variants ? { pieces } : {}),
         note:
-          started.length > 1
-            ? `${started.length} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
-            : "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
+          variants > 1
+            ? `${variants} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
+            : pieces > 1
+              ? `${pieces} pieces started at once; each appears on the clip when it is ready. The user does not need to do anything.`
+              : "Generation started. The media appears on the clip when it is ready; the user does not need to do anything.",
       }),
       summary: `Started ${NOUN[prepared.model.kind]} (${credits})`,
       version: applied.version,

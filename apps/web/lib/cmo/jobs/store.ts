@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { ClipJob, CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { ClipJob, CmoStore, CompetitorInsight, Documents, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -179,5 +179,18 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return ((data as { body?: CompetitorInsight } | null)?.body ?? null);
     },
     saveMetrics: (userId, rows) => rpc<number>("cmo_save_metrics", { p_user: userId, p_rows: rows }),
+    async inbox(userId, inboxId) {
+      const { data, error } = await admin.from("cmo_inbox").select("answers, memo").eq("id", inboxId).eq("user_id", userId).maybeSingle();
+      if (error) throw new Error(`inbox: ${error.message}`);
+      return (data as InboxState | null) ?? null;
+    },
+    async openInbox(run, step, request, memo) {
+      return one<{ id: string }>(
+        await rpc("cmo_inbox_open", { p_run: run.id, p_attempt: run.attempt, p_step: step, p_request: request, p_memo: memo }),
+      )?.id ?? null;
+    },
+    async finishInbox(run, ok, feedback) {
+      await rpc("cmo_inbox_finish", { p_run: run.id, p_ok: ok, p_feedback: feedback });
+    },
   };
 }
