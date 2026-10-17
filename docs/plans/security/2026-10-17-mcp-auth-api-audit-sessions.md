@@ -2,7 +2,7 @@
 
 Plan: [`2026-10-17-mcp-auth-api-audit-plan.md`](2026-10-17-mcp-auth-api-audit-plan.md). Read all of it first,
 especially "Leads from exploration" and "Method".
-Branch: **`claude/security-audit-mcp-auth-7pqvh8`** · PR: PR_LINK (draft), shared by both sessions.
+Branch: **`claude/security-audit-mcp-auth-7pqvh8`** · PR: [#73](https://github.com/marcus-legia/opencmo/pull/73) (draft), shared by both sessions.
 
 Two Claude Code sessions audit in parallel on the same branch:
 

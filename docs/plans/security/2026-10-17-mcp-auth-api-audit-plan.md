@@ -1,6 +1,6 @@
 # Plan: security audit — MCP on Modal, auth, API routes  (2026-10-17)
 
-Track: Security · PR: PR_LINK · Work split: [`2026-10-17-mcp-auth-api-audit-sessions.md`](2026-10-17-mcp-auth-api-audit-sessions.md)
+Track: Security · PR: [#73](https://github.com/marcus-legia/opencmo/pull/73) · Work split: [`2026-10-17-mcp-auth-api-audit-sessions.md`](2026-10-17-mcp-auth-api-audit-sessions.md)
 
 Source reports:
 

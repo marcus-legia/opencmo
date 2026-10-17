@@ -7,4 +7,4 @@ Newest first.
 
 | Date | Plan | Source report | PR |
 |---|---|---|---|
-| 2026-10-17 | [Audit: MCP on Modal, auth, API routes](2026-10-17-mcp-auth-api-audit-plan.md) · [sessions](2026-10-17-mcp-auth-api-audit-sessions.md) | `docs/research/security/2026-10-17-security-agent-injection-mcp.md`; PR #71 (billing, out of scope) | PR_LINK |
+| 2026-10-17 | [Audit: MCP on Modal, auth, API routes](2026-10-17-mcp-auth-api-audit-plan.md) · [sessions](2026-10-17-mcp-auth-api-audit-sessions.md) | `docs/research/security/2026-10-17-security-agent-injection-mcp.md`; PR #71 (billing, out of scope) | [#73](https://github.com/marcus-legia/opencmo/pull/73) |
