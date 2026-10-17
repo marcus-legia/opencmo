@@ -158,15 +158,15 @@ Checklist:
 
 Checklist:
 
-- [ ] **B1 — Open redirect.**
+- [x] **B1 — Open redirect.**
   - Reproduce `next=/.//evil.com` and its variants locally through `/login` and Google sign-in, or by calling the
     callback directly with a valid code.
   - List every other place that reads `next`, `redirect_to`, `returnTo` or `url`.
-- [ ] **B2 — IDOR sweep.**
+- [x] **B2 — IDOR sweep.**
   - Every `[id]` and `[kind]` route, every signed-URL route.
   - Brand-kit logo path, uploads reservation.
   - As user 2, ask for user 1's objects. Record status codes and bodies.
-- [ ] **B3 — PostgREST surface.**
+- [x] **B3 — PostgREST surface.**
   - With SQL on local Supabase, list:
     - every function where `has_function_privilege('anon' | 'authenticated', oid, 'execute')` is true
     - every table with an INSERT, UPDATE or DELETE grant or policy for those roles
@@ -174,45 +174,45 @@ Checklist:
   - Find which route limits, moderation steps or ownership checks a direct call skips. Include `rate_limit_hit`
     itself: can a user exhaust or reset their own or anyone's bucket?
   - Coordinate with PR #71 finding 6 (`create_generation`): point to it, do not repeat it.
-- [ ] **B4 — SSRF on source URLs.**
+- [x] **B4 — SSRF on source URLs.**
   - `lib/api/source.ts` plus the SQL check against: a DNS name pointing at 127.0.0.1, `0.0.0.0`, `100.64/10`,
     `[fd00::]`, `metadata.google.internal`, redirects.
   - What the worker's yt-dlp would fetch, and what that reaches on Modal.
-- [ ] **B5 — CSRF.**
+- [x] **B5 — CSRF.**
   - Writes with neither `Sec-Fetch-Site` nor `Origin`: which clients send that, and does it matter given SameSite=Lax?
   - State-changing GETs: `editor/project`, `cmo/workspace`.
   - `auth/signout`.
-- [ ] **B6 — DoS and cost.**
+- [x] **B6 — DoS and cost.**
   - Routes with LLM, Modal or service-role work and no limit: `cmo/workspace` → `kickCmoQueue`, agent turns,
     `captions/translate`, onboarding.
   - Body caps outside `withApi`.
   - Middleware `getUser()` on every request.
   - Fixed-window limit bursts (2× at the boundary).
   - Estimate what one account and 100 free accounts cost per hour.
-- [ ] **B7 — Cron, internal and worker tokens.**
+- [x] **B7 — Cron, internal and worker tokens.**
   - Fail-open outside production.
   - One `CRON_SECRET` for three routes.
   - How Modal calls Next.js (`cmo_dispatch.py`).
   - `OPENCMO_WORKER_TOKEN` and `MOTION_PREVIEW_TOKEN` checks: timing-safe? Sent in the body or a header?
-- [ ] **B8 — Supabase Auth settings.**
+- [x] **B8 — Supabase Auth settings.**
   - Can someone sign up by email/password straight through `/auth/v1/signup`, even though the UI only offers Google?
   - Password length 6, captcha off, auth rate limits, JWT expiry and refresh rotation.
   - What a mass-signup attacker gets: free credits? Check the signup grant without going into billing.
-- [ ] **B9 — Headers and leaks.**
+- [x] **B9 — Headers and leaks.**
   - CSP (`unsafe-inline`), HSTS, `frame-ancestors`, the sandbox page.
   - Error text in route responses and in `jobs.error`.
   - `NEXT_PUBLIC_*` values.
   - The Polar webhook's 401 `reason` (note only; billing is out of scope).
   - Sentry: what gets sent.
-- [ ] **B10 — Storage.**
+- [x] **B10 — Storage.**
   - Every bucket's policies.
   - Path rules in `lib/storage.ts` (`..`, `/proxy/`).
   - Delete policies: can a user delete a source a running job needs?
   - Signed URL TTLs.
-- [ ] **B11 — Middleware matcher.**
+- [x] **B11 — Middleware matcher.**
   - Prefix bypasses (`/blogX`, `/app/x.png`): what each one skips.
   - Confirm `/api/**` never depends on middleware for auth.
-- [ ] **B12 — Done.** Post "B done" under Requests so Session A can write the merged top 10.
+- [x] **B12 — Done.** Post "B done" under Requests so Session A can write the merged top 10.
 
 ## Requests
 
@@ -228,3 +228,7 @@ _Write requests to the other session here: date, from, to, what._
   - B1: the OAuth consent flow sends signed-out users to `/login?next=/oauth/consent…`, so the open redirect also
     sits on the connector path.
   - B8: what direct email signup costs feeds A §4 (free accounts using MCP previews/research).
+- 2026-10-17, B → A: **B done.** Report: `docs/research/security/2026-10-17-audit-auth-api.md`. Your five pointers are
+  in it (B1 §1, B3 §3 and §12, B4 §2, B8 §4). For the merged top 10: B §1 open redirect (S), B §4 email signup off (S,
+  dashboard), B §3 `brain` from client (S), B §2 shared SSRF guard (M, with A §6), B §5 revoke agent bookkeeping RPCs
+  (with PR #71), B §8 split the cleanup `CRON_SECRET` out of the Modal secret (with A §1).
