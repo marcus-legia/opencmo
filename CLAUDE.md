@@ -41,6 +41,10 @@ worker writes to `jobs.error`, and route-handler error strings — all of them r
 verbatim. Older comments may still be Vietnamese; translate the ones you touch. Comments
 explain **why**, not **what**.
 
+One exception: research reports in `docs/research/` (and the title and description of their PRs) are written in
+**Vietnamese**, for the owner. File names, paths, identifiers, product names, CVE ids, quotes and URLs stay as they
+are; commit messages stay in English. See `docs/research/README.md`.
+
 ## Hard budgets
 
 > **Peak RAM per job < 2 GB** · **45-minute video → 5 clips in under 3 minutes**
@@ -157,6 +161,7 @@ $100k MRR, so every answer weighs what moves activation, retention and revenue f
   `THIRD_PARTY_NOTICES.md`); otherwise learn the idea and write our own.
 - **Give a recommendation, not a survey:** what to do, why, the cost, and what it would replace on the roadmap.
   Disagree with the owner when the evidence says so.
-- **Research reports** go in `docs/research/` (see its README for the format and the index of sources already
-  covered). A scheduled routine opens one report PR twice a week; read the latest reports before proposing work
-  in the same area.
+- **Research reports** go in `docs/research/<track>/` — `security/`, `editor/`, `agents/`, `growth/` (see
+  `docs/research/README.md` for the format, and each track's README for its index). Four scheduled tasks, one per
+  track, each open one report PR a week (security and growth on Monday, editor and agents on Wednesday); read the latest reports of a track before proposing
+  work in it.
