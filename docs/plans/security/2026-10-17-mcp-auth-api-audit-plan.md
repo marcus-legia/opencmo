@@ -198,6 +198,26 @@ row each to `docs/research/security/README.md`.
 3. **Merged top 10**, filled in below after both reports land. Rank by risk removed per day of work. Each entry
    names the follow-up fix PR it belongs to.
 
-## Merged top 10 (filled in at the end)
+## Merged top 10
 
-_Pending: Session A writes this after Session B posts "B done" under Requests in the sessions file._
+From `docs/research/security/2026-10-17-audit-mcp-modal.md` (A) and `2026-10-17-audit-auth-api.md` (B). Ranked by risk
+removed per day of work. Each item is its own follow-up PR (or a dashboard change), never this PR.
+
+| # | What | Source | Cost | Belongs to |
+|---|---|---|---|---|
+| 1 | Shrink the MCP container's secrets: drop the worker secret `opencmo` from `mcp_server`, keep only what the bundle reads; give confirm codes their own key; take the cleanup `CRON_SECRET` out of any secret MCP mounts | A §1, B §8 | S | PR "mcp hardening" |
+| 2 | Set `max_containers` on `mcp_server`. Confirm whether Modal's ~200 rps quota is per workspace; if so, move MCP to its own workspace or environment, or put it behind a per-IP limit. Make `rate_limit_hit` one call per batch | A §2, §7 | S | PR "mcp hardening" |
+| 3 | Fix the `/auth/callback` open redirect (check the normalized pathname, reject `//`), with a `*.check.ts` table of variants | B §1 | S | PR "web auth" |
+| 4 | Production Auth: `[auth.email] enable_signup = false` (Google stays), captcha if email is kept, password ≥ 12; align `supabase/config.toml` | B §4 | S | Owner (dashboard) + small config PR |
+| 5 | Close the free-cost paths: `cmo_enqueue` stops trusting `brain` from the client; decide a paid-plan rule or daily cap for MCP previews and social research; `research_credits` returns "available / used up", not the balance | B §3, A §4, A §11 | S | PR "CMO" + owner decision |
+| 6 | OAuth: allowlist client redirect hosts at consent (claude.ai, localhost), a `mcp_grants` table checked by `userForAccessToken`, consent title shows the redirect host; check that revoke stops live tokens | A §3 | M | PR "mcp oauth" |
+| 7 | One SSRF guard (resolve DNS, public unicast only, pinned IP, re-check every redirect) shared by `read_site`, source URLs + yt-dlp, and captures; one range table for TS, SQL and Python | B §2, A §6 | M | PR "ssrf" |
+| 8 | Retire `/api/mcp` (410 with the new URL), require `OPENCMO_MCP_URL` in the app and in `main.ts`, move `e2e/mcp.spec.ts` | A §5, §8 | S | PR "mcp hardening" |
+| 9 | Revoke the Assistant bookkeeping RPCs from `authenticated`, cap `agent_record_tool` input size, add a pgTAP allowlist of functions `authenticated` may execute | B §5, PR #71 recs 6/8 | S–M | PR #71's billing/agent PR |
+| 10 | Memory-poisoning gate and untrusted-text sanitizer (10-17 report recs 1–2), before the connector is public: over MCP, `remember` and research share one Claude session | A §11 table | M | CMO track |
+
+**Not doing:** no extra route-level authorization layer (B: 0 of 660 cross-user RPC calls got through); no Origin /
+`allowedHosts` check on the remote MCP server (A §9).
+
+**Owner decisions needed:** item 4 (dashboard), item 5 (what free accounts may use over MCP), and the Modal quota
+question in item 2.

@@ -135,8 +135,9 @@ Checklist:
   _Done:_ report §11. Tool errors sanitized; export links 5 minutes; no tokens in logs.
 - [x] **A10 — 10-17 report status.** For recommendations 1–7: done, partly done or not done, each with evidence.
   _Done:_ report, table "Trạng thái khuyến nghị": recs 1–4 and 6 not done, 5 partly.
-- [ ] **A11 — Merged top 10.** After "B done" appears under Requests, fill in the plan's last section from both
+- [x] **A11 — Merged top 10.** After "B done" appears under Requests, fill in the plan's last section from both
   reports.
+  _Done:_ plan, "Merged top 10". B's report reviewed: findings §1–§5 and §8 re-checked against code, no edits needed.
 
 ## Session B — Web auth, API routes, DB grants
 
