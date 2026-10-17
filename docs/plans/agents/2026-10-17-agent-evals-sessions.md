@@ -81,15 +81,25 @@ export function cascade(id: string, epoch: number, issues: string[], judge: Judg
       _Done:_ also `genModel(answered, brain, fake)` in `edit-taxonomy.ts` (`founder-claude` for inbox runs, `fake`
       in fake mode). The option travels `drainCmoQueue(store, { searchReddit })` → `runOne(store, run, opts)` →
       `ctx.searchReddit`; production callers pass nothing.
-- [ ] **A2 — Where drafts came from (P1).** `body.gen` in `draft-post.ts` (model that answered, after failover);
+- [x] **A2 — Where drafts came from (P1).** `body.gen` in `draft-post.ts` (model that answered, after failover);
       `opportunities.gen` column + `cmo_save_opportunities` passes `p_items[].gen`; `sales-scan.ts` sets it.
       Accept: `jobs.check.ts` asserts `gen` on fake runs; pgTAP for the column.
-- [ ] **A3 — `cmo_draft_outcomes` (P2).** Migration: `pg_trgm` in `extensions`, table + RLS + revokes, new
+      _Done:_ the model comes from `onUsage` of the call whose text the founder sees (`fix_post` when it ran, else
+      `draft_post`; `draft_reply` for Sales). `prompt_version` hashes the writer's system prompt (`SYSTEM`,
+      `REPLY_SYSTEM`), skill text included. Migration `20261201090000_cmo_draft_gen.sql`: `opportunities.gen` keeps
+      only `model` (≤ 100) and `prompt_version` (≤ 40), ≤ 256 bytes; pgTAP `162_cmo_draft_gen`.
+- [x] **A3 — `cmo_draft_outcomes` (P2).** Migration: `pg_trgm` in `extensions`, table + RLS + revokes, new
       `cmo_decide_post` / `cmo_decide_opportunity` bodies writing the outcome in the same transaction, view
       `cmo_draft_quality_weekly` (service role only), `EDIT_MODES` check constraint. `dump-schema.sh`.
       Accept: pgTAP — other user cannot read; user cannot insert/update; approve as written → similarity 1 and
       right `chosen_version`; approve an alternate edited → < 1 and the nearest version; skip → null similarity;
       opportunity replied / dismissed → row; `authenticated` cannot select the view. `db:reset && db:test` green.
+      _Done:_ `20261201100000_cmo_draft_outcomes.sql`, pgTAP `163_cmo_draft_outcomes` (25 checks). Approvals at
+      similarity ≥ 0.95 (`cmo_as_written()`) are labelled `NO_MEANINGFUL_EDIT` at once, so the classifier only sees
+      real edits. No text is copied into the table. Ran on this container's Postgres 16 with pgTAP and a stand-in
+      for the Supabase `auth`/`storage` schemas (Docker image pulls are blocked here): all 96 pgTAP files pass.
+      `current.sql` updated from the before/after diff of a dump, not a fresh dump (the file comes from Postgres 17);
+      worth one `scripts/dump-schema.sh` on a machine with Supabase local.
 - [ ] **A4 — `classify_edits` (P3/P4).** Service-role RPCs `cmo_claim_unclassified_outcomes(p_limit)` /
       `cmo_set_edit_mode(p_id, p_mode)`; `classify-edits.ts` with `checker` and a fake rule; called from the cron
       route with a small cap; a check test that `EDIT_MODES` equals the SQL constraint list.
