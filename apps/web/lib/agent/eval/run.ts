@@ -33,14 +33,15 @@ import { planStudio3d, planVoiceover, quoteRange, readCaptionState, speechSource
 
 import { promptVersion } from "@/lib/cmo/jobs/edit-taxonomy";
 import type { CaseResult, EvalReport } from "@/lib/eval/compare";
+import { priceOf, type Price } from "@/lib/eval/prices";
 import { gitInfo, printComparison, writeReport } from "@/lib/eval/report";
 
 import { clipContextBlock } from "../clip-context";
 import { KEEP_IMAGES } from "../limits";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
-import { anthropicProvider } from "../providers/anthropic";
+import { ANTHROPIC_MODEL, anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
-import { geminiKey, geminiProvider } from "../providers/gemini";
+import { GEMINI_MODEL, geminiKey, geminiProvider } from "../providers/gemini";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
 import { backgroundToolSpec, prepareBackground } from "../background-tool";
 import { editToolSpec, prepareEdit } from "../edit-tool";
@@ -95,13 +96,11 @@ function positive(flag: string, raw: string | undefined): number | null {
   return n;
 }
 
-/** Price per million tokens (USD), same as `agent_model_prices`. */
-const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  // The Assistant runs on Sonnet 5.5.
-  anthropic: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
-  gemini: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 2.5 },
-  fake: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-};
+/** Price per million tokens (USD) of the model each provider runs the Assistant on; the fake one is free. */
+function priceFor(provider: string): Price {
+  if (provider === "fake") return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  return priceOf(provider === "gemini" ? GEMINI_MODEL : ANTHROPIC_MODEL);
+}
 
 function providerFor(name: string): Provider {
   if (name === "fake") return fakeProvider;
@@ -364,14 +363,14 @@ async function main() {
   // "video-" (ending in a dash) runs every task of that group.
   const tasks = options.task ? TASKS.filter((task) => (options.task!.endsWith("-") ? task.id.startsWith(options.task!) : task.id === options.task)) : TASKS;
   if (!tasks.length) throw new Error(`không có bài ${options.task}`);
-  const price = PRICES[options.provider] ?? PRICES.anthropic!;
+  const price = priceFor(options.provider);
 
   if (options.provider !== "fake" && !options.yes) {
     // Ước lượng thô: ~15 bước/bài, ~30k token vào mỗi bước (80% trúng cache), ~1.5k ra.
     const perStep = (6_000 * price.input + 24_000 * price.cacheRead + 1_500 * price.output) / 1e6;
     const runs = tasks.length * options.epochs;
     console.log(`Estimate: ${runs} task runs × ~15 steps × ~$${perStep.toFixed(3)} ≈ $${(runs * 15 * perStep).toFixed(2)} (at most ${options.maxSteps} steps a task${options.maxUsd ? `, stops after $${options.maxUsd}` : ""}).`);
-    console.log("Thêm --yes để chạy thật.");
+    console.log("Add --yes to run it.");
     return;
   }
 

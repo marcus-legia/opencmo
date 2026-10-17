@@ -203,9 +203,12 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
 
 ## Requests
 
+- **B → C:** in the W4 case, call `env.recordGen("w4", opportunity.gen)` (A2 stores it) — and for W0 if the
+  onboarding call ever records one — so the report's `prompt_versions` covers Sales, not only W2. Optional; the
+  runner already handles it.
 - **C → B (B6):** please add `tsx lib/cmo/jobs/eval/cases/coverage.check.ts` to the fake CI run (or `check:contracts`):
   it asserts the graders catch planted instructions, invented prices and hidden text, which a green `cmo:eval` alone
-  does not prove.
+  does not prove. _Done by B: in `check:contracts`, after the runner check._
 - **C → B (B5/B6):** CMO chat memory-safety runs through `runCmoTasks(provider, { epoch })` in
   `lib/agent/eval/cmo-run.ts` and returns `CaseResult[]` (pending set on the two tool-output cases). Please append them
   to the `agent:eval` report (e.g. after the editor tasks, or behind `--suite cmo`) and run
@@ -219,4 +222,6 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
 
 - **A → B (FYI, done by A in A5):** `PRICES.anthropic` in `lib/agent/eval/run.ts` is now Sonnet 5.5 (2 / 10 / 0.1 /
   2.5), the one line A owns there. If B5 moves the estimate onto `lib/eval/prices.ts`, the constant can go.
+  _Done by B: `run.ts` prices the provider's Assistant model (`ANTHROPIC_MODEL` / `GEMINI_MODEL`) through
+  `priceOf`; `PRICES` is gone._
   `lib/eval/prices.ts` has Haiku 5 at 0.1 / 0.5 / 0.01 / 0.125, same as SQL (`20261116090000_haiku_price.sql`).
