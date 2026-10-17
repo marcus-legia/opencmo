@@ -11,7 +11,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { ApiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
-import { resolveAgent, type AgentId, type ResolvedAgent } from "@/lib/cmo/agents/registry";
+import { resolveAgent, type AgentId, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 
 import { outage, withFailover } from "@/lib/llm-health";
 
@@ -45,9 +45,25 @@ export type StructuredOptions<S extends z.ZodType> = {
   timeoutMs?: number;
   /** Token usage of the call, for callers that charge it (the editor's Video agent team). */
   onUsage?: (usage: LlmUsage) => void | Promise<void>;
+  /**
+   * Run as this provider first, whatever the agent is configured for. The eval judge uses it so a
+   * model never grades its own provider's drafts.
+   */
+  prefer?: ProviderKind;
 };
 
 export type LlmUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
+
+const usageListeners = new Set<(usage: LlmUsage, agent: AgentId) => void>();
+
+/**
+ * Every structured call's usage, process-wide. Only the eval CLIs listen (to cap what a run spends);
+ * a server never registers one, so production has no shared state here.
+ */
+export function onLlmUsage(listener: (usage: LlmUsage, agent: AgentId) => void): () => void {
+  usageListeners.add(listener);
+  return () => usageListeners.delete(listener);
+}
 
 async function structuredGemini<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
   let response;
@@ -98,8 +114,17 @@ async function structuredGemini<S extends z.ZodType>(opts: StructuredOptions<S>,
  * credit, a bad key, rate limits, an outage) and the server has a key for the other one, the call
  * runs there on that provider's model of the same tier.
  */
-export async function structured<S extends z.ZodType>(opts: StructuredOptions<S>): Promise<z.infer<S>> {
-  const configured = resolveAgent(opts.agent);
+export async function structured<S extends z.ZodType>(input: StructuredOptions<S>): Promise<z.infer<S>> {
+  const opts: StructuredOptions<S> = usageListeners.size
+    ? {
+        ...input,
+        onUsage: async (usage) => {
+          for (const listener of usageListeners) listener(usage, input.agent);
+          await input.onUsage?.(usage);
+        },
+      }
+    : input;
+  const configured = opts.prefer ? resolveAgent(opts.agent, process.env, opts.prefer) : resolveAgent(opts.agent);
   const other = resolveAgent(opts.agent, process.env, configured.provider === "anthropic" ? "gemini" : "anthropic");
   const candidates = [configured, other].filter((agent) => agent.apiKey);
   if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");

@@ -53,13 +53,19 @@ export type EvalReport = { suite: "cmo" | "agent"; git: { head: string; diffHash
 
 // B1 — apps/web/lib/cmo/jobs/eval/types.ts
 export type EvalFixture = { name: string; docs: Documents; brief: string; clips: ClipInfo[] };
-export type EvalCase = { job: string; run(fixture: EvalFixture, env: EvalEnv): Promise<CaseResult[]> };
-export type EvalEnv = { drain: typeof drainCmoQueue; provider: string; judge: Judge; epoch: number };
+export type EvalCase = { job: string; once?: boolean /* brings its own fixtures: run once per epoch */;
+  run(fixture: EvalFixture, env: EvalEnv): Promise<CaseResult[]> };
+export type EvalEnv = { drain: typeof drainCmoQueue; provider: string; judge: Judge; epoch: number;
+  log: (line: string) => void /* printed under the table on real runs */ };
 export function registerCases(cases: EvalCase[]): void;
+// Every file in eval/cases/ is imported by the runner (sorted); it calls registerCases at import time.
 
 // B1 — apps/web/lib/cmo/jobs/judge.ts
 export type Judge = (input: { job: string; docs: Documents; output: string; criteria?: string[] })
   => Promise<{ pass: boolean | null; verdict?: string; reasons?: string; cost_usd?: number }>;
+export function fakeJudge(): Judge;                       // fixed labels, same path as the model judge
+export function cascade(id: string, epoch: number, issues: string[], judge: Judge | null, input: JudgeInput)
+  => Promise<CaseResult>;                                 // code issues decide alone; judge failure → pass: null
 ```
 
 ## Session A — Production signal
@@ -94,11 +100,11 @@ export type Judge = (input: { job: string; docs: Documents; output: string; crit
 `apps/web/lib/cmo/jobs/eval/{types,runner,fixtures}.ts`, `apps/web/lib/agent/eval/run.ts` (except A's `PRICES`
 line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-architecture-implementation.md`.
 
-- [ ] **B1 — Contracts.** `compare.ts` types; `eval/types.ts` with `registerCases`; `Judge` type and a fake judge.
+- [x] **B1 — Contracts.** `compare.ts` types; `eval/types.ts` with `registerCases`; `Judge` type and a fake judge.
       Accept: typecheck. Push this first.
-- [ ] **B2 — Compare (H1).** `mcnemarExact`, `compareReports`, `kOfK`, `cohensKappa` + `compare.check.ts`.
+- [x] **B2 — Compare (H1).** `mcnemarExact`, `compareReports`, `kOfK`, `cohensKappa` + `compare.check.ts`.
       Accept: known (b, c) → known p; identical reports → `INCONCLUSIVE`, p = 1; kappa of identical labels = 1.
-- [ ] **B3 — Cascade judge (H2).** `judge.ts` per the plan: code tier first, `checker` on the other provider,
+- [x] **B3 — Cascade judge (H2).** `judge.ts` per the plan: code tier first, `checker` on the other provider,
       labels with reasons first, binary criteria one at a time, failures → `pass: null`.
       Accept: unit test with a stub `structured` — code failure never calls the judge; thrown error and unknown
       label → unscored; fake provider returns fixed labels.
@@ -143,4 +149,8 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
 
 ## Requests
 
-_None yet._
+- **B → A (FYI, done by B):** `lib/cmo/jobs/llm.ts` (no owner) gained two additive pieces: `StructuredOptions.prefer`
+  (run as that provider first; the judge uses it to grade on the provider that did not draft) and
+  `onLlmUsage(listener)` (process-wide usage, only the eval CLIs listen, for `--max-usd`). A2 can read the model that
+  actually answered from `onUsage` as before. Eval cost uses `lib/eval/prices.ts` (Sonnet 5.5 cache read already
+  0.1); keep it in step with A5.
