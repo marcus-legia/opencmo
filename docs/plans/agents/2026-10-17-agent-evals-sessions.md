@@ -161,8 +161,12 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       dispatches workflows that exist on `main`, so the manual run waits for the merge.
       _Verified:_ CI green on `470be3b` (all six jobs; the motion job's fake `agent:eval`: 43/43 editor tasks, CMO
       chat 4/4 + 2 pending). Locally on the same tree: `typecheck`, `npm run build`, `check:contracts` (incl.
-      `cmo:eval --provider fake`: W1/W2/W5/W0/W4, 1 pending) green. **Not done:** the manual dispatch run (needs the
-      workflow on `main`) and a graded real-provider run: the cloud session has a `GEMINI_API_KEY` but its prepaid
+      `cmo:eval --provider fake`: W1/W2/W5/W0/W4, 1 pending) green. **Workflow run (fake provider):**
+      [run 39038897106](https://github.com/marcus-legia/opencmo/actions/runs/39038897106) — `cmo · fake` green, every
+      step ran (key check, previous-report lookup → baseline, eval, upload); artifact `eval-cmo-fake` attached.
+      GitHub refuses `workflow_dispatch` for a workflow not on `main` (404), so commit `c305c7a` added a push trigger
+      limited to this branch and file for that one run, and the next commit removed it. **Real provider:** no graded
+      run: the cloud session has a `GEMINI_API_KEY` but its prepaid
       credit is used up (402 `RESOURCE_EXHAUSTED`), and no Anthropic key. One `cmo:eval --provider gemini --yes --job
       w1,w2,w4,w0 --max-usd 1` ran: $0 spent, every run reported unfinished with its error (the harness side works). After the merge:
       add `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` to the `ai-evals` environment and dispatch once with
