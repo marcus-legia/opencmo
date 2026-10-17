@@ -75,19 +75,21 @@ Also add a short section **"Những gì đang làm tốt (để giữ)"**, so a 
 
 Checklist:
 
-- [ ] **A1 — Secret blast radius.**
+- [x] **A1 — Secret blast radius.**
   - List every env var the `opencmo-mcp` container receives.
   - For each, which code in `packages/mcp-server` (and the bundled `@/` modules) actually needs it.
   - What an attacker gets from a read of `process.env`, or from code execution in that container.
   - Is `SUPABASE_JWT_SECRET` reuse for confirm codes a problem?
   - Recommend the minimal secret set.
-- [ ] **A2 — Token acceptance.**
+  _Done:_ report §1. Bundle env grep: `CRON_SECRET` and Modal tokens unused; JWT secret also keys confirm codes.
+- [x] **A2 — Token acceptance.**
   - API keys: format, hash, revocation latency, `last_used_at` write per call.
   - OAuth: what `getUser` proves, what the `client_id` check proves, audience and resource, token passthrough to
     PostgREST, DCR open, consent auto-redirect, no scopes.
   - Can a browser session token, a refresh token or another project's token get through?
   - Test each locally.
-- [ ] **A3 — DoS and cost.**
+  _Done:_ report §3. In-process PoC: any `client_id` passes, session token without one fails; DCR open, client name spoofable on consent.
+- [x] **A3 — DoS and cost.**
   - Cost of one unauthenticated or bad-token request: round trips, and DB writes.
   - Worst-case containers without `max_containers`.
   - `max_inputs=50` with requests that run 140 s.
@@ -95,36 +97,44 @@ Checklist:
   - Body and batch caps on the new and the old route.
   - The `mcp_preview`, `mcp_site` and `mcp_social` caps, and whether they hold per account or per key.
   - Free accounts as a multiplier: what signup costs an attacker.
-- [ ] **A4 — Confirm codes.**
+  _Done:_ report §2, §4, §7. Outbound calls per request measured; no `max_containers`; free accounts get previews/research without credits.
+- [x] **A4 — Confirm codes.**
   - Replay on the old `/api/mcp` (no nonce): reproduce it locally.
   - The new route's single-use `mcp_confirm_use`.
   - Payload size and inflate limits.
   - The code being visible to the model: what a prompt-injected session can spend in one hour.
-- [ ] **A5 — Two live endpoints.**
+  _Done:_ report §5, §10. Old-route replay does not double-charge (`spec_hash` reuse); new route single-use.
+- [x] **A5 — Two live endpoints.**
   - Feature and guard drift between `/api/mcp` and Modal.
   - Where the app links each one.
   - What retiring the old one requires.
-- [ ] **A6 — SSRF in `read_site`.**
+  _Done:_ report §5. Old route still linked, no body cap (32 MiB parsed in PoC), protocol 2025-06-18.
+- [x] **A6 — SSRF in `read_site`.**
   - Every gap: rebinding, NAT64, 6to4, hex `::ffff:`, ports and userinfo on redirect hops, `siteReads: 0` over MCP.
   - What a fetch from the Modal container can reach that a fetch from Vercel cannot.
   - Compare with the worker's `capture/guard.py` and `addresses.py`.
-- [ ] **A7 — Host, Origin, CORS.**
+  _Done:_ report §6. NAT64/6to4/`192.0.0.8` pass `privateAddress`; rebinding rationale void over MCP.
+- [x] **A7 — Host, Origin, CORS.**
   - The `origin()` fallback on the `x-forwarded-host` / `host` headers.
   - Is `OPENCMO_MCP_URL` guaranteed to be set on Modal?
   - Wildcard CORS with bearer tokens.
   - The SDK's DNS-rebinding options (`allowedHosts`, `allowedOrigins`): do they matter for a remote server?
   - `/` as an alias of `/mcp`.
-- [ ] **A8 — Tool authorization.**
+  _Done:_ report §8, §9. Host-header metadata poisoning only without `OPENCMO_MCP_URL`; CORS `*` fine for bearer.
+- [x] **A8 — Tool authorization.**
   - For every tool group (find, studio, generations, explainer, export, guides, cmo, inbox, account): where its IDs
     come from.
   - Does any tool use the service role or `ctx.userId` in a way RLS does not cover? (Example: `kickCmoQueue` from
     `lib/cmo/mcp/cmo.ts`.)
   - Cross-user test with two local users on a sample of each group.
-- [ ] **A9 — Leaks in output.**
+  _Done (code read):_ report §11. All tools under the caller's RLS; service role only in `api_key_owner`. The two-user run was not done here (no local Supabase); repeat it on a machine with `npm run dev`.
+- [x] **A9 — Leaks in output.**
   - Error text returned to the model: Supabase messages, stack traces, paths.
   - Signed URLs: lifetime and scope.
   - Logs: tokens, prompts, scene code.
-- [ ] **A10 — 10-17 report status.** For recommendations 1–7: done, partly done or not done, each with evidence.
+  _Done:_ report §11. Tool errors sanitized; export links 5 minutes; no tokens in logs.
+- [x] **A10 — 10-17 report status.** For recommendations 1–7: done, partly done or not done, each with evidence.
+  _Done:_ report, table "Trạng thái khuyến nghị": recs 1–4 and 6 not done, 5 partly.
 - [ ] **A11 — Merged top 10.** After "B done" appears under Requests, fill in the plan's last section from both
   reports.
 
@@ -207,3 +217,14 @@ Checklist:
 ## Requests
 
 _Write requests to the other session here: date, from, to, what._
+
+- 2026-10-17, A → B: pointers from `docs/research/security/2026-10-17-audit-mcp-modal.md` for your report:
+  - B3: a Supabase OAuth access token is a full `authenticated` JWT, so any approved OAuth client can call PostgREST
+    directly, not only MCP (A §3). Include it when you list the PostgREST surface.
+  - B3: `enqueue_cmo_run` accepts `brain: "claude"` from the user (price 0), by design (A §11). Check it against the
+    daily caps.
+  - B4: share one private-address table with `read_site` (A §6: NAT64, 6to4, `192.0.0.0/24` missing in
+    `lib/cmo/site.ts`).
+  - B1: the OAuth consent flow sends signed-out users to `/login?next=/oauth/consent…`, so the open redirect also
+    sits on the connector path.
+  - B8: what direct email signup costs feeds A §4 (free accounts using MCP previews/research).
