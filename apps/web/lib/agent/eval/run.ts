@@ -65,6 +65,8 @@ import {
   fixtureManifest,
 } from "./fixture";
 import { nodeCapture, nodeGrab, nodeInspectColor, nodePreview3d, nodeWaveform, type NodeMedia } from "./node-tools";
+import { runCmoTasks } from "./cmo-run";
+import { CMO_TASKS } from "./cmo-tasks";
 import { TASKS, type EvalTask } from "./tasks";
 
 type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean; untilCard: boolean; epochs: number; compare: string | null; maxUsd: number | null };
@@ -361,8 +363,11 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
 async function main() {
   const options = args();
   // "video-" (ending in a dash) runs every task of that group.
-  const tasks = options.task ? TASKS.filter((task) => (options.task!.endsWith("-") ? task.id.startsWith(options.task!) : task.id === options.task)) : TASKS;
-  if (!tasks.length) throw new Error(`không có bài ${options.task}`);
+  const selected = (id: string) => !options.task || (options.task.endsWith("-") ? id.startsWith(options.task) : id === options.task);
+  const tasks = TASKS.filter((task) => selected(task.id));
+  // CMO chat memory-safety (`cmo-run.ts`): the app's turn loop on a recording client, graded on its tool calls.
+  const cmoTasks = CMO_TASKS.filter((task) => selected(task.id));
+  if (!tasks.length && !cmoTasks.length) throw new Error(`No task ${options.task}.`);
   const price = priceFor(options.provider);
 
   if (options.provider !== "fake" && !options.yes) {
@@ -420,11 +425,27 @@ async function main() {
     for (const card of result.cards) console.log(`     card (${card.tool}): ${card.changes[0] ?? ""}`);
     if (!result.cards.length && result.reply) console.log(`     reply: ${result.reply.replace(/\s+/g, " ").slice(0, 300)}`);
   }
+  for (let epoch = 0; epoch < options.epochs && cmoTasks.length; epoch++) {
+    if (options.maxUsd !== null && spent >= options.maxUsd) {
+      skipped += cmoTasks.length;
+      continue;
+    }
+    const results = await runCmoTasks(provider, { epoch, tasks: cmoTasks, log: (line) => console.log(`     ${line}`) });
+    for (const result of results) {
+      spent += result.cost_usd ?? 0;
+      cases.push(result);
+      console.log(`${result.pending ? "PEND" : result.pass ? "PASS" : "FAIL"} ${result.id}  $${(result.cost_usd ?? 0).toFixed(3)}${result.notes?.length ? `  ${result.notes.join("; ")}` : ""}${result.pending ? `  (pending: ${result.pending})` : ""}`);
+    }
+  }
+  const cmoCases = cases.filter((result) => cmoTasks.some((task) => task.id === result.id));
+  const cmoFailed = cmoCases.filter((result) => !result.pending && result.pass !== true).length;
+  const cmoPending = cmoCases.filter((result) => result.pending).length;
   const passed = rows.filter((row) => row.pass).length;
-  const total = rows.reduce((sum, row) => sum + row.cost, 0);
+  const total = spent;
   const sum = (key: "steps" | "calls" | "seconds" | "input" | "cached" | "output") => rows.reduce((acc, row) => acc + row[key], 0);
   const totals = { steps: sum("steps"), calls: sum("calls"), seconds: sum("seconds"), input: sum("input"), cached: sum("cached"), output: sum("output") };
   console.log(`\n${passed}/${rows.length} tasks passed · $${total.toFixed(2)} · ${totals.steps} steps, ${totals.calls} tool calls, ${totals.seconds}s · tokens in ${totals.input} (+${totals.cached} cached) out ${totals.output} · report in ${options.out}`);
+  if (cmoCases.length) console.log(`CMO chat: ${cmoCases.length - cmoFailed - cmoPending}/${cmoCases.length - cmoPending} passed, ${cmoPending} pending (reported, never fail the run)`);
   if (skipped) console.log(`${skipped} task runs not started: the $${options.maxUsd} cap was reached.`);
   writeFileSync(join(options.out, "report.json"), JSON.stringify({ provider: options.provider, rows, passed, cost: total, totals }, null, 2));
   // The shared format, for --compare and the scheduled eval workflow.
@@ -439,7 +460,7 @@ async function main() {
   };
   writeReport(join(options.out, "eval-report.json"), report);
   if (options.compare) printComparison(options.compare, report);
-  if (passed < rows.length) process.exitCode = 1;
+  if (passed < rows.length || cmoFailed) process.exitCode = 1;
 }
 
 main().catch((error) => {

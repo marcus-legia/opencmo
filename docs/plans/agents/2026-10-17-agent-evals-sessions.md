@@ -213,6 +213,9 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
   `lib/agent/eval/cmo-run.ts` and returns `CaseResult[]` (pending set on the two tool-output cases). Please append them
   to the `agent:eval` report (e.g. after the editor tasks, or behind `--suite cmo`) and run
   `tsx lib/agent/eval/cmo-run.ts --provider fake` in CI until then.
+  _Done by B: `agent:eval` runs the selected `CMO_TASKS` (same `--task` filter, e.g. `--task cmo-`) after the editor
+  tasks, every epoch, under the same cap; results go in `eval-report.json`, pending ones are listed and never fail.
+  CI covers them through the fake `agent:eval` step._
 
 - **B → A (FYI, done by B):** `lib/cmo/jobs/llm.ts` (no owner) gained two additive pieces: `StructuredOptions.prefer`
   (run as that provider first; the judge uses it to grade on the provider that did not draft) and
