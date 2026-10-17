@@ -20,6 +20,8 @@ export type EvalEnv = {
   epoch: number;
   /** Lines a real run prints under the table (what the model wrote), so a person can read it. */
   log: (line: string) => void;
+  /** Where an output came from (`body.gen` / `opportunities.gen`): its prompt version goes in the report under `key`. */
+  recordGen: (key: string, gen: unknown) => void;
 };
 
 export type EvalCase = {

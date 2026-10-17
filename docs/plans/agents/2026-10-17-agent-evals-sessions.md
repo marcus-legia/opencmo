@@ -100,7 +100,7 @@ export function cascade(id: string, epoch: number, issues: string[], judge: Judg
 ## Session B — Harness
 
 **Owns:** `apps/web/lib/eval/**`, `apps/web/lib/cmo/jobs/{eval,judge}.ts`,
-`apps/web/lib/cmo/jobs/eval/{types,runner,fixtures}.ts`, `apps/web/lib/agent/eval/run.ts` (except A's `PRICES`
+`apps/web/lib/cmo/jobs/eval/{types,runner,fixtures,core}.ts` (+ their `.check.ts`), `apps/web/lib/agent/eval/run.ts` (except A's `PRICES`
 line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-architecture-implementation.md`.
 
 - [x] **B1 — Contracts.** `compare.ts` types; `eval/types.ts` with `registerCases`; `Judge` type and a fake judge.
@@ -111,10 +111,15 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       labels with reasons first, binary criteria one at a time, failures → `pass: null`.
       Accept: unit test with a stub `structured` — code failure never calls the judge; thrown error and unknown
       label → unscored; fake provider returns fixed labels.
-- [ ] **B4 — `cmo:eval` registry (H3).** Move W1/W2/W5 into the registry without changing what they check; 3–5 new
+- [x] **B4 — `cmo:eval` registry (H3).** Move W1/W2/W5 into the registry without changing what they check; 3–5 new
       fixtures; `--epochs`, `--out`, `--compare`, `--max-usd` / `EVAL_MAX_USD`; report JSON; `pending` cases listed
       apart and never fail the run. Accept: `cmo:eval -- --provider fake` green and writes the report; same rows
       as `main` for W1/W2/W5 on the old three fixtures.
+      _Done:_ W1/W2/W5 live in `eval/core.ts`; the CLI also imports every file in `eval/cases/` (sorted), so C only
+      adds files there. Fixtures: the old three + `meals` (B2C), `changelog` (distinctive voice), `pottery` (no
+      numbers to borrow). Each case returns `${job}:${fixture}:run` first, then one result per output (W1 per plan
+      item, W2 per version — judged after `checkPost` —, W5 per clip). `--provider gemini` sets
+      `CMO_LLM_PROVIDER`. Fake run: 18 runs, 63/63 outputs pass; same rows as `main` on the old fixtures.
 - [ ] **B5 — `agent:eval` reports (H4).** Same `EvalReport`, `--epochs`, `--compare`. Accept:
       `agent:eval -- --provider fake` result unchanged; report written; `--compare` of two fake runs → INCONCLUSIVE.
 - [ ] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
