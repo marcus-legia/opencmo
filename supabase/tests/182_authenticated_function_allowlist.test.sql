@@ -96,6 +96,7 @@ insert into allowed values
   ('is_paid(uuid)'),
   ('job_hold_credits()'),
   ('list_projects(timestamp with time zone,uuid,text,integer)'),
+  ('mcp_admit(integer)'),
   ('mcp_confirm_use(uuid)'),
   ('normalize_capture_url(text)'),
   ('purge_in_progress()'),
