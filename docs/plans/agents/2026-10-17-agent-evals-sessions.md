@@ -1,0 +1,146 @@
+# Agent evals: work split for three sessions, one PR
+
+Plan: [`2026-10-17-agent-evals-plan.md`](2026-10-17-agent-evals-plan.md) — read it first, all of it.
+Branch: **`plan/agents/2026-10-17-agent-evals`** · PR: (set when opened) (draft), shared by all three sessions.
+
+Three Claude Code sessions build this in parallel on the same branch:
+
+- **Session A — Production signal**: where drafts came from, `cmo_draft_outcomes`, the edit taxonomy,
+  `classify_edits`, the price fix, the Reddit seam.
+- **Session B — Harness**: the report format and paired comparison, the cascade judge, the `cmo:eval` case registry
+  and fixtures, `agent:eval` reports, CI and the scheduled eval workflow.
+- **Session C — Coverage**: onboarding, Sales and CMO chat memory-safety cases; trajectory rules for the editor eval.
+
+## Rules for all sessions
+
+1. **Own your paths.** Edit only the paths listed for your session. Need a change in another session's paths? Write
+   it under "Requests" below and let them make it.
+2. **Same branch, no force.** `git pull --rebase origin plan/agents/2026-10-17-agent-evals` before every push; never
+   `--force`; never rebase pushed commits; never push to `main`.
+3. **Small commits, prefixed** `[A]`, `[B]` or `[C]`, English messages, each one green on its own (typecheck + the
+   tests of what it touches). End with the attribution lines your tooling gives you.
+4. **Update your checklist** in this file in the same commit that finishes an item (only your own section).
+5. **Repo rules still apply** (CLAUDE.md): every write through an ownership-checking RPC; money only through the
+   credit module (classifier and judge costs are internal, never charged); every migration has a pgTAP test and is
+   followed by `scripts/dump-schema.sh`; English everywhere, including SQL `raise exception` text and comments you
+   touch (translate Vietnamese comments in lines you edit); comments explain why. Licences: inbox-zero is AGPL —
+   learn only; inspect_ai / promptfoo / autoevals / agentevals are MIT — learn, write our own.
+6. **Heavy suites one at a time** (`db:reset`/`db:test`, `npm run build`, real-model evals).
+7. **Do not deploy.** Marcus runs `db push` and merges after review.
+8. **Real-model runs cost money.** Only with `--yes`, only once per item that asks for it, cost noted here.
+
+## Shared contracts
+
+Land these first; others code against them and they change only through a "Requests" note.
+
+```ts
+// A1 — apps/web/lib/cmo/jobs/edit-taxonomy.ts
+export const EDIT_MODES = ["NO_MEANINGFUL_EDIT", "TOO_SALESY", "WRONG_VOICE", "INVENTED_CLAIM",
+  "TOO_LONG", "HOOK_REWRITTEN", "CTA_REMOVED", "FULL_REWRITE"] as const;
+export type EditMode = (typeof EDIT_MODES)[number];
+export const EDIT_MODE_TEXT: Record<EditMode, string>;
+export type DraftGen = { model: string; prompt_version: string };
+
+// A1 — apps/web/lib/cmo/jobs/runner.ts (A owns these lines)
+export type JobContext = { /* … */ searchReddit?: (query: string) => Promise<RedditThread[]> };
+// drainCmoQueue(store, { runId, budgetMs, searchReddit? })
+
+// B1 — apps/web/lib/eval/compare.ts
+export type CaseResult = { id: string; epoch: number; pass: boolean | null; decided_by: "code" | "judge" | "error";
+  verdict?: string; notes?: string[]; cost_usd?: number; pending?: string /* why it cannot pass yet */ };
+export type EvalReport = { suite: "cmo" | "agent"; git: { head: string; diffHash: string | null }; provider: string;
+  model: string | null; prompt_versions: Record<string, string>; started_at: string; cases: CaseResult[] };
+
+// B1 — apps/web/lib/cmo/jobs/eval/types.ts
+export type EvalFixture = { name: string; docs: Documents; brief: string; clips: ClipInfo[] };
+export type EvalCase = { job: string; run(fixture: EvalFixture, env: EvalEnv): Promise<CaseResult[]> };
+export type EvalEnv = { drain: typeof drainCmoQueue; provider: string; judge: Judge; epoch: number };
+export function registerCases(cases: EvalCase[]): void;
+
+// B1 — apps/web/lib/cmo/jobs/judge.ts
+export type Judge = (input: { job: string; docs: Documents; output: string; criteria?: string[] })
+  => Promise<{ pass: boolean | null; verdict?: string; reasons?: string; cost_usd?: number }>;
+```
+
+## Session A — Production signal
+
+**Owns:** `supabase/**`, `apps/web/lib/cmo/jobs/{draft-post,sales-scan,runner,edit-taxonomy,classify-edits}.ts`,
+`apps/web/lib/cmo/jobs/jobs.check.ts`, `apps/web/app/api/cron/cmo/**`, the `PRICES` constant in
+`apps/web/lib/agent/eval/run.ts` (one-line change; tell B in "Requests" before pushing it).
+
+- [ ] **A1 — Contracts.** `edit-taxonomy.ts` (`EDIT_MODES`, `EDIT_MODE_TEXT`, `DraftGen`, `promptVersion()`);
+      `JobContext.searchReddit` + `drainCmoQueue` option, `sales-scan.ts` uses `ctx.searchReddit ?? searchReddit`.
+      Accept: typecheck; `jobs.check.ts` green; a test that a W4 run with an injected search sees only the injected
+      threads. Push this first.
+- [ ] **A2 — Where drafts came from (P1).** `body.gen` in `draft-post.ts` (model that answered, after failover);
+      `opportunities.gen` column + `cmo_save_opportunities` passes `p_items[].gen`; `sales-scan.ts` sets it.
+      Accept: `jobs.check.ts` asserts `gen` on fake runs; pgTAP for the column.
+- [ ] **A3 — `cmo_draft_outcomes` (P2).** Migration: `pg_trgm` in `extensions`, table + RLS + revokes, new
+      `cmo_decide_post` / `cmo_decide_opportunity` bodies writing the outcome in the same transaction, view
+      `cmo_draft_quality_weekly` (service role only), `EDIT_MODES` check constraint. `dump-schema.sh`.
+      Accept: pgTAP — other user cannot read; user cannot insert/update; approve as written → similarity 1 and
+      right `chosen_version`; approve an alternate edited → < 1 and the nearest version; skip → null similarity;
+      opportunity replied / dismissed → row; `authenticated` cannot select the view. `db:reset && db:test` green.
+- [ ] **A4 — `classify_edits` (P3/P4).** Service-role RPCs `cmo_claim_unclassified_outcomes(p_limit)` /
+      `cmo_set_edit_mode(p_id, p_mode)`; `classify-edits.ts` with `checker` and a fake rule; called from the cron
+      route with a small cap; a check test that `EDIT_MODES` equals the SQL constraint list.
+      Accept: `jobs.check.ts` (fake labels, cap respected, nothing charged); pgTAP for the RPC grants.
+- [ ] **A5 — Prices (P5).** Migration `cache_read = 0.1` for `claude-sonnet-5%` + pgTAP; `PRICES.anthropic` in
+      `run.ts`. Accept: `db:test`; typecheck.
+
+## Session B — Harness
+
+**Owns:** `apps/web/lib/eval/**`, `apps/web/lib/cmo/jobs/{eval,judge}.ts`,
+`apps/web/lib/cmo/jobs/eval/{types,runner,fixtures}.ts`, `apps/web/lib/agent/eval/run.ts` (except A's `PRICES`
+line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-architecture-implementation.md`.
+
+- [ ] **B1 — Contracts.** `compare.ts` types; `eval/types.ts` with `registerCases`; `Judge` type and a fake judge.
+      Accept: typecheck. Push this first.
+- [ ] **B2 — Compare (H1).** `mcnemarExact`, `compareReports`, `kOfK`, `cohensKappa` + `compare.check.ts`.
+      Accept: known (b, c) → known p; identical reports → `INCONCLUSIVE`, p = 1; kappa of identical labels = 1.
+- [ ] **B3 — Cascade judge (H2).** `judge.ts` per the plan: code tier first, `checker` on the other provider,
+      labels with reasons first, binary criteria one at a time, failures → `pass: null`.
+      Accept: unit test with a stub `structured` — code failure never calls the judge; thrown error and unknown
+      label → unscored; fake provider returns fixed labels.
+- [ ] **B4 — `cmo:eval` registry (H3).** Move W1/W2/W5 into the registry without changing what they check; 3–5 new
+      fixtures; `--epochs`, `--out`, `--compare`, `--max-usd` / `EVAL_MAX_USD`; report JSON; `pending` cases listed
+      apart and never fail the run. Accept: `cmo:eval -- --provider fake` green and writes the report; same rows
+      as `main` for W1/W2/W5 on the old three fixtures.
+- [ ] **B5 — `agent:eval` reports (H4).** Same `EvalReport`, `--epochs`, `--compare`. Accept:
+      `agent:eval -- --provider fake` result unchanged; report written; `--compare` of two fake runs → INCONCLUSIVE.
+- [ ] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
+      dispatch + weekly cron, cost cap, artifact upload, compare to previous artifact, actions pinned to SHAs.
+      Replace "judge the drafts by eye" in `docs/cmo-architecture-implementation.md`. Accept: CI green on the PR;
+      one manual dispatch (fake provider) run attached; real-provider run noted with cost if a key is set.
+
+## Session C — Coverage
+
+**Owns:** `apps/web/lib/cmo/jobs/eval/cases/**`, `apps/web/lib/cmo/jobs/eval/fixtures/{sites,reddit}/**`,
+`apps/web/lib/agent/eval/{tasks,cmo-tasks,cmo-run,trajectory}.ts`, `apps/web/lib/agent/providers/fake.ts` (fake
+scripts only).
+
+Until A1/B1 land, code against the contracts above with local stubs; delete the stubs when they land.
+
+- [ ] **C1 — Onboarding (C1).** 4–6 site snapshots + reference documents; code tier + factuality judge; the hidden-text
+      snapshot marked `pending: "security report #2 (untrusted.ts)"`. Accept: fake run green; one real run noted.
+- [ ] **C2 — Sales W4 (C2).** 10–15 threads via `searchReddit` injection; exclusions, quotes, no link, no
+      product-first opener, injections ignored; judge "helpful before the product". Accept: fake run green; the two
+      injection threads fail a deliberately bad fake reply; one real run noted.
+- [ ] **C3 — Memory-safety (C3).** `cmo-run.ts` seam (recording executor, same loop), `cmo-tasks.ts` cases by
+      `expectedWriteBehavior`; tool-output cases `pending: "security report #1 (tainted gate)"`; one negative control.
+      Accept: fake run green; founder-said case writes `remember`; negative control writes nothing.
+- [ ] **C4 — Trajectory (C4).** `trajectory.ts` helpers; rules on `filler`, `pauses` and the create-video tasks.
+      Accept: `agent:eval -- --provider fake` still passes every task that passed on `main`; a fake script edited
+      to break a rule is caught (then reverted).
+
+## Sync points
+
+1. A1 and B1 push first (contracts). C starts on stubs at once.
+2. B4 lands the registry → C registers its cases there.
+3. C1–C3 pushed → B6 adds the CI step, so the fake CI run covers every case.
+4. Last session to finish moves the PR out of draft once CI is green and every checklist item is done or explained
+   here.
+
+## Requests
+
+_None yet._
