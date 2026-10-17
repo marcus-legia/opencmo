@@ -187,7 +187,7 @@ Checklist:
 
 Checklist:
 
-- [ ] **C1 — Contracts.** The shared fixture; `lib/net/address.ts` with `address.check.ts` reading the fixture;
+- [x] **C1 — Contracts.** The shared fixture; `lib/net/address.ts` with `address.check.ts` reading the fixture;
   `test_addresses.py` reading the same fixture.
   - **Accept:** both checks green on the full table. Push this first.
 - [ ] **C2 — Web side of fix 7.**
