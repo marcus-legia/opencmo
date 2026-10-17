@@ -107,8 +107,9 @@ Checklist:
   - `api_key_owner` writes `last_used_at` at most every 5 minutes.
   - **Accept:** pgTAP green; `npm run test --workspace @opencmo/mcp-server` has a case "batch of 20 → one admission
     call" and the 403 body.
-- [x] **A2 — Secrets out of the MCP container (fix 1).** `modal serve` was not run: the session container has no
-  Modal credentials; the deploy steps are in the PR body.
+- [x] **A2 — Secrets out of the MCP container (fix 1).** `modal serve` needs Modal credentials the session container
+  does not have. Checked instead: both app files load with `modal` (`opencmo-mcp` holds only `mcp_server`), and the
+  built bundle starts with `HOST=0.0.0.0` (healthz 200, unauthenticated POST 401). Deploy steps are in the PR body.
   - The MCP app lives in its own file and Modal workspace, with only the `opencmo-mcp` secret.
   - Confirm-code key `OPENCMO_MCP_CONFIRM_KEY`, fail closed when missing.
   - The worker's `wake` endpoint plus `OPENCMO_WAKE_TOKEN`; `wakeWorker` uses it when it has no worker token.
@@ -122,9 +123,8 @@ Checklist:
     - The deploy steps for O2 are written in the PR body.
 - [x] **A3 — Flood cap (fix 2).** `max_containers=3` on `mcp_server`, with the reason (workspace quota) in a comment.
   - **Accept:** `test_modal_secrets.py` also asserts `max_containers`.
-- [x] **A4 — Retire `/api/mcp` (fix 8).** Run in the session container (Chromium, no Chrome): both MCP cases pass
-  against `packages/mcp-server` on 8787 with a clip from `new_edit` and the email provider on (see the B request
-  below). The committed spec's `makeClipsInEditor` step needs real Chrome for H.264, so run it once on a laptop.
+- [x] **A4 — Retire `/api/mcp` (fix 8).** `e2e/mcp.spec.ts` passes as committed (2/2) at 38ded7c, run in the session
+  container with Chrome for Testing 131 (it plays H.264; plain Chromium cannot open the editor).
   - The route returns 410 with the new URL.
   - Delete `lib/mcp/server.ts`.
   - `connect.ts` and `ApiKeys.tsx` stop falling back to the old URL.
