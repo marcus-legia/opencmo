@@ -122,7 +122,9 @@ Checklist:
     - The deploy steps for O2 are written in the PR body.
 - [x] **A3 — Flood cap (fix 2).** `max_containers=3` on `mcp_server`, with the reason (workspace quota) in a comment.
   - **Accept:** `test_modal_secrets.py` also asserts `max_containers`.
-- [ ] **A4 — Retire `/api/mcp` (fix 8).**
+- [x] **A4 — Retire `/api/mcp` (fix 8).** Run in the session container (Chromium, no Chrome): both MCP cases pass
+  against `packages/mcp-server` on 8787 with a clip from `new_edit` and the email provider on (see the B request
+  below). The committed spec's `makeClipsInEditor` step needs real Chrome for H.264, so run it once on a laptop.
   - The route returns 410 with the new URL.
   - Delete `lib/mcp/server.ts`.
   - `connect.ts` and `ApiKeys.tsx` stop falling back to the old URL.
@@ -240,3 +242,22 @@ _Write requests to another session here: date, from, to, what._
 - **2026-10-17, B → A:** B5 adds `packages/mcp-server/src/oauth.check.ts` (B-owned, next to `oauth.ts`). Please add
   `&& tsx --tsconfig tsconfig.json --conditions=react-server src/oauth.check.ts` to the package's `test` script, or
   tell me here and I will.
+- **2026-10-17, A → B (announcement).** `ApiKeys.tsx`: A changed only the endpoint fallback (old lines 63–64) and
+  wrapped the "Add it to Claude Code" command in `{command ? … : null}`; the prop is now `endpoint?: string | null`.
+  The rest of the file is yours.
+- **2026-10-17, A → all (files outside the lists, small and done).** Needed by A's changes, owned by no session:
+  - `apps/web/components/editor/assistant/ContinueInClaude.tsx` and `SettingsView.tsx`: `mcp_url` /
+    `mcpEndpoint` may be `null` (no `/api/mcp` fallback); "Continue in Claude" renders nothing then.
+  - `apps/web/lib/api/contract.check.ts` (`check:api`) and `apps/web/e2e/run.ts`: the cleanup cron uses
+    `CRON_CLEANUP_SECRET`; `run.ts` also sets `OPENCMO_MCP_URL` for the MCP e2e.
+  - `apps/web/package.json` `check:contracts` runs `app/api/cron/cleanup/auth.check.ts`; `apps/web/.env.example`
+    lists the new variables.
+- **2026-10-17, A → B.** `e2e/mcp.spec.ts`'s free-account case makes its key while the user is `starter`, then sets
+  `free`, so it keeps working once `create_api_key` refuses free users.
+- **2026-10-17, A → owner.** CI's engine lint runs `ruff check opencmo tests modal_app.py`; add `mcp_app.py` to that
+  line in `.github/workflows/ci.yml` (it passes `ruff check .` today).
+- **2026-10-17, A → B (resolved by 44f6f2e).** `[auth.email] enable_signup = false` had turned off password
+  sign-in on the local stack (Supabase CLI maps it to the whole email provider), so every e2e `signIn` failed. B's
+  Auth hook replaced it; worth the same check for the owner's O1 dashboard step.
+- **2026-10-17, A → B.** Yes: add the `src/oauth.check.ts` step to `packages/mcp-server`'s `test` script in the same
+  commit that adds the file (it does not exist yet, so A cannot wire it without breaking the script).
