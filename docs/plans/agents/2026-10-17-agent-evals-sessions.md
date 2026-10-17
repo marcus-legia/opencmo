@@ -148,7 +148,7 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       `--max-usd`. Fake result unchanged: 41/43 before and after; the two failures (`explain-make`,
       `explain-vaccine`) need the explainer renderer (`OPENCMO_MOTION=local` + Chrome), see B6. Two full fake runs
       compared → INCONCLUSIVE, 43 paired, p = 1.
-- [ ] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
+- [x] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
       dispatch + weekly cron, cost cap, artifact upload, compare to previous artifact, actions pinned to SHAs.
       Replace "judge the drafts by eye" in `docs/cmo-architecture-implementation.md`. Accept: CI green on the PR;
       one manual dispatch (fake provider) run attached; real-provider run noted with cost if a key is set.
@@ -159,6 +159,12 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       registered), `EVAL_MAX_USD` default $3, report uploaded as `eval-<suite>-<provider>` and compared with the
       newest earlier artifact of that name; keys only in the `ai-evals` environment; actionlint clean. GitHub only
       dispatches workflows that exist on `main`, so the manual run waits for the merge.
+      _Verified:_ CI green on `470be3b` (all six jobs; the motion job's fake `agent:eval`: 43/43 editor tasks, CMO
+      chat 4/4 + 2 pending). Locally on the same tree: `typecheck`, `npm run build`, `check:contracts` (incl.
+      `cmo:eval --provider fake`: W1/W2/W5/W0/W4, 1 pending) green. **Not done:** the manual dispatch run (needs the
+      workflow on `main`) and real-provider runs — no API key in the cloud session, so $0 spent. After the merge:
+      add `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` to the `ai-evals` environment and dispatch once with
+      `provider: fake`, then once with a real provider (cap $3).
 
 ## Session C — Coverage
 
