@@ -74,10 +74,13 @@ export function cascade(id: string, epoch: number, issues: string[], judge: Judg
 `apps/web/lib/cmo/jobs/jobs.check.ts`, `apps/web/app/api/cron/cmo/**`, the `PRICES` constant in
 `apps/web/lib/agent/eval/run.ts` (one-line change; tell B in "Requests" before pushing it).
 
-- [ ] **A1 — Contracts.** `edit-taxonomy.ts` (`EDIT_MODES`, `EDIT_MODE_TEXT`, `DraftGen`, `promptVersion()`);
+- [x] **A1 — Contracts.** `edit-taxonomy.ts` (`EDIT_MODES`, `EDIT_MODE_TEXT`, `DraftGen`, `promptVersion()`);
       `JobContext.searchReddit` + `drainCmoQueue` option, `sales-scan.ts` uses `ctx.searchReddit ?? searchReddit`.
       Accept: typecheck; `jobs.check.ts` green; a test that a W4 run with an injected search sees only the injected
       threads. Push this first.
+      _Done:_ also `genModel(answered, brain, fake)` in `edit-taxonomy.ts` (`founder-claude` for inbox runs, `fake`
+      in fake mode). The option travels `drainCmoQueue(store, { searchReddit })` → `runOne(store, run, opts)` →
+      `ctx.searchReddit`; production callers pass nothing.
 - [ ] **A2 — Where drafts came from (P1).** `body.gen` in `draft-post.ts` (model that answered, after failover);
       `opportunities.gen` column + `cmo_save_opportunities` passes `p_items[].gen`; `sales-scan.ts` sets it.
       Accept: `jobs.check.ts` asserts `gen` on fake runs; pgTAP for the column.

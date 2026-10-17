@@ -157,12 +157,13 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     const found = new Map<string, RedditThread>();
     const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000;
     const list = queries.slice(0, MAX_QUERIES);
+    const search = ctx.searchReddit ?? searchReddit;
     let failed = 0;
     let lastError = "Reddit did not answer. Try again in a minute.";
     for (const query of list) {
       let results: RedditThread[];
       try {
-        results = await searchReddit(query);
+        results = await search(query);
       } catch (error) {
         if (!(error instanceof SocialReadError)) throw error;
         // Thiếu/sai khoá thì truy vấn nào cũng hỏng: dừng ngay. Lỗi khác chỉ bỏ truy vấn đó.

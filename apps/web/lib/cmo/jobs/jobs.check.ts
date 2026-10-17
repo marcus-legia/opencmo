@@ -15,7 +15,7 @@ import { pickDueItem } from "./draft-post";
 import { toPlanItems } from "./plan-week";
 import { drainCmoQueue } from "./runner";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, timingScore } from "./sales-scan";
-import { parseRedditSearch } from "../social/reddit";
+import { parseRedditSearch, type RedditThread } from "../social/reddit";
 import { checkCaptions } from "./video-pack";
 import { memoryStore } from "./memory-store";
 import { isoDay, type ClipJob, type Documents, type ItemRow, type MemoryEvent, type PlatformCaptions } from "./types";
@@ -134,6 +134,20 @@ async function main() {
   assert.equal(empty.status, "done", `lượt rỗng vẫn xong (${empty.error})`);
   assert.deepEqual(empty.output, { cards: 0, refund: true }, "lượt rỗng hoàn credit");
   assert.equal(empty.steps.at(-1)!.label, "No conversations worth joining today");
+
+  // An injected search (the evals' seam) replaces Reddit: only its threads become cards.
+  const injected = (n: number): RedditThread => ({
+    url: `https://www.reddit.com/r/freelance/comments/inj${n}/`, community: "freelance", title: `Clients pay me late ${n}`,
+    author: "someone", text: `Every month the same story. My clients pay invoices weeks late and I hate chasing them.`, comments: 4,
+    postedAt: new Date().toISOString(),
+  });
+  const queried: string[] = [];
+  const memInj = memoryStore(docs);
+  const inj = memInj.enqueue("sales_scan");
+  await drainCmoQueue(memInj.store, { searchReddit: async (query) => (queried.push(query), [injected(1), injected(2)]) });
+  assert.equal(inj.status, "done", `W4 with an injected search (${inj.error})`);
+  assert.ok(queried.length > 0, "the injected search was asked");
+  assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
 
   // W5: chờ job clip (hoãn, không tính lần thử) → xong thì viết caption năm nền tảng và ghi thẻ.
   const mem5 = memoryStore(docs);
