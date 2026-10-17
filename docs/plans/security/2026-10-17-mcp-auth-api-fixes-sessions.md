@@ -1,7 +1,7 @@
 # Security fixes (MCP, auth, API): work split for three sessions, one PR
 
 Plan: [`2026-10-17-mcp-auth-api-fixes-plan.md`](2026-10-17-mcp-auth-api-fixes-plan.md). Read all of it first.
-Branch: **`plan/security/2026-10-17-mcp-auth-api-fixes`** · PR: PR_LINK (draft), shared by all three sessions.
+Branch: **`plan/security/2026-10-17-mcp-auth-api-fixes`** · PR: [#74](https://github.com/marcus-legia/opencmo/pull/74) (draft), shared by all three sessions.
 
 Three Claude Code sessions build this in parallel on the same branch:
 

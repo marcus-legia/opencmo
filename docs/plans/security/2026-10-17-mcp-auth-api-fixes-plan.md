@@ -1,6 +1,6 @@
 # Plan: fix the MCP, auth and API audit findings  (2026-10-17)
 
-Track: Security · PR: PR_LINK · Work split: [`2026-10-17-mcp-auth-api-fixes-sessions.md`](2026-10-17-mcp-auth-api-fixes-sessions.md)
+Track: Security · PR: [#74](https://github.com/marcus-legia/opencmo/pull/74) · Work split: [`2026-10-17-mcp-auth-api-fixes-sessions.md`](2026-10-17-mcp-auth-api-fixes-sessions.md)
 
 Source: the audit on PR #73.
 
