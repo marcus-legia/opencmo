@@ -1,0 +1,31 @@
+{
+  "name": "duely",
+  "about": "B2B SaaS, plain voice, price on a pricing page",
+  "snapshot": {
+    "url": "https://duely.example/",
+    "pages": [
+      {
+        "url": "https://duely.example/",
+        "title": "Duely – Invoice reminders that get you paid",
+        "description": "Duely sends polite payment reminders for your invoices so you stop chasing clients.",
+        "headings": ["Get paid without the awkward emails", "Reminders on day 3, 7 and 14", "Works with the invoices you already send", "Built for freelancers and small studios"],
+        "text": "Get paid without the awkward emails. Duely watches the invoices you send and follows up for you. A friendly reminder goes out on day 3, a firmer one on day 7 and a final one on day 14. Clients pay from a link in the email. Duely works with invoices from QuickBooks, Xero and plain PDF. Built for freelancers and small studios who invoice 3 to 20 clients a month. You see every reminder before it is sent the first time, then Duely keeps the schedule."
+      },
+      {
+        "url": "https://duely.example/pricing",
+        "title": "Pricing – Duely",
+        "description": "One plan. $12 a month. Cancel any time.",
+        "headings": ["One simple plan", "Questions"],
+        "text": "One simple plan. $12 per month for unlimited invoices and reminders. 14-day free trial, no card needed. Cancel any time from your settings."
+      }
+    ]
+  },
+  "reference": {
+    "name": "Duely",
+    "one_liner": "Sends polite payment reminders on day 3, 7 and 14 so freelancers get paid without chasing clients.",
+    "icp": "Freelancers and small studios who invoice 3 to 20 clients a month.",
+    "pricing": "$12 per month, unlimited invoices; 14-day free trial.",
+    "prices": ["12"],
+    "competitors": ["FreshBooks", "Chaser", "InvoiceNinja"]
+  }
+}

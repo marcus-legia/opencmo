@@ -1,0 +1,24 @@
+{
+  "name": "pawpal",
+  "about": "B2C mobile app, warm voice, freemium",
+  "snapshot": {
+    "url": "https://pawpal.example/",
+    "pages": [
+      {
+        "url": "https://pawpal.example/",
+        "title": "PawPal | Book a trusted dog walker near you",
+        "description": "Book vetted dog walkers in your neighbourhood in two taps. Live GPS map of every walk.",
+        "headings": ["Walks your dog will love", "Every walker is vetted", "Watch the walk live", "Download the app"],
+        "text": "Walks your dog will love. Book a walker in your neighbourhood in two taps, from 30-minute strolls to hour-long adventures. Every walker passes an ID check and a meet-and-greet before their first walk. Watch the walk live on a GPS map and get a photo when your dog is home. The app is free to download and you pay per walk. PawPal Plus is $4.99 a month and removes booking fees. Available in London, Manchester and Bristol."
+      }
+    ]
+  },
+  "reference": {
+    "name": "PawPal",
+    "one_liner": "An app to book vetted local dog walkers in two taps and watch each walk live on a map.",
+    "icp": "Busy dog owners in London, Manchester and Bristol who need someone to walk their dog.",
+    "pricing": "Free app, pay per walk; PawPal Plus $4.99 a month removes booking fees.",
+    "prices": ["4.99"],
+    "competitors": ["Rover", "Wag"]
+  }
+}

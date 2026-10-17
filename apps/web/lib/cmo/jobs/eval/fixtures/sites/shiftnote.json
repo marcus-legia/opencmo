@@ -1,0 +1,31 @@
+{
+  "name": "shiftnote",
+  "about": "B2B SaaS for restaurants, per-location pricing",
+  "snapshot": {
+    "url": "https://shiftnote.example/",
+    "pages": [
+      {
+        "url": "https://shiftnote.example/",
+        "title": "Shiftnote - Staff scheduling for independent restaurants",
+        "description": "Build next week's rota in 10 minutes. Staff swap shifts from their phones, you approve.",
+        "headings": ["The rota, done in 10 minutes", "Shift swaps without the group chat", "Labour cost on every schedule", "Made for independent restaurants"],
+        "text": "The rota, done in 10 minutes. Drag shifts onto next week, copy last week, and publish to every phone. Staff ask to swap and you approve with one tap, so the group chat stays quiet. Each schedule shows the labour cost against your sales forecast. Made for independent restaurants and cafés with 8 to 60 staff."
+      },
+      {
+        "url": "https://shiftnote.example/pricing",
+        "title": "Pricing - Shiftnote",
+        "description": "$29 per location per month.",
+        "headings": ["Simple pricing"],
+        "text": "Simple pricing. $29 per location per month, any number of staff. Free for 30 days."
+      }
+    ]
+  },
+  "reference": {
+    "name": "Shiftnote",
+    "one_liner": "Staff scheduling for independent restaurants: build the rota in minutes and approve shift swaps from your phone.",
+    "icp": "Owners and managers of independent restaurants and cafés with 8 to 60 staff.",
+    "pricing": "$29 per location per month, any number of staff; free for 30 days.",
+    "prices": ["29"],
+    "competitors": ["7shifts", "Deputy", "Homebase"]
+  }
+}

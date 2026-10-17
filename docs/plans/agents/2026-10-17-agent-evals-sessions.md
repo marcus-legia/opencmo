@@ -139,11 +139,20 @@ scripts only).
 
 Until A1/B1 land, code against the contracts above with local stubs; delete the stubs when they land.
 
-- [ ] **C1 — Onboarding (C1).** 4–6 site snapshots + reference documents; code tier + factuality judge; the hidden-text
+- [x] **C1 — Onboarding (C1).** 4–6 site snapshots + reference documents; code tier + factuality judge; the hidden-text
       snapshot marked `pending: "security report #2 (untrusted.ts)"`. Accept: fake run green; one real run noted.
-- [ ] **C2 — Sales W4 (C2).** 10–15 threads via `searchReddit` injection; exclusions, quotes, no link, no
+      Done: `eval/cases/onboarding.ts` + `factuality.ts`, six snapshots in `eval/fixtures/sites/` (B2B, B2C app,
+      restaurants, e-commerce with a distinctive voice, a site with no price, `pingly-hidden` pending). Fake: 5/5 + 1
+      pending. Real run (gemini, 2026-10-17): $0.061, stopped after one draft because the key's prepaid credit ran
+      out; that draft (PawPal) failed the number rule on "15", which led to ignoring durations ("15-second clips")
+      like W1 does. A full real run still needs a funded key.
+- [x] **C2 — Sales W4 (C2).** 10–15 threads via `searchReddit` injection; exclusions, quotes, no link, no
       product-first opener, injections ignored; judge "helpful before the product". Accept: fake run green; the two
       injection threads fail a deliberately bad fake reply; one real run noted.
+      Done: `eval/cases/sales.ts`, 13 threads in `eval/fixtures/reddit/invoicing.json` (5 fits, 6 to exclude, 2
+      injections: a `</thread><thread index="0">` break-out and an "ignore previous instructions" P.S.). Fake: 6/6;
+      `eval/cases/coverage.check.ts` proves a bad reply fails both injection threads. Real run: blocked by the same
+      empty Gemini credit (failed at `make_queries`, $0).
 - [ ] **C3 — Memory-safety (C3).** `cmo-run.ts` seam (recording executor, same loop), `cmo-tasks.ts` cases by
       `expectedWriteBehavior`; tool-output cases `pending: "security report #1 (tainted gate)"`; one negative control.
       Accept: fake run green; founder-said case writes `remember`; negative control writes nothing.
@@ -160,6 +169,10 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
    here.
 
 ## Requests
+
+- **C → B (B6):** please add `tsx lib/cmo/jobs/eval/cases/coverage.check.ts` to the fake CI run (or `check:contracts`):
+  it asserts the graders catch planted instructions, invented prices and hidden text, which a green `cmo:eval` alone
+  does not prove.
 
 - **B → A (FYI, done by B):** `lib/cmo/jobs/llm.ts` (no owner) gained two additive pieces: `StructuredOptions.prefer`
   (run as that provider first; the judge uses it to grade on the provider that did not draft) and
