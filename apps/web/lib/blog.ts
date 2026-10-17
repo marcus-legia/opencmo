@@ -16,6 +16,7 @@ import { z } from "zod";
 
 import { AUTHORS, type AuthorId } from "@/content/blog/authors";
 import { CATEGORIES, type CategorySlug } from "@/content/blog/categories";
+import { BLOCK_MARKER, splitBlocks, type Segment } from "@/lib/blog-blocks";
 
 export const BLOG_DIR = path.join(process.cwd(), "content/blog");
 export const POSTS_PER_PAGE = 12;
@@ -43,9 +44,10 @@ export type TocItem = { id: string; text: string; level: 2 | 3 };
 export type Post = PostMeta & {
   slug: string;
   updated: string;
-  /** HTML đúng như người viết (cho `check:blog`); `html` là bản đã thêm neo/khung bảng. */
+  /** HTML exactly as written, blocks included (for `check:blog`). */
   body: string;
-  html: string;
+  /** What the page renders: HTML runs (with anchors/table frames added) and visual blocks. */
+  segments: Segment[];
   toc: TocItem[];
   words: number;
   readingMinutes: number;
@@ -82,19 +84,22 @@ export function parsePost(slug: string, source: string): Post {
     throw new Error(`${slug}.html: meta sai — ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   }
   const body = source.slice(match[0].length).trim();
+  const segments = splitBlocks(slug, body).map((s): Segment => (s.kind === "html" ? { kind: "html", html: enhance(s.html) } : s));
+  // Blocks carry JSON (it may contain "<" or ">"), so they are cut out before tags are stripped.
+  const prose = body.replace(BLOCK_MARKER, " ");
 
   const toc: TocItem[] = [];
-  for (const m of body.matchAll(HEADING)) {
+  for (const m of prose.matchAll(HEADING)) {
     toc.push({ level: Number(m[1]) as 2 | 3, id: m[2], text: stripTags(m[4]) });
   }
-  const words = stripTags(body).split(" ").filter(Boolean).length;
+  const words = stripTags(prose).split(" ").filter(Boolean).length;
 
   return {
     ...parsed.data,
     slug,
     updated: parsed.data.updated ?? parsed.data.date,
     body,
-    html: enhance(body),
+    segments,
     toc,
     words,
     readingMinutes: Math.max(1, Math.round(words / 230)),

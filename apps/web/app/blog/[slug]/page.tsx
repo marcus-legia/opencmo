@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PostBody } from "@/components/blog/Blocks";
 import { BlogCta } from "@/components/blog/BlogCta";
 import { Breadcrumbs } from "@/components/blog/BlogChrome";
 import { PostCard } from "@/components/blog/PostCard";
@@ -66,7 +67,9 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       image: absoluteUrl(`/blog/${post.slug}/opengraph-image`),
       datePublished: post.date,
       dateModified: post.updated,
-      author: { "@type": "Person", name: author.name, jobTitle: author.role, url: author.url },
+      author: author.type === "Organization"
+        ? { "@type": "Organization", name: author.name, url: author.url }
+        : { "@type": "Person", name: author.name, jobTitle: author.role, url: author.url },
       publisher: { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: SITE_NAME, logo: absoluteUrl("/icon.svg") },
       articleSection: category.name,
       keywords: post.keywords.join(", "),
@@ -136,7 +139,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
               <p>{post.answer}</p>
             </section>
 
-            <div className="blog-prose blog-article-body" dangerouslySetInnerHTML={{ __html: post.html }} />
+            <PostBody segments={post.segments} />
 
             {post.faq.length > 0 && (
               <section className="blog-faq" aria-labelledby="faq">
