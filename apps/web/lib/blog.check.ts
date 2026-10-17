@@ -13,6 +13,7 @@ import path from "node:path";
 
 import redirects from "../content/blog/redirects.json";
 import { BLOG_DIR, parsePost, stripTags, type Post } from "./blog";
+import { BLOCK_MARKER } from "./blog-blocks";
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+){1,5}$/;
 const STOP_EDGE = new Set(["a", "an", "the", "of", "and", "or", "to", "in", "for", "on", "with", "your", "my"]);
@@ -20,6 +21,11 @@ const ALLOWED_TAGS = new Set([
   "p", "h2", "h3", "h4", "ul", "ol", "li", "a", "strong", "em", "b", "i", "blockquote", "figure", "figcaption",
   "img", "table", "thead", "tbody", "tr", "th", "td", "code", "pre", "hr", "br", "sup", "sub", "mark", "small",
 ]);
+/**
+ * Posts from this date on are the short, visual format: 500–800 words of prose and at
+ * least three blocks of two kinds. Older posts were written before blocks existed.
+ */
+const VISUAL_FROM = "2026-10-17";
 const ALLOWED_ATTRS = new Set(["id", "href", "src", "alt", "title", "width", "height", "colspan", "rowspan", "loading", "rel", "target"]);
 
 function checkSlug(slug: string): string[] {
@@ -67,8 +73,24 @@ function checkHtml(html: string): string[] {
   return errors;
 }
 
+function checkBlocks(post: Post): string[] {
+  const blocks = post.segments.flatMap((s) => (s.kind === "block" ? [s.block] : []));
+  const errors: string[] = [];
+  if (blocks.filter((b) => b.type === "scene").length > 1) errors.push("at most one scene block per post (3D is heavy on phones)");
+  if (post.date < VISUAL_FROM) return errors;
+  const kinds = new Set(blocks.map((b) => b.type));
+  if (blocks.length < 3 || kinds.size < 2) errors.push(`needs ≥ 3 visual blocks of ≥ 2 kinds, has ${blocks.length} of ${kinds.size}`);
+  if (![...kinds].some((k) => k === "chart" || k === "stats" || k === "leaderboard" || k === "scene")) {
+    errors.push("needs at least one data or 3D block (chart, stats, leaderboard or scene)");
+  }
+  if (post.segments[0]?.kind === "block") errors.push("open with a paragraph, not a block");
+  if (post.words > 800) errors.push(`body has ${post.words} words (visual posts: 500–800)`);
+  return errors;
+}
+
 function checkPost(post: Post, slugs: Set<string>): string[] {
-  const errors = [...checkSlug(post.slug), ...checkHtml(post.body)];
+  const prose = post.body.replace(BLOCK_MARKER, " ");
+  const errors = [...checkSlug(post.slug), ...checkHtml(prose), ...checkBlocks(post)];
   if (post.title.length > 65) errors.push(`title dài ${post.title.length} ký tự (tối đa 65 — Google cắt sau đó)`);
   if (post.description.length > 160) errors.push(`description dài ${post.description.length} ký tự (tối đa 160)`);
   const answerWords = post.answer.split(/\s+/).length;
@@ -78,7 +100,7 @@ function checkPost(post: Post, slugs: Set<string>): string[] {
   if (post.date > new Date().toISOString().slice(0, 10)) errors.push(`date ${post.date} ở tương lai — blog build tĩnh, bài sẽ hiện ngay khi merge`);
   if (post.words < 500) errors.push(`thân bài chỉ ${post.words} từ (tối thiểu 500)`);
 
-  const contentLinks = [...post.body.matchAll(/<a\s[^>]*href="(\/[^"]*)"/g)].map((m) => m[1]);
+  const contentLinks = [...prose.matchAll(/<a\s[^>]*href="(\/[^"]*)"/g)].map((m) => m[1]);
   if (contentLinks.length < 2) errors.push(`cần ≥ 2 link nội bộ (landing hoặc bài khác), đang có ${contentLinks.length}`);
   for (const href of contentLinks) {
     const target = href.match(/^\/blog\/([^/#?]+)$/)?.[1];
