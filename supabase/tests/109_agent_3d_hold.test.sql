@@ -5,6 +5,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select no_plan();
 
 insert into auth.users (id, email) values
@@ -30,7 +37,7 @@ select is(public.agent_raise_hold_3d((select id from t1)), 5, 'chưa preview_3d:
 select is(public.credit_balance('e1090000-0000-4000-8000-00000000000a'), 25, 'không trừ thêm');
 
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t1), 'p_0', 'preview_3d', '{"code":"return () => {};"}', 'done',
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t1), 'p_0', 'preview_3d', '{"code":"return () => {};"}', 'done',
        '{"summary":"Previewed the 3D scene"}', null) $$,
   'ghi một lần preview_3d'
 );

@@ -177,6 +177,40 @@ $$;
 
 
 --
+-- Name: agent_append_for(uuid, uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_append_for(p_user uuid, p_turn_id uuid, p_role text, p_content jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_turn public.agent_turns;
+  v_seq int;
+begin
+  v_turn := public.agent_owned_turn(p_turn_id, p_user);
+  if p_role is null or p_role not in ('user', 'assistant') then
+    raise exception 'Invalid assistant message.' using errcode = '22023';
+  end if;
+  if p_content is null or jsonb_typeof(p_content) <> 'array' or pg_column_size(p_content) > 1048576 then
+    raise exception 'Invalid assistant message.' using errcode = '22023';
+  end if;
+  perform 1 from public.agent_sessions where id = v_turn.session_id for update;
+  select status into v_turn.status from public.agent_turns where id = p_turn_id;
+  if v_turn.status <> 'running' then
+    raise exception 'This assistant turn was stopped.' using errcode = 'P0001';
+  end if;
+  select coalesce(max(seq), 0) + 1 into v_seq from public.agent_messages where session_id = v_turn.session_id;
+  insert into public.agent_messages(session_id, turn_id, seq, role, content)
+  values (v_turn.session_id, p_turn_id, v_seq, p_role, p_content);
+  update public.agent_sessions set lock_until = now() + interval '6 minutes', updated_at = now()
+  where id = v_turn.session_id;
+  return v_seq;
+end;
+$$;
+
+
+--
 -- Name: agent_auto_extend(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -384,6 +418,9 @@ begin
   if p_status not in ('done', 'failed') then
     raise exception 'Invalid tool status.' using errcode = '22023';
   end if;
+  if pg_column_size(p_result) > 262144 then
+    raise exception 'This tool call is too large to save.' using errcode = '22023';
+  end if;
   update public.agent_tool_calls set status = p_status, result = p_result
   where turn_id = p_turn_id and tool_use_id = p_tool_use_id and status = 'pending';
   if not found then
@@ -464,6 +501,24 @@ declare
   v_user uuid := public.require_user();
 begin
   perform public.agent_owned_turn(p_turn_id, v_user);
+  if p_status not in ('done', 'failed', 'stopped') then
+    raise exception 'Invalid turn status.' using errcode = '22023';
+  end if;
+  return public.agent_close_turn(p_turn_id, p_status, p_error);
+end;
+$$;
+
+
+--
+-- Name: agent_finish_turn_for(uuid, uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_finish_turn_for(p_user uuid, p_turn_id uuid, p_status text, p_error text) RETURNS public.agent_turns
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
   if p_status not in ('done', 'failed', 'stopped') then
     raise exception 'Invalid turn status.' using errcode = '22023';
   end if;
@@ -911,6 +966,29 @@ $$;
 
 
 --
+-- Name: agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_record_tool_for(p_user uuid, p_turn_id uuid, p_tool_use_id text, p_name text, p_input jsonb, p_status text, p_result jsonb, p_content jsonb DEFAULT NULL::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
+  if p_status not in ('pending', 'done', 'failed') then
+    raise exception 'Invalid tool status.' using errcode = '22023';
+  end if;
+  -- 256 KB each: far above any real tool call, far below what bloats the table.
+  if pg_column_size(p_input) > 262144 or pg_column_size(p_result) > 262144 or pg_column_size(p_content) > 262144 then
+    raise exception 'This tool call is too large to save.' using errcode = '22023';
+  end if;
+  insert into public.agent_tool_calls(turn_id, tool_use_id, name, input, status, result, content)
+  values (p_turn_id, p_tool_use_id, p_name, coalesce(p_input, '{}'::jsonb), p_status, p_result, p_content);
+end;
+$$;
+
+
+--
 -- Name: agent_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -923,6 +1001,31 @@ declare
   v_total bigint;
 begin
   perform public.agent_owned_turn(p_turn_id, v_user);
+  if least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
+    raise exception 'Invalid usage.' using errcode = '22023';
+  end if;
+  insert into public.agent_usage(turn_id, model, input_tokens, output_tokens,
+    cache_read_tokens, cache_write_tokens, micro_usd)
+  values (p_turn_id, left(coalesce(p_model, 'unknown'), 64), p_input, p_output, p_cache_read, p_cache_write,
+    public.agent_micro_usd(p_model, p_input, p_output, p_cache_read, p_cache_write));
+  select coalesce(sum(micro_usd), 0)::bigint into v_total from public.agent_usage where turn_id = p_turn_id;
+  return public.agent_credits(v_total);
+end;
+$$;
+
+
+--
+-- Name: agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.agent_record_usage_for(p_user uuid, p_turn_id uuid, p_model text, p_input integer, p_output integer, p_cache_read integer, p_cache_write integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_total bigint;
+begin
+  perform public.agent_owned_turn(p_turn_id, p_user);
   if least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
     raise exception 'Invalid usage.' using errcode = '22023';
   end if;

@@ -60,6 +60,7 @@ import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepa
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
@@ -165,6 +166,7 @@ export async function clipScope(
   clipId: string,
   turn: Turn,
   checkpointed: boolean,
+  ledger: Ledger,
 ): Promise<Scope> {
   const checkpoint = checkpointing(supabase, turn, checkpointed);
   return clipScopeWith(supabase, context, clipId, {
@@ -173,7 +175,7 @@ export async function clipScope(
       mark: checkpoint.mark,
     },
     recordUsage: async (usage) => {
-      await rpcOrThrow<number>(supabase, "agent_record_usage", {
+      await ledger<number>("agent_record_usage", {
         p_turn_id: turn.id,
         p_model: usage.model,
         p_input: usage.input,

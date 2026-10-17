@@ -15,6 +15,7 @@ import type { CaseResult } from "@/lib/eval/compare";
 import { usageUsd } from "@/lib/eval/prices";
 
 import { isCmoWrite } from "../cmo-tools";
+import type { Ledger } from "../ledger";
 import { runTurn } from "../loop";
 import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
@@ -34,7 +35,7 @@ export type Recording = { rpcs: { name: string; args: Record<string, unknown> }[
  * answered with the shape the real RPC returns. Filters other than `eq` are ignored: the fixture
  * tables only hold what the case needs.
  */
-export function recordingClient(tables: Record<string, Row[]>): { client: SupabaseClient; recording: Recording } {
+export function recordingClient(tables: Record<string, Row[]>): { client: SupabaseClient; ledger: Ledger; recording: Recording } {
   const recording: Recording = { rpcs: [], calls: [], messages: [], turn: { status: "running", error: null }, costUsd: 0 };
   const source = (table: string): Row[] => {
     if (table === "agent_turns") return [{ ...recording.turn, checkpoint_id: null, hold_credits: 1000 }];
@@ -89,12 +90,14 @@ export function recordingClient(tables: Record<string, Row[]>): { client: Supaba
       return { data: answers[name]?.(args) ?? null, error: null };
     },
   };
-  return { client: client as unknown as SupabaseClient, recording };
+  // The server's ledger (`_for` RPCs under the service role) answers from the same recording.
+  const ledger: Ledger = async <T,>(name: string, args: Record<string, unknown>) => (await client.rpc(name, args)).data as T;
+  return { client: client as unknown as SupabaseClient, ledger, recording };
 }
 
 export async function runCmoTask(task: CmoEvalTask, provider: Provider): Promise<Recording> {
   const tables = { marketing_documents_latest: Object.entries(CMO_DOCS).map(([kind, body]) => ({ kind, body, created_by: "user", version: 1 })) };
-  const { client, recording } = recordingClient(tables);
+  const { client, ledger, recording } = recordingClient(tables);
   const base = cmoScope(client);
   // The outside world answers with the case's canned text; everything else is the real tool code.
   const scope: Scope = {
@@ -107,7 +110,7 @@ export async function runCmoTask(task: CmoEvalTask, provider: Provider): Promise
   // As `startTurn` (session.ts): documents and state ride along with the first message.
   const opening = `${slashDirective(task.prompt)}${(await scope.context?.()) ?? ""}${await scope.state()}`;
   recording.messages.push({ role: "user", content: provider.userTurn(task.prompt, opening) as unknown[] });
-  await runTurn({ supabase: client, provider, scope, turn: { id: "turn-1", session_id: "session-1", number: 1, prompt: task.prompt }, emit: () => undefined });
+  await runTurn({ supabase: client, ledger, provider, scope, turn: { id: "turn-1", session_id: "session-1", number: 1, prompt: task.prompt }, emit: () => undefined });
   return recording;
 }
 

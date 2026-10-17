@@ -207,7 +207,7 @@ Checklist:
   - **Accept:** a pytest where yt-dlp follows a redirect to `127.0.0.1` fails with the guard's refusal;
     `opencmo doctor` and the engine suite pass; `/usr/bin/time -v` on the 54-minute reference video, under the budgets
     and noted in the PR.
-- [ ] **C4 — Fix 9.**
+- [x] **C4 — Fix 9.** (`agent_complete_tool` got the same 256 KB cap; it stays user-callable.)
   - The four `_for` service-role variants with `p_user`.
   - Revoke the old four from `authenticated`.
   - Size caps.
@@ -226,3 +226,9 @@ Checklist:
 ## Requests
 
 _Write requests to another session here: date, from, to, what._
+
+- **2026-10-17, C → A and B:** pgTAP `182_authenticated_function_allowlist` lists every `public` function
+  `authenticated` can execute. A new function a user may call (e.g. `mcp_admit`, `mcp_grant_record`,
+  `mcp_grant_revoke`) needs one row there in the same commit; a service-role-only one needs
+  `revoke … from public, anon, authenticated`. Changing a signature (as C did for `cmo_remember`) means
+  updating its row. `is_paid(uuid)` is already listed.

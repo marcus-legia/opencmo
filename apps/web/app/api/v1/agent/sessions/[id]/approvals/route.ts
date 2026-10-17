@@ -19,9 +19,10 @@ const body = z.object({
  * Server-Sent Events với route `turns`. Tool đang chờ mà không có quyết định
  * nào thì tính là Cancel: Assistant không bao giờ tự ghi lên nhiều clip.
  */
-export const POST = withApi({ body }, async ({ supabase, body, params }) =>
+export const POST = withApi({ body }, async ({ supabase, user, body, params }) =>
   continueTurn(
     supabase,
+    user.id,
     params.id,
     body.decisions.map((decision) => ({ tool_use_id: decision.tool_use_id, approved: decision.approved })),
   ),
