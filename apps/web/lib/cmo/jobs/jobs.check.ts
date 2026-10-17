@@ -4,10 +4,13 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 process.env.OPENCMO_AGENT_FAKE = "1";
 
 import { checkPost } from "./check-post";
+import { classifyEdits } from "./classify-edits";
+import { EDIT_MODES } from "./edit-taxonomy";
 import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
@@ -396,7 +399,28 @@ async function main() {
   assert.equal(badPlan.status, "failed");
   assert.ok(memX.inbox[0]!.feedback?.startsWith("The answer does not match"), `${memX.inbox[0]!.feedback}`);
 
-  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn đều đúng.");
+  // classify_edits: labels each edited approval once, within the limit, with a known label.
+  const pairs = [
+    { id: "o1", draft: "Most invoices are forgotten, not refused.\nSend a reminder on day 3.", final_text: "Clients forget invoices.\nSend a reminder on day 3." },
+    { id: "o2", draft: "Late invoices are a process problem, not a people problem, and here is the long version of why.", final_text: "Late invoices are a process problem." },
+    { id: "o3", draft: "We built reminders.", final_text: "I got tired of chasing, so I made reminders." },
+  ];
+  const labels = new Map<string, string>();
+  const outcomes = {
+    unclassified: async (limit: number) => pairs.filter((p) => !labels.has(p.id)).slice(0, limit),
+    setEditMode: async (id: string, mode: string) => (labels.has(id) ? false : (labels.set(id, mode), true)),
+  };
+  assert.deepEqual(await classifyEdits(outcomes, { limit: 2 }), { classified: 2, failed: 0 }, "the limit holds");
+  assert.deepEqual(await classifyEdits(outcomes, { limit: 10 }), { classified: 1, failed: 0 }, "the next run takes the rest");
+  assert.deepEqual(Object.fromEntries(labels), { o1: "HOOK_REWRITTEN", o2: "TOO_LONG", o3: "WRONG_VOICE" }, "fake labels by shape");
+  assert.deepEqual(await classifyEdits(outcomes, { budgetMs: 0 }), { classified: 0, failed: 0 }, "no time budget, no calls");
+
+  // EDIT_MODES and the SQL check constraint on cmo_draft_outcomes.edit_mode list the same labels.
+  const migration = readFileSync(new URL("../../../../../supabase/migrations/20261201100000_cmo_draft_outcomes.sql", import.meta.url), "utf8");
+  const sqlModes = [...(migration.match(/edit_mode in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(sqlModes, [...EDIT_MODES], "EDIT_MODES matches the SQL constraint");
+
+  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }
 
 main().catch((error) => {

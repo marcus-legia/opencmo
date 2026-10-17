@@ -100,15 +100,24 @@ export function cascade(id: string, epoch: number, issues: string[], judge: Judg
       for the Supabase `auth`/`storage` schemas (Docker image pulls are blocked here): all 96 pgTAP files pass.
       `current.sql` updated from the before/after diff of a dump, not a fresh dump (the file comes from Postgres 17);
       worth one `scripts/dump-schema.sh` on a machine with Supabase local.
-- [ ] **A4 — `classify_edits` (P3/P4).** Service-role RPCs `cmo_claim_unclassified_outcomes(p_limit)` /
+- [x] **A4 — `classify_edits` (P3/P4).** Service-role RPCs `cmo_claim_unclassified_outcomes(p_limit)` /
       `cmo_set_edit_mode(p_id, p_mode)`; `classify-edits.ts` with `checker` and a fake rule; called from the cron
       route with a small cap; a check test that `EDIT_MODES` equals the SQL constraint list.
       Accept: `jobs.check.ts` (fake labels, cap respected, nothing charged); pgTAP for the RPC grants.
+      _Done:_ the read RPC is `cmo_unclassified_outcomes(p_limit)` (a plain read, nothing is locked: one cron a
+      day), it returns the version the founder started from (`chosen_version`) and the approved text, ≤ 100 rows;
+      `cmo_set_edit_mode` writes a label once. Migration `20261201120000_cmo_classify_edits.sql`, pgTAP
+      `165_cmo_classify_edits`. `classify-edits.ts` runs at the end of `/api/cron/cmo` when the checker has a key:
+      ≤ 30 pairs, a 120 s budget, stops after 3 failed calls in a row, never fails the schedule; it calls
+      `structured()` directly, so no credit moves. `jobs.check.ts`: limit, second run takes the rest, fake labels,
+      zero budget, and `EDIT_MODES` equals the constraint list parsed from the migration.
 - [x] **A5 — Prices (P5).** Migration `cache_read = 0.1` for `claude-sonnet-5%` + pgTAP; `PRICES.anthropic` in
       `run.ts`. Accept: `db:test`; typecheck.
       _Done:_ `20261201110000_sonnet_cache_price.sql` + pgTAP `164_sonnet_cache_price` (a million cache-read
       tokens = 100 000 micro-USD). `PRICES.anthropic` in `run.ts` → Sonnet 5.5 ($2 / $10 / $0.10 / $2.50), matching
-      B's `lib/eval/prices.ts`. Data only, so `current.sql` does not change.
+      B's `lib/eval/prices.ts`. Data only, so `current.sql` does not change. The first push missed that
+      `149_sonnet_price` asserts the old cache-read cost (2.7 → 2.6 USD per million read + written); fixed in the
+      next commit, full suite green since.
 
 ## Session B — Harness
 
