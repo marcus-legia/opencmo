@@ -168,7 +168,9 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       limited to this branch and file for that one run, and the next commit removed it. **Real provider:** no graded
       run: the cloud session has a `GEMINI_API_KEY` but its prepaid
       credit is used up (402 `RESOURCE_EXHAUSTED`), and no Anthropic key. One `cmo:eval --provider gemini --yes --job
-      w1,w2,w4,w0 --max-usd 1` ran: $0 spent, every run reported unfinished with its error (the harness side works). After the merge:
+      w1,w2,w4,w0 --max-usd 1` ran: $0 spent, every run reported unfinished with its error (the harness side works). Re-tried once after a
+      20-token probe answered 200: same result, $0 — the prepaid balance covers only tiny requests (`maxOutputTokens:
+      2000` → 402). A graded real run needs a funded key. After the merge:
       add `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` to the `ai-evals` environment and dispatch once with
       `provider: fake`, then once with a real provider (cap $3).
 
