@@ -9,11 +9,10 @@ import { z } from "zod";
 import { documentsBlock, goalBlock, insightBlock, recall } from "./context";
 import { mondayOf } from "./summarize-memory";
 import { skillText } from "../skills";
-import { fakeAllowed, structured } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import { isoDay, type Documents, type PlanItem } from "./types";
 
-const PlanSchema = z.object({
+export const PlanSchema = z.object({
   items: z
     .array(
       z.object({
@@ -94,11 +93,12 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   );
 
   const plan = await ctx.step("plan_items", "Planning the week", async () => {
-    if (fakeAllowed()) return fakePlan(docs);
     const lastWeek = recent.length
       ? recent.map((i) => `- ${i.day} ${i.department}: ${i.status} "${i.idea}"`).join("\n")
       : "(nothing yet)";
-    return structured({
+    return ctx.think({
+      title: "Plan the founder's next seven days (posts, Reddit, video)",
+      fake: () => fakePlan(docs),
       agent: "planner",
       system: SYSTEM,
       prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${goalBlock(goal)}${insightBlock(insight)}\n\n<last_week>\n${lastWeek}\n</last_week>\n\n${typeof run.input.brief === "string" && run.input.brief ? `Your CMO's brief for this week: "${run.input.brief.slice(0, 300)}"\n\n` : ""}Today is ${isoDay()}. Plan the next seven days.`,

@@ -1,0 +1,25 @@
+{
+  "name": "@opencmo/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "OpenCMO's MCP server (Streamable HTTP, stateless). Runs on Modal as opencmo-mcp; the tools are the web app's Assistant tools.",
+  "scripts": {
+    "dev": "tsx --tsconfig tsconfig.json --conditions=react-server src/main.ts",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.mjs",
+    "check": "tsc --noEmit -p .",
+    "test": "tsx --tsconfig tsconfig.json --conditions=react-server src/server.check.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "modal": "0.10.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3"
+  }
+}

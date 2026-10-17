@@ -1,0 +1,8 @@
+{
+  "name": "opencmo",
+  "version": "0.1.0",
+  "description": "Work with OpenCMO from Claude: plan the week, draft X posts and Reddit replies you approve and post yourself, work the CMO inbox, and edit your own clips and explainers.",
+  "author": { "name": "OpenCMO", "url": "https://opencmo.io" },
+  "homepage": "https://opencmo.io",
+  "keywords": ["marketing", "video", "mcp"]
+}

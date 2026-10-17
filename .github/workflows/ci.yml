@@ -4,94 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
-    # `labeled` lets the `full-ci` label start the heavy jobs on a PR.
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 # Read-only token: workflows from forks must not be able to write to the repo.
-# `pull-requests: read` lets paths-filter list a PR's changed files through the API.
 permissions:
   contents: read
-  pull-requests: read
 
-# Actions minutes are billed now that the repo is private, so CI only runs what a change touches:
-# - every job is gated by the paths it depends on (the `changes` job below);
-# - draft PRs run nothing until they are marked ready;
-# - the heavy jobs (motion, browsers, parity) run on pushes to main, and on a PR only once it
-#   carries the `full-ci` label.
-# A label event gets its own concurrency group so adding an unrelated label never cancels a run.
+# Every job runs on every pull request and every push to main: the repo is public, so Actions
+# minutes are free, and a full run catches what a path filter would miss.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name || 'run' }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  changes:
-    name: changes
-    if: >-
-      github.event_name == 'push' ||
-      (!github.event.pull_request.draft &&
-       (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
-    runs-on: ubuntu-latest
-    outputs:
-      engine: ${{ steps.filter.outputs.engine }}
-      web: ${{ steps.filter.outputs.web }}
-      motion: ${{ steps.filter.outputs.motion }}
-      browsers: ${{ steps.filter.outputs.browsers }}
-      parity: ${{ steps.filter.outputs.parity }}
-      database: ${{ steps.filter.outputs.database }}
-    steps:
-      # Pushes are diffed with git (needs a checkout); PRs are diffed through the API.
-      - uses: actions/checkout@v7
-        if: github.event_name == 'push'
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            shared: &shared
-              - .github/workflows/ci.yml
-            node: &node
-              - package.json
-              - package-lock.json
-            engine:
-              - *shared
-              - packages/engine/**
-              - packages/contracts/**
-              - packages/clip-*/**
-              - packages/editor-parity/**
-            web:
-              - *shared
-              - *node
-              - apps/web/**
-              - packages/contracts/**
-              - packages/clip-*/**
-              - packages/editor-core/**
-              - scripts/**
-              - tests/**
-            motion:
-              - *shared
-              - *node
-              - packages/clip-motion/**
-              - packages/clip-media/**
-            browsers:
-              - *shared
-              - *node
-              - apps/web/**
-              - packages/editor-core/**
-              - packages/clip-*/**
-            parity:
-              - *shared
-              - *node
-              - packages/editor-parity/**
-              - packages/clip-*/**
-            database:
-              - *shared
-              - supabase/**
-              - packages/engine/**
-
   engine:
     name: engine (python)
-    needs: changes
-    # Light jobs already ran for this commit when the `full-ci` label is added.
-    if: needs.changes.outputs.engine == 'true' && github.event.action != 'labeled'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -121,8 +47,6 @@ jobs:
 
   web:
     name: web (Next.js)
-    needs: changes
-    if: needs.changes.outputs.web == 'true' && github.event.action != 'labeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -145,17 +69,20 @@ jobs:
       # Operation registry shared by the editor and `/api/v1/editor/ops`.
       - run: npm run check:editor-core
       - run: npm run test:editor-core
+      # Style skills: markdown → generated index, frontmatter against the capability registry.
+      - run: npm run check:skills
+      - run: npm run test:skills
       - run: npm run typecheck
+      - run: npm run check:mcp-server
+      - run: npm run test:mcp-server
+      # The Modal image runs this bundle: a module it cannot resolve fails here, not at deploy.
+      - run: npm run build:mcp-server
       - run: npm run build
 
   motion:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
     # Remotion in the same Chrome Headless Shell build the references were drawn with.
     name: motion (clip-motion)
-    needs: changes
-    if: >-
-      needs.changes.outputs.motion == 'true' &&
-      (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -177,10 +104,6 @@ jobs:
     # (OPFS, or IndexedDB when createWritable is missing as in Safari 17) on real engines.
     # Needs no Supabase/worker — see apps/web/e2e-compat/compat.spec.ts.
     name: browsers (editor compat)
-    needs: changes
-    if: >-
-      needs.changes.outputs.browsers == 'true' &&
-      (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -201,10 +124,6 @@ jobs:
     # `--phase A3`: every sample, including text and the 7 caption presets. Reference
     # images are in the repo; samples whose reference is known-broken (`oracleBroken`) are skipped.
     name: parity (clip-render vs DS)
-    needs: changes
-    if: >-
-      needs.changes.outputs.parity == 'true' &&
-      (github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -245,8 +164,6 @@ jobs:
 
   database:
     name: database (Supabase)
-    needs: changes
-    if: needs.changes.outputs.database == 'true' && github.event.action != 'labeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

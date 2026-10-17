@@ -58,7 +58,8 @@ function visibility(r: RNode, frame: number): void {
 export function transitionWindow(left: RNode, right: RNode): { start: number; end: number } {
   const middle = Math.max(Math.floor((left.end + right.start) / 2), left.end);
   const spec = (left.node as { transition?: { duration?: number } | null }).transition;
-  const duration = toFrames(spec?.duration ?? 1);
+  // A whip is a snap: a quarter second unless the clip says otherwise.
+  const duration = toFrames(spec?.duration ?? ((spec as { type?: string } | null | undefined)?.type === 'whip' ? 0.25 : 1));
   return { start: middle - duration / 2, end: middle + duration / 2 };
 }
 

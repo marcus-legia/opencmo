@@ -57,6 +57,9 @@ export function markDown(provider: LlmProvider, kind: Outage, model: string, now
   else busyUntil.set(`${provider}:${model}`, Math.max(busyUntil.get(`${provider}:${model}`) ?? 0, until));
 }
 
+/** The provider's key or credit failed recently: every model of it is out, not one busy model. */
+export const accountDown = (provider: LlmProvider, now: number = Date.now()): boolean => (accountDownUntil.get(provider) ?? 0) > now;
+
 export const isDown = (provider: LlmProvider, model: string, now: number = Date.now()): boolean =>
   (accountDownUntil.get(provider) ?? 0) > now || (busyUntil.get(`${provider}:${model}`) ?? 0) > now;
 

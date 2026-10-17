@@ -26,6 +26,7 @@ import {
   type Transcript,
 } from "@opencmo/editor-core";
 
+import { CAPABILITY_IDS, isReady } from "@opencmo/editor-core/capabilities";
 import icons from "../../../../../packages/clip-icons/data/icons.json";
 
 import type { PreparedGeneration } from "../generate-tool";
@@ -910,6 +911,51 @@ export const TASKS: EvalTask[] = [
       const unsafe = outcome.report.issues.filter((issue) => issue.code === "text-unsafe" || issue.code === "caption-overlap" || issue.code === "captions-covered");
       const safe = check(notes, !unsafe.length, `check: ${unsafe.map((issue) => issue.code).join(", ")}`);
       return { pass: quoted && timed && named && role && inside && safe && sane(outcome, notes), notes };
+    },
+  },
+  {
+    // Style skills (docs/style-skills-build.md A8): one Edit Plan, one apply_style, quotes not seconds.
+    id: "style-listicle",
+    prompt: "/style senior-dev-listicle",
+    grade(outcome) {
+      const notes: string[] = [];
+      const calls = outcome.calls ?? [];
+      const styled = calls.filter((call) => call.name === "apply_style");
+      if (!check(notes, styled.length === 1, `${styled.length} apply_style calls, want exactly one`)) return { pass: false, notes };
+      type Plan = {
+        hook?: { lines: string[] };
+        emphasis?: { quote: string }[];
+        chapters?: { quote: string }[];
+        list?: { quote: string; reveal?: { quote: string }[] };
+        proofs?: { capture_id: string; quote: string }[];
+      };
+      const plan = ((styled[0]!.input as { plan?: Plan }).plan ?? {}) as Plan;
+      const quotes = [
+        ...(plan.emphasis ?? []).map((item) => item.quote),
+        ...(plan.chapters ?? []).map((item) => item.quote),
+        ...(plan.list ? [plan.list.quote, ...(plan.list.reveal ?? []).map((item) => item.quote)] : []),
+        ...(plan.proofs ?? []).map((item) => item.quote),
+      ];
+      const missing = quotes.filter((quote) => !quoteFound(outcome.document, quote));
+      const quoted = check(notes, !missing.length, `quotes not in the transcript: ${missing.join(" | ")}`);
+      // Emphasis is rare: at most one emphasized phrase per 2 s of speech.
+      const starts = (plan.emphasis ?? []).map((item) => quoteHit(outcome.document, item.quote)?.start).filter((start): start is number => start !== undefined).sort((a, b) => a - b);
+      const crowded = starts.slice(1).filter((start, index) => start - starts[index]! < 2);
+      const sparse = check(notes, !crowded.length, `${crowded.length} emphasized words within 2 s of the previous one`);
+      const long = (plan.hook?.lines ?? []).filter((line) => line.trim().split(/\s+/).length > 8);
+      const hook = check(notes, Boolean(plan.hook) && !long.length, plan.hook ? `hook lines over 8 words: ${long.join(" | ")}` : "no hook");
+      // A proof needs a capture the Assistant saw ready; this clip cites no page.
+      const unproven = (plan.proofs ?? []).filter((proof) => !calls.some((call) => call.name === "capture_status" && (call.input as { capture_id?: string }).capture_id === proof.capture_id));
+      const proofs = check(notes, !unproven.length, `${unproven.length} proofs without a checked capture`);
+      // The receipt reaches the user: what was skipped, and what is not available while a capability isn't ready.
+      const unready = CAPABILITY_IDS.some((id) => !isReady(id));
+      const reply = outcome.reply ?? "";
+      const reported = check(
+        notes,
+        /skipped/i.test(reply) && (!unready || /not available|unavailable/i.test(reply)),
+        `the reply does not report the receipt (skipped${unready ? ", unavailable" : ""})`,
+      );
+      return { pass: quoted && sparse && hook && proofs && reported && sane(outcome, notes), notes };
     },
   },
 ];

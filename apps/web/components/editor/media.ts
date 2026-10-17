@@ -17,7 +17,7 @@
 
 import type { AssetInput, ClipDocument } from "@opencmo/clip-doc";
 import { FONTS, mediaSources, parseCube, readTranscriptText, type CubeLut, type MediaHost, type MediaResult, type Transcript } from "@opencmo/clip-render";
-import { BRAND_SRC_PREFIX } from "@opencmo/editor-core";
+import { BRAND_SRC_PREFIX, CAPTURE_SRC_PREFIX } from "@opencmo/editor-core";
 
 import { watchFrames } from "./frames";
 import { readLocal } from "./library/store";
@@ -539,6 +539,8 @@ export class BrowserMedia implements MediaHost {
       if (edited) return `/api/v1/editor/transcript?clip_id=${encodeURIComponent(this.clipId)}&hash=${edited[1]}`;
       // Logo của Brand Kit: bucket `brand`, không nằm trong thư viện của clip.
       if (src.startsWith(BRAND_SRC_PREFIX)) return `/api/v1/brand-kits/logo?object=${encodeURIComponent(src.slice(BRAND_SRC_PREFIX.length))}`;
+      // Proof B-roll (Track C): a page capture's screenshot, read under the user's RLS.
+      if (src.startsWith(CAPTURE_SRC_PREFIX)) return `/api/v1/captures/${encodeURIComponent(src.slice(CAPTURE_SRC_PREFIX.length))}/image`;
     }
     const record = libraryRecord(this.manifest, src);
     if (!record) return null;

@@ -5,7 +5,23 @@
  * with the model's thinking, so the directive is the reliable path.)
  */
 
+import { readyStyles } from "./styles";
+
 export type SlashCommand = { name: string; label: string; hint: string; directive: string };
+
+/**
+ * `/style <name>`: offered only while at least one style has every capability it needs, so the menu
+ * never shows a command that cannot do its job.
+ */
+const STYLE_COMMAND: SlashCommand = {
+  name: "style",
+  label: "Apply a style",
+  hint: "A whole look: hook title, captions, punch-ins, proof",
+  directive:
+    'read_skill the style the user names (one of <styles>; if they name none, pick the one that fits and say which), then follow the steps it returns',
+};
+
+const styleReady = readyStyles().length > 0;
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "video", label: "Create a video", hint: "A full AI video from a prompt", directive: "call create_video" },
@@ -29,6 +45,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     hint: "A narrated animated explainer, 15-90 s",
     directive: 'read_guide "explainer" and follow its steps: show the storyboard (say, label and visual of every beat) and ask before writing any code',
   },
+  ...(styleReady ? [STYLE_COMMAND] : []),
 ];
 
 /** The command a prompt starts with, if any (`/video make…`). */

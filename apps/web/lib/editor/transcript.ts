@@ -146,7 +146,7 @@ export async function readProjectTranscript(
   if (path !== MASTER_TRANSCRIPT) throw new OpFailure("This clip's captions point to a file that cannot be edited.");
 
   try {
-    const signed = await signedTranscriptUrl(editorSource(context, clipId));
+    const signed = await signedTranscriptUrl(editorSource(context, clipId), supabase);
     if (signed) {
       const response = await fetch(signed, { cache: "no-store" });
       if (!response.ok) throw new OpFailure("The transcript of this clip could not be loaded.");

@@ -1,5 +1,6 @@
 ---
 name: short-video
+kind: playbook
 description: Short vertical video from the founder's own long video — picking moments, hooks, and captions per platform. Used by the Video agent and the CMO.
 agents: [video, cmo]
 source: marketingskills/social (short-form video), marketingskills/video; claude-code-templates/podcast-content-analyzer, social-media-clip-creator

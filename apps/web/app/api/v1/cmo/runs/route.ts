@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { withApi } from "@/lib/api/handler";
+import { brainMode } from "@/lib/cmo/brain";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,12 @@ const body = z.object({
   idea: z.string().trim().max(300).optional(),
 });
 
-/** "Plan my week", "Run now" của X Agent / Reddit Agent. Trần mỗi ngày + credit kiểm trong `enqueue_cmo_run`. */
-export const POST = withApi({ body }, async ({ supabase, body }) =>
-  startCmoRun(supabase, body.kind, body.idea ? { idea: body.idea } : {}),
-);
+/**
+ * "Plan my week", "Run now" của X Agent / Reddit Agent. Trần mỗi ngày + credit kiểm trong `enqueue_cmo_run`.
+ * In mode B the task goes to the founder's Claude inbox instead of failing for credits.
+ */
+export const POST = withApi({ body }, async ({ supabase, user, body }) => {
+  const input: Record<string, unknown> = body.idea ? { idea: body.idea } : {};
+  if ((await brainMode(supabase, user.id)).brain === "claude") input.brain = "claude";
+  return startCmoRun(supabase, body.kind, input);
+});

@@ -837,10 +837,10 @@
               "$ref": "#/$defs/__schema83"
             },
             "letterSpacing": {
-              "$ref": "#/$defs/__schema84"
+              "$ref": "#/$defs/__schema85"
             },
             "textCase": {
-              "$ref": "#/$defs/__schema85"
+              "$ref": "#/$defs/__schema86"
             },
             "textAlign": {
               "type": "string",
@@ -896,10 +896,10 @@
                     "$ref": "#/$defs/__schema83"
                   },
                   "letterSpacing": {
-                    "$ref": "#/$defs/__schema84"
+                    "$ref": "#/$defs/__schema85"
                   },
                   "textCase": {
-                    "$ref": "#/$defs/__schema85"
+                    "$ref": "#/$defs/__schema86"
                   },
                   "paints": {
                     "$ref": "#/$defs/__schema7"
@@ -954,7 +954,7 @@
               "maxItems": 3,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema86"
+                "$ref": "#/$defs/__schema87"
               }
             },
             "fill": {
@@ -1109,28 +1109,28 @@
               "$ref": "#/$defs/__schema18"
             },
             "objectFit": {
-              "$ref": "#/$defs/__schema87"
-            },
-            "objectPosition": {
               "$ref": "#/$defs/__schema88"
             },
-            "frameRate": {
+            "objectPosition": {
               "$ref": "#/$defs/__schema89"
+            },
+            "frameRate": {
+              "$ref": "#/$defs/__schema90"
             },
             "alpha": {
               "$ref": "#/$defs/__schema22"
             },
             "volume": {
-              "$ref": "#/$defs/__schema90"
-            },
-            "muted": {
               "$ref": "#/$defs/__schema91"
             },
-            "syncTo": {
+            "muted": {
               "$ref": "#/$defs/__schema92"
             },
-            "denoise": {
+            "syncTo": {
               "$ref": "#/$defs/__schema93"
+            },
+            "denoise": {
+              "$ref": "#/$defs/__schema94"
             },
             "paints": {
               "$ref": "#/$defs/__schema7"
@@ -1273,13 +1273,13 @@
               "$ref": "#/$defs/__schema18"
             },
             "objectFit": {
-              "$ref": "#/$defs/__schema87"
-            },
-            "objectPosition": {
               "$ref": "#/$defs/__schema88"
             },
-            "frameRate": {
+            "objectPosition": {
               "$ref": "#/$defs/__schema89"
+            },
+            "frameRate": {
+              "$ref": "#/$defs/__schema90"
             },
             "alpha": {
               "$ref": "#/$defs/__schema22"
@@ -1362,16 +1362,16 @@
               "$ref": "#/$defs/__schema18"
             },
             "volume": {
-              "$ref": "#/$defs/__schema90"
-            },
-            "muted": {
               "$ref": "#/$defs/__schema91"
             },
-            "syncTo": {
+            "muted": {
               "$ref": "#/$defs/__schema92"
             },
-            "denoise": {
+            "syncTo": {
               "$ref": "#/$defs/__schema93"
+            },
+            "denoise": {
+              "$ref": "#/$defs/__schema94"
             },
             "tracks": {
               "$ref": "#/$defs/__schema13"
@@ -1451,7 +1451,7 @@
               "$ref": "#/$defs/__schema6"
             },
             "denoise": {
-              "$ref": "#/$defs/__schema93"
+              "$ref": "#/$defs/__schema94"
             },
             "start": {
               "$ref": "#/$defs/__schema50"
@@ -1635,6 +1635,41 @@
             },
             "censor": {
               "type": "boolean"
+            },
+            "emphasis": {
+              "maxItems": 500,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema95"
+              }
+            },
+            "emphasisStyle": {
+              "type": "object",
+              "properties": {
+                "fontFamily": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "fontStyle": {
+                  "$ref": "#/$defs/__schema84"
+                },
+                "color": {
+                  "$ref": "#/$defs/__schema1"
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 1.6
+                }
+              },
+              "additionalProperties": false
+            },
+            "reveal": {
+              "type": "string",
+              "enum": [
+                "fade"
+              ]
             },
             "seed": {
               "$ref": "#/$defs/__schema2"
@@ -2762,6 +2797,11 @@
           ],
           "additionalProperties": false
         },
+        "style": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
         "studio3d": {
           "type": "object",
           "properties": {
@@ -3065,7 +3105,8 @@
                 "slideFromRight",
                 "slideFromLeft",
                 "fadeToBlack",
-                "fadeToWhite"
+                "fadeToWhite",
+                "whip"
               ]
             },
             "duration": {
@@ -3689,6 +3730,9 @@
       ]
     },
     "__schema83": {
+      "$ref": "#/$defs/__schema84"
+    },
+    "__schema84": {
       "type": "string",
       "enum": [
         "normal",
@@ -3696,10 +3740,10 @@
         "oblique"
       ]
     },
-    "__schema84": {
+    "__schema85": {
       "$ref": "#/$defs/__schema2"
     },
-    "__schema85": {
+    "__schema86": {
       "type": "string",
       "enum": [
         "original",
@@ -3707,7 +3751,7 @@
         "lower"
       ]
     },
-    "__schema86": {
+    "__schema87": {
       "type": "string",
       "enum": [
         "underline",
@@ -3715,28 +3759,44 @@
         "strike"
       ]
     },
-    "__schema87": {
+    "__schema88": {
       "$ref": "#/$defs/__schema20"
     },
-    "__schema88": {
+    "__schema89": {
       "$ref": "#/$defs/__schema21"
     },
-    "__schema89": {
+    "__schema90": {
       "$ref": "#/$defs/__schema2"
     },
-    "__schema90": {
+    "__schema91": {
       "$ref": "#/$defs/__schema6"
     },
-    "__schema91": {
+    "__schema92": {
       "type": "boolean"
     },
-    "__schema92": {
+    "__schema93": {
       "type": "string"
     },
-    "__schema93": {
+    "__schema94": {
       "type": "number",
       "minimum": 0,
       "maximum": 1
+    },
+    "__schema95": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "end": {
+          "$ref": "#/$defs/__schema2"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
     }
   },
   "$id": "https://opencmo.io/schemas/clip-document.json",

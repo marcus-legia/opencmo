@@ -14,7 +14,8 @@ type Key = { id: string; name: string; prefix: string; created_at: string; last_
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "never");
 
-export function ApiKeys() {
+/** `endpoint`: the MCP server clients connect to (`OPENCMO_MCP_URL`, read on the server). */
+export function ApiKeys({ endpoint: configured }: { endpoint?: string } = {}) {
   const [keys, setKeys] = useState<Key[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -59,7 +60,7 @@ export function ApiKeys() {
     }
   };
 
-  const endpoint = typeof window === "undefined" ? "/api/mcp" : `${window.location.origin}/api/mcp`;
+  const endpoint = configured ?? (typeof window === "undefined" ? "/api/mcp" : `${window.location.origin}/api/mcp`);
   const command = created ? `claude mcp add --transport http opencmo ${endpoint} --header "Authorization: Bearer ${created}"` : "";
 
   const copy = async () => {

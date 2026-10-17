@@ -174,6 +174,8 @@ cpu_image = (
             "OPENCMO_3D": "modal",
             # Explainers: the worker makes the voice, then spawns `render_motion` below.
             "OPENCMO_MOTION": "modal",
+            # Proof B-roll: task `capture_page` calls `page_capture` below; no Chromium here.
+            "OPENCMO_CAPTURE": "modal",
         }
     )
 )
@@ -276,6 +278,19 @@ motion_image = (
         " node src/cli.ts render fixtures/vaccine.job.json /tmp/warm.mp4 && rm /tmp/warm.mp4",
     )
 )
+
+# Page captures (docs/style-skills-build.md, C3): Chromium opens pages the user names and runs their
+# JavaScript, so it gets an image and a function of its own with no secrets. Only the engine's
+# `opencmo.capture` and Playwright's Chromium are in it; no Node, no ffmpeg, no fonts beyond
+# what Playwright's `--with-deps` installs plus Noto for non-Latin pages.
+CAPTURE_PLAYWRIGHT = "1.56.0"
+capture_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install("fonts-noto-core", "fonts-noto-cjk", "fonts-noto-color-emoji")
+    .pip_install(f"playwright=={CAPTURE_PLAYWRIGHT}")
+    .run_commands("playwright install --with-deps chromium")
+)
+capture_image = _with_engine(capture_image, face=False)
 
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
@@ -432,6 +447,28 @@ def render_motion(payload: dict) -> bytes:
 
     with tempfile.TemporaryDirectory(prefix="opencmo-motion-") as tmp:
         return render_bytes(payload, Path(tmp))
+
+
+@app.function(
+    image=capture_image,
+    timeout=90,
+    cpu=2,
+    memory=2048,
+    max_containers=8,
+    # No secrets: the page's JavaScript runs here. Network stays on (the page has to load), but
+    # every connection goes through `opencmo.capture.guard`, which refuses private, loopback,
+    # link-local and metadata addresses. Not `block_network=True`: the page could not load.
+)
+def page_capture(spec: dict) -> dict:
+    """`{url, width, max_height}` → `{png: bytes, boxes: dict}`. The worker's `capture_page`
+    task calls this, then moderates and stores the result itself.
+
+    Refusals leave as `CaptureError` with one of the contract's English sentences (Modal pickles
+    the message), so the worker writes the right one for the user.
+    """
+    from opencmo.capture.page import capture
+
+    return capture(spec)
 
 
 @app.cls(
@@ -655,6 +692,57 @@ def cleanup() -> None:
         log.error("OPENCMO_WEB_URL or CRON_SECRET missing: cleanup did not run")
         return
     log.info("Cleanup: %s", cmo_dispatch.call_cron(*web, "/api/cron/cleanup", timeout=75.0))
+
+
+# --------------------------------------------------------------------------- MCP server
+# `opencmo-mcp` (docs/mcp-on-modal-plan.md): the TypeScript MCP server (packages/mcp-server) that
+# lets the user's own Claude drive OpenCMO. One small always-warm container answers every session:
+# the server is stateless, waits on the database and Modal, and never runs scene code (previews go
+# to `motion_preview`, renders through the task queue to `render_motion`).
+#
+# Build the bundle first; without it the app deploys without this function:
+#     npm run build --workspace @opencmo/mcp-server
+#     modal secret create opencmo-mcp \
+#         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... SUPABASE_JWT_SECRET=... \
+#         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... MODAL_SUBMIT_URL=... \
+#         OPENCMO_WEB_URL=https://opencmo.io \
+#         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.modal.run \
+#         MODAL_TOKEN_ID=... MODAL_TOKEN_SECRET=...  # optional: tools that call Modal directly
+# The other secrets are the web app's own keys: the service key for `api_key_owner`, the worker
+# token to wake the worker, and the provider keys, without which the model catalog hides the
+# generation tools exactly as on Vercel.
+MCP_PORT = 8000
+_MCP_BUNDLE = _PACKAGES / "mcp-server" / "dist" / "server.cjs"
+_MCP_ROOT = "/root/mcp"
+
+if _MCP_BUNDLE.exists():
+    mcp_image = _with_node(
+        modal.Image.debian_slim(python_version="3.12").apt_install("curl", "xz-utils")
+    ).add_local_file(_MCP_BUNDLE, remote_path=f"{_MCP_ROOT}/server.cjs")
+
+    @app.function(
+        image=mcp_image,
+        secrets=[secret, voice_secret, fal_secret, modal.Secret.from_name("opencmo-mcp")],
+        # Warm for a snappy connector (0.25 core, 0.5 GiB). Modal cuts web requests at 150 s,
+        # which is why every slow tool is async.
+        min_containers=1,
+        cpu=0.25,
+        memory=512,
+        timeout=150,
+    )
+    @modal.concurrent(max_inputs=50)
+    @modal.web_server(port=MCP_PORT, startup_timeout=60, label=f"{APP_NAME}-mcp")
+    def mcp_server() -> None:
+        import subprocess
+
+        env = {**os.environ, "PORT": str(MCP_PORT), "HOST": "0.0.0.0"}
+        # The worker's secret names the database SUPABASE_URL; the web code reads the public name.
+        env.setdefault("NEXT_PUBLIC_SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
+        subprocess.Popen(["node", "--enable-source-maps", f"{_MCP_ROOT}/server.cjs"], env=env)
+else:
+    log.warning(
+        "opencmo-mcp not deployed: build it first (npm run build --workspace @opencmo/mcp-server)."
+    )
 
 
 @app.local_entrypoint()

@@ -98,6 +98,24 @@ export type ClipJob = { status: "queued" | "running" | "done" | "failed" | "canc
 /** Caption cho năm nền tảng của MỘT clip. */
 export type PlatformCaptions = { tiktok: string; reels: string; shorts: string; facebook: string; threads: string };
 
+/** Who thinks for a run: OpenCMO's own models, or the founder's Claude through the inbox. */
+export type Brain = "opencmo" | "claude";
+
+/** A model call a run could not make itself, as the founder's Claude reads it in the inbox. */
+export type InboxRequest = {
+  /** What Claude is asked to do, one line. */
+  title: string;
+  /** The agent that would have answered (`lib/cmo/agents/registry.ts`). */
+  agent: string;
+  system: string;
+  prompt: string;
+  /** JSON Schema of the answer: the job validates it with the same zod schema. */
+  schema: Record<string, unknown>;
+};
+
+/** What an inbox replay starts from: the answers given so far, and the step results kept between rounds. */
+export type InboxState = { answers: Record<string, unknown>; memo: Record<string, unknown> };
+
 /** Mọi đọc/ghi của một việc CMO đi qua đây: thật là Supabase (service role), test là bộ nhớ. */
 export interface CmoStore {
   claim(runId?: string): Promise<QueuedRun | null>;
@@ -134,6 +152,12 @@ export interface CmoStore {
   latestInsight(userId: string): Promise<CompetitorInsight | null>;
   /** W6-lite: số liệu bài đã đăng; chỉ nhận bài `published` của chính người dùng. */
   saveMetrics(userId: string, rows: MetricRow[]): Promise<number>;
+  /** The inbox item a replay run answers; null when it is gone or not the user's. */
+  inbox(userId: string, inboxId: string): Promise<InboxState | null>;
+  /** Writes the waiting model call to the run's inbox item and ends the run; null when the lease was lost. */
+  openInbox(run: QueuedRun, step: string, request: InboxRequest, memo: Record<string, unknown>): Promise<string | null>;
+  /** A replay ended: closes the item, or reopens it with the reason the answer failed. */
+  finishInbox(run: QueuedRun, ok: boolean, feedback: string | null): Promise<void>;
 }
 
 /** Ngày theo UTC dạng YYYY-MM-DD, cộng `offset` ngày. Cùng mốc với `current_date` của Postgres (UTC). */

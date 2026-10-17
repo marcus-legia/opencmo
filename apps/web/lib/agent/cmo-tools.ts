@@ -17,7 +17,7 @@ import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { readSite, SiteError } from "@/lib/cmo/site";
-import { isoDay, type CompetitorInsight, type Lesson } from "@/lib/cmo/jobs/types";
+import { isoDay, type Brain, type CompetitorInsight, type Lesson } from "@/lib/cmo/jobs/types";
 
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
@@ -238,8 +238,11 @@ const data = (value: unknown) => JSON.stringify({ untrusted_data: value });
  */
 export const SITE_READS_PER_TURN = 3;
 
-/** Counters that live for one request (the scope is rebuilt every turn). */
-export type CmoTurn = { siteReads: number };
+/**
+ * Counters that live for one request (the scope is rebuilt every turn). `brain: "claude"`: the
+ * caller is the founder's own Claude (MCP), so tasks it hands out think with it, through the inbox.
+ */
+export type CmoTurn = { siteReads: number; brain?: Brain };
 
 export async function runCmoTool(supabase: SupabaseClient, name: string, input: unknown, turn: CmoTurn = { siteReads: 0 }): Promise<ToolOutcome> {
   switch (name) {
@@ -314,7 +317,7 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         const kind = JOB_OF[task.agent as keyof typeof JOB_OF];
         const input =
           kind === "post_draft" ? { idea: task.brief, brief: task.brief } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
-        const run = await startCmoRun(supabase, kind, input);
+        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input);
         const label = { plan_week: "Planning the week", post_draft: "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
         return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label };
       } catch (error) {

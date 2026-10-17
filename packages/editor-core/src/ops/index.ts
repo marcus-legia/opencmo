@@ -24,7 +24,7 @@ import {
 	restoreWordsOp,
 	splitLine,
 } from './captions';
-import { OpError, OpFailure, type OpContext } from './context';
+import { OpError, OpFailure, unwrapOutcome, type OpContext } from './context';
 import { addGenerated, addText, deleteElement, enhanceGenerated, pickVariant, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
 import { moveElements, moveKeyframe, moveLayer, setWorkarea, splitElements, trimElement } from './timeline';
 import { addPart, copySettings, movePart, setKeyframe, setProps } from './inspector';
@@ -45,9 +45,14 @@ import { addIntro } from '../motion/intro';
 import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
 import { createVideo } from './create-video';
-import { add3d, addChart, addDiagram, addGraph, addIcon, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
+import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
+import { emphasizeWords } from './emphasis';
+import { punchIn } from './punch-in';
+import { styleOp, type StyleDeps } from '../style/apply';
+// Track C: proof B-roll.
+import { addProof } from '../proof';
 
-export { OpError, OpFailure, type OpContext } from './context';
+export { OpError, OpFailure, OpOutcome, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
 export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
@@ -95,6 +100,14 @@ export {
 	type ExplainerScene,
 } from './explainer';
 export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
+
+// Style skills (Track A): runs the other ops of this registry, so it reaches them by name. The
+// annotations break the type cycle with REGISTRY.
+const STYLE_DEPS: StyleDeps = {
+	run: (document: ClipDocument, op: { op: string }, ctx: OpContext): Promise<ClipDocument> => runOne(document, op, ctx),
+	has: (name: string): boolean => byName.has(name),
+};
+const applyStyle = styleOp(STYLE_DEPS);
 
 const REGISTRY = [
 	removeWords,
@@ -177,6 +190,14 @@ const REGISTRY = [
 	attachTranscript,
 	syncExplainer,
 	addTitle,
+	applyStyle,
+	// Style skills, Track B.
+	emphasizeWords,
+	addHookTitle,
+	punchIn,
+	addList,
+	// Style skills, Track C.
+	addProof,
 ] as const;
 
 type Definition = {
@@ -186,9 +207,24 @@ type Definition = {
 	apply: (document: ClipDocument, input: never, ctx: OpContext) => Promise<ClipDocument>;
 };
 
-const byName = new Map<string, Definition>(REGISTRY.map((op) => [op.name, op as unknown as Definition]));
+const byName: Map<string, Definition> = new Map(REGISTRY.map((op) => [op.name, op as unknown as Definition]));
 
 export const OP_NAMES = REGISTRY.map((op) => op.name);
+
+/**
+ * One op inside another (`apply_style`): schema-checked like a batch, and its refusal stays an
+ * `OpFailure` so the outer op can report it instead of failing as a whole.
+ */
+async function runOne(document: ClipDocument, op: { op: string }, ctx: OpContext): Promise<ClipDocument> {
+	const definition = byName.get(op.op);
+	if (!definition) throw new OpFailure(`Unknown operation "${op.op}".`);
+	const parsed = definition.input.safeParse(op);
+	if (!parsed.success) {
+		const issue = parsed.error.issues[0];
+		throw new OpFailure(`${issue?.path.length ? `${issue.path.join('.')}: ` : ''}${issue?.message ?? 'Invalid input.'}`);
+	}
+	return unwrapOutcome(await definition.apply(document, parsed.data as never, ctx)).document;
+}
 
 /**
  * Schema đầu vào của từng op, theo tên. Assistant sinh tool definition từ
@@ -217,7 +253,8 @@ export function describeOp(op: Op): string {
 	return definition ? definition.describe(op as never) : op.op;
 }
 
-export type OpResult = { op: string; summary: string; changed: boolean };
+/** `detail`: what the op reported about its run (`apply_style`'s receipt), when it reports one. */
+export type OpResult = { op: string; summary: string; changed: boolean; detail?: unknown };
 
 /**
  * Kiểm một op theo schema của nó. Lỗi thành `OpError` với câu đọc được — lỗi
@@ -304,21 +341,24 @@ export async function applyOps(
 	for (const [index, op] of valid.entries()) {
 		const definition = byName.get(op.op)!;
 		let next: ClipDocument;
+		let detail: unknown;
 		try {
-			if (STAGE_OPS.has(op.op)) next = await definition.apply(current, op as never, ctx);
+			if (STAGE_OPS.has(op.op)) ({ document: next, detail } = unwrapOutcome(await definition.apply(current, op as never, ctx)));
 			else {
 				// Op thường chỉ thấy timeline đang mở (E2-a): mọi op viết cho "scene đầu"
 				// sửa đúng tab người dùng đang xem, các timeline khác giữ nguyên.
 				const view = activeView(current);
 				const scene = timelinesOf(view)[0]!;
-				next = mergeView(current, scene, view, await definition.apply(view, op as never, ctx));
+				const applied = unwrapOutcome(await definition.apply(view, op as never, ctx));
+				detail = applied.detail;
+				next = mergeView(current, scene, view, applied.document);
 			}
 		} catch (error) {
 			if (error instanceof OpFailure) throw new OpError(index, op.op, error.message);
 			console.error(`[editor-core] ${op.op} failed`, error);
 			throw new OpError(index, op.op, 'This change could not be applied to the project.');
 		}
-		results.push({ op: op.op, summary: definition.describe(op as never), changed: !same(next, current) });
+		results.push({ op: op.op, summary: definition.describe(op as never), changed: !same(next, current), ...(detail !== undefined ? { detail } : {}) });
 		current = next;
 		steps.push({ op: op.op, document: current });
 	}

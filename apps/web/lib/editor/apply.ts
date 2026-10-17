@@ -9,7 +9,7 @@
 import { normalizeManifest, type Manifest } from "@opencmo/clip-assets";
 import { canonicalJson, type AssetInput, type ClipDocument } from "@opencmo/clip-doc";
 import { mediaSources, type Transcript as RenderTranscript } from "@opencmo/clip-render";
-import { applyOps, MASTER_SRC, OpError, type OpContext, type OpResult } from "@opencmo/editor-core";
+import { applyOps, MASTER_SRC, OpError, type OpContext, type OpResult, type ProofContext, type StyleContext } from "@opencmo/editor-core";
 
 import { ApiError } from "@/lib/api/errors";
 import type { ClipContext } from "@/lib/api/clips";
@@ -17,6 +17,8 @@ import { notFound, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { checkedDocument, projectDocument, saveDocument } from "@/lib/editor/document";
 import { editorSource, NoEditorSourceError } from "@/lib/editor/media";
 import { EDITED_TRANSCRIPT, MASTER_TRANSCRIPT, readProjectTranscript } from "@/lib/editor/transcript";
+import { readCaptureState } from "@/lib/agent/captures";
+import { readProofCapture } from "@/lib/capture";
 
 export type EditorProjectRow = {
   clip_id: string;
@@ -42,7 +44,7 @@ export function serverOpContext(
   context: ClipContext,
   clipId: string,
   media?: OpContext["media"],
-): OpContext {
+): StyleContext & ProofContext {
   let master: OpContext["master"] = null;
   try {
     const source = editorSource(context, clipId);
@@ -61,6 +63,10 @@ export function serverOpContext(
       });
       return `assets/transcripts/${hash}.json`;
     },
+    // Proof cards (`apply_style`) only place captures this user owns.
+    capture: (id) => readCaptureState(supabase, id),
+    // `add_proof` reads the page's word boxes, under the same RLS.
+    proofCapture: (id) => readProofCapture(supabase, id),
   };
 }
 

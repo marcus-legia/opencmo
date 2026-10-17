@@ -1,5 +1,6 @@
 ---
 name: x-writing
+kind: playbook
 description: How to write posts on X for a solo founder — hooks, formats, voice and limits. Used by the X writer.
 agents: [x_writer, cmo]
 source: marketingskills/social (+ references/post-templates.md, platform-limits.md, reverse-engineering.md), marketingskills/copywriting; claude-code-templates/publisher-x

@@ -1,5 +1,6 @@
 ---
 name: outlier-research
+kind: playbook
 description: Finding posts that beat an account's own baseline and explaining why they worked. Used by the CMO and the Research agent.
 agents: [cmo, research]
 source: social-media-research-skills/outlier-post-finder, transcript-intelligence; marketingskills/social/references/reverse-engineering.md

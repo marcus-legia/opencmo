@@ -1,0 +1,15 @@
+{
+  "name": "opencmo",
+  "description": "OpenCMO's plugin for Claude Code: the MCP server and the opencmo skill.",
+  "owner": {
+    "name": "OpenCMO",
+    "url": "https://opencmo.io"
+  },
+  "plugins": [
+    {
+      "name": "opencmo",
+      "source": "./",
+      "description": "OpenCMO's MCP server and the opencmo skill for Claude Code."
+    }
+  ]
+}

@@ -35,7 +35,9 @@ function parse(file: string): Skill {
   }
   const name = meta.name ?? "";
   if (`${name}.md` !== file) throw new Error(`${file}: name "${name}" phải trùng tên file`);
-  for (const key of ["description", "agents", "source", "license"]) if (!meta[key]) throw new Error(`${file}: thiếu ${key}`);
+  for (const key of ["kind", "description", "agents", "source", "license"]) if (!meta[key]) throw new Error(`${file}: missing ${key}`);
+  // The same `kind` field as packages/skills, so these can move into the skill library unchanged.
+  if (meta.kind !== "playbook") throw new Error(`${file}: kind must be "playbook" (got "${meta.kind}")`);
   const agents = meta.agents!.replace(/^\[|\]$/g, "").split(",").map((a) => a.trim()).filter(Boolean);
   for (const agent of agents) if (!AGENTS.has(agent)) throw new Error(`${file}: agent lạ "${agent}"`);
   if (!/MIT/.test(meta.license!)) throw new Error(`${file}: chỉ nhận nguồn MIT (ghi copyright)`);

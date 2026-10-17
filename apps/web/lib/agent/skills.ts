@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
+import { readStyleSkill } from "./styles";
 import { spec, type ToolOutcome } from "./tools";
 
 const name = z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$/, "Use letters, numbers and hyphens, like hook-style.");
@@ -23,7 +24,11 @@ export const saveSkillInput = z.object({
 export const SKILL_TOOLS = new Set(["read_skill", "save_skill"]);
 
 export const SKILL_SPECS = [
-  spec("read_skill", "Read one of the user's saved editing skills (recipes they asked you to remember), by name from <your_skills>. Read it before doing the kind of edit it describes.", readSkillInput),
+  spec(
+    "read_skill",
+    "Read a style by name from <styles> (read it before apply_style), or one of the user's saved editing skills (recipes they asked you to remember) from <your_skills>. Read it before doing the kind of edit it describes.",
+    readSkillInput,
+  ),
   spec(
     "save_skill",
     "Save an editing recipe the user wants you to reuse on future clips (\"remember this style\", \"always do my hooks like this\"). Saving under an existing name replaces it. Only when the user asks you to remember or save something.",
@@ -43,6 +48,9 @@ export async function runSkillTool(supabase: SupabaseClient, call: { name: strin
   if (call.name === "read_skill") {
     const parsed = readSkillInput.safeParse(call.input);
     if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: parsed.error.issues[0]?.message }), summary: "Could not read the skill" };
+    // A built-in style is our own text, not user data: no untrusted envelope.
+    const style = readStyleSkill(parsed.data.name);
+    if (style) return { ok: true, content: style, summary: `Read the style ${parsed.data.name.toLowerCase()}` };
     const { data } = await supabase.from("editor_skills").select("name, description, body").eq("name", parsed.data.name.toLowerCase()).maybeSingle();
     if (!data) return { ok: false, content: JSON.stringify({ error: `No skill named ${parsed.data.name}.` }), summary: "Skill not found" };
     // Thân skill do người dùng viết: dữ liệu, không phải chỉ thị hệ thống.

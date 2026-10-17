@@ -1,5 +1,6 @@
 ---
 name: reddit-listening
+kind: playbook
 description: Finding Reddit threads where people need the product, scoring them, and drafting helpful replies the founder posts. Used by the Sales agent.
 agents: [sales, checker, cmo]
 source: marketingskills/social/references/listening.md, marketingskills/customer-research; social-media-research-skills/product-demand-research, comment-mining

@@ -16,8 +16,8 @@ describe('kho mẫu', () => {
     expect(validate(document)).toEqual(document);
   });
 
-  it('covers all 71 samples (67 from DS + 4 from OpenCMO)', () => {
-    expect(manifest.samples.length).toBe(71);
+  it('covers all 72 samples (67 from DS + 5 from OpenCMO)', () => {
+    expect(manifest.samples.length).toBe(72);
   });
 });
 

@@ -24,6 +24,8 @@ import { buildLottie, LottieError, lottieInput, type LottieInput } from '../visu
 import { buildShape, SHAPE_NAMES, shapeInput, type ShapeInput } from '../visuals/shape';
 import { buildThree, threeInput, type ThreeInput } from '../visuals/three';
 import { buildTitle, measureTitle, titleInput, titleName, titleSafe, type TitleInput } from '../visuals/title';
+import { buildHook, hookArea, hookInput, type HookInput } from '../visuals/hook';
+import { buildList, listInput, listItem, type ListInput } from '../visuals/list';
 import { OpFailure, type OpContext } from './context';
 import { loadCaptions } from './captions';
 import { checked } from './project';
@@ -216,6 +218,19 @@ const BUILDERS: Record<string, Builder> = {
 		build: (input: GraphInput, frame, area, duration) => buildGraph(input, frame, area, duration),
 		title: (input: GraphInput) => `Graph of ${input.expr}`,
 	},
+	add_hook_title: {
+		name: 'add_hook_title',
+		schema: hookInput,
+		build: (input: HookInput, _frame, area) => buildHook(input, area),
+		title: () => 'Hook title',
+		area: (_input: never, frame) => hookArea(frame, titleSafe(frame)),
+	},
+	add_list: {
+		name: 'add_list',
+		schema: listInput,
+		build: (input: ListInput, _frame, area) => buildList(input, area),
+		title: (input: ListInput) => `List of ${input.items.length}`,
+	},
 	add_title: {
 		name: 'add_title',
 		schema: titleInput,
@@ -280,6 +295,48 @@ export const addGraph = visualOp('add_graph', graphInput, (input) => `Plot y = $
 export const addIcon = visualOp('add_icon', iconInput, (input) => `Add the ${input.name} icon${input.motion && input.motion !== 'none' ? ` (${input.motion})` : ''}`);
 // A title stays up long enough to read a name and role (5.5 s), never longer than 8 s.
 export const addTitle = visualOp('add_title', titleInput, (input) => `Add a ${input.kind === 'chapter' ? 'chapter title' : input.kind === 'nameTag' ? 'name tag' : 'lower third'}: ${input.title}`, { min: 5.5, max: 8 });
+/**
+ * The opening hook of a talking head. Without start/end/quote it opens the clip: 0–3 s. A hook is
+ * read in one glance, so it stays up 1.5–8 s.
+ */
+const hookOp = visualOp('add_hook_title', hookInput, (input) => `Add a hook title: ${input.lines.join(' / ')}`, { min: 1.5, max: 8 });
+export const addHookTitle = {
+	...hookOp,
+	async apply(document: ClipDocument, input: Parameters<typeof hookOp.apply>[1], ctx?: OpContext) {
+		const opening = input.start === undefined && input.end === undefined && input.quote === undefined;
+		return hookOp.apply(document, opening ? { ...input, start: 0, end: 3 } : input, ctx);
+	},
+};
+/**
+ * A numbered list in the visual panel (split layouts) or the upper region. `reveal_quotes`, one per
+ * item in order, light each row when the speaker reaches it; the list stays up until 2.5 s after the
+ * last one.
+ */
+export const addList = {
+	name: 'add_list' as const,
+	input: z
+		.object({
+			op: z.literal('add_list'),
+			...timing,
+			items: z.array(listItem).min(2).max(7),
+			/** The words that bring each row up, one per item, in order. */
+			reveal_quotes: z.array(z.string().trim().min(2).max(120)).max(7).optional(),
+		})
+		.strict()
+		.refine((input) => !input.reveal_quotes || input.reveal_quotes.length === input.items.length, { path: ['reveal_quotes'], message: 'Give one reveal quote per item, in order.' }),
+	describe: (input: { items: { label: string }[] }) => `Add a list: ${input.items.map((item) => item.label).slice(0, 4).join(', ')}${input.items.length > 4 ? '…' : ''}`,
+	async apply(document: ClipDocument, input: { start?: number; end?: number; quote?: string; items: ListInput['items']; reveal_quotes?: string[] }, ctx?: OpContext) {
+		const frame = frameOf(document);
+		let when = await resolveTiming(document, ctx, input, { min: 4, max: 12 });
+		const reveals: number[] = [];
+		for (const quote of input.reveal_quotes ?? []) reveals.push((await quoteRange(document, ctx, quote)).start);
+		if (reveals.some((at, index) => index > 0 && at < reveals[index - 1]!)) throw new OpFailure('The reveal quotes must come in the order of the items.');
+		if (reveals.length) when = { start: Math.min(when.start, reveals[0]!), end: Math.max(when.end, reveals.at(-1)! + 2.5) };
+		when = clamp(when, frame.duration);
+		const spec: ListInput = { items: input.items, ...(reveals.length ? { reveal_at: reveals.map((at) => Math.round((at - when.start) * 100) / 100) } : {}) };
+		return addTo(document, await visualNode('add_list', spec, when, frame, document, ctx));
+	},
+};
 export const addLottie = visualOp('add_lottie', lottieInput, (input) => `Add the ${input.animation.split('/').pop()} animation`);
 // 3D phẳng vẽ CPU: agent không dùng nữa (spec code-scenes: 3D của agent là code
 // three.js qua add_3d_scene). Op giữ nguyên cho document cũ và update_visual.
@@ -326,8 +383,11 @@ export const updateVisual = {
 		const kept = Object.fromEntries(
 			KEPT_ON_UPDATE.filter((key) => target.entity[key] !== undefined).map((key) => [key, target.entity[key]]),
 		);
+		// A style's visual stays the style's after an edit, so the next apply_style still replaces it.
+		const style = (target.entity.marks as { style?: string } | undefined)?.style;
+		const marks = style ? { ...(fresh.marks as object), style } : fresh.marks;
 		const list = target.list!;
-		list.splice(list.indexOf(target.entity), 1, { ...fresh, ...kept, id: input.id } as Entity);
+		list.splice(list.indexOf(target.entity), 1, { ...fresh, ...kept, ...(marks ? { marks } : {}), id: input.id } as Entity);
 		return checked(next, 'That visual cannot be updated');
 	},
 };

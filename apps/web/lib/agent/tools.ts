@@ -51,6 +51,7 @@ import { nodeFor } from "@/lib/editor/asset-node";
 import { GUIDE_NAMES, readGuide } from "./guides";
 import { FILLERS, bare, findRetakes } from "./retakes";
 import { noTranscript, sourceOf, speechCount } from "./speech";
+import { readyStyles } from "./styles";
 import type { AgentWorkspace } from "./workspace";
 import type { Image } from "./providers/types";
 
@@ -434,6 +435,18 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Turn numbers the speaker says into an animated chart: bar (bars grow), line (line draws on), pie, donut (sweeps round; shows the first share in the middle), stat (one big number with a label). Values are raw numbers; unit is a suffix like % or k.",
   add_graph:
     "Plot y = f(x) on axes, drawn on like a 3Blue1Brown animation. expr uses x, + - * / ^, brackets, sin cos tan exp log sqrt abs, pi, e (e.g. 2^x, x^2, sin(x)). Optional x and y ranges.",
+  apply_style:
+    "Apply a style from <styles> as ONE change and one undo, after read_skill on it: write an Edit Plan (hook lines, words to emphasize, chapters, an optional list, proofs from ready page captures) where every beat quotes exact words from <clip_context>, never seconds. The style's preset sets captions, punch-in, transitions and colours. Beats whose words are not found, and parts that are not available, are skipped and listed in the result's receipt; tell the user about them.",
+  emphasize_words:
+    "Style chosen keywords in the captions (the captions' emphasis style: font, italic, colour) — not the word being spoken, which highlight already marks. quotes = exact words from <clip_context>, one to three words each: numbers, names, promises; at most one every 2 seconds, never filler. Emphasis follows the words through later cuts. remove: true takes those words out; clear: true removes all emphasis first (with no quotes: removes it all).",
+  add_hook_title:
+    "Add the opening hook: one or two short lines (≤ 40 characters each) in the upper third, clear of the face and captions — line 1 the topic, line 2 the promise on an accent box (accent_line picks the boxed line; accent_font_style italic for a serif accent). Without start/end/quote it shows from 0 to 3 s; it stays up 1.5–8 s. Use the speaker's strongest phrase. One hook per clip.",
+  punch_in:
+    "Alternate the speaker's zoom at every cut (scales = [wide, close], default [1, 1.15]) so jump cuts read as deliberate; shots shorter than min_shot (default 1.2 s) keep the zoom before them. The zoom stays centred on the face. Running it again replaces the earlier punch-ins.",
+  add_list:
+    "Show a numbered list (2–7 items: label, optional short meta like \"12.4k\", blur: true hides a label the speaker is teasing) in the visual panel of a split layout or the upper region. reveal_quotes, one per item in order, light each row when the speaker reaches it (exact words from <clip_context>). Pass quote or start/end for when the list appears.",
+  add_proof:
+    "Show a captured web page as proof while the speaker makes a claim: a browser frame with the page's real address slides in, eases in on focus (words copied from the page) and marks them as quote (the speaker's words) starts. capture_id must be a ready capture from capture_page. One card per claim; it ends before the next card. read_guide \"proof\".",
   add_title:
     "Add a title card in the brand's colors and font: kind lowerThird (a name and role when a speaker appears), nameTag (the compact version), chapter (a centered section title; sub = \"Chapter 2\" or \"Episode 12\"). title = the name or chapter title (≤ 60 characters), sub = role, company or episode. look: bar (accent bar, no panel), kicker (sub on an accent band above the name), card (panel with an accent line). side left/right/center, motion calm/standard/punchy. Pass quote = the words the speaker says when it should appear (often their introduction): it starts there and holds 5.5-8 s. It is placed inside title-safe, above the captions, clear of the phone's buttons. One name tag per speaker, at their first appearance; chapters where the topic changes. read_guide \"titles\".",
   update_visual:
@@ -492,6 +505,8 @@ export const TOOL_SPECS: ToolSpec[] = [
   PLACE_BROLL,
   ...Object.keys(AGENT_OP_INPUTS)
     .filter((name) => !NOT_OFFERED.has(name))
+    // A style needs a ready style to apply; until one is, the tool would only invite a degraded run.
+    .filter((name) => name !== "apply_style" || readyStyles().length > 0)
     .sort()
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
@@ -867,6 +882,7 @@ export async function runTool(name: string, input: unknown, env: ToolEnv): Promi
     const blocked = guard(parsed.data as Record<string, unknown>, (await env.workspace.read()).document);
     if (blocked) return invalid(op as Op, blocked);
 
+    if (name === "apply_style") return await applyStyleOutcome(parsed.data as Op, env);
     return await applyOpOutcome(parsed.data as Op, env);
   } catch (err) {
     return toolFailure(name, err);
@@ -1012,21 +1028,30 @@ export async function applyOpTool(op: Op, env: ToolEnv): Promise<ToolOutcome> {
   }
 }
 
+/**
+ * `apply_style` with its receipt: what was applied, skipped (and why) and not available. The op
+ * reports it on its result, from the run that was written.
+ */
+async function applyStyleOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
+  return applyOpsOutcome([op], env, undefined, { receipt: true });
+}
+
 async function applyOpOutcome(op: Op, env: ToolEnv): Promise<ToolOutcome> {
   return applyOpsOutcome([op], env);
 }
 
 /** Several ops as one write (one revision, one undo); `label` sums them up for the panel. */
-async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string): Promise<ToolOutcome> {
+async function applyOpsOutcome(ops: Op[], env: ToolEnv, label?: string, options: { receipt?: boolean } = {}): Promise<ToolOutcome> {
   const op = ops[0]!;
   const applied = await env.workspace.apply(ops);
   const result = ops.length === 1 ? applied.results[0] : { summary: label ?? `${ops.length} changes` };
+  const receipt = options.receipt && ops.length === 1 ? applied.results[0]?.detail : undefined;
   // Trả phần đổi thay cho cả project (học Palmier §A1): model tự cập nhật, không đọc lại.
   const delta = applied.changed ? diffDocuments(applied.before, applied.after) : null;
   const touched = delta ? [...delta.added.map((item) => item.id), ...delta.changed.map((item) => item.id), ...delta.shifted.flatMap((rule) => rule.ids)] : [];
   return {
     ok: true,
-    content: JSON.stringify({ ok: true, changed: applied.changed, version: applied.version, summary: result?.summary, ...(delta ? { delta } : {}) }),
+    content: JSON.stringify({ ok: true, changed: applied.changed, version: applied.version, summary: result?.summary, ...(delta ? { delta } : {}), ...(receipt !== undefined ? { receipt } : {}) }),
     summary: result?.summary ?? describeOp(op),
     version: applied.changed ? applied.version : undefined,
     documentHash: applied.changed ? applied.documentHash : undefined,

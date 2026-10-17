@@ -101,7 +101,7 @@ export function taskShape(task: RawTask, url: string | null): RenderTask {
  */
 export async function taskWithUrl(
   task: RawTask,
-  options: { inline?: boolean } = {},
+  options: { inline?: boolean; client?: SupabaseClient } = {},
 ): Promise<RenderTask> {
   if (task.status !== "done") return taskShape(task, null);
 
@@ -123,6 +123,7 @@ export async function taskWithUrl(
         : task.kind === "zip"
           ? "opencmo-clips.zip"
           : "opencmo-clip.mp4",
+      ...(options.client ? { client: options.client } : {}),
     }),
   );
 }

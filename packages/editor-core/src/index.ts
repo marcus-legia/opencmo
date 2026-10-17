@@ -25,4 +25,8 @@ export { LAYOUT_MODES, panelRegionAt, readLayout, speakerBandAt, type LayoutMode
 export { anchorPoint, LAYOUT_ANCHOR_NAMES, LAYOUT_LABEL, layoutSlots, layoutsFor, slotBox, VIDEO_LAYOUTS, type LayoutSlot, type VideoLayout } from './layouts';
 export { clipScript, clipTranscript, clipWords, findQuote, formatScript, quoteTiming, type QuoteHit, type ScriptLine } from './script';
 export { quoteRange } from './ops/visuals';
+export { CAPABILITIES, CAPABILITY_IDS, capabilityIssues, isCapability, isReady, missingCapabilities, type Capability, type CapabilityInfo } from './capabilities';
+export * from './style';
+export { applyStyleInput, describeStyle, runStyle, type ApplyStyle, type CaptureState, type StyleContext, type StyleDeps, type StyleReceipt } from './style/apply';
 export { buildIntro, INTRO_ELEMENTS, INTRO_MOTIONS, introSpecSchema, MAX_MOVING, PERSONALITIES, PERSONALITY, READ_SECONDS, reviewIntro, type IntroSpec, type Personality } from './motion/intro';
+export { addProofInput, CAPTURE_SRC_PREFIX, type AddProof, type ProofCapture, type ProofContext } from './proof';

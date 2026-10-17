@@ -21,11 +21,14 @@
 
 import { createServerClient } from "./supabase/server";
 
+type SignClient = Awaited<ReturnType<typeof createServerClient>>;
+
 /**
  * Bốn bucket của sản phẩm. `sources` giữ cả file nguồn người dùng upload, cache
  * section của worker và proxy cho editor; `renders` giữ preview/export/ZIP.
  */
-export const BUCKETS = ["clips", "sources", "renders", "media", "exports", "brand"] as const;
+// `captures`: page captures for proof B-roll (`lib/capture`), written only by the worker.
+export const BUCKETS = ["clips", "sources", "renders", "media", "exports", "brand", "captures"] as const;
 export type Bucket = (typeof BUCKETS)[number];
 
 /**
@@ -59,7 +62,7 @@ const DOWNLOAD_TTL = 300;
 export async function signedObjectUrl(
   bucket: Bucket,
   path: string,
-  options: { ttl?: number; download?: string } = {},
+  options: { ttl?: number; download?: string; client?: SignClient } = {},
 ): Promise<string> {
   if (!path || path.includes("..")) {
     throw new Error(`Could not sign a link (${bucket}).`);
@@ -70,7 +73,8 @@ export async function signedObjectUrl(
     throw new Error("Could not sign a link (sources).");
   }
 
-  const supabase = await createServerClient();
+  // A caller without cookies (the MCP server) passes its own client, which runs under the same RLS.
+  const supabase = options.client ?? (await createServerClient());
   const { data, error } = await supabase.storage
     .from(bucket)
     .createSignedUrl(path, options.ttl ?? (options.download ? DOWNLOAD_TTL : PLAY_TTL),

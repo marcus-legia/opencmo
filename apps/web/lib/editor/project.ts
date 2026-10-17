@@ -128,7 +128,7 @@ export async function ensureEditorProject(
   const source = editorSource(context, clipId);
   const withTranscript =
     transcript ??
-    ((await signedTranscriptUrl(source)) !== null || (await hasTranscript(supabase, context.clip.job_id)));
+    ((await signedTranscriptUrl(source, supabase)) !== null || (await hasTranscript(supabase, context.clip.job_id)));
   const generated = generatedDocument(() =>
     generateProject({
       settings,

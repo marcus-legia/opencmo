@@ -21,19 +21,57 @@ of the web app, the editor and the video engine, released under the
 Browser ──► Next.js app + /api/v1 (Vercel) ──► Supabase (Auth · Postgres/RLS · Storage · Realtime)
                                                    ▲
                        Modal worker (Python + ffmpeg + Node exporter) ── claims queued tasks
+Your Claude ──► MCP server (Modal) ──────────────────┘  same tools as the in-app Assistant
 ```
 
-- **`apps/web`** — Next.js app: landing, workspace, the AI CMO, the clip editor, and the
-  `/api/v1` routes. Every read runs under Row Level Security; every write goes through a
-  Postgres RPC that checks ownership.
-- **`packages/engine`** — Python engine: transcript first, then download only the selected
-  sections, face-tracked reframe and burned-in captions via streaming `ffmpeg`. Runs as a CLI
-  locally and as a [Modal](https://modal.com) worker in production.
-- **`packages/clip-*` / `editor-core`** — the editor stack: a JSON clip document
-  (`clip-doc`), operations on it (`editor-core`), a Canvas 2D renderer shared by the browser
-  preview and the server exporter (`clip-render`, `clip-export`), icons, media and 3D scenes.
-- **`supabase/`** — migrations, pgTAP tests and local config. The database schema is the
-  contract between the web app and the worker.
+Every read runs under Row Level Security; every write goes through a Postgres RPC that checks
+ownership. The database schema is the contract between the web app, the worker and the MCP
+server.
+
+## Repository layout
+
+```
+opencmo/
+├── apps/
+│   └── web/                    Next.js app: landing, workspace, AI CMO, clip editor, /api/v1
+│       ├── app/                routes (App Router); app/api/v1 = the public API
+│       ├── components/         UI, including the editor (components/editor)
+│       ├── lib/
+│       │   ├── agent/          the editor Assistant — its tools are editor-core operations
+│       │   ├── cmo/            the AI CMO: onboarding, jobs, schedules and its agents
+│       │   ├── generate/       AI image/video/voice generation, with prompt moderation
+│       │   ├── mcp/            MCP auth: API keys → short-lived user tokens under RLS
+│       │   └── supabase/       Supabase clients (admin.ts = service role, server-only)
+│       ├── e2e/                Playwright end-to-end tests
+│       └── e2e-compat/         Safari/Firefox compatibility tests
+├── packages/
+│   ├── engine/                 Python engine: transcript → selected sections → face-tracked
+│   │                           reframe → burned-in captions, all via streaming ffmpeg;
+│   │                           CLI locally, Modal worker in production (modal_app.py)
+│   ├── contracts/              JSON contracts shared by Python and TypeScript
+│   │                           (task kinds, AI model catalog, document schemas)
+│   ├── clip-doc/               the clip document: zod schema, validation, migrations
+│   ├── editor-core/            operations on the document — the only write path
+│   │                           (editor buttons, the API and the Assistant all use it)
+│   ├── clip-render/            Canvas 2D renderer, shared by the browser preview and the exporter
+│   ├── clip-export/            server export: document → MP4
+│   ├── clip-motion/            explainer animations (Remotion), rendered on the worker
+│   ├── clip-three/             3D scenes, rendered on a GPU worker
+│   ├── clip-icons/             animated icon library
+│   ├── clip-assets/            the editor media library: manifest, folders, rename/move/delete
+│   ├── clip-media/             bundled fonts and Lottie animations
+│   ├── editor-parity/          golden-image tests that keep the renderer pixel-stable
+│   ├── skills/                 style skills: markdown + frontmatter → a generated index
+│   └── mcp-server/             MCP server (Streamable HTTP, stateless) so your own Claude
+│                               can drive OpenCMO
+├── supabase/
+│   ├── migrations/             schema history, applied in order
+│   ├── tests/                  pgTAP tests, one per migration
+│   ├── schema/current.sql      generated snapshot of the current schema (read-only)
+│   └── config.toml             local stack config
+├── scripts/                    dev stack (dev.mjs), schema dump, document checks
+└── docs/                       design notes, build plans and research reports
+```
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the decisions behind this shape, including the
 two hard budgets every change must respect: **peak RAM per job < 2 GB** and **a 45-minute

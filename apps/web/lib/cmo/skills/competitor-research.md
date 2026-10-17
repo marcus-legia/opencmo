@@ -1,5 +1,6 @@
 ---
 name: competitor-research
+kind: playbook
 description: Comparing competitors' social content to find gaps and tests for the founder. Used by the Research agent and the CMO.
 agents: [research, cmo]
 source: social-media-research-skills/competitor-social-research, creator-profile-teardown; marketingskills/competitors

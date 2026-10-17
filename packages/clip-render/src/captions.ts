@@ -20,7 +20,9 @@
 
 import type { CaptionsNode, Shadow, TextNode, TextRange } from '@opencmo/clip-doc';
 
-export type TranscriptWord = { text: string; start: number; end: number };
+import { hex, parseColor } from './color.ts';
+
+export type TranscriptWord = { id?: string; text: string; start: number; end: number };
 export type Transcript = { text?: string; words: TranscriptWord[] }[];
 
 type Limit = { duration: number } | { length: number };
@@ -204,6 +206,87 @@ export function splitLines(group: TranscriptWord[]): [TranscriptWord[], Transcri
   return [group.slice(0, leftWords), group.slice(leftWords)];
 }
 
+// ------------------------------------------------------------------ emphasis and reveal
+
+/**
+ * A word's start in SOURCE seconds. After a cut the captions read a remapped transcript whose times
+ * are clip times, but every word keeps the id editor-core gave it, and that id is its source start
+ * in milliseconds (`w` + base 36). Without an id the transcript was never remapped, so its times are
+ * already source times. `emphasize_words` uses the same rule, so emphasis survives cuts.
+ */
+export function sourceStart(word: TranscriptWord): number {
+  const match = /^w([0-9a-z]+)(?:-\d+)?$/.exec(word.id ?? '');
+  return match ? parseInt(match[1]!, 36) / 1000 : word.start;
+}
+
+/** Ranges are inclusive at the start, so a range written around one word's start catches it. */
+const SOURCE_EPSILON = 0.0015;
+
+export function isEmphasized(word: TranscriptWord, ranges: readonly { start: number; end: number }[]): boolean {
+  const at = sourceStart(word);
+  return ranges.some((range) => at >= range.start - SOURCE_EPSILON && at <= range.end + SOURCE_EPSILON);
+}
+
+/** `reveal: 'fade'`: a word not yet spoken shows at 35% ink, then reaches full ink over 120 ms. */
+const REVEAL_FROM = 0.35;
+const REVEAL_SECONDS = 0.12;
+const EMPHASIS_COLOR = '#FFD400';
+
+/**
+ * `color` at `amount` of its strength over the caption's background. Text has no alpha here, so the
+ * muted ink is mixed toward black for light ink and toward white for dark ink.
+ */
+function mute(color: string, amount: number): string {
+  if (amount >= 1) return color;
+  const value = parseColor(color);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const light = channels[0]! * 0.299 + channels[1]! * 0.587 + channels[2]! * 0.114 > 128;
+  const toward = light ? 0 : 255;
+  const [r, g, b] = channels.map((channel) => Math.round(toward + (channel - toward) * amount));
+  return hex((r! << 16) | (g! << 8) | b!);
+}
+
+/** The words on screen with their character spans in `text` (lines break at a space, so spans hold). */
+function spans(words: TranscriptWord[]): { word: TranscriptWord; start: number; end: number }[] {
+  let at = 0;
+  return words.map((word) => {
+    const span = { word, start: at, end: at + word.text.length };
+    at = span.end + 1;
+    return span;
+  });
+}
+
+/**
+ * Ranges for emphasized words and the reveal. They come after the preset's own ranges, so the
+ * emphasis colour wins over spotlight's spoken-word colour, and before highlight pop/block, which
+ * still mark the word being spoken.
+ */
+function emphasisRanges(node: CaptionsNode, shown: TranscriptWord[], t: number, base: TextNode, ink: string | null): TextRange[] {
+  const emphasis = node.emphasis ?? [];
+  const reveal = node.reveal === 'fade' && ink !== null;
+  if (!emphasis.length && !reveal) return [];
+  const look = node.emphasisStyle ?? {};
+  const accent = look.color ?? node.colors?.[0] ?? EMPHASIS_COLOR;
+  const out: TextRange[] = [];
+  for (const { word, start, end } of spans(shown)) {
+    const strength = reveal ? REVEAL_FROM + (1 - REVEAL_FROM) * Math.min(1, Math.max(0, (t - word.start) / REVEAL_SECONDS)) : 1;
+    if (emphasis.length && isEmphasized(word, emphasis)) {
+      out.push({
+        start,
+        end,
+        ...(look.fontFamily ? { fontFamily: look.fontFamily } : {}),
+        ...(look.fontStyle ? { fontStyle: look.fontStyle } : {}),
+        ...(look.scale && look.scale !== 1 ? { fontSize: (base.fontSize ?? 16) * look.scale } : {}),
+        // Stark draws with a difference blend and no ink of its own: emphasis changes only the font there.
+        ...(ink !== null ? { paints: [{ type: 'solid' as const, color: mute(accent, strength) }] } : {}),
+      });
+    } else if (strength < 1) {
+      out.push({ start, end, paints: [{ type: 'solid', color: mute(ink!, strength) }] });
+    }
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ một khung
 
 export type CaptionFrame = {
@@ -323,6 +406,8 @@ export function captionFrame(node: CaptionsNode, groups: TranscriptWord[][], t: 
     case 'whisper':
       break;
   }
+  const shown = node.preset === 'cascade' ? group.filter((word) => word.start <= t) : group;
+  ranges.push(...emphasisRanges(node, shown, t, base, preset.fill ? (node.color ?? preset.fill) : null));
   if (ranges.length) base.ranges = ranges;
   base.text = text;
   const frame: CaptionFrame = { text, node: base, state };

@@ -55,6 +55,8 @@
  *   "hook title" / "caption style … classic" / "punch-in zoom" / "problems … fix" / "make it better" /
  *   "call to action" / "uppercase … outline" / "fade to black" → the eval's edit tasks, done as the guides say
  *   "gate test"        → insert_node an image missing from the library; the verify gate then makes it delete_element it
+ *   "/style …"         → ONE apply_style (senior-dev-listicle: hook, emphasis, chapters by exact quotes, no proof) →
+ *                        reports the receipt: applied, skipped with reasons, unavailable
  *   còn lại            → trả lời bằng chữ
  * Sau tool_result: ảnh thì đếm và nói số ảnh đã xem; còn lại một câu kết.
  */
@@ -130,6 +132,23 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("set_frame") && /then undo/.test(asked)) return [text("On second thought, undoing that."), use("undo", {})];
     if (previous.includes("undo")) return [text(raw0.includes('"changed":true') ? "Undone: the clip is back to how it was." : "There was nothing to undo.")];
     if (previous.includes("send_feedback")) return [text("I sent that to the OpenCMO team.")];
+    if (previous.includes("apply_style")) {
+      const parsed = JSON.parse(raw0) as { receipt?: { applied: string[]; skipped: { item: string; reason: string }[]; unavailable: string[] }; INVALID_INPUT?: string; error?: string };
+      if (!parsed.receipt) return [text(`The style could not be applied: ${parsed.INVALID_INPUT ?? parsed.error ?? "unknown error"}`)];
+      const { applied, skipped, unavailable } = parsed.receipt;
+      return [
+        text(
+          [
+            `Style applied as one change (one undo). Applied: ${applied.length ? applied.join("; ") : "nothing"}.`,
+            skipped.length ? `Skipped: ${skipped.map((item) => `${item.item} (${item.reason})`).join("; ")}.` : "Nothing was skipped.",
+            unavailable.length ? `Not available in the editor yet, so left out: ${unavailable.join(", ")}.` : "",
+            "No proof card: you did not cite a page I could capture.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        ),
+      ];
+    }
     if (previous.includes("get_project_state") && /cinematic/.test(asked)) {
       const ids = [...raw0.matchAll(/\\?"id\\?":\\?"([^"\\]+)\\?",\\?"tag\\?":\\?"video/g)].map((match) => match[1]!);
       return [
@@ -393,6 +412,25 @@ function script(history: StoredMessage[]): unknown[] {
     return [
       text("I'll have the director plan the video."),
       use("create_video", { prompt: words || "a short product video", seconds: asked ? Number(asked) : 15, ...(aspect ? { aspect } : {}) }),
+    ];
+  }
+  // /style: one Edit Plan of exact quotes from the clip, one apply_style; no page is cited, so no proof.
+  if (/^\s*\/style\b/.test(ask)) {
+    return [
+      text("Applying the style in one step: a hook from your strongest line, emphasis on the payoff words, and chapters at each new point."),
+      use("apply_style", {
+        style: "senior-dev-listicle",
+        plan: {
+          style: "senior-dev-listicle",
+          hook: { lines: ["The one thing nobody tells you", "You need better hooks"] },
+          emphasis: [{ quote: "nobody" }, { quote: "better hooks" }, { quote: "three seconds" }, { quote: "the numbers" }],
+          chapters: [
+            { quote: "Most people lose viewers", title: "Where viewers drop" },
+            { quote: "start with the result", title: "Start with the result" },
+          ],
+          proofs: [],
+        },
+      }),
     ];
   }
   // /explain: the storyboard first, as the guide says; the code only after the user says go, or

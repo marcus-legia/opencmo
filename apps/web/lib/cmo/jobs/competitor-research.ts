@@ -13,13 +13,13 @@ import { skillText } from "../skills";
 import { xTopPosts } from "../social/research";
 import { outliers, ScBudget, SocialReadError, type Outlier } from "../social/scrapecreators";
 import { documentsBlock } from "./context";
-import { fakeAllowed, LlmError, structured } from "./llm";
+import { LlmError } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import type { CompetitorInsight, Documents } from "./types";
 
 const MAX_ACCOUNTS = 4;
 
-const InsightSchema = z.object({
+export const InsightSchema = z.object({
   hooks: z
     .array(z.object({ pattern: z.string().describe("The hook pattern in a few words"), url: z.string().describe("URL of the outlier post that shows it, copied from the data"), why: z.string() }))
     .describe("Three to six hook patterns that beat the baseline"),
@@ -78,15 +78,12 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
   const accounts: CompetitorInsight["accounts"] = [];
   const winners: Outlier[] = [];
   for (const handle of handles) {
-    await ctx.step(
+    const result = await ctx.step(
       "find_outliers",
       `Reading @${handle} on X`,
       async () => {
         try {
-          const result = outliers(await xTopPosts(handle, budget));
-          accounts.push({ handle: `@${handle}`, posts: result.items.length, baseline: result.baseline, confidence: result.confidence });
-          winners.push(...result.items.filter((p) => p.label !== "normal").slice(0, 6));
-          return result;
+          return outliers(await xTopPosts(handle, budget));
         } catch (error) {
           // Một tài khoản riêng tư/sai tên không làm hỏng cả lượt.
           if (error instanceof SocialReadError) return null;
@@ -94,20 +91,24 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
         }
       },
       (result) => (result ? `@${handle}: ${result.items.filter((p) => p.label !== "normal").length} outliers` : `@${handle}: not readable`),
+      { memo: `find_outliers:${handle}` },
     );
+    if (result) {
+      accounts.push({ handle: `@${handle}`, posts: result.items.length, baseline: result.baseline, confidence: result.confidence });
+      winners.push(...result.items.filter((p) => p.label !== "normal").slice(0, 6));
+    }
   }
   if (!winners.length) throw new LlmError("No competitor posts stood out this week. Try adding more competitors.");
 
   const raw = await ctx.step("extract_patterns", "Finding hooks that work", async () => {
-    if (fakeAllowed()) {
-      return {
+    const posts = winners.map((p) => `<post url="${p.url}" lift="${p.lift}" label="${p.label}">${p.text}</post>`).join("\n");
+    return ctx.think({
+      title: "Find the hooks and formats that work in competitors' standout posts",
+      fake: () => ({
         hooks: winners.slice(0, 2).map((p) => ({ pattern: "Stop doing X the hard way", url: p.url, why: "Names a pain and promises a shortcut." })),
         formats: ["Short single post", "3-step list"],
         ideas: winners.slice(0, 2).map((p) => ({ idea: "The 3-step version of chasing a late invoice", inspired_by: p.url })),
-      };
-    }
-    const posts = winners.map((p) => `<post url="${p.url}" lift="${p.lift}" label="${p.label}">${p.text}</post>`).join("\n");
-    return structured({
+      }),
       agent: "research",
       system: SYSTEM,
       prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, content_strategy: docs.content_strategy })}\n\n<posts>\n${posts}\n</posts>\n\nExtract what works and three to five ideas for this founder.`,

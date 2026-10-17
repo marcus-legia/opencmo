@@ -51,7 +51,8 @@ export const TURN_TOOL_SPECS = [
 
 export const TURN_TOOLS = new Set(TURN_TOOL_SPECS.map((tool) => tool.name));
 
-type Env = { supabase: SupabaseClient; clipId: string; turnId: string };
+/** `turnId` is the Assistant turn; without one (MCP) there is no request to undo. */
+type Env = { supabase: SupabaseClient; clipId: string; turnId?: string };
 
 export async function runTurnTool(name: string, input: unknown, env: Env): Promise<ToolOutcome> {
   try {
@@ -77,6 +78,7 @@ export async function runTurnTool(name: string, input: unknown, env: Env): Promi
 }
 
 async function undoTurn({ supabase, clipId, turnId }: Env): Promise<ToolOutcome> {
+  if (!turnId) return { ok: false, content: JSON.stringify({ error: "Undo works inside an Assistant request only." }), summary: "Could not undo" };
   const { data: turn } = await supabase.from("agent_turns").select("checkpoint_id").eq("id", turnId).maybeSingle();
   const checkpointId = (turn as { checkpoint_id: string | null } | null)?.checkpoint_id ?? null;
   if (!checkpointId) {

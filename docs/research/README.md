@@ -1,49 +1,52 @@
-# Research reports
+# Báo cáo nghiên cứu
 
-Written by the scheduled research routine (twice a week) and by agents acting as product advisor
-(`CLAUDE.md`, "Product advisor role"). One file per report: `YYYY-MM-DD-<topic>.md`.
+Do các scheduled task nghiên cứu và các agent đóng vai product advisor viết (`CLAUDE.md`, "Product advisor
+role"). Mỗi mảng có một thư mục riêng và một mục lục riêng, để các PR mở cùng một sáng không đụng nhau.
 
-## Rotation
+**Ngôn ngữ:** báo cáo trong thư mục này viết bằng **tiếng Việt** (ngoại lệ của quy tắc "mọi thứ trong repo bằng
+tiếng Anh" trong `CLAUDE.md`). Giữ nguyên tiếng Anh cho tên file, đường dẫn, tên hàm/biến, tên sản phẩm, mã CVE,
+câu trích và URL. Commit message vẫn bằng tiếng Anh; tiêu đề và mô tả PR của báo cáo viết bằng tiếng Việt.
 
-Each run picks the next area in this list after the last report's area, unless something urgent happened
-(a major launch, a security advisory that affects our stack):
+## Các mảng
 
-1. AI agents: tool design, agent loops, memory, evals
-2. Video editing: editor features, caption/motion styles, short-form formats, competitors' releases
-3. Security: LLM/agent security (prompt injection, tool abuse), web app security, Supabase/Next.js advisories
-4. Workflows and automation: job engines, schedulers, marketing automation, social APIs
-5. Growth for solo-founder SaaS: pricing, onboarding, activation, distribution (what is working now)
-6. Editor skills and creative templates: style libraries, prompt/skill packaging, reference repos
+Mỗi mảng chạy một lần mỗi tuần (giờ Việt Nam): Bảo mật và Tăng trưởng sáng Thứ 2 (~6h); Editor & motion và
+AI agent & automation sáng Thứ 4 (~5h), sau đó một task khác viết plan triển khai từ hai báo cáo này (~6h30). Mỗi
+lượt mở đúng một PR chỉ sửa thư mục của mảng đó.
 
-## Report format
+| Mảng | Thư mục | Phạm vi |
+|---|---|---|
+| Bảo mật | [`security/`](security/README.md) | Review bảo mật chính sản phẩm: RLS/RPC, auth, agent và LLM (prompt injection, lạm dụng tool), MCP, upload và ffmpeg, secret và dependency; advisory của Next.js, Supabase, Electron, Modal, ffmpeg, stack LLM/agent. Chỉ báo cáo, không sửa code. |
+| Editor & motion | [`editor/`](editor/README.md) | Sản phẩm và tính năng editor, caption, animation, 3D, motion graphic, AI editor; đối thủ (CapCut, Opus Clip, Descript, Submagic, Captions…); thư viện style, template, repo tham khảo. |
+| AI agent & automation | [`agents/`](agents/README.md) | AI agent cho sản phẩm của mình: thiết kế tool, vòng lặp agent, bộ nhớ, evals; job engine, scheduler, marketing automation, API mạng xã hội. |
+| Tăng trưởng | [`growth/`](growth/README.md) | Tăng trưởng cho SaaS của solo founder: giá, onboarding, activation, retention, phân phối, cái gì đang hiệu quả (Typefully, Hypefury và các SaaS indie). |
+
+Tên file: `<thư mục>/YYYY-MM-DD-<slug>.md` (slug tiếng Anh không dấu). Mỗi lượt đọc mục lục của thư mục mình
+trước để không lặp chủ đề hay nguồn, và chọn chủ đề con chưa được phủ gần đây.
+
+## Định dạng báo cáo
 
 ```markdown
-# <Area>: <one-line headline>  (YYYY-MM-DD)
+# <Mảng>: <tiêu đề một dòng>  (YYYY-MM-DD)
 
 ## TL;DR
-3–5 bullets: what changed in the world, what it means for OpenCMO.
+3–5 gạch đầu dòng: thế giới vừa thay đổi gì, điều đó nghĩa là gì cho OpenCMO.
 
-## Findings
-For each finding: what it is, link(s), why it matters to us, evidence (numbers, stars, dates).
+## Phát hiện
+Mỗi phát hiện: nó là gì, link, vì sao quan trọng với mình, bằng chứng (số liệu, sao, ngày).
 
-## Repos worth learning from
-| Repo | What to learn | Files to read | Licence | Copy or learn only |
+## Repo đáng học
+| Repo | Học được gì | File nên đọc | Licence | Copy hay chỉ học |
 
-## Recommendations
-Ranked. Each: what to do, cost (S/M/L), what it improves (activation, retention, revenue, cost, risk),
-and which doc/PR/track it belongs to. "Do nothing" is a valid recommendation.
+## Khuyến nghị
+Có xếp hạng. Mỗi mục: làm gì, chi phí (S/M/L), cải thiện gì (activation, retention, doanh thu, chi phí, rủi ro),
+và thuộc doc/PR/track nào. "Không làm gì" cũng là một khuyến nghị hợp lệ.
 
-## Sources
-Every URL used, with the date read.
+## Nguồn
+Mọi URL đã dùng, kèm ngày đọc.
 ```
 
-Rules: English; cite everything; no copied code in reports; facts older than 6 months are marked as such; a
-claim without a source is labelled as opinion.
+Hai mảng Editor & motion và AI agent & automation có thêm mục `## Gắn vào OpenCMO` sau "Repo đáng học", và giữ
+bảng "Repo đã đọc" trong README của thư mục (xem README của từng mảng).
 
-## Index
-
-Newest first. Each run adds one line and checks this list so it does not repeat a source.
-
-| Date | Area | Report | Key sources |
-|---|---|---|---|
-| 2026-10-16 | Video editing | (seed) reference reel review, led to `docs/style-skills-build.md` | Instagram reel "5 Plugins To Code Like A Senior Dev" |
+Quy tắc: tiếng Việt; dẫn nguồn mọi thứ; không chép code vào báo cáo; dữ kiện cũ hơn 6 tháng phải ghi rõ; nhận định
+không có nguồn phải gắn nhãn là ý kiến.

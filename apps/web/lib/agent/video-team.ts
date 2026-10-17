@@ -26,6 +26,15 @@ export const planVideoInput = z.object({
 });
 export type PlanVideoInput = z.infer<typeof planVideoInput>;
 
+/**
+ * What `prepareVideo` reads: the tool's input plus, from an outside client (MCP), a finished
+ * intro spec. The Assistant's schema does not offer `spec`; a given spec still goes through the
+ * code Reviewer (`reviewIntro`) and the same storyboard card.
+ */
+export const planVideoFullInput = planVideoInput.extend({
+  spec: introSpecSchema.optional().describe("A finished intro plan (personality, elements, beats). The server reviews it and sends back what to fix."),
+});
+
 export const PLAN_VIDEO_TOOL: ToolSpec = {
   name: "plan_video",
   description:
@@ -80,7 +89,7 @@ export async function prepareVideo(
   context: { document: ClipDocument; clipContext: string },
   onUsage: (usage: LlmUsage) => Promise<void>,
 ): Promise<{ prepared: PreparedVideo; card: VideoCard } | string> {
-  const parsed = planVideoInput.safeParse(input);
+  const parsed = planVideoFullInput.safeParse(input);
   if (!parsed.success) return `${parsed.error.issues[0]?.path.join(".") ?? ""}: ${parsed.error.issues[0]?.message ?? "Invalid input."}`;
   const request = parsed.data;
   const brand = readBrand(context.document);
@@ -89,7 +98,11 @@ export async function prepareVideo(
 
   let spec: IntroSpec;
   try {
-    if (fakeAllowed()) {
+    if (request.spec) {
+      const issues = reviewIntro(request.spec, { hasLogo });
+      if (issues.length) return `Fix the plan and send it again: ${issues.join(" ")}`;
+      spec = request.spec;
+    } else if (fakeAllowed()) {
       spec = fakeSpec(request.title ?? "Watch this first", request.brief ? "A quick walkthrough" : undefined, seconds);
     } else {
       if (!llmReady("writer") || !llmReady("motion")) return "The video team is not set up on this server yet.";
