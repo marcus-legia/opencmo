@@ -2661,7 +2661,10 @@ CREATE FUNCTION public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) RETU
     AS $$
 declare
   v_row public.cmo_runs;
-  v_price integer := case when p_input->>'brain' = 'claude' then 0 else public.cmo_job_price(p_kind) end;
+  v_price integer := case
+    when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
+    else public.cmo_job_price(p_kind)
+  end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
@@ -4107,6 +4110,10 @@ declare
   v_key text;
   v_row public.api_keys;
 begin
+  if not public.is_paid(v_user) then
+    -- P0001 so the route shows the message (lib/api/errors.ts passes it through).
+    raise exception 'API keys are part of the paid plans.' using errcode = 'P0001';
+  end if;
   if v_name = '' or char_length(v_name) > 60 then
     raise exception 'Name the key in 1 to 60 characters.' using errcode = '22023';
   end if;

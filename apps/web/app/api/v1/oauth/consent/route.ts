@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
+import { PAID_PLAN_CONSENT, paidUser } from "@/lib/auth/consent";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +17,15 @@ const body = z.object({
  * the page navigates there itself, because the site's CSP (`form-action 'self'`) blocks a form
  * that redirects to another site. Signed in, same site only (`withApi`).
  */
-export const POST = withApi({ body, rateLimit: { bucket: "project-write", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
+export const POST = withApi({ body, rateLimit: { bucket: "project-write", limit: 60, windowSeconds: 3600 } }, async ({ supabase, user, body }) => {
   // Supabase ties the request to the user when its details are read: read them in this request
   // too before answering. Already approved: the details are the way back.
   const details = await supabase.auth.oauth.getAuthorizationDetails(body.authorization_id);
   if (details.error || !details.data) throw new ApiError(404, "This request has expired. Start connecting again from the app.");
   if (!("authorization_id" in details.data)) return { redirect_url: details.data.redirect_url };
+
+  // Checked here, not only on the page: approve is a plain POST anyone signed in can send.
+  if (body.decision === "approve" && !(await paidUser(supabase, user.id))) throw new ApiError(403, PAID_PLAN_CONSENT);
 
   const options = { skipBrowserRedirect: true };
   const { data, error } =

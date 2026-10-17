@@ -5,9 +5,10 @@ import { useState } from "react";
 /**
  * Allow / Deny: posts the answer, then goes where Supabase says (back to the app that asked). A
  * script navigation, not a form redirect: the CSP's `form-action 'self'` stops a form from
- * landing on another site.
+ * landing on another site. `denyOnly`: the account may not connect (free plan, unknown app), so
+ * the only answer it can give is no, which still sends the app a clean `access_denied`.
  */
-export function ConsentButtons({ authorizationId }: { authorizationId: string }) {
+export function ConsentButtons({ authorizationId, denyOnly = false }: { authorizationId: string; denyOnly?: boolean }) {
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,9 +38,11 @@ export function ConsentButtons({ authorizationId }: { authorizationId: string })
         </p>
       ) : null}
       <div className="auth-fields">
-        <button className="primary-button" type="button" disabled={busy !== null} onClick={() => decide("approve")} data-testid="oauth-approve">
-          {busy === "approve" ? "Connecting…" : "Allow"}
-        </button>
+        {denyOnly ? null : (
+          <button className="primary-button" type="button" disabled={busy !== null} onClick={() => decide("approve")} data-testid="oauth-approve">
+            {busy === "approve" ? "Connecting…" : "Allow"}
+          </button>
+        )}
         <button className="secondary-button" type="button" disabled={busy !== null} onClick={() => decide("deny")} data-testid="oauth-deny">
           Deny
         </button>

@@ -55,7 +55,8 @@ export async function run(userId: string) {
     const { error } = await ctx.supabase.rpc("cmo_add_item", { p_department: department, p_idea: idea, p_day: isoDay(), p_reason: "e2e", p_body: {} });
     assert.ifError(error);
   }
-  await admin.from("profiles").update({ credit_balance: 0 }).eq("id", userId);
+  // A paid founder out of credits: MCP and the free `brain = 'claude'` run are paid-plan features.
+  await admin.from("profiles").update({ credit_balance: 0, plan: "starter" }).eq("id", userId);
 
   // Mode B, because of credits (and no keys).
   const mode = await call("get_mode", {}, ctx);

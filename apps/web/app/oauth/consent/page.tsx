@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Brand } from "@/components/brand/Brand";
+import { PAID_PLAN_CONSENT, paidUser } from "@/lib/auth/consent";
 import { createServerClient } from "@/lib/supabase/server";
 
 import { ConsentButtons } from "./ConsentButtons";
@@ -33,6 +34,16 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
   if (!("authorization_id" in data)) redirect(data.redirect_url);
 
   const client = data.client.name || "An app";
+  if (!(await paidUser(supabase, user.id))) {
+    return (
+      <Consent title={`Connect ${client} to OpenCMO`} text={PAID_PLAN_CONSENT}>
+        <p className="auth-consent-note">
+          <Link href="/app/billing">See plans</Link>
+        </p>
+        <ConsentButtons authorizationId={data.authorization_id} denyOnly />
+      </Consent>
+    );
+  }
   return (
     <Consent title={`Connect ${client} to OpenCMO`} text={`${client} wants to use OpenCMO as ${data.user.email}.`}>
       <ul className="auth-consent">

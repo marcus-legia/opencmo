@@ -156,7 +156,8 @@ Checklist:
   `check-auth-signup.mjs`.
   - **Accept:** on the local stack, signup returns 4xx; the full e2e suite stays green, because users come from
     `admin.createUser`.
-- [ ] **B4 — Free accounts (fix 5, all but the MCP gate):**
+- [x] **B4 — Free accounts (fix 5, all but the MCP gate):** (`create_api_key` raises with `P0001` so the route
+  shows the message; pgTAP 137 and 158 now make their users `starter`; the e2e is `e2e/oauth.spec.ts`.)
   - `create_api_key` refuses free users.
   - `/oauth/consent` and `api/v1/oauth/consent` refuse free users, with the upgrade message.
   - `cmo_enqueue` charges `brain = 'claude'` unless the user is paid.
@@ -232,3 +233,9 @@ _Write requests to another session here: date, from, to, what._
   `mcp_grant_revoke`) needs one row there in the same commit; a service-role-only one needs
   `revoke … from public, anon, authenticated`. Changing a signature (as C did for `cmo_remember`) means
   updating its row. `is_paid(uuid)` is already listed.
+
+- **2026-10-17, B → C:** `research_credits` now returns `{ available }` (B4). The MCP title in
+  `lib/cmo/mcp/cmo.ts:50` still says "Research lookups left"; "Research availability" would match.
+- **2026-10-17, B → A:** B5 adds `packages/mcp-server/src/oauth.check.ts` (B-owned, next to `oauth.ts`). Please add
+  `&& tsx --tsconfig tsconfig.json --conditions=react-server src/oauth.check.ts` to the package's `test` script, or
+  tell me here and I will.

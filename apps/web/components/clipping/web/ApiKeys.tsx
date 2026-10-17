@@ -1,8 +1,11 @@
 "use client";
 
 /**
- * Khoá API cho MCP (G5): tạo, xem, thu hồi. Khoá gốc chỉ hiện MỘT lần ngay sau khi tạo — server
- * chỉ giữ hash. Kèm lệnh nối Claude Code, cùng cách Palmier hướng dẫn cài MCP.
+ * API keys for MCP (G5): create, list, revoke. The raw key is shown ONCE, right after it is made;
+ * the server keeps only its hash. Comes with the Claude Code command to connect.
+ *
+ * MCP is a paid-plan feature: a free account sees the upgrade path instead of the create form, and
+ * keeps its old keys listed so it can revoke them (they no longer work over MCP).
  */
 
 import { useEffect, useState } from "react";
@@ -10,12 +13,14 @@ import { useEffect, useState } from "react";
 import { ApiError, api, jsonBody } from "../api";
 import { Skeleton } from "../Skeleton";
 
+import { PaidPlanNote } from "./PaidPlanNote";
+
 type Key = { id: string; name: string; prefix: string; created_at: string; last_used_at: string | null; revoked_at: string | null };
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "never");
 
 /** `endpoint`: the MCP server clients connect to (`OPENCMO_MCP_URL`, read on the server). */
-export function ApiKeys({ endpoint: configured }: { endpoint?: string | null } = {}) {
+export function ApiKeys({ endpoint: configured, paid = false }: { endpoint?: string | null; paid?: boolean } = {}) {
   const [keys, setKeys] = useState<Key[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -81,6 +86,7 @@ export function ApiKeys({ endpoint: configured }: { endpoint?: string | null } =
         Connect Claude, Cursor or another MCP client to edit your clips. Generating media from a client still shows you the
         price first. Anyone with a key can edit your projects and spend your credits: keep it private.
       </p>
+      {paid ? null : <PaidPlanNote />}
       {created ? (
         <div className="api-key-created" role="status">
           <p>
@@ -100,13 +106,15 @@ export function ApiKeys({ endpoint: configured }: { endpoint?: string | null } =
           ) : null}
         </div>
       ) : null}
-      <form className="api-key-form" onSubmit={(event) => void create(event)}>
-        <label htmlFor="api-key-name">Key name</label>
-        <input id="api-key-name" data-testid="api-key-name" value={name} maxLength={60} placeholder="Claude Desktop" onChange={(event) => setName(event.target.value)} />
-        <button type="submit" className="secondary-button" disabled={!name.trim() || busy} data-testid="api-key-create">
-          Create key
-        </button>
-      </form>
+      {paid ? (
+        <form className="api-key-form" onSubmit={(event) => void create(event)}>
+          <label htmlFor="api-key-name">Key name</label>
+          <input id="api-key-name" data-testid="api-key-name" value={name} maxLength={60} placeholder="Claude Desktop" onChange={(event) => setName(event.target.value)} />
+          <button type="submit" className="secondary-button" disabled={!name.trim() || busy} data-testid="api-key-create">
+            Create key
+          </button>
+        </form>
+      ) : null}
       {error ? (
         <p className="field-error" role="alert">
           {error}

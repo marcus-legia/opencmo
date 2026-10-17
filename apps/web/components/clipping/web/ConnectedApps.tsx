@@ -4,7 +4,8 @@
  * Apps connected through OpenCMO's OAuth server (claude.ai's connector, other MCP clients): the
  * consent screen (`/oauth/consent`) promises they can be disconnected here. Disconnecting revokes
  * the grant; the app's token stops working on its next request. Shown only where the OAuth server
- * is on: without it there is nothing to list or to promise.
+ * is on: without it there is nothing to list or to promise. A free account sees the upgrade path
+ * (connecting is a paid-plan feature) and can still disconnect what it connected before.
  */
 
 import { useEffect, useState } from "react";
@@ -13,11 +14,13 @@ import { createClient } from "@/lib/supabase/client";
 
 import { Skeleton } from "../Skeleton";
 
+import { PaidPlanNote } from "./PaidPlanNote";
+
 type Grant = { client: { id: string; name: string; uri: string }; scopes: string[]; granted_at: string };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
-export function ConnectedApps() {
+export function ConnectedApps({ paid = false }: { paid?: boolean } = {}) {
   const [grants, setGrants] = useState<Grant[] | null>(null);
   const [available, setAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export function ConnectedApps() {
     <div className="settings-card" data-testid="connected-apps">
       <h2>Connected apps</h2>
       <p>Apps you allowed to use OpenCMO as you, such as Claude. Disconnect one to stop it at once.</p>
+      {paid ? null : <PaidPlanNote />}
       {error ? (
         <p className="field-error" role="alert">
           {error}
