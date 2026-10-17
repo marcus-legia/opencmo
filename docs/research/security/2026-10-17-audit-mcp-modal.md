@@ -38,7 +38,7 @@ Thang mức độ: Cao / Trung bình / Thấp.
 - **"Đã xác nhận"**: đã đọc code và chạy lại được trong máy này. Các PoC chạy in-process, gọi thẳng `handle()` của `packages/mcp-server/src/http.ts` hoặc `POST` của route cũ, với `fetch` giả lập Supabase.
 - **"Nghi ngờ"**: cần Modal thật, Supabase Auth thật hoặc claude.ai để kiểm.
 
-**Môi trường:** không có Modal CLI, không có Supabase CLI/Docker. Vì vậy không chạy được `modal serve` hay luồng OAuth thật; mục nào cần những thứ đó đều ghi rõ cách kiểm tay. Không có request nào đi ra production.
+**Môi trường:** không có Modal CLI, không có Supabase CLI/Docker. Vì vậy không chạy được `modal serve` hay luồng OAuth thật; mục nào cần những thứ đó đều ghi rõ cách kiểm tay. Trong PoC, `getUser` của Supabase là bản giả lập, nên mục 3 chỉ chứng minh phần kiểm ở phía server mình; Supabase thật có nhận token đó hay không thì vẫn là nghi ngờ. Không có request nào đi ra production.
 
 ### 1. [Cao, đã xác nhận] Container MCP giữ secret của cả hệ thống, nhiều hơn mức nó cần
 
@@ -51,9 +51,9 @@ Thang mức độ: Cao / Trung bình / Thấp.
   |---|---|---|
   | `SUPABASE_JWT_SECRET` | Có | Ký JWT 5 phút cho đường API key (`apps/web/lib/mcp/auth.ts:33-40`); làm khoá cho mã confirm (`src/confirm.ts:18-23`) |
   | `SUPABASE_SERVICE_ROLE_KEY` | Có | Chỉ `api_key_owner` (`lib/mcp/auth.ts:51-56`); fallback khoá confirm; `kickCmoQueue` (không chạy qua MCP vì `brain: "claude"`) |
-  | `OPENCMO_WORKER_TOKEN` | Có | Đánh thức worker khi tạo task |
+  | `OPENCMO_WORKER_TOKEN` | Có | Đánh thức worker khi tạo task (`wakeWorker` trong `apps/web/lib/modal.ts`). Đây là token mà endpoint `submit` của Modal tin tưởng, nên lộ nó là gửi được job thẳng vào worker |
   | `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` | Có | Kiểm duyệt prompt (`moderateText`) |
-  | `FAL_KEY`, `ELEVENLABS_API_KEY` | Có | Catalog model, ẩn/hiện tool generation |
+  | `FAL_KEY`, `ELEVENLABS_API_KEY` | Có | Catalog model, ẩn/hiện tool generation. `FAL_KEY` còn bắt buộc cho kiểm duyệt prompt: `moderationReady()` cần cả khoá Anthropic lẫn `FAL_KEY` (`apps/web/lib/generate/moderation.ts:40`) |
   | `MOTION_PREVIEW_URL/TOKEN`, `MODAL_SUBMIT_URL` | Có | Preview, gửi task |
   | `CRON_SECRET` | **Không** | Không có dòng nào đọc |
   | `MODAL_TOKEN_ID/SECRET` | Có code, nhưng không tool nào gọi `callModal` (`src/modal.ts:4-9`) | Không cần lúc này |
@@ -84,7 +84,7 @@ Thang mức độ: Cao / Trung bình / Thấp.
   - Nếu đúng, request 401 rẻ tới đâu cũng vẫn tốn quota chung. Đẩy đủ ~200–1.000 rps vào `…-opencmo-mcp.modal.run` là `submit` (web app gửi job) và `motion_preview` bị 429, tức là cả sản phẩm video ngừng nhận việc.
   - Chưa xác nhận được vì không đọc được modal.com từ máy này.
 - **Chi phí khi autoscale (đã xác nhận từ config):**
-  - Một user hợp lệ được 600 message/giờ. Mỗi lần `wait_for_media` hay inbox giữ request tới 50 giây (`studio.ts:311`).
+  - Một user hợp lệ được 600 message/giờ. Mỗi lần `wait_for_media` hay inbox giữ request tới 50 giây (`packages/mcp-server/src/groups/studio.ts:189`, `apps/web/lib/cmo/mcp/inbox.ts:47`).
   - 50 request đồng thời mỗi container × không trần container, nên N tài khoản free (mục 4) là N lần số container.
   - Mỗi container khoảng 0,25 core + 0,5 GiB (~$10/tháng nếu chạy liên tục, theo `docs/mcp-on-modal-plan.md`). Tiền tăng tuyến tính mà không có trần.
 - **Cách kiểm tay:**
@@ -197,6 +197,7 @@ Thang mức độ: Cao / Trung bình / Thấp.
   - fallback khoá confirm
 - **Lỗi:** `callTool` chỉ trả message của `ApiError` dưới 500 và `ConfirmError`. Lỗi khác thì ghi log và trả "Something went wrong" (`server.ts:147-155`). Log không chứa token, header hay tham số.
 - **Link tải:** link export ký 5 phút (`DOWNLOAD_TTL = 300`, `lib/storage.ts:49`).
+- **[Thấp] Lộ số dư ScrapeCreators của công ty:** tool `research_credits` (`apps/web/lib/agent/cmo-research.ts:85-86, 157`) trả cho mọi user số lookup còn lại trên tài khoản ScrapeCreators mà OpenCMO trả tiền, không phải hạn mức riêng của user. Đây là thông tin kinh doanh, và kẻ đang tấn công chi phí (mục 4) nhìn vào đó là biết đòn của mình có hiệu quả không. Nên trả "còn / hết" thay vì con số.
 - **Ngoài phạm vi MCP nhưng cần ghi:** `enqueue_cmo_run` được grant cho `authenticated`, và `cmo_enqueue` nhận `brain: "claude"` từ chính user (giá 0). Đây là thiết kế có chủ ý, đã ghi trong migration `20261128090000_cmo_inbox.sql:53-55`. Session B kiểm khi rà bề mặt PostgREST.
 
 ### Những gì đang làm tốt (để giữ)
