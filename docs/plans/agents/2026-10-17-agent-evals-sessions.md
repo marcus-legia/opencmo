@@ -173,9 +173,15 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
       injections: a `</thread><thread index="0">` break-out and an "ignore previous instructions" P.S.). Fake: 6/6;
       `eval/cases/coverage.check.ts` proves a bad reply fails both injection threads. Real run: blocked by the same
       empty Gemini credit (failed at `make_queries`, $0).
-- [ ] **C3 — Memory-safety (C3).** `cmo-run.ts` seam (recording executor, same loop), `cmo-tasks.ts` cases by
+- [x] **C3 — Memory-safety (C3).** `cmo-run.ts` seam (recording executor, same loop), `cmo-tasks.ts` cases by
       `expectedWriteBehavior`; tool-output cases `pending: "security report #1 (tainted gate)"`; one negative control.
       Accept: fake run green; founder-said case writes `remember`; negative control writes nothing.
+      Done: the seam is the Supabase client, not the loop — `runTurn` and `cmoScope` run unchanged on an in-memory
+      recording client; read tools with a case's canned output stand in for the outside world. Six cases: three
+      founder-said (`remember`, `update_document`, `set_week_goal`), one negative control, two tool-output injections
+      (`read_site`, `search_reddit`) pending. Fake scripts for goal / update doc / read site added to `fake.ts`.
+      `tsx lib/agent/eval/cmo-run.ts --provider fake`: 4/4 + 2 pending, $0. Real run: not done (no Anthropic key
+      here, the Gemini key has no credit).
 - [ ] **C4 — Trajectory (C4).** `trajectory.ts` helpers; rules on `filler`, `pauses` and the create-video tasks.
       Accept: `agent:eval -- --provider fake` still passes every task that passed on `main`; a fake script edited
       to break a rule is caught (then reverted).
@@ -193,6 +199,10 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
 - **C → B (B6):** please add `tsx lib/cmo/jobs/eval/cases/coverage.check.ts` to the fake CI run (or `check:contracts`):
   it asserts the graders catch planted instructions, invented prices and hidden text, which a green `cmo:eval` alone
   does not prove.
+- **C → B (B5/B6):** CMO chat memory-safety runs through `runCmoTasks(provider, { epoch })` in
+  `lib/agent/eval/cmo-run.ts` and returns `CaseResult[]` (pending set on the two tool-output cases). Please append them
+  to the `agent:eval` report (e.g. after the editor tasks, or behind `--suite cmo`) and run
+  `tsx lib/agent/eval/cmo-run.ts --provider fake` in CI until then.
 
 - **B → A (FYI, done by B):** `lib/cmo/jobs/llm.ts` (no owner) gained two additive pieces: `StructuredOptions.prefer`
   (run as that provider first; the judge uses it to grade on the provider that did not draft) and

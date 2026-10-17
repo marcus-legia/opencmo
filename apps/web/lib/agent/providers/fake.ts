@@ -715,8 +715,20 @@ function projectScript(history: StoredMessage[]): unknown[] {
  *   "draft"/"post"    → create_task x_writer
  *   "calendar"        → list_calendar → nói số mục
  *   "remember"        → remember (phần sau chữ "remember")
+ *   "goal"            → set_week_goal this week (metric from the words, target the first number, else 5)
+ *   "update" + "doc"  → read_doc → update_document (the price in the request, e.g. "$15/month")
+ *   "read" + a domain → read_site → a reply about the page, nothing saved (memory-safety eval)
  *   còn lại           → trả lời bằng chữ
  */
+/** The founder's words of the turn: the latest user message with text, without the documents and state. */
+const cmoAsk = (history: StoredMessage[]): string =>
+  [...history]
+    .reverse()
+    .map((message) => (message.role === "user" ? (message.content as Block[]) : []).filter((block) => block.type === "text").map((block) => block.text ?? "").join(" "))
+    .find((words) => words.trim())
+    ?.split("<documents>")[0]!
+    .split("<cmo_state>")[0]! ?? "";
+
 function cmoScript(history: StoredMessage[]): unknown[] {
   const user = [...history].reverse().find((message) => message.role === "user");
   const blocks = (user?.content ?? []) as Block[];
@@ -743,11 +755,29 @@ function cmoScript(history: StoredMessage[]): unknown[] {
       return [text(`You have ${items.length} items on your calendar for the next two weeks.`)];
     }
     if (previous.includes("remember")) return [text("Noted. I will use that in every plan and draft.")];
+    if (previous.includes("read_doc")) {
+      const price = /\$\d+(?:\.\d+)?(?:\/\w+)?/.exec(cmoAsk(history))?.[0];
+      if (price) return [text("Updating the pricing."), use("update_document", { kind: "product", fields_json: JSON.stringify({ pricing: price }) })];
+      return [text("I read the document.")];
+    }
+    if (previous.includes("update_document")) return [text(/"saved":\s*true/.test(raw) ? "Updated. The old version stays in history." : "I could not update the document.")];
+    if (previous.includes("set_week_goal")) return [text("Proposed. Approve or edit it on the goal card in Approvals.")];
+    if (previous.includes("read_site")) return [text("I read the homepage. Lead with the outcome in the first heading and put the price above the fold.")];
     return [text("Done.")];
   }
-  const ask = blocks.map((block) => block.text ?? "").join(" ").split("<documents>")[0]!.split("<cmo_state>")[0]!;
+  const ask = cmoAsk(history);
   const lower = ask.toLowerCase();
   if (/remember/.test(lower)) return [use("remember", { note: ask.replace(/^.*?remember( that)?:?\s*/i, "").trim().slice(0, 200) || ask.trim() })];
+  if (/\bgoal\b/.test(lower)) {
+    const metric = /repl/.test(lower) ? "replies" : /clip/.test(lower) ? "clips" : /view/.test(lower) ? "views" : "posts";
+    return [use("set_week_goal", { week: "this", goal: ask.replace(/^.*?goal:?\s*/i, "").trim().slice(0, 300) || ask.trim(), metric, target: Number(/\d+/.exec(lower)?.[0] ?? 5) })];
+  }
+  if (/\bupdate\b/.test(lower) && /\bdoc/.test(lower)) {
+    const kind = /strategy/.test(lower) ? "strategy" : /competitor/.test(lower) ? "competitors" : /content/.test(lower) ? "content_strategy" : "product";
+    return [text("Reading the document first."), use("read_doc", { kind })];
+  }
+  const site = /\bread\b/.test(lower) ? /\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b/.exec(lower)?.[1] : undefined;
+  if (site) return [text("Reading the site."), use("read_site", { url: site })];
   if (/research/.test(lower)) return [text("Looking at Reddit first."), use("search_reddit", { query: "late invoices" })];
   if (/clip|video/.test(lower)) return [text("Adding a video task."), use("create_task", { agent: "video", brief: "Clips about how you onboard a new client", clips: 3, clip_length: "short" })];
   if (/reddit/.test(lower)) return [text("Scanning Reddit for people who need this."), use("create_task", { agent: "sales", brief: "People who struggle with the problem we solve", when: "now" })];
