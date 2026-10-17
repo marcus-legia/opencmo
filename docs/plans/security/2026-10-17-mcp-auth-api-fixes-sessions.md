@@ -146,7 +146,7 @@ Checklist:
 
 Checklist:
 
-- [ ] **B1 — Contracts.** `is_paid` migration plus pgTAP; `isPaidPlan()`. Push this first.
+- [x] **B1 — Contracts.** `is_paid` migration plus pgTAP; `isPaidPlan()`. Push this first.
 - [ ] **B2 — Open redirect (fix 3).** `lib/auth/next.ts` `safeNext` plus `next.check.ts` with the plan's table, then
   `auth/callback/route.ts` uses it.
   - **Accept:** the check fails on today's logic (copy the old expression into the test as the "before" case) and

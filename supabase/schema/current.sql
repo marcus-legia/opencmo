@@ -5330,6 +5330,23 @@ $$;
 
 
 --
+-- Name: is_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_paid(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(
+    (select p.plan in ('starter', 'creator')
+       from public.profiles p
+      where p.id = p_user
+        and (auth.uid() is null or auth.uid() = p_user)),
+    false);
+$$;
+
+
+--
 -- Name: job_credits_spent(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 

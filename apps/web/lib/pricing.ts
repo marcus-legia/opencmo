@@ -151,6 +151,14 @@ export function checkoutUrlFor(
   }
 }
 
+/**
+ * Paid = one of the two plans Polar sells. Same rule as SQL `is_paid()`: an unknown or missing
+ * `profiles.plan` is unpaid, so a typo in a webhook can't unlock paid features.
+ */
+export function isPaidPlan(plan: string | null | undefined): boolean {
+  return plan === "starter" || plan === "creator";
+}
+
 export function planById(id: string): Plan | undefined {
   return PLANS.find((p) => p.id === id);
 }
