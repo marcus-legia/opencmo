@@ -45,6 +45,13 @@ check("the fixture covers every case the plan names", () => {
   assert.ok(ADDRESS_CASES.some((c) => !c.blocked) && ADDRESS_CASES.some((c) => c.blocked));
 });
 
+check("pgTAP 180 runs exactly the fixture's cases", () => {
+  const sql = readFileSync(new URL("../../../../supabase/tests/180_private_video_urls.test.sql", import.meta.url), "utf8");
+  const block = sql.slice(sql.indexOf("insert into shared_cases values"), sql.indexOf("select is(public.video_url_refused('https://'"));
+  const rows = [...block.matchAll(/\('([^']*)', (true|false)\)/g)].map((m) => ({ input: m[1], blocked: m[2] === "true" }));
+  assert.deepEqual(rows, ADDRESS_CASES.map(({ input, blocked }) => ({ input, blocked })));
+});
+
 check("only ports 80 and 443, whatever the scheme", () => {
   assert.deepEqual(checkUrl(new URL("https://example.com/")), { host: "example.com", port: 443 });
   assert.deepEqual(checkUrl(new URL("http://example.com/")), { host: "example.com", port: 80 });

@@ -4322,12 +4322,7 @@ begin
     raise exception 'Missing video link.' using errcode = '22023';
   end if;
   if v_source not like 'storage://%'
-     and (
-       v_source !~* '^https?://[^/@[:space:]]+([/:?#]|$)'
-       or v_source ~* '^https?://[^/]*@'
-       or v_source ~* '^https?://(localhost|127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)([/:?#]|[0-9])'
-       or v_source ~* '^https?://\[::1\]([/:?#]|$)'
-     )
+     and (v_source !~* '^https?://[^/@[:space:]]+([/:?#]|$)' or public.video_url_refused(v_source))
   then
     raise exception 'Paste a public HTTP or HTTPS video link.' using errcode = '22023';
   end if;
@@ -8197,6 +8192,80 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: video_url_refused(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.video_url_refused(p_url text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_authority text := lower(substring(p_url from '^[hH][tT][tT][pP][sS]?://([^/?#]*)'));
+  v_host text;
+  v_port text;
+  v_octets int[];
+  v_h1 int;
+  v_h2 int;
+begin
+  if v_authority is null or v_authority = '' or v_authority ~ '[@[:space:]\\]' then
+    return true;
+  end if;
+  if v_authority like '[%' then
+    v_host := substring(v_authority from '^(\[[0-9a-f:.]*\])');
+    if v_host is null then
+      return true;
+    end if;
+    v_port := substring(v_authority from length(v_host) + 1);
+  else
+    v_host := split_part(v_authority, ':', 1);
+    v_port := substring(v_authority from length(v_host) + 1);
+  end if;
+  if v_port <> '' and v_port not in (':', ':80', ':443') then
+    return true;
+  end if;
+
+  if v_host like '[%' then
+    -- Global unicast is 2000::/3; IPv4 hidden in IPv6 (mapped, NAT64, 6to4, Teredo) and every
+    -- local range fall outside it or in the prefixes refused here.
+    v_host := btrim(v_host, '[]');
+    if v_host !~ '^[0-9a-f]{1,4}:' then
+      return true;
+    end if;
+    v_h1 := ('x' || lpad(split_part(v_host, ':', 1), 8, '0'))::bit(32)::int;
+    v_h2 := case when split_part(v_host, ':', 2) ~ '^[0-9a-f]{1,4}$'
+      then ('x' || lpad(split_part(v_host, ':', 2), 8, '0'))::bit(32)::int else 0 end;
+    return v_h1 < 8192 or v_h1 > 16383 or v_h1 = 8194 or (v_h1 = 8193 and (v_h2 < 512 or v_h2 = 3512));
+  end if;
+
+  v_host := rtrim(v_host, '.');
+  if v_host !~ '\.' or v_host ~ '(^|\.)(localhost|local|internal|intranet|lan|home\.arpa|onion)$' then
+    return true;
+  end if;
+  -- Digits, dots and hex only: an address in some encoding. Only a plain dotted quad is judged;
+  -- `0x7f.1`, `127.1` and `0177.0.0.1` are refused outright.
+  if v_host ~ '^(0x[0-9a-f]*|[0-9]+)(\.(0x[0-9a-f]*|[0-9]+))*$' then
+    if v_host !~ '^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$' then
+      return true;
+    end if;
+    v_octets := string_to_array(v_host, '.')::int[];
+    return v_octets[1] > 255 or v_octets[2] > 255 or v_octets[3] > 255 or v_octets[4] > 255
+      or v_octets[1] in (0, 10, 127) or v_octets[1] >= 224
+      or (v_octets[1] = 100 and v_octets[2] between 64 and 127)
+      or (v_octets[1] = 169 and v_octets[2] = 254)
+      or (v_octets[1] = 172 and v_octets[2] between 16 and 31)
+      or (v_octets[1] = 192 and v_octets[2] = 168)
+      or (v_octets[1] = 192 and v_octets[2] = 0 and v_octets[3] in (0, 2))
+      or (v_octets[1] = 192 and v_octets[2] = 88 and v_octets[3] = 99)
+      or (v_octets[1] = 198 and v_octets[2] in (18, 19))
+      or (v_octets[1] = 198 and v_octets[2] = 51 and v_octets[3] = 100)
+      or (v_octets[1] = 203 and v_octets[2] = 0 and v_octets[3] = 113);
+  end if;
+  return false;
+end;
+$_$;
 
 
 --

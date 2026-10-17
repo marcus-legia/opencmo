@@ -6,9 +6,9 @@
  * The usual SSRF targets hide in encodings a prefix list misses: IPv4 inside IPv6 (mapped, 6to4,
  * Teredo, NAT64), and `2130706433` / `0x7f.1` for 127.0.0.1 — `new URL` turns the last two into
  * dotted quads, which is why callers must check `url.hostname`, never the raw string.
+ *
+ * No Node imports: `lib/api/source.ts` uses this and is also bundled for the browser.
  */
-
-import { isIP } from "node:net";
 
 /** The only ports we fetch on; anything else is refused whatever the scheme. */
 export const DEFAULT_PORTS: Record<string, number> = { "http:": 80, "https:": 443 };
@@ -41,7 +41,6 @@ function parseIpv4(text: string): number[] | null {
 
 /** 16 bytes, or null when `text` is not an IPv6 address. */
 function parseIpv6(text: string): number[] | null {
-  if (isIP(text) !== 6) return null;
   let head = text;
   let tail: number[] = [];
   const v4 = text.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
@@ -51,14 +50,33 @@ function parseIpv6(text: string): number[] | null {
     head = v4[1].endsWith("::") ? v4[1] : v4[1].slice(0, -1);
     tail = [(quad[0] << 8) | quad[1], (quad[2] << 8) | quad[3]];
   }
-  const [left, right] = head.includes("::") ? head.split("::") : [head, null];
-  const words = (s: string) => (s ? s.split(":").map((w) => parseInt(w, 16)) : []);
-  const before = words(left);
-  const after = [...words(right ?? ""), ...tail];
-  const fill = right === null ? [] : Array(8 - before.length - after.length).fill(0);
-  const all = right === null ? [...before, ...tail] : [...before, ...fill, ...after];
+  const halves = head.split("::");
+  if (halves.length > 2) return null;
+  const words = (part: string): number[] | null => {
+    if (!part) return [];
+    const groups = part.split(":");
+    return groups.every((g) => /^[0-9a-f]{1,4}$/i.test(g)) ? groups.map((g) => parseInt(g, 16)) : null;
+  };
+  const before = words(halves[0]);
+  const after = halves.length === 2 ? words(halves[1]) : [];
+  if (!before || !after) return null;
+  const known = before.length + after.length + tail.length;
+  let all: number[];
+  if (halves.length === 2) {
+    if (known > 7) return null;
+    all = [...before, ...Array(8 - known).fill(0), ...after, ...tail];
+  } else {
+    all = [...before, ...tail];
+  }
   if (all.length !== 8) return null;
   return all.flatMap((w) => [w >> 8, w & 0xff]);
+}
+
+/** 4 or 6 for a literal address (brackets allowed), 0 for a name. */
+export function ipVersion(host: string): 0 | 4 | 6 {
+  const text = host.replace(/^\[|\]$/g, "");
+  if (parseIpv4(text)) return 4;
+  return text.includes(":") && parseIpv6(text.split("%", 1)[0]) ? 6 : 0;
 }
 
 /** True for every address a server-side fetch must never connect to; unparsable counts as private. */
@@ -100,7 +118,7 @@ export function checkUrl(url: URL): { host: string; port: number } | Refusal {
   if (url.username || url.password) return { refused: "userinfo" };
   if (!ALLOWED_PORTS.has(port)) return { refused: "port" };
   const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.+$/, "");
-  if (isIP(host)) return privateAddress(host) ? { refused: "private address" } : { host, port };
+  if (ipVersion(host)) return privateAddress(host) ? { refused: "private address" } : { host, port };
   // A host made only of digits, dots and hex is a number `new URL` did not turn into an address
   // (e.g. out of range); never send that to DNS.
   if (/^(0x[0-9a-f]*|\d+)(\.(0x[0-9a-f]*|\d+))*$/i.test(host)) return { refused: "private address" };
