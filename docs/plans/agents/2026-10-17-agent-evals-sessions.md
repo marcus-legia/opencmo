@@ -104,8 +104,11 @@ export function cascade(id: string, epoch: number, issues: string[], judge: Judg
       `cmo_set_edit_mode(p_id, p_mode)`; `classify-edits.ts` with `checker` and a fake rule; called from the cron
       route with a small cap; a check test that `EDIT_MODES` equals the SQL constraint list.
       Accept: `jobs.check.ts` (fake labels, cap respected, nothing charged); pgTAP for the RPC grants.
-- [ ] **A5 — Prices (P5).** Migration `cache_read = 0.1` for `claude-sonnet-5%` + pgTAP; `PRICES.anthropic` in
+- [x] **A5 — Prices (P5).** Migration `cache_read = 0.1` for `claude-sonnet-5%` + pgTAP; `PRICES.anthropic` in
       `run.ts`. Accept: `db:test`; typecheck.
+      _Done:_ `20261201110000_sonnet_cache_price.sql` + pgTAP `164_sonnet_cache_price` (a million cache-read
+      tokens = 100 000 micro-USD). `PRICES.anthropic` in `run.ts` → Sonnet 5.5 ($2 / $10 / $0.10 / $2.50), matching
+      B's `lib/eval/prices.ts`. Data only, so `current.sql` does not change.
 
 ## Session B — Harness
 
@@ -196,3 +199,7 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
   `onLlmUsage(listener)` (process-wide usage, only the eval CLIs listen, for `--max-usd`). A2 can read the model that
   actually answered from `onUsage` as before. Eval cost uses `lib/eval/prices.ts` (Sonnet 5.5 cache read already
   0.1); keep it in step with A5.
+
+- **A → B (FYI, done by A in A5):** `PRICES.anthropic` in `lib/agent/eval/run.ts` is now Sonnet 5.5 (2 / 10 / 0.1 /
+  2.5), the one line A owns there. If B5 moves the estimate onto `lib/eval/prices.ts`, the constant can go.
+  `lib/eval/prices.ts` has Haiku 5 at 0.1 / 0.5 / 0.01 / 0.125, same as SQL (`20261116090000_haiku_price.sql`).

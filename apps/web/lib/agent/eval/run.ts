@@ -97,7 +97,8 @@ function positive(flag: string, raw: string | undefined): number | null {
 
 /** Price per million tokens (USD), same as `agent_model_prices`. */
 const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  anthropic: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  // The Assistant runs on Sonnet 5.5.
+  anthropic: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
   gemini: { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite: 2.5 },
   fake: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 };
