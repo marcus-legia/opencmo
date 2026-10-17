@@ -7,7 +7,9 @@ name: AI evals
 # epochs and cap.
 #
 # API keys live only in the `ai-evals` environment of this workflow (Settings → Environments →
-# ai-evals: ANTHROPIC_API_KEY, GEMINI_API_KEY). A provider without a key is skipped with a notice.
+# ai-evals: ANTHROPIC_API_KEY, GEMINI_API_KEY; limit its deployment branches to `main`). A provider
+# without a key is skipped with a notice. The keys reach only the step that runs the eval: never
+# `npm ci`, whose install scripts would otherwise see them.
 
 on:
   workflow_dispatch:
@@ -64,15 +66,17 @@ jobs:
       EPOCHS: ${{ inputs.epochs || '1' }}
       EVAL_MAX_USD: ${{ inputs.max_usd || '3' }}
       ARTIFACT: eval-${{ matrix.suite }}-${{ matrix.provider }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - name: Key check
         id: key
+        env:
+          # Only whether a key is set, never the key itself.
+          HAS_ANTHROPIC: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
         run: |
           missing=false
-          if [ "$PROVIDER" = anthropic ] && [ -z "$ANTHROPIC_API_KEY" ]; then missing=true; fi
-          if [ "$PROVIDER" = gemini ] && [ -z "$GEMINI_API_KEY" ]; then missing=true; fi
+          if [ "$PROVIDER" = anthropic ] && [ "$HAS_ANTHROPIC" != true ]; then missing=true; fi
+          if [ "$PROVIDER" = gemini ] && [ "$HAS_GEMINI" != true ]; then missing=true; fi
           if [ "$missing" = true ]; then
             echo "::notice::No $PROVIDER key in the ai-evals environment; skipping this eval."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -117,6 +121,10 @@ jobs:
         working-directory: apps/web
         # bash with pipefail, so `| tee` does not hide a failing eval.
         shell: bash
+        env:
+          # Both: the judge grades on the provider that did not draft.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           out="$RUNNER_TEMP/out"
           mkdir -p "$out"
