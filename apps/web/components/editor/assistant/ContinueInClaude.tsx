@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/components/clipping/api";
 
-type Mode = { brain: "opencmo" | "claude"; reason: "ok" | "credits" | "llm_down" | "forced"; credits: number; inbox: number; mcp_url: string };
+type Mode = { brain: "opencmo" | "claude"; reason: "ok" | "credits" | "llm_down" | "forced"; credits: number; inbox: number; mcp_url: string | null };
 
 const command = (url: string) => `claude mcp add --transport http opencmo ${url} --header "Authorization: Bearer <your API key>"`;
 
@@ -29,7 +29,9 @@ export function ContinueInClaude({ where }: { where: "assistant" | "cmo" }) {
     };
   }, []);
 
-  if (!mode || mode.brain !== "claude") return null;
+  // No MCP server configured: there is nothing to connect to.
+  if (!mode || mode.brain !== "claude" || !mode.mcp_url) return null;
+  const url = mode.mcp_url;
 
   const why =
     mode.reason === "credits"
@@ -40,7 +42,7 @@ export function ContinueInClaude({ where }: { where: "assistant" | "cmo" }) {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(command(mode.mcp_url));
+      await navigator.clipboard.writeText(command(url));
       setCopied(true);
     } catch {
       setCopied(false);
@@ -71,10 +73,10 @@ export function ContinueInClaude({ where }: { where: "assistant" | "cmo" }) {
           <button type="button" className="cic-copy" onClick={() => void copy()} data-testid="continue-in-claude-copy">
             {copied ? "Copied" : "Copy command"}
           </button>
-          <code className="cic-code">{command(mode.mcp_url)}</code>
+          <code className="cic-code">{command(url)}</code>
         </li>
         <li>
-          Claude Desktop or claude.ai: add a custom connector with <code className="cic-code">{mode.mcp_url}</code>
+          Claude Desktop or claude.ai: add a custom connector with <code className="cic-code">{url}</code>
         </li>
       </ol>
       {mode.reason === "credits" ? (

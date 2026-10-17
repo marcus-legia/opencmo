@@ -1,11 +1,9 @@
 /**
- * Where the founder's Claude connects. The MCP server moves to Modal (docs/mcp-on-modal-plan.md);
- * until then it is the web app's own `/api/mcp`.
+ * Where the founder's Claude connects: the MCP server on Modal (`OPENCMO_MCP_URL`). null when it is
+ * not configured, and the app then hides "Connect Claude": the old `/api/mcp` route only answers 410.
  */
 
-import { SITE_URL } from "@/lib/site";
-
-export const mcpEndpoint = (env: NodeJS.ProcessEnv = process.env): string => (env.OPENCMO_MCP_URL?.trim() || `${SITE_URL}/api/mcp`).replace(/\/$/, "");
+export const mcpEndpoint = (env: NodeJS.ProcessEnv = process.env): string | null => env.OPENCMO_MCP_URL?.trim().replace(/\/$/, "") || null;
 
 /** The Claude Code command, with the founder's own key in place of `key`. */
 export const claudeCodeCommand = (endpoint: string, key = "<your API key>"): string =>

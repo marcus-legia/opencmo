@@ -21,7 +21,7 @@ type KitRow = { id: string; name: string; is_default: boolean };
  * Quota và credit nằm ở Billing — ở đây chỉ còn danh tính, dung lượng và một
  * lối sang Billing, để hai trang không lặp cùng một bảng số.
  */
-export function SettingsView({ mcpEndpoint }: { mcpEndpoint?: string }) {
+export function SettingsView({ mcpEndpoint }: { mcpEndpoint?: string | null }) {
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [kits, setKits] = useState<KitRow[] | null>(null);

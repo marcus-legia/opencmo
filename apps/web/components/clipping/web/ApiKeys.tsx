@@ -15,7 +15,7 @@ type Key = { id: string; name: string; prefix: string; created_at: string; last_
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "never");
 
 /** `endpoint`: the MCP server clients connect to (`OPENCMO_MCP_URL`, read on the server). */
-export function ApiKeys({ endpoint: configured }: { endpoint?: string } = {}) {
+export function ApiKeys({ endpoint: configured }: { endpoint?: string | null } = {}) {
   const [keys, setKeys] = useState<Key[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -60,8 +60,8 @@ export function ApiKeys({ endpoint: configured }: { endpoint?: string } = {}) {
     }
   };
 
-  const endpoint = configured ?? (typeof window === "undefined" ? "/api/mcp" : `${window.location.origin}/api/mcp`);
-  const command = created ? `claude mcp add --transport http opencmo ${endpoint} --header "Authorization: Bearer ${created}"` : "";
+  // No MCP server configured: no command to show, the key alone is still shown once.
+  const command = created && configured ? `claude mcp add --transport http opencmo ${configured} --header "Authorization: Bearer ${created}"` : "";
 
   const copy = async () => {
     try {
@@ -89,11 +89,15 @@ export function ApiKeys({ endpoint: configured }: { endpoint?: string } = {}) {
           <code className="api-key-value" data-testid="api-key-created">
             {created}
           </code>
-          <p className="field-hint">Add it to Claude Code:</p>
-          <code className="api-key-value">{command}</code>
-          <button type="button" className="secondary-button" onClick={() => void copy()}>
-            {copied ? "Copied" : "Copy command"}
-          </button>
+          {command ? (
+            <>
+              <p className="field-hint">Add it to Claude Code:</p>
+              <code className="api-key-value">{command}</code>
+              <button type="button" className="secondary-button" onClick={() => void copy()}>
+                {copied ? "Copied" : "Copy command"}
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
       <form className="api-key-form" onSubmit={(event) => void create(event)}>
