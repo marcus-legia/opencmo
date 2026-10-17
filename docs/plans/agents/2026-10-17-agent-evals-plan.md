@@ -1,6 +1,6 @@
 # Plan: agent evals — production draft signal, eval harness, coverage  (2026-10-17)
 
-Track: AI agent & automation · PR: (set when opened) · Work split: [`2026-10-17-agent-evals-sessions.md`](2026-10-17-agent-evals-sessions.md)
+Track: AI agent & automation · PR: [#72](https://github.com/marcus-legia/opencmo/pull/72) · Work split: [`2026-10-17-agent-evals-sessions.md`](2026-10-17-agent-evals-sessions.md)
 
 Source research: `docs/research/agents/2026-10-17-agent-evals-draft-signal.md`. Related: the security report of the
 same day, `docs/research/security/2026-10-17-security-agent-injection-mcp.md` (recommendations 1 and 2 are not built

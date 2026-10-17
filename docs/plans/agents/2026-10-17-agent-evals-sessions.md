@@ -1,7 +1,7 @@
 # Agent evals: work split for three sessions, one PR
 
 Plan: [`2026-10-17-agent-evals-plan.md`](2026-10-17-agent-evals-plan.md) — read it first, all of it.
-Branch: **`plan/agents/2026-10-17-agent-evals`** · PR: (set when opened) (draft), shared by all three sessions.
+Branch: **`plan/agents/2026-10-17-agent-evals`** · PR: [#72](https://github.com/marcus-legia/opencmo/pull/72) (draft), shared by all three sessions.
 
 Three Claude Code sessions build this in parallel on the same branch:
 
