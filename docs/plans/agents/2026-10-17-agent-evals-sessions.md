@@ -170,7 +170,9 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       credit is used up (402 `RESOURCE_EXHAUSTED`), and no Anthropic key. One `cmo:eval --provider gemini --yes --job
       w1,w2,w4,w0 --max-usd 1` ran: $0 spent, every run reported unfinished with its error (the harness side works). Re-tried once after a
       20-token probe answered 200: same result, $0 — the prepaid balance covers only tiny requests (`maxOutputTokens:
-      2000` → 402). A graded real run needs a funded key. After the merge:
+      2000` → 402). A graded real run needs a funded key. **Marcus waived the graded real run for this PR (2026-10-17);** B6 is accepted with the
+      fake-provider workflow run. The first real run will be the weekly `AI evals` run once the keys are in the
+      `ai-evals` environment. After the merge:
       add `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` to the `ai-evals` environment and dispatch once with
       `provider: fake`, then once with a real provider (cap $3).
 
