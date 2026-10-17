@@ -100,7 +100,7 @@ B1 must land before A1's migration. A can write the TypeScript side of A1 agains
 
 Checklist:
 
-- [ ] **A1 — Contracts.**
+- [x] **A1 — Contracts.**
   - `mcp_admit` migration and pgTAP: bounds, free plan, 601st message, other users unaffected.
   - `PAID_PLAN_ERROR`.
   - `http.ts` calls `mcp_admit` once per request: a free user gets 403, a rate-limited one 429.

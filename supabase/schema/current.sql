@@ -1295,9 +1295,15 @@ CREATE FUNCTION public.api_key_owner(p_hash text) RETURNS uuid
 declare
   v_user uuid;
 begin
-  update public.api_keys set last_used_at = now()
-  where key_hash = p_hash and revoked_at is null
-  returning user_id into v_user;
+  select user_id into v_user
+  from public.api_keys
+  where key_hash = p_hash and revoked_at is null;
+
+  if v_user is not null then
+    update public.api_keys set last_used_at = now()
+    where key_hash = p_hash
+      and (last_used_at is null or last_used_at < now() - interval '5 minutes');
+  end if;
   return v_user;
 end;
 $$;
@@ -5433,6 +5439,39 @@ CREATE FUNCTION public.lock_credit_owner(p_user_id uuid) RETURNS void
     AS $$
 begin
   perform 1 from public.profiles where id = p_user_id for update;
+end;
+$$;
+
+
+--
+-- Name: mcp_admit(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mcp_admit(p_count integer) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_window_start timestamptz;
+  v_count int;
+begin
+  if p_count is null or p_count < 1 or p_count > 20 then
+    raise exception 'Send 1 to 20 messages per request.' using errcode = '22023';
+  end if;
+  -- Before counting: a free account's refused requests must not fill a bucket it cannot use.
+  if not public.is_paid(v_user) then
+    return 'free_plan';
+  end if;
+
+  v_window_start := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  insert into public.rate_limits (user_id, bucket, window_start, count)
+  values (v_user, 'mcp', v_window_start, p_count)
+  on conflict (user_id, bucket, window_start)
+  do update set count = public.rate_limits.count + p_count
+  returning count into v_count;
+
+  return case when v_count <= 600 then 'ok' else 'rate_limited' end;
 end;
 $$;
 

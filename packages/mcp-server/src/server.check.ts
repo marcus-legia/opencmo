@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 
 import { ConfirmError, read, sign } from "./confirm";
-import { handle } from "./http";
+import type { Caller } from "./auth";
+import { handle, PAID_PLAN_ERROR } from "./http";
 import { registerGroup, registry } from "./registry";
 import { callTool, describeTool, INSTRUCTIONS } from "./server";
 
@@ -154,6 +155,44 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal((await handle(new Request("http://mcp.test/healthz"))).status, 200);
   assert.equal((await handle(new Request("http://mcp.test/other"))).status, 404);
   assert.equal((await handle(new Request("http://mcp.test/mcp", { method: "OPTIONS" }))).headers.get("access-control-allow-origin"), "*");
+}
+
+// ------------------------------------------------------------ admission: one call per request
+
+{
+  const calls: { name: string; args: unknown }[] = [];
+  const callerAnswering = (answer: string): Caller => ({
+    userId: ctx.userId,
+    via: "api_key",
+    supabase: {
+      rpc: async (name: string, args: unknown) => {
+        calls.push({ name, args });
+        return { data: answer, error: null };
+      },
+    } as never,
+  });
+  const post = (body: unknown, answer: string) =>
+    handle(
+      new Request("http://mcp.test/mcp", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: "Bearer x" } }),
+      async () => callerAnswering(answer),
+    );
+  const pings = (count: number) => Array.from({ length: count }, (_, id) => ({ jsonrpc: "2.0", id, method: "ping" }));
+
+  const batch = await post(pings(20), "ok");
+  assert.equal(batch.status, 200);
+  assert.deepEqual(calls, [{ name: "mcp_admit", args: { p_count: 20 } }], "a batch of 20 makes one admission call");
+
+  calls.length = 0;
+  assert.equal((await post(pings(21), "ok")).status, 400, "more than 20 messages");
+  assert.equal(calls.length, 0, "an oversized batch is refused before the database");
+
+  const free = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } } }, "free_plan");
+  assert.equal(free.status, 403, "free accounts cannot use MCP, initialize included");
+  assert.deepEqual(await free.json(), { jsonrpc: "2.0", id: null, error: PAID_PLAN_ERROR });
+  assert.equal(PAID_PLAN_ERROR.message, "OpenCMO's MCP connection is part of the paid plans. Upgrade on the Credits page.");
+
+  assert.equal((await post(pings(1), "rate_limited")).status, 429);
+  assert.equal((await post(pings(1), "something else")).status, 503, "an unknown answer fails closed");
 }
 
 // ------------------------------------------------------------ prompts and resources
