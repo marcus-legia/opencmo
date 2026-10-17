@@ -3090,15 +3090,15 @@ CREATE TABLE public.cmo_memories (
     CONSTRAINT cmo_memories_importance_check CHECK (((importance >= 1) AND (importance <= 3))),
     CONSTRAINT cmo_memories_kind_check CHECK ((kind = ANY (ARRAY['preference'::text, 'fact'::text, 'feedback'::text, 'result'::text]))),
     CONSTRAINT cmo_memories_topic_check CHECK ((topic = ANY (ARRAY['general'::text, 'post'::text, 'sales'::text, 'video'::text, 'research'::text]))),
-    CONSTRAINT cmo_memories_type_check CHECK ((type = ANY (ARRAY['feedback'::text, 'user'::text])))
+    CONSTRAINT cmo_memories_type_check CHECK ((type = ANY (ARRAY['feedback'::text, 'user'::text, 'agent'::text])))
 );
 
 
 --
--- Name: cmo_remember(text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_remember(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_remember(p_body text, p_topic text DEFAULT 'general'::text) RETURNS public.cmo_memories
+CREATE FUNCTION public.cmo_remember(p_body text, p_topic text DEFAULT 'general'::text, p_source text DEFAULT 'user'::text) RETURNS public.cmo_memories
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3112,6 +3112,9 @@ begin
   if p_topic is null or p_topic not in ('general', 'post', 'sales', 'video', 'research') then
     raise exception 'Unknown topic.' using errcode = '22023';
   end if;
+  if p_source is null or p_source not in ('user', 'agent') then
+    raise exception 'Unknown note source.' using errcode = '22023';
+  end if;
   -- At the cap, drop the least important, oldest note rather than simply the oldest one.
   if (select count(*) from public.cmo_memories where user_id = v_user) >= 200 then
     delete from public.cmo_memories where id in (
@@ -3119,7 +3122,8 @@ begin
     );
   end if;
   insert into public.cmo_memories (user_id, type, kind, topic, importance, body)
-  values (v_user, 'user', 'preference', p_topic, 3, trim(p_body))
+  values (v_user, p_source, case when p_source = 'user' then 'preference' else 'fact' end, p_topic,
+    case when p_source = 'user' then 3 else 2 end, trim(p_body))
   returning * into v_row;
   return v_row;
 end;

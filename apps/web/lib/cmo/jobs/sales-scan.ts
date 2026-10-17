@@ -12,6 +12,7 @@
 import { z } from "zod";
 
 import { searchReddit, SocialReadError, type RedditThread } from "../social/reddit";
+import { cleanUntrusted, escapeAttribute, escapeForTag } from "../untrusted";
 import { avoidList, documentsBlock, recall } from "./context";
 import { genModel, promptVersion } from "./edit-taxonomy";
 import { skillText } from "../skills";
@@ -89,7 +90,8 @@ const clamp = (n: number, max: number) => Math.max(0, Math.min(max, Math.round(N
 
 /** Câu trích phải có thật trong thread (không phân biệt hoa thường, gộp khoảng trắng). */
 export function quoteIn(quote: string, thread: RedditThread): boolean {
-  const q = quote.toLowerCase().replace(/\s+/g, " ").replace(/^["“']|["”']$/g, "").trim();
+  // The model saw the thread escaped (`threadBlock`), so it may quote `&lt;` for `<`.
+  const q = quote.replace(/&lt;/g, "<").replace(/&gt;/g, ">").toLowerCase().replace(/\s+/g, " ").replace(/^["“']|["”']$/g, "").trim();
   if (q.length < 4) return false;
   return `${thread.title} ${thread.text}`.toLowerCase().replace(/\s+/g, " ").includes(q);
 }
@@ -110,8 +112,10 @@ export function scoreThread(thread: RedditThread, s: Scored | undefined, now = D
   return { score: parts.reduce((sum, p) => sum + p.score, 0), parts };
 }
 
-function threadBlock(t: RedditThread, i: number): string {
-  return `<thread index="${i}" community="${t.community}">\nTitle: ${t.title}\n${t.text}\n</thread>`;
+/** One thread for the scoring prompt. Its text cannot close the block or forge an attribute. */
+export function threadBlock(t: RedditThread, i: number): string {
+  const text = (value: string) => escapeForTag(cleanUntrusted(value));
+  return `<thread index="${i}" community="${escapeAttribute(cleanUntrusted(t.community))}">\nTitle: ${text(t.title)}\n${text(t.text)}\n</thread>`;
 }
 
 function fakeQueries(docs: Documents): string[] {

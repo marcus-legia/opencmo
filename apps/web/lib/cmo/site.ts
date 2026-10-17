@@ -20,6 +20,7 @@ import https from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
+import { cleanUntrusted } from "@/lib/cmo/untrusted";
 import { blockedName, checkUrl, privateAddress, refused } from "@/lib/net/address";
 
 export { privateAddress };
@@ -164,13 +165,62 @@ const decode = (s: string) =>
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
 
-const clean = (s: string) => decode(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+const clean = (s: string) => cleanUntrusted(decode(s.replace(/<[^>]+>/g, " "))).replace(/\s+/g, " ").trim();
 
-/** Rút chữ đọc được từ HTML: tiêu đề, mô tả, các heading, thân bài (đã bỏ script/style/nav). */
+/** Inline styles and attributes that hide an element from a visitor (but not from a text extractor). */
+const HIDDEN = new RegExp(
+  [
+    String.raw`\shidden(?=[\s=/]|$)`,
+    String.raw`\saria-hidden\s*=\s*["']?true`,
+    String.raw`display\s*:\s*none`,
+    String.raw`visibility\s*:\s*hidden`,
+    String.raw`font-size\s*:\s*0(?:\.0+)?(?:px|em|rem|pt|%)?\s*(?:[;"'!]|$)`,
+    String.raw`opacity\s*:\s*0(?:\.0+)?\s*(?:[;"'!]|$)`,
+  ].join("|"),
+  "i",
+);
+const VOID = new Set(["area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+
+/**
+ * Removes elements a visitor never sees: a page can hide instructions for an AI reader in them
+ * (security plan fix 10). Nested elements of the same name are matched, so the whole hidden
+ * subtree goes, not just up to the first closing tag.
+ */
+function dropHidden(html: string): string {
+  const open = /<([a-z][a-z0-9-]*)\b([^>]*)>/gi;
+  let out = "";
+  let from = 0;
+  for (let match = open.exec(html); match; match = open.exec(html)) {
+    const name = match[1].toLowerCase();
+    if (!HIDDEN.test(match[2])) continue;
+    out += html.slice(from, match.index);
+    let end = open.lastIndex;
+    if (!VOID.has(name) && !match[2].trimEnd().endsWith("/")) {
+      const tags = new RegExp(`<(/?)${name}\\b[^>]*>`, "gi");
+      tags.lastIndex = end;
+      let depth = 1;
+      for (let tag = tags.exec(html); tag; tag = tags.exec(html)) {
+        depth += tag[1] ? -1 : 1;
+        if (depth === 0) {
+          end = tags.lastIndex;
+          break;
+        }
+      }
+      if (depth !== 0) end = html.length;
+    }
+    from = end;
+    open.lastIndex = end;
+  }
+  return out + html.slice(from);
+}
+
+/** Readable text from HTML: title, description, headings, body (no script/style/nav, nothing hidden). */
 export function extractPage(url: string, html: string): SitePage {
-  const body = html
-    .replace(/<(script|style|noscript|svg|template|iframe)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
+  const body = dropHidden(
+    html
+      .replace(/<(script|style|noscript|svg|template|iframe|textarea)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " "),
+  );
   const title = clean(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
   const description = clean(
     body.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i)?.[1] ??

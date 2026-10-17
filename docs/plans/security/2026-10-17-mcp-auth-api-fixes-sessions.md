@@ -216,7 +216,8 @@ Checklist:
   - The `authenticated` function allowlist pgTAP.
   - **Accept:** pgTAP (revokes, B §5's early-finish scenario settles, allowlist); Assistant e2e and
     `agent:eval -- --provider fake` green; a note in PR #71 about the overlap.
-- [ ] **C5 — Fix 10.**
+- [x] **C5 — Fix 10.** (The fake provider now obeys planted "remember" / goal text, so the two eval cases fail
+  without the gate; checked by switching the gate off.)
   - Per-turn taint in `loop.ts`; the gated write tools return the confirm message.
   - `cmo_memories.type 'agent'` and `cmo_remember(p_source)`, with pgTAP.
   - MCP and chat `remember` pass `'agent'`.

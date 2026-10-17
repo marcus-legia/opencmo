@@ -44,6 +44,7 @@ import {
   STOP_POLL_MS,
 } from "./limits";
 import { canSwitchFrom } from "./model";
+import { TAINT_GATED_TOOLS, TAINT_MESSAGE, TAINTING_TOOLS } from "./cmo-tools";
 import type { Ledger } from "./ledger";
 import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
@@ -212,6 +213,21 @@ async function spentCredits(supabase: SupabaseClient, turnId: string): Promise<n
   return micro <= 0 ? 0 : Math.max(1, Math.ceil(micro / 50_000));
 }
 
+/**
+ * Whether this turn already read outside content (fix 10). Read from the turn's own tool calls,
+ * not kept in memory: a turn that paused and continues in a new request is still the same turn.
+ */
+async function turnTainted(supabase: SupabaseClient, turnId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("agent_tool_calls")
+    .select("name")
+    .eq("turn_id", turnId)
+    .eq("status", "done")
+    .in("name", [...TAINTING_TOOLS])
+    .limit(1);
+  return Boolean(data?.length);
+}
+
 async function pause(env: TurnEnv, reason: "browser" | "approval" | "input" | "time" | "steps" | "budget") {
   await rpcOrThrow(env.supabase, "agent_pause_turn", { p_turn_id: env.turn.id, p_reason: reason });
 }
@@ -231,6 +247,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
   // only when it may be stale (first step, or a step whose tools ran sub-agents that record their own).
   let spent: number | null = null;
   const streak = failureStreak();
+  // Outside content read in this turn: memory writes wait for the founder's next message.
+  let tainted: boolean | undefined;
 
   try {
     for (let step = 0; ; step++) {
@@ -373,6 +391,13 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           deferred = true;
           continue;
         }
+        if (TAINT_GATED_TOOLS.has(call.name) && (tainted ??= await turnTainted(supabase, turn.id))) {
+          const content = JSON.stringify({ error: TAINT_MESSAGE });
+          await recordTool(env, call, "failed", { summary: "Waiting for the founder to confirm" }, content);
+          emit("tool_result", { id: call.id, name: call.name, ok: false, summary: "Waiting for the founder to confirm" });
+          results.push({ id: call.id, name: call.name, ok: false, content });
+          continue;
+        }
         const ready = early.get(call.id);
         const plan = ready?.plan ?? (await scope.plan(call));
         if (plan.kind === "browser") {
@@ -398,6 +423,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           continue;
         }
         const outcome = ready?.outcome ?? (await scope.run(call));
+        if (outcome.ok && TAINTING_TOOLS.has(call.name)) tainted = true;
         let content = outcome.content;
         if (outcome.ok) streak.succeeded();
         else {

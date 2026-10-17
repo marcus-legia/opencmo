@@ -65,7 +65,7 @@ insert into allowed values
   ('cmo_memories_classify()'),
   ('cmo_read_hit(text)'),
   ('cmo_read_limit(text)'),
-  ('cmo_remember(text,text)'),
+  ('cmo_remember(text,text,text)'),
   ('cmo_remove_item(uuid)'),
   ('cmo_set_week_goal(date,text,text,integer)'),
   ('cmo_update_item(uuid,text,date)'),
