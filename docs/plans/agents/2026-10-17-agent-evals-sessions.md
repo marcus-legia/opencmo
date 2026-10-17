@@ -120,8 +120,12 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
       numbers to borrow). Each case returns `${job}:${fixture}:run` first, then one result per output (W1 per plan
       item, W2 per version — judged after `checkPost` —, W5 per clip). `--provider gemini` sets
       `CMO_LLM_PROVIDER`. Fake run: 18 runs, 63/63 outputs pass; same rows as `main` on the old fixtures.
-- [ ] **B5 — `agent:eval` reports (H4).** Same `EvalReport`, `--epochs`, `--compare`. Accept:
+- [x] **B5 — `agent:eval` reports (H4).** Same `EvalReport`, `--epochs`, `--compare`. Accept:
       `agent:eval -- --provider fake` result unchanged; report written; `--compare` of two fake runs → INCONCLUSIVE.
+      _Done:_ `eval-report.json` next to `report.json` (case id = task id, `prompt_versions.assistant`), plus
+      `--max-usd`. Fake result unchanged: 41/43 before and after; the two failures (`explain-make`,
+      `explain-vaccine`) need the explainer renderer (`OPENCMO_MOTION=local` + Chrome), see B6. Two full fake runs
+      compared → INCONCLUSIVE, 43 paired, p = 1.
 - [ ] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
       dispatch + weekly cron, cost cap, artifact upload, compare to previous artifact, actions pinned to SHAs.
       Replace "judge the drafts by eye" in `docs/cmo-architecture-implementation.md`. Accept: CI green on the PR;

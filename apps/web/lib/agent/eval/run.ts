@@ -11,6 +11,11 @@
  * model costs only its own tokens and the director's, never media credits. `--task video-` runs
  * every task whose id starts with "video-".
  *
+ * Comparing runs (same report format as `cmo:eval`, `lib/eval/compare.ts`):
+ *   --epochs N     run every task N times; the comparison uses each task's majority
+ *   --compare p    pair with an earlier `eval-report.json`: McNemar exact, BETTER / WORSE / INCONCLUSIVE
+ *   --max-usd X    stop starting tasks once X USD is spent (also EVAL_MAX_USD)
+ *
  * Mỗi bài: workspace trong bộ nhớ từ clip mẫu → cùng system prompt, cùng bộ
  * tool, cùng `runTool` với app; tool tab chạy bằng Node (`node-tools.ts`);
  * `ask_user` được trả lời bằng câu soạn sẵn của bài. Chấm bằng code
@@ -22,9 +27,13 @@
 
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { planStudio3d, planVoiceover, quoteRange, readCaptionState, speechSources, summarizeProject, type Transcript } from "@opencmo/editor-core";
+
+import { promptVersion } from "@/lib/cmo/jobs/edit-taxonomy";
+import type { CaseResult, EvalReport } from "@/lib/eval/compare";
+import { gitInfo, printComparison, writeReport } from "@/lib/eval/report";
 
 import { clipContextBlock } from "../clip-context";
 import { KEEP_IMAGES } from "../limits";
@@ -57,7 +66,7 @@ import {
 import { nodeCapture, nodeGrab, nodeInspectColor, nodePreview3d, nodeWaveform, type NodeMedia } from "./node-tools";
 import { TASKS, type EvalTask } from "./tasks";
 
-type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean; untilCard: boolean };
+type Args = { provider: string; task?: string; out: string; maxSteps: number; yes: boolean; untilCard: boolean; epochs: number; compare: string | null; maxUsd: number | null };
 
 function args(): Args {
   const argv = process.argv.slice(2);
@@ -72,7 +81,18 @@ function args(): Args {
     maxSteps: Number(value("--max-steps") ?? 60),
     yes: argv.includes("--yes"),
     untilCard: argv.includes("--until-card"),
+    epochs: positive("--epochs", value("--epochs")) ?? 1,
+    compare: value("--compare") ? resolve(value("--compare")!) : null,
+    maxUsd: positive("--max-usd", value("--max-usd") ?? process.env.EVAL_MAX_USD),
   };
+}
+
+function positive(flag: string, raw: string | undefined): number | null {
+  if (raw === undefined || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${flag} needs a positive number, got "${raw}".`);
+  if (flag === "--epochs" && !Number.isInteger(n)) throw new Error("--epochs needs a whole number.");
+  return n;
 }
 
 /** Price per million tokens (USD), same as `agent_model_prices`. */
@@ -348,7 +368,8 @@ async function main() {
   if (options.provider !== "fake" && !options.yes) {
     // Ước lượng thô: ~15 bước/bài, ~30k token vào mỗi bước (80% trúng cache), ~1.5k ra.
     const perStep = (6_000 * price.input + 24_000 * price.cacheRead + 1_500 * price.output) / 1e6;
-    console.log(`Ước lượng: ${tasks.length} bài × ~15 bước × ~$${perStep.toFixed(3)} ≈ $${(tasks.length * 15 * perStep).toFixed(2)} (trần ${options.maxSteps} bước/bài).`);
+    const runs = tasks.length * options.epochs;
+    console.log(`Estimate: ${runs} task runs × ~15 steps × ~$${perStep.toFixed(3)} ≈ $${(runs * 15 * perStep).toFixed(2)} (at most ${options.maxSteps} steps a task${options.maxUsd ? `, stops after $${options.maxUsd}` : ""}).`);
     console.log("Thêm --yes để chạy thật.");
     return;
   }
@@ -357,16 +378,29 @@ async function main() {
   if (options.provider === "fake") process.env.OPENCMO_AGENT_FAKE ??= "1";
   const provider = providerFor(options.provider);
   mkdirSync(options.out, { recursive: true });
-  type Row = { task: string; pass: boolean; steps: number; stopped: string; seconds: number; calls: number; input: number; cached: number; output: number; gate: boolean; cost: number; notes: string };
+  type Row = { task: string; epoch: number; pass: boolean; steps: number; stopped: string; seconds: number; calls: number; input: number; cached: number; output: number; gate: boolean; cost: number; notes: string };
   const rows: Row[] = [];
-  for (const task of tasks) {
+  const cases: CaseResult[] = [];
+  const started_at = new Date().toISOString();
+  let spent = 0;
+  let skipped = 0;
+  for (let epoch = 0; epoch < options.epochs; epoch++) for (const task of tasks) {
+    // The cap stops new tasks, never one in progress.
+    if (options.maxUsd !== null && spent >= options.maxUsd) {
+      skipped += 1;
+      continue;
+    }
     const started = Date.now();
     const result = await runTask(task, provider, options);
     const cost = (result.usage.input * price.input + result.usage.output * price.output + result.usage.cacheRead * price.cacheRead + result.usage.cacheWrite * price.cacheWrite) / 1e6;
-    if (result.sheet) writeFileSync(join(options.out, `${task.id}.jpg`), Buffer.from(result.sheet, "base64"));
-    writeFileSync(join(options.out, `${task.id}.json`), JSON.stringify({ tools: result.tools, calls: result.calls, cards: result.cards, reply: result.reply, grade: result.grade, document: result.document }, null, 2));
+    spent += cost;
+    const file = options.epochs > 1 ? `${task.id}.${epoch}` : task.id;
+    if (result.sheet) writeFileSync(join(options.out, `${file}.jpg`), Buffer.from(result.sheet, "base64"));
+    writeFileSync(join(options.out, `${file}.json`), JSON.stringify({ tools: result.tools, calls: result.calls, cards: result.cards, reply: result.reply, grade: result.grade, document: result.document }, null, 2));
+    cases.push({ id: task.id, epoch, pass: result.grade.pass, decided_by: "code", ...(result.grade.notes.length ? { notes: result.grade.notes } : {}), cost_usd: cost });
     const row: Row = {
       task: task.id,
+      epoch,
       pass: result.grade.pass,
       steps: result.steps,
       stopped: result.stopped,
@@ -390,8 +424,21 @@ async function main() {
   const total = rows.reduce((sum, row) => sum + row.cost, 0);
   const sum = (key: "steps" | "calls" | "seconds" | "input" | "cached" | "output") => rows.reduce((acc, row) => acc + row[key], 0);
   const totals = { steps: sum("steps"), calls: sum("calls"), seconds: sum("seconds"), input: sum("input"), cached: sum("cached"), output: sum("output") };
-  console.log(`\n${passed}/${rows.length} bài qua · $${total.toFixed(2)} · ${totals.steps} steps, ${totals.calls} tool calls, ${totals.seconds}s · tokens in ${totals.input} (+${totals.cached} cached) out ${totals.output} · báo cáo ở ${options.out}`);
+  console.log(`\n${passed}/${rows.length} tasks passed · $${total.toFixed(2)} · ${totals.steps} steps, ${totals.calls} tool calls, ${totals.seconds}s · tokens in ${totals.input} (+${totals.cached} cached) out ${totals.output} · report in ${options.out}`);
+  if (skipped) console.log(`${skipped} task runs not started: the $${options.maxUsd} cap was reached.`);
   writeFileSync(join(options.out, "report.json"), JSON.stringify({ provider: options.provider, rows, passed, cost: total, totals }, null, 2));
+  // The shared format, for --compare and the scheduled eval workflow.
+  const report: EvalReport = {
+    suite: "agent",
+    git: gitInfo(),
+    provider: options.provider,
+    model: options.provider === "fake" ? null : provider.model,
+    prompt_versions: { assistant: promptVersion(SYSTEM_PROMPT) },
+    started_at,
+    cases,
+  };
+  writeReport(join(options.out, "eval-report.json"), report);
+  if (options.compare) printComparison(options.compare, report);
   if (passed < rows.length) process.exitCode = 1;
 }
 
