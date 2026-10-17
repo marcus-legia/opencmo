@@ -28,7 +28,7 @@ export function GET() {
     <title>${SITE_NAME} Blog</title>
     <link>${absoluteUrl("/blog")}</link>
     <atom:link href="${absoluteUrl("/blog/rss.xml")}" rel="self" type="application/rss+xml" />
-    <description>Turning long videos into short clips, and distribution for founders.</description>
+    <description>Short, visual marketing lessons for founders who run their own marketing.</description>
     <language>en</language>
 ${posts[0] ? `    <lastBuildDate>${new Date(`${posts[0].updated}T00:00:00Z`).toUTCString()}</lastBuildDate>\n` : ""}${items}
   </channel>

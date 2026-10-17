@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import type { Block, BlockOf, Segment } from "@/lib/blog-blocks";
 
+import { BlogCta } from "./BlogCta";
 import { SceneBlock } from "./SceneBlock";
 
 /**
@@ -11,13 +12,37 @@ import { SceneBlock } from "./SceneBlock";
 export function PostBody({ segments }: { segments: Segment[] }) {
   return (
     <div className="blog-prose blog-article-body">
-      {segments.map((s, i) =>
-        s.kind === "html"
-          ? <div key={i} className="blog-run" dangerouslySetInnerHTML={{ __html: s.html }} />
+      {withInlineCta(segments).map((s, i) =>
+        s.kind === "cta" ? <BlogCta key={i} variant="inline" />
+          : s.kind === "html" ? <div key={i} className="blog-run" dangerouslySetInnerHTML={{ __html: s.html }} />
           : <BlockView key={i} block={s.block} />,
       )}
     </div>
   );
+}
+
+/**
+ * Places the mid-post CTA right before the middle H2: the reader has had half a lesson,
+ * and a section break is where an aside doesn't cut a thought in two.
+ */
+function withInlineCta(segments: Segment[]): (Segment | { kind: "cta" })[] {
+  const total = segments.reduce((n, s) => n + (s.kind === "html" ? (s.html.match(/<h2\b/g)?.length ?? 0) : 0), 0);
+  if (total < 3) return segments;
+  let target = Math.floor(total / 2) + 1;
+  const out: (Segment | { kind: "cta" })[] = [];
+  for (const s of segments) {
+    const here = s.kind === "html" ? [...s.html.matchAll(/<h2\b/g)] : [];
+    if (s.kind === "html" && target > 0 && target <= here.length) {
+      const at = here[target - 1].index!;
+      if (at > 0) out.push({ kind: "html", html: s.html.slice(0, at) });
+      out.push({ kind: "cta" }, { kind: "html", html: s.html.slice(at) });
+      target = 0;
+    } else {
+      target -= here.length;
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 function BlockView({ block }: { block: Block }) {
