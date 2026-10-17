@@ -4,10 +4,13 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 process.env.OPENCMO_AGENT_FAKE = "1";
 
 import { checkPost } from "./check-post";
+import { classifyEdits } from "./classify-edits";
+import { EDIT_MODES } from "./edit-taxonomy";
 import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
@@ -15,7 +18,7 @@ import { pickDueItem } from "./draft-post";
 import { toPlanItems } from "./plan-week";
 import { drainCmoQueue } from "./runner";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, timingScore } from "./sales-scan";
-import { parseRedditSearch } from "../social/reddit";
+import { parseRedditSearch, type RedditThread } from "../social/reddit";
 import { checkCaptions } from "./video-pack";
 import { memoryStore } from "./memory-store";
 import { isoDay, type ClipJob, type Documents, type ItemRow, type MemoryEvent, type PlatformCaptions } from "./types";
@@ -69,6 +72,9 @@ async function main() {
   assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
   assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
   assert.equal((card!.body.alternates as string[]).length, 2, "kèm 2 phiên bản khác");
+  const gen = card!.body.gen as { model: string; prompt_version: string };
+  assert.equal(gen.model, "fake", "the draft records which model wrote it");
+  assert.match(gen.prompt_version, /^[0-9a-f]{12}$/, "and which prompt");
 
   // Lượt mất lease giữa chừng: dừng im lặng, không ghi kết quả.
   const mem2 = memoryStore(docs);
@@ -117,6 +123,7 @@ async function main() {
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   assert.ok(mem3.opps.every((o) => o.score >= PASS_SCORE && o.reply.length > 0 && o.score_parts.length === 5), "thẻ đủ điểm, có trả lời");
   assert.ok(mem3.opps.every((o) => new URL(o.url).hostname === "www.reddit.com"), "chỉ link reddit.com");
+  assert.ok(mem3.opps.every((o) => o.gen?.model === "fake" && /^[0-9a-f]{12}$/.test(o.gen.prompt_version)), "replies record model and prompt");
   assert.equal((w4.output as { refund: boolean }).refund, false);
 
   const again = mem3.enqueue("sales_scan");
@@ -134,6 +141,20 @@ async function main() {
   assert.equal(empty.status, "done", `lượt rỗng vẫn xong (${empty.error})`);
   assert.deepEqual(empty.output, { cards: 0, refund: true }, "lượt rỗng hoàn credit");
   assert.equal(empty.steps.at(-1)!.label, "No conversations worth joining today");
+
+  // An injected search (the evals' seam) replaces Reddit: only its threads become cards.
+  const injected = (n: number): RedditThread => ({
+    url: `https://www.reddit.com/r/freelance/comments/inj${n}/`, community: "freelance", title: `Clients pay me late ${n}`,
+    author: "someone", text: `Every month the same story. My clients pay invoices weeks late and I hate chasing them.`, comments: 4,
+    postedAt: new Date().toISOString(),
+  });
+  const queried: string[] = [];
+  const memInj = memoryStore(docs);
+  const inj = memInj.enqueue("sales_scan");
+  await drainCmoQueue(memInj.store, { searchReddit: async (query) => (queried.push(query), [injected(1), injected(2)]) });
+  assert.equal(inj.status, "done", `W4 with an injected search (${inj.error})`);
+  assert.ok(queried.length > 0, "the injected search was asked");
+  assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
 
   // W5: chờ job clip (hoãn, không tính lần thử) → xong thì viết caption năm nền tảng và ghi thẻ.
   const mem5 = memoryStore(docs);
@@ -343,6 +364,7 @@ async function main() {
   const fromClaude = memIn.items.find((i) => i.status === "in_review")!;
   assert.equal(fromClaude.body.text, "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.");
   assert.deepEqual(fromClaude.body.alternates, ["Late invoices are a process problem."], "a version that breaks a rule is dropped");
+  assert.equal((fromClaude.body.gen as { model: string }).model, "founder-claude", "an inbox draft is the founder's Claude's");
   assert.ok(!good.steps.some((s) => s.tool === "fix_post"), "no second model call to fix");
 
   // Sales: three rounds; the Reddit search runs once and its threads stay the same.
@@ -377,7 +399,28 @@ async function main() {
   assert.equal(badPlan.status, "failed");
   assert.ok(memX.inbox[0]!.feedback?.startsWith("The answer does not match"), `${memX.inbox[0]!.feedback}`);
 
-  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn đều đúng.");
+  // classify_edits: labels each edited approval once, within the limit, with a known label.
+  const pairs = [
+    { id: "o1", draft: "Most invoices are forgotten, not refused.\nSend a reminder on day 3.", final_text: "Clients forget invoices.\nSend a reminder on day 3." },
+    { id: "o2", draft: "Late invoices are a process problem, not a people problem, and here is the long version of why.", final_text: "Late invoices are a process problem." },
+    { id: "o3", draft: "We built reminders.", final_text: "I got tired of chasing, so I made reminders." },
+  ];
+  const labels = new Map<string, string>();
+  const outcomes = {
+    unclassified: async (limit: number) => pairs.filter((p) => !labels.has(p.id)).slice(0, limit),
+    setEditMode: async (id: string, mode: string) => (labels.has(id) ? false : (labels.set(id, mode), true)),
+  };
+  assert.deepEqual(await classifyEdits(outcomes, { limit: 2 }), { classified: 2, failed: 0 }, "the limit holds");
+  assert.deepEqual(await classifyEdits(outcomes, { limit: 10 }), { classified: 1, failed: 0 }, "the next run takes the rest");
+  assert.deepEqual(Object.fromEntries(labels), { o1: "HOOK_REWRITTEN", o2: "TOO_LONG", o3: "WRONG_VOICE" }, "fake labels by shape");
+  assert.deepEqual(await classifyEdits(outcomes, { budgetMs: 0 }), { classified: 0, failed: 0 }, "no time budget, no calls");
+
+  // EDIT_MODES and the SQL check constraint on cmo_draft_outcomes.edit_mode list the same labels.
+  const migration = readFileSync(new URL("../../../../../supabase/migrations/20261201100000_cmo_draft_outcomes.sql", import.meta.url), "utf8");
+  const sqlModes = [...(migration.match(/edit_mode in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(sqlModes, [...EDIT_MODES], "EDIT_MODES matches the SQL constraint");
+
+  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }
 
 main().catch((error) => {

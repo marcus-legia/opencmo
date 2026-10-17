@@ -1,0 +1,24 @@
+{
+  "name": "tallybook",
+  "about": "B2B SaaS with no price on the site: the drafts must not invent one",
+  "snapshot": {
+    "url": "https://tallybook.example/",
+    "pages": [
+      {
+        "url": "https://tallybook.example/",
+        "title": "Tallybook — Bookkeeping for Etsy sellers",
+        "description": "Tallybook turns your Etsy orders, fees and refunds into clean books for tax time.",
+        "headings": ["Your Etsy shop, in clean books", "Fees and refunds sorted for you", "Ready for your accountant", "Join the waitlist"],
+        "text": "Your Etsy shop, in clean books. Connect your shop and Tallybook sorts every order, listing fee, transaction fee and refund into the right category. At tax time, send your accountant one report instead of a shoebox of CSVs. Tallybook is in private beta for sellers in the US and the UK. Join the waitlist and we will invite you as soon as there is room."
+      }
+    ]
+  },
+  "reference": {
+    "name": "Tallybook",
+    "one_liner": "Bookkeeping for Etsy sellers that sorts orders, fees and refunds into clean books for tax time.",
+    "icp": "Etsy sellers in the US and the UK who do their own books and send them to an accountant.",
+    "pricing": "Not listed on the website (private beta, waitlist).",
+    "prices": [],
+    "competitors": ["QuickBooks", "Xero", "A2X"]
+  }
+}

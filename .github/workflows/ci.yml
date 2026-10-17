@@ -100,6 +100,14 @@ jobs:
           npx -y playwright@1.56.1 install --with-deps chromium-headless-shell
           echo "OPENCMO_MOTION_CHROME=$(ls -d ~/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell | head -1)" >> "$GITHUB_ENV"
       - run: npm run check:clip-motion
+      # The editor Assistant's eval with the fake model (free, offline). It runs here because its
+      # explainer tasks render previews with the clip-motion CLI and the Chrome build above. The
+      # CMO jobs' fake eval runs in the web job, inside check:contracts.
+      - name: Assistant eval (fake model)
+        working-directory: apps/web
+        env:
+          OPENCMO_MOTION: local
+        run: npm run agent:eval -- --provider fake
 
   browsers:
     # The editor outside Chromium (Safari/Firefox): feature detection + library bytes

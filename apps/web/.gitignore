@@ -4,3 +4,4 @@ public/sandbox/
 # Chép từ packages/clip-media lúc dev/build (scripts/sync-media.mts) — nguồn ở đó.
 public/fonts/
 public/lottie/
+.cmo-eval/

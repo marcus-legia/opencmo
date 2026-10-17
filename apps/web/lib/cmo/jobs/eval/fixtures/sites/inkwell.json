@@ -1,0 +1,31 @@
+{
+  "name": "inkwell",
+  "about": "E-commerce, distinctive playful voice, product prices",
+  "snapshot": {
+    "url": "https://inkwell.example/",
+    "pages": [
+      {
+        "url": "https://inkwell.example/",
+        "title": "Inkwell & Thread — Hand-bound journals",
+        "description": "Hand-bound journals sewn one at a time in our Lisbon workshop. Paper that loves fountain pens.",
+        "headings": ["Sewn by hand, one at a time", "Paper that drinks ink politely", "Shop journals", "Our Lisbon workshop"],
+        "text": "Sewn by hand, one at a time. Every Inkwell & Thread journal is stitched in our tiny Lisbon workshop by the two of us and a very opinionated cat. Our 120 gsm cotton paper drinks fountain-pen ink politely: no feathering, no ghosting, no drama. Covers are vegetable-tanned leather that gets better with every coffee stain. The A5 journal is €34 and the pocket journal is €22. We ship across the EU in 3 to 5 days."
+      },
+      {
+        "url": "https://inkwell.example/about",
+        "title": "About — Inkwell & Thread",
+        "description": "Two bookbinders and a cat.",
+        "headings": ["Two bookbinders and a cat"],
+        "text": "Two bookbinders and a cat. We started binding notebooks for friends in 2019 and never stopped. We write long, slightly silly emails and we answer every one of yours."
+      }
+    ]
+  },
+  "reference": {
+    "name": "Inkwell & Thread",
+    "one_liner": "Hand-bound leather journals with fountain-pen-friendly paper, sewn one at a time in a Lisbon workshop.",
+    "icp": "People who write by hand with fountain pens and want a well-made journal, in the EU.",
+    "pricing": "A5 journal €34, pocket journal €22; EU shipping in 3 to 5 days.",
+    "prices": ["34", "22"],
+    "competitors": ["Leuchtturm1917", "Midori", "Moleskine"]
+  }
+}
