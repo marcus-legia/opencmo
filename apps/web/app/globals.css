@@ -5128,6 +5128,11 @@ span.ed2-asst-model {
   color: var(--ds-fg-6);
   text-decoration: line-through;
 }
+.ed2-trn-word.is-emphasized {
+  font-style: italic;
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--ds-peach);
+}
 .ed2-trn-word.is-selected {
   background: var(--ds-peach);
   color: var(--ds-accent-ink);

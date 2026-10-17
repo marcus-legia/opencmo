@@ -60,8 +60,9 @@ export function buildList(input: ListInput, area: Box): Node[] {
 		const at = reveal?.[index];
 		const next = reveal?.[index + 1];
 		out.push({ kind: 'rect', name: `Row ${index + 1}`, ...row, cornerRadius: Math.round(rowHeight * 0.2), ...tint(THEME.panel, THEME.panelOpacity) });
-		// The highlight sits on the row being talked about, until the next row takes it.
-		if (at !== undefined) {
+		// The highlight sits on the row being talked about, until the next row takes it. A row the
+		// next one follows at once (both named before the list appeared) is already passed: no highlight.
+		if (at !== undefined && (next === undefined || next > at + FADE)) {
 			out.push({ kind: 'rect', name: `Row ${index + 1} highlight`, ...row, cornerRadius: Math.round(rowHeight * 0.2), ...tint(THEME.accent, 0.28), ...steps(0, 1, at, next) });
 		}
 		// A fresh track per node: a shared object would be one element in two places.

@@ -90,6 +90,15 @@ describe('emphasize_words', () => {
 		expect(captions(none.document).emphasis).toBeUndefined();
 	});
 
+	it('word ids name exact words (the panel selection); a cut word is refused', async () => {
+		const ctx = memory();
+		const ids = normalize(TRANSCRIPT)[1]!.words.map((word) => word.id!);
+		const { document } = await applyOps(SOURCE, [{ op: 'emphasize_words', word_ids: [ids[2]!, ids[3]!] }], ctx);
+		expect(emphasized(document, ctx)).toEqual(['24', 'skills']);
+		const cut = await applyOps(SOURCE, [{ op: 'remove_words', word_ids: [ids[2]!] }], ctx);
+		await expect(applyOps(cut.document, [{ op: 'emphasize_words', word_ids: [ids[2]!] }], ctx)).rejects.toThrow(/not in the clip/);
+	});
+
 	it('a quote not in the transcript fails with the quote error; nothing to do fails too', async () => {
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: ['compound interest'] }], memory())).rejects.toThrow(/not in this clip's transcript/);
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [] }], memory())).rejects.toThrow(/quotes to emphasize/);

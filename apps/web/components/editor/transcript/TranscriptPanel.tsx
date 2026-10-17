@@ -13,11 +13,15 @@
  *
  * "Add title" turns selected words into a name tag or lower third that appears when they are
  * spoken: the title is pre-filled with the words, the quote is the same words.
+ *
+ * "Emphasize" gives the selected words the captions' emphasis style (style skills): picked by id,
+ * so a phrase said twice is emphasized where the user selected it. Emphasized words show in italic.
  */
 
 import { useEffect, useMemo, useState } from "react";
 
 import type { ClipDocument } from "@opencmo/clip-doc";
+import { isEmphasized } from "@opencmo/clip-render";
 import {
   NUDGE,
   VOICEOVER_MARK,
@@ -124,6 +128,16 @@ export function TranscriptPanel({
   }, [flat, anchor, focus]);
   const selectedKeys = useMemo(() => new Set(selected.map((entry) => key(entry.at))), [selected]);
   const hits = useMemo(() => new Set(search(model?.transcript ?? [], query).map((at) => key(at as At))), [model, query]);
+  // Emphasis lives on this source's captions layer, in source seconds.
+  const emphasis = useMemo(() => {
+    let found: { start: number; end: number }[] = [];
+    if (source?.captionsId) {
+      walk(doc, ({ entity }) => {
+        if (entity.id === source.captionsId && Array.isArray(entity.emphasis)) found = entity.emphasis as typeof found;
+      });
+    }
+    return found;
+  }, [doc, source?.captionsId]);
 
   const picker =
     sources.length > 1 ? (
@@ -172,6 +186,11 @@ export function TranscriptPanel({
   const anyKept = selected.some((entry) => !removed(entry.word));
   const anyRemoved = selected.some((entry) => removed(entry.word));
   const ids = () => selected.map((entry) => entry.word.id!);
+  const emphasized = (word: Word) => emphasis.length > 0 && isEmphasized(word, emphasis);
+  const toEmphasize = selected.filter((entry) => !removed(entry.word) && !emphasized(entry.word));
+  const toPlain = selected.filter((entry) => !removed(entry.word) && emphasized(entry.word));
+  // Emphasis is drawn on a captions layer; a source without one has nothing to emphasize.
+  const canEmphasize = Boolean(source?.captionsId);
   const cutWords = () => ({ op: "remove_words", word_ids: ids(), ...(tightness === "words" ? {} : { tightness }) });
 
   const act = (ops: unknown[], clear = false) => {
@@ -296,6 +315,7 @@ export function TranscriptPanel({
               if (selectedKeys.has(key(at))) cls.push("is-selected");
               if (hits.has(key(at))) cls.push("is-hit");
               if (removed(word)) cls.push("is-removed");
+              else if (emphasized(word)) cls.push("is-emphasized");
               return (
                 <span key={word.id ?? w}>
                   <span
@@ -376,6 +396,18 @@ export function TranscriptPanel({
               <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-restore"
                 onClick={() => act([{ op: "restore_words", word_ids: ids() }])}>
                 Restore
+              </button>
+            ) : null}
+            {canEmphasize && toEmphasize.length ? (
+              <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-emphasize" title="Give these words the captions' emphasis style"
+                onClick={() => act([{ op: "emphasize_words", word_ids: toEmphasize.map((entry) => entry.word.id!) }])}>
+                Emphasize
+              </button>
+            ) : null}
+            {canEmphasize && toPlain.length ? (
+              <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-unemphasize"
+                onClick={() => act([{ op: "emphasize_words", word_ids: toPlain.map((entry) => entry.word.id!), remove: true }])}>
+                Remove emphasis
               </button>
             ) : null}
             {canTitle && !titleDraft ? (

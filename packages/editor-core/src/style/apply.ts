@@ -272,9 +272,12 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 		}
 	}
 
+	// The hook owns the upper band while it is up; the list waits for it.
+	let hookEnd = 0;
 	if (plan.hook && ready('title.hook')) {
 		const look = preset.hookTitle ?? {};
 		const seconds = look.seconds ?? DEFAULT_HOOK_SECONDS;
+		hookEnd = seconds;
 		steps.push({
 			item: `Hook title ${quoted(plan.hook.lines.join(' / '))}`,
 			op: {
@@ -306,7 +309,8 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 	if (plan.list && ready('list.reveal')) {
 		const list = plan.list;
 		const item = `List of ${plural(list.items.length, 'item')}`;
-		if (await locate(item, list.quote)) {
+		const at = await locate(item, list.quote);
+		if (at) {
 			let reveal: string[] | undefined;
 			if (list.reveal?.length) {
 				const found: string[] = [];
@@ -317,7 +321,7 @@ export async function runStyle(input: ClipDocument, request: ApplyStyle, ctx: St
 			}
 			steps.push({
 				item,
-				op: { op: 'add_list', items: list.items, quote: list.quote, ...(reveal ? { reveal_quotes: reveal } : {}) },
+				op: { op: 'add_list', items: list.items, quote: list.quote, ...(at.start < hookEnd ? { start: hookEnd } : {}), ...(reveal ? { reveal_quotes: reveal } : {}) },
 				done: `${item}${reveal ? ', each lit when it is mentioned' : ''}`,
 			});
 		}

@@ -954,6 +954,14 @@ function CaptionSection({ ctx, parent }: { ctx: InspectorContext; parent: Entity
           onChange={(value) => setProps(ctx, node, { highlight: value === "off" ? null : value })}
         />
       </Row>
+      {/* Style skills: words fade in as they are spoken, and the words picked in the Transcript tab get this look. */}
+      <Row label="Reveal">
+        <label className="ed2-check">
+          <input type="checkbox" data-testid="ins-caption-reveal" checked={node.reveal === "fade"} onChange={(event) => setProps(ctx, node, { reveal: event.target.checked ? "fade" : null })} />
+          Fade words in as they are spoken
+        </label>
+      </Row>
+      <EmphasisRows ctx={ctx} />
       {/* E4-e: che từ tục trên màn; transcript và file SRT xuất ra vẫn là lời gốc. */}
       <Row label="Profanity">
         <label className="ed2-check">
@@ -963,6 +971,60 @@ function CaptionSection({ ctx, parent }: { ctx: InspectorContext; parent: Entity
       </Row>
       {ctx.clipId ? <TranslateCaptionsRow ctx={ctx} parent={parent} clipId={ctx.clipId} /> : null}
     </Section>
+  );
+}
+
+/**
+ * The look of emphasized words (picked in the Transcript tab with "Emphasize", or by a style).
+ * Unset keys follow the caption preset; the colour falls back to the first accent colour.
+ */
+function EmphasisRows({ ctx }: { ctx: InspectorContext }) {
+  const { node } = ctx;
+  const look = (node.emphasisStyle as { fontFamily?: string; fontStyle?: string; color?: string; scale?: number } | undefined) ?? {};
+  const count = Array.isArray(node.emphasis) ? node.emphasis.length : 0;
+  const update = (patch: Partial<typeof look>) => {
+    const next = Object.fromEntries(Object.entries({ ...look, ...patch }).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+    setProps(ctx, node, { emphasisStyle: Object.keys(next).length ? next : null });
+  };
+  return (
+    <>
+      <Row label="Emphasis">
+        <span className="ed2-muted" data-testid="ins-caption-emphasis-count">
+          {count ? `${count} emphasized ${count === 1 ? "phrase" : "phrases"}` : "Select words in Transcript, then Emphasize"}
+        </span>
+      </Row>
+      <Row label="Emphasis font">
+        <SelectField
+          label="Emphasis font"
+          testid="ins-caption-emphasis-font"
+          value={look.fontFamily ?? ""}
+          options={[{ value: "", label: "Same as captions" }, ...Object.keys(FONTS).map((value) => ({ value, label: value }))]}
+          onChange={(value) => update({ fontFamily: value || undefined })}
+        />
+      </Row>
+      <Row label="Emphasis style">
+        <label className="ed2-check">
+          <input type="checkbox" data-testid="ins-caption-emphasis-italic" checked={look.fontStyle === "italic"} onChange={(event) => update({ fontStyle: event.target.checked ? "italic" : undefined })} />
+          Italic
+        </label>
+      </Row>
+      <Row label="Emphasis color">
+        <ColorField value={look.color ?? ((node.colors as string[] | undefined)?.[0] ?? "#FFD400")} testid="ins-caption-emphasis-color" onCommit={(value) => update({ color: value })} />
+      </Row>
+      <Row label="Emphasis size">
+        <NumberField
+          label="Emphasis size"
+          value={look.scale ?? 1}
+          scale={100}
+          step={5}
+          min={100}
+          max={160}
+          unit="%"
+          testid="ins-caption-emphasis-size"
+          onCommit={(value) => update({ scale: value > 1 ? value : undefined })}
+        />
+      </Row>
+    </>
   );
 }
 
@@ -1066,6 +1128,7 @@ const TRANSITIONS = [
   { value: "slideFromLeft", label: "Slide From Left" },
   { value: "fadeToBlack", label: "Fade To Black" },
   { value: "fadeToWhite", label: "Fade To White" },
+  { value: "whip", label: "Whip" },
 ] as const;
 
 function TransitionSection({ ctx }: { ctx: InspectorContext }) {

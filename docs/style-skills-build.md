@@ -295,31 +295,31 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ## Track B: Editing capabilities
 
-- [ ] **B1. Schema.** Captions `emphasis`, `emphasisStyle`, `reveal`; `whip` in `TRANSITION_TYPES`; regenerate
+- [x] **B1. Schema.** Captions `emphasis`, `emphasisStyle`, `reveal`; `whip` in `TRANSITION_TYPES`; regenerate
   `packages/contracts/clip-document.schema.json` with `packages/clip-doc/scripts/json-schema.ts` (B may commit that
   generated file). **Push this first.**
-- [ ] **B2. Keyword emphasis.** `clip-render/src/captions.ts` draws emphasized words with `emphasisStyle` (font,
+- [x] **B2. Keyword emphasis.** `clip-render/src/captions.ts` draws emphasized words with `emphasisStyle` (font,
   italic, colour, scale) in every preset, without breaking line width (measure with the emphasized font). Op
   `emphasize_words` resolves quotes to source-time ranges; removing words keeps the rest. Tests: emphasis survives a
   cut; a quote not in the transcript fails with the existing quote error. Flip `caption.emphasis`.
-- [ ] **B3. Reveal.** `reveal: 'fade'` fades each word from 35% ink to full ink over 120 ms at its start. Flip
+- [x] **B3. Reveal.** `reveal: 'fade'` fades each word from 35% ink to full ink over 120 ms at its start. Flip
   `caption.reveal`.
-- [ ] **B4. Hook title.** `add_hook_title`: group of 1–2 text rows; the accent line sits on a rounded accent rect sized
+- [x] **B4. Hook title.** `add_hook_title`: group of 1–2 text rows; the accent line sits on a rounded accent rect sized
   from the measured text; upper third; `check` reports caption overlap as today. `pop` in, fade out. Flip
   `title.hook`.
-- [ ] **B5. Punch-in.** `punch_in` writes a scale track on the speaker that alternates `scales` at each cut boundary
+- [x] **B5. Punch-in.** `punch_in` writes a scale track on the speaker that alternates `scales` at each cut boundary
   (cuts from the captions model; shots shorter than `min_shot` keep the previous scale), recentred on the face
   track so the face never leaves the frame. Rerun replaces. Flip `speaker.punchIn`.
-- [ ] **B6. List.** `add_list`: rows with index, label and optional meta in the visual panel (works with
+- [x] **B6. List.** `add_list`: rows with index, label and optional meta in the visual panel (works with
   `split-top`/`split-bottom`); each row highlights at its `reveal_quotes` time; `blur: true` items get the blur
   effect on the label only. Flip `list.reveal`.
-- [ ] **B7. Whip.** Renderer: the outgoing clip shifts out and the incoming one shifts in, with directional motion blur
+- [x] **B7. Whip.** Renderer: the outgoing clip shifts out and the incoming one shifts in, with directional motion blur
   (sampled, at most 6 taps), 0.25 s default. Browser and export draw the same frames: add an `editor-parity` sample.
   Flip `transition.whip`.
-- [ ] **B8. Editor UI.** In the transcript panel, select words → "Emphasize" / "Remove emphasis" (calls
+- [x] **B8. Editor UI.** In the transcript panel, select words → "Emphasize" / "Remove emphasis" (calls
   `emphasize_words`); the captions inspector gets an emphasis style section and the reveal toggle. Guides: new
   paragraphs in `captions`, `hooks`, `motion`.
-- [ ] **B9. Look and measure.** Export a 60 s clip with all of B2–B7; look at 8 full-size frames (hook, an emphasized
+- [x] **B9. Look and measure.** Export a 60 s clip with all of B2–B7; look at 8 full-size frames (hook, an emphasized
   word, both punch-in scales, the list mid-reveal, the whip midpoint); `/usr/bin/time -v` peak RSS < 2 GB; Notes.
 
 **Checks:** `npm run typecheck`; clip-doc, clip-render, editor-core tests; `editor-parity` render;
@@ -419,6 +419,40 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 ### Track B
 
+- **B1.** Captions `emphasis` (source-second ranges), `emphasisStyle`, `reveal: 'fade'`; `whip` in `TRANSITION_TYPES`;
+  JSON Schema regenerated. Optional keys only, so no document version change.
+- **B2.** Emphasis is matched by a word's SOURCE start: after a cut the captions read a remapped transcript, but every
+  word keeps the id editor-core gave it (`w` + source ms), so `sourceStart()` in clip-render and `emphasize_words` agree
+  and cuts never move emphasis (tested: cut other words, cut an emphasized one). Emphasized words are one text range
+  (font, italic, colour, scale) after the preset's ranges, so the accent wins over spotlight; stark keeps only the font.
+  `emphasize_words` takes `quotes` and also `word_ids` (the Transcript panel's selection), `clear`, `remove`.
+- **B3.** Text colour has no alpha here, so "35% ink" is a mix toward black (light ink) or white (dark ink).
+- **B4.** The accent box is the accent line's own text `background`, which clip-render sizes from the measured glyphs:
+  it fits in the browser and the export without a width estimate. Takes the preset's look (A's request).
+- **B5.** Each cut piece is its own node, so the punch-in is `scale` plus `offsetX = (focus − 0.5) × width ×
+  (1 − scale)` from the scene's face track: the face stays put and the frame stays covered (both tested). No cuts → a
+  plain error the receipt shows.
+- **B6.** Rows are rect + text with opacity keyframes in the group's seconds; `blur` blurs the label only. `split-top`
+  in this codebase is speaker on top; the reel's layout (speaker below, list above) is `split-bottom`. Found while
+  looking (B9): a list now ends with the split panel it sits in, a given `start` wins (rows named earlier are lit when
+  it appears), and a row passed at once gets no highlight. `apply_style` starts the list after the hook.
+- **B7.** Whip = cubic in-out travel + ≤ 6 running-average taps, 0.25 s default; parity sample `transition-whip`
+  (opencmo oracle; browser within mean 1.3, tile 4). Found while looking (B9), and true of the slides and fades
+  too: inside a layout group the sequence's box is 0 × 0 when transitions read it, and a face-tracked shot is a box
+  several frames wide, so a shifted shot still covered the frame. Transitions now measure the scene and clip each
+  moving shot to the frame (`transition-group.test.ts`); the six transition samples still pass on both targets.
+- **B8.** Transcript tab: select words → Emphasize / Remove emphasis (by word id); emphasized words show italic.
+  Captions inspector: Reveal toggle, emphasis font, italic, colour, size. Transition picker: Whip. Guides: hooks,
+  captions, motion. e2e `keyword emphasis from the transcript` added to `editor-captions.spec.ts`; **not run here**:
+  Docker Hub answered 429 and the ECR mirror "data limit exceeded" for the Supabase images.
+- **B9.** A synthetic 60 s 16:9 talking head (a face box that moves; its track measured from the frames), rough cut,
+  `split-bottom` for the list, then `apply_style senior-dev-listicle`: everything applied, nothing skipped,
+  `apply_style` 85 ms. Export (`clip-export`, 1080×1920, 1050 frames): **618 MB peak RSS, 50 s** (`/usr/bin/time -v`).
+  Full-size frames: hook alone in the panel (box fits); list mid-reveal (row 3 highlighted, blurred label); split
+  ended → list gone, speaker full frame; 1× and 1.15× pieces with the face centred and whole; "24" and "in" in the
+  italic accent; whip mid-way (outgoing smeared left, incoming entering right) and landed. The first look found the
+  three bugs above; the frames listed are after the fixes.
+
 ### Track C
 
 - **C1.** `20261128090000_page_captures.sql` + `158_page_captures.test.sql` (32 assertions). `page_captures`
@@ -503,10 +537,10 @@ guides and C writes a new `proof` guide. Edit only your own section. `packages/e
 
 Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner ticks it when done.
 
-- [ ] (from A → owner B) `add_hook_title`: also take the preset's look — `accent_line`, `accent_box`,
+- [x] (from A → owner B) `add_hook_title`: also take the preset's look — `accent_line`, `accent_box`,
   `font_family`, `accent_font_family`, `accent_font_style` — so `apply_style` can pass `preset.hookTitle`. Today it
   passes only `lines`, `start`, `end` (the contract).
-- [ ] (from A → owner B) `emphasize_words`: accept `quotes: []` with `clear: true` (a rerun whose plan has no
+- [x] (from A → owner B) `emphasize_words`: accept `quotes: []` with `clear: true` (a rerun whose plan has no
   emphasis clears the old one), and keep a visual's `marks.visual.op` on the groups `add_hook_title` / `add_list`
   place: `apply_style` finds its earlier output by it.
 - [ ] (from A → owner C) `page_captures` needs `status` and `error` columns readable under RLS
@@ -518,7 +552,7 @@ Cross-track asks. Format: `- [ ] (from X → owner Y) what and why`. The owner t
 - [x] (from C → owner B) `components/editor/media.ts`: C added the `capture:<id>` branch next to `brand:` (two
   lines, resolving to `/api/v1/captures/<id>/image`), since without it a proof card's page is blank in the editor
   once `proof.card` is ready. Please keep it when you next touch that file.
-- [ ] (from C → owner B) `agent-design.check` fails "every tool says what it does": `add_hook_title`, `add_list`,
+- [x] (from C → owner B) `agent-design.check` fails "every tool says what it does": `add_hook_title`, `add_list`,
   `emphasize_words` and `punch_in` have no line in `OP_DESCRIPTIONS` (`lib/agent/tools.ts`).
 - [ ] (from C → owner A) `apply_style`: pass `preset.proof` to `add_proof` as `zoom` and `mark` (the op takes both,
   optional); today every proof uses the defaults (1.8, marker).

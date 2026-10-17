@@ -27,13 +27,15 @@ export const emphasizeWordsInput = z
 		op: z.literal('emphasize_words'),
 		element_id: speechElement,
 		/** Exact words from the transcript: one to three words each, the ones to colour. */
-		quotes: z.array(z.string().trim().min(1).max(60)).max(40),
+		quotes: z.array(z.string().trim().min(1).max(60)).max(40).default([]),
+		/** Exact words by id (the Transcript panel's selection), instead of or with quotes. */
+		word_ids: z.array(z.string().min(1).max(40)).max(500).optional(),
 		/** Clear the layer's emphasis first (a style rerun). With no quotes: remove all emphasis. */
 		clear: z.boolean().optional(),
 		/** Take these words OUT of the emphasis instead of adding them. */
 		remove: z.boolean().optional(),
 	})
-	.refine((input) => input.quotes.length > 0 || input.clear, 'Give quotes to emphasize, or clear: true.');
+	.refine((input) => input.quotes.length > 0 || Boolean(input.word_ids?.length) || input.clear, 'Give quotes to emphasize, or clear: true.');
 type EmphasizeWords = z.infer<typeof emphasizeWordsInput>;
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
@@ -60,8 +62,8 @@ export const emphasizeWords = {
 	name: 'emphasize_words',
 	input: emphasizeWordsInput,
 	describe: (input: EmphasizeWords) => {
-		const list = input.quotes.map((quote) => `"${quote.length > 30 ? `${quote.slice(0, 29)}…` : quote}"`).join(', ');
-		if (!input.quotes.length) return 'Remove the caption emphasis';
+		const list = input.quotes.length ? input.quotes.map((quote) => `"${quote.length > 30 ? `${quote.slice(0, 29)}…` : quote}"`).join(', ') : `${input.word_ids?.length ?? 0} words`;
+		if (!input.quotes.length && !input.word_ids?.length) return 'Remove the caption emphasis';
 		return input.remove ? `Remove the emphasis from ${list}` : `Emphasize ${list}`;
 	},
 	async apply(document: ClipDocument, input: EmphasizeWords, ctx: OpContext) {
@@ -77,6 +79,12 @@ export const emphasizeWords = {
 			if (!hit) throw new OpFailure(`"${quote.slice(0, 80)}" is not in this clip's transcript. Copy the exact words from <clip_context>.`);
 			const starts = words.filter((word) => word.start >= hit.start - 0.001 && word.end <= hit.end + 0.001).map((word) => sourceStart(word));
 			if (starts.length) found.push({ start: round(Math.min(...starts)), end: round(Math.max(...starts)) });
+		}
+		if (input.word_ids?.length) {
+			const wanted = new Set(input.word_ids);
+			const picked = words.filter((word) => word.id && wanted.has(word.id));
+			if (picked.length < wanted.size) throw new OpFailure('Some of those words are not in the clip any more.');
+			for (const word of picked) found.push({ start: round(sourceStart(word)), end: round(sourceStart(word)) });
 		}
 		const next = clone(document);
 		const layer = captionsLayer(next, input.element_id);

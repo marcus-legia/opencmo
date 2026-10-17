@@ -759,6 +759,16 @@ function gradeOverlays(ctx: Ctx2D, r: RNode): void {
 const WHIP_TAPS = 6;
 const WHIP_BLUR = 0.18;
 
+/**
+ * A moving shot travels as the picture it shows, not as its whole box: a face-tracked crop is a box
+ * several frames wide slid under the frame, and shifted unclipped it would still cover the frame.
+ */
+function frameClip(ctx: Ctx2D, width: number, height: number): void {
+  ctx.beginPath();
+  ctx.rect(0, 0, width, height);
+  ctx.clip();
+}
+
 function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
   const right = partnerOf(left);
   if (!right) return;
@@ -768,7 +778,12 @@ function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
   const completion = (now - window.start) / (window.end - window.start);
   const type = (left.node as { transition?: { type?: string } }).transition?.type ?? 'dissolve';
   const { ctx } = scope;
-  const { width, height } = sequence.values;
+  // The frame the shots move across. A sequence borrows its parent's box, and inside a group (the
+  // speaker of a layout) that box is not measured yet when the sequence is, so it reads 0 × 0:
+  // measure the nearest ancestor with a box of its own (the scene).
+  let frame: RNode = sequence;
+  while (frame.parent && (frame.node.kind === 'sequence' || frame.node.kind === 'group')) frame = frame.parent;
+  const { width, height } = frame.values;
   switch (type) {
     case 'slideFromRight':
     case 'slideFromLeft': {
@@ -776,6 +791,7 @@ function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
       ctx.save();
       const direction = type === 'slideFromRight' ? 1 : -1;
       ctx.translate(((1 - completion) ** 2 * width * direction) | 0, 0);
+      frameClip(ctx, width, height);
       drawNode(scope, right);
       ctx.restore();
       break;
@@ -793,6 +809,7 @@ function drawTransition(scope: Scope, sequence: RNode, left: RNode): void {
           ctx.save();
           // Whole pixels, as the slides: sub-pixel shifts rasterize differently in Chromium and Node.
           ctx.translate(Math.round(shift + (taps > 1 ? (tap / (taps - 1) - 0.5) * smear : 0)), 0);
+          frameClip(ctx, width, height);
           ctx.globalAlpha = alpha / (tap + 1);
           drawNode(scope, node);
           ctx.restore();

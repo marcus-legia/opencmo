@@ -79,3 +79,38 @@ test("library video captions, translation and censor", async ({ page }, testInfo
   expect((rows ?? []).map((row) => row.delta)).toEqual([-1, -1]);
   expect(await balance(page)).toBeLessThan(beforeAgent);
 });
+
+/**
+ * Style skills B8: select words in the Transcript tab → Emphasize gives them the captions'
+ * emphasis style (source-second ranges on the captions layer); Remove emphasis takes it off.
+ */
+test("keyword emphasis from the transcript", async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
+  await signIn(page, state().users.a);
+  await openEditor(page);
+  const clipId = page.url().split("/").pop()!;
+  const emphasis = async () => {
+    const body = (await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()) as { document: unknown };
+    const found = JSON.stringify(body.document).match(/"emphasis":(\[[^\]]*\])/);
+    return found ? (JSON.parse(found[1]!) as unknown[]).length : 0;
+  };
+
+  await page.getByRole("tab", { name: "Transcript" }).click();
+  const words = page.getByTestId("transcript-word");
+  await expect(words.first()).toBeVisible({ timeout: 60_000 });
+  await words.nth(1).click();
+  await words.nth(2).click({ modifiers: ["Shift"] });
+  await page.getByTestId("transcript-emphasize").click();
+  await expect(words.nth(1)).toHaveClass(/is-emphasized/, { timeout: 60_000 });
+  await expect(words.nth(2)).toHaveClass(/is-emphasized/);
+  await expect(words.nth(0)).not.toHaveClass(/is-emphasized/);
+  await expect.poll(emphasis, { timeout: 60_000, message: "the emphasis did not reach the document" }).toBe(2);
+  await page.screenshot({ path: testInfo.outputPath("04-emphasized.png") });
+
+  await words.nth(2).click();
+  await page.getByTestId("transcript-unemphasize").click();
+  await expect(words.nth(2)).not.toHaveClass(/is-emphasized/, { timeout: 60_000 });
+  await expect(words.nth(1)).toHaveClass(/is-emphasized/);
+  await expect.poll(emphasis, { timeout: 60_000 }).toBe(1);
+});

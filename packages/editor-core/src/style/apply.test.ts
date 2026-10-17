@@ -182,6 +182,16 @@ describe('apply_style', () => {
 		expect(receipt.applied).toContain('dissolve transition at 1 chapter');
 	});
 
+	it('a list whose words come during the hook waits for the hook to end', async () => {
+		const ctx = memoryContext();
+		const calls: Call[] = [];
+		await runStyle(await cutClip(ctx), request({ hook: { lines: ['A hook'] }, list: { quote: 'so this is', items: [{ label: 'One' }, { label: 'Two' }] } }), ctx, fakeDeps(calls));
+		expect(calls.find((call) => call.op === 'add_list')).toMatchObject({ quote: 'so this is', start: 3 });
+		const later: Call[] = [];
+		await runStyle(await cutClip(ctx), request({ hook: { lines: ['A hook'] }, list: { quote: 'it has', items: [{ label: 'One' }, { label: 'Two' }] } }), ctx, fakeDeps(later));
+		expect(later.find((call) => call.op === 'add_list')).not.toHaveProperty('start');
+	});
+
 	it('skips a beat whose quote is not in the transcript and says why', async () => {
 		const ctx = memoryContext();
 		const { receipt } = await runStyle(await cutClip(ctx), request({ emphasis: [{ quote: '24' }, { quote: 'compound interest' }], chapters: [{ quote: 'chapter nobody said' }] }), ctx, fakeDeps());

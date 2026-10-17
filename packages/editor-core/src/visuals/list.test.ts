@@ -71,6 +71,36 @@ describe('add_list', () => {
 		expect(errors.map((issue) => issue.code)).toEqual([]);
 	});
 
+	it('ends with its split panel, and a given start (after a hook) keeps earlier rows lit from the start', async () => {
+		const { document } = await applyOps(
+			SOURCE,
+			[
+				{ op: 'set_layout', mode: 'split-bottom', start: 0, end: 7 },
+				{ op: 'add_list', items: ITEMS, quote: 'here are three repos', start: 3.5, reveal_quotes: ['the first one', 'the second one', 'the third one'] },
+			],
+			ctx,
+		);
+		const group = list(document);
+		expect(group).toMatchObject({ start: 3.5, end: 7 });
+		// "the first one" (3 s) came before the list: row 1 is lit when the list appears.
+		const label = group.children!.find((child) => child.name === 'Row 1 label')!;
+		const keys = (label.tracks as { keyframes: { time: number; value: number }[] }[])[0]!.keyframes;
+		expect(keys.at(-1)).toMatchObject({ time: 0.1, value: 1 });
+		// Rows 1 and 2 both named before the list appears (6.5 s): only row 2, the latest, is highlighted.
+		const late = list((await applyOps(SOURCE, [
+			{ op: 'set_layout', mode: 'split-bottom', start: 0, end: 15 },
+			{ op: 'add_list', items: ITEMS, quote: 'here are three repos', start: 6.5, reveal_quotes: ['the first one', 'the second one', 'the third one'] },
+		], ctx)).document);
+		const highlights = late.children!.filter((child) => /highlight$/.test(String(child.name))).map((child) => child.name);
+		expect(highlights).toEqual(['Row 2 highlight', 'Row 3 highlight']);
+		for (const child of [...group.children!, ...late.children!]) {
+			for (const track of (child.tracks as { keyframes: { time: number }[] }[] | undefined) ?? []) {
+				const times = track.keyframes.map((key) => key.time);
+				expect(times).toEqual([...times].sort((a, b) => a - b));
+			}
+		}
+	});
+
 	it('without reveals every row shows at once; reveals out of order or miscounted fail', async () => {
 		const { document } = await applyOps(SOURCE, [{ op: 'add_list', items: ITEMS, start: 2, end: 8 }], ctx);
 		expect(list(document).children!.some((child) => child.tracks)).toBe(false);

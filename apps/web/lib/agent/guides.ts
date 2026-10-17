@@ -97,7 +97,8 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 - Place it in the upper third (y about 0.15-0.25 with add_text) so it does not cover the face or the captions (captions sit low by default).
 - Make it readable on a phone: fontSize 70-100 on a 1080-wide frame, weight 800, white or a brand color, with a stroke (add_part strokes {color: "#000000", width: 8}) or a shadow for contrast over video.
 - Give it motion: an "in" animation (fade, slideUp, grow, appearWord) of 0.3-0.5s, and an "out" fade before it ends.
-- Always capture a frame at 1s to confirm it reads well.`,
+- Always capture a frame at 1s to confirm it reads well.
+- add_hook_title {lines: [topic, promise]} builds this in one step: the opening 0-3 s in the upper third, line 2 (the promise) on an accent box in its own font (accent_font_family "Fraunces" with accent_font_style "italic" reads as an editorial hook), popping in line by line. Prefer it over add_text for an opening hook; one hook per clip (a second call adds a second one, so update or delete the first).`,
 
   titles: `# Titles: name tags, lower thirds, chapters (add_title)
 
@@ -118,6 +119,8 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 - Captions for OTHER media (B-roll, an uploaded talk, a song): uploads are transcribed automatically for free, and a video's transcript is a hidden captions layer linked to it: show it with set_props {hidden: false}. add_captions {element_id} covers the rest (free when the file is already transcribed, otherwise 1 credit/min; the user approves the price). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
 - highlight: "block" (box behind the spoken word) or "pop" (the spoken word grows and turns yellow) with set_props on the captions element; censor: true masks swear words on screen (the transcript keeps them).
 - Fix misheard words with edit_words; split long lines with split_line and join short ones with merge_lines.
+- Keyword emphasis: emphasize_words {quotes: ["24", "free"]} gives picked words the captions' emphasisStyle (set_props {emphasisStyle: {fontFamily, fontStyle: "italic", color, scale 1-1.6}}). Pick numbers, names and promises only, at most one per 2 seconds; never filler. It follows the words through later cuts. clear: true replaces what was there, remove: true takes words out. It is not highlight: highlight marks whichever word is being spoken.
+- reveal: "fade" (set_props on the captions) brings each word in from a muted grey to full as it is spoken. Pair it with maxWords 1-2 (set_caption_breaks) for the one-or-two-words-at-a-time look.
 - Keep captions off faces: they sit at the bottom by default; move them with set_props on the captions element (verticalAlign, offsetY).
 - Titles must not overlap the captions: check reports caption-overlap.
 - A captions layer on the timeline is not proof the captions show on the video. Before telling the user the clip has captions, run check: captions-empty means the layer shows no words (its transcript could not be loaded, or its sourceIn/sourceOut miss every word), captions-covered means another layer is drawn over them. Tell the user exactly that; never say captions are on screen when check reports either.`,
@@ -215,6 +218,8 @@ Use apply_color (one call can set many adjustments on many elements) and check w
   motion: `# Motion: zoom, pan, animation
 
 - Punch-in on emphasis: on the video element, set_keyframe scale 1 at the start of the phrase and 1.12-1.2 a few frames later (easing snappy or easeOut); set it back at the next sentence. Keyframe times are the ELEMENT's own seconds.
+- Alternating punch-in between cuts: punch_in {scales: [1, 1.15], min_shot: 1.2} zooms every other cut piece of the speaker, pulled toward the face, so each cut reads as a camera change. It needs cuts (remove filler or pauses first); rerun replaces it and [1, 1] removes it. Capture a frame on a zoomed piece: the face must be fully in frame.
+- Whip between chapters: set_props {transition: {type: "whip"}} on the LEFT clip of the cut where a new chapter starts (0.25 s, a fast pan with motion blur). Use it at chapter changes only; on every cut it becomes noise.
 - Slow push: scale 1 -> 1.08 over 3-5s, easing linear or easeInOut.
 - Pan: keyframe x. For the main video in a fill frame, x is already keyframed to follow the speaker; do not break that track — prefer scale.
 - Text: animations {type: "appearWord"} reveal word by word; "grow"/"slideUp" for titles; always add an "out" phase for titles that end mid-clip.

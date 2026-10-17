@@ -14,7 +14,7 @@ import { createRenderer, FPS, type LayoutBox } from '@opencmo/clip-render';
 import { byId, clone, sceneOf, type Entity } from '../doc';
 import { readBrand, rebrand, themeFromBrand } from '../brand';
 import { buildChart, chartInput, type ChartInput } from '../visuals/chart';
-import { panelRegionAt } from '../layout';
+import { panelRegionAt, readLayout } from '../layout';
 import { clipScript, clipWords, findQuote, quoteTiming } from '../script';
 import { defaultRegion, r2, toPixels, visualGroup, type Box, type Node } from '../visuals/common';
 import { buildDiagram, diagramInput, type DiagramInput } from '../visuals/diagram';
@@ -331,9 +331,13 @@ export const addList = {
 		const reveals: number[] = [];
 		for (const quote of input.reveal_quotes ?? []) reveals.push((await quoteRange(document, ctx, quote)).start);
 		if (reveals.some((at, index) => index > 0 && at < reveals[index - 1]!)) throw new OpFailure('The reveal quotes must come in the order of the items.');
-		if (reveals.length) when = { start: Math.min(when.start, reveals[0]!), end: Math.max(when.end, reveals.at(-1)! + 2.5) };
+		// A given start wins (the list waits for a hook): rows named before it are simply lit when it appears.
+		if (reveals.length) when = { start: input.start ?? Math.min(when.start, reveals[0]!), end: Math.max(when.end, reveals.at(-1)! + 2.5) };
+		// A list in a split panel ends with the panel: after it, that part of the frame is the speaker again.
+		const panel = readLayout(document).find((range) => range.mode !== 'cell' && when.start >= range.start - 1e-6 && when.start < range.end);
+		if (panel) when = { start: when.start, end: Math.min(when.end, panel.end) };
 		when = clamp(when, frame.duration);
-		const spec: ListInput = { items: input.items, ...(reveals.length ? { reveal_at: reveals.map((at) => Math.round((at - when.start) * 100) / 100) } : {}) };
+		const spec: ListInput = { items: input.items, ...(reveals.length ? { reveal_at: reveals.map((at) => Math.max(0, Math.round((at - when.start) * 100) / 100)) } : {}) };
 		return addTo(document, await visualNode('add_list', spec, when, frame, document, ctx));
 	},
 };
