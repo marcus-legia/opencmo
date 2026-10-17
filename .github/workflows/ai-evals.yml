@@ -32,6 +32,11 @@ on:
         description: "Stop starting cases once this many USD are spent"
         type: string
         default: "3"
+  # TEMPORARY (session B, B6 acceptance): GitHub only dispatches workflows that exist on `main`, so
+  # this push trigger runs the fake-provider path once from the PR branch. Removed in the next commit.
+  push:
+    branches: [plan/agents/2026-10-17-agent-evals]
+    paths: [.github/workflows/ai-evals.yml]
   schedule:
     # Monday 06:17 UTC: after the weekend's model releases, before the week's prompt work.
     - cron: "17 6 * * 1"
@@ -55,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'schedule' && '[{"suite":"cmo","provider":"anthropic"},{"suite":"cmo","provider":"gemini"}]' || format('[{{"suite":"{0}","provider":"{1}"}}]', inputs.suite, inputs.provider)) }}
+        include: ${{ fromJSON(github.event_name == 'schedule' && '[{"suite":"cmo","provider":"anthropic"},{"suite":"cmo","provider":"gemini"}]' || format('[{{"suite":"{0}","provider":"{1}"}}]', inputs.suite || 'cmo', inputs.provider || 'fake')) }}
     env:
       SUITE: ${{ matrix.suite }}
       PROVIDER: ${{ matrix.provider }}
