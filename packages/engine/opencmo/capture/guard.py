@@ -10,6 +10,9 @@ proxy for everything, loopback included (Playwright adds `<-loopback>` to the by
 HTTPS and WebSockets arrive as CONNECT tunnels; plain HTTP as absolute-form requests, served one
 per connection (`Connection: close`) so a kept-alive proxy connection can never carry a request
 for a second, unchecked host.
+
+yt-dlp (and the ffmpeg it starts for sections) uses the same proxy when the worker has no
+outbound proxy of its own: `shared_proxy_url()` runs one for the whole process on a thread.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import asyncio
 import contextlib
 import logging
 import socket
+import threading
 from dataclasses import dataclass, field
 from typing import Self
 from urllib.parse import urlsplit
@@ -28,6 +32,8 @@ log = logging.getLogger(__name__)
 
 #: A request head larger than this is not a browser talking to a proxy.
 MAX_HEAD = 64 * 1024
+#: Refusals kept for errors and tests; the shared proxy lives as long as the worker process.
+MAX_BLOCKED = 100
 #: Connections the page may hold open at once; a page that opens more waits.
 MAX_CONNECTIONS = 64
 CONNECT_TIMEOUT = 10.0
@@ -81,6 +87,7 @@ class Guard:
 
     def _refuse(self, host: str, port: int, why: str) -> None:
         self.blocked.append(f"{host}:{port}")
+        del self.blocked[:-MAX_BLOCKED]
         log.info("Capture refused %s:%s (%s)", host, port, why)
         raise Refused(f"{host}:{port} {why}")
 
@@ -178,3 +185,66 @@ class GuardProxy:
         upstream[1].write(out.encode("latin-1"))
         await upstream[1].drain()
         await _relay((reader, writer), upstream)
+
+
+class GuardProxyThread:
+    """A `GuardProxy` on its own event-loop thread, for synchronous callers such as yt-dlp.
+
+    `with GuardProxyThread(guard) as proxy:` → `proxy.url`.
+    """
+
+    def __init__(self, guard: Guard) -> None:
+        self.guard = guard
+        self.url = ""
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._proxy: GuardProxy | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> Self:
+        ready = threading.Event()
+        failure: list[BaseException] = []
+
+        def run() -> None:
+            loop = asyncio.new_event_loop()
+            self._loop = loop
+            try:
+                self._proxy = loop.run_until_complete(GuardProxy(self.guard).__aenter__())
+                self.url = self._proxy.url
+            except BaseException as exc:  # noqa: BLE001 - surfaced to the caller below
+                failure.append(exc)
+                ready.set()
+                return
+            ready.set()
+            loop.run_forever()
+            loop.run_until_complete(self._proxy.__aexit__(None, None, None))
+            loop.close()
+
+        self._thread = threading.Thread(target=run, name="guard-proxy", daemon=True)
+        self._thread.start()
+        if not ready.wait(10) or failure or not self.url:
+            raise RuntimeError("The address guard proxy did not start") from (failure[0] if failure else None)
+        return self
+
+    def stop(self) -> None:
+        if self._loop is not None and self._thread is not None:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join(5)
+
+    def __enter__(self) -> Self:
+        return self.start()
+
+    def __exit__(self, *exc: object) -> None:
+        self.stop()
+
+
+_shared: GuardProxyThread | None = None
+_shared_lock = threading.Lock()
+
+
+def shared_proxy_url() -> str:
+    """The process-wide guard proxy, started on first use; no `allow`, so no exceptions."""
+    global _shared
+    with _shared_lock:
+        if _shared is None or _shared._thread is None or not _shared._thread.is_alive():
+            _shared = GuardProxyThread(Guard()).start()
+        return _shared.url

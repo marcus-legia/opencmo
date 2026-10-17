@@ -10,6 +10,15 @@ Chiến lược cốt lõi — xem ARCHITECTURE.md §3:
 Với video 45 phút, cách này biến ~1GB thành ~90MB. Đây là tối ưu lớn nhất
 của toàn bộ pipeline: nó cắt cùng lúc chi phí proxy, băng thông, dung lượng
 đĩa và thời gian chờ.
+
+Where the bytes go (SSRF, security plan fix 7): `validate_public_url` checks the link once, but
+yt-dlp then follows redirects and extractor hops on its own, and so does the ffmpeg it starts.
+- Without `OPENCMO_PROXY`, every request goes through the address guard
+  (`capture.guard.shared_proxy_url`): each host is resolved once, refused unless every answer is
+  public and on port 80/443, and connected to at the address that was checked.
+- With `OPENCMO_PROXY` (IPRoyal), egress is that proxy: connections leave from IPRoyal's network,
+  which cannot reach Modal's metadata service, our private network or the worker's own ports. The
+  guard is not chained in front of it; IPRoyal resolves the host on its side.
 """
 
 from __future__ import annotations
@@ -20,6 +29,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from ..capture.guard import shared_proxy_url
 from ..config import Config, fresh_proxy_session
 from ..media.ffmpeg import extract_audio
 from ..media.probe import probe_file
@@ -88,8 +98,8 @@ def _base_opts(cfg: Config) -> dict:
         # trong gói `yt-dlp-ejs` (extra `default`), không tải từ GitHub lúc chạy.
         "js_runtimes": {"deno": {}, "node": {}},
     }
-    if cfg.proxy:
-        opts["proxy"] = cfg.proxy
+    # Never unset: without a proxy yt-dlp would connect wherever a redirect points.
+    opts["proxy"] = cfg.proxy or shared_proxy_url()
     if cfg.cookies_file:
         opts["cookiefile"] = cfg.cookies_file
     return opts

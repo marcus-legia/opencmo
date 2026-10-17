@@ -197,7 +197,10 @@ Checklist:
   - A new `create_job` regex migration with pgTAP reading the fixture's URL cases.
   - **Accept:** `site.check.ts` and `source.check.ts` refuse every fixture "blocked" case and accept the public
     controls; pgTAP green.
-- [ ] **C3 — Worker side of fix 7.**
+- [x] **C3 — Worker side of fix 7.** (54-minute YouTube run not possible from the build container: YouTube is
+  blocked there. Measured instead: 5 parallel ffmpeg sections of a local 25-minute 720p source, direct 44.1 s / 42.2 s
+  vs. through the guard 41.7 s / 40.6 s, same 180 MB per ffmpeg, 24 MB for the proxy process. Production with
+  `OPENCMO_PROXY` set does not use the guard. The owner should still run the reference video once.)
   - `validate_public_url` uses `addresses.py`, ports 80/443 only.
   - yt-dlp goes through `GuardProxy` when `cfg.proxy` is unset.
   - Document the IPRoyal case in `download.py`.
