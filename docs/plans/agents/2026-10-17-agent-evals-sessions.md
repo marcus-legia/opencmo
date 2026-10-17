@@ -182,9 +182,16 @@ Until A1/B1 land, code against the contracts above with local stubs; delete the 
       (`read_site`, `search_reddit`) pending. Fake scripts for goal / update doc / read site added to `fake.ts`.
       `tsx lib/agent/eval/cmo-run.ts --provider fake`: 4/4 + 2 pending, $0. Real run: not done (no Anthropic key
       here, the Gemini key has no credit).
-- [ ] **C4 — Trajectory (C4).** `trajectory.ts` helpers; rules on `filler`, `pauses` and the create-video tasks.
+- [x] **C4 — Trajectory (C4).** `trajectory.ts` helpers; rules on `filler`, `pauses` and the create-video tasks.
       Accept: `agent:eval -- --provider fake` still passes every task that passed on `main`; a fake script edited
       to break a rule is caught (then reverted).
+      Done: `toolUsed`, `forbidden`, `inOrder`, `maxSteps`, `before`. Rules: `filler` (finder before `remove_words`, no
+      paid tool, ≤ 6 calls), `pauses` (no paid tool, ≤ 6 calls), `intro` (no paid tool before `plan_video`, at most
+      two plans), `ask` (no edit before `ask_user`), every `gradeVideo` task (at most two `create_video` cards). Fake:
+      41/43, the same as `main` (`explain-make` and `explain-vaccine` fail there too: no explainer preview offline).
+      A fake `filler` script with five extra calls finished the edit correctly and failed only on "7 tool calls
+      (at most 6)"; reverted. "No write after `ask_user` until answered" needs step boundaries in `Outcome.calls`
+      (`run.ts`, B's); the eval answers in the next step, so `ask` checks the part that matters today.
 
 ## Sync points
 

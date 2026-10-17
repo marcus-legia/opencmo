@@ -31,6 +31,7 @@ import icons from "../../../../../packages/clip-icons/data/icons.json";
 
 import type { PreparedGeneration } from "../generate-tool";
 import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
+import { PAID_TOOLS, before, forbidden, inOrder, maxSteps, toolUsed, trajectory, writes } from "./trajectory";
 
 /** The shared clip with an introduction as its first line, for the name-tag task. */
 const INTRO_TRANSCRIPT: Transcript = [
@@ -123,6 +124,8 @@ function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }
   const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer"].includes(call.name));
   const first = priced[0];
   if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
+  // One video card, not a retry loop that shows the founder a new price each time.
+  if (!trajectory(notes, toolUsed(outcome.calls ?? [], "create_video", { max: 2 }))) return { pass: false, notes };
   const input = first!.input as { seconds?: number; aspect?: string };
   const seconds = check(notes, (input.seconds ?? 30) === want.seconds, `asked for ${want.seconds}s, create_video got seconds ${input.seconds ?? "(default 30)"}`);
   const aspect = !want.aspect || check(notes, input.aspect === want.aspect, `asked for ${want.aspect}, create_video got aspect ${input.aspect ?? "(the edit's frame)"}`);
@@ -221,7 +224,10 @@ export const TASKS: EvalTask[] = [
       const fillers = check(notes, gone("um") && gone("uh"), "um/uh still in the video");
       const cutWords = words().filter((word) => isRemoved(word, removed)).length;
       const careful = check(notes, cutWords <= 4, `removed ${cutWords} words (expected about 3)`);
-      return { pass: fillers && careful && sane(outcome, notes), notes };
+      // Found by the filler finder, not guessed from the transcript; no credits; a short path.
+      const calls = outcome.calls ?? [];
+      const path = trajectory(notes, inOrder(calls, ["find_filler_words", "remove_words"]), forbidden(calls, PAID_TOOLS, "paid tools"), maxSteps(calls, 6));
+      return { pass: fillers && careful && path && sane(outcome, notes), notes };
     },
   },
   {
@@ -234,7 +240,9 @@ export const TASKS: EvalTask[] = [
       const tight = check(notes, !left.length, `pauses left: ${left.map((item) => `${item.start}-${item.end}`).join(", ")}`);
       const kept = words().filter((word) => !isRemoved(word, removed)).length;
       const words_ = check(notes, kept >= words().length - 3, `cut ${words().length - kept} spoken words`);
-      return { pass: tight && words_ && sane(outcome, notes), notes };
+      const calls = outcome.calls ?? [];
+      const path = trajectory(notes, forbidden(calls, PAID_TOOLS, "paid tools"), maxSteps(calls, 6));
+      return { pass: tight && words_ && path && sane(outcome, notes), notes };
     },
   },
   {
@@ -334,7 +342,9 @@ export const TASKS: EvalTask[] = [
     grade(outcome) {
       const notes: string[] = [];
       const asked = check(notes, outcome.tools.includes("ask_user"), "did not ask what 'better' means");
-      return { pass: asked && sane(outcome, notes), notes };
+      // Asking is pointless if it edits first: nothing changes until the founder has answered.
+      const waited = trajectory(notes, forbidden(before(outcome.calls ?? [], "ask_user"), writes, "edited before asking"));
+      return { pass: asked && waited && sane(outcome, notes), notes };
     },
   },
   {
@@ -541,13 +551,16 @@ export const TASKS: EvalTask[] = [
       const intro = all(outcome.document).find((item) => item.tag === "group" && (item.entity.marks as { visual?: { op?: string } } | undefined)?.visual?.op === "intro");
       if (!check(notes, Boolean(intro), "no intro group from plan_video")) return { pass: false, notes };
       const used = check(notes, outcome.tools.includes("plan_video"), "the intro was not built by the video team");
+      // The plan comes first: no priced piece before the storyboard, and one plan, not a loop of them.
+      const calls = outcome.calls ?? [];
+      const planned = trajectory(notes, forbidden(before(calls, "plan_video"), PAID_TOOLS, "paid tools before plan_video"), toolUsed(calls, "plan_video", { max: 2 }));
       const start = check(notes, intro!.entity.start === 0, `intro starts at ${String(intro!.entity.start)}s`);
       const animated = check(
         notes,
         ((intro!.entity.children as Entity[] | undefined) ?? []).filter((child) => child.tracks || child.animations).length >= 2,
         "fewer than two animated elements",
       );
-      return { pass: used && start && animated && sane(outcome, notes), notes };
+      return { pass: used && planned && start && animated && sane(outcome, notes), notes };
     },
   },
   {
