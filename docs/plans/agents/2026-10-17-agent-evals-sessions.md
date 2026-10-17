@@ -151,7 +151,9 @@ line), `apps/web/package.json` scripts, `.github/workflows/**`, `docs/cmo-archit
 - [x] **B6 — CI + scheduled evals (H5, after C1–C3 are pushed).** Fake runs in `ci.yml`; `ai-evals.yml` with
       dispatch + weekly cron, cost cap, artifact upload, compare to previous artifact, actions pinned to SHAs.
       Replace "judge the drafts by eye" in `docs/cmo-architecture-implementation.md`. Accept: CI green on the PR;
-      one manual dispatch (fake provider) run attached; real-provider run noted with cost if a key is set.
+      one manual dispatch (fake provider) run attached; ~~real-provider run noted with cost if a key is set~~
+      (amended by Marcus 2026-10-17: the graded real-provider run is out of B6's acceptance for this PR; it moves to
+      the first weekly `AI evals` run after the merge).
       _Pushed:_ `ci.yml` motion job runs `agent:eval -- --provider fake` with `OPENCMO_MOTION=local` (its explainer
       tasks need the clip-motion CLI and that job's Chrome); the CMO fake eval already runs in `check:contracts` and
       loads every file in `eval/cases/`, so C's cases are covered as they land. `ai-evals.yml`: dispatch (suite,
