@@ -6684,6 +6684,22 @@ $$;
 
 
 --
+-- Name: refuse_email_signup(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.refuse_email_signup(event jsonb) RETURNS jsonb
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select case
+    when event #>> '{user,app_metadata,provider}' = 'email'
+      then jsonb_build_object('error', jsonb_build_object('http_code', 403, 'message', 'New accounts sign up with Google.'))
+    else '{}'::jsonb
+  end;
+$$;
+
+
+--
 -- Name: media_assets; Type: TABLE; Schema: public; Owner: -
 --
 
