@@ -69,6 +69,9 @@ async function main() {
   assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
   assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
   assert.equal((card!.body.alternates as string[]).length, 2, "kèm 2 phiên bản khác");
+  const gen = card!.body.gen as { model: string; prompt_version: string };
+  assert.equal(gen.model, "fake", "the draft records which model wrote it");
+  assert.match(gen.prompt_version, /^[0-9a-f]{12}$/, "and which prompt");
 
   // Lượt mất lease giữa chừng: dừng im lặng, không ghi kết quả.
   const mem2 = memoryStore(docs);
@@ -117,6 +120,7 @@ async function main() {
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   assert.ok(mem3.opps.every((o) => o.score >= PASS_SCORE && o.reply.length > 0 && o.score_parts.length === 5), "thẻ đủ điểm, có trả lời");
   assert.ok(mem3.opps.every((o) => new URL(o.url).hostname === "www.reddit.com"), "chỉ link reddit.com");
+  assert.ok(mem3.opps.every((o) => o.gen?.model === "fake" && /^[0-9a-f]{12}$/.test(o.gen.prompt_version)), "replies record model and prompt");
   assert.equal((w4.output as { refund: boolean }).refund, false);
 
   const again = mem3.enqueue("sales_scan");
@@ -357,6 +361,7 @@ async function main() {
   const fromClaude = memIn.items.find((i) => i.status === "in_review")!;
   assert.equal(fromClaude.body.text, "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.");
   assert.deepEqual(fromClaude.body.alternates, ["Late invoices are a process problem."], "a version that breaks a rule is dropped");
+  assert.equal((fromClaude.body.gen as { model: string }).model, "founder-claude", "an inbox draft is the founder's Claude's");
   assert.ok(!good.steps.some((s) => s.tool === "fix_post"), "no second model call to fix");
 
   // Sales: three rounds; the Reddit search runs once and its threads stay the same.

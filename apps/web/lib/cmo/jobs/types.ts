@@ -87,6 +87,8 @@ export type Opportunity = {
   score: number;
   score_parts: ScorePart[];
   reply: string;
+  /** Which model and prompt drafted the reply (`edit-taxonomy.ts`). */
+  gen?: { model: string; prompt_version: string };
 };
 
 /** Một clip của job cắt, đủ để viết caption và dựng thẻ (W5). */
