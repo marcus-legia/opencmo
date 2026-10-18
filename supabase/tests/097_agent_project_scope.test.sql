@@ -11,6 +11,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select no_plan();
 
 insert into auth.users (id, email) values
@@ -78,7 +85,7 @@ create temporary table t as
   select * from public.agent_begin_turn((select id from sp), 'Yellow captions on all clips', '[{"text":"x"}]');
 grant select on t to authenticated;
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t), 'ap_0', 'apply_to_clips',
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'ap_0', 'apply_to_clips',
        '{"clip_ids":[],"ops":[]}', 'pending', '{"approval":{"clips":[],"changes":[]}}') $$,
   'tool duyệt lưu pending kèm thẻ'
 );
@@ -127,7 +134,7 @@ select lives_ok(
   $$ select public.agent_complete_tool((select id from t), 'ap_0', 'done', '{"summary":"Changed 1 of 2 clips"}') $$,
   'hoàn tất tool duyệt'
 );
-select lives_ok($$ select public.agent_record_tool((select id from t), 'ap_1', 'apply_to_clips', '{}', 'pending', '{"approval":{}}') $$, 'thẻ thứ hai');
+select lives_ok($$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'ap_1', 'apply_to_clips', '{}', 'pending', '{"approval":{}}') $$, 'thẻ thứ hai');
 select lives_ok($$ select public.agent_pause_turn((select id from t), 'approval') $$, 'chờ duyệt lần hai');
 select lives_ok($$ select public.agent_stop((select id from sp)) $$, 'Stop khi chờ duyệt');
 select is((select status from public.agent_turns where id = (select id from t)), 'stopped', 'lượt dừng');

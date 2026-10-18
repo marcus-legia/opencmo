@@ -10,6 +10,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select no_plan();
 
 insert into auth.users (id, email) values
@@ -52,17 +59,17 @@ create temporary table t as
   select * from public.agent_begin_turn((select id from sg), 'Check the frame', '[{"text":"Check the frame"}]');
 grant select on t to authenticated;
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t), 'gc_0', 'set_frame', '{}', 'done', '{"summary":"x"}', '{"text":"{}"}') $$,
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'gc_0', 'set_frame', '{}', 'done', '{"summary":"x"}', '{"text":"{}"}') $$,
   'tool server của bước lưu kèm content'
 );
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t), 'gc_1', 'capture_frames', '{"times":[1]}', 'pending', null) $$,
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'gc_1', 'capture_frames', '{"times":[1]}', 'pending', null) $$,
   'tool trình duyệt lưu pending'
 );
 select lives_ok($$ select public.agent_pause_turn((select id from t)) $$, 'tạm dừng lượt');
 select is((select status from public.agent_turns where id = (select id from t)), 'awaiting_browser', 'lượt chờ trình duyệt');
 select throws_ok(
-  $$ select public.agent_append((select id from t), 'assistant', '[]') $$,
+  $$ select public.agent_append_for(auth.uid(), (select id from t), 'assistant', '[]') $$,
   'P0001', 'This assistant turn was stopped.', 'đang chờ thì không nối tin nhắn'
 );
 select throws_ok(
@@ -86,7 +93,7 @@ select throws_ok(
 
 -- Stop khi đang chờ: chốt, hoàn khoản giữ, tool pending thành failed.
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t), 'gc_2', 'capture_frames', '{"times":[2]}', 'pending', null) $$,
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'gc_2', 'capture_frames', '{"times":[2]}', 'pending', null) $$,
   'một tool pending khác'
 );
 select lives_ok($$ select public.agent_pause_turn((select id from t)) $$, 'tạm dừng lần hai');

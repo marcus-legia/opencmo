@@ -43,4 +43,4 @@ const body = z.object({
  * rồi lượt chạy tiếp — cùng Server-Sent Events với route `turns`. Lượt không
  * chờ gì (đã Stop, đã trả) thì 409, trước khi stream mở.
  */
-export const POST = withApi({ body }, async ({ supabase, body, params }) => continueTurn(supabase, params.id, body.results));
+export const POST = withApi({ body }, async ({ supabase, user, body, params }) => continueTurn(supabase, user.id, params.id, body.results));

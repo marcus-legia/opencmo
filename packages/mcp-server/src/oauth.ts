@@ -9,8 +9,11 @@
  * 2. The client reads `/.well-known/oauth-protected-resource`, finds Supabase Auth, registers
  *    itself and sends the user to sign in; the consent screen is the web app's `/oauth/consent`.
  * 3. The access token is a Supabase user JWT carrying the OAuth `client_id`. It is checked with
- *    Supabase Auth on every request (`getUser`), so a revoked grant stops working at once, and it is
- *    then used as is: the tools run under that user's RLS, like an API key's short-lived JWT.
+ *    Supabase Auth on every request (`getUser`), and then against our own grant (`mcp_grants`,
+ *    recorded by the web app's consent route when the founder approves an allowlisted app). The
+ *    grant is what Disconnect in Settings revokes, so a revoke holds on the next request whatever
+ *    Supabase does with tokens it already issued. The token is then used as is: the tools run under
+ *    that user's RLS, like an API key's short-lived JWT.
  */
 
 import { userClient } from "./client";
@@ -61,13 +64,24 @@ function claims(token: string): Record<string, unknown> | null {
 }
 
 /** An OAuth access token → its user, or null (not a JWT, expired, revoked, or a plain web session). */
-export async function userForAccessToken(token: string): Promise<{ userId: string; supabase: SupabaseClient } | null> {
+export async function userForAccessToken(
+  token: string,
+  makeClient: (token: string) => SupabaseClient = userClient,
+): Promise<{ userId: string; supabase: SupabaseClient } | null> {
   if (token.split(".").length !== 3) return null;
-  const supabase = userClient(token);
+  const supabase = makeClient(token);
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return null;
   // Only tokens issued to an OAuth client: a browser session token is for the web app, not for MCP.
   const body = claims(token);
   if (!body || typeof body.client_id !== "string" || !body.client_id) return null;
+  // Under the user's RLS: only their own rows are visible. No active grant, no access.
+  const { data: grant, error: grantError } = await supabase
+    .from("mcp_grants")
+    .select("client_id")
+    .eq("client_id", body.client_id)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (grantError || !grant) return null;
   return { userId: data.user.id, supabase };
 }

@@ -6,12 +6,12 @@
  *   GET  /.well-known/oauth-protected-resource  RFC 9728 metadata: where to get a token (A8)
  *   GET  /healthz                               Modal's readiness probe and uptime checks
  *
- * Every POST is authenticated and rate limited per JSON-RPC message (600 an hour per user, the
- * same `mcp` bucket as the Vercel route), so a batch cannot slip past the limit.
+ * Every POST is authenticated, then admitted by one `mcp_admit` call: free accounts get 403 (MCP is
+ * part of the paid plans), and every JSON-RPC message of the body counts against the user's 600 an
+ * hour, so a batch cannot slip past the limit. One database call per request, whatever its size.
  */
 
 import { authenticate, type Caller } from "./auth";
-import { callModal, spawnModal } from "./modal";
 import { protectedResourceMetadata, resourceMetadataUrl } from "./oauth";
 import type { McpToolContext } from "./registry";
 import { handleMcp } from "./server";
@@ -19,6 +19,9 @@ import { handleMcp } from "./server";
 /** Scene code is at most 32,000 characters; a full video plan a few KB. */
 export const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_MESSAGES = 20;
+
+/** The answer to every request from a free account, `initialize` included: the client shows it at connect time. */
+export const PAID_PLAN_ERROR = { code: -32003, message: "OpenCMO's MCP connection is part of the paid plans. Upgrade on the Credits page." };
 
 const CORS = {
   // Bearer tokens, never cookies: any origin may call, as with any public API (MCP Inspector runs in a browser).
@@ -67,23 +70,23 @@ async function readBody(request: Request): Promise<{ body: unknown } | { error: 
 }
 
 export function contextFor(caller: Caller): McpToolContext {
-  return { supabase: caller.supabase, userId: caller.userId, callModal, spawnModal };
+  return { supabase: caller.supabase, userId: caller.userId };
 }
 
-/** Counts every JSON-RPC message of the body against the user's hourly limit. */
-async function allowed(caller: Caller, messages: number): Promise<boolean | null> {
-  for (let index = 0; index < messages; index++) {
-    const { data, error } = await caller.supabase.rpc("rate_limit_hit", { p_bucket: "mcp", p_limit: 600, p_window_seconds: 3600 });
-    if (error) {
-      console.error("[mcp] rate limit failed", error);
-      return null;
-    }
-    if (data === false) return false;
+type Admission = "ok" | "free_plan" | "rate_limited";
+
+/** The plan check and the hourly limit for `messages` messages, in one call. null: the database failed. */
+async function admit(caller: Caller, messages: number): Promise<Admission | null> {
+  const { data, error } = await caller.supabase.rpc("mcp_admit", { p_count: messages });
+  if (error || !["ok", "free_plan", "rate_limited"].includes(data as string)) {
+    console.error("[mcp] admission failed", error ?? data);
+    return null;
   }
-  return true;
+  return data as Admission;
 }
 
-export async function handle(request: Request): Promise<Response> {
+/** `auth` is replaceable for the checks, which run without a database. */
+export async function handle(request: Request, auth: typeof authenticate = authenticate): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -99,7 +102,7 @@ export async function handle(request: Request): Promise<Response> {
 
   let caller: Caller | null;
   try {
-    caller = await authenticate(request.headers.get("authorization"));
+    caller = await auth(request.headers.get("authorization"));
   } catch (err) {
     console.error("[mcp] auth failed", err);
     return rpcError(503, -32603, "Could not check these credentials. Please try again.");
@@ -111,9 +114,10 @@ export async function handle(request: Request): Promise<Response> {
   const count = Array.isArray(read.body) ? read.body.length : 1;
   if (count < 1 || count > MAX_MESSAGES) return rpcError(400, -32600, `Send 1 to ${MAX_MESSAGES} messages per request.`);
 
-  const ok = await allowed(caller, count);
-  if (ok === null) return rpcError(503, -32603, "Could not start this request. Please try again.");
-  if (!ok) return rpcError(429, -32000, "Too many requests from this account. Try again in an hour.");
+  const admission = await admit(caller, count);
+  if (admission === null) return rpcError(503, -32603, "Could not start this request. Please try again.");
+  if (admission === "free_plan") return rpcError(403, PAID_PLAN_ERROR.code, PAID_PLAN_ERROR.message);
+  if (admission === "rate_limited") return rpcError(429, -32000, "Too many requests from this account. Try again in an hour.");
 
   const response = await handleMcp(request, contextFor(caller), read.body);
   const headers = new Headers(response.headers);

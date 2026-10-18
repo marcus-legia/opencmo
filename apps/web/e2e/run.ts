@@ -79,8 +79,11 @@ function readEnv(): NodeJS.ProcessEnv {
     SUPABASE_SERVICE_ROLE_KEY: values.SERVICE_ROLE_KEY,
     // MCP (G5) ký JWT ngắn hạn cho chủ khoá API.
     SUPABASE_JWT_SECRET: values.JWT_SECRET,
-    // check:api gọi cron dọn (xoá tài khoản free hết hạn) với cùng secret server đọc.
     CRON_SECRET: "e2e-cron-secret",
+    // check:api calls the cleanup cron (deletes expired free accounts) with the secret the server reads.
+    CRON_CLEANUP_SECRET: "e2e-cron-cleanup-secret",
+    // mcp.spec starts the MCP server on this port; Settings shows it in the Claude Code command.
+    OPENCMO_MCP_URL: "http://127.0.0.1:8787/mcp",
     E2E_INBUCKET_URL: values.INBUCKET_URL,
   };
 }

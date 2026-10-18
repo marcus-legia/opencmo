@@ -9,12 +9,14 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 
 import { ConfirmError, read, sign } from "./confirm";
-import { handle } from "./http";
+import type { Caller } from "./auth";
+import { handle, PAID_PLAN_ERROR } from "./http";
 import { registerGroup, registry } from "./registry";
 import { callTool, describeTool, INSTRUCTIONS } from "./server";
 
 // Read when called, not at import: set before anything runs.
 process.env.SUPABASE_JWT_SECRET = "check-secret-check-secret-check-secret";
+process.env.OPENCMO_MCP_CONFIRM_KEY = "check-confirm-key-check-confirm-key";
 process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
 delete process.env.OPENCMO_MCP_URL;
@@ -39,12 +41,6 @@ const chain: unknown = new Proxy(() => undefined, {
 const ctx = {
   supabase: offline as never,
   userId: "11111111-1111-4111-8111-111111111111",
-  callModal: async () => {
-    throw new Error("no modal in checks");
-  },
-  spawnModal: async () => {
-    throw new Error("no modal in checks");
-  },
 };
 
 async function main() {
@@ -60,6 +56,12 @@ async function main() {
   const [body, signature] = code.split(".");
   assert.throws(() => read(`${body}A.${signature}`, ctx.userId, "tool:a"), ConfirmError, "a changed body");
   assert.throws(() => read(sign(ctx.userId, "tool:a", 1, 600, Date.now() - 601_000), ctx.userId, "tool:a"), /expired/, "an old price");
+  // Its own key, no fallback to the JWT secret: without it nothing is signed or read.
+  const confirmKey = process.env.OPENCMO_MCP_CONFIRM_KEY;
+  delete process.env.OPENCMO_MCP_CONFIRM_KEY;
+  assert.throws(() => sign(ctx.userId, "tool:a", 1), /OPENCMO_MCP_CONFIRM_KEY/, "signing fails closed without the confirm key");
+  assert.throws(() => read(code, ctx.userId, "tool:a"), /OPENCMO_MCP_CONFIRM_KEY/, "reading fails closed without the confirm key");
+  process.env.OPENCMO_MCP_CONFIRM_KEY = confirmKey;
 }
 
 // ------------------------------------------------------------ the tool list
@@ -153,6 +155,44 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal((await handle(new Request("http://mcp.test/healthz"))).status, 200);
   assert.equal((await handle(new Request("http://mcp.test/other"))).status, 404);
   assert.equal((await handle(new Request("http://mcp.test/mcp", { method: "OPTIONS" }))).headers.get("access-control-allow-origin"), "*");
+}
+
+// ------------------------------------------------------------ admission: one call per request
+
+{
+  const calls: { name: string; args: unknown }[] = [];
+  const callerAnswering = (answer: string): Caller => ({
+    userId: ctx.userId,
+    via: "api_key",
+    supabase: {
+      rpc: async (name: string, args: unknown) => {
+        calls.push({ name, args });
+        return { data: answer, error: null };
+      },
+    } as never,
+  });
+  const post = (body: unknown, answer: string) =>
+    handle(
+      new Request("http://mcp.test/mcp", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: "Bearer x" } }),
+      async () => callerAnswering(answer),
+    );
+  const pings = (count: number) => Array.from({ length: count }, (_, id) => ({ jsonrpc: "2.0", id, method: "ping" }));
+
+  const batch = await post(pings(20), "ok");
+  assert.equal(batch.status, 200);
+  assert.deepEqual(calls, [{ name: "mcp_admit", args: { p_count: 20 } }], "a batch of 20 makes one admission call");
+
+  calls.length = 0;
+  assert.equal((await post(pings(21), "ok")).status, 400, "more than 20 messages");
+  assert.equal(calls.length, 0, "an oversized batch is refused before the database");
+
+  const free = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } } }, "free_plan");
+  assert.equal(free.status, 403, "free accounts cannot use MCP, initialize included");
+  assert.deepEqual(await free.json(), { jsonrpc: "2.0", id: null, error: PAID_PLAN_ERROR });
+  assert.equal(PAID_PLAN_ERROR.message, "OpenCMO's MCP connection is part of the paid plans. Upgrade on the Credits page.");
+
+  assert.equal((await post(pings(1), "rate_limited")).status, 429);
+  assert.equal((await post(pings(1), "something else")).status, 503, "an unknown answer fails closed");
 }
 
 // ------------------------------------------------------------ prompts and resources

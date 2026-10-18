@@ -1,5 +1,5 @@
 /**
- * Starts the MCP server: `node dist/server.mjs` on Modal (`opencmo-mcp`, port 8000), or
+ * Starts the MCP server: `node dist/server.cjs` on Modal (`opencmo-mcp`, port 8000), or
  * `npm run dev` locally (tsx, port 8787).
  */
 
@@ -10,6 +10,13 @@ import { handle } from "./http";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "127.0.0.1";
+
+// A public server without its own URL would advertise the request's Host header as the OAuth
+// resource (`oauth.ts`), which any caller can set. Refuse to start instead.
+if (HOST === "0.0.0.0" && !process.env.OPENCMO_MCP_URL?.trim()) {
+  console.error("[mcp] OPENCMO_MCP_URL is not set: a public server needs its own URL. Not starting.");
+  process.exit(1);
+}
 
 function toRequest(req: IncomingMessage): Request {
   const headers = new Headers();

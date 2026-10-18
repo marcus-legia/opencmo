@@ -11,6 +11,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select no_plan();
 
 insert into auth.users (id, email) values
@@ -34,7 +41,7 @@ create temporary table t1 as select * from public.agent_begin_turn((select id fr
 grant select on t1 to authenticated;
 select is(public.credit_balance('e1030000-0000-4000-8000-00000000000a'), 11, 'giữ 5 credit khi bắt đầu');
 select lives_ok(
-  $$ select public.agent_record_tool((select id from t1), 'q_0', 'ask_user', '{"question":"Which?"}', 'pending',
+  $$ select public.agent_record_tool_for(auth.uid(), (select id from t1), 'q_0', 'ask_user', '{"question":"Which?"}', 'pending',
        '{"question":{"question":"Which?","options":["A","B"],"multi":false}}') $$,
   'câu hỏi lưu pending kèm thẻ'
 );

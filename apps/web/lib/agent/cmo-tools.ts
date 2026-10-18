@@ -22,7 +22,7 @@ import { isoDay, type Brain, type CompetitorInsight, type Lesson } from "@/lib/c
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
 
-import { RESEARCH_TOOL_SPECS } from "./cmo-research";
+import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
 import type { ToolOutcome, ToolSpec } from "./tools";
 
 const EMPTY = { type: "object", properties: {}, additionalProperties: false };
@@ -197,6 +197,16 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
 const WRITES = new Set(["create_task", "remember", "set_week_goal", "create_video_brief", "update_document"]);
 export const isCmoWrite = (name: string) => WRITES.has(name);
 
+/**
+ * The per-turn memory gate (security plan fix 10). Once a tool brings outside content into the
+ * turn (a website, Reddit, social research), the writes that every later plan and draft read are
+ * refused until the founder's next message: text on a page must not become a founder preference.
+ * `create_task` stays allowed; it only queues our own job.
+ */
+export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site"]);
+export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal"]);
+export const TAINT_MESSAGE = "This came after reading outside content. Ask the founder to confirm it in their next message.";
+
 const readInput = z.object({ kind: z.enum(DOCUMENT_KINDS) });
 const updateInput = z.object({ kind: z.enum(DOCUMENT_KINDS), fields_json: z.string().min(2).max(30_000) });
 const skillInput = z.object({ name: z.string() });
@@ -332,7 +342,9 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
     case "remember": {
       const parsed = rememberInput.safeParse(input);
       if (!parsed.success) return invalid("note must be 1 to 600 characters.");
-      await rpcOrThrow(supabase, "cmo_remember", { p_body: parsed.data.note, p_topic: parsed.data.topic });
+      // 'agent': ranks below the founder's own notes. MCP lands here too, and cannot see what a
+      // stateless caller read before, so it never saves at the founder's weight.
+      await rpcOrThrow(supabase, "cmo_remember", { p_body: parsed.data.note, p_topic: parsed.data.topic, p_source: "agent" });
       return { ok: true, content: JSON.stringify({ saved: true }), summary: "Saved to memory" };
     }
     case "read_site": {

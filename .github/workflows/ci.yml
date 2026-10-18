@@ -42,7 +42,7 @@ jobs:
           pip install -e '.[dev]'
 
       - name: Lint
-        run: ruff check opencmo tests modal_app.py
+        run: ruff check opencmo tests modal_app.py mcp_app.py
 
       - name: Test
         run: pytest -q

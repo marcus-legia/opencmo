@@ -37,6 +37,6 @@ const body = z.object({
  *   'time' or 'steps' → call the `continue` route at once; 'budget' → ask the user, then
  *   `continue` with `extend: true`.
  */
-export const POST = withApi({ body }, async ({ supabase, body, params }) =>
-  startTurn(supabase, params.id, body.prompt, body.attachments),
+export const POST = withApi({ body }, async ({ supabase, user, body, params }) =>
+  startTurn(supabase, user.id, params.id, body.prompt, body.attachments),
 );

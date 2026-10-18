@@ -83,7 +83,7 @@ export const RESEARCH_TOOL_SPECS: ToolSpec[] = [
   },
   {
     name: "research_credits",
-    description: "How many social research lookups are left on the account that pays for them. Check before a large research task.",
+    description: "Whether social research is available right now. Check before a large research task.",
     schema: obj({}, []),
     strict: true,
   },
@@ -153,8 +153,10 @@ export async function runResearchTool(name: string, raw: unknown, budget: ScBudg
         return { ok: true, content: data(out), summary: "Read a video transcript" };
       }
       default: {
-        const credits = await creditBalance();
-        return { ok: true, content: JSON.stringify({ lookups_left: credits }), summary: `${credits} research lookups left` };
+        // Only whether research works: the balance is OpenCMO's own ScrapeCreators account, not the
+        // founder's, and over MCP it would hand any caller our spend (security fixes plan, fix 5).
+        const available = (await creditBalance()) > 0;
+        return { ok: true, content: JSON.stringify({ available }), summary: available ? "Research available" : "Research unavailable" };
       }
     }
   } catch (error) {

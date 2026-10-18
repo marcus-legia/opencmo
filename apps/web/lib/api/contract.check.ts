@@ -2143,9 +2143,9 @@ async function main(): Promise<void> {
     assert.ifError(backdate);
 
     const cron = await fetch(`${BASE}/api/cron/cleanup`, {
-      headers: process.env.CRON_SECRET ? { authorization: `Bearer ${process.env.CRON_SECRET}` } : {},
+      headers: process.env.CRON_CLEANUP_SECRET ? { authorization: `Bearer ${process.env.CRON_CLEANUP_SECRET}` } : {},
     });
-    assert.equal(cron.status, 200, "cron cần CRON_SECRET giống server");
+    assert.equal(cron.status, 200, "cleanup needs the same CRON_CLEANUP_SECRET as the server");
     assert.ok(((await cron.json()) as { accounts: number }).accounts >= 1);
     const { data: gone } = await admin.auth.admin.getUserById(c.userId);
     assert.equal(gone.user ?? null, null, "user đã bị xoá");

@@ -15,9 +15,13 @@ export const PREVIEW_SECONDS = 3600;
 
 export class ConfirmError extends Error {}
 
+/**
+ * A key of its own, not one derived from `SUPABASE_JWT_SECRET`: a leaked confirm key then forges
+ * confirm codes, never sessions. No fallback, so a missing key fails closed.
+ */
 function key(): Buffer {
-  const secret = process.env.SUPABASE_JWT_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!secret) throw new Error("Missing the signing key for MCP confirm codes (SUPABASE_JWT_SECRET).");
+  const secret = process.env.OPENCMO_MCP_CONFIRM_KEY;
+  if (!secret) throw new Error("Missing the signing key for MCP confirm codes (OPENCMO_MCP_CONFIRM_KEY).");
   // Its own label: a code signed for another purpose of the same secret never verifies here.
   return createHmac("sha256", "opencmo-mcp-confirm-v2").update(secret).digest();
 }

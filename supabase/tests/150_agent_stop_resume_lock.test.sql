@@ -4,6 +4,13 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
+-- The bookkeeping RPCs are service-role only since 20261210201000; these cases test what they do,
+-- so this transaction lends them to authenticated (rolled back below).
+grant execute on function public.agent_record_usage_for(uuid, uuid, text, integer, integer, integer, integer),
+  public.agent_append_for(uuid, uuid, text, jsonb),
+  public.agent_record_tool_for(uuid, uuid, text, text, jsonb, text, jsonb, jsonb),
+  public.agent_finish_turn_for(uuid, uuid, text, text) to authenticated;
+
 select plan(7);
 
 insert into auth.users (id, email) values ('e1500000-0000-4000-8000-00000000000a', 'lock-a@test.local');
@@ -26,7 +33,7 @@ create temporary table s as select * from public.agent_open_session('e1520000-00
 grant select on s to authenticated;
 create temporary table t as select * from public.agent_begin_turn((select id from s), 'Make it square', '[{"text":"Make it square"}]');
 grant select on t to authenticated;
-select lives_ok($$ select public.agent_record_tool((select id from t), 'tu_1', 'generate_media', '{}', 'pending', null) $$, 'a card waits for approval');
+select lives_ok($$ select public.agent_record_tool_for(auth.uid(), (select id from t), 'tu_1', 'generate_media', '{}', 'pending', null) $$, 'a card waits for approval');
 select lives_ok($$ select public.agent_pause_turn((select id from t), 'approval') $$, 'turn paused for approval');
 
 select is((select status from public.agent_stop((select id from s))), 'stopped', 'Stop closes the waiting turn');
