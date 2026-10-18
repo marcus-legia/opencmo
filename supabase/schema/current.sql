@@ -2097,6 +2097,15 @@ $$;
 
 
 --
+-- Name: cmo_as_written(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_as_written() RETURNS real
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 0.95::real $$;
+
+
+--
 -- Name: marketing_documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2282,9 +2291,11 @@ CREATE TABLE public.opportunities (
     status text DEFAULT 'in_review'::text NOT NULL,
     decided_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    gen jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = 'reddit'::text)),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
@@ -2325,6 +2336,9 @@ begin
     insert into public.cmo_memories (user_id, type, body)
     values (v_user, 'feedback', left('Dismissed the Reddit thread "' || left(v_row.title, 120) || '": ' || trim(p_reason), 600));
   end if;
+  insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version)
+  values (v_user, p_id, 'sales', p_action, left(coalesce(v_row.gen->>'model', ''), 100), left(coalesce(v_row.gen->>'prompt_version', ''), 40))
+  on conflict (department, item_id) do nothing;
   return v_row;
 end;
 $$;
@@ -2342,6 +2356,10 @@ declare
   v_user uuid := public.require_user();
   v_row public.content_items;
   v_text text;
+  v_versions text[];
+  v_best real;
+  v_best_index smallint;
+  v_sim real;
 begin
   if p_action is null or p_action not in ('approve', 'skip') then
     raise exception 'Unknown action.' using errcode = '22023';
@@ -2364,6 +2382,10 @@ begin
       insert into public.cmo_memories (user_id, type, body)
       values (v_user, 'feedback', left('Skipped the X post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
     end if;
+    insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version)
+    values (v_user, p_id, 'post', 'skip', left(coalesce(v_row.body->'gen'->>'model', ''), 100),
+            left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40))
+    on conflict (department, item_id) do nothing;
     return v_row;
   end if;
 
@@ -2381,6 +2403,28 @@ begin
   insert into public.operation_log (user_id, platform, action, target) values (v_user, 'x', 'approve', p_id::text);
   update public.content_items set status = 'approved', final_text = v_text, decided_at = now(), updated_at = now()
   where id = p_id returning * into v_row;
+
+  -- Version 0 is `text`, 1–2 the alternates, in the order the card shows them.
+  v_versions := array[v_row.body->>'text'] || coalesce(array(
+    select jsonb_array_elements_text(v_row.body->'alternates')
+    where jsonb_typeof(v_row.body->'alternates') = 'array'), '{}');
+  for i in 1 .. least(coalesce(array_length(v_versions, 1), 0), 3) loop
+    continue when v_versions[i] is null;
+    v_sim := case when v_versions[i] = v_text then 1 else extensions.similarity(v_versions[i], v_text) end;
+    if v_best is null or v_sim > v_best then
+      v_best := v_sim;
+      v_best_index := i - 1;
+    end if;
+  end loop;
+  insert into public.cmo_draft_outcomes (
+    user_id, item_id, department, action, chosen_version, similarity, edit_mode, classified_at, model, prompt_version
+  ) values (
+    v_user, p_id, 'post', 'approve', v_best_index, v_best,
+    case when v_best >= public.cmo_as_written() then 'NO_MEANINGFUL_EDIT' end,
+    case when v_best >= public.cmo_as_written() then now() end,
+    left(coalesce(v_row.body->'gen'->>'model', ''), 100), left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40)
+  )
+  on conflict (department, item_id) do nothing;
   return v_row;
 end;
 $$;
@@ -3152,20 +3196,25 @@ declare
   v_item jsonb;
   v_count integer := 0;
   v_score integer;
+  v_gen jsonb;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 10 then
     raise exception 'These conversations are not valid.' using errcode = '22023';
   end if;
   for v_item in select * from jsonb_array_elements(p_items) loop
     v_score := least(100, greatest(0, coalesce((v_item->>'score')::integer, 0)));
+    v_gen := case when jsonb_typeof(v_item->'gen') = 'object' then jsonb_strip_nulls(jsonb_build_object(
+      'model', left(v_item->'gen'->>'model', 100),
+      'prompt_version', left(v_item->'gen'->>'prompt_version', 40))) else '{}'::jsonb end;
     insert into public.opportunities (
-      user_id, run_id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority
+      user_id, run_id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, gen
     ) values (
       p_user, p_run, v_item->>'url', left(coalesce(v_item->>'community', ''), 100), left(v_item->>'title', 400),
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
       v_score, coalesce(v_item->'score_parts', '[]'::jsonb), left(v_item->>'reply', 3000),
-      case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end
+      case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end,
+      v_gen
     )
     on conflict (user_id, url) do nothing;
     if found then
@@ -3203,6 +3252,26 @@ $$;
 
 
 --
+-- Name: cmo_set_edit_mode(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_set_edit_mode(p_id uuid, p_mode text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_mode is null or p_mode not in ('NO_MEANINGFUL_EDIT', 'TOO_SALESY', 'WRONG_VOICE', 'INVENTED_CLAIM',
+                                      'TOO_LONG', 'HOOK_REWRITTEN', 'CTA_REMOVED', 'FULL_REWRITE') then
+    raise exception 'Unknown edit mode.' using errcode = '22023';
+  end if;
+  update public.cmo_draft_outcomes set edit_mode = p_mode, classified_at = now()
+  where id = p_id and classified_at is null;
+  return found;
+end;
+$$;
+
+
+--
 -- Name: cmo_set_week_goal(date, text, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3213,6 +3282,26 @@ CREATE FUNCTION public.cmo_set_week_goal(p_week date, p_goal text, p_metric text
 begin
   return public.cmo_put_goal(public.require_user(), null, p_week, p_goal, p_metric, p_target);
 end;
+$$;
+
+
+--
+-- Name: cmo_unclassified_outcomes(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_unclassified_outcomes(p_limit integer) RETURNS TABLE(id uuid, draft text, final_text text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.id,
+    case o.chosen_version when 0 then c.body->>'text' else c.body->'alternates'->>(o.chosen_version - 1) end,
+    c.final_text
+  from public.cmo_draft_outcomes o
+  join public.content_items c on c.id = o.item_id and c.user_id = o.user_id
+  where o.department = 'post' and o.action = 'approve' and o.classified_at is null
+    and o.similarity is not null and o.chosen_version is not null and c.final_text is not null
+  order by o.decided_at
+  limit least(greatest(coalesce(p_limit, 0), 0), 100)
 $$;
 
 
@@ -8189,6 +8278,78 @@ CREATE TABLE public.caption_translations (
 
 
 --
+-- Name: cmo_draft_outcomes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cmo_draft_outcomes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    item_id uuid NOT NULL,
+    department text NOT NULL,
+    action text NOT NULL,
+    chosen_version smallint,
+    similarity real,
+    edit_mode text,
+    model text DEFAULT ''::text NOT NULL,
+    prompt_version text DEFAULT ''::text NOT NULL,
+    decided_at timestamp with time zone DEFAULT now() NOT NULL,
+    classified_at timestamp with time zone,
+    CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
+    CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
+    CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
+    CONSTRAINT cmo_draft_outcomes_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['NO_MEANINGFUL_EDIT'::text, 'TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text, 'FULL_REWRITE'::text]))),
+    CONSTRAINT cmo_draft_outcomes_model_check CHECK ((char_length(model) <= 100)),
+    CONSTRAINT cmo_draft_outcomes_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
+    CONSTRAINT cmo_draft_outcomes_similarity_check CHECK (((similarity >= (0)::double precision) AND (similarity <= (1)::double precision)))
+);
+
+
+--
+-- Name: cmo_draft_quality_weekly; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.cmo_draft_quality_weekly WITH (security_invoker='true') AS
+ WITH modes AS (
+         SELECT (date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date AS week,
+            cmo_draft_outcomes.department,
+            cmo_draft_outcomes.model,
+            cmo_draft_outcomes.prompt_version,
+            cmo_draft_outcomes.edit_mode,
+            count(*) AS n
+           FROM public.cmo_draft_outcomes
+          WHERE (cmo_draft_outcomes.edit_mode IS NOT NULL)
+          GROUP BY ((date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date), cmo_draft_outcomes.department, cmo_draft_outcomes.model, cmo_draft_outcomes.prompt_version, cmo_draft_outcomes.edit_mode
+        ), totals AS (
+         SELECT (date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date AS week,
+            cmo_draft_outcomes.department,
+            cmo_draft_outcomes.model,
+            cmo_draft_outcomes.prompt_version,
+            count(*) AS decided,
+            count(*) FILTER (WHERE ((cmo_draft_outcomes.action = 'approve'::text) AND (cmo_draft_outcomes.similarity >= public.cmo_as_written()))) AS approved_as_written,
+            count(*) FILTER (WHERE ((cmo_draft_outcomes.action = 'approve'::text) AND (cmo_draft_outcomes.similarity < public.cmo_as_written()))) AS approved_edited,
+            count(*) FILTER (WHERE (cmo_draft_outcomes.action = 'replied'::text)) AS replied,
+            count(*) FILTER (WHERE (cmo_draft_outcomes.action = ANY (ARRAY['skip'::text, 'dismissed'::text]))) AS skipped,
+            round((avg(cmo_draft_outcomes.similarity))::numeric, 3) AS mean_similarity
+           FROM public.cmo_draft_outcomes
+          GROUP BY ((date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date), cmo_draft_outcomes.department, cmo_draft_outcomes.model, cmo_draft_outcomes.prompt_version
+        )
+ SELECT week,
+    department,
+    model,
+    prompt_version,
+    decided,
+    approved_as_written,
+    approved_edited,
+    replied,
+    skipped,
+    mean_similarity,
+    COALESCE(( SELECT jsonb_object_agg(m.edit_mode, m.n) AS jsonb_object_agg
+           FROM modes m
+          WHERE ((m.week = t.week) AND (m.department = t.department) AND (m.model = t.model) AND (m.prompt_version = t.prompt_version))), '{}'::jsonb) AS edit_modes
+   FROM totals t;
+
+
+--
 -- Name: cmo_lessons; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8769,6 +8930,22 @@ ALTER TABLE ONLY public.clips
 
 
 --
+-- Name: cmo_draft_outcomes cmo_draft_outcomes_department_item_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_outcomes
+    ADD CONSTRAINT cmo_draft_outcomes_department_item_id_key UNIQUE (department, item_id);
+
+
+--
+-- Name: cmo_draft_outcomes cmo_draft_outcomes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_outcomes
+    ADD CONSTRAINT cmo_draft_outcomes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cmo_goals cmo_goals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9261,6 +9438,20 @@ CREATE INDEX caption_translations_user_idx ON public.caption_translations USING 
 --
 
 CREATE UNIQUE INDEX clips_one_full_idx ON public.clips USING btree (job_id) WHERE (kind = 'full'::text);
+
+
+--
+-- Name: cmo_draft_outcomes_unclassified_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_draft_outcomes_unclassified_idx ON public.cmo_draft_outcomes USING btree (decided_at) WHERE ((classified_at IS NULL) AND (action = 'approve'::text));
+
+
+--
+-- Name: cmo_draft_outcomes_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_draft_outcomes_user_idx ON public.cmo_draft_outcomes USING btree (user_id, decided_at DESC);
 
 
 --
@@ -9815,6 +10006,14 @@ ALTER TABLE ONLY public.caption_translations
 
 ALTER TABLE ONLY public.clips
     ADD CONSTRAINT clips_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cmo_draft_outcomes cmo_draft_outcomes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_outcomes
+    ADD CONSTRAINT cmo_draft_outcomes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -10402,6 +10601,12 @@ ALTER TABLE public.caption_translations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clips ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cmo_draft_outcomes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_draft_outcomes ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cmo_goals; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10605,6 +10810,13 @@ CREATE POLICY "read own CMO goals" ON public.cmo_goals FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: cmo_draft_outcomes read own draft outcomes; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own draft outcomes" ON public.cmo_draft_outcomes FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

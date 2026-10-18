@@ -6,9 +6,9 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { POSTS_PER_PAGE, getAllPosts, pageCount } from "@/lib/blog";
 import { OG_DEFAULTS, absoluteUrl } from "@/lib/site";
 
-const TITLE = "Blog — marketing guides and tips for founders";
+const TITLE = "Blog — marketing lessons from an AI CMO";
 const DESCRIPTION =
-  "How-to guides, tips and playbooks on marketing for solo founders and small teams: positioning, content, social posts and finding customers.";
+  "Short, visual lessons on content, brand, video and selling, for founders and small teams who run their own marketing.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -37,8 +37,8 @@ export default function BlogIndex() {
         }}
       />
       <header className="blog-header">
-        <p className="section-kicker">Blog</p>
-        <h1>Marketing you can do yourself.</h1>
+        <p className="section-kicker">The OpenCMO Blog</p>
+        <h1>Think like a CMO. Ship like a founder.</h1>
         <p>{DESCRIPTION}</p>
       </header>
       <CategoryChips />

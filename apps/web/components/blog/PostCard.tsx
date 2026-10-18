@@ -11,7 +11,7 @@ export function PostCard({ post, featured = false, headingLevel = 3 }: { post: P
   return (
     <article className={`post-card ${featured ? "is-featured" : ""}`}>
       <Link href={`/blog/${post.slug}`} className="post-card-link">
-        <PostCover slug={post.slug} category={post.category} size={featured ? "feature" : "card"} />
+        <PostCover title={post.title} category={post.category} size={featured ? "feature" : "card"} />
         <div className="post-card-body">
           <span className="post-card-category">{findCategory(post.category)?.name}</span>
           <Heading>{post.title}</Heading>

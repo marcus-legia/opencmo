@@ -77,8 +77,9 @@ of the queue waited until the user opened the app.
 - `packages/engine/modal_app.py`: `_dispatch_cmo()` at the end of `sweep()`, plus `cmo_schedule`
   and `cleanup` crons.
 - `apps/web/lib/agent/cmo-tools.ts`: `read_site` capped at `SITE_READS_PER_TURN = 3`.
-- `apps/web/lib/cmo/jobs/eval.ts` (`npm run cmo:eval`, W1, W2 and W5) and `memory-store.ts`, the in-memory
-  store shared by checks and evals.
+- `apps/web/lib/cmo/jobs/eval.ts` (`npm run cmo:eval`): cases from a registry (`eval/core.ts` for W1, W2 and W5,
+  plus every file in `eval/cases/`), the cascade judge (`judge.ts`) and the shared report format
+  (`lib/eval/compare.ts`); `memory-store.ts` is the in-memory store shared by checks and evals.
 - Tests: `packages/engine/tests/test_cmo_dispatch.py`.
 - Env: `CRON_SECRET` (Vercel and Modal), `OPENCMO_WEB_URL` (Modal).
 
@@ -253,5 +254,9 @@ Findings from the local run (2026-10-10):
   regenerate it locally (B).
 - `npm run check:api` also fails on `main` because it needs a live API; it is not part of this
   change.
-- The W2 eval grades with code only (finished runs, versions passing the checks, time). Judge the
-  drafts by eye too before choosing the LLM.
+- Choosing or changing the LLM: run `npm run cmo:eval -- --provider <p> --yes --epochs 3 --compare <base>`
+  instead of reading drafts by eye. W2 versions that pass the code checks go to the cascade judge
+  (`lib/cmo/jobs/judge.ts`, on the provider that did not draft; a judge failure is unscored, not a
+  fail), and `--compare` pairs the two runs case by case (McNemar exact, BETTER / WORSE /
+  INCONCLUSIVE). The scheduled `AI evals` workflow does this weekly against the previous report. W1 and
+  W5 still grade with code only.

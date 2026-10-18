@@ -15,6 +15,7 @@ import { planWeek } from "./plan-week";
 import { pullMetrics } from "./pull-metrics";
 import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
+import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
 import { videoPack } from "./video-pack";
@@ -44,7 +45,11 @@ export type JobContext = {
   step<T>(tool: string, label: string, fn: () => Promise<T>, done?: (value: T) => string, opts?: { memo?: string }): Promise<T>;
   /** One structured model call (`think.ts`). */
   think<S extends z.ZodType>(opts: ThinkOptions<S>): Promise<z.infer<S>>;
+  /** Stands in for the Reddit search (evals, checks); production leaves it unset. */
+  searchReddit?: (query: string) => Promise<RedditThread[]>;
 };
+
+export type RunOptions = { searchReddit?: JobContext["searchReddit"] };
 
 export type JobOutput = Record<string, unknown>;
 type Job = (ctx: JobContext) => Promise<JobOutput>;
@@ -63,7 +68,7 @@ export const JOBS: Record<CmoJobKind, Job> = {
 /** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */
 class LeaseLost extends Error {}
 
-export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boolean; error: string | null; deferred?: boolean; inbox?: string }> {
+export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions = {}): Promise<{ ok: boolean; error: string | null; deferred?: boolean; inbox?: string }> {
   const steps: Step[] = [];
   const write = async () => {
     if (!(await store.step(run, steps))) throw new LeaseLost();
@@ -110,6 +115,7 @@ export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boo
       }
     },
     think: (opts) => think(opts, brain, inbox.answers),
+    searchReddit: opts.searchReddit,
   };
 
   const job = JOBS[run.kind];
@@ -153,13 +159,13 @@ export async function runOne(store: CmoStore, run: QueuedRun): Promise<{ ok: boo
  * Nhận và chạy việc cho tới khi hết hàng đợi hoặc hết ngân sách thời gian.
  * Có `runId` thì chỉ chạy đúng lượt đó (người dùng vừa bấm) — lượt khác để cron.
  */
-export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; budgetMs?: number } = {}): Promise<number> {
+export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; budgetMs?: number } & RunOptions = {}): Promise<number> {
   const deadline = Date.now() + (opts.budgetMs ?? 240_000);
   let ran = 0;
   while (Date.now() < deadline) {
     const run = await store.claim(opts.runId);
     if (!run) break;
-    await runOne(store, run);
+    await runOne(store, run, { searchReddit: opts.searchReddit });
     ran += 1;
     if (opts.runId) break;
   }
