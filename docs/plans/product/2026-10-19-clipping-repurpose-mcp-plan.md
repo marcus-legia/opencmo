@@ -15,23 +15,29 @@ Facts below were checked on `main` at `83821c69`.
 3. **About 5 $ of Anthropic credit tops up the existing shared key** (`ANTHROPIC_API_KEY`); no separate
    moderation key. Prompt moderation is a product rule and a payment provider requirement, so it stays.
 4. **Clipping must let the user pick segments by hand.** The picker moved from its own page into the small editor
-   panel on 2026-10-04 and lost segment picking. AI picking stays optional.
+   panel on 2026-10-04 and lost segment picking. AI picking is removed (decision 8).
 5. **Downloads must be cheap.** The IPRoyal proxy bill feels too high; measure first, then cut bytes.
 6. **Everything outside this plan gets a Beta badge** saying it is still being finished.
 7. **Out of scope, owner handles it:** Polar and payment policy, pricing, any new ownership-verification scheme,
    landing page changes.
+8. **Manual picking only.** The user picks every moment. No user, API or MCP path runs the `select` step; AI moment
+   picking is gone from the product. `steps/select.py` stays in the engine for the dev CLI; do not delete it.
+9. **IPRoyal has no credit; links stay as they are.** Link jobs fail until the proxy is back or removed (O5).
+   Uploads do not use the proxy (`worker/process_job.py:147` reads the signed Storage URL), so upload is the path that
+   works today.
 
 Phase ES of the [editor roadmap](../editor/2026-10-19-editor-spearhead-roadmap.md) needs generated media (fal); it
 waits for budget. This plan is the zero-API work that makes the sold product usable now.
 
 ## Goal and why
 
-- A user pastes their own YouTube link (or uploads), **picks the moments on a full-size player and timeline**, and gets
+- A user uploads (or pastes their own YouTube link), **picks the moments on a full-size player and timeline**, and gets
   clips without any LLM call on our side. Only the picked sections are downloaded.
+- If captions cannot be made (no subtitles and speech-to-text fails), the user still gets the raw cut clips (item 8).
 - Each clip opens as an edit and can be **repurposed** with a voiceover (ElevenLabs, manual UI) or an explainer
   (the user's Claude over MCP: `preview_explainer` → `add_explainer`).
 - The **AI CMO runs fully over MCP** in production: every job goes to the inbox and the user's Claude answers it.
-- Proxy bytes per job drop and the failure mode of the two failed downloads is understood.
+- Proxy work (item 2) waits until IPRoyal has credit again.
 
 ## Facts checked
 
@@ -56,8 +62,16 @@ waits for budget. This plan is the zero-API work that makes the sold product usa
   nothing uses the hook. CSP already allows it (`next.config.ts`).
 - `components/editor/clipping/ClipsPanel.tsx` never sends `segments`.
 
-**AI selection needs Anthropic.** `steps/select.py` calls Claude only. `config.py` refuses to start without
-`ANTHROPIC_API_KEY`; there is no fallback but evenly spaced windows for videos with almost no speech.
+**AI selection needs Anthropic.** `steps/select.py` calls Claude only (`Config.validate_for_select`); there is no
+fallback but evenly spaced windows for videos with almost no speech. A clip job with no `segments` takes this branch
+(`pipeline.py:221`), and so do the two "Try again with longer clips" buttons (`ClipsPanel.tsx:385`,
+`ProjectResults.tsx:131`). Decision 8 closes all of them.
+
+**A failed speech-to-text fails the whole job.** On the manual branch `_transcript_for_moments` (`pipeline.py:111`)
+tries ready-made subtitles first; `fetch_subtitles` already returns `None` on error (`download.py:260-271`). Without
+subtitles it calls ElevenLabs Scribe per section, and `transcribe_audio` raises on a missing key, an empty quota or a
+network error. The sections are already cut, but the job fails. Rendering already copes with an empty transcript
+(`render.py:155-159`, and the comment at `pipeline.py:278`: the clip comes out without captions).
 
 **Every yt-dlp call goes through the proxy** (`steps/download.py:81` `_base_opts`). These multiply bytes
 (inferred, not measured):
@@ -103,29 +117,53 @@ Each item names its check. Where a check is a test, it must fail on today's code
 
 ### 1. Full-size clip picker — Session A
 
-A dedicated picker view, not the panel.
-- **Open it from:** the Clips tab after a link is pasted (or a file uploaded), and from `/app/video`.
-- **Video:** the YouTube IFrame player for links (`useYouTubePlayer`) and a `<video>` on the signed URL for uploads.
+A dedicated full-size picker, shown as an overlay over the editor, not the small panel.
+- **Open it from:** the Clips tab after a file is uploaded (or a link pasted), and from `/app/video`. The URL is
+  `/app/editor?panel=clips&picker=open` (contract A1); `EditorShell.tsx:354` already reads `panel=clips`.
+- **Video:** a `<video>` on the signed URL for uploads and the YouTube IFrame player for links (`useYouTubePlayer`).
 - **Timeline:** the restored `SegmentBar` under the player. Add a moment with "Add a moment" or keyboard `I`/`O` at
   the playhead.
-- **Options:** frame, captions and clip length (from `OutputOptions` and `ClipsPanel`).
+- **Options:** frame and captions on/off (from `OutputOptions` and `ClipsPanel`). No clip count and no clip length:
+  each picked moment is one clip, and its length is the moment's length.
 - **Submit:**
   - Picked moments are sent as `segments`.
-  - With none picked, the button reads "Let AI pick (uses credits)" and works as today.
+  - "Make clips" stays disabled until at least one moment is picked. There is no AI-pick button (decision 8).
+  - Uploads keep `mode: "full"` (the whole video into the editor, no segments).
   - The ownership checkbox stays as it is.
-- **Prefill:** the picker reads `?source=<url>&segments=<start>-<end>,…` (seconds) to come in pre-filled. This is a
+- **Manual-only guard, in three layers** (`CLAUDE.md` web rule 2):
+  - zod: `createClipJobInput` (`lib/clipping/create.ts`) requires `segments` with at least one moment when
+    `mode` is `"clip"`, error "Pick at least one moment to clip." Both `/api/v1/jobs` and `/api/v1/editor/clipping`
+    use it.
+  - SQL: a migration changes `create_job` (latest in `20261210200000_private_video_urls.sql`) to refuse
+    `mode = 'clip'` without segments and to set the clip count to the number of segments. pgTAP for it.
+  - Worker: `worker/process_job.py` fails a clip job that has no `segments` and no stored `moments` artifact with a
+    clear English error, and never runs the AI branch of `run_pipeline`.
+- **Remove "Try again with longer clips"** in `ClipsPanel.tsx` and `ProjectResults.tsx`. Replace it with "Pick again",
+  which opens the picker with the job's source and moments.
+- **Prefill:** the picker reads `&source=<url>&segments=<start>-<end>,…` (seconds) to come in pre-filled. This is a
   contract with item 5.
 - **After the job finishes:** each clip shows "Open", plus "Add voiceover" and "Add explainer" hints. The hints open
   the edit with the Generate → Voiceover tab, or show the MCP `/explain` route.
-- **Check:** an e2e that picks two moments on a link and on an upload. The job row has `segments`, the clips match
-  the lengths ±1 s, and the worker log has no `select` step. Look at one frame of the full-size output, per
-  `CLAUDE.md` "Verify by looking".
+- **Check:**
+  - An e2e that picks two moments on an upload. The job row has `segments`, the clips match the lengths ±1 s, and the
+    worker log has no `select` step. Run the same on a link only locally, where downloads do not need the proxy.
+  - The e2e submits with no moment and gets a 422; a pgTAP case for the same in `create_job`; a pytest case for the
+    worker guard. Each fails on today's code first.
+  - Look at one frame of the full-size output, per `CLAUDE.md` "Verify by looking".
 
-### 2. Measure the proxy, then cut bytes — Session B
+### 2. (Deferred) Measure the proxy, then cut bytes
+
+Deferred on 2026-10-19: IPRoyal has no credit, so nothing can be measured, and the owner keeps links as they are
+(decision 9). Pick this up when the proxy has credit again. The sub-items below stay as the plan for that day.
+
+Warning from the plan review: googlevideo URLs may be bound to the IP that extracted them. "Extract once" must then
+keep one sticky session from probe to the last section (`Config` already picks one session per job, `config.py:113`)
+and must extract again whenever `fresh_proxy_session` gives a new IP (section retries do, `download.py:392`). 2a has to
+find out whether the URLs are IP-bound before 2b starts.
 
 - **2a. Measure.** Count extractions and bytes per job, split by call type (probe, subtitles, audio, section,
   retry), and log one summary line per job. Reproduce `lETIcbAzZ40` and record which call failed and why.
-  - **Check:** the summary line for a 5-moment manual job and a 5-clip AI job, before any change, written into this
+  - **Check:** the summary line for two 5-moment manual jobs, before any change, written into this
     plan.
 - **2b. Cut bytes.**
   - Extract once: reuse the probe's info dict for subtitles and sections where yt-dlp allows it.
@@ -159,14 +197,20 @@ other items keep theirs.
 - Let `create_task` start `summarize_memory` and `review_week`.
 - **Check:**
   - pgTAP for each migration; `brain.check` for the production flag.
-  - On production with the flag set, "Plan my week" creates an inbox item, not a `cmo_runs.error`.
+  - On production with the flag set, "Plan my week" creates an inbox item, not a `cmo_runs.error`. This one runs
+    only after O2 and O4; the session lists it in the PR body as a post-deploy check and is not blocked by it.
   - A full week over MCP runs end to end: `plan_week` → `post_draft` → approve → `review_week`.
 
 ### 5. Clips from MCP without giving up the human step — Session B
 
-- MCP tool `make_clips(url, segments)` creates **no job**. It validates the segments with the same rules as
-  `segmentProblem` and returns the picker link from item 1, pre-filled. The user confirms ownership and presses Make
-  clips. The user's Claude picks moments for free; the human keeps the ownership step.
+- MCP tool `make_clips(url, segments)` creates **no job**. It validates the segments with `segmentProblem` from
+  `lib/clipping/segments.ts` (at least one moment) and returns the picker link from item 1, pre-filled. The user
+  confirms ownership and presses Make clips. The user's Claude suggests moments for free; the human checks them and
+  keeps the ownership step.
+- Links only: the user's Claude cannot see an upload before it is transcribed. The tool description says link jobs
+  need the download proxy (decision 9).
+- The tool body lives in `apps/web/lib/mcp/`; `packages/mcp-server/src/groups/clips.ts` only registers it, like the
+  other groups.
 - **Check:** `server.check.ts` cases for valid segments (returns a link) and overlapping segments (returns an error
   result). A manual run in claude.ai opens the picker pre-filled.
 
@@ -188,9 +232,22 @@ other items keep theirs.
   - never confirm a price alone;
   - no regeneration on timeout;
   - `read_guide` before a new kind of edit.
-- The first flow covered is **clip → voiceover → explainer → export**.
+- The first flow covered is **clip → voiceover → explainer → export**, on an uploaded fixture video (links need the
+  proxy, decision 9).
 - **Check:** one full run through claude.ai, results in `docs/evals/results/2026-10-xx.md`. Every failure gets either a
   guide or tool-description fix or an issue.
+
+### 8. Raw clips when captions cannot be made — Session B
+
+- In `_transcript_for_moments` (`pipeline.py:111`), a Scribe error on a section is logged as a warning and that
+  section gets no captions; the job goes on. If every section fails, the transcript is `Transcript(segments=[])`.
+- The user gets the cut clips without captions and can add them later with Inspector → Generate captions.
+- Nothing new: keep `source="scribe"` with empty `segments`, so `clipping-types.ts` and the SQL checks do not change.
+  `mode: "full"` is untouched; it needs no transcript.
+- **Check** (pytest, failing first):
+  - No subtitles and a fake Scribe that raises: the job returns every clip, the files exist, the transcript is empty.
+  - Two sections, Scribe works on the first and fails on the second: only the first has captions.
+  - Look at one frame of a full-size output: no captions, the frame is right.
 
 ## Owner tasks (not code)
 
@@ -202,12 +259,17 @@ other items keep theirs.
 - **O4** Deploy:
   - `supabase db push` for C's migrations;
   - Vercel through the merge;
-  - `modal deploy modal_app.py` for B's engine changes;
+  - `supabase db push` also for A's `create_job` migration;
+  - `modal deploy modal_app.py` for A's worker guard and B's raw-clip fallback (item 8);
   - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for item 5.
+- **O5** Top up IPRoyal, **or** remove `OPENCMO_PROXY` from the worker's Modal secret. With an empty IPRoyal account
+  every link job fails at probe. Without the secret, yt-dlp goes out through the built-in guard proxy
+  (`capture/guard.py:244`, no setup) from Modal's IPs, which YouTube may block. `deploy_env.py` does not require
+  `OPENCMO_PROXY`.
 
 ## Not doing
 
 - Polar, payment policy, pricing, new ownership verification, landing page copy (owner).
 - Onboarding without a website (needs its own research first).
-- Better AI moment selection; the in-app Assistant or CMO chat on a server model; caption translation.
+- AI moment picking of any kind (decision 8); proxy work until IPRoyal has credit (item 2); the in-app Assistant or CMO chat on a server model; caption translation.
 - Phase ES generation items (`/video`, AI B-roll); they wait for budget.
