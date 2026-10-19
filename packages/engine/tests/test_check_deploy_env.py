@@ -8,6 +8,10 @@ from opencmo import deploy_env as env
 from opencmo.deploy_env import MCP, MOTION, VERCEL, WORKER
 
 MCP_URL = "https://ws--opencmo-mcp.us-east.modal.run/mcp"
+URLS = {
+    "OPENCMO_WAKE_URL": "https://ws--opencmo-wake.us-east.modal.run",
+    "MOTION_PREVIEW_URL": "https://ws--opencmo-motion-preview.us-east.modal.run",
+}
 
 
 def _healthy() -> dict[str, dict[str, str | None]]:
@@ -17,10 +21,12 @@ def _healthy() -> dict[str, dict[str, str | None]]:
         value = env.fingerprint(shared.holders[0][1], f"value of {shared.what}")
         if shared.what == "MCP URL":
             value = MCP_URL
+        if shared.holders[0][1] in URLS:
+            value = URLS[shared.holders[0][1]]
         for place, key in shared.holders:
             seen[place][key] = value
     for key in env.MCP_REQUIRED:
-        seen[MCP].setdefault(key, env.fingerprint(key, f"value of {key}"))
+        seen[MCP].setdefault(key, URLS.get(key) or env.fingerprint(key, f"value of {key}"))
     for place, key, expected in env.EXPECTED:
         seen[place][key] = expected
     return seen
@@ -104,3 +110,13 @@ def test_plain_keys_stay_readable_and_secrets_are_hashed():
 def test_parse_dotenv_reads_vercel_pull_output():
     text = '# Created by Vercel CLI\nOPENCMO_ENV="production"\nMOTION_PREVIEW_TOKEN="a\\"b"\nEMPTY=""\n'
     assert env.parse_dotenv(text) == {"OPENCMO_ENV": "production", "MOTION_PREVIEW_TOKEN": 'a"b', "EMPTY": ""}
+
+
+def test_a_url_pasted_on_the_wrong_line_is_reported():
+    # 2026-10-19: OPENCMO_WAKE_URL held the motion preview URL, so every wake got 401.
+    seen = _healthy()
+    seen[MCP]["OPENCMO_WAKE_URL"] = URLS["MOTION_PREVIEW_URL"]
+    problems, _ = env.check(seen)
+    assert problems == [
+        f"opencmo-mcp:OPENCMO_WAKE_URL points at the wrong endpoint (expected a URL with '--opencmo-wake.', got {URLS['MOTION_PREVIEW_URL']})"
+    ]

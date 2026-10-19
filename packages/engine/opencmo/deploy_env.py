@@ -104,6 +104,16 @@ EXPECTED = (
 # A client connected to any other path ignores the server's OAuth metadata and cannot sign in.
 MCP_URL_HOLDERS = ((VERCEL, "OPENCMO_MCP_URL"), (MCP, "OPENCMO_MCP_URL"))
 
+# Modal web endpoint URLs carry the function's label (`<workspace>--<label>.<region>.modal.run`):
+# a URL pasted on the wrong line points at another endpoint, which answers 401 with its own message.
+ENDPOINT_LABELS = (
+    (MCP, "OPENCMO_WAKE_URL", "--opencmo-wake."),
+    (MCP, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
+    (VERCEL, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
+    (MCP, "OPENCMO_MCP_URL", "--opencmo-mcp."),
+    (VERCEL, "OPENCMO_MCP_URL", "--opencmo-mcp."),
+)
+
 
 def keys_to_read(place: str) -> list[str]:
     """Every key the checks look at in `place`."""
@@ -188,6 +198,11 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
         value = get(place, key)
         if place in seen and value and not value.rstrip("/").endswith("/mcp"):
             problems.append(f"{place}:{key} must end in /mcp (got {value})")
+
+    for place, key, label in ENDPOINT_LABELS:
+        value = get(place, key)
+        if place in seen and value and label not in value:
+            problems.append(f"{place}:{key} points at the wrong endpoint (expected a URL with {label!r}, got {value})")
 
     if unreadable:
         notes.append(
