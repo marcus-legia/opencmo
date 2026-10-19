@@ -7,4 +7,4 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
-| 2026-10-19 | [Clip picker, cheap downloads, repurpose and AI CMO over MCP](2026-10-19-clipping-repurpose-mcp-plan.md) · [sessions](2026-10-19-clipping-repurpose-mcp-sessions.md) | Owner decisions of 2026-10-19 (no API budget; editor + AI CMO sold, thinking over MCP) | (this PR) |
+| 2026-10-19 | [Clip picker, cheap downloads, repurpose and AI CMO over MCP](2026-10-19-clipping-repurpose-mcp-plan.md) · [sessions](2026-10-19-clipping-repurpose-mcp-sessions.md) | Owner decisions of 2026-10-19 (no API budget; editor + AI CMO sold, thinking over MCP) | [#84](https://github.com/marcus-legia/opencmo/pull/84) |

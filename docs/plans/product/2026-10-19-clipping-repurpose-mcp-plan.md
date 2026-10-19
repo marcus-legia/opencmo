@@ -1,6 +1,6 @@
 # Plan: clip picker, cheap downloads, repurpose and AI CMO over MCP (2026-10-19)
 
-Track: product · PR: this branch's draft PR · Work split: [sessions](2026-10-19-clipping-repurpose-mcp-sessions.md)
+Track: product · PR: [#84](https://github.com/marcus-legia/opencmo/pull/84) · Work split: [sessions](2026-10-19-clipping-repurpose-mcp-sessions.md)
 
 Facts below were checked on `main` at `83821c69`.
 
