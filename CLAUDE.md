@@ -29,6 +29,11 @@ The editor is locked in as the spearhead: build it until it can make every marke
   owner says otherwise.
 - **Every phase ends with a real video** made in the editor, published, and kept as real landing material
   (no invented examples).
+- **The editor is also what we sell first** (owner, 2026-10-19). The pitch: an editor that makes video from a
+  slash command (`/video`, `/broll`, `/animate`, `/edit`…; `apps/web/lib/agent/slash.ts`), puts generated
+  shots in as B-roll on the right words, and lets the user bring in their other videos and edit them all
+  together. Post and Sales stay in the code but come after the editor sells. Generated media still follows the
+  product rules below (moderation, no real people, no model names as features).
 - The phase roadmap is [`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md).
   Each item gets its own research and plan before it is built; do not build an item from the roadmap line alone.
 

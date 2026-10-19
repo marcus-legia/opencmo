@@ -2,7 +2,9 @@
 
 > Owner decision (see `CLAUDE.md`, "Strategy"): there is no paid-marketing budget, so OpenCMO's own
 > marketing videos are made in OpenCMO's editor. The editor is built until it can make every video we
-> need, phase by phase. This file splits the work into phases and items. **It is not a build plan:**
+> need, phase by phase. The editor is also **what we sell first** (owner, 2026-10-19): video from a slash
+> command, generated shots placed as B-roll, and the user's other videos brought in and edited together.
+> Hence phase **ES** right after E0. This file splits the work into phases and items. **It is not a build plan:**
 > each item gets its own research report (`docs/research/editor/`) and plan (`docs/plans/editor/`)
 > before code.
 >
@@ -51,6 +53,9 @@ Assistant + MCP over the same ops.
 Sizes are first guesses (S ≤ 2 days, M ≤ 1 week, L > 1 week) and get fixed in each item's plan.
 Every phase closes with its acceptance video, made by the owner in the editor and published.
 
+**Order: E0 → ES → E1 → E2 → E3 → E4 → E5 → E6.** ES comes second because the editor is what we sell; it
+takes the generation items that a paying user meets first (moved up from E1 and E6).
+
 ### E0. A base we can trust
 
 Goal: what already exists works on production every time. Without this, every later phase ships on sand.
@@ -70,6 +75,27 @@ Goal: what already exists works on production every time. Without this, every la
 **Acceptance:** a 60 s V1 clip of the owner, cut and captioned in the editor, exported on production; a
 frame from the full-size file checked by eye.
 
+### ES. The editor we sell: slash-command video, AI B-roll, your own videos together
+
+Goal: a stranger can pay, open the editor, bring in their videos, type `/broll` or `/video`, get generated
+shots placed on the right words, cut everything by text, and export. Most of the features exist
+(`apps/web/lib/agent/slash.ts`, `place_broll`, PR #52 own-video editing, chained `/video`); what is missing is
+proof on production, prices, and the path from payment to first export.
+
+| Item | What | Size | Research questions |
+|---|---|---|---|
+| ES.1 | Credit price per model and per slash command, wired to billing (usage billing to Polar is not connected yet) | M | Margin per model at fal prices; what a $15 starter buys; `check:pricing` |
+| ES.2 | Run every slash command live on production with real providers: `/video` with a chain, `/broll` stills → animate, `/animate`, `/edit` (Kling edit with an uploaded video, never called live), `/background`, `/music`, `/voiceover` | M | Failure modes per provider; fal concurrency on a new account; real wait vs the card's estimate |
+| ES.3 | `/broll` on the user's own talk end to end: pick lines, stills, approve, animate, place on the quotes, one undo | S | Today it is two approvals (stills, then animate); measure whether users want one card for the whole pack |
+| ES.4 | Bring other videos in: several uploads in one edit, cut any of them by words, use the user's own clips as B-roll (`place_broll` from the library) | S | Upload size/length caps; transcript wait per file; New edit with no master video |
+| ES.5 | Prompt rules for generated shots (Opus #32, moved from E1.4): three motion layers, no moving text, no text in keyframes, "live-action" | S | Before/after on 10 shots per model |
+| ES.6 | Check generated frames for garbled text before they reach the timeline (Opus #37, moved from E6.4) | M | VLM cost per frame; reuse `opencmo/ai/moderation.py` frame sampling |
+| ES.7 | Landing and pricing page that show only real output made in the editor; no model names, nothing "coming soon" | M | Which three demos sell it; the landing video is this phase's acceptance video |
+| ES.8 | First-run path: sign up → editor → a sample of the user's own upload → first `/broll` → export, with prices on every card | M | Where new users stop; free credits for the first video |
+
+**Acceptance:** a 60 s landing video, made in the editor with `/broll` and `/video` over the owner's own
+footage, that shows exactly this flow; and one real purchase that reaches an export.
+
 ### E1. Founder clips in minutes (V1)
 
 Goal: the weekly V1 clip takes under 15 minutes from upload to published file.
@@ -79,7 +105,7 @@ Goal: the weekly V1 clip takes under 15 minutes from upload to published file.
 | E1.1 | Text animator + `add_title` lands (plan 2026-10-17, PR #65) | in flight | — |
 | E1.2 | Active-speaker reframe for 2-person recordings (report 2026-10-18) | M | Scribe diarization vs face cues; `speaker_coverage` threshold |
 | E1.3 | One-click "founder clip" style: hook title, emphasis, punch-ins, B-roll proof | S | Which existing style skill becomes the default; what still needs the Assistant |
-| E1.4 | Prompt rules for AI B-roll shots (Opus #32: three motion layers, no moving text, no text in keyframes) | S | Measure before/after on 10 shots |
+| E1.4 | (moved to ES.5) | — | — |
 | E1.5 | 👍/👎 + reason saved per Assistant and CMO chat message (Opus #81; today `ChatPanel.tsx` keeps it in `useState`) | S | Table and RPC; how the owner's ratings feed `agent:eval` |
 
 **Acceptance:** three V1 clips in one week, each under 15 minutes of owner time.
@@ -167,15 +193,15 @@ approval.
 
 ### E6. Generated shots where real footage is missing (last)
 
-Product marketing should show the real product; generated shots only fill gaps (concept scenes,
-backgrounds). Do this phase only if E2–E4 videos show a real need.
+Generation the paying user meets first is in ES. This phase is the deeper pipeline (keyframes first, style
+maker); do it when ES users or E2–E4 videos show a real need.
 
 | Item | What | Size | Opus |
 |---|---|---|---|
 | E6.1 | Keyframes first, video second; contact sheet before paying for video | L | #22, #23 |
 | E6.2 | Edit one keyframe → redo only its two transitions | M | #24 |
 | E6.3 | Style prompt with `[SUBJECT]` + style from reference images | M | #33, #34 |
-| E6.4 | VLM check for garbled text in generated frames | M | #37 |
+| E6.4 | (moved to ES.6) | — | #37 |
 | E6.5 | Pick the last frame among candidates; anchor assets from the Brand Kit; merge adjacent transitions; world bible for long stories; restyle as a branch | M | #25, #26, #41, #30, #47 |
 | E6.6 | Style history and automatic style pick | S | #35, #36 |
 
