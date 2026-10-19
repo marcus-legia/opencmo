@@ -2,145 +2,101 @@
 
 import { useEffect, useRef } from "react";
 
-import { BEATS } from "./data";
-import { LineIcon } from "./Glyphs";
-import { createHeroGraph, LABELS, ss } from "./hero-graph";
-import { DEPT_ICON, SOCIAL, type SocialKey } from "./icons";
+import { BEATS, DEPTS } from "./data";
+import { SOCIAL } from "./icons";
 import { gsap, prefersReducedMotion, ScrollTrigger } from "./motion";
 
-const DEPT_NAME = { video: "Video", post: "Post", sales: "Sales" } as const;
+/** Every platform a department works on, once each, in the order the departments list them. */
+const PLATFORMS = Array.from(new Set(DEPTS.flatMap((d) => d.channels))).map((k) => SOCIAL[k].name);
+
+// A 4×2 block of brand squares with cut-outs, pinned to the hero's bottom-right corner.
+const BLOCKS = ["fill", "dot", "cut", "fill", "cut", "fill", "ring", "dot"] as const;
+
+function words(text: string) {
+  return text.split(" ").map((w, i) => <span key={i} className="lv-w">{w} </span>);
+}
 
 /**
- * Hero cao 340vh, phần nhìn thấy dính ở đỉnh màn hình: cuộn trong hero là "tua" đồ
- * thị (progress 0 → 1) và đổi ba đoạn chữ I · II · III. H1 và ô website nằm trong HTML
- * ngay từ đầu (SEO + không cần JS để bắt đầu); nhãn đồ thị là `aria-hidden`.
+ * Hero, then the three beats I · II · III as one large statement whose words darken as
+ * the reader scrolls through it. The H1 and the website form are in the HTML from the
+ * start (SEO, and starting needs no JavaScript); without JS or with reduced motion the
+ * statement simply renders in full ink.
  */
 export function Hero({ action, fineprint }: { action: string; fineprint: string }) {
   const heroRef = useRef<HTMLElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const labelsRef = useRef<HTMLDivElement>(null);
-  const copyRef = useRef<HTMLDivElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
+  const essayRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const hero = heroRef.current!, canvas = canvasRef.current!, labelBox = labelsRef.current!;
-    const reduced = prefersReducedMotion();
-    const graph = createHeroGraph(canvas);
-    const labelEls = Array.from(labelBox.children) as HTMLElement[];
-    const ptr = { x: 0, y: 0, tx: 0, ty: 0 };
-    let p = 0, raf = 0;
-    const t0 = performance.now();
-
-    const progress = () => {
-      const r = hero.getBoundingClientRect();
-      return Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - window.innerHeight)));
-    };
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      // Qua khỏi hero thì ngừng vẽ: cảnh 11k điểm không có lý do chạy dưới footer.
-      if (window.scrollY > hero.offsetHeight + 200) return;
-      p += ((reduced ? 1 : progress()) - p) * 0.07;
-      ptr.x += (ptr.tx - ptr.x) * 0.04;
-      ptr.y += (ptr.ty - ptr.y) * 0.04;
-      const screen = graph?.frame(p, ptr, (performance.now() - t0) / 1000);
-      if (!screen) return;
-      labelEls.forEach((el, i) => {
-        const d = LABELS[i], at = screen.get(d.key);
-        const o = at ? ss(d.from, d.from + 0.07, p) : 0;
-        el.style.opacity = o.toFixed(3);
-        if (at) el.style.transform = `translate(${at.x.toFixed(1)}px,${(at.y + d.dy).toFixed(1)}px) translate(-50%,-50%) scale(${(0.9 + 0.1 * o).toFixed(3)})`;
-      });
-    };
-    const onPtr = (e: PointerEvent) => {
-      ptr.tx = (e.clientX / window.innerWidth) * 2 - 1;
-      ptr.ty = (e.clientY / window.innerHeight) * 2 - 1;
-    };
-    const onResize = () => graph?.resize();
-    graph?.resize();
-    loop();
-    window.addEventListener("pointermove", onPtr);
-    window.addEventListener("resize", onResize);
-
+    if (prefersReducedMotion()) return;
+    const essay = essayRef.current!;
+    essay.dataset.armed = "1";
     const ctx = gsap.context(() => {
-      gsap.from("[data-intro-line]", { yPercent: 110, duration: 1.6, ease: "expo.out", stagger: 0.12, delay: 0.35 });
-      gsap.from("[data-intro]", { y: 30, opacity: 0, filter: "blur(8px)", duration: 1.4, ease: "expo.out", stagger: 0.1, delay: 0.6 });
-      gsap.from(canvas, { opacity: 0, duration: 2.4, ease: "power2.out" });
-      gsap.to(copyRef.current, { y: -80, opacity: 0, filter: "blur(6px)", ease: "none", scrollTrigger: { trigger: hero, start: "top top", end: "12% top", scrub: true } });
-      gsap.to(barRef.current, { scaleY: 1, ease: "none", scrollTrigger: { trigger: hero, start: "top top", end: "bottom bottom", scrub: true } });
-      const tl = gsap.timeline({ scrollTrigger: { trigger: hero, start: "10% top", end: "bottom bottom", scrub: 0.6 } });
-      const beats = gsap.utils.toArray<HTMLElement>("[data-beat]");
-      beats.forEach((el, i) => {
-        tl.fromTo(el, { opacity: 0, y: 60, filter: "blur(10px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 1, ease: "power2.out" });
-        if (i < beats.length - 1) tl.to(el, { opacity: 0, y: -60, filter: "blur(10px)", duration: 1, ease: "power2.in" }, "+=0.8");
-        else tl.to({}, { duration: 0.6 });
+      gsap.from("[data-intro-line]", { yPercent: 110, duration: 1.5, ease: "expo.out", stagger: 0.1, delay: 0.2 });
+      gsap.from("[data-intro]", { y: 24, opacity: 0, duration: 1.2, ease: "expo.out", stagger: 0.08, delay: 0.5 });
+      gsap.from("[data-block]", { scale: 0, duration: 0.5, ease: "expo.out", stagger: { each: 0.05, from: "random" }, delay: 0.7 });
+      // GSAP cannot tween `var()`, so resolve the two target inks once.
+      const css = getComputedStyle(essay);
+      const ink = css.getPropertyValue("--ink").trim(), ink2 = css.getPropertyValue("--ink2").trim();
+      gsap.to(essay.querySelectorAll(".lv-w"), {
+        color: (_: number, el: Element) => (el.closest(".lv-essay-body") ? ink2 : ink),
+        ease: "none",
+        stagger: 0.1,
+        scrollTrigger: { trigger: essay, start: "top 70%", end: "bottom 55%", scrub: 1.5 },
       });
-    }, hero);
+    }, heroRef.current!.parentElement!);
     const refresh = setTimeout(() => ScrollTrigger.refresh(), 600);
-
     return () => {
-      cancelAnimationFrame(raf);
       clearTimeout(refresh);
-      window.removeEventListener("pointermove", onPtr);
-      window.removeEventListener("resize", onResize);
       ctx.revert();
-      graph?.dispose();
+      delete essay.dataset.armed;
     };
   }, []);
 
   return (
-    <section id="top" ref={heroRef} className="lv-hero">
-      <div className="lv-hero-stage">
-        <canvas ref={canvasRef} aria-hidden="true" className="lv-hero-canvas" />
-        <div aria-hidden="true" className="lv-hero-shade" />
-        <div ref={labelsRef} aria-hidden="true" className="lv-hero-labels">
-          {LABELS.map((d) => (
-            <div key={d.key} className={`lv-node is-${d.kind}`}>
-              {d.kind === "plat" ? (
-                <span className="lv-node-tile" style={{ background: SOCIAL[d.key as SocialKey].color }}>
-                  <svg viewBox="0 0 24 24" width="13" height="13"><path d={SOCIAL[d.key as SocialKey].d} fill="#fff" /></svg>
-                </span>
-              ) : (
-                <LineIcon d={d.kind === "cmo" ? DEPT_ICON.cmo : DEPT_ICON[d.key as keyof typeof DEPT_NAME]} size={16} width={2} color={d.kind === "cmo" ? "#1a0d07" : "#f2946f"} />
-              )}
-              <span className="lv-node-text">
-                <strong>{d.kind === "cmo" ? "AI CMO" : d.kind === "dept" ? DEPT_NAME[d.key as keyof typeof DEPT_NAME] : SOCIAL[d.key as SocialKey].name}</strong>
-                {d.kind === "cmo" && <span>Your goal</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div ref={copyRef} className="lv-hero-copy">
-          <p data-intro="1" className="lv-eyebrow lv-eyebrow-rule">Led by an AI CMO · for founders</p>
+    <>
+      <section id="top" ref={heroRef} className="lv-hero">
+        <div className="lv-hero-inner">
+          <p data-intro="1" className="lv-eyebrow">Led by an AI CMO · for founders</p>
           <h1 className="lv-hero-title">
-            <span className="lv-mask"><span data-intro-line="1" className="lv-hero-line is-lora">Your AI</span></span>
-            <span className="lv-mask is-tail"><span data-intro-line="1" className="lv-hero-line lv-accent">marketing team</span></span>
+            <span className="lv-mask"><span data-intro-line="1">Your AI</span></span>
+            <span className="lv-mask"><span data-intro-line="1">marketing team<span aria-hidden="true" className="lv-dot" /></span></span>
           </h1>
-          <p data-intro="1" className="lv-hero-lede">It edits the videos, writes the posts and finds the conversations. You approve.</p>
-          {/* `site` đi qua đăng nhập (LoginForm → auth/callback) tới app. */}
-          <form data-intro="1" action={action} className="lv-pill-form">
-            <label htmlFor="hero-site" className="sr-only">Your website</label>
-            <input id="hero-site" name="site" type="text" inputMode="url" autoComplete="url" required placeholder="yourcompany.com" />
-            <button type="submit" className="lv-btn-terra">Start with your website</button>
-          </form>
-          <p data-intro="1" className="lv-hero-fine">{fineprint}</p>
+          <div className="lv-hero-support">
+            <p data-intro="1" className="lv-hero-lede">It edits the videos, writes the posts and finds the conversations. You approve.</p>
+            {/* `site` travels through login (LoginForm → auth/callback) into the app. */}
+            <form data-intro="1" action={action} className="lv-pill-form">
+              <label htmlFor="hero-site" className="sr-only">Your website</label>
+              <input id="hero-site" name="site" type="text" inputMode="url" autoComplete="url" required placeholder="yourcompany.com" />
+              <button type="submit" className="lv-btn-terra">Start with your website</button>
+            </form>
+            <p data-intro="1" className="lv-hero-fine">{fineprint}</p>
+          </div>
         </div>
-
-        <div className="lv-beats">
-          {BEATS.map((b) => (
-            <div key={b.num} data-beat="1" className="lv-beat">
-              <span>{b.num}</span>
-              <h2>{b.title}</h2>
-              <p>{b.body}</p>
-            </div>
-          ))}
+        <div aria-hidden="true" className="lv-blocks">
+          {BLOCKS.map((b, i) => <span key={i} data-block="1" className={`is-${b}`} />)}
         </div>
+      </section>
 
-        <div aria-hidden="true" className="lv-hero-rail">
-          <div className="lv-hero-rail-line"><div ref={barRef} /></div>
-          <div className="lv-hero-rail-text"><span>I · Goal</span><span>II · Plan</span><span>III · Departments</span></div>
+      <div className="lv-ticker">
+        <div className="lv-ticker-track">
+          <ul aria-label="Platforms" className="lv-ticker-copy">
+            {PLATFORMS.map((p) => <li key={p}>{p}</li>)}
+          </ul>
+          <ul aria-hidden="true" className="lv-ticker-copy is-clone">
+            {PLATFORMS.map((p) => <li key={p}>{p}</li>)}
+          </ul>
         </div>
       </div>
-    </section>
+
+      <section ref={essayRef} aria-label="How it works" className="lv-essay">
+        {BEATS.map((b) => (
+          <p key={b.num} className="lv-essay-line">
+            <span className="lv-essay-num">{b.num}</span>
+            {words(b.title)}
+            <span className="lv-essay-body">{words(b.body)}</span>
+          </p>
+        ))}
+      </section>
+    </>
   );
 }
