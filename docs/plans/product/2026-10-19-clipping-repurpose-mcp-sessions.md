@@ -5,7 +5,7 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
 - **Branch:** `plan/product/2026-10-19-clipping-repurpose-mcp`. Every session works on it and the draft PR is shared.
 - **Session A — Clip picker (web), manual picking only:** item 1.
 - **Session B — Raw-clip fallback and MCP clips:** items 8 and 5. (Item 2 is deferred, item 3 was dropped.)
-- **Session C — AI CMO over MCP, Beta badges, MCP checklist:** items 4, 6 and 7.
+- **Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts:** items 4, 6, 7 and 9.
 - **Order:** A pushes A1 first. Then A2–A5 and B5 run side by side. B6 and all of C can start at once.
 
 ## Rules for all sessions
@@ -123,7 +123,7 @@ Checklist:
 - [ ] **B6 — Raw clips when transcription fails.** Plan item 8. Start here; it depends on no one.
   - **Accept:** the two failing-first pytest cases of item 8; one full-size frame looked at; budgets hold.
 
-## Session C — AI CMO over MCP, Beta badges, MCP checklist
+## Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts
 
 **Owns:**
 
@@ -134,6 +134,8 @@ Checklist:
   `components/clipping/WorkspaceShell.tsx`, `components/editor/generate/GeneratePanel.tsx`,
   `components/editor/visuals/VisualsPanel.tsx`
 - `docs/evals/**`, `apps/web/lib/agent/guides.ts` (guide fixes found by the checklist run)
+- item 9: `apps/web/components/editor/assistant/ContinueInClaude.tsx`, `plugins/opencmo-claude/skills/opencmo/SKILL.md`,
+  and the `/daily` prompt (in `lib/cmo/mcp/prompts.ts`)
 
 Checklist:
 
@@ -150,6 +152,10 @@ Checklist:
   an uploaded fixture video.
   - **Accept:** `docs/evals/results/2026-10-xx.md`; each failure fixed in a guide or tool description, or filed as an
     issue.
+- [ ] **C5 — Daily drafts from claude.ai.** Plan item 9. Write the 9a spike steps for the owner first (O6); build 9b–9d
+  only once the spike says Cowork scheduled tasks load our connector, else switch to routines and update the plan.
+  - **Accept:** a `server.check.ts` case for the `/daily` prompt;
+    typecheck; the 7-day production check (after O6) listed in the PR body as post-deploy.
 
 ## Requests
 

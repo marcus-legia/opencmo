@@ -37,6 +37,8 @@ waits for budget. This plan is the zero-API work that makes the sold product usa
 - Each clip opens as an edit and can be **repurposed** with a voiceover (ElevenLabs, manual UI) or an explainer
   (the user's Claude over MCP: `preview_explainer` → `add_explainer`).
 - The **AI CMO runs fully over MCP** in production: every job goes to the inbox and the user's Claude answers it.
+- **Drafts are ready every morning without the user typing anything** (item 9): a scheduled task in the user's own
+  claude.ai works the inbox through our connector; the user only approves and posts.
 - Proxy work (item 2) waits until IPRoyal has credit again.
 
 ## Facts checked
@@ -249,6 +251,63 @@ other items keep theirs.
   - Two sections, Scribe works on the first and fails on the second: only the first has captions.
   - Look at one frame of a full-size output: no captions, the frame is right.
 
+### 9. Daily drafts from the user's claude.ai — Session C (after C1 and C2)
+
+Today the inbox only moves when the user opens Claude and types `/inbox`. The goal is that every morning the X draft
+(and the Reddit replies, on sales days) already wait in Approvals, with no server model call.
+
+**Why claude.ai pulls and we do not push** (research 2026-10-19):
+- MCP is client-initiated: our server answers tool calls and cannot open a claude.ai conversation. claude.ai's
+  custom-connector docs list tools only; nothing says it supports MCP sampling, and sampling would need an open session
+  anyway. There is no public API to fire a claude.ai (Cowork) scheduled task.
+- **Cowork scheduled tasks** (claude.ai, all paid plans) run remotely on Anthropic's servers on an hourly, daily,
+  weekday or weekly cadence, and use the connectors on the user's claude.ai account. Remote tasks cannot use local
+  folders or local connectors; our server is a remote connector (URL + OAuth), which is the kind they can use.
+  Sources: [scheduled tasks](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-claude-cowork),
+  [remote execution](https://support.claude.com/en/articles/15811196-what-to-expect-with-remote-execution-in-claude-cowork),
+  [custom connectors](https://support.claude.com/en/articles/11175166).
+- Not confirmed by any official page: that a *custom* connector loads in a scheduled run. Community reports describe
+  connectors missing from scheduled runs
+  ([#42033](https://github.com/anthropics/claude-code/issues/42033),
+  [#43397](https://github.com/anthropics/claude-code/issues/43397),
+  [#40835](https://github.com/anthropics/claude-code/issues/40835)). 9a settles this before any code.
+- **Fallback: Claude Code routines** ([docs](https://code.claude.com/docs/en/routines)) have an API trigger
+  (`POST …/routines/<id>/fire` with a per-routine token), so our cron could wake the user's Claude exactly when an inbox
+  item opens. Costs: it is a Claude Code session (the form asks for a GitHub repo), the user pastes a token we must
+  store encrypted, and the endpoint is behind an experimental beta header. Only if 9a fails.
+- Free claude.ai plans have no scheduled tasks; they keep `/inbox` by hand.
+
+**Sub-items:**
+- **9a. Spike (owner run, under half a day, after O2 and O4).** Create one daily Cowork scheduled task on the owner's
+  claude.ai with the OpenCMO connector and the prompt from 9c. Let it run on two mornings. Record in this plan:
+  - does the run see our tools;
+  - does the OAuth token refresh without the user (Supabase OAuth access tokens are short-lived; the run is
+    unattended);
+  - did it submit, and did a card land in Approvals;
+  - how long the run took and how much of the Pro usage it used.
+
+  If the connector does not load or the token does not refresh, switch 9b to routines and note why here.
+- **9b. Set-up card in the app.** "Draft every morning in Claude" in the "Continue in Claude" card and on the CMO
+  workspace:
+  - numbered steps: add the connector, open Cowork → Scheduled, new task, daily;
+  - the prompt with a Copy button;
+  - a suggested time in the user's time zone that falls after the 00:05 UTC cron.
+
+  Copy describes software ("Claude drafts, you approve and publish"), no model names as features.
+- **9c. Unattended mode for the CMO tools.** A scheduled run has nobody to answer:
+  - a `/daily` MCP prompt and a matching section in `plugins/opencmo-claude/skills/opencmo/SKILL.md`: work every open
+    inbox item until `list_inbox` is empty; never ask the user; never confirm a price; skip and report an item it
+    cannot finish;
+  - the server cannot tell an unattended run from a live one, so no server-side mode: the existing two-step price →
+    confirm already spends nothing without a confirm, and the prompt forbids confirming. Submitting (`submit_*`)
+    stays free.
+- **9d. Tell the user.** The Approvals count shows in the app's nav. Email is out of scope: there is no mail provider
+  in the app yet; note it as a follow-up.
+- **Check:**
+  - `server.check.ts` case for the `/daily` prompt (registered, says "never ask", "never confirm a price").
+  - 7 days in a row on production: every day with an X item due has a card in Approvals before 9:00 local, 0 server
+    credits spent, nothing posted. Results in `docs/evals/results/`.
+
 ## Owner tasks (not code)
 
 - **O1** Top up about 5 $ of Anthropic credit on the existing account. No new key and no secret changes: Vercel,
@@ -266,6 +325,7 @@ other items keep theirs.
   every link job fails at probe. Without the secret, yt-dlp goes out through the built-in guard proxy
   (`capture/guard.py:244`, no setup) from Modal's IPs, which YouTube may block. `deploy_env.py` does not require
   `OPENCMO_PROXY`.
+- **O6** Run the item 9a spike on your own claude.ai (paid plan, Cowork) after O2 and O4, then the 7-day check.
 
 ## Not doing
 
@@ -273,3 +333,5 @@ other items keep theirs.
 - Onboarding without a website (needs its own research first).
 - AI moment picking of any kind (decision 8); proxy work until IPRoyal has credit (item 2); the in-app Assistant or CMO chat on a server model; caption translation.
 - Phase ES generation items (`/video`, AI B-roll); they wait for budget.
+- Automatic posting of any kind, including scheduled publishing of approved posts through the X API (item 9 only
+  drafts; the user still presses post). Email notifications (no mail provider yet).
