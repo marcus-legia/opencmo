@@ -12,8 +12,8 @@ Facts below were checked on `main` at `83821c69`.
 2. **No API budget.** Anthropic and Gemini credit is gone, fal has about 1–2 $, ElevenLabs still has credit, Modal
    runs. Nothing in this plan may add a server-side Anthropic, Gemini or fal call. Thinking goes over MCP: the
    user's own Claude does it (`brain: 'claude'`, the inbox, `preview_explainer`).
-3. **About 5 $ of Anthropic credit goes to moderation only.** Prompt moderation is a product rule and a payment
-   provider requirement; it stays, on a key nothing else can spend.
+3. **About 5 $ of Anthropic credit tops up the existing shared key** (`ANTHROPIC_API_KEY`); no separate
+   moderation key. Prompt moderation is a product rule and a payment provider requirement, so it stays.
 4. **Clipping must let the user pick segments by hand.** The picker moved from its own page into the small editor
    panel on 2026-10-04 and lost segment picking. AI picking stays optional.
 5. **Downloads must be cheap.** The IPRoyal proxy bill feels too high; measure first, then cut bytes.
@@ -75,13 +75,15 @@ waits for budget. This plan is the zero-API work that makes the sold product usa
 
 **Repurpose today.**
 - Voiceover: Generate → Voiceover tab, a manual path that does not need the Assistant. It runs `moderateText`
-  (`lib/generate/create.ts:128`), so it needs the moderation key.
+  (`lib/generate/create.ts:128`), so it needs credit on `ANTHROPIC_API_KEY`.
 - Captions: Inspector → Generate captions (Scribe), manual. Translation needs an LLM.
 - Explainer: Assistant or MCP only.
 
 **Moderation shares the general Anthropic key.** It reads `ANTHROPIC_API_KEY` in
 `apps/web/lib/generate/moderation.ts:36` and `packages/engine/opencmo/ai/moderation.py:129`. The in-app Assistant,
-every CMO agent and `select.py` read the same key, so 5 $ would not stay with moderation.
+every CMO agent and `select.py` read the same key. The owner keeps one shared key (decision 3), so this plan keeps
+the other readers from spending it by default: the CMO thinks over MCP (item 4) and AI moment picking only runs when
+the user asks (item 1). The in-app Assistant still spends it when used.
 
 **CMO brain.**
 - `lib/cmo/brain.ts:42` ignores `OPENCMO_BRAIN=claude` in production. A key with no credit still counts as up until
@@ -138,16 +140,10 @@ A dedicated picker view, not the panel.
   "blocked" vs "interrupted" to messages that say what to try.
   - **Check:** a pytest case where the first probe fails with a retryable error and the second succeeds.
 
-### 3. A moderation-only key — Session B
+### 3. (Dropped) A moderation-only key
 
-- Read `OPENCMO_MODERATION_ANTHROPIC_KEY` first and fall back to `ANTHROPIC_API_KEY`, in both
-  `lib/generate/moderation.ts` and `opencmo/ai/moderation.py`, including `moderationReady` / `ready()`.
-- Add the key to `opencmo/deploy_env.py`:
-  - the Shared rules across Vercel, `opencmo` and `opencmo-mcp`;
-  - `MCP_REQUIRED`, in place of `ANTHROPIC_API_KEY`;
-  - the secret docs in `mcp_app.py` and `modal_app.py`.
-- **Check:** `moderation.check.ts` and `test_ai_moderation.py` cases where only the dedicated key is set and
-  moderation runs on it. `pytest tests/test_check_deploy_env.py` passes with the new rules.
+Dropped by the owner on 2026-10-19: moderation keeps using the shared `ANTHROPIC_API_KEY`. The number is kept so the
+other items keep theirs.
 
 ### 4. AI CMO over MCP in production — Session C
 
@@ -198,8 +194,8 @@ A dedicated picker view, not the panel.
 
 ## Owner tasks (not code)
 
-- **O1** Top up about 5 $ of Anthropic credit on a **new** key. Set it as `OPENCMO_MODERATION_ANTHROPIC_KEY` on
-  Vercel and in the Modal secrets `opencmo` and `opencmo-mcp`, after item 3 ships.
+- **O1** Top up about 5 $ of Anthropic credit on the existing account. No new key and no secret changes: Vercel,
+  `opencmo` and `opencmo-mcp` already hold `ANTHROPIC_API_KEY`.
 - **O2** Set `OPENCMO_BRAIN=claude` on Vercel after item 4 ships.
 - **O3** Run `cd packages/engine && .venv312/bin/modal run check_deploy_env.py` after O1 and O2. It must print
   `Deploy env OK.`
@@ -207,7 +203,7 @@ A dedicated picker view, not the panel.
   - `supabase db push` for C's migrations;
   - Vercel through the merge;
   - `modal deploy modal_app.py` for B's engine changes;
-  - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for items 3 and 5.
+  - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for item 5.
 
 ## Not doing
 

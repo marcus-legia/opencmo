@@ -4,7 +4,7 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
 
 - **Branch:** `plan/product/2026-10-19-clipping-repurpose-mcp`. Every session works on it and the draft PR is shared.
 - **Session A — Clip picker (web):** item 1.
-- **Session B — Downloads, moderation key, MCP clips:** items 2, 3 and 5.
+- **Session B — Downloads and MCP clips:** items 2 and 5. (Item 3 was dropped.)
 - **Session C — AI CMO over MCP, Beta badges, MCP checklist:** items 4, 6 and 7.
 
 ## Rules for all sessions
@@ -30,8 +30,8 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
    - Comments explain why.
    - Pipeline budgets: peak RAM < 2 GB, 45-minute video → 5 clips in < 3 minutes. B must measure when the yt-dlp
      path changes.
-6. **No new server-side Anthropic, Gemini or fal calls.** The only paid model call this plan touches is moderation
-   (item 3).
+6. **No new server-side Anthropic, Gemini or fal calls.** Moderation keeps using the shared `ANTHROPIC_API_KEY`
+   as it does today.
 7. **Numbering, so files don't collide:**
 
    | Session | Migration timestamps | pgTAP files |
@@ -55,12 +55,6 @@ Land these first; others code against them, and they change only through a "Requ
 /app/editor?panel=clips&source=<url-encoded source>&segments=<start>-<end>,<start>-<end>
 //   seconds as decimals, at most 10 segments, each 1–180 s, no overlap (same rules as
 //   apps/web/lib/clipping/create.ts segmentProblem). Invalid or missing segments: open the picker empty.
-```
-
-```text
-// B3 — moderation key (B owns)
-OPENCMO_MODERATION_ANTHROPIC_KEY   read first by apps/web/lib/generate/moderation.ts and
-                                   packages/engine/opencmo/ai/moderation.py; falls back to ANTHROPIC_API_KEY
 ```
 
 ```text
@@ -100,15 +94,13 @@ Checklist:
   `/explain` in Claude over MCP).
   - **Accept:** e2e clicks Open and lands in the edit; one full-size frame looked at.
 
-## Session B — Downloads, moderation key, MCP clips
+## Session B — Downloads and MCP clips
 
 **Owns:**
 
 - `packages/engine/opencmo/steps/download.py`, `packages/engine/opencmo/pipeline.py`,
   `packages/engine/opencmo/worker/errors.py`
 - the `Retries` arguments and secret docs in `packages/engine/modal_app.py`; the secret docs in `mcp_app.py`
-- `packages/engine/opencmo/ai/moderation.py`, `apps/web/lib/generate/moderation.ts` and their tests
-- `packages/engine/opencmo/deploy_env.py`, `packages/engine/tests/test_check_deploy_env.py`
 - new engine tests for downloads
 - `packages/mcp-server/src/groups/clips.ts` (new) and its registration line in `groups/index.ts`, plus its check
 
@@ -119,10 +111,6 @@ Checklist:
 - [ ] **B2 — Cut bytes.** Extract once, skip subtitles when there are none, cap the last format fallback, retry only the
   failed section, no whole-job rerun once sections are stored.
   - **Accept:** failing-first pytest cases; after-numbers on the same jobs; `/usr/bin/time -v` within budget.
-- [ ] **B3 — Moderation key.** `OPENCMO_MODERATION_ANTHROPIC_KEY` first, `ANTHROPIC_API_KEY` second, web and engine;
-  `deploy_env.py` rules and secret docs.
-  - **Accept:** dedicated-key cases in `moderation.check.ts` and `test_ai_moderation.py`; `test_check_deploy_env.py`
-    green.
 - [ ] **B4 — Probe and subtitle retries.** Fresh proxy session on retry; clearer blocked vs interrupted messages.
   - **Accept:** pytest where the first probe fails and the second succeeds.
 - [ ] **B5 — `make_clips` MCP tool.** No job; validates with A1's `segmentProblem`; returns the picker link.
