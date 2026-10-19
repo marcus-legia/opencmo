@@ -4,7 +4,8 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
 
 - **Branch:** `plan/product/2026-10-19-clipping-repurpose-mcp`. Every session works on it and the draft PR is shared.
 - **Session A — Clip picker (web), manual picking only:** item 1.
-- **Session B — Raw-clip fallback and MCP clips:** items 8 and 5. (Item 2 is deferred, item 3 was dropped.)
+- **Session B — Raw-clip fallback, MCP clips, look and listen over MCP:** items 8, 5 and 10. (Item 2 is deferred, item 3
+  was dropped.)
 - **Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts:** items 4, 6, 7 and 9.
 - **Order:** A pushes A1 first. Then A2–A5 and B5 run side by side. B6 and all of C can start at once.
 
@@ -104,13 +105,17 @@ Checklist:
   item 1).
   - **Accept:** a 422 in the e2e, a pgTAP case and a worker pytest, each failing on today's code first.
 
-## Session B — Raw-clip fallback and MCP clips
+## Session B — Raw-clip fallback, MCP clips, look and listen over MCP
 
 **Owns:**
 
 - `packages/engine/opencmo/pipeline.py` and new engine tests for it
 - `apps/web/lib/mcp/` (the `make_clips` tool body, new file)
 - `packages/mcp-server/src/groups/clips.ts` (new) and its registration line in `groups/index.ts`, plus its check
+- item 10: `packages/mcp-server/src/groups/look.ts` (new) and its registration line, the `look` function in
+  `packages/engine/modal_app.py` (new block only), a new frame entry in `packages/clip-export/src/` and its test, the
+  opencmo server instructions in `packages/mcp-server/src/server.ts`. Guide text in `apps/web/lib/agent/guides.ts` is
+  C's: ask in Requests.
 
 Checklist:
 
@@ -122,6 +127,13 @@ Checklist:
     run in claude.ai.
 - [ ] **B6 — Raw clips when transcription fails.** Plan item 8. Start here; it depends on no one.
   - **Accept:** the two failing-first pytest cases of item 8; one full-size frame looked at; budgets hold.
+- [ ] **B7 — `capture_frame` over MCP.** Plan item 10a plus the `look` Modal function. After B6; depends on no one.
+  - **Accept:** `server.check.ts` cases; the frame-vs-export match test; one contact sheet looked at; peak RAM measured.
+- [ ] **B8 — `inspect_color`, `media_grab`, `media_waveform`.** Plan items 10b–10d on the same function.
+  - **Accept:** `server.check.ts` cases per tool; a waveform case on a fixture with a known 2 s silence.
+- [ ] **B9 — Versions, then `save_frame`.** Plan items 10f and 10e.
+  - **Accept:** a restore round trip in `server.check.ts` (edit → list → restore → document equals the old one); pgTAP
+    if a new RPC is needed (ask in Requests for numbers).
 
 ## Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts
 

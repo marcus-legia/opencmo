@@ -230,7 +230,7 @@ other items keep theirs.
   §7 and the Opus notes in the internal repo):
   - no write before the user answers a question;
   - at most one question per turn;
-  - call `check` before saying done;
+  - call `check` and `capture_frame` (item 10) before saying done;
   - never confirm a price alone;
   - no regeneration on timeout;
   - `read_guide` before a new kind of edit.
@@ -308,6 +308,59 @@ Today the inbox only moves when the user opens Claude and types `/inbox`. The go
   - 7 days in a row on production: every day with an X item due has a card in Approvals before 9:00 local, 0 server
     credits spent, nothing posted. Results in `docs/evals/results/`.
 
+### 10. Let Claude look and listen over MCP — Session B
+
+**Why:** over MCP, Claude edits blind. The in-app Assistant has six tools that run in the user's browser
+(`BROWSER_TOOLS` in `apps/web/lib/agent/tools.ts:312`, `{ browser: true }`): `capture`, `media_waveform`,
+`preview_3d`, `save_frame`, `media_grab`, `inspect_color`. `packages/mcp-server/src/groups/studio.ts:258` drops every
+browser tool, so over MCP Claude only has the transcript, `check` and `preview_explainer` stills. It cannot catch the
+silent failures `CLAUDE.md` "Verify by looking" warns about (half-cropped speaker, captions off-screen, overlaps).
+`clip-render` already draws a document in Node (`@napi-rs/canvas`) for `clip-export`, so the same frames can be
+rendered on the worker with no outside API.
+
+**Tools** (same names and inputs as the in-app ones where they exist, so guides and skills keep one vocabulary):
+- **10a. `capture_frame`** (in-app `capture`): render frames at clip-timeline seconds exactly as the export draws
+  them, as one contact sheet with a timecode per cell and the 0.25/0.5/0.75 guides, plus per frame the visible layers
+  top-first with id and 0–1 box. Up to 12 times per call. This is the one to build first.
+- **10b. `inspect_color`**: the same render, measured with `scopeStats` from `clip-render` (black/white point,
+  median luma, crushed and blown share, RGB averages, 16-bin histogram). Needed so `apply_color` over MCP is not
+  guesswork.
+- **10c. `media_grab`**: frames at given seconds of a library video or image, as a contact sheet, so Claude can
+  pick the part of a B-roll file that fits. ffmpeg only (`-ss` before `-i`, explicit format per budget rule 7).
+- **10d. `media_waveform`**: coarse dB levels and silent stretches of the clip's own video (source seconds, ready
+  for `remove_ranges`) or of a library file. ffmpeg `astats` / `silencedetect` on the audio stream of the signed URL,
+  streaming; never the whole file into memory.
+- **10e. `save_frame`**: one frame without captions or text saved to the library folder Frames, for
+  `generate_media` start/end images. Low priority while fal has no budget; build it after 10a–10d.
+- **10f. Versions:** `list_versions` and `restore_version` over the existing revisions
+  (`app/api/v1/editor/revisions/route.ts`, `checkpoint_editor_project`). MCP has no `undo`, so today a bad edit can
+  only be reverted by the user in Version history. Read the revisions RPCs first; add one only if no
+  ownership-checked restore exists.
+- Not now: `preview_3d` (GPU worker, 3D is outside this plan).
+
+**How:**
+- One Modal function on the existing worker image (it already runs `clip-export` and ffmpeg), for example
+  `look(payload)`: loads the clip document and media under the user's ownership (the same reads as
+  `render_document`), renders only the asked frames, returns JPEGs plus the layer boxes. No MP4 is encoded.
+- Tool bodies in a new MCP group `packages/mcp-server/src/groups/look.ts`; results come back as MCP image content
+  plus the same JSON text the in-app tool returns (Claude Code shows `structuredContent`, so repeat the text as
+  `message`, as B10 found).
+- Free for the user, but each call costs us Modal time: a per-user hourly cap in its own `rate_limit_hit` bucket
+  (`mcp_look`, 60/h to start), and a timeout below Modal's 150 s web cut. If a contact sheet cannot finish in time,
+  return `{ id, status }` and a poll, like exports.
+- Budgets: peak RAM < 2 GB per call, measured with `/usr/bin/time -v`. Decode only the frames asked (input
+  seeking), never the whole source.
+- Update the opencmo server instructions and the guides: they now say "there is no browser here"; replace that with
+  "call `capture_frame` after changing the frame, cutting, adding text or media, and before you finish".
+- **Check:**
+  - `server.check.ts` cases: each tool is registered with `clip_id`; `capture_frame` refuses more than 12 times and
+    times outside the clip; the cap returns an error result.
+  - A clip-export test that the frame from `look` and the same frame of an exported MP4 match (the parity script in
+    `editor-parity` or a pixel diff under a small threshold).
+  - Look at one contact sheet by eye, per "Verify by looking".
+  - The item 7 checklist run uses `capture_frame` before every "done", and records whether Claude caught a planted
+    problem (captions pushed off-screen in the fixture).
+
 ## Owner tasks (not code)
 
 - **O1** Top up about 5 $ of Anthropic credit on the existing account. No new key and no secret changes: Vercel,
@@ -320,7 +373,8 @@ Today the inbox only moves when the user opens Claude and types `/inbox`. The go
   - Vercel through the merge;
   - `supabase db push` also for A's `create_job` migration;
   - `modal deploy modal_app.py` for A's worker guard and B's raw-clip fallback (item 8);
-  - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for item 5.
+  - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for items 5 and 10;
+  - `modal deploy modal_app.py` also for item 10's `look` function.
 - **O5** Top up IPRoyal, **or** remove `OPENCMO_PROXY` from the worker's Modal secret. With an empty IPRoyal account
   every link job fails at probe. Without the secret, yt-dlp goes out through the built-in guard proxy
   (`capture/guard.py:244`, no setup) from Modal's IPs, which YouTube may block. `deploy_env.py` does not require
