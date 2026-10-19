@@ -31,7 +31,7 @@ Hai đường vào, cố ý:
      It also dispatches queued AI CMO runs to the web app (`_dispatch_cmo`).
   3. `cmo_schedule()` and `cleanup()` — daily crons that call the web app's cron routes.
      Modal is the only scheduler; `apps/web/vercel.json` has no crons.
-  4. `wake` — the MCP server (`mcp_app.py`, its own workspace) asks for an early `sweep()` with a
+  4. `wake` — the MCP server (`mcp_app.py`, its own app) asks for an early `sweep()` with a
      token that can do nothing else.
 
 Nhờ có (2), (1) được phép hỏng: web app coi lỗi gọi `submit` là chuyện nhỏ, job
