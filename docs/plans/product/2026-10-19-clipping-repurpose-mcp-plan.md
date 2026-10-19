@@ -12,8 +12,9 @@ Facts below were checked on `main` at `83821c69`.
 2. **No API budget.** Anthropic and Gemini credit is gone, fal has about 1–2 $, ElevenLabs still has credit, Modal
    runs. Nothing in this plan may add a server-side Anthropic, Gemini or fal call. Thinking goes over MCP: the
    user's own Claude does it (`brain: 'claude'`, the inbox, `preview_explainer`).
-3. **About 5 $ of Anthropic credit tops up the existing shared key** (`ANTHROPIC_API_KEY`); no separate
-   moderation key. Prompt moderation is a product rule and a payment provider requirement, so it stays.
+3. **Moderation moves to Groq** (owner, 2026-10-19, replacing the Anthropic top-up): `GROQ_API_KEY` is already in the
+   environments. Prompt moderation is a product rule and a payment provider requirement, so it stays; only the model
+   behind it changes (item 3). No Anthropic top-up.
 4. **Clipping must let the user pick segments by hand.** The picker moved from its own page into the small editor
    panel on 2026-10-04 and lost segment picking. AI picking is removed (decision 8).
 5. **Downloads must be cheap.** The IPRoyal proxy bill feels too high; measure first, then cut bytes.
@@ -91,13 +92,13 @@ network error. The sections are already cut, but the job fails. Rendering alread
 
 **Repurpose today.**
 - Voiceover: Generate → Voiceover tab, a manual path that does not need the Assistant. It runs `moderateText`
-  (`lib/generate/create.ts:128`), so it needs credit on `ANTHROPIC_API_KEY`.
+  (`lib/generate/create.ts:128`), so today it needs credit on `ANTHROPIC_API_KEY`; after item 3 it runs on Groq.
 - Captions: Inspector → Generate captions (Scribe), manual. Translation needs an LLM.
 - Explainer: Assistant or MCP only.
 
 **Moderation shares the general Anthropic key.** It reads `ANTHROPIC_API_KEY` in
 `apps/web/lib/generate/moderation.ts:36` and `packages/engine/opencmo/ai/moderation.py:129`. The in-app Assistant,
-every CMO agent and `select.py` read the same key. The owner keeps one shared key (decision 3), so this plan keeps
+every CMO agent and `select.py` read the same key. Moderation moves to Groq (decision 3, item 3), and this plan keeps
 the other readers from spending it by default: the CMO thinks over MCP (item 4) and AI moment picking only runs when
 the user asks (item 1). The in-app Assistant still spends it when used.
 
@@ -180,10 +181,38 @@ find out whether the URLs are IP-bound before 2b starts.
   "blocked" vs "interrupted" to messages that say what to try.
   - **Check:** a pytest case where the first probe fails with a retryable error and the second succeeds.
 
-### 3. (Dropped) A moderation-only key
+### 3. Moderation on Groq — Session C (do first)
 
-Dropped by the owner on 2026-10-19: moderation keeps using the shared `ANTHROPIC_API_KEY`. The number is kept so the
-other items keep theirs.
+Moderation is the only server-side model call left that the sold product needs: voiceover (`moderateText`), every
+Generate request and every generated image or video frame go through it. Today it reads `ANTHROPIC_API_KEY`, with
+Gemini as standby, and both have no credit, so every check fails closed ("Could not check this request").
+
+- **Web, prompt text** (`apps/web/lib/generate/moderation.ts`): Groq becomes the primary checker through its
+  OpenAI-compatible chat API (`https://api.groq.com/openai/v1/chat/completions`, `GROQ_API_KEY`), same `POLICY` /
+  `AUDIO_POLICY`, same `verdictSchema` through `response_format: { type: "json_schema", strict: true }`. Model from
+  `OPENCMO_MODERATION_GROQ_MODEL`.
+- **Worker, images and video frames** (`packages/engine/opencmo/ai/moderation.py`): fal's NSFW classifier stays as
+  the first check; the policy check (real people, logos) moves to a Groq vision model, the same frames as data URLs.
+  Model from `OPENCMO_MODERATION_GROQ_VISION_MODEL`.
+- **Pick the models from the live list, not from memory.** Groq's model list changes often. Before coding, list the
+  models with the key (`GET https://api.groq.com/openai/v1/models`) and check the structured-outputs docs: the text
+  model must support strict `json_schema` (candidates: `openai/gpt-oss-safeguard-20b`, made for policy moderation,
+  or `openai/gpt-oss-20b`); the vision model must accept images and at least JSON mode (validate with the pydantic
+  `_Verdict` either way). Write the chosen ids and the date into this item.
+- **Order:** Groq first; Anthropic and Gemini stay as standby only when their keys are set, with the existing rule:
+  a verdict is final and is never retried on another model; only an outage or an account error falls through.
+  If no checker can answer, refuse, as today.
+- `moderationReady()` (and `ready()` in Python) count Groq as a checker. `deploy_env.py` stops requiring
+  `ANTHROPIC_API_KEY` for moderation and requires `GROQ_API_KEY` on Vercel and the worker (the MCP and motion apps keep
+  what they need for their own reasons; read why each requires it before removing anything).
+- The policy text and the categories do not change.
+- **Check:**
+  - `moderation.check.ts` and the engine moderation pytest, with a fake Groq server: a clean prompt passes, a policy
+    prompt is blocked with its category, a Groq 401/429/5xx falls through to standby or refuses, a malformed answer
+    refuses. Each new case fails on today's code first.
+  - One real call per checker with the production key (a clean prompt and a blocked one), logged in this plan with
+    the latency.
+  - A voiceover from the Generate panel works end to end with no Anthropic credit.
 
 ### 4. AI CMO over MCP in production — Session C
 
@@ -363,8 +392,8 @@ rendered on the worker with no outside API.
 
 ## Owner tasks (not code)
 
-- **O1** Top up about 5 $ of Anthropic credit on the existing account. No new key and no secret changes: Vercel,
-  `opencmo` and `opencmo-mcp` already hold `ANTHROPIC_API_KEY`.
+- **O1** (Replaced by item 3: no Anthropic top-up.) Make sure `GROQ_API_KEY` is set on Vercel and in the worker's
+  Modal secret, and set the two `OPENCMO_MODERATION_GROQ_*` model ids that item 3 writes down.
 - **O2** Set `OPENCMO_BRAIN=claude` on Vercel after item 4 ships.
 - **O3** Run `cd packages/engine && .venv312/bin/modal run check_deploy_env.py` after O1 and O2. It must print
   `Deploy env OK.`
@@ -372,7 +401,8 @@ rendered on the worker with no outside API.
   - `supabase db push` for C's migrations;
   - Vercel through the merge;
   - `supabase db push` also for A's `create_job` migration;
-  - `modal deploy modal_app.py` for A's worker guard and B's raw-clip fallback (item 8);
+  - `modal deploy modal_app.py` for A's worker guard, B's raw-clip fallback (item 8) and the worker moderation on
+    Groq (item 3);
   - `npm run build --workspace @opencmo/mcp-server && modal deploy mcp_app.py` for items 5 and 10;
   - `modal deploy modal_app.py` also for item 10's `look` function.
 - **O5** Top up IPRoyal, **or** remove `OPENCMO_PROXY` from the worker's Modal secret. With an empty IPRoyal account

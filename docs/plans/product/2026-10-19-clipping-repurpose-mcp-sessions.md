@@ -4,9 +4,8 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
 
 - **Branch:** `plan/product/2026-10-19-clipping-repurpose-mcp`. Every session works on it and the draft PR is shared.
 - **Session A — Clip picker (web), manual picking only:** item 1.
-- **Session B — Raw-clip fallback, MCP clips, look and listen over MCP:** items 8, 5 and 10. (Item 2 is deferred, item 3
-  was dropped.)
-- **Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts:** items 4, 6, 7 and 9.
+- **Session B — Raw-clip fallback, MCP clips, look and listen over MCP:** items 8, 5 and 10. (Item 2 is deferred.)
+- **Session C — Moderation on Groq, AI CMO over MCP, Beta badges, MCP checklist, daily drafts:** items 3, 4, 6, 7 and 9.
 - **Order:** A pushes A1 first. Then A2–A5 and B5 run side by side. B6 and all of C can start at once.
 
 ## Rules for all sessions
@@ -32,8 +31,8 @@ Read [the plan](2026-10-19-clipping-repurpose-mcp-plan.md) first, all of it.
    - Comments explain why.
    - Pipeline budgets: peak RAM < 2 GB, 45-minute video → 5 clips in < 3 minutes. Measure when the pipeline
      changes.
-6. **No new server-side Anthropic, Gemini or fal calls.** Moderation keeps using the shared `ANTHROPIC_API_KEY`
-   as it does today. No path may run AI moment picking (plan decision 8).
+6. **No new server-side Anthropic, Gemini or fal calls.** Moderation moves to Groq (plan item 3, Session C); no
+   other path may call Groq. No path may run AI moment picking (plan decision 8).
 7. **Test clipping on uploads.** IPRoyal has no credit, so link jobs fail on Modal (plan decision 9).
 8. **Numbering, so files don't collide:**
 
@@ -135,10 +134,12 @@ Checklist:
   - **Accept:** a restore round trip in `server.check.ts` (edit → list → restore → document equals the old one); pgTAP
     if a new RPC is needed (ask in Requests for numbers).
 
-## Session C — AI CMO over MCP, Beta badges, MCP checklist, daily drafts
+## Session C — Moderation on Groq, AI CMO over MCP, Beta badges, MCP checklist, daily drafts
 
 **Owns:**
 
+- `apps/web/lib/generate/moderation.ts` and its check, `packages/engine/opencmo/ai/moderation.py` and its pytest,
+  `packages/engine/opencmo/deploy_env.py` (item 3)
 - `apps/web/lib/cmo/**`, `apps/web/app/api/cron/cmo/**`, `apps/web/app/api/v1/cmo/**`
 - `apps/web/components/cmo/**`
 - C's migrations and pgTAP files (numbering above)
@@ -151,6 +152,9 @@ Checklist:
 
 Checklist:
 
+- [ ] **C0 — Moderation on Groq.** Plan item 3. Start here: voiceover and the C4 run need it.
+  - **Accept:** the failing-first cases in `moderation.check.ts` and the engine pytest; the chosen model ids and one
+    real call per checker written into the plan; a voiceover end to end with no Anthropic credit.
 - [ ] **C1 — Brain flag in production.** `OPENCMO_BRAIN=claude` honoured everywhere; skip `classify_edits`;
   `create_video_pack` passes the brain; W0 offers "Continue in Claude".
   - **Accept:** `brain.check` case for production; pgTAP for the video-pack migration. The production run of
