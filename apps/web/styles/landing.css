@@ -204,8 +204,6 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 @keyframes lv-blink { 0%, 93% { transform: none; } 94%, 97% { transform: scaleY(.15); } }
 .lv-tree-name { display: flex; align-items: center; justify-content: center; gap: 8px; font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
 .lv-tree-goal { font: 500 clamp(22px, 2vw, 28px)/1.1 var(--sans); letter-spacing: -.035em; color: var(--ink); text-wrap: balance; }
-.lv-tree-result { font: 400 15px/1.55 var(--sans); color: var(--ink2); text-wrap: pretty; }
-.lv-tree .lv-chips { justify-content: center; }
 @media (max-width: 760px) {
   .lv-org:has(.lv-tree) { align-items: flex-start; }
   .lv-org:has(.lv-tree) > .lv-wire.is-trunk { margin-left: 20px; }
@@ -216,7 +214,7 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
   .lv-tree li:last-child::before { bottom: auto; height: 50px; }
   .lv-tree li::after { content: ""; position: absolute; top: 46px; left: 24px; width: 32px; height: 4px; background: repeating-linear-gradient(90deg, var(--brand) 0 4px, transparent 4px 8px); }
   .lv-tree .lv-wire.is-v { display: none; }
-  .lv-tree-name, .lv-tree .lv-chips { justify-content: flex-start; }
+  .lv-tree-name { justify-content: flex-start; }
   .lv-bot { width: 88px; }
 }
 

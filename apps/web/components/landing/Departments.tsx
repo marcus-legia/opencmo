@@ -55,7 +55,7 @@ export function Channels() {
 
 /**
  * The org chart: the AI CMO at the top branches into the three departments, each one a
- * pixel robot with the result it answers for. `#departments` is linked from the
+ * pixel robot with its goal. `#departments` is linked from the
  * marketing nav, so the id stays.
  */
 export function Departments() {
@@ -80,10 +80,6 @@ export function Departments() {
                 <PixelBot delay={i * 0.4} />
                 <p className="lv-tree-name"><span className="lv-numeral">{d.numeral}</span>{d.name}</p>
                 <h3 className="lv-tree-goal">{d.goal}</h3>
-                <p className="lv-tree-result">{d.result}</p>
-                <span className="lv-chips">
-                  {d.channels.map((c) => <SocialTile key={c} k={c} size={24} radius={4} />)}
-                </span>
               </div>
             </li>
           ))}
