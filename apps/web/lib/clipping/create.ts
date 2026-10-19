@@ -17,12 +17,9 @@ import { sourceProblem } from "@/lib/api/source";
 import { wakeWorker } from "@/lib/modal";
 import { ASPECTS, JOB_LAYOUTS } from "@/lib/settings-schema";
 
-/**
- * Trần độ dài một đoạn tự chọn. Trùng `MAX_SEGMENT_SECONDS` của worker và luật
- * trong `create_job()` — ba chốt cùng một số, và SQL là chốt thật.
- */
-const MAX_SEGMENT_SECONDS = 180;
-const MIN_SEGMENT_SECONDS = 1;
+import { MAX_SEGMENTS, segmentProblem } from "./segments";
+
+export { segmentProblem } from "./segments";
 
 const segment = z.object({
   start: z.number().min(0).finite(),
@@ -35,7 +32,7 @@ export const createClipJobInput = z.object({
   // Tên public ổn định dùng bởi form web và worker.
   clip_length: z.enum(["auto", "short", "medium", "long"]).default("auto"),
   /** Các đoạn người dùng kéo trên thanh bar. Bỏ trống = để AI chọn khoảnh khắc. */
-  segments: z.array(segment).max(10).optional(),
+  segments: z.array(segment).max(MAX_SEGMENTS).optional(),
   /** "full" tải nguyên video, không cắt và không burn phụ đề. */
   mode: z.enum(["clip", "full"]).default("clip"),
   // Danh sách lấy từ `settings-schema`: revision và job phải nói cùng một bộ giá trị.
@@ -47,19 +44,6 @@ export const createClipJobInput = z.object({
   ownership_confirmed: z.boolean().default(false),
 });
 export type CreateClipJobInput = z.infer<typeof createClipJobInput>;
-
-function segmentProblem(segments: { start: number; end: number }[]): string | null {
-  const sorted = [...segments].sort((a, b) => a.start - b.start);
-  let previousEnd = -1;
-  for (const { start, end } of sorted) {
-    const length = end - start;
-    if (length < MIN_SEGMENT_SECONDS) return "Each moment must be at least 1 second long.";
-    if (length > MAX_SEGMENT_SECONDS) return "Each moment must be 3 minutes or shorter.";
-    if (start < previousEnd) return "Your moments overlap. Move them apart and try again.";
-    previousEnd = end;
-  }
-  return null;
-}
 
 // Không rate limit ở route: `create_job()` tự gọi `rate_limit_hit('jobs', 10, 3600)` —
 // đếm hai chỗ là mười job thật thành năm.

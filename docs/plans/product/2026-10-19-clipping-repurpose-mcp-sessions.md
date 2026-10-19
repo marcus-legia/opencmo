@@ -89,9 +89,11 @@ segment validator for both to use; until then B calls the same rules through a s
 
 Checklist:
 
-- [ ] **A1 — Contract.** `lib/clipping/segments.ts`: `parseSegments(param)` and `segmentProblem` moved here from
+- [x] **A1 — Contract.** `lib/clipping/segments.ts`: `parseSegments(param)` and `segmentProblem` moved here from
   `create.ts` (re-exported there). Push this first.
   - **Accept:** a `segments.check.ts` with valid, overlapping, too long, more than 10, and garbage input.
+  - *Done:* `parseSegments`, `formatSegments`, `pickerPath` (B: build the `make_clips` link with it) and
+    `segmentProblem` (empty list → "Pick at least one moment to clip."); `segments.check.ts` runs in `check:contracts`.
 - [ ] **A2 — Picker view.** Full-size player with timeline, for links and uploads; options; prefill from the URL.
   - **Accept:** typecheck; manual look at 1440 px and 390 px widths, light and dark.
 - [ ] **A3 — Submit with segments.** Picked moments go out as `segments`; Make clips is disabled with none. No clip
