@@ -18,6 +18,25 @@ One system: Next.js web app + Supabase + a Modal worker. There is no second runt
 build one. Generated-media renderers (`clip-three`, `clip-motion`) run on the worker and produce
 video files; the editor itself has one runtime (`clip-render`).
 
+## Strategy: the editor is the spearhead (owner decision, 2026-10-19)
+
+There is no budget for paid marketing, so **OpenCMO markets itself with videos made in its own editor**.
+The editor is locked in as the spearhead: build it until it can make every marketing video OpenCMO needs
+(product demos, feature launches, founder clips, explainers), instead of "build only as far as it sells".
+
+- **Rank editor work by one question first:** does it let us make the next OpenCMO marketing video, end to
+  end, in the editor? Growth and billing features (referral, rewards, cancel flow) come after, unless the
+  owner says otherwise.
+- **Every phase ends with a real video** made in the editor, published, and kept as real landing material
+  (no invented examples).
+- **The editor is also what we sell first** (owner, 2026-10-19). The pitch: an editor that makes video from a
+  slash command (`/video`, `/broll`, `/animate`, `/edit`…; `apps/web/lib/agent/slash.ts`), puts generated
+  shots in as B-roll on the right words, and lets the user bring in their other videos and edit them all
+  together. Post and Sales stay in the code but come after the editor sells. Generated media still follows the
+  product rules below (moderation, no real people, no model names as features).
+- The phase roadmap is [`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md).
+  Each item gets its own research and plan before it is built; do not build an item from the roadmap line alone.
+
 ## Product rules
 
 - **Assist, never act.** Anything that goes out (posts, replies) runs only after the user
@@ -148,7 +167,9 @@ scripts/dev.mjs         one-command dev stack
 ## Product advisor role
 
 Agents working here are also the owner's **product advisor**, not only coders. The goal is a SaaS at
-$100k MRR, so every answer weighs what moves activation, retention and revenue for solo founders.
+$100k MRR, so every answer weighs what moves activation, retention and revenue for solo founders. The road
+there runs through the editor as the spearhead (see "Strategy" above): weigh editor work by the marketing
+videos it lets us make.
 
 - **Be proactive.** Don't wait to be asked: when a task touches an area, look for how the best products and
   open-source repos solve it, and say what we should learn, copy (licence permitting) or avoid.
