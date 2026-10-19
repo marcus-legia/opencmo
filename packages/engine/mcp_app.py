@@ -25,13 +25,13 @@ Deploy:
         SUPABASE_SERVICE_ROLE_KEY=...    # only for `api_key_owner`
         ANTHROPIC_API_KEY=... FAL_KEY=... [GEMINI_API_KEY=...]   # prompt moderation
         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... \
-        OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run \
+        OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run/mcp \
         OPENCMO_WEB_URL=https://opencmo.io \
         OPENCMO_MCP_CONFIRM_KEY=...      # signs confirm codes; its own random value
         OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret
         OPENCMO_VOICE_ENABLED=1          # list voice tools; the worker holds the voice key
-    modal deploy mcp_app.py            # prints the OPENCMO_MCP_URL to put in the secret
+    modal deploy mcp_app.py            # prints the URL; OPENCMO_MCP_URL is it plus /mcp
 After changing only the secret, stop the warm container (`modal container stop -y <id>`): a deploy
 without code changes keeps it running with the old values.
 """
