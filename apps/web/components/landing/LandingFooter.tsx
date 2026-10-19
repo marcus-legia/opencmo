@@ -7,27 +7,23 @@ import { SUPPORT_EMAIL } from "@/lib/site";
 
 import { FOOTER_COLUMNS } from "./data";
 import { LogoMark, SocialTile } from "./Glyphs";
-import { startGalaxy } from "./galaxy";
 import { gsap, onAnchorClick, prefersReducedMotion } from "./motion";
 
 /**
- * Footer là bức tranh dải ngân hà: CTA cuối trang (ô website) nằm ngay trên lõi thiên
- * hà, khung link kính mờ để ánh sáng xuyên qua, chữ "OpenCMO" khổng lồ ở đáy.
+ * Footer: the last website form on a brand-colour block, the link grid on paper below,
+ * and a giant "OpenCMO" wordmark at the bottom.
  *
- * Bốn link pháp lý + email hỗ trợ là điều kiện duyệt của Polar/Creem (luật 6): luôn
- * thấy được khi chưa đăng nhập.
+ * The four legal links + support email are a Polar/Creem review requirement (rule 6):
+ * always visible while logged out.
  */
-export function GalaxyFooter({ action }: { action: string }) {
+export function LandingFooter({ action }: { action: string }) {
   const footRef = useRef<HTMLElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const foot = footRef.current!;
-    const stop = startGalaxy(canvasRef.current!, foot, ctaRef.current, prefersReducedMotion());
-    const intro = gsap.from(ctaRef.current!.children, { y: 40, opacity: 0, duration: 1.4, ease: "expo.out", stagger: 0.12, scrollTrigger: { trigger: foot, start: "top 70%" } });
+    if (prefersReducedMotion()) return;
+    const intro = gsap.from(ctaRef.current!.children, { y: 40, opacity: 0, duration: 1.4, ease: "expo.out", stagger: 0.12, scrollTrigger: { trigger: footRef.current!, start: "top 70%" } });
     return () => {
-      stop();
       intro.scrollTrigger?.kill();
       intro.kill();
     };
@@ -35,8 +31,6 @@ export function GalaxyFooter({ action }: { action: string }) {
 
   return (
     <footer ref={footRef} className="lv-footer">
-      <canvas ref={canvasRef} aria-hidden="true" className="lv-footer-canvas" />
-      <div aria-hidden="true" className="lv-footer-shade" />
       <div id="start" ref={ctaRef} className="lv-final">
         <span className="lv-mono-eyebrow">Your customers are already talking</span>
         <h2>Put your marketing team to work tonight.</h2>

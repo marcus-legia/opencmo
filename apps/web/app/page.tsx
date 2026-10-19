@@ -5,8 +5,8 @@ import { faqs } from "@/components/landing/data";
 import { DemoSection } from "@/components/landing/DemoSection";
 import { Departments, Goals } from "@/components/landing/Departments";
 import { FaqSection } from "@/components/landing/FaqSection";
-import { GalaxyFooter } from "@/components/landing/GalaxyFooter";
 import { Hero } from "@/components/landing/Hero";
+import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingMotion } from "@/components/landing/LandingMotion";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { PricingSection } from "@/components/landing/PricingSection";
@@ -93,7 +93,7 @@ export default async function LandingPage() {
         <PricingSection prices={prices} action={action} />
         <FaqSection items={faq} />
       </main>
-      <GalaxyFooter action={action} />
+      <LandingFooter action={action} />
     </div>
   );
 }
