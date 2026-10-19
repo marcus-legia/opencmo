@@ -1,7 +1,8 @@
 /**
  * The landing background: a 12px lattice where slow value noise grows "islands" of
- * squares, dots and rings in the brand colour. Islands are kept to the left and right
- * edges so body copy always sits on plain paper. A click on empty page sends a ripple
+ * squares, dots and rings in the brand colour. In the side margins they are drawn at
+ * full strength; across the content column they spread on at a faint tint, so the whole
+ * page moves while body copy stays readable. A click on empty page sends a ripple
  * through the lattice.
  *
  * Drawn on a canvas at runtime rather than shipped as an image: ~0 bytes to download,
@@ -12,6 +13,8 @@ const CELL = 12;
 const FRAME_MS = 1000 / 30;
 const RIPPLE_LIFE = 2.6;
 const RIPPLE_SPEED = 260;
+// Opacity of the islands that reach under the content column.
+const TINT = 0.16;
 
 // Deterministic per-cell hash, so a cell keeps its decoration while the islands drift.
 function hash(x: number, y: number): number {
@@ -64,26 +67,34 @@ export function startPixelField(canvas: HTMLCanvasElement, reduced: boolean): ()
     ctx!.strokeStyle = brand;
     ctx!.lineWidth = 1.2;
     const cols = Math.ceil(width / CELL), rows = Math.ceil(height / CELL);
-    // Islands live only in the side margin: outside the 1240px content column, or inside
-    // the page gutter (`--gutter` in landing.css) when the screen is narrower than that.
+    // Full-strength islands live in the side margin: outside the 1240px content column,
+    // or inside the page gutter (`--gutter` in landing.css) on narrower screens.
     const gutter = Math.min(56, Math.max(20, width * 0.04));
     const zone = Math.max((width - 1240) / 2, gutter) - 10;
+    let alpha = 1;
+    const setAlpha = (a: number) => {
+      if (a !== alpha) ctx!.globalAlpha = alpha = a;
+    };
     for (let gx = 0; gx < cols; gx++) {
       const x = gx * CELL + CELL / 2;
-      // A margin under ~2 cells only reads as a stray line; phones keep just the ripples.
+      // A margin under ~2 cells only reads as a stray line; phones get the tint alone.
       const pull = zone < 24 ? 0 : 1 - Math.min(x, width - x) / zone;
       for (let gy = 0; gy < rows; gy++) {
         const px = gx * CELL, py = gy * CELL, cx = px + CELL / 2, cy = py + CELL / 2;
         if (ripples.length && onRipple(cx, cy)) {
+          setAlpha(1);
           ctx!.fillRect(px + 2, py + 2, CELL - 4, CELL - 4);
           continue;
         }
-        if (pull <= 0) continue;
-        const n = noise(gx * 0.09 + drift, gy * 0.09 - drift * 0.4) + pull * 0.35;
-        if (n < 0.76) continue;
+        const inMargin = pull > 0;
+        const n = noise(gx * 0.09 + drift, gy * 0.09 - drift * 0.4) + (inMargin ? pull * 0.35 : 0);
+        if (n < (inMargin ? 0.76 : 0.74)) continue;
+        setAlpha(inMargin ? 1 : TINT);
         const pick = hash(gx, gy);
         if (n > 0.94) {
-          ctx!.fillRect(px, py, CELL + 0.5, CELL + 0.5);
+          // The half-pixel overlap hides seams at full strength but shows them as a grid when tinted.
+          const size = inMargin ? CELL + 0.5 : CELL;
+          ctx!.fillRect(px, py, size, size);
           if (pick < 0.1) {
             ctx!.fillStyle = paper;
             ctx!.beginPath();
@@ -106,6 +117,7 @@ export function startPixelField(canvas: HTMLCanvasElement, reduced: boolean): ()
         }
       }
     }
+    setAlpha(1);
   }
 
   const tick = (t: number) => {

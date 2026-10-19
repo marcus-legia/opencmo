@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 
-import { ControlSection } from "@/components/landing/ControlSection";
 import { faqs } from "@/components/landing/data";
 import { DemoSection } from "@/components/landing/DemoSection";
-import { Departments, Goals } from "@/components/landing/Departments";
+import { Channels, Departments } from "@/components/landing/Departments";
 import { FaqSection } from "@/components/landing/FaqSection";
 import { Hero } from "@/components/landing/Hero";
 import { LandingFooter } from "@/components/landing/LandingFooter";
@@ -85,11 +84,10 @@ export default async function LandingPage() {
       <JsonLd data={landingLd(faq)} />
       <LandingNav user={!!user} />
       <main>
-        <Hero action={action} fineprint={`$${prices.annual} a month, billed annually · all three departments · cancel anytime`} />
-        <Goals />
+        <Hero action={action} />
+        <Channels />
         <Departments />
         <DemoSection />
-        <ControlSection />
         <PricingSection prices={prices} action={action} />
         <FaqSection items={faq} />
       </main>

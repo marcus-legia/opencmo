@@ -6,16 +6,24 @@ import { INCLUDED, savePercent, USUAL_STACK, type Prices } from "./data";
 import { LineIcon, LogoMark } from "./Glyphs";
 
 const STACK_TOTAL = USUAL_STACK.reduce((n, r) => n + r.price, 0);
+const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 /**
- * Một giá, mặc định trả theo năm. Bên trái là "cách làm thường" (ước tính, có ghi chú
- * ngay dưới), bên phải là OpenCMO. Cố ý KHÔNG có animation: phần này phải đọc rõ ngay.
+ * One price, billed annually by default. A two-bar chart puts the monthly cost of the
+ * usual stack next to OpenCMO's, then the breakdown (estimates, footnoted below) and
+ * the OpenCMO offer. Deliberately NOT animated: this part has to read at a glance.
+ *
+ * Every mention of the usual-stack total is labelled "Without OpenCMO" and struck
+ * through, and on phones the offer comes before the breakdown, so $1,060 can't be
+ * mistaken for our price.
  */
 export function PricingSection({ prices, action }: { prices: Prices; action: string }) {
   const [annual, setAnnual] = useState(true);
   const price = annual ? prices.annual : prices.monthly;
   const save = savePercent(prices);
   const lessThanUsual = Math.round((1 - price / STACK_TOTAL) * 100);
+  // A bar narrower than ~2% disappears next to its label; the number beside it stays exact.
+  const ourWidth = `${Math.max(2, (price / STACK_TOTAL) * 100).toFixed(1)}%`;
 
   return (
     <section id="pricing" aria-labelledby="pricing-title" className="lv-panel-section is-pricing">
@@ -34,16 +42,31 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
           </div>
         </div>
 
+        <figure className="lv-compare">
+          <figcaption>Cost per month</figcaption>
+          <div className="lv-bar is-usual">
+            <span className="lv-bar-label"><b>Without OpenCMO</b><small>5 vendors · 5 logins</small></span>
+            <span className="lv-bar-track"><span className="lv-bar-fill" style={{ width: "100%" }} /></span>
+            <s className="lv-bar-num">{money(STACK_TOTAL)}</s>
+          </div>
+          <div className="lv-bar is-ours">
+            <span className="lv-bar-label"><b>With OpenCMO</b><small>AI CMO + three departments</small></span>
+            <span className="lv-bar-track"><span className="lv-bar-fill" style={{ width: ourWidth }} /></span>
+            <strong className="lv-bar-num">{money(price)}</strong>
+          </div>
+        </figure>
+
         <div className="lv-pricing-grid">
-          <article aria-label="The usual way" className="lv-usual">
-            <div className="lv-usual-head"><h3>The usual way</h3><span>5 vendors · 5 logins</span></div>
+          <article aria-label="Without OpenCMO: the usual way" className="lv-usual">
+            <div className="lv-usual-head"><h3>Without OpenCMO · the usual way</h3><span>5 vendors · 5 logins</span></div>
             <ul>
               {USUAL_STACK.map((r) => (
-                <li key={r.who}><b>{r.who}</b><span>${r.price}</span><small>{r.what}</small></li>
+                <li key={r.who}><b>{r.who}</b><span>{money(r.price)}</span><small>{r.what}</small></li>
               ))}
             </ul>
             <div className="lv-usual-foot">
-              <div><span>Every month</span><s>${STACK_TOTAL.toLocaleString("en-US")}</s></div>
+              <span>Every month, without OpenCMO</span>
+              <s>{money(STACK_TOTAL)}</s>
               <span className="lv-usual-hours">+ about 20 hours a week of briefing and posting</span>
             </div>
           </article>

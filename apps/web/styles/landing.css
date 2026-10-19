@@ -127,32 +127,13 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 @media (max-width: 959px) { .lv-nav-trig.is-plain { display: none; } }
 @media (max-width: 719px) { .lv-nav-menus { display: none; } .lv-nav-actions { margin-left: auto; } .lv-nav-actions .lv-btn-ghost { display: none; } }
 
-/* hero */
-.lv-hero { position: relative; padding: clamp(130px, 18vh, 200px) var(--gutter) clamp(64px, 10vh, 120px); scroll-margin-top: 0; }
-.lv-hero-inner { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 40px 24px; align-items: end; }
-.lv-hero-inner > .lv-eyebrow { grid-column: 1 / -1; }
-.lv-hero-title { grid-column: 1 / -1; font: 500 clamp(48px, 10.5vw, 168px)/.86 var(--sans); letter-spacing: -.055em; color: var(--ink); }
+/* hero: everything centred */
+.lv-hero { min-height: min(100svh, 980px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(28px, 4vh, 40px); padding: 120px var(--gutter) 80px; text-align: center; }
+.lv-hero .lv-eyebrow { justify-content: center; }
+.lv-hero-title { font: 500 clamp(48px, 10.5vw, 168px)/.86 var(--sans); letter-spacing: -.055em; color: var(--ink); }
 .lv-hero-title .lv-mask { padding-bottom: .14em; margin-bottom: -.09em; }
 .lv-dot { display: inline-block; width: .22em; aspect-ratio: 1; margin-left: .06em; border-radius: 50%; background: var(--brand); }
-.lv-hero-support { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 22px; max-width: 560px; }
-.lv-hero-lede { font: 400 clamp(18px, 1.6vw, 21px)/1.5 var(--sans); color: var(--ink2); text-wrap: pretty; }
-.lv-hero-fine { font: 400 12.5px var(--sans); color: var(--mute); }
-@media (min-width: 960px) { .lv-hero-support { grid-column: 7 / span 6; } }
-.lv-blocks { --b: clamp(16px, 1.8vw, 26px); position: absolute; right: var(--gutter); bottom: 0; display: grid; grid-template-columns: repeat(4, var(--b)); grid-auto-rows: var(--b); pointer-events: none; }
-.lv-blocks span { position: relative; background: var(--brand); }
-.lv-blocks .is-cut { background: transparent; }
-.lv-blocks .is-dot::after, .lv-blocks .is-ring::after { content: ""; position: absolute; inset: 32%; border-radius: 50%; background: var(--paper); }
-.lv-blocks .is-ring::after { inset: 18%; background: transparent; border: 3px solid var(--paper); }
-@media (max-width: 719px) { .lv-blocks { display: none; } }
-
-/* platform ticker: a CSS loop over two copies; reduced motion wraps one copy instead */
-.lv-ticker { position: relative; overflow: hidden; border-block: 1px solid var(--line); background: var(--paper); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
-.lv-ticker-track { display: flex; width: max-content; animation: lv-drift 40s linear infinite; }
-.lv-ticker:hover .lv-ticker-track { animation-play-state: paused; }
-.lv-ticker-copy { display: flex; align-items: center; gap: 28px; padding: 20px 28px 20px 0; }
-.lv-ticker-copy li { display: flex; align-items: center; gap: 28px; white-space: nowrap; font: 400 13px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
-.lv-ticker-copy li::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--brand); }
-@keyframes lv-drift { to { transform: translateX(-50%); } }
+.lv-hero .lv-pill-form { width: min(560px, 100%); text-align: left; }
 
 /* scroll-darkened statement */
 .lv-essay { max-width: 1000px; margin: 0 auto; padding: clamp(100px, 16vh, 180px) var(--gutter); display: flex; flex-direction: column; gap: clamp(36px, 6vh, 64px); }
@@ -161,87 +142,85 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-essay-num { display: block; margin-bottom: 14px; font: 400 13px var(--mono); letter-spacing: .12em; color: var(--brand); }
 .lv-essay[data-armed] .lv-w { color: var(--ghost); }
 
-/* shared flat surfaces */
-.lv-slab { background: var(--paper2); border: 1px solid var(--line); color: var(--ink); }
-.lv-ink-tile { flex: none; width: 44px; height: 44px; background: var(--brand); color: #fff; display: grid; place-items: center; }
-.lv-ink-tile.is-lg { width: 52px; height: 52px; }
+/* shared */
 .lv-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .lv-chips .lv-social { border-radius: 4px !important; }
 
-/* goals */
-.lv-goals { position: relative; padding: 0 var(--gutter) 120px; }
-.lv-goals-grid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--ink); }
-.landing .lv-goal { position: relative; display: flex; flex-direction: column; gap: 22px; min-height: 280px; padding: 26px 26px 30px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--ink); transition: background .35s var(--ease); }
-.landing .lv-goal:last-child { border-right: 0; }
-.landing .lv-goal:hover { background: var(--paper2); color: var(--ink); }
-.lv-goal-head { display: flex; align-items: center; justify-content: space-between; }
-.lv-goal-id { display: flex; align-items: center; gap: 14px; }
-.lv-goal-short { font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
-.lv-goal-result { font: 500 clamp(24px, 2.2vw, 30px)/1.12 var(--sans); letter-spacing: -.03em; color: var(--ink); text-wrap: balance; }
-.lv-goal .lv-chips { margin-top: auto; }
-@media (max-width: 860px) { .landing .lv-goal { border-right: 0; border-bottom: 1px solid var(--line); } }
+/*
+ * Org charts (channels + departments). Wires are 4px stripes; vertical ones scroll their
+ * packets downward. Each item draws its own slice of the horizontal bus in ::before, so
+ * the bus always runs from the first to the last item of a row, whatever the column count.
+ */
+.lv-org-section { position: relative; padding: clamp(90px, 12vw, 150px) var(--gutter); border-top: 1px solid var(--line); scroll-margin-top: 68px; }
+.lv-org-head { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-bottom: clamp(44px, 6vw, 72px); text-align: center; }
+.lv-org-head .lv-eyebrow { justify-content: center; }
+.lv-org-head .lv-lede { max-width: 560px; }
+.lv-org { display: flex; flex-direction: column; align-items: center; }
+.lv-hub { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 12px; background: var(--brand); color: #fff; box-shadow: 6px 6px 0 var(--ink); }
+.lv-hub-mark { width: 44px; height: 44px; display: grid; place-items: center; background: var(--paper); color: var(--ink); }
+.lv-hub-text { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.lv-hub-text b { font: 600 20px/1 var(--sans); letter-spacing: -.03em; }
+.lv-hub-text small { font: 400 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.lv-wire { display: block; flex: none; }
+.lv-wire.is-v { width: 4px; height: 36px; background: repeating-linear-gradient(180deg, var(--brand) 0 4px, transparent 4px 8px); animation: lv-flow .5s steps(2) infinite; }
+.lv-wire.is-trunk { height: 44px; }
+@keyframes lv-flow { to { background-position: 0 8px; } }
+.lv-fan li::before, .lv-tree li::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: repeating-linear-gradient(90deg, var(--brand) 0 4px, transparent 4px 8px); }
+.lv-fan li:first-child::before, .lv-tree li:first-child::before { left: calc(50% - 2px); }
+.lv-fan li:last-child::before, .lv-tree li:last-child::before { right: calc(50% - 2px); }
 
-/* departments */
-.lv-depts { position: relative; overflow: hidden; background: var(--paper); border-block: 1px solid var(--line); }
-.lv-depts.is-wide { height: 100vh; }
-.lv-depts-track { display: flex; align-items: center; gap: 4vw; height: 100%; }
-.is-wide .lv-depts-track { flex-direction: row; width: max-content; padding: 0 8vw; }
-.is-stacked .lv-depts-track { flex-direction: column; width: 100%; padding: 100px var(--gutter); }
-.lv-depts-intro { flex: none; display: flex; flex-direction: column; gap: 22px; width: 100%; }
-.is-wide .lv-depts-intro { width: min(460px, 34vw); }
-.lv-depts-intro .lv-lede { max-width: 440px; }
-.lv-scroll-cue { display: flex; align-items: center; gap: 12px; font: 400 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.lv-scroll-cue span { width: 60px; height: 1px; background: var(--line2); }
-.is-stacked .lv-scroll-cue { display: none; }
-.lv-panel { flex: none; width: 100%; min-height: min(640px, 78vh); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(24px, 3vw, 44px); padding: clamp(24px, 3vw, 40px); }
-.is-wide .lv-panel { width: min(1080px, 76vw); }
-.lv-panel-body { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.lv-panel-head { display: flex; align-items: center; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
-.lv-panel-head > div { display: flex; flex-direction: column; gap: 8px; }
-.lv-panel-name { font: 400 12.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
-.lv-panel-goal { font: 500 clamp(28px, 2.8vw, 40px)/1.05 var(--sans); letter-spacing: -.04em; color: var(--ink); text-wrap: balance; }
-.lv-steps { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.lv-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); font: 400 15px/1.45 var(--sans); color: var(--ink2); }
-.lv-steps li span { font: 400 12px var(--mono); color: var(--brand); }
-.lv-panel-result { margin-top: auto !important; display: flex; flex-direction: column; gap: 6px; font: 500 20px/1.3 var(--sans); letter-spacing: -.02em; color: var(--ink); }
-.lv-panel-result span { font: 400 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--brand); }
-.lv-depts-bar { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 28px; height: 1px; background: var(--line); }
-.lv-depts-bar > div { height: 100%; background: var(--brand); transform-origin: 0 50%; transform: scaleX(0); }
-.is-stacked .lv-depts-bar { display: none; }
+/* channels: one row of 12 on desktop, rows of 6 or 4 joined by a centre spine below that */
+.lv-fan { --row: 156px; position: relative; width: 100%; max-width: 1080px; }
+.lv-fan ul { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.lv-fan li { position: relative; height: var(--row); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.lv-fan .lv-social { box-shadow: 3px 3px 0 var(--ink); }
+.lv-fan-tile { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.lv-fan-tile > span:last-child { font: 400 10.5px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); text-align: center; }
+.lv-fan-spine { display: none; position: absolute; top: 0; bottom: var(--row); left: calc(50% - 2px); width: 4px; background: repeating-linear-gradient(180deg, var(--brand) 0 4px, transparent 4px 8px); animation: lv-flow .5s steps(2) infinite; }
+@media (max-width: 1000px) {
+  .lv-fan ul { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .lv-fan-spine { display: block; }
+  .lv-fan li:nth-child(6n + 1)::before { left: calc(50% - 2px); }
+  .lv-fan li:nth-child(6n)::before { right: calc(50% - 2px); }
+}
+@media (max-width: 560px) {
+  .lv-fan { --row: 140px; }
+  .lv-fan ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lv-fan li:nth-child(n)::before { left: 0; right: 0; }
+  .lv-fan li:nth-child(4n + 1)::before { left: calc(50% - 2px); }
+  .lv-fan li:nth-child(4n)::before { right: calc(50% - 2px); }
+}
 
-/* department illustrations: charcoal screens with brand marks */
-.lv-ill { position: relative; min-height: 340px; overflow: hidden; background: var(--char); display: grid; place-items: center; padding: 28px; color: var(--char-ink); }
-.lv-ill-video { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
-.lv-ill-strip { position: relative; width: 100%; max-width: 380px; height: 46px; background: repeating-linear-gradient(90deg, var(--char2) 0 22px, var(--char) 22px 24px); border: 1px solid rgb(243 243 238 / .14); }
-.lv-ill-strip span { position: absolute; top: -6px; bottom: -6px; border: 2px solid var(--brand); }
-.lv-ill-clips { display: flex; gap: clamp(8px, 2.5vw, 14px); }
-.lv-ill-clip { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.lv-ill-clip > div { width: min(92px, 22vw); aspect-ratio: 9 / 16; background: linear-gradient(175deg, var(--char2) 0 52%, var(--brand) 53% 58%, #4a2a1f 59%); border: 1px solid rgb(243 243 238 / .18); display: flex; align-items: flex-end; padding: 8px; }
-.lv-ill-clip > div span { font: 700 9.5px/1.25 var(--sans); color: #fff; text-transform: uppercase; }
-.lv-ill-clip > span { font: 400 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: rgb(243 243 238 / .7); }
-.lv-ill-post { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: var(--paper2); color: var(--ink); }
-.lv-ill-post-head { display: flex; align-items: center; gap: 10px; }
-.lv-ill-post-head b { font: 600 13.5px var(--sans); }
-.lv-ill-post-head div div { font: 400 12px var(--sans); color: var(--ink2); }
-.lv-ill-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--brand); }
-.lv-ill-tags { display: flex; gap: 5px; flex-wrap: wrap; }
-.lv-ill-tags span { padding: 3px 8px; border: 1px solid var(--line); color: var(--ink2); font: 400 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
-.lv-ill-tags span.is-first { border-color: var(--ink); background: var(--ink); color: var(--paper); }
-.lv-ill-post p { font: 400 14px/1.55 var(--sans); }
-.lv-ill-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.lv-ill-actions span { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line2); font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-.lv-ill-actions span.is-dark { border-color: var(--brand); background: var(--brand); color: #fff; }
-.lv-ill-sales { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 8px; }
-.lv-ill-thread { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--char2); border: 1px solid rgb(243 243 238 / .1); }
-.lv-ill-thread > div { display: flex; justify-content: space-between; gap: 10px; font: 400 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: rgb(243 243 238 / .6); }
-.lv-ill-thread .is-why { color: var(--brand); }
-.lv-ill-thread-title { font: 500 13.5px/1.4 var(--sans); color: var(--char-ink); }
-.lv-ill-meter { height: 3px; background: rgb(243 243 238 / .12); }
-.lv-ill-meter span { display: block; height: 100%; background: var(--brand); }
-.lv-ill-reply { padding: 12px 14px; background: var(--paper2); color: var(--ink); font: 400 13px/1.5 var(--sans); }
-.lv-ill-reply b { display: block; margin-bottom: 4px; font: 400 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--brand); }
+/* departments: three robots under the AI CMO; on phones, a left-hand trunk with stubs */
+.lv-tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; max-width: 1080px; }
+.lv-tree li { position: relative; display: flex; flex-direction: column; align-items: center; padding: 0 clamp(12px, 2vw, 28px); text-align: center; }
+.lv-tree-node { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.lv-tree .lv-wire.is-v { height: 28px; }
+.lv-bot { width: clamp(96px, 9vw, 124px); height: auto; overflow: visible; animation: lv-bob 1.1s steps(1) infinite; }
+.lv-bot-body { fill: var(--brand); }
+.lv-bot-ink { fill: var(--ink); }
+.lv-bot-eyes { fill: var(--ink); transform-box: fill-box; transform-origin: center; animation: lv-blink 4.2s steps(1) infinite; }
+@keyframes lv-bob { 50% { transform: translateY(-4px); } }
+@keyframes lv-blink { 0%, 93% { transform: none; } 94%, 97% { transform: scaleY(.15); } }
+.lv-tree-name { display: flex; align-items: center; justify-content: center; gap: 8px; font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+.lv-tree-goal { font: 500 clamp(22px, 2vw, 28px)/1.1 var(--sans); letter-spacing: -.035em; color: var(--ink); text-wrap: balance; }
+.lv-tree-result { font: 400 15px/1.55 var(--sans); color: var(--ink2); text-wrap: pretty; }
+.lv-tree .lv-chips { justify-content: center; }
+@media (max-width: 760px) {
+  .lv-org:has(.lv-tree) { align-items: flex-start; }
+  .lv-org:has(.lv-tree) > .lv-wire.is-trunk { margin-left: 20px; }
+  .lv-tree { grid-template-columns: minmax(0, 1fr); }
+  .lv-tree li { align-items: flex-start; padding: 0 0 40px 64px; text-align: left; }
+  .lv-tree-node { align-items: flex-start; gap: 10px; }
+  .lv-tree li::before, .lv-tree li:first-child::before { top: 0; bottom: 0; left: 20px; right: auto; width: 4px; height: auto; background: repeating-linear-gradient(180deg, var(--brand) 0 4px, transparent 4px 8px); }
+  .lv-tree li:last-child::before { bottom: auto; height: 50px; }
+  .lv-tree li::after { content: ""; position: absolute; top: 46px; left: 24px; width: 32px; height: 4px; background: repeating-linear-gradient(90deg, var(--brand) 0 4px, transparent 4px 8px); }
+  .lv-tree .lv-wire.is-v { display: none; }
+  .lv-tree-name, .lv-tree .lv-chips { justify-content: flex-start; }
+  .lv-bot { width: 88px; }
+}
 
-/* ruled sections (demo, control, pricing, faq) */
+/* ruled sections (demo, pricing, faq) */
 .lv-panel-section { position: relative; padding: clamp(80px, 11vw, 140px) var(--gutter); border-top: 1px solid var(--line); scroll-margin-top: 68px; }
 .lv-panel-section.lv-demo { padding-bottom: clamp(70px, 9vw, 110px); }
 .lv-panel-section.is-pricing { background: rgb(250 250 248 / .7); }
@@ -257,78 +236,66 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-demo-track span { display: block; height: 100%; background: var(--brand); transform-origin: 0 50%; transform: scaleX(0); }
 .lv-demo-caption { max-width: 720px; font: 400 16px/1.6 var(--sans); color: var(--ink2); }
 
-/* control + inbox */
-.lv-control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(36px, 5vw, 80px); align-items: center; }
-.lv-promises { margin-top: 8px !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px 28px; }
-.lv-promises li { display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid var(--ink); }
-.lv-promises b { font: 500 17px/1.3 var(--sans); letter-spacing: -.015em; color: var(--ink); }
-.lv-promises span { font: 400 14px/1.6 var(--sans); color: var(--ink2); }
-.lv-inbox { position: relative; padding: clamp(20px, 2.4vw, 28px); }
-.lv-inbox-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
-.lv-inbox-head > div { display: flex; flex-direction: column; gap: 4px; }
-.lv-inbox-head > div span { font: 400 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--brand); }
-.lv-inbox-head > div b { font: 500 24px var(--sans); letter-spacing: -.03em; color: var(--ink); }
-.lv-inbox-count { font: 400 12px var(--mono); color: var(--ink2); }
-.lv-inbox-stack { position: relative; height: 330px; }
-.lv-card { position: absolute; left: 0; right: 0; top: 0; transform-origin: 50% 0; transition: transform .55s var(--ease), filter .55s; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #fff; border: 1px solid var(--line); }
-.lv-card-meta { display: flex; align-items: center; gap: 8px; font: 400 12px var(--sans); color: var(--ink2); }
-.lv-tag { padding: 3px 7px; font: 400 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
-.lv-tag.is-post { background: #e3e7f6; color: #26338a; }
-.lv-tag.is-video { background: var(--brand-soft); color: var(--brand-deep); }
-.lv-tag.is-sales { background: #dfeadb; color: #24502c; }
-.lv-card-title { font: 500 19px/1.25 var(--sans); letter-spacing: -.02em; color: var(--ink); }
-.lv-card-body { font: 400 14px/1.6 var(--sans); color: var(--ink2); white-space: pre-line; }
-.lv-card textarea { width: 100%; resize: none; padding: 10px 12px; border: 1px solid var(--brand); background: #fff; font: 400 14px/1.55 var(--sans); color: var(--ink); outline: none; }
-.lv-card-thumbs { display: flex; gap: 8px; }
-.lv-card-thumbs span { width: 44px; aspect-ratio: 9 / 16; background: linear-gradient(175deg, var(--char2) 0 52%, var(--brand) 53% 58%, #4a2a1f 59%); }
-.lv-card-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-.lv-card-actions button { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line2); background: transparent; font: 400 11.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); cursor: pointer; }
-.lv-card-actions button:hover { border-color: var(--ink); color: var(--ink); }
-.lv-card-actions button.is-primary { padding: 8px 16px; border-color: var(--brand); background: var(--brand); color: #fff; }
-.lv-card-actions button.is-primary:hover { border-color: var(--ink); background: var(--ink); }
-.lv-inbox-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px; padding: 0 8px; }
-.lv-inbox-empty b { font: 500 30px/1.1 var(--sans); letter-spacing: -.035em; color: var(--ink); }
-.lv-inbox-empty span { font: 400 15px/1.6 var(--sans); color: var(--ink2); }
-.lv-inbox-empty button { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--brand); background: transparent; font: 400 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--brand); cursor: pointer; }
-.lv-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; padding: 11px 18px; border-radius: 999px; background: var(--ink); color: var(--paper); font: 400 13px var(--mono); letter-spacing: .04em; }
-
-/* pricing */
+/*
+ * Pricing. Colour carries the comparison: the usual stack is grey and struck through,
+ * OpenCMO is brand orange. On phones the offer comes before the breakdown.
+ */
 .lv-pricing-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .lv-pricing-head .lv-stack-16 { max-width: 720px; }
-.lv-pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 0; align-items: stretch; border: 1px solid var(--line); }
-.lv-usual { display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 3vw, 40px); background: transparent; }
-.lv-usual-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.lv-usual-head h3 { font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
-.lv-usual-head span { font: 400 12px var(--mono); color: var(--mute); }
-.lv-usual li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 16px 0; border-bottom: 1px dashed var(--line2); }
+.lv-compare { margin: 0; display: flex; flex-direction: column; gap: 16px; padding: clamp(20px, 3vw, 32px); border: 1px solid var(--line); background: var(--paper2); }
+.lv-compare figcaption { font: 400 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
+.lv-bar { display: grid; grid-template-columns: 230px minmax(0, 1fr) minmax(3.6em, auto); align-items: center; gap: 18px; }
+.lv-bar-label { display: flex; flex-direction: column; gap: 2px; }
+.lv-bar-label b { font: 600 15px var(--sans); color: var(--ink); }
+.lv-bar-label small { font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.lv-bar-track { height: 32px; background: var(--paper3); }
+.lv-bar-fill { display: block; height: 100%; }
+.is-usual .lv-bar-fill { background: repeating-linear-gradient(135deg, #8c8c7f 0 6px, #a3a396 6px 12px); }
+.is-ours .lv-bar-fill { background: var(--brand); }
+.lv-bar-num { font: 600 clamp(26px, 3vw, 40px)/1 var(--sans); letter-spacing: -.04em; text-align: right; }
+.is-usual .lv-bar-num { color: var(--ink2); text-decoration: line-through; text-decoration-color: var(--brand); text-decoration-thickness: 4px; }
+.is-ours .lv-bar-num { color: var(--brand); }
+.is-ours .lv-bar-label b { color: var(--brand); }
+@media (max-width: 720px) {
+  .lv-bar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .lv-bar-track { grid-column: 1 / -1; grid-row: 2; height: 24px; }
+}
+
+.lv-pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: stretch; }
+.lv-usual { display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 3vw, 40px); background: var(--paper3); color: var(--ink2); }
+.lv-usual-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lv-usual-head h3 { font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+.lv-usual-head span { font: 400 12px var(--mono); color: var(--ink2); }
+.lv-usual li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 14px 0; border-bottom: 1px dashed var(--line2); }
 .lv-usual li b { font: 500 15.5px var(--sans); color: var(--ink); }
 .lv-usual li span { grid-row: span 2; align-self: center; font: 400 18px var(--mono); color: var(--ink2); font-variant-numeric: tabular-nums; }
 .lv-usual li small { font: 400 13px/1.45 var(--sans); color: var(--ink2); }
-.lv-usual-foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.lv-usual-foot > div { display: flex; flex-direction: column; gap: 4px; }
-.lv-usual-foot > div span { font: 400 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.lv-usual-foot s { font: 500 clamp(44px, 5vw, 64px)/1 var(--sans); letter-spacing: -.05em; color: var(--ink2); text-decoration-color: var(--brand); text-decoration-thickness: 3px; }
-.lv-usual-hours { padding: 7px 12px; border: 1px solid var(--line2); font: 400 12px var(--mono); color: var(--ink2); }
-.lv-offer { position: relative; display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 3vw, 40px); background: var(--paper2); border-left: 1px solid var(--line); color: var(--ink); }
-@media (max-width: 900px) { .lv-offer { border-left: 0; border-top: 1px solid var(--line); } }
+.lv-usual-foot { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.lv-usual-foot > span:first-child { font: 400 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
+.lv-usual-foot s { font: 600 clamp(72px, 10vw, 140px)/.95 var(--sans); letter-spacing: -.06em; color: #8c8c7f; text-decoration: line-through; text-decoration-color: var(--brand); text-decoration-thickness: .09em; }
+.lv-usual-hours { margin-top: 8px; padding: 7px 12px; border: 1px solid var(--line2); font: 400 12px var(--mono); color: var(--ink2); }
+
+.lv-offer { position: relative; display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 3vw, 40px); background: var(--brand); color: #fff; }
 .lv-offer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.lv-offer-head h3 { display: flex; align-items: center; gap: 9px; font: 600 22px var(--sans); letter-spacing: -.035em; color: var(--ink); }
-.lv-offer-head > span { padding: 5px 10px; border-radius: 999px; background: var(--brand); color: #fff; font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.lv-offer-head h3 { display: flex; align-items: center; gap: 9px; font: 600 22px var(--sans); letter-spacing: -.035em; color: #fff; }
+.lv-offer-head h3 .lv-logo circle { fill: var(--ink); }
+.lv-offer-head > span { padding: 5px 10px; border-radius: 999px; background: #fff; color: var(--brand); font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .lv-offer-price { display: flex; flex-direction: column; gap: 6px; }
 .lv-offer-price p { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.lv-offer-price s { font: 400 28px var(--sans); color: var(--mute); }
-.lv-offer-price strong { font: 500 clamp(84px, 10vw, 136px)/.85 var(--sans); letter-spacing: -.06em; color: var(--ink); }
-.lv-offer-price p span { font: 400 15px var(--sans); color: var(--ink2); }
-.lv-offer-price > span { font: 400 13.5px var(--sans); color: var(--ink2); }
-.lv-included { padding-top: 20px !important; display: flex; flex-direction: column; gap: 13px; border-top: 1px solid var(--line); }
+.lv-offer-price s { font: 400 28px var(--sans); color: rgb(255 255 255 / .6); }
+.lv-offer-price strong { font: 500 clamp(84px, 10vw, 136px)/.85 var(--sans); letter-spacing: -.06em; color: #fff; }
+.lv-offer-price p span { font: 400 15px var(--sans); color: rgb(255 255 255 / .85); }
+.lv-offer-price > span { font: 400 13.5px var(--sans); color: rgb(255 255 255 / .85); }
+.lv-included { padding-top: 20px !important; display: flex; flex-direction: column; gap: 13px; border-top: 1px solid rgb(255 255 255 / .35); }
 .lv-included li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
-.lv-included-icon { width: 28px; height: 28px; background: var(--brand); color: #fff; display: grid; place-items: center; }
+.lv-included-icon { width: 28px; height: 28px; background: #fff; color: var(--brand); display: grid; place-items: center; }
 .lv-included li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
-.lv-included b { font: 600 14.5px var(--sans); color: var(--ink); }
-.lv-included small { font: 400 13.5px/1.5 var(--sans); color: var(--ink2); }
-.lv-offer-zone { margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: var(--paper3); }
+.lv-included b { font: 600 14.5px var(--sans); color: #fff; }
+.lv-included small { font: 400 13.5px/1.5 var(--sans); color: rgb(255 255 255 / .85); }
+.lv-offer-zone { margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: var(--paper); color: var(--ink); }
 .lv-offer-zone > span { font: 400 11.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--brand); }
 .lv-offer-zone > small { font: 400 12.5px var(--sans); color: var(--ink2); }
+@media (max-width: 900px) { .lv-offer { order: -1; } }
 
 /* faq */
 .lv-faq-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: clamp(30px, 5vw, 80px); align-items: start; }
@@ -375,9 +342,5 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lv-ticker { mask-image: none; }
-  .lv-ticker-track { width: auto; animation: none; }
-  .lv-ticker-copy { flex-wrap: wrap; justify-content: center; row-gap: 10px; padding: 20px var(--gutter); }
-  .lv-ticker-copy.is-clone { display: none; }
-  .lv-card { transition: none; }
+  .lv-wire.is-v, .lv-fan-spine, .lv-bot, .lv-bot-eyes { animation: none; }
 }
