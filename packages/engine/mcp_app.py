@@ -1,20 +1,23 @@
-"""`opencmo-mcp`: OpenCMO's MCP server on Modal, in its own app and its own Modal workspace.
+"""`opencmo-mcp`: OpenCMO's MCP server on Modal, in its own app.
 
 The TypeScript server (packages/mcp-server) lets the user's own Claude drive OpenCMO. One small
 always-warm container answers every session: the server is stateless, waits on the database, and
 never runs scene code (previews go to `motion_preview`, renders through the task queue).
 
-Why a separate file and workspace (docs/plans/security/2026-10-17-mcp-auth-api-fixes-plan.md,
+Why a separate app and secret (docs/plans/security/2026-10-17-mcp-auth-api-fixes-plan.md,
 items 1 and 2):
   - The container faces the internet. It mounts one secret, `opencmo-mcp`, and nothing of the
     worker's (`opencmo`: service role for the worker, `CRON_SECRET`, `OPENCMO_WORKER_TOKEN`; the
     provider keys). It wakes the worker through the worker's `wake` endpoint, whose token can only
     start an early sweep.
-  - Modal's request quota is per workspace, and every request counts before any container runs.
-    In its own workspace a flood against MCP cannot starve the web app's `submit`.
+  - Modal's request quota is per workspace, and every request counts before any container runs,
+    so only a separate workspace keeps a flood against MCP from starving the web app's `submit`.
+    For now it shares the worker's workspace (owner's call, 2026-10-19: no paying users yet). To
+    move it: deploy this file in a new workspace, set `OPENCMO_MCP_URL` there and on Vercel, and
+    connected apps reconnect once.
 This file does not import `modal_app`: that would build the worker's secret objects here.
 
-Deploy (in the MCP workspace, never the worker's):
+Deploy:
     npm run build --workspace @opencmo/mcp-server
     modal secret create opencmo-mcp \
         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
@@ -22,13 +25,15 @@ Deploy (in the MCP workspace, never the worker's):
         SUPABASE_SERVICE_ROLE_KEY=...    # only for `api_key_owner`
         ANTHROPIC_API_KEY=... FAL_KEY=... [GEMINI_API_KEY=...]   # prompt moderation
         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... \
-        OPENCMO_MCP_URL=https://<mcp-workspace>--opencmo-mcp.modal.run \
+        OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run \
         OPENCMO_WEB_URL=https://opencmo.io \
         OPENCMO_MCP_CONFIRM_KEY=...      # signs confirm codes; its own random value
-        OPENCMO_WAKE_URL=https://<worker-workspace>--opencmo-wake.modal.run \
+        OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret
         OPENCMO_VOICE_ENABLED=1          # list voice tools; the worker holds the voice key
-    modal deploy mcp_app.py
+    modal deploy mcp_app.py            # prints the OPENCMO_MCP_URL to put in the secret
+After changing only the secret, stop the warm container (`modal container stop -y <id>`): a deploy
+without code changes keeps it running with the old values.
 """
 
 from __future__ import annotations
@@ -46,7 +51,9 @@ _ROOT = "/root/mcp"
 
 app = modal.App(APP_NAME)
 
-if _BUNDLE.exists():
+# Modal imports this file again inside the container, where the local bundle path does not exist:
+# check for the bundle only on the deploying machine.
+if _BUNDLE.exists() or not modal.is_local():
     image = (
         modal.Image.debian_slim(python_version="3.12")
         .apt_install("curl", "xz-utils")
@@ -64,7 +71,7 @@ if _BUNDLE.exists():
         # which is why every slow tool is async.
         min_containers=1,
         # A flood scales to at most 3 containers. It does not protect the quota (Modal checks it
-        # before any container runs; the separate workspace does that), it caps the bill.
+        # before any container runs; only a separate workspace does that), it caps the bill.
         max_containers=3,
         cpu=0.25,
         memory=512,
