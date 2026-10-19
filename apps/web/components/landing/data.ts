@@ -63,26 +63,11 @@ export const DEPTS: Dept[] = [
   },
 ];
 
-/** Ba đoạn chữ I · II · III đổi theo thanh cuộn trong hero. */
+/** The three beats I · II · III, darkened word by word as the reader scrolls (Hero.tsx). */
 export const BEATS = [
   { num: "I.", title: "It starts with your website.", body: "The AI CMO reads your site and competitors, and turns them into one strategy and one goal." },
   { num: "II.", title: "The plan takes shape.", body: "Your goal becomes a weekly calendar, mapped across the channels where your customers already are." },
   { num: "III.", title: "Three departments carry it.", body: "Video, Post and Sales each own one result, and leave their drafts for you to approve." },
-];
-
-export const PROMISES = [
-  { title: "Nothing is published without your approval", body: "Every post, clip and reply waits in your inbox until you say yes." },
-  { title: "Only your accounts", body: "OpenCMO publishes to accounts you connect, never to accounts it creates." },
-  { title: "No automated likes, follows, DMs or replies", body: "It drafts. You decide what to say and where." },
-  { title: "Only content you own", body: "Video tools work on recordings you own or have the rights to use." },
-];
-
-export type InboxCard = { id: string; dept: "Post" | "Video" | "Sales"; when: string; title: string; body: string; thumbs?: number };
-
-export const INBOX_CARDS: InboxCard[] = [
-  { id: "c1", dept: "Post", when: "X · for today 9:30", title: "Shipped this week: bulk export", body: "We shipped bulk export this week.\nIt started with one support email asking to get data out without a CSV per project." },
-  { id: "c2", dept: "Video", when: "2 clips · from Tuesday's podcast", title: "Two moments that tell your founder story", body: "Framed on the speaker, captions on, a caption written for each platform.", thumbs: 2 },
-  { id: "c3", dept: "Sales", when: "r/SaaS · 2h old", title: "Someone is asking for exactly what you built", body: "\"Data out without a CSV per project?\" A reply is drafted. You post it yourself." },
 ];
 
 export const DEMOS: Record<DeptId, { src: string; poster: string; label: string; alt: string; caption: string }> = {
