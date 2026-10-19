@@ -9,7 +9,9 @@
 > The state of the editor below comes from a scan of the code and docs on 2026-10-19 (op registry,
 > `capabilities.ts`, `docs/ai-video-status.md`, `docs/ke-hoach-pr-sau.md`). Re-check it when an item is
 > picked up. "Opus #n" points to the gap list in the internal repo
-> (`opencmo-internal/docs/specs/2026-10-19-hoc-agent-opus-3-danh-sach.md`).
+> (`opencmo-internal/docs/specs/2026-10-19-hoc-agent-opus-3-danh-sach.md`). Its section "Chiến lược build
+> theo giai đoạn" places all 90 Opus items in these phases with a reason each; the tables below carry the
+> items that land in E0–E6.
 
 ## 1. The videos OpenCMO needs
 
@@ -59,6 +61,11 @@ Goal: what already exists works on production every time. Without this, every la
 | E0.2 | Exact export at 24/25/50/60 fps (`ke-hoach-pr-sau.md` §1) | M | Frame timing in `clip-export`; audio drift over 3 min |
 | E0.3 | Project file stops growing after many cuts (§2) | M | What grows: transcript copies, history, marks? Migration for existing documents |
 | E0.4 | Clear the deploy backlog the editor depends on (migrations, Modal secrets, Vercel env) | S | List from `VIEC-CAN-LAM.md` (internal) and open PR notes |
+| E0.5 | Idempotency key on every paid request; a timeout never triggers a new paid run (Opus #85) | S | Where the 2026-10-11 "paid twice" came from; key scope per generation and export |
+| E0.6 | The client reports each export's outcome (Opus #52) | S | Success rate on Modal production per format and length |
+| E0.7 | Warn before leaving with unrendered or unsaved changes (Opus #53) | S | Which states count as unsaved in the document model |
+| E0.8 | Internal debug page per project + per-project model override (Opus #83) | S | What to show (document, tasks, agent turns, costs); admin-only access |
+| E0.9 | Feature flags, so E2–E3 work runs on production for the owner's account first (Opus #82, flags part) | S | Flags without breaking "don't ship coming soon": hidden, never teased |
 
 **Acceptance:** a 60 s V1 clip of the owner, cut and captioned in the editor, exported on production; a
 frame from the full-size file checked by eye.
@@ -73,6 +80,7 @@ Goal: the weekly V1 clip takes under 15 minutes from upload to published file.
 | E1.2 | Active-speaker reframe for 2-person recordings (report 2026-10-18) | M | Scribe diarization vs face cues; `speaker_coverage` threshold |
 | E1.3 | One-click "founder clip" style: hook title, emphasis, punch-ins, B-roll proof | S | Which existing style skill becomes the default; what still needs the Assistant |
 | E1.4 | Prompt rules for AI B-roll shots (Opus #32: three motion layers, no moving text, no text in keyframes) | S | Measure before/after on 10 shots |
+| E1.5 | 👍/👎 + reason saved per Assistant and CMO chat message (Opus #81; today `ChatPanel.tsx` keeps it in `useState`) | S | Table and RPC; how the owner's ratings feed `agent:eval` |
 
 **Acceptance:** three V1 clips in one week, each under 15 minutes of owner time.
 
@@ -88,6 +96,8 @@ Goal: record OpenCMO in the browser and get a polished demo with no manual keyfr
 | E2.4 | Screen-recording look: padding, background, rounded corners, shadow, browser/device frame | S | Reuse the `add_proof` browser frame |
 | E2.5 | 16:9 recording → 9:16/1:1 that follows the cursor and zoom targets | M | Reuse reframe logic with the cursor as the "face" |
 | E2.6 | Cut dead time: long waits (agent thinking, uploads) sped up or cut, with a "sped up" marker | S | Detect idle from the log + frame diff; keep it honest on screen |
+| E2.7 | Photo passthrough: product screenshots animated with ffmpeg pan/zoom, no model (Opus #40, moved up from generated shots) | S | Same zoom engine as E2.3; no credits, no invented UI |
+| E2.8 | Blur a region over a time range (emails, keys, customer data) instead of AI inpaint (Opus #46, reshaped) | S | Region tracking when the page scrolls; blur must survive every export format |
 
 Learn from, licence to be checked before reading code (copy only MIT/BSD/Apache-2.0 with notice):
 Cap (AGPL by its own about page, some crates MIT), OpenScreen (listed as MIT), Screenize (listed as
@@ -104,10 +114,17 @@ Goal: from a recording or a brief, the Assistant assembles a finished story the 
 |---|---|---|---|
 | E3.1 | Script → voiceover → recording aligned to the words (narrate a silent recording) | M | Align by interaction log events to script beats; reuse `sync_voiceover` |
 | E3.2 | Recipes beyond `intro` in `plan_video`: demo, feature launch, tutorial, changelog | M | Beat structure per recipe; what the Reviewer (code) checks |
-| E3.3 | Music bed as a track: pick, versions, swap without re-render, ducking under voice (Opus #49) | M | Licensing of generated music; reuse `duck_db` |
+| E3.3 | Music bed as a track: pick, versions, swap without re-render, ducking under voice; runs in parallel and never fails the video (Opus #49, #50) | M | Licensing of generated music; reuse `duck_db` |
 | E3.4 | Hook options: 3 hooks to pick from on the card (Opus #4) | S | Hook patterns for SaaS demos |
 | E3.5 | Templates the owner saves and reuses weekly ("changelog short") | M | Template = document with slots; how the Assistant fills slots |
 | E3.6 | Captured pages and explainers placed on script beats (`capture_page`, `add_explainer`) | S | Mostly exists; gap is placement by beat |
+| E3.7 | Recipe planning: infer the recipe from the recording and brief, ask once on one card while the recording is processed, paid steps only through a button (Opus #13, #14, #17) | M | Signals that tell demo from launch from tutorial |
+| E3.8 | Brief references assets with labels (`@demo-onboarding`, `@logo`) (Opus #27) | M | Mention syntax in the Assistant input; binding must use the exact asset |
+| E3.9 | Shared pipeline context across script → voice → placement → music, with prompts per video type (Opus #28, #29) | M | What each step must see; prompt variants per recipe |
+| E3.10 | Beat rules: never split a name or number; beats rejoin to the exact script (Opus #31) | S | Checker in code, retry with the failure reason |
+| E3.11 | Timed shot script, voice preview and script preview before the paid run; voice-first variant that locks the script (Opus #42–45) | M | Card layout; cost of a preview vs a full run |
+| E3.12 | Staleness ledger: an edited line marks the voice, captions and placements that must be redone (Opus #11) | M | Smallest redo set; how the user sees what changed |
+| E3.13 | One card system in chat for script, hook, storyboard and video; message the agent mid-run; long-script handling (Opus #5, #3, #19) | M | Steering a running turn without losing work |
 
 **Acceptance:** a 30 s V3 feature-launch short and a 2 min V5 tutorial, each from one recording plus a
 brief, with at most two approvals.
@@ -123,6 +140,9 @@ Goal: one master edit becomes every platform cut and lands as drafts in the Post
 | E4.3 | Per-platform captions and chapters (YouTube) | S | Reuse CMO caption drafting |
 | E4.4 | Translated captions for the same cut (`translate_captions` exists) | S | Which markets first |
 | E4.5 | Hand-off: finished video → X draft in Post, user approves and publishes (rule: assist, never act) | M | Upload path to X; approval link (Opus #86) |
+| E4.6 | Public share page `/share/{id}` with its own DTO (Opus #78) | S | Which fields are public; Opus leaked staff emails through this endpoint |
+| E4.7 | Export at the source resolution (1440p/2160p) so recorded UI text stays sharp, instead of AI upscale (Opus #51, reshaped) | M | RAM and time at 2160p against the hard budgets |
+| E4.8 | Per-project concurrency cap for export sets + email when a long job finishes (Opus #60, #58) | S | Cap value from the ~400 MB per ffmpeg budget |
 
 **Acceptance:** one V2 demo becomes a YouTube video, three shorts and X drafts in under 30 minutes.
 
@@ -132,12 +152,15 @@ Goal: the weekly videos run mostly on their own, with the owner approving.
 
 | Item | What | Size | Opus |
 |---|---|---|---|
-| E5.1 | 👍/👎 + reason saved per agent message (today `ChatPanel.tsx` keeps it in `useState`) | S | #81 |
 | E5.2 | Auto-continue timer on free, internal steps; paid and outgoing steps always wait | S | #1, #2 |
 | E5.3 | Structured output contract + machine-readable failure for the next step | M | #8 |
 | E5.4 | Atomic todo per user message, closed by the agent | M | #9 |
 | E5.5 | Step outputs as records with ids; rerun from a step | L | #7 |
-| E5.6 | One progress protocol for long tasks + estimated % | M | #54, #55 |
+| E5.6 | One progress protocol for long tasks, estimated %, one shared SSE connection, "still running" notices | M | #54–57 |
+| E5.7 | Spec as the single source of a recipe's plan; conflict check and end-of-turn review | M | #10, #12 |
+| E5.8 | Glossary from internal terms to user words; split in-scope and out-of-scope asks; fast path for complete briefs; undo by turn | S | #15, #16, #18, #21 |
+| E5.9 | Model chain per task with the measured reason in a comment | S | #20 |
+| E5.10 | MCP polish: prepare vs start, `edit_clip` with dry run, renamed tools kept as no-op signposts, styles listed with use cases | M | #84, #87, #88, #90 |
 
 **Acceptance:** "make this week's changelog short from today's recording" gives a finished V3 with one
 approval.
@@ -153,14 +176,18 @@ backgrounds). Do this phase only if E2–E4 videos show a real need.
 | E6.2 | Edit one keyframe → redo only its two transitions | M | #24 |
 | E6.3 | Style prompt with `[SUBJECT]` + style from reference images | M | #33, #34 |
 | E6.4 | VLM check for garbled text in generated frames | M | #37 |
-| E6.5 | Photo passthrough: real screenshots animated with ffmpeg pan/zoom, no model | S | #40 |
+| E6.5 | Pick the last frame among candidates; anchor assets from the Brand Kit; merge adjacent transitions; world bible for long stories; restyle as a branch | M | #25, #26, #41, #30, #47 |
+| E6.6 | Style history and automatic style pick | S | #35, #36 |
 
 ## 4. Not now
 
-Inpaint, 4K upscale, Temporal-style workflow engine, quality tiers, voice cloning and lip-sync (product
-rule), "recreate someone else's reel", desktop app (`docs/spec-desktop-app.md` stays "for later"). Growth
-and billing items from the Opus list (referral, onboarding rewards, cancel flow) wait until the owner
-calls them, per the strategy.
+AI inpaint and AI 4K upscale (reshaped into E2.8 and E4.7), Temporal-style workflow engine (Opus #59),
+copy motion (#39), voice cloning and lip-sync (product rule), "recreate someone else's reel", desktop app
+(`docs/spec-desktop-app.md` stays "for later").
+
+Growth and billing items from the Opus list (phase **G** in the internal mapping: analytics, Explore +
+Remix, onboarding rewards, cancel flow, referral, quotas, quality tiers…) wait until the owner calls them,
+per the strategy. When G starts, Explore uses our own marketing videos from E1–E4 as its first items.
 
 ## 5. How an item moves from here to code
 
