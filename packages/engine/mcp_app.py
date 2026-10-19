@@ -31,6 +31,8 @@ Deploy:
         OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret
         OPENCMO_VOICE_ENABLED=1          # list voice tools; the worker holds the voice key
+        OPENCMO_MOTION=modal             # explainers (preview_explainer, add_explainer); unset hides them
+        OPENCMO_ENV=production           # turns on the production-only guards (isProduction())
     modal deploy mcp_app.py            # prints the URL; OPENCMO_MCP_URL is it plus /mcp
 After changing only the secret, stop the warm container (`modal container stop -y <id>`): a deploy
 without code changes keeps it running with the old values.
