@@ -56,7 +56,7 @@ export async function openClipsPanel(page: Page): Promise<void> {
  * click again, `O`. The picker must be open and the video loaded.
  */
 export async function pickMoments(page: Page, moments: [number, number][]): Promise<void> {
-  const picker = page.getByTestId("clip-picker");
+  const picker = page.getByTestId("moment-picker");
   await expect(picker.getByTestId("picker-add")).toBeEnabled({ timeout: 60_000 });
   const track = picker.locator(".clip-picker-track");
   const duration = Number(await picker.getByTestId("picker-video").evaluate((video: HTMLVideoElement) => video.duration));
@@ -94,7 +94,7 @@ export async function startClipsInEditor(
   await page.getByTestId("picker-submit").click();
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
-  await expect(page.getByTestId("clip-picker")).toHaveCount(0);
+  await expect(page.getByTestId("moment-picker")).toHaveCount(0);
   return ((await response.json()) as { id: string }).id;
 }
 

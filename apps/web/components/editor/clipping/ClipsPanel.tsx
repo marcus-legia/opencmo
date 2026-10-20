@@ -5,7 +5,7 @@
  * editor, không còn trang `/app/video` riêng. Mỗi clip vẫn là một bản sửa riêng — nút Open
  * mở nó ở `/app/editor/<clip>`.
  *
- * The user picks every moment on the full-size picker (`ClipPicker`, plan item 1): this panel
+ * The user picks every moment on the full-size picker (`MomentPicker`, plan item 1): this panel
  * chooses the video and lists the jobs. There is no AI picking, so no clip count or length.
  *
  * Upload là đường chính. Dán link nằm sau "Use a link instead" và phải tick "Is this your
@@ -32,7 +32,7 @@ import { CREDITS_PER_MINUTE, JOB_HOLD_CREDITS } from "@/lib/credits";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 import { uploadResumable, type UploadHandle } from "@/lib/upload-tus";
 
-import { ClipPicker } from "./ClipPicker";
+import { MomentPicker } from "./MomentPicker";
 
 type Granted = { bucket: string; objectName: string; source: string | null };
 // Chỉ bật/tắt (R4): kiểu phụ đề chọn trong editor, bằng đúng bộ preset của editor.
@@ -368,7 +368,7 @@ export function ClipsPanel({
       </form>
 
       {pickerOpen && chosen ? (
-        <ClipPicker
+        <MomentPicker
           source={linkMode ? { kind: "link", url: url.trim() } : { kind: "file", file: file! }}
           segments={segments}
           onSegments={setSegments}

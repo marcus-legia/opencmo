@@ -89,7 +89,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function ClipPicker(props: Props) {
+export function MomentPicker(props: Props) {
   const { source, segments, onSegments, busy } = props;
   const link = source.kind === "link" ? source.url : null;
   const videoId = link ? youtubeId(link) : null;
@@ -155,7 +155,7 @@ export function ClipPicker(props: Props) {
   const title = source.kind === "file" ? source.file.name : link;
 
   return (
-    <div className="clip-picker-backdrop" data-testid="clip-picker">
+    <div className="clip-picker-backdrop" data-testid="moment-picker">
       <div className="clip-picker" role="dialog" aria-modal="true" aria-label="Pick the moments to clip">
         <header className="clip-picker-head">
           <div>

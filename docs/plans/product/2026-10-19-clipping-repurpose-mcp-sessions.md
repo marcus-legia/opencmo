@@ -94,14 +94,18 @@ Checklist:
   - **Accept:** a `segments.check.ts` with valid, overlapping, too long, more than 10, and garbage input.
   - *Done:* `parseSegments`, `formatSegments`, `pickerPath` (B: build the `make_clips` link with it) and
     `segmentProblem` (empty list → "Pick at least one moment to clip."); `segments.check.ts` runs in `check:contracts`.
-- [ ] **A2 — Picker view.** Full-size player with timeline, for links and uploads; options; prefill from the URL.
+- [x] **A2 — Picker view.** Full-size player with timeline, for links and uploads; options; prefill from the URL.
   - **Accept:** typecheck; manual look at 1440 px and 390 px widths, light and dark.
-  - *Status (2026-10-20):* code in `components/editor/clipping/ClipPicker.tsx` and
-    `components/clipping/web/SegmentBar.tsx`; the manual look at 1440/390 px is still to do.
-- [ ] **A3 — Submit with segments.** Picked moments go out as `segments`; Make clips is disabled with none. No clip
+  - *Done (2026-10-20):* `components/editor/clipping/MomentPicker.tsx` and `components/clipping/web/SegmentBar.tsx`.
+    Looked at 1440 and 390 px, light and dark: no overflow, handles and labels readable. Named `MomentPicker` because
+    `components/editor/ClipPicker.tsx` (the top bar's clip menu) already owns `data-testid="clip-picker"`.
+- [x] **A3 — Submit with segments.** Picked moments go out as `segments`; Make clips is disabled with none. No clip
   count or clip length options. "Try again with longer clips" becomes "Pick again" in both places.
   - **Accept:** the e2e from plan item 1 (two moments on an upload; `jobs.segments` set; no `select` step).
-  - *Status:* code done; `editor-clipping.spec.ts` has the two-moment case. The e2e run is still to report.
+  - *Done:* `editor-clipping.spec.ts` green (two moments → 2 clips of 6 s and 8 s; no moments → 422). Run here with
+    `E2E_VIDEO_CODEC=vp9` and Playwright's Chromium, which DeviceCheck refuses for lack of H.264, so the run stubbed
+    `canPlayType` locally (not committed); CI's Chrome needs neither. `output-options` and `upload-resume` were updated
+    for the picker but not run here.
 - [ ] **A4 — After the job.** Each clip: Open, "Add voiceover" (opens Generate → Voiceover), "Add explainer" (points to
   `/explain` in Claude over MCP).
   - **Accept:** e2e clicks Open and lands in the edit; one full-size frame looked at.
@@ -191,6 +195,6 @@ _Write requests to another session here: date, from, to, what._
   to clip."). Until C wires it, "New video pack" fails with that message. C, please:
   - `app/api/v1/cmo/video-packs/route.ts`: accept `segments` (same zod shape and `segmentProblem` as
     `lib/clipping/create.ts`) and send `p_segments`; drop `clips`.
-  - `components/cmo/workspace/NewVideoPack.tsx`: open A's full-size picker (`components/editor/clipping/ClipPicker.tsx`,
+  - `components/cmo/workspace/NewVideoPack.tsx`: open A's full-size picker (`components/editor/clipping/MomentPicker.tsx`,
     props documented there) on the chosen file or link, and send the picked moments. The caption step is unchanged.
   - Status: open.

@@ -85,7 +85,8 @@ def _fixture_pipeline(source: str, cfg, moments=None, **callbacks):
                                                  "watermark": cfg.watermark,
                                                  "encoder": "libx264"})
 
-    tracks = callbacks["on_sections"](picked, [(Path(source), 0.0)])
+    # The whole source is every section, so a moment starts `moment.start` into it.
+    tracks = callbacks["on_sections"](picked, [(Path(source), moment.start) for moment in picked])
 
     clips = []
     for index, moment in enumerate(picked):
