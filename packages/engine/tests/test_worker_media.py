@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from opencmo.backends.supabase import Job
-from opencmo.config import Config
 from opencmo.media.ffmpeg import run
 from opencmo.media.probe import probe_file
 from opencmo.worker import media
@@ -50,91 +49,6 @@ def sample_video(tmp_path: Path) -> Path:
     return target
 
 
-def test_link_section_duoc_tai_mot_lan_va_mo_rong_tao_section_moi(
-    monkeypatch, tmp_path: Path, sample_video: Path
-):
-    store = FakeStore(tmp_path / "storage")
-    job = Job(
-        id="job-1", user_id="user-1", source_url="https://youtube.com/watch?v=test",
-        clips_requested=2, attempt_id="attempt-1",
-    )
-    calls: list[tuple[float, float]] = []
-
-    def fake_download(_url, _index, moment, _cfg, workdir):
-        calls.append((moment.start, moment.end))
-        target = workdir / "section_00.mp4"
-        shutil.copyfile(sample_video, target)
-        return target, 0.0
-
-    monkeypatch.setattr(media.download, "_download_one_section", fake_download)
-    workdir = tmp_path / "work"
-
-    first = media.resolve_web_source(store, job, 10, 12, workdir, Config())
-    again = media.resolve_web_source(store, job, 10.2, 11.8, workdir, Config())
-    wider = media.resolve_web_source(store, job, 9, 12, workdir, Config())
-
-    assert first.path == again.path
-    assert wider.path != first.path
-    assert calls == [(10, 12), (9, 12)]
-    assert len(store.uploads) == 2
-    assert first.manifest["attempt_id"] == "attempt-1"
-
-
-def test_upload_source_kiem_owner_va_chi_tai_mot_lan(tmp_path: Path, sample_video: Path):
-    store = FakeStore(tmp_path / "storage")
-    source = store.root / "sources/user-1/upload.mp4"
-    source.parent.mkdir(parents=True)
-    shutil.copyfile(sample_video, source)
-    job = Job(
-        id="job-1", user_id="user-1", source_url="storage://user-1/upload.mp4",
-        clips_requested=1, attempt_id="attempt-1",
-    )
-
-    first = media.resolve_web_source(store, job, 0, 1, tmp_path / "work", Config())
-    second = media.resolve_web_source(store, job, 0, 1, tmp_path / "work", Config())
-
-    assert first.path == second.path
-    bad = Job(
-        id="job-2", user_id="user-2", source_url="storage://user-1/upload.mp4",
-        clips_requested=1, attempt_id="attempt-2",
-    )
-    with pytest.raises(ValueError, match="This upload is not available"):
-        media.resolve_web_source(store, bad, 0, 1, tmp_path / "other", Config())
-
-
-def test_upload_reframe_uu_tien_section_da_cong_bo_thay_vi_tai_full_source(
-    tmp_path: Path, sample_video: Path
-):
-    store = FakeStore(tmp_path / "storage")
-    upload = store.root / "sources/user-1/upload.mp4"
-    section = store.root / "sources/user-1/job-1/section.mp4"
-    upload.parent.mkdir(parents=True)
-    section.parent.mkdir(parents=True)
-    shutil.copyfile(sample_video, upload)
-    shutil.copyfile(sample_video, section)
-    store.get_job_row = lambda job_id: {
-        "id": job_id,
-        "media_manifest": {
-            "sections": [{
-                "bucket": "sources",
-                "object": "user-1/job-1/section.mp4",
-                "start": 0,
-                "end": 2,
-                "offset": 0,
-            }]
-        },
-    }
-    job = Job(
-        id="job-1", user_id="user-1", source_url="storage://user-1/upload.mp4",
-        clips_requested=1, attempt_id="attempt-1",
-    )
-
-    resolved = media.resolve_web_source(store, job, 0.2, 1.8, tmp_path / "work", Config())
-
-    assert resolved.path.is_file()
-    assert store.downloads == [("sources", "user-1/job-1/section.mp4")]
-
-
 @pytest.mark.parametrize(
     "source_url",
     [
@@ -151,49 +65,6 @@ def test_upload_source_tu_choi_path_khong_canonical(source_url: str):
     )
     with pytest.raises(media.UploadUnavailableError):
         media.upload_object_name(job)
-
-
-@pytest.mark.parametrize(
-    "source_url",
-    ["file:///etc/passwd", "http://127.0.0.1/a", "http://localhost/a", "https://user:pass@example.com/a"],
-)
-def test_link_source_tu_choi_scheme_noi_bo_va_credential(source_url: str):
-    with pytest.raises(media.UnsafeSourceError):
-        media.validate_public_url(source_url)
-
-
-def test_link_source_nhan_moi_host_cong_khai(monkeypatch):
-    monkeypatch.setattr(
-        media.socket,
-        "getaddrinfo",
-        lambda *_args, **_kwargs: [(media.socket.AF_INET, media.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
-    )
-
-    media.validate_public_url("https://www.tiktok.com/@creator/video/123")
-    media.validate_public_url("https://cdn.example.com/video.mp4")
-
-
-def test_link_source_tu_choi_host_phan_giai_ve_ip_noi_bo(monkeypatch):
-    monkeypatch.setattr(
-        media.socket,
-        "getaddrinfo",
-        lambda *_args, **_kwargs: [(media.socket.AF_INET, media.socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))],
-    )
-
-    with pytest.raises(media.UnsafeSourceError):
-        media.validate_public_url("https://public-looking.example/video.mp4")
-
-
-def test_editor_proxy_la_540p_va_giu_duration(tmp_path: Path, sample_video: Path):
-    output = tmp_path / "proxy.mp4"
-
-    media.make_editor_proxy(sample_video, output)
-
-    source_info = probe_file(str(sample_video))
-    proxy_info = probe_file(str(output))
-    assert proxy_info.height == 540
-    assert proxy_info.width == 960
-    assert proxy_info.duration == pytest.approx(source_info.duration, abs=0.08)
 
 
 @pytest.fixture

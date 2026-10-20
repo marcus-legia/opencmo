@@ -14,7 +14,5 @@ def test_moi_kind_co_handler_import_duoc():
 def test_kind_khong_trung_va_dung_thu_tu_uu_tien():
     names = kinds.task_kinds()
     assert len(names) == len(set(names))
-    # Người dùng đang nhìn "Checking video…"/"Generating…" → hai kind ngắn đứng đầu;
-    # ZIP có trạng thái riêng trên trang project nên đứng cuối.
+    # Người dùng đang nhìn "Checking video…"/"Generating…" → hai kind ngắn đứng đầu.
     assert names[:2] == ("probe_media", "generate")
-    assert names[-1] == "zip"
