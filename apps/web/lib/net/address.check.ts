@@ -4,8 +4,8 @@
  *     cd apps/web && npx tsx lib/net/address.check.ts
  *
  * The cases come from `packages/contracts/private-addresses.json`, the same file
- * `packages/engine/tests/test_addresses.py` and pgTAP `180_private_video_urls` read, so the web
- * guard, the worker guard and the SQL refusal cannot disagree on any of them.
+ * `packages/engine/tests/test_addresses.py` reads, so the web guard and the worker guard cannot
+ * disagree on any of them.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -43,13 +43,6 @@ for (const { input, blocked, why } of ADDRESS_CASES) {
 check("the fixture covers every case the plan names", () => {
   assert.ok(ADDRESS_CASES.length >= 25);
   assert.ok(ADDRESS_CASES.some((c) => !c.blocked) && ADDRESS_CASES.some((c) => c.blocked));
-});
-
-check("pgTAP 180 runs exactly the fixture's cases", () => {
-  const sql = readFileSync(new URL("../../../../supabase/tests/180_private_video_urls.test.sql", import.meta.url), "utf8");
-  const block = sql.slice(sql.indexOf("insert into shared_cases values"), sql.indexOf("select is(public.video_url_refused('https://'"));
-  const rows = [...block.matchAll(/\('([^']*)', (true|false)\)/g)].map((m) => ({ input: m[1], blocked: m[2] === "true" }));
-  assert.deepEqual(rows, ADDRESS_CASES.map(({ input, blocked }) => ({ input, blocked })));
 });
 
 check("only ports 80 and 443, whatever the scheme", () => {

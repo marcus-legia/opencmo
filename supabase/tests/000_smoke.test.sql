@@ -14,7 +14,7 @@ set search_path to public, extensions;
 select plan(2);
 
 select has_table('public', 'jobs', 'migration nền đã chạy');
-select has_function('public', 'create_job', 'RPC tạo job có mặt');
+select has_function('public', 'create_upload_edit', 'the upload RPC exists');
 
 select * from finish();
 rollback;

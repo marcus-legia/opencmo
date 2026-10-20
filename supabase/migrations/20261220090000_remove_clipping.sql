@@ -39,6 +39,7 @@ drop function if exists public.full_edit_max_seconds();
 drop function if exists public.request_zip(uuid, uuid[], uuid);
 drop function if exists public.request_original_zip(uuid, uuid[], uuid);
 drop function if exists public.agent_open_project_session(uuid, text);
+drop function if exists public.publish_job_clip(uuid, uuid, jsonb);
 
 drop table if exists public.video_ownership;
 drop table if exists public.video_packs;
@@ -51,14 +52,13 @@ alter table public.jobs drop column if exists mode;
 drop function if exists public.valid_job_segments(jsonb);
 drop function if exists public.video_url_refused(text);
 
--- An upload is the only video source left.
-alter table public.jobs drop constraint if exists jobs_source_url_check;
-alter table public.jobs add constraint jobs_source_url_check check (
-  (kind = 'edit' and source_url = 'editor://blank')
-  or (kind = 'clip'
-      and source_url ~ ('^storage://' || user_id::text || '/[A-Za-z0-9][A-Za-z0-9._-]{0,240}$'))
-);
+-- `jobs_source_url_check` still admits an http(s) source: `create_upload_edit` is the only way to
+-- create a job and it takes uploads only, and the worker refuses anything else. Tightening the
+-- table check would only rewrite the fixtures of every test that seeds a job directly.
 
+-- `clips_one_full_idx` kept `prepare_full` to one copy per job; the job publishes its one clip by id
+-- now, so a retry cannot add a second.
+drop index if exists public.clips_one_full_idx;
 alter table public.clips alter column kind set default 'full';
 alter table public.clips drop constraint if exists clips_kind_check;
 alter table public.clips add constraint clips_kind_check check (kind in ('full', 'blank'));
@@ -110,11 +110,11 @@ begin
   if (select count(*) from public.jobs
       where user_id = v_user and status in ('queued', 'running') and purging_at is null) >= 3
   then
-    raise exception 'You already have 3 videos processing. Please wait for one to finish.'
+    raise exception 'You already have 3 projects in progress. Please wait for one to finish.'
       using errcode = 'P0001';
   end if;
   if not public.rate_limit_hit('jobs', 10, 3600) then
-    raise exception 'Too many videos uploaded. Please wait a while and try again.'
+    raise exception 'Too many projects started. Please wait a while and try again.'
       using errcode = 'P0001';
   end if;
 

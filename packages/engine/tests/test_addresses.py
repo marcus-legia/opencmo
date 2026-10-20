@@ -1,7 +1,7 @@
 """The shared address cases (`packages/contracts/private-addresses.json`), worker side.
 
-`apps/web/lib/net/address.check.ts` and pgTAP `180_private_video_urls` read the same file, so the
-three guards cannot disagree on any case in it.
+`apps/web/lib/net/address.check.ts` reads the same file, so the two guards cannot disagree on any
+case in it.
 """
 
 from __future__ import annotations

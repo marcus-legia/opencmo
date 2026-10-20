@@ -682,42 +682,6 @@ $$;
 
 
 --
--- Name: agent_open_project_session(uuid, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.agent_open_project_session(p_job_id uuid, p_model text) RETURNS public.agent_sessions
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_session public.agent_sessions;
-begin
-  if not exists (
-    select 1 from public.jobs j where j.id = p_job_id and j.user_id = v_user and j.purging_at is null
-  ) then
-    raise exception 'Project not found.' using errcode = 'P0002';
-  end if;
-  if p_model is null or char_length(p_model) > 64 or not exists (
-    select 1 from public.agent_model_prices p
-    where p.allowed and p.pattern <> 'default' and p_model like p.pattern
-  ) then
-    raise exception 'Unknown assistant model.' using errcode = '22023';
-  end if;
-  select * into v_session from public.agent_sessions
-  where job_id = p_job_id and user_id = v_user and model = p_model
-  order by created_at desc limit 1;
-  if found then
-    return v_session;
-  end if;
-  insert into public.agent_sessions(user_id, job_id, scope, model)
-  values (v_user, p_job_id, 'project', p_model) returning * into v_session;
-  return v_session;
-end;
-$$;
-
-
---
 -- Name: agent_open_session(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1528,7 +1492,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'zip'::text, 'generate'::text, 'render_document'::text, 'prepare_full'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -1595,34 +1559,6 @@ $$;
 
 
 --
--- Name: valid_job_segments(jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.valid_job_segments(p_segments jsonb) RETURNS boolean
-    LANGUAGE sql IMMUTABLE
-    SET search_path TO 'public'
-    AS $$
-  select p_segments is null
-     or (
-       jsonb_typeof(p_segments) = 'array'
-       and jsonb_array_length(p_segments) between 1 and 10
-       and not exists (
-         select 1
-         from jsonb_array_elements(p_segments) as s
-         -- `is distinct from` chứ không phải `<>`: khoá thiếu cho
-         -- `jsonb_typeof` ra NULL, và `NULL <> 'number'` là NULL, tức lọt.
-         where jsonb_typeof(s) is distinct from 'object'
-            or jsonb_typeof(s -> 'start') is distinct from 'number'
-            or jsonb_typeof(s -> 'end') is distinct from 'number'
-            or (s ->> 'start')::numeric < 0
-            or (s ->> 'end')::numeric - (s ->> 'start')::numeric < 1
-            or (s ->> 'end')::numeric - (s ->> 'start')::numeric > 180
-       )
-     );
-$$;
-
-
---
 -- Name: jobs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1650,9 +1586,6 @@ CREATE TABLE public.jobs (
     pinned boolean DEFAULT false NOT NULL,
     media_manifest jsonb,
     attempt_started_at timestamp with time zone,
-    clip_length text DEFAULT 'auto'::text NOT NULL,
-    segments jsonb,
-    mode text DEFAULT 'clip'::text NOT NULL,
     aspect text DEFAULT '9:16'::text NOT NULL,
     layout text DEFAULT 'auto'::text NOT NULL,
     captions boolean DEFAULT true NOT NULL,
@@ -1661,13 +1594,10 @@ CREATE TABLE public.jobs (
     kind text DEFAULT 'clip'::text NOT NULL,
     CONSTRAINT jobs_aspect_check CHECK ((aspect = ANY (ARRAY['9:16'::text, '1:1'::text, '16:9'::text]))),
     CONSTRAINT jobs_caption_preset_check CHECK ((caption_preset = ANY (ARRAY['bold'::text, 'clean'::text, 'minimal'::text]))),
-    CONSTRAINT jobs_clip_length_check CHECK ((clip_length = ANY (ARRAY['auto'::text, 'short'::text, 'medium'::text, 'long'::text]))),
     CONSTRAINT jobs_kind_check CHECK ((kind = ANY (ARRAY['clip'::text, 'edit'::text]))),
     CONSTRAINT jobs_layout_check CHECK ((layout = ANY (ARRAY['auto'::text, 'fill'::text, 'fit'::text]))),
     CONSTRAINT jobs_media_manifest_size_check CHECK (((media_manifest IS NULL) OR (pg_column_size(media_manifest) < 1000000))),
-    CONSTRAINT jobs_mode_check CHECK ((mode = ANY (ARRAY['clip'::text, 'full'::text]))),
     CONSTRAINT jobs_name_length_check CHECK ((char_length(name) <= 120)),
-    CONSTRAINT jobs_segments_check CHECK (public.valid_job_segments(segments)),
     CONSTRAINT jobs_source_url_check CHECK ((((kind = 'edit'::text) AND (source_url = 'editor://blank'::text)) OR ((kind = 'clip'::text) AND ((source_url ~ '^https?://[^[:space:]]+$'::text) OR (source_url ~ (('^storage://'::text || (user_id)::text) || '/[A-Za-z0-9][A-Za-z0-9._-]{0,240}$'::text))))))
 );
 
@@ -1955,7 +1885,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'video_pack'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -2252,64 +2182,6 @@ $$;
 
 
 --
--- Name: cmo_video_briefs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.cmo_video_briefs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    job_id uuid NOT NULL,
-    hook text NOT NULL,
-    broll text DEFAULT ''::text NOT NULL,
-    visuals text DEFAULT ''::text NOT NULL,
-    pacing text DEFAULT ''::text NOT NULL,
-    status text DEFAULT 'in_review'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    decided_at timestamp with time zone,
-    CONSTRAINT cmo_video_briefs_broll_check CHECK ((char_length(broll) <= 600)),
-    CONSTRAINT cmo_video_briefs_hook_check CHECK (((char_length(hook) >= 1) AND (char_length(hook) <= 200))),
-    CONSTRAINT cmo_video_briefs_pacing_check CHECK ((char_length(pacing) <= 300)),
-    CONSTRAINT cmo_video_briefs_status_check CHECK ((status = ANY (ARRAY['in_review'::text, 'approved'::text, 'skipped'::text]))),
-    CONSTRAINT cmo_video_briefs_visuals_check CHECK ((char_length(visuals) <= 600))
-);
-
-
---
--- Name: cmo_create_video_brief(uuid, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_create_video_brief(p_job uuid, p_hook text, p_broll text, p_visuals text, p_pacing text) RETURNS public.cmo_video_briefs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.cmo_video_briefs;
-begin
-  if not exists (select 1 from public.jobs where id = p_job and user_id = v_user) then
-    raise exception 'Project not found.' using errcode = 'P0002';
-  end if;
-  if not exists (select 1 from public.clips where job_id = p_job and kind = 'moment') then
-    raise exception 'This project has no clips yet. Make clips first.' using errcode = 'P0001';
-  end if;
-  if p_hook is null or char_length(trim(p_hook)) = 0 or char_length(p_hook) > 200 then
-    raise exception 'The hook must be 1 to 200 characters.' using errcode = '22023';
-  end if;
-  if char_length(coalesce(p_broll, '')) > 600 or char_length(coalesce(p_visuals, '')) > 600 or char_length(coalesce(p_pacing, '')) > 300 then
-    raise exception 'This brief is too long.' using errcode = '22023';
-  end if;
-  if (select count(*) from public.cmo_video_briefs where user_id = v_user and status = 'in_review') >= 10 then
-    raise exception 'You have 10 video briefs waiting. Approve or skip some first.' using errcode = 'P0001';
-  end if;
-  insert into public.cmo_video_briefs (user_id, job_id, hook, broll, visuals, pacing)
-  values (v_user, p_job, trim(p_hook), trim(coalesce(p_broll, '')), trim(coalesce(p_visuals, '')), trim(coalesce(p_pacing, '')))
-  returning * into v_row;
-  return v_row;
-end;
-$$;
-
-
---
 -- Name: cmo_goals; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2540,99 +2412,6 @@ $$;
 
 
 --
--- Name: cmo_decide_video_brief(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_decide_video_brief(p_id uuid, p_action text, p_reason text DEFAULT NULL::text) RETURNS public.cmo_video_briefs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.cmo_video_briefs;
-begin
-  if p_action is null or p_action not in ('approve', 'skip') then
-    raise exception 'Choose approve or skip.' using errcode = '22023';
-  end if;
-  update public.cmo_video_briefs
-  set status = case p_action when 'approve' then 'approved' else 'skipped' end, decided_at = now()
-  where id = p_id and user_id = v_user and status = 'in_review'
-  returning * into v_row;
-  if not found then
-    if exists (select 1 from public.cmo_video_briefs where id = p_id and user_id = v_user) then
-      raise exception 'This brief was already decided.' using errcode = 'P0001';
-    end if;
-    raise exception 'Brief not found.' using errcode = 'P0002';
-  end if;
-  if p_action = 'skip' and p_reason is not null and char_length(trim(p_reason)) > 0 then
-    insert into public.cmo_memories (user_id, type, kind, topic, body)
-    values (v_user, 'feedback', 'feedback', 'video', left('Skipped a video brief "' || left(v_row.hook, 120) || '": ' || trim(p_reason), 600));
-  end if;
-  return v_row;
-end;
-$$;
-
-
---
--- Name: video_packs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.video_packs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    run_id uuid,
-    job_id uuid NOT NULL,
-    clips jsonb NOT NULL,
-    captions jsonb NOT NULL,
-    status text DEFAULT 'in_review'::text NOT NULL,
-    exports jsonb DEFAULT '[]'::jsonb NOT NULL,
-    decided_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT video_packs_captions_check CHECK (((jsonb_typeof(captions) = 'object'::text) AND (octet_length((captions)::text) <= 65536))),
-    CONSTRAINT video_packs_clips_check CHECK (((jsonb_typeof(clips) = 'array'::text) AND ((jsonb_array_length(clips) >= 1) AND (jsonb_array_length(clips) <= 10)) AND (octet_length((clips)::text) <= 16384))),
-    CONSTRAINT video_packs_exports_check CHECK (((jsonb_typeof(exports) = 'array'::text) AND (octet_length((exports)::text) <= 8192))),
-    CONSTRAINT video_packs_status_check CHECK ((status = ANY (ARRAY['in_review'::text, 'approved'::text, 'dismissed'::text])))
-);
-
-
---
--- Name: cmo_decide_video_pack(uuid, text, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_decide_video_pack(p_id uuid, p_action text, p_exports jsonb DEFAULT '[]'::jsonb, p_reason text DEFAULT NULL::text) RETURNS public.video_packs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.video_packs;
-begin
-  if p_action is null or p_action not in ('approved', 'dismissed') then
-    raise exception 'Unknown action.' using errcode = '22023';
-  end if;
-  if p_exports is null or jsonb_typeof(p_exports) <> 'array' then
-    raise exception 'This request is not valid.' using errcode = '22023';
-  end if;
-  update public.video_packs
-  set status = p_action, decided_at = now(), exports = case when p_action = 'approved' then p_exports else exports end
-  where id = p_id and user_id = v_user and status = 'in_review'
-  returning * into v_row;
-  if not found then
-    if exists (select 1 from public.video_packs where id = p_id and user_id = v_user) then
-      raise exception 'This video pack was already decided.' using errcode = 'P0001';
-    end if;
-    raise exception 'Video pack not found.' using errcode = 'P0002';
-  end if;
-  if p_action = 'dismissed' and p_reason is not null and char_length(trim(p_reason)) > 0 then
-    insert into public.cmo_memories (user_id, type, body)
-    values (v_user, 'feedback', left('Skipped a video pack: ' || trim(p_reason), 600));
-  end if;
-  return v_row;
-end;
-$$;
-
-
---
 -- Name: cmo_defer_run(uuid, integer, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2733,7 +2512,7 @@ CREATE TABLE public.cmo_inbox (
     CONSTRAINT cmo_inbox_answers_check CHECK (((jsonb_typeof(answers) = 'object'::text) AND (octet_length((answers)::text) <= 262144))),
     CONSTRAINT cmo_inbox_feedback_check CHECK ((char_length(feedback) <= 1000)),
     CONSTRAINT cmo_inbox_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_inbox_kind_check CHECK ((kind = ANY (ARRAY['plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'video_pack'::text, 'competitor_research'::text, 'summarize_memory'::text, 'review_week'::text]))),
+    CONSTRAINT cmo_inbox_kind_check CHECK ((kind = ANY (ARRAY['plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'summarize_memory'::text, 'review_week'::text]))),
     CONSTRAINT cmo_inbox_memo_check CHECK (((jsonb_typeof(memo) = 'object'::text) AND (octet_length((memo)::text) <= 1048576))),
     CONSTRAINT cmo_inbox_request_check CHECK (((jsonb_typeof(request) = 'object'::text) AND (octet_length((request)::text) <= 1048576))),
     CONSTRAINT cmo_inbox_rounds_check CHECK ((rounds >= 0)),
@@ -2840,7 +2619,7 @@ $$;
 CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$
-  select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3 when 'video_pack' then 3
+  select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
     else 0 end
 $$;
@@ -2853,7 +2632,7 @@ $$;
 CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$
-  select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5 when 'video_pack' then 1
+  select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
     else 0 end
 $$;
@@ -2903,7 +2682,6 @@ begin
       new.topic := case
         when new.body like 'Skipped the X post%' then 'post'
         when new.body like 'Dismissed the Reddit thread%' then 'sales'
-        when new.body like 'Skipped a video pack%' then 'video'
         else 'general' end;
     end if;
     new.expires_at := coalesce(new.expires_at, now() + interval '90 days');
@@ -3345,29 +3123,6 @@ $$;
 
 
 --
--- Name: cmo_save_video_pack(uuid, uuid, uuid, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_save_video_pack(p_user uuid, p_run uuid, p_job uuid, p_clips jsonb, p_captions jsonb) RETURNS public.video_packs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_row public.video_packs;
-begin
-  if not exists (select 1 from public.jobs where id = p_job and user_id = p_user) then
-    raise exception 'That video is not in this account.' using errcode = 'P0002';
-  end if;
-  insert into public.video_packs (user_id, run_id, job_id, clips, captions)
-  values (p_user, p_run, p_job, p_clips, p_captions)
-  on conflict (run_id) do update set clips = excluded.clips, captions = excluded.captions
-  returning * into v_row;
-  return v_row;
-end;
-$$;
-
-
---
 -- Name: cmo_set_edit_mode(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3509,54 +3264,6 @@ begin
   return true;
 end;
 $$;
-
-
---
--- Name: complete_full_edit(uuid, uuid, jsonb, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.complete_full_edit(p_task_id uuid, p_attempt_id uuid, p_settings jsonb, p_settings_hash text, p_master jsonb) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $_$
-declare
-  v_task public.tasks;
-begin
-  select * into v_task from public.tasks
-  where id = p_task_id and kind = 'prepare_full' and status = 'running'
-    and attempt_id is not distinct from p_attempt_id
-  for update;
-  if not found then
-    return exists (select 1 from public.tasks where id = p_task_id and status = 'done' and attempt_id is not distinct from p_attempt_id);
-  end if;
-  if not exists (select 1 from public.clips where id = v_task.clip_id and job_id = v_task.job_id and kind = 'full') then
-    raise exception 'Full-video clip mismatch.' using errcode = '22023';
-  end if;
-  if jsonb_typeof(p_settings) is distinct from 'object' or coalesce(p_settings_hash, '') !~ '^[0-9a-f]{64}$' then
-    raise exception 'Clip settings are invalid.' using errcode = '22023';
-  end if;
-  if jsonb_typeof(p_master) is distinct from 'object' or coalesce(p_master ->> 'object', '') = '' then
-    raise exception 'Master is invalid.' using errcode = '22023';
-  end if;
-
-  update public.clips
-  set settings = p_settings, settings_hash = p_settings_hash
-  where id = v_task.clip_id and settings is null;
-
-  update public.jobs
-  set media_manifest = jsonb_set(
-    coalesce(media_manifest, '{}'::jsonb) || jsonb_build_object('masters', coalesce(media_manifest -> 'masters', '{}'::jsonb)),
-    array['masters', v_task.clip_id::text],
-    p_master
-  )
-  where id = v_task.job_id;
-
-  update public.tasks
-  set status = 'done', error = null, finished_at = now(), lease_until = null
-  where id = p_task_id;
-  return true;
-end;
-$_$;
 
 
 --
@@ -4223,88 +3930,6 @@ $_$;
 
 
 --
--- Name: create_clip_job(text, integer, text, jsonb, text, text, text, boolean, text, boolean); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.create_clip_job(p_source_url text, p_clips integer DEFAULT 5, p_length text DEFAULT 'auto'::text, p_segments jsonb DEFAULT NULL::jsonb, p_mode text DEFAULT 'clip'::text, p_aspect text DEFAULT '9:16'::text, p_layout text DEFAULT 'auto'::text, p_captions boolean DEFAULT true, p_caption_preset text DEFAULT 'bold'::text, p_ownership_confirmed boolean DEFAULT false) RETURNS public.jobs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_source text := btrim(coalesce(p_source_url, ''));
-  v_upload boolean := v_source like 'storage://%';
-  v_job public.jobs;
-begin
-  if not v_upload and not coalesce(p_ownership_confirmed, false) then
-    raise exception 'Confirm this is your own video to continue.' using errcode = '22023';
-  end if;
-  v_job := public.create_job(v_source, p_clips, p_length, p_segments, p_mode, p_aspect, p_layout, p_captions, p_caption_preset);
-  insert into public.video_ownership (job_id, user_id, source, url)
-  values (v_job.id, v_user, case when v_upload then 'upload' else 'link' end, case when v_upload then null else v_source end);
-  return v_job;
-end;
-$$;
-
-
---
--- Name: create_full_edit(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.create_full_edit(p_job_id uuid) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_job public.jobs;
-  v_clip public.clips;
-  v_task public.tasks;
-  v_ready boolean;
-begin
-  select * into v_job from public.jobs where id = p_job_id and user_id = v_user;
-  if not found then
-    raise exception 'Project not found.' using errcode = 'P0002';
-  end if;
-  if coalesce(v_job.source_url, '') not like 'storage://%' then
-    raise exception 'Full-video editing works on videos you uploaded. For a link, edit the clips.' using errcode = '22023';
-  end if;
-  if v_job.status <> 'done' or v_job.duration_seconds is null or v_job.duration_seconds <= 0 then
-    raise exception 'Wait for the video to finish processing.' using errcode = 'P0001';
-  end if;
-  if v_job.duration_seconds > public.full_edit_max_seconds() then
-    raise exception 'Full-video editing supports videos up to % minutes.', public.full_edit_max_seconds() / 60
-      using errcode = '22023';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended(p_job_id::text, 2201));
-  select * into v_clip from public.clips where job_id = p_job_id and kind = 'full';
-  if not found then
-    insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
-    values (p_job_id, -1, 'Full video', 0, v_job.duration_seconds, 0, v_job.duration_seconds, 'full')
-    returning * into v_clip;
-  end if;
-
-  v_ready := (v_job.media_manifest -> 'masters' -> (v_clip.id::text)) is not null
-    and v_clip.settings is not null;
-  if v_ready then
-    return jsonb_build_object('clip_id', v_clip.id, 'ready', true, 'task_id', null);
-  end if;
-
-  select * into v_task from public.tasks
-  where clip_id = v_clip.id and kind = 'prepare_full' and status in ('queued', 'running')
-  order by created_at desc limit 1;
-  if not found then
-    insert into public.tasks (user_id, kind, clip_id, job_id, payload, status, request_id)
-    values (v_user, 'prepare_full', v_clip.id, p_job_id, '{}'::jsonb, 'queued', gen_random_uuid())
-    returning * into v_task;
-  end if;
-  return jsonb_build_object('clip_id', v_clip.id, 'ready', false, 'task_id', v_task.id);
-end;
-$$;
-
-
---
 -- Name: create_generation(uuid, uuid, text, jsonb, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4413,107 +4038,27 @@ $_$;
 
 
 --
--- Name: create_job(text, integer, text, jsonb, text, text, text, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: create_upload_edit(text, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.create_job(p_source_url text, p_clips integer DEFAULT 5, p_length text DEFAULT 'auto'::text, p_segments jsonb DEFAULT NULL::jsonb, p_mode text DEFAULT 'clip'::text, p_aspect text DEFAULT '9:16'::text, p_layout text DEFAULT 'auto'::text, p_captions boolean DEFAULT true, p_caption_preset text DEFAULT 'bold'::text) RETURNS public.jobs
+CREATE FUNCTION public.create_upload_edit(p_source_url text, p_aspect text DEFAULT '9:16'::text, p_captions boolean DEFAULT true) RETURNS public.jobs
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $_$
+    AS $$
 declare
   v_user uuid := public.require_user();
   v_hold int := public.job_hold_credits();
   v_balance int;
   v_plan text;
-  v_length text := coalesce(p_length, 'auto');
   v_job public.jobs;
-  v_source text := trim(coalesce(p_source_url, ''));
-  v_segments jsonb := p_segments;
-  v_clips int := p_clips;
-  v_mode text := coalesce(p_mode, 'clip');
+  v_source text := btrim(coalesce(p_source_url, ''));
   v_aspect text := coalesce(p_aspect, '9:16');
-  v_layout text := coalesce(p_layout, 'auto');
-  v_captions boolean := coalesce(p_captions, true);
-  v_preset text := coalesce(p_caption_preset, 'bold');
-  v_prev numeric;
-  v_item jsonb;
 begin
-  if v_source = '' then
-    raise exception 'Missing video link.' using errcode = '22023';
-  end if;
-  if v_source not like 'storage://%'
-     and (v_source !~* '^https?://[^/@[:space:]]+([/:?#]|$)' or public.video_url_refused(v_source))
-  then
-    raise exception 'Paste a public HTTP or HTTPS video link.' using errcode = '22023';
-  end if;
-
-  if v_mode not in ('clip', 'full') then
-    raise exception 'Choose whether to clip the video or download it whole.' using errcode = '22023';
-  end if;
-
-  if v_segments is not null and jsonb_typeof(v_segments) = 'array'
-     and jsonb_array_length(v_segments) = 0 then
-    v_segments := null;
-  end if;
-  if v_mode = 'full' then
-    if v_segments is not null then
-      raise exception 'Picked moments only apply when we clip your video.' using errcode = '22023';
-    end if;
-    v_clips := 1;
-  end if;
-
-  if v_segments is not null then
-    if jsonb_typeof(v_segments) <> 'array' then
-      raise exception 'Pick the moments you want on the timeline.' using errcode = '22023';
-    end if;
-    if jsonb_array_length(v_segments) > 10 then
-      raise exception 'Pick at most 10 moments.' using errcode = '22023';
-    end if;
-
-    v_prev := null;
-    for v_item in
-      select value from jsonb_array_elements(v_segments)
-      order by (value ->> 'start')::numeric
-    loop
-      if jsonb_typeof(v_item) is distinct from 'object'
-         or jsonb_typeof(v_item -> 'start') is distinct from 'number'
-         or jsonb_typeof(v_item -> 'end') is distinct from 'number' then
-        raise exception 'Each moment needs a start and end time.' using errcode = '22023';
-      end if;
-      if (v_item ->> 'start')::numeric < 0 then
-        raise exception 'A moment cannot start before the video does.' using errcode = '22023';
-      end if;
-      if (v_item ->> 'end')::numeric - (v_item ->> 'start')::numeric < 1 then
-        raise exception 'Each moment must be at least 1 second long.' using errcode = '22023';
-      end if;
-      if (v_item ->> 'end')::numeric - (v_item ->> 'start')::numeric > 180 then
-        raise exception 'Each moment must be 3 minutes or shorter.' using errcode = '22023';
-      end if;
-      if v_prev is not null and (v_item ->> 'start')::numeric < v_prev then
-        raise exception 'Your moments overlap. Move them apart and try again.' using errcode = '22023';
-      end if;
-      v_prev := (v_item ->> 'end')::numeric;
-    end loop;
-
-    select jsonb_agg(value order by (value ->> 'start')::numeric)
-    into v_segments from jsonb_array_elements(v_segments);
-    v_clips := jsonb_array_length(v_segments);
-  end if;
-
-  if v_clips < 1 or v_clips > 10 then
-    raise exception 'Clip count must be between 1 and 10.' using errcode = '22023';
-  end if;
-  if v_length not in ('auto', 'short', 'medium', 'long') then
-    raise exception 'Choose a clip length.' using errcode = '22023';
+  if v_source not like 'storage://%' then
+    raise exception 'Upload the video file to edit it.' using errcode = '22023';
   end if;
   if v_aspect not in ('9:16', '1:1', '16:9') then
     raise exception 'Unsupported aspect ratio.' using errcode = '22023';
-  end if;
-  if v_layout not in ('auto', 'fill', 'fit') then
-    raise exception 'Unsupported frame layout.' using errcode = '22023';
-  end if;
-  if v_preset not in ('bold', 'clean', 'minimal') then
-    raise exception 'Unsupported caption style.' using errcode = '22023';
   end if;
 
   if (select count(*) from public.jobs
@@ -4522,15 +4067,12 @@ begin
     raise exception 'You already have 3 projects in progress. Please wait for one to finish.'
       using errcode = 'P0001';
   end if;
-
   if not public.rate_limit_hit('jobs', 10, 3600) then
     raise exception 'Too many projects started. Please wait a while and try again.'
       using errcode = 'P0001';
   end if;
 
-  if v_source like 'storage://%' then
-    perform public.consume_upload_reservation('sources', substring(v_source from 11), null);
-  end if;
+  perform public.consume_upload_reservation('sources', substring(v_source from 11), null);
 
   perform 1 from public.profiles where id = v_user for update;
   v_balance := public.credit_balance(v_user);
@@ -4540,47 +4082,12 @@ begin
   end if;
   select plan into v_plan from public.profiles where id = v_user;
 
-  insert into public.jobs(
-    user_id, source_url, clips_requested, clip_length, watermark, segments,
-    mode, aspect, layout, captions, caption_preset
-  ) values(
-    v_user, v_source, v_clips, v_length, coalesce(v_plan, 'free') = 'free', v_segments,
-    v_mode, v_aspect, v_layout, v_captions, v_preset
-  ) returning * into v_job;
+  insert into public.jobs (user_id, source_url, clips_requested, watermark, aspect, captions)
+  values (v_user, v_source, 1, coalesce(v_plan, 'free') = 'free', v_aspect, coalesce(p_captions, true))
+  returning * into v_job;
 
   perform public.credit_hold(v_user, 'job', v_job.id, v_hold, 'Hold for new job', v_job.id);
   return v_job;
-end;
-$_$;
-
-
---
--- Name: create_video_pack(text, boolean, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.create_video_pack(p_source text, p_confirmed boolean DEFAULT false, p_clips integer DEFAULT 5) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_source text := trim(coalesce(p_source, ''));
-  v_upload boolean := v_source like 'storage://%';
-  v_job public.jobs;
-  v_run public.cmo_runs;
-begin
-  if not v_upload and not coalesce(p_confirmed, false) then
-    raise exception 'Confirm that this is your own video.' using errcode = '22023';
-  end if;
-  if exists (select 1 from public.cmo_runs where user_id = v_user and kind = 'video_pack' and status in ('queued', 'running')) then
-    raise exception 'Your last video pack is still being made.' using errcode = 'P0001';
-  end if;
-  v_job := public.create_job(v_source, coalesce(p_clips, 5), 'auto', null, 'clip', '9:16', 'auto', true, 'bold');
-  update public.projects set kind = 'video_pack' where job_id = v_job.id;
-  insert into public.video_ownership (job_id, user_id, source, url)
-  values (v_job.id, v_user, case when v_upload then 'upload' else 'link' end, case when v_upload then null else v_source end);
-  v_run := public.cmo_enqueue(v_user, 'video_pack', jsonb_build_object('job_id', v_job.id));
-  return jsonb_build_object('job', to_jsonb(v_job), 'run', to_jsonb(v_run));
 end;
 $$;
 
@@ -5233,15 +4740,6 @@ $$;
 
 
 --
--- Name: full_edit_max_seconds(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.full_edit_max_seconds() RETURNS integer
-    LANGUAGE sql IMMUTABLE
-    AS $$ select 900 $$;
-
-
---
 -- Name: generation_active_limit(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5498,8 +4996,8 @@ declare
   v_pattern text;
 begin
   if v_query is not null then
-    -- `%` và `_` người dùng gõ là chữ, không phải ký tự đại diện. Escape `\`
-    -- trước, nếu không thì hai lần thay sau lại escape chính dấu vừa thêm.
+    -- `%` and `_` the user types are text, not wildcards. Escape `\` first, or the next two
+    -- replacements escape the backslashes they just added.
     v_pattern := '%' || replace(replace(replace(v_query, '\', '\\'), '%', '\%'), '_', '\_') || '%';
   end if;
 
@@ -5508,7 +5006,7 @@ begin
   from public.projects p
   join public.jobs j on j.id = p.job_id
   where p.user_id = v_user
-    and p.kind in ('clip', 'video_pack')
+    and p.kind = 'clip'
     and (
       p_cursor_created_at is null
       or p_cursor_id is null
@@ -5824,10 +5322,10 @@ CREATE TABLE public.clips (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     source_start numeric,
     source_end numeric,
-    kind text DEFAULT 'moment'::text NOT NULL,
+    kind text DEFAULT 'full'::text NOT NULL,
     settings jsonb,
     settings_hash text,
-    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['moment'::text, 'full'::text, 'blank'::text]))),
+    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text]))),
     CONSTRAINT clips_settings_hash_check CHECK ((((settings IS NULL) AND (settings_hash IS NULL)) OR ((jsonb_typeof(settings) = 'object'::text) AND COALESCE((settings_hash ~ '^[0-9a-f]{64}$'::text), false)))),
     CONSTRAINT clips_settings_size_check CHECK (((settings IS NULL) OR (pg_column_size(settings) < 65536))),
     CONSTRAINT clips_source_range_check CHECK ((source_end > source_start))
@@ -6055,68 +5553,6 @@ begin
   return new;
 end;
 $$;
-
-
---
--- Name: publish_job_clip(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.publish_job_clip(p_job_id uuid, p_attempt_id uuid, p_clip jsonb) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $_$
-declare
-  v_job public.jobs;
-  v_clip public.clips;
-  v_old public.clips;
-  v_path text;
-begin
-  select * into v_job from public.jobs where id=p_job_id for update;
-  if not found or p_attempt_id is null or v_job.status <> 'running'
-     or v_job.attempt_id is distinct from p_attempt_id then return false; end if;
-  if p_clip is null or jsonb_typeof(p_clip) <> 'object'
-     or coalesce(p_clip->>'id','') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-     or jsonb_typeof(p_clip->'idx') is distinct from 'number'
-     or (p_clip->>'idx') !~ '^[0-9]{1,6}$'
-     or jsonb_typeof(p_clip->'start_seconds') is distinct from 'number'
-     or jsonb_typeof(p_clip->'end_seconds') is distinct from 'number'
-     or (p_clip ? 'score' and p_clip->'score' <> 'null'::jsonb and jsonb_typeof(p_clip->'score') <> 'number') then
-    raise exception 'A clip is missing required fields.' using errcode='22023';
-  end if;
-  if (p_clip->>'start_seconds')::numeric < 0 or (p_clip->>'end_seconds')::numeric <= (p_clip->>'start_seconds')::numeric then
-    raise exception 'A clip must end after it starts.' using errcode='22023';
-  end if;
-  -- Bucket clips: chỉ nhận key tương đối thuộc đúng chủ sở hữu và project.
-  if p_clip->>'storage_path' is null then
-    raise exception 'Invalid clip storage path.' using errcode='22023';
-  end if;
-  foreach v_path in array array[p_clip->>'storage_path',p_clip->>'preview_path'] loop
-    if v_path is not null and v_path !~ ('^'||v_job.user_id::text||'/'||p_job_id::text||'/[A-Za-z0-9_-]+/[A-Za-z0-9][A-Za-z0-9._-]*$') then
-      raise exception 'Invalid clip storage path.' using errcode='22023';
-    end if;
-  end loop;
-  v_clip.id := (p_clip->>'id')::uuid; v_clip.job_id := p_job_id;
-  v_clip.idx := (p_clip->>'idx')::int; v_clip.hook := p_clip->>'hook';
-  v_clip.start_seconds := (p_clip->>'start_seconds')::numeric;
-  v_clip.end_seconds := (p_clip->>'end_seconds')::numeric;
-  v_clip.source_start := v_clip.start_seconds; v_clip.source_end := v_clip.end_seconds;
-  v_clip.score := (p_clip->>'score')::numeric; v_clip.reason := p_clip->>'reason';
-  v_clip.storage_path := p_clip->>'storage_path'; v_clip.preview_path := p_clip->>'preview_path';
-  select * into v_old from public.clips where id=v_clip.id;
-  if found then
-    if row(v_old.job_id,v_old.idx,v_old.hook,v_old.start_seconds,v_old.end_seconds,v_old.score,v_old.reason,v_old.storage_path,v_old.preview_path,v_old.source_start,v_old.source_end)
-      is distinct from row(v_clip.job_id,v_clip.idx,v_clip.hook,v_clip.start_seconds,v_clip.end_seconds,v_clip.score,v_clip.reason,v_clip.storage_path,v_clip.preview_path,v_clip.source_start,v_clip.source_end) then
-      raise exception 'This clip was already published with different content.' using errcode='22023';
-    end if;
-    return true;
-  end if;
-  if exists(select 1 from public.clips where job_id=p_job_id and idx=v_clip.idx) then
-    raise exception 'A different clip already exists at this position.' using errcode='22023';
-  end if;
-  insert into public.clips(id,job_id,idx,hook,start_seconds,end_seconds,score,reason,storage_path,preview_path,source_start,source_end)
-    values(v_clip.id,v_clip.job_id,v_clip.idx,v_clip.hook,v_clip.start_seconds,v_clip.end_seconds,v_clip.score,v_clip.reason,v_clip.storage_path,v_clip.preview_path,v_clip.source_start,v_clip.source_end);
-  return true;
-end; $_$;
 
 
 --
@@ -7187,136 +6623,6 @@ $$;
 
 
 --
--- Name: request_original_zip(uuid, uuid[], uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.request_original_zip(p_job_id uuid, p_clip_ids uuid[], p_request_id uuid) RETURNS public.tasks
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_items jsonb;
-  v_task public.tasks;
-  v_count int;
-begin
-  if p_request_id is null then raise exception 'Missing request id.' using errcode='22023'; end if;
-  if p_clip_ids is null or cardinality(p_clip_ids)=0 then raise exception 'Choose at least one clip.' using errcode='22023'; end if;
-  if cardinality(p_clip_ids)>10 then raise exception 'Choose at most 10 clips.' using errcode='22023'; end if;
-  if (select count(distinct id) from unnest(p_clip_ids) id) <> cardinality(p_clip_ids) then
-    raise exception 'Choose each clip only once.' using errcode='22023';
-  end if;
-  if not exists(select 1 from public.jobs where id=p_job_id and user_id=v_user) then
-    raise exception 'Project not found.' using errcode='P0002';
-  end if;
-  select count(*),jsonb_agg(c.id::text order by c.id) into v_count,v_items
-    from public.clips c join public.jobs j on j.id=c.job_id
-    where c.id=any(p_clip_ids) and c.job_id=p_job_id and j.user_id=v_user and c.storage_path is not null;
-  if v_count <> cardinality(p_clip_ids) then
-    raise exception 'One or more clips are not ready to download.' using errcode='P0002';
-  end if;
-  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text,1701));
-  select * into v_task from public.tasks where request_id=p_request_id;
-  if found then
-    if v_task.user_id is distinct from v_user or v_task.kind <> 'zip' or v_task.job_id is distinct from p_job_id
-       or v_task.payload is distinct from jsonb_build_object('clip_ids',v_items) then
-      raise exception 'This request id was already used for something else.' using errcode='22023';
-    end if;
-    return v_task;
-  end if;
-  perform pg_advisory_xact_lock(hashtextextended(v_user::text,1702));
-  if (select count(*) from public.tasks where user_id=v_user and kind in ('preview','export','zip') and status in ('queued','running')) >= 20 then
-    raise exception 'You already have 20 downloads or renders in progress. Please wait for one to finish.' using errcode='P0001';
-  end if;
-  perform public.consume_daily_task_quota('export');
-  insert into public.tasks(user_id,kind,job_id,payload,request_id)
-    values(v_user,'zip',p_job_id,jsonb_build_object('clip_ids',v_items),p_request_id) returning * into v_task;
-  return v_task;
-end; $$;
-
-
---
--- Name: request_zip(uuid, uuid[], uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.request_zip(p_job_id uuid, p_clip_ids uuid[], p_request_id uuid) RETURNS public.tasks
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_count int;
-  v_items jsonb;
-  v_task public.tasks;
-begin
-  if p_request_id is null then
-    raise exception 'Missing request id.' using errcode = '22023';
-  end if;
-  if p_clip_ids is null or array_length(p_clip_ids, 1) is null then
-    raise exception 'Choose at least one clip.' using errcode = '22023';
-  end if;
-  -- Trần 10: `zip_task.py` từ chối payload dài hơn thế.
-  if array_length(p_clip_ids, 1) > 10 then
-    raise exception 'Choose at most 10 clips.' using errcode = '22023';
-  end if;
-
-  if not exists (select 1 from public.jobs where id = p_job_id and user_id = v_user) then
-    raise exception 'Project not found.' using errcode = 'P0002';
-  end if;
-
-  -- Gọi lại cùng request_id (mạng gửi lại, bấm hai lần) trả đúng task cũ.
-  select * into v_task from public.tasks where request_id = p_request_id;
-  if found then
-    if v_task.kind <> 'zip' or v_task.job_id is distinct from p_job_id then
-      raise exception 'This request id was already used for something else.'
-        using errcode = '22023';
-    end if;
-    return v_task;
-  end if;
-
-  -- Ảnh chụp lúc bấm: bản mới nhất là revision editor LỚN NHẤT, không phải task
-  -- xong sau cùng — cùng luật với `latestExportByRevision` của trang project, để
-  -- ZIP chứa đúng file mà trang đang cho tải. Chỉ clip thuộc đúng project + đúng
-  -- người dùng: worker chạy bằng service role sẽ gói bất cứ id nào ở đây.
-  select count(*), jsonb_agg(to_jsonb(t.id::text) order by t.idx)
-    into v_count, v_items
-  from (
-    select distinct on (c.id)
-      c.id as clip_id, c.idx, k.id
-    from public.clips c
-    join public.jobs j on j.id = c.job_id
-    join public.tasks k on k.clip_id = c.id
-    join public.editor_revisions r on r.id = k.editor_revision_id
-    where c.id = any(p_clip_ids)
-      and c.job_id = p_job_id
-      and j.user_id = v_user
-      and k.kind = 'render_document'
-      and k.status = 'done'
-    order by c.id, r.number desc, k.finished_at desc nulls last
-  ) t;
-
-  if v_count = 0 then
-    raise exception 'Export these clips before downloading them together.'
-      using errcode = 'P0002';
-  end if;
-
-  insert into public.tasks (user_id, kind, job_id, payload, request_id)
-  values (v_user, 'zip', p_job_id, jsonb_build_object('export_task_ids', v_items), p_request_id)
-  on conflict do nothing
-  returning * into v_task;
-
-  if not found then
-    select * into v_task from public.tasks where request_id = p_request_id;
-    if not found then
-      raise exception 'Could not start the download. Please try again.' using errcode = 'P0001';
-    end if;
-  end if;
-  return v_task;
-end;
-$$;
-
-
---
 -- Name: require_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7875,18 +7181,14 @@ CREATE FUNCTION public.set_job_storage_expiry() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'public'
     AS $$
-declare
-  v_window interval := case when new.mode = 'full'
-                            then interval '24 hours'
-                            else interval '7 days' end;
 begin
   if new.status::text in ('done', 'failed', 'cancelled')
      and new.status is distinct from old.status then
-    new.expires_at := coalesce(new.finished_at, now()) + v_window;
+    new.expires_at := coalesce(new.finished_at, now()) + interval '7 days';
   elsif new.status::text in ('queued', 'running')
         and old.status::text in ('done', 'failed', 'cancelled') then
-    -- Retry phải có một cửa sổ mới; cron không được dọn source giữa lần chạy.
-    new.expires_at := now() + v_window;
+    -- A retry needs a fresh window so the cron does not clean the source mid-run.
+    new.expires_at := now() + interval '7 days';
   end if;
   return new;
 end;
@@ -8405,80 +7707,6 @@ $$;
 
 
 --
--- Name: video_url_refused(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.video_url_refused(p_url text) RETURNS boolean
-    LANGUAGE plpgsql IMMUTABLE
-    SET search_path TO 'public'
-    AS $_$
-declare
-  v_authority text := lower(substring(p_url from '^[hH][tT][tT][pP][sS]?://([^/?#]*)'));
-  v_host text;
-  v_port text;
-  v_octets int[];
-  v_h1 int;
-  v_h2 int;
-begin
-  if v_authority is null or v_authority = '' or v_authority ~ '[@[:space:]\\]' then
-    return true;
-  end if;
-  if v_authority like '[%' then
-    v_host := substring(v_authority from '^(\[[0-9a-f:.]*\])');
-    if v_host is null then
-      return true;
-    end if;
-    v_port := substring(v_authority from length(v_host) + 1);
-  else
-    v_host := split_part(v_authority, ':', 1);
-    v_port := substring(v_authority from length(v_host) + 1);
-  end if;
-  if v_port <> '' and v_port not in (':', ':80', ':443') then
-    return true;
-  end if;
-
-  if v_host like '[%' then
-    -- Global unicast is 2000::/3; IPv4 hidden in IPv6 (mapped, NAT64, 6to4, Teredo) and every
-    -- local range fall outside it or in the prefixes refused here.
-    v_host := btrim(v_host, '[]');
-    if v_host !~ '^[0-9a-f]{1,4}:' then
-      return true;
-    end if;
-    v_h1 := ('x' || lpad(split_part(v_host, ':', 1), 8, '0'))::bit(32)::int;
-    v_h2 := case when split_part(v_host, ':', 2) ~ '^[0-9a-f]{1,4}$'
-      then ('x' || lpad(split_part(v_host, ':', 2), 8, '0'))::bit(32)::int else 0 end;
-    return v_h1 < 8192 or v_h1 > 16383 or v_h1 = 8194 or (v_h1 = 8193 and (v_h2 < 512 or v_h2 = 3512));
-  end if;
-
-  v_host := rtrim(v_host, '.');
-  if v_host !~ '\.' or v_host ~ '(^|\.)(localhost|local|internal|intranet|lan|home\.arpa|onion)$' then
-    return true;
-  end if;
-  -- Digits, dots and hex only: an address in some encoding. Only a plain dotted quad is judged;
-  -- `0x7f.1`, `127.1` and `0177.0.0.1` are refused outright.
-  if v_host ~ '^(0x[0-9a-f]*|[0-9]+)(\.(0x[0-9a-f]*|[0-9]+))*$' then
-    if v_host !~ '^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$' then
-      return true;
-    end if;
-    v_octets := string_to_array(v_host, '.')::int[];
-    return v_octets[1] > 255 or v_octets[2] > 255 or v_octets[3] > 255 or v_octets[4] > 255
-      or v_octets[1] in (0, 10, 127) or v_octets[1] >= 224
-      or (v_octets[1] = 100 and v_octets[2] between 64 and 127)
-      or (v_octets[1] = 169 and v_octets[2] = 254)
-      or (v_octets[1] = 172 and v_octets[2] between 16 and 31)
-      or (v_octets[1] = 192 and v_octets[2] = 168)
-      or (v_octets[1] = 192 and v_octets[2] = 0 and v_octets[3] in (0, 2))
-      or (v_octets[1] = 192 and v_octets[2] = 88 and v_octets[3] = 99)
-      or (v_octets[1] = 198 and v_octets[2] in (18, 19))
-      or (v_octets[1] = 198 and v_octets[2] = 51 and v_octets[3] = 100)
-      or (v_octets[1] = 203 and v_octets[2] = 0 and v_octets[3] = 113);
-  end if;
-  return false;
-end;
-$_$;
-
-
---
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8975,7 +8203,7 @@ CREATE TABLE public.projects (
     job_id uuid NOT NULL,
     kind text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT projects_kind_check CHECK ((kind = ANY (ARRAY['clip'::text, 'video_pack'::text, 'edit'::text])))
+    CONSTRAINT projects_kind_check CHECK ((kind = ANY (ARRAY['clip'::text, 'edit'::text])))
 );
 
 
@@ -9061,21 +8289,6 @@ CREATE TABLE public.upload_reservations (
     CONSTRAINT upload_reservations_content_type_check CHECK ((content_type ~~ 'video/%'::text)),
     CONSTRAINT upload_reservations_declared_size_check CHECK (((declared_size > 0) AND (declared_size <= '2147483648'::bigint))),
     CONSTRAINT upload_reservations_status_check CHECK ((status = ANY (ARRAY['reserved'::text, 'consumed'::text])))
-);
-
-
---
--- Name: video_ownership; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.video_ownership (
-    job_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    source text NOT NULL,
-    url text,
-    confirmed_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT video_ownership_source_check CHECK ((source = ANY (ARRAY['upload'::text, 'link'::text]))),
-    CONSTRAINT video_ownership_url_check CHECK (((url IS NULL) OR (char_length(url) <= 2000)))
 );
 
 
@@ -9316,14 +8529,6 @@ ALTER TABLE ONLY public.cmo_memories
 
 ALTER TABLE ONLY public.cmo_runs
     ADD CONSTRAINT cmo_runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: cmo_video_briefs cmo_video_briefs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cmo_video_briefs
-    ADD CONSTRAINT cmo_video_briefs_pkey PRIMARY KEY (id);
 
 
 --
@@ -9655,30 +8860,6 @@ ALTER TABLE ONLY public.upload_reservations
 
 
 --
--- Name: video_ownership video_ownership_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_ownership
-    ADD CONSTRAINT video_ownership_pkey PRIMARY KEY (job_id);
-
-
---
--- Name: video_packs video_packs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_packs
-    ADD CONSTRAINT video_packs_pkey PRIMARY KEY (id);
-
-
---
--- Name: video_packs video_packs_run_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_packs
-    ADD CONSTRAINT video_packs_run_id_key UNIQUE (run_id);
-
-
---
 -- Name: worker_draft_initializations worker_draft_initializations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9748,13 +8929,6 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 --
 
 CREATE INDEX caption_translations_user_idx ON public.caption_translations USING btree (user_id, created_at DESC);
-
-
---
--- Name: clips_one_full_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX clips_one_full_idx ON public.clips USING btree (job_id) WHERE (kind = 'full'::text);
 
 
 --
@@ -9832,13 +9006,6 @@ CREATE INDEX cmo_runs_queue_idx ON public.cmo_runs USING btree (created_at) WHER
 --
 
 CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, created_at DESC);
-
-
---
--- Name: cmo_video_briefs_user_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX cmo_video_briefs_user_idx ON public.cmo_video_briefs USING btree (user_id, status, created_at DESC);
 
 
 --
@@ -10091,13 +9258,6 @@ CREATE INDEX tasks_user_created_idx ON public.tasks USING btree (user_id, create
 --
 
 CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations USING btree (user_id, status, expires_at);
-
-
---
--- Name: video_packs_user_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX video_packs_user_idx ON public.video_packs USING btree (user_id, status, created_at DESC);
 
 
 --
@@ -10419,22 +9579,6 @@ ALTER TABLE ONLY public.cmo_memories
 
 ALTER TABLE ONLY public.cmo_runs
     ADD CONSTRAINT cmo_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
--- Name: cmo_video_briefs cmo_video_briefs_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cmo_video_briefs
-    ADD CONSTRAINT cmo_video_briefs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
-
-
---
--- Name: cmo_video_briefs cmo_video_briefs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cmo_video_briefs
-    ADD CONSTRAINT cmo_video_briefs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -10798,46 +9942,6 @@ ALTER TABLE ONLY public.upload_reservations
 
 
 --
--- Name: video_ownership video_ownership_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_ownership
-    ADD CONSTRAINT video_ownership_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
-
-
---
--- Name: video_ownership video_ownership_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_ownership
-    ADD CONSTRAINT video_ownership_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
--- Name: video_packs video_packs_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_packs
-    ADD CONSTRAINT video_packs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
-
-
---
--- Name: video_packs video_packs_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_packs
-    ADD CONSTRAINT video_packs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.cmo_runs(id) ON DELETE SET NULL;
-
-
---
--- Name: video_packs video_packs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_packs
-    ADD CONSTRAINT video_packs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
 -- Name: worker_draft_initializations worker_draft_initializations_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10966,12 +10070,6 @@ ALTER TABLE public.cmo_memories ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.cmo_runs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: cmo_video_briefs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.cmo_video_briefs ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: content_items; Type: ROW SECURITY; Schema: public; Owner: -
@@ -11179,13 +10277,6 @@ CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO aut
 
 
 --
--- Name: cmo_video_briefs read own video briefs; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "read own video briefs" ON public.cmo_video_briefs FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
-
-
---
 -- Name: scene_codes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -11208,18 +10299,6 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.upload_reservations ENABLE ROW LEVEL SECURITY;
-
---
--- Name: video_ownership; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.video_ownership ENABLE ROW LEVEL SECURITY;
-
---
--- Name: video_packs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.video_packs ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: worker_draft_initializations; Type: ROW SECURITY; Schema: public; Owner: -
@@ -11322,13 +10401,6 @@ CREATE POLICY "đọc editor revision thuộc clip của mình" ON public.editor
 CREATE POLICY "đọc generation của chính mình" ON public.generations FOR SELECT TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) AND (NOT (EXISTS ( SELECT 1
    FROM public.jobs j
   WHERE ((j.id = generations.job_id) AND (j.purging_at IS NOT NULL)))))));
-
-
---
--- Name: video_packs đọc gói video của mình; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "đọc gói video của mình" ON public.video_packs FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -11494,13 +10566,6 @@ CREATE POLICY "đọc usage assistant của mình" ON public.agent_usage FOR SEL
    FROM (public.agent_turns t
      JOIN public.agent_sessions s ON ((s.id = t.session_id)))
   WHERE ((t.id = agent_usage.turn_id) AND (s.user_id = ( SELECT auth.uid() AS uid))))));
-
-
---
--- Name: video_ownership đọc xác nhận của mình; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "đọc xác nhận của mình" ON public.video_ownership FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

@@ -51,33 +51,21 @@ select throws_ok(
   '23514', null, 'phiên hai phạm vi bị chặn'
 );
 
+-- ================================================================ phiên
+-- The project-wide assistant's opener went with multi-clip projects (20261220090000); a session
+-- scoped to a job still runs on the same turn, approval and checkpoint RPCs.
+insert into public.agent_sessions (user_id, model, job_id, scope)
+values ('e9700000-0000-4000-8000-00000000000a', 'fake', 'e9710000-0000-4000-8000-00000000000a', 'project');
+create temporary table sp as
+  select * from public.agent_sessions where job_id = 'e9710000-0000-4000-8000-00000000000a';
+grant select on sp to authenticated;
+select hasnt_function('public', 'agent_open_project_session', array['uuid', 'text'], 'the project session opener is gone');
+
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e9700000-0000-4000-8000-00000000000a"}';
-
--- ================================================================ phiên
-create temporary table sp as select * from public.agent_open_project_session('e9710000-0000-4000-8000-00000000000a', 'fake');
-grant select on sp to authenticated;
-select is((select job_id from sp), 'e9710000-0000-4000-8000-00000000000a'::uuid, 'phiên gắn với project');
-select is((select clip_id from sp), null::uuid, 'phiên project không có clip');
-select is(
-  (select id from public.agent_open_project_session('e9710000-0000-4000-8000-00000000000a', 'fake')),
-  (select id from sp), 'mở lại trả đúng phiên cũ'
-);
-select isnt(
-  (select id from public.agent_open_project_session('e9710000-0000-4000-8000-00000000000a', 'claude-opus-5')),
-  (select id from sp), 'đổi model là phiên mới'
-);
 select isnt(
   (select id from public.agent_open_session('e9720000-0000-4000-8000-00000000000a', 'fake')),
   (select id from sp), 'phiên clip tách khỏi phiên project'
-);
-select throws_ok(
-  $$ select public.agent_open_project_session('e9710000-0000-4000-8000-00000000000b', 'fake') $$,
-  'P0002', 'Project not found.', 'không mở phiên trên project người khác'
-);
-select throws_ok(
-  $$ select public.agent_open_project_session('e9710000-0000-4000-8000-00000000000a', 'default') $$,
-  '22023', 'Unknown assistant model.', 'model lạ bị chặn'
 );
 
 -- ================================================================ chờ duyệt
