@@ -17,6 +17,7 @@ import {
   type LookAnswer,
   type LookOp,
 } from "@/lib/mcp/look";
+import { saveFrame, saveFrameInput } from "@/lib/mcp/save-frame";
 
 import { errorResult, registerGroup, type McpResult, type McpTool } from "../registry";
 
@@ -69,6 +70,18 @@ registerGroup({
       "Look inside a library video or image before using it: frames at the given seconds of the file, as one contact sheet. Use it to choose which part of a B-roll file fits. Free.",
       mediaGrabInput,
     ),
+    {
+      name: "save_frame",
+      title: "Save a frame",
+      description:
+        "Save one frame of the clip (as the export draws it, WITHOUT captions or text) to the library folder Frames, uploaded so generate_media can use it as start_image or end_image: " +
+        "an AI transition between two shots (the frame before and after a cut), or a video that continues from a moment of the clip. Returns its library path and the picture. Free.",
+      inputSchema: saveFrameInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(input, { supabase, userId }) {
+        return answer(await saveFrame(supabase, userId, input as Parameters<typeof saveFrame>[2]));
+      },
+    },
     tool(
       "media_waveform",
       "Listen for loudness",

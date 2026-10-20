@@ -104,6 +104,15 @@ describe('lookJob (real ffmpeg)', () => {
     expect(speaker.data.box).toEqual([0, 0, 1, 1]);
   });
 
+  it('frame: one large frame without the text, for save_frame', async () => {
+    const result = await lookJob({ ...base(), op: 'frame', time: 0.25, edge: 640 });
+    if ('error' in result) throw new Error(result.error);
+    expect([result.data.width, result.data.height]).toEqual([360, 640]);
+    // The title is on screen at 0.25 s in a capture; here the text is left out, so its spot stays the video's gray.
+    const where = await grayOf(result.images[0]!, 120, 535);
+    expect(where.gray).toBeLessThan(80);
+  });
+
   it('grab: frames inside a library video, or the one picture of an image', async () => {
     const video = await lookJob({ ...base(), op: 'grab', file: join(dir, 'master.mp4'), times: [0.5, 1.5] });
     if ('error' in video) throw new Error(video.error);

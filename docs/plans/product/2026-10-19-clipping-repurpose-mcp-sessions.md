@@ -165,9 +165,19 @@ Checklist:
   - **Accept:** `server.check.ts` cases per tool; a waveform case on a fixture with a known 2 s silence.
   - *Done:* same endpoint and group. `inspect_color` and `grab` in `look.test.ts`; waveform in `test_worker_look.py`
     (tone 0-2 s, silence 2-4 s, tone 4-6 s → silence [2, 4]; a window in file seconds). Same untested part as B7.
-- [ ] **B9 — Versions, then `save_frame`.** Plan items 10f and 10e.
+- [x] **B9 — Versions, then `save_frame`.** Plan items 10f and 10e.
   - **Accept:** a restore round trip in `server.check.ts` (edit → list → restore → document equals the old one); pgTAP
     if a new RPC is needed (ask in Requests for numbers).
+  - *Done (2026-10-20):* no new RPC was needed.
+    - `list_versions` / `restore_version` (`apps/web/lib/mcp/versions.ts`, group `versions.ts`): a restore takes a
+      checkpoint, then saves the old document behind the optimistic lock, like the editor's Restore.
+      `versions.check.ts` runs the round trip on an in-memory client (edit → list → restore → old document back;
+      original; gone; another user's clip).
+    - `save_frame` (`apps/web/lib/mcp/save-frame.ts`): the worker draws the frame without text (`look` op `frame`,
+      `look.test.ts`), then the editor's own upload steps under RLS: `reserve_upload` → Storage upload →
+      `register_media_asset` → library record via `save_editor_document`. `save-frame.check.ts` covers the library
+      record. **Untested:** the upload chain against a real database and Storage, and generate_media using the
+      frame (needs fal budget); noted in the file.
 
 ## Session C — Moderation on Groq, AI CMO over MCP, Beta badges, MCP checklist, daily drafts
 

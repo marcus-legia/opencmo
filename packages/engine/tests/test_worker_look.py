@@ -87,6 +87,20 @@ def test_capture_fetches_the_planned_sources_and_draws_in_node(monkeypatch, tmp_
     assert store.downloads == [("renders", "u-1/j-1/master.mp4")]
 
 
+def test_frame_passes_only_its_own_fields(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_node(command, file, *rest, timeout):
+        if command == "plan":
+            return json.dumps({"sources": []})
+        seen.update(json.loads(Path(file).read_text()))
+        return json.dumps({"images": ["AAAA"], "data": {"time": 2}})
+
+    monkeypatch.setattr(look_mod, "_node", fake_node)
+    look_mod.look(FakeStore(), _request("frame", document={"version": 1}, input={"time": 2, "edge": 1280, "times": [1]}), tmp_path)
+    assert seen["op"] == "frame" and seen["time"] == 2 and seen["edge"] == 1280 and "times" not in seen
+
+
 def test_capture_without_a_document_asks_to_open_the_editor(tmp_path):
     assert "Open it in the editor" in look_mod.look(FakeStore(), _request("capture"), tmp_path)["error"]
 
