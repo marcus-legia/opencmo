@@ -88,7 +88,8 @@ export function ClipsPanel({
 }: {
   frame: AspectRatio;
   prefill?: ClipsPrefill | null;
-  onOpen: (clipId: string) => void;
+  /** `then: "voiceover"` opens the edit with Generate → Voiceover. */
+  onOpen: (clipId: string, then?: "voiceover") => void;
 }) {
   const { credits, userId, refreshAccount } = useShellAccount();
   const [linkMode, setLinkMode] = useState(Boolean(prefill?.url));
@@ -104,6 +105,7 @@ export function ClipsPanel({
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<ClippingJob[] | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const upload = useRef<UploadHandle | null>(null);
   const uploaded = useRef<{ file: File; source: string } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -224,6 +226,21 @@ export function ClipsPanel({
       setProgress(null);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * "Add explainer": explainers are written by the user's own Claude over MCP (`preview_explainer` →
+   * `add_explainer`); the in-app Assistant needs our model budget. The request is copied for Claude.
+   */
+  async function copyExplainer(clipId: string, hook: string) {
+    const request = `Make an explainer for my OpenCMO clip "${hook}" (clip_id ${clipId}). Use the explain guide, show me the storyboard first.`;
+    try {
+      await navigator.clipboard.writeText(request);
+      setCopied(clipId);
+    } catch {
+      setCopied(null);
+      setError(`Copy this into Claude: ${request}`);
     }
   }
 
@@ -353,6 +370,12 @@ export function ClipsPanel({
         </fieldset>
 
         {error && !pickerOpen ? <p className="ed2-clips-error" role="alert">{error}</p> : null}
+        {copied ? (
+          <p className="ed2-clips-hint" role="status" data-testid="clips-explainer-hint">
+            Copied. Paste it in Claude with OpenCMO connected; it writes the storyboard, you approve the price. Not connected
+            yet? <a href="/app/settings">Connect Claude in Settings</a>.
+          </p>
+        ) : null}
         {needsPlan ? (
           <a className="ed2-btn ed2-primary" href="/app/billing">Choose a plan to start</a>
         ) : (
@@ -423,9 +446,23 @@ export function ClipsPanel({
                     {/* Bản sửa của clip dựng từ master + transcript mà worker ghi lúc job XONG:
                         mở sớm hơn là "This clip has no editable source yet". */}
                     {job.status === "done" ? (
-                      <button type="button" className="ed2-btn" data-testid="clips-open" onClick={() => onOpen(clip.id)}>
-                        Open
-                      </button>
+                      <span className="ed2-clips-actions">
+                        <button type="button" className="ed2-btn" data-testid="clips-open" onClick={() => onOpen(clip.id)}>
+                          Open
+                        </button>
+                        <button type="button" className="ed2-clips-switch" data-testid="clips-voiceover" onClick={() => onOpen(clip.id, "voiceover")}>
+                          Add voiceover
+                        </button>
+                        <button
+                          type="button"
+                          className="ed2-clips-switch"
+                          data-testid="clips-explainer"
+                          title="Copies a request for Claude with OpenCMO connected (Settings → Connected apps)"
+                          onClick={() => void copyExplainer(clip.id, clip.hook ?? `Clip ${clip.idx + 1}`)}
+                        >
+                          {copied === clip.id ? "Copied for Claude" : "Add explainer"}
+                        </button>
+                      </span>
                     ) : (
                       <small>Preparing…</small>
                     )}

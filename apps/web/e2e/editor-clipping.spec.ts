@@ -88,4 +88,21 @@ test("tab Clips: link cần xác nhận chính chủ, upload ra clip mở đư�
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({ path: testInfo.outputPath(`clips-jobs-${width}.png`) });
   }
+  await page.setViewportSize({ width: 1366, height: 900 });
+
+  // A4: "Add explainer" copies a request for the user's Claude (MCP) naming the clip.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const finished = page.locator(`[data-job="${jobId}"]`);
+  await finished.getByTestId("clips-explainer").first().click();
+  await expect(page.getByTestId("clips-explainer-hint")).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(`clip_id ${clipId}`);
+
+  // A4: "Add voiceover" opens that clip's edit with Generate on its Voiceover tab.
+  const here = page.url();
+  await finished.getByTestId("clips-voiceover").first().click();
+  await page.waitForURL((url) => url.href !== here && new RegExp(`/app/editor/${clipId}$`).test(url.pathname), { timeout: 60_000 });
+  await expect(page.getByTestId("generate-panel")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("generate-kind-voiceover")).toHaveAttribute("aria-pressed", "true");
+  await expect(page).not.toHaveURL(/generate=/);
+  await page.screenshot({ path: testInfo.outputPath("clips-add-voiceover-1366.png") });
 });

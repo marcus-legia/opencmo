@@ -106,9 +106,14 @@ Checklist:
     `E2E_VIDEO_CODEC=vp9` and Playwright's Chromium, which DeviceCheck refuses for lack of H.264, so the run stubbed
     `canPlayType` locally (not committed); CI's Chrome needs neither. `output-options` and `upload-resume` (updated for
     the picker) pass the same way.
-- [ ] **A4 — After the job.** Each clip: Open, "Add voiceover" (opens Generate → Voiceover), "Add explainer" (points to
+- [x] **A4 — After the job.** Each clip: Open, "Add voiceover" (opens Generate → Voiceover), "Add explainer" (points to
   `/explain` in Claude over MCP).
   - **Accept:** e2e clicks Open and lands in the edit; one full-size frame looked at.
+  - *Done:* "Add voiceover" opens the clip's edit with `?generate=voiceover` (Generate on its Voiceover tab; the
+    parameter is then dropped). "Add explainer" copies a request naming the clip_id for the user's Claude over MCP and
+    points to Settings to connect; the in-app Assistant would need our model budget. `editor-clipping.spec.ts` covers
+    both; screenshots looked at. Not looked at: a full-size frame of a real engine render (the e2e worker renders a
+    fixture, and the engine render did not change).
 - [x] **A5 — Manual-only guard.** zod, `create_job` migration and worker refuse a clip job without segments (plan
   item 1).
   - **Accept:** a 422 in the e2e, a pgTAP case and a worker pytest, each failing on today's code first.

@@ -455,7 +455,16 @@ function Workspace({
   const [backgroundRange, setBackgroundRange] = useState<{ start: number; end: number } | null>(null);
   const [editRange, setEditRange] = useState<{ start: number; end: number } | null>(null);
   // Gieo sẵn ô Generate từ menu chuột phải; `key` mount lại panel để nó nhận giá trị mới.
-  const [generateInitial, setGenerateInitial] = useState<{ key: number; kind: "video"; firstFrame?: string; edit?: EditSource } | null>(null);
+  const [generateInitial, setGenerateInitial] = useState<{ key: number; kind: "video" | "voiceover"; firstFrame?: string; edit?: EditSource } | null>(null);
+  // `?generate=voiceover` ("Add voiceover" on a finished clip, plan item 1): the edit opens with the
+  // Generate panel on its Voiceover tab. Dropped from the URL like `panel=clips`.
+  useEffect(() => {
+    if (search.get("generate") !== "voiceover") return;
+    setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "voiceover" }));
+    setGenerateOpen(true);
+    router.replace(pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, pathname, router]);
   const [visualsOpen, setVisualsOpen] = useState(false);
   const generate = async (ops: unknown[]) => {
     const before = new Set<string>();
@@ -1386,7 +1395,7 @@ function Workspace({
           <ClipsPanel
             frame={sceneWidth && sceneHeight ? aspectOf(sceneWidth, sceneHeight) : "9:16"}
             prefill={clipsPrefill}
-            onOpen={(id) => void leave(`/app/editor/${id}`)}
+            onOpen={(id, then) => void leave(`/app/editor/${id}${then === "voiceover" ? "?generate=voiceover" : ""}`)}
           />
         ) : (
           <TranscriptPanel

@@ -7072,3 +7072,10 @@ html[data-theme] .ed2-zoom {
     width: 100%;
   }
 }
+/* Open, Add voiceover, Add explainer on a finished clip: stacked, the panel is narrow. */
+.ed2-clips-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
