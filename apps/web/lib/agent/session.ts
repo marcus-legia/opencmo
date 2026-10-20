@@ -1,9 +1,8 @@
 import "server-only";
 
 /**
- * Nạp một phiên Assistant (dưới RLS) và dựng phạm vi của nó. Route turns,
- * tool-results và approvals đi chung đường này — phiên clip hay project chỉ
- * khác nhau ở đây.
+ * Loads an Assistant session (under RLS) and builds its scope. The turns, tool-results and
+ * approvals routes share this path — a clip chat and the CMO chat differ only here.
  */
 
 import { ApiError } from "@/lib/api/errors";
@@ -16,17 +15,19 @@ import type { Provider } from "./providers/types";
 import { loadCatalog } from "@/lib/generate/models";
 
 import { serviceLedger, type Ledger } from "./ledger";
-import { clipScope, cmoScope, projectScope, type Scope } from "./scope";
+import { clipScope, cmoScope, type Scope } from "./scope";
 import { sseResponse } from "./sse";
 import { slashDirective } from "./slash";
 
-export type SessionRow = { id: string; scope: "clip" | "project" | "cmo"; clip_id: string | null; job_id: string | null; model: string };
+/** `scope` is the stored value: rows from the removed multi-clip project chat may still say "project". */
+export type SessionRow = { id: string; scope: string; clip_id: string | null; model: string };
 
 export async function loadSession(supabase: SupabaseClient, id: string | undefined): Promise<{ session: SessionRow; provider: Provider }> {
   if (!/^[0-9a-f-]{36}$/.test(id ?? "")) throw notFound("Assistant session not found.");
-  const { data } = await supabase.from("agent_sessions").select("id, scope, clip_id, job_id, model").eq("id", id).maybeSingle();
+  const { data } = await supabase.from("agent_sessions").select("id, scope, clip_id, model").eq("id", id).maybeSingle();
   const session = data as SessionRow | null;
-  if (!session) throw notFound("Assistant session not found.");
+  // The multi-clip project chat is gone with the clipping tool; its old sessions stay read-only history.
+  if (!session || (session.scope !== "cmo" && !session.clip_id)) throw notFound("Assistant session not found.");
   // A CMO chat runs on the `cmo` agent's current model of the chat's own provider family: history
   // only replays within a family.
   const family = kindOf(session.model);
@@ -47,11 +48,9 @@ export async function scopeFor(
   // Tool sinh media mang giá trên thẻ duyệt: nạp catalog DB (G5) trước khi dựng scope.
   await loadCatalog(supabase);
   if (session.scope === "cmo") return cmoScope(supabase);
-  if (session.clip_id) {
-    const context = await clipContext(supabase, session.clip_id);
-    return clipScope(supabase, context, session.clip_id, turn, checkpointed, ledger);
-  }
-  return projectScope(supabase, session.job_id!, turn, checkpointed);
+  if (!session.clip_id) throw notFound("Assistant session not found.");
+  const context = await clipContext(supabase, session.clip_id);
+  return clipScope(supabase, context, session.clip_id, turn, checkpointed, ledger);
 }
 
 /**

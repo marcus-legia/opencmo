@@ -40,8 +40,8 @@ export const GET = withApi({}, async ({ request, supabase }) => {
         .from("clips")
         .select("id, job_id, idx, storage_path, preview_path")
         .in("job_id", jobIds)
-        // Clip "cả video" (E2-c) không phải một clip AI cắt: không tính, không làm ảnh bìa.
-        .eq("kind", "moment")
+        // The upload's one editable video; blank New edits have no file to show.
+        .eq("kind", "full")
         .order("idx", { ascending: true })
     : { data: [], error: null };
   if (clipResult.error) {

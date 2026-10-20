@@ -11,37 +11,20 @@ import type {
   Project,
   ProjectClip,
   ProjectSettings,
-  SourceSegment,
 } from "../clipping-types";
 import { ASPECTS, JOB_LAYOUTS } from "../settings-schema";
 import { isSourceUpload, sourceObjectPath } from "../upload";
 
-/** Cùng bảng lựa chọn độ dài với worker. */
-const CLIP_LENGTHS: Record<string, [number, number]> = {
-  auto: [10, 60],
-  short: [15, 30],
-  medium: [30, 60],
-  long: [60, 90],
-};
-
 /**
- * Mặc định ở đây phải TRÙNG mặc định của `create_job()`: job tạo trước khi có
+ * Mặc định ở đây phải TRÙNG mặc định của `create_upload_edit()`: job tạo trước khi có
  * các cột này không có giá trị nào để đọc, và chúng đã chạy ra 9:16 có phụ đề.
  */
 export function projectSettings(job: {
-  clip_length: string | null;
-  mode?: string | null;
   aspect?: string | null;
   layout?: string | null;
   captions?: boolean | null;
 }): ProjectSettings {
-  const key = job.clip_length && job.clip_length in CLIP_LENGTHS ? job.clip_length : "auto";
-  const [min, max] = CLIP_LENGTHS[key];
   return {
-    clip_length: key as ProjectSettings["clip_length"],
-    min_seconds: min,
-    max_seconds: max,
-    mode: job.mode === "full" ? "full" : "clip",
     aspect: (ASPECTS.includes(job.aspect as never) ? job.aspect : "9:16") as ProjectSettings["aspect"],
     layout: (JOB_LAYOUTS.includes(job.layout as never)
       ? job.layout
@@ -74,12 +57,9 @@ export type JobRow = {
   stage: string | null;
   duration_seconds: number | string | null;
   clips_requested: number;
-  clip_length: string | null;
-  mode: string | null;
   aspect: string | null;
   layout: string | null;
   captions: boolean | null;
-  segments: { start: number | string; end: number | string }[] | null;
   error: string | null;
   created_at: string;
   finished_at: string | null;
@@ -141,17 +121,6 @@ export function clipShape(
   };
 }
 
-/**
- * `jobs.segments` → hợp đồng. `[]` được đưa về null: một mảng rỗng không mô tả
- * đoạn nào, và UI phân biệt "tự chọn" với "để AI chọn" bằng đúng chỗ này.
- */
-export function projectSegments(
-  raw: { start: number | string; end: number | string }[] | null | undefined,
-): SourceSegment[] | null {
-  if (!raw || raw.length === 0) return null;
-  return raw.map((s) => ({ start: number(s.start), end: number(s.end) }));
-}
-
 export function projectShape(
   job: JobRow,
   clips: ProjectClip[] = [],
@@ -171,7 +140,6 @@ export function projectShape(
     finished_at: job.finished_at,
     settings: projectSettings(job),
     attempt_started_at: job.attempt_started_at,
-    segments: projectSegments(job.segments),
     clips,
   };
   if (hasTranscript !== undefined) project.has_transcript = hasTranscript;

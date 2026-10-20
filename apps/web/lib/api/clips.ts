@@ -21,7 +21,7 @@ export type ProxyEntry = {
 };
 
 export type ClipContext = {
-  /** `kind`: `moment` (khoảnh khắc), `full` (cả video, E2-c), `blank` (New edit, F1 — không có nguồn). */
+  /** `kind`: `full` (an uploaded video, edited whole) or `blank` (New edit, F1 — no source). */
   clip: { id: string; job_id: string; idx: number; kind: string };
   job: {
     id: string;
@@ -49,7 +49,7 @@ export async function clipContext(
   const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
   if (!job) throw notFound(CLIP_NOT_FOUND);
 
-  return { clip: { id: row.id, job_id: row.job_id, idx: row.idx, kind: row.kind ?? "moment" }, job };
+  return { clip: { id: row.id, job_id: row.job_id, idx: row.idx, kind: row.kind ?? "full" }, job };
 }
 
 /** Độ dài nguồn cho `parseSettings`; 0 nghĩa là chưa probe xong. */

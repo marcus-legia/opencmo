@@ -117,15 +117,15 @@ def test_parallel_claims_never_hand_out_the_same_task_twice(user):
     job = str(uuid.uuid4())
     sql(f"""
         insert into public.jobs (id, user_id, source_url, status)
-        values ('{job}', '{user}', 'https://youtu.be/x', 'done');
+        values ('{job}', '{user}', 'storage://{user}/x.mp4', 'done');
         insert into public.tasks (user_id, kind, job_id, request_id)
-        select '{user}', 'zip', '{job}', gen_random_uuid() from generate_series(1, 20);
+        select '{user}', 'probe_media', '{job}', gen_random_uuid() from generate_series(1, 20);
     """)
 
     def claim_all() -> list[str]:
         taken = []
         while True:
-            got = sql("select id from public.claim_next_task(array['zip']);")
+            got = sql("select id from public.claim_next_task(array['probe_media']);")
             if not got:
                 return taken
             taken.append(got)
@@ -218,7 +218,7 @@ def test_global_request_race_does_not_return_another_users_task(clip):
         return try_sql(f"""
             begin;
             insert into public.tasks(id,user_id,kind,request_id)
-            values ('{task}', '{other}', 'zip', '{request}');
+            values ('{task}', '{other}', 'probe_media', '{request}');
             select pg_sleep(2) /* {marker} */;
             commit;
         """)

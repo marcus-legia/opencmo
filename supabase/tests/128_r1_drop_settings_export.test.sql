@@ -33,8 +33,7 @@ select throws_ok(
   '23514', null, 'task preview không còn hợp lệ'
 );
 
--- Clip đầu có hai bản xuất xong: revision 2 xong TRƯỚC revision 1 (worker hoàn
--- tất ngược thứ tự). ZIP phải lấy revision lớn nhất, như trang project.
+-- Exports of both clips; the second clip's only export is still running.
 insert into public.editor_revisions (id, clip_id, number, source_hash, document) values
   ('f1283000-0000-4000-8000-000000000001', 'f1282000-0000-4000-8000-00000000000a', 1, repeat('1', 64), '{}'),
   ('f1283000-0000-4000-8000-000000000002', 'f1282000-0000-4000-8000-00000000000a', 2, repeat('2', 64), '{}'),
@@ -44,26 +43,8 @@ insert into public.tasks (id, user_id, kind, clip_id, editor_revision_id, status
    'f1282000-0000-4000-8000-00000000000a', 'f1283000-0000-4000-8000-000000000001', 'done', gen_random_uuid(), now()),
   ('f1284000-0000-4000-8000-000000000002', 'f1280000-0000-4000-8000-00000000000a', 'render_document',
    'f1282000-0000-4000-8000-00000000000a', 'f1283000-0000-4000-8000-000000000002', 'done', gen_random_uuid(), now() - interval '1 hour'),
-  -- Clip thứ hai chỉ có bản đang chạy: chưa có gì để gói.
   ('f1284000-0000-4000-8000-000000000003', 'f1280000-0000-4000-8000-00000000000a', 'render_document',
    'f1282000-0000-4000-8000-00000000000b', 'f1283000-0000-4000-8000-000000000003', 'running', gen_random_uuid(), null);
-
-set local role authenticated;
-set local request.jwt.claims = '{"sub":"f1280000-0000-4000-8000-00000000000a"}';
-
-select is(
-  (public.request_zip('f1281000-0000-4000-8000-00000000000a',
-     array['f1282000-0000-4000-8000-00000000000a', 'f1282000-0000-4000-8000-00000000000b']::uuid[],
-     'f1285000-0000-4000-8000-000000000001')).payload -> 'export_task_ids',
-  '["f1284000-0000-4000-8000-000000000002"]'::jsonb,
-  'ZIP gói bản xuất của revision lớn nhất, bỏ bản chưa xong'
-);
-select throws_ok(
-  $$ select public.request_zip('f1281000-0000-4000-8000-00000000000a',
-       array['f1282000-0000-4000-8000-00000000000b']::uuid[], gen_random_uuid()) $$,
-  'P0002', 'Export these clips before downloading them together.',
-  'clip chưa có bản xuất xong thì không tạo ZIP rỗng'
-);
 
 -- Hạn mức export/ngày của gói free (5) chặn đường document.
 reset role;

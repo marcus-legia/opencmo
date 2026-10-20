@@ -68,23 +68,6 @@ export function demoInbox(product: string): InboxCard[] {
       createdAt: hoursAgo(1),
     },
     {
-      id: "demo-video-1",
-      priority: "medium",
-      department: "video",
-      title: "5 clips ready",
-      source: "Founder interview — how we priced v1.mp4",
-      clips: [
-        { id: "c1", title: "Why we killed the free plan", seconds: 41, hook: "We had 2,000 free users and no revenue." },
-        { id: "c2", title: "The one question to ask before pricing", seconds: 37, hook: "Ask what they pay today." },
-        { id: "c3", title: "Annual vs monthly", seconds: 52, hook: "Annual saved us, but not for the reason you think." },
-        { id: "c4", title: "Our first 10 customers", seconds: 46, hook: "All ten came from one Reddit thread." },
-        { id: "c5", title: "What I'd do differently", seconds: 33, hook: "Charge from day one." },
-      ],
-      platforms: ["TikTok", "Reels", "Shorts"],
-      projectId: null,
-      createdAt: hoursAgo(3),
-    },
-    {
       id: "demo-sales-2",
       priority: "low",
       department: "sales",
@@ -117,7 +100,7 @@ export function demoInbox(product: string): InboxCard[] {
 export function demoCalendar(): CalendarItem[] {
   return [
     { id: "k1", day: daysFromNow(0), department: "post", platform: "X", idea: "Reminders shipped: why follow-ups matter more than pricing", reason: "Pain #1 in your strategy", editable: false },
-    { id: "k2", day: daysFromNow(1), department: "video", platform: "Shorts", idea: "Clip: why we killed the free plan", reason: "Strongest hook from Tuesday's interview", editable: false },
+    { id: "k2", day: daysFromNow(1), department: "video", platform: "Shorts", idea: "Short video: why we killed the free plan", reason: "The pricing story your audience asks about most", editable: false },
     { id: "k3", day: daysFromNow(2), department: "post", platform: "X", idea: "Thread: the 3-7-14 reminder rule", reason: "Hook pattern that is working for competitors this week", editable: false },
     { id: "k4", day: daysFromNow(3), department: "sales", platform: "Reddit", idea: "Join r/freelance threads on late payments", reason: "Most replies last week came from here", editable: false },
     { id: "k5", day: daysFromNow(4), department: "post", platform: "X", idea: "Build in public: this week's numbers", reason: "Founders reply most to concrete numbers", editable: false },
@@ -129,7 +112,7 @@ export function demoMetrics(): Metrics {
     windowDays: 7,
     tiles: [
       { label: "Posts published", value: 6, change: 2, hint: "On X this week" },
-      { label: "Views", value: 18420, change: 31, hint: "Across X and short videos" },
+      { label: "Views", value: 18420, change: 31, hint: "Across your posts on X" },
       { label: "Replies", value: 47, change: 12, hint: "On your posts" },
       { label: "Clips scheduled", value: 5, change: null, hint: "TikTok, Reels, Shorts" },
     ],
@@ -156,15 +139,6 @@ export function demoLog(): LogEntry[] {
         { tool: "next_due_item", label: "Today: reminders shipped", status: "done" },
         { tool: "draft_post", label: "3 versions", status: "done" },
         { tool: "check_post", label: "Passed the X playbook", status: "done" },
-        { tool: "create_card", label: "1 card in your inbox", status: "done" },
-      ],
-    },
-    {
-      id: "l3", job: "W5", title: "Video pack", status: "done", startedAt: hoursAgo(3), detail: "5 clips from your interview",
-      steps: [
-        { tool: "create_clip_job", label: "5 clips cut", status: "done" },
-        { tool: "render_document", label: "Brand applied and rendered", status: "done" },
-        { tool: "write_captions", label: "Captions for 3 platforms", status: "done" },
         { tool: "create_card", label: "1 card in your inbox", status: "done" },
       ],
     },

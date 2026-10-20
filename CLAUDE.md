@@ -6,9 +6,10 @@ contributors: see [CONTRIBUTING.md](CONTRIBUTING.md) — the rules are the same.
 ## Project
 
 OpenCMO is an AI CMO for solo founders: it learns a business from its website and runs three
-departments — **Video** (your own long-form video → captioned vertical clips → editor →
-per-platform captions), **Post** (X drafts you approve and publish), and **Sales** (Reddit
-threads scored with evidence and draft replies the user posts themselves).
+departments — **Video** (an editor: upload your own video and edit it whole — cut by words,
+captions, B-roll, generated shots — or start a blank edit), **Post** (X drafts you approve and
+publish), and **Sales** (Reddit threads scored with evidence and draft replies the user posts
+themselves).
 
 **The repository is closed source (private) since 2026-10-16.** Internal docs — costs, plans,
 specs, provider comparisons — go straight into `docs/` here; there is no separate public repo to
@@ -42,8 +43,9 @@ The editor is locked in as the spearhead: build it until it can make every marke
 - **Assist, never act.** Anything that goes out (posts, replies) runs only after the user
   approves it, on their own account. Never add automatic liking, following, commenting,
   multiple accounts or fake engagement. Sales has no post button.
-- **Video must be the user's own.** Links go through the "Is this your YouTube video?"
-  confirmation, recorded with the job; upload is the main path.
+- **Video must be the user's own.** Upload is the only way in. There is no link import and no
+  clipping tool (removed 2026-10-20: payment providers forbid clipping tools and content
+  downloaders); do not bring either back.
 - **AI images/video only with moderation.** Prompts go through `lib/generate/moderation.ts`
   before credits are held; generated images and video frames go through
   `opencmo/ai/moderation.py` before upload. No identifiable real people, no other brands'
@@ -66,18 +68,18 @@ are; commit messages stay in English. See `docs/research/README.md`.
 
 ## Hard budgets
 
-> **Peak RAM per job < 2 GB** · **45-minute video → 5 clips in under 3 minutes**
+> **Peak RAM per job < 2 GB**
 
-Changes that break either are rejected. Measure with `/usr/bin/time -v` after any pipeline
-change. Last measurement (54-minute interview, 5 clips): 155.5 s, 849 MB peak.
+Changes that break it are rejected. Measure with `/usr/bin/time -v` after any pipeline change.
+Processing an upload (probe → remux → transcript) has no time budget yet: measure it on a long
+upload and set one.
 
 1. Never load video frames into Python memory — streaming `ffmpeg` subprocesses only.
 2. No MoviePy or other frame-by-frame Python libraries.
-3. Never download the whole source video: transcript first, then only selected sections.
-4. `-ss` goes **before** `-i`.
-5. Detect encoders with a real one-frame test encode.
-6. Cap parallelism with `cfg.max_parallel` (~400 MB per ffmpeg process).
-7. User media is untrusted: read it with an explicit format or the demuxer allowlist
+3. `-ss` goes **before** `-i`.
+4. Probe a hardware encoder with a real one-frame test encode before relying on it.
+5. Cap parallel ffmpeg processes (~400 MB each).
+6. User media is untrusted: read it with an explicit format or the demuxer allowlist
    (`USER_MEDIA_FORMATS` / `USER_INPUT`). ffmpeg sniffs content, so an "upload" can be an HLS
    playlist pointing at arbitrary URLs or local files.
 
@@ -92,7 +94,7 @@ npm run typecheck && npm run build
 cd apps/web && npm run check:contracts && npm run test:e2e
 ```
 
-Engine (use `.venv312`; MediaPipe has no wheel for Python 3.14):
+Engine (use `.venv312`):
 
 ```bash
 cd packages/engine
@@ -104,25 +106,19 @@ set -a && source ../../.env.local && set +a   # the engine does not read .env it
 Use the pinned Supabase CLI version from CI, not `npx supabase` (a newer CLI builds a storage
 schema the running storage container rejects with `42P10`). Run heavy suites one at a time.
 
-Two engine tests (`test_worker_e2e_local`, `test_web_sql_concurrency`) fail while
-`npm run dev` is running — the dev worker claims their tasks first.
+`test_web_sql_concurrency` fails while `npm run dev` is running — the dev worker claims its
+tasks first.
 
 ## Verify by looking
 
-Green tests don't prove a clip is usable; the worst failures are silent (half-cropped
-speaker, captions off-screen, a section with no video frames). After touching reframe,
-captions, render or export, extract a frame from the full-size file (not `*.preview.mp4`)
-and look at it.
+Green tests don't prove a video is usable; the worst failures are silent (captions off-screen,
+a master with no video frames, an export with no sound). After touching the master, captions,
+render or export, extract a frame from the full-size file (not `*.preview.mp4`) and look at it.
 
 ## Known traps
 
-- Face tracking is not optional: without MediaPipe the engine falls back to a centre crop.
-- MediaPipe 1.0 removed `mp.solutions`; use the Tasks API.
-- yt-dlp's `bestvideo` may pick YouTube HLS, which yields zero-frame sections; keep the
-  `protocol^=https` constraint in `SECTION_FORMAT`.
-- YouTube auto-captions: cue settings after timestamps, whitespace-only lines, rolling
-  duplicates — regression tests in `tests/test_transcript.py`.
-- Don't wrap captions by character count; leave `WrapStyle: 0` to libass.
+- A Scribe failure does not fail an upload: the video is published without a transcript and
+  the editor shows "no speech". Check the worker log, not the job status, when words are missing.
 
 ## Layout
 

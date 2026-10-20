@@ -35,11 +35,7 @@ export type ActiveJobs = {
 };
 
 function finishedMessage(project: Project): string {
-  if (project.settings.mode === "full") {
-    return `${project.title || "Your video"} is ready to download`;
-  }
-  const count = project.clip_count ?? project.clips.length;
-  return `${count} ${count === 1 ? "clip" : "clips"} ready — ${project.title || "your video"}`;
+  return `${project.title || "Your video"} is ready to edit`;
 }
 
 export function useActiveJobs(

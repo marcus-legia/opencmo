@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, signIn, state } from "./helpers";
+import { uploadToEditor, signIn, state } from "./helpers";
 
 /**
  * E5: bố cục nhiều nguồn như Palmier. Nhập 2 ảnh, chèn vào clip, chọn video của clip rồi
@@ -12,7 +12,7 @@ import { makeClipsInEditor, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page) {
-  await makeClipsInEditor(page, SOURCE_VIDEO);
+  await uploadToEditor(page, SOURCE_VIDEO);
 }
 
 const fieldValue = (page: Page, prop: string) => page.getByTestId(`ins-${prop}`).locator("input").inputValue();

@@ -1,4 +1,4 @@
--- RPC của D3: retry_job, request_zip, register_media_asset (bản có probe),
+-- RPC của D3: retry_job, create_upload_edit, register_media_asset (bản có probe),
 -- account_summary. Cùng luật với 020: chạy dưới vai `authenticated` với JWT giả,
 -- vì đó là đường PostgREST đi — chạy dưới postgres sẽ bỏ qua cả RLS lẫn grant.
 create extension if not exists pgtap with schema extensions;
@@ -6,7 +6,19 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(26);
+select plan(18);
+
+-- An upload the user reserved and finished: what `create_upload_edit` consumes.
+create function pg_temp.upload(p_user uuid, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.upload_reservations (user_id, bucket, object_name, declared_size, content_type)
+  values (p_user, 'sources', p_user || '/' || p_name, 1000, 'video/mp4');
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('sources', p_user || '/' || p_name, '{"size": 100, "mimetype": "video/mp4"}');
+  return 'storage://' || p_user || '/' || p_name;
+end;
+$$;
 
 -- --------------------------------------------------------------- fixture
 insert into auth.users (id, email) values
@@ -105,62 +117,6 @@ select is(
   10, 'và KHÔNG tính tiền lần hai'
 );
 
--- ============================================================== request_zip
-select is(
-  (public.request_zip('a1100000-0000-4000-8000-00000000000a',
-     array['a2000000-0000-4000-8000-00000000000a', 'a2100000-0000-4000-8000-00000000000a']::uuid[],
-     'a6000000-0000-4000-8000-00000000000a')).kind,
-  'zip', 'request_zip tạo task zip'
-);
-
-select is(
-  jsonb_array_length(
-    (select payload -> 'export_task_ids' from public.tasks where request_id = 'a6000000-0000-4000-8000-00000000000a')
-  ),
-  2, 'ảnh chụp giữ đúng hai export'
-);
-
--- Khoá `export_task_ids` là hợp đồng với `zip_task.py`; đổi tên nó là làm hỏng
--- worker một cách im lặng (task fail với "This export is no longer available").
-select is(
-  (select payload -> 'export_task_ids' ->> 0 from public.tasks
-   where request_id = 'a6000000-0000-4000-8000-00000000000a'),
-  'a4000000-0000-4000-8000-00000000000a',
-  'ảnh chụp chốt id export, không để worker tự chọn lại lúc chạy'
-);
-
-select is(
-  (public.request_zip('a1100000-0000-4000-8000-00000000000a',
-     array['a2000000-0000-4000-8000-00000000000a']::uuid[],
-     'a6000000-0000-4000-8000-00000000000a')).request_id,
-  'a6000000-0000-4000-8000-00000000000a'::uuid,
-  'cùng request_id trả đúng task cũ, không tạo task thứ hai'
-);
-
-select is(
-  (select count(*)::int from public.tasks where kind = 'zip'),
-  1, 'và bảng chỉ có đúng một task zip'
-);
-
--- Clip của B nằm ngoài project này: bị loại khỏi ảnh chụp, không phải "gói kèm".
-select throws_ok(
-  $$ select public.request_zip('a1100000-0000-4000-8000-00000000000a',
-       array['b2000000-0000-4000-8000-00000000000b']::uuid[], gen_random_uuid()) $$,
-  'P0002', 'Export these clips before downloading them together.',
-  'clip của người khác không vào được ZIP'
-);
-
-select throws_ok(
-  $$ select public.request_zip('b1000000-0000-4000-8000-00000000000b',
-       array['b2000000-0000-4000-8000-00000000000b']::uuid[], gen_random_uuid()) $$,
-  'P0002', 'Project not found.', 'A không gói ZIP từ project của B'
-);
-
-select throws_ok(
-  $$ select public.request_zip('a1100000-0000-4000-8000-00000000000a', array[]::uuid[], gen_random_uuid()) $$,
-  '22023', 'Choose at least one clip.', 'danh sách rỗng bị từ chối'
-);
-
 -- =================================================== register_media_asset v2
 reset role;
 insert into public.upload_reservations(user_id,bucket,object_name,declared_size,content_type,project_id)
@@ -205,20 +161,20 @@ select throws_ok(
   '22023', 'Missing request id.', 'thiếu request id thì từ chối'
 );
 
--- ================================================================ create_job
+-- ======================================================= create_upload_edit
 select is(
-  (public.create_clip_job('https://youtu.be/x', 3, 'short', p_ownership_confirmed => true)).clip_length,
-  'short', 'create_job giữ lựa chọn độ dài clip'
-);
-
-select is(
-  (public.create_clip_job('https://youtu.be/y', 3, p_ownership_confirmed => true)).clip_length,
-  'auto', 'không chọn thì mặc định auto'
+  (public.create_upload_edit(pg_temp.upload('a0000000-0000-4000-8000-00000000000a', 'talk.mp4'))).aspect,
+  '9:16', 'an upload becomes a job, vertical by default'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/z', 3, 'tuỳ-tiện', p_ownership_confirmed => true) $$,
-  '22023', 'Choose a clip length.', 'giá trị lạ bị từ chối'
+  $$ select public.create_upload_edit('https://youtu.be/z') $$,
+  '22023', 'Upload the video file to edit it.', 'a link is refused'
+);
+
+select throws_ok(
+  $$ select public.create_upload_edit(pg_temp.upload('a0000000-0000-4000-8000-00000000000a', 'wide.mp4'), '4:3') $$,
+  '22023', 'Unsupported aspect ratio.', 'an unknown aspect is refused'
 );
 
 -- ========================================================= account_summary

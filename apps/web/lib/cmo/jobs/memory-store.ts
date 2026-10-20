@@ -4,7 +4,7 @@
  */
 
 import { latestPerTopic } from "./context";
-import { isoDay, type ClipJob, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PlatformCaptions, type QueuedRun, type Step, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type WeekResults } from "./types";
 
 export type InboxItem = {
   id: string;
@@ -24,12 +24,10 @@ export type RunState = QueuedRun & { status: string; steps: Step[]; error: strin
 export function memoryStore(docs: Documents, memories: string[] = ["Skipped the X post \"Pricing\": too salesy"], events: MemoryEvent[] = []) {
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
-  const results: WeekResults = { posts: 0, replies: 0, clips: 0, views: 0 };
+  const results: WeekResults = { posts: 0, replies: 0, views: 0 };
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
-  const jobs = new Map<string, ClipJob>();
-  const packs: Array<{ id: string; runId: string; jobId: string; clips: unknown[]; captions: Record<string, PlatformCaptions> }> = [];
   const insights: CompetitorInsight[] = [];
   const metrics: MetricRow[] = [];
   const inbox: InboxItem[] = [];
@@ -108,12 +106,6 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       opps.push(...fresh);
       return fresh.length;
     },
-    clipJob: async (_u, jobId) => jobs.get(jobId) ?? null,
-    async saveVideoPack(_u, runId, jobId, clips, captions) {
-      const pack = { id: id(), runId, jobId, clips, captions };
-      packs.push(pack);
-      return pack.id;
-    },
     async defer(run, seconds, steps) {
       const r = runs.find((x) => x.id === run.id)!;
       if (r.attempt !== run.attempt || r.status !== "running") return false;
@@ -171,5 +163,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, jobs, packs, insights, metrics, lessons, goals, results, enqueue, inbox, submit };
+  return { store, runs, items, opps, insights, metrics, lessons, goals, results, enqueue, inbox, submit };
 }

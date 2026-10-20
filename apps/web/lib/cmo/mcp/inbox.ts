@@ -37,7 +37,6 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   review_week: "Weekly review",
   post_draft: "X post",
   sales_scan: "Reddit scan",
-  video_pack: "Video pack captions",
   summarize_memory: "Memory summary",
   competitor_research: "Competitor research",
   pull_metrics: "Post metrics",
@@ -243,7 +242,6 @@ export const INBOX_TOOLS: CmoMcpTool[] = [
   submitTool("submit_plan", "Submit a weekly plan or review", "Answer a weekly plan (plan_week) or weekly review (review_week) item."),
   submitTool("submit_post_draft", "Submit an X post draft", "Answer an X post item with three versions. Versions that fail the code checks are dropped; if all fail you get the reasons now."),
   submitTool("submit_sales_scan", "Submit a Reddit scan step", "Answer a Reddit scan item: the search queries, then the thread scores (with exact quotes), then the replies. Each answer brings the next step."),
-  submitTool("submit_video_pack", "Submit video pack captions", "Answer a video pack item with one caption set per clip."),
   submitTool("submit_memory", "Submit the memory summary", "Answer a memory summary item with this week's lessons."),
   submitTool("submit_research", "Submit competitor research", "Answer a competitor research item with hooks, formats and ideas, each backed by a post URL from the context."),
 ];

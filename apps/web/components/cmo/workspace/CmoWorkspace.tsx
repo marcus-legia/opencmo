@@ -138,10 +138,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
     });
   }
 
-  // Bản tải về của gói video dựng trên worker, không nằm trong log CMO — cũng phải chờ.
-  const busy =
-    ws.log.some((l) => l.status === "queued" || l.status === "running") ||
-    ws.inbox.some((c) => c.department === "video" && c.clips.some((clip) => clip.download?.status === "queued" || clip.download?.status === "running"));
+  const busy = ws.log.some((l) => l.status === "queued" || l.status === "running");
 
   const refresh = useCallback(async () => {
     try {
@@ -195,12 +192,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
       epoch.current += 1;
       setWs((current) => optimistic(current, card, act));
       try {
-        if (card.department === "video") {
-          // Gói video: duyệt = dựng bản tải về; bỏ = ghi lý do. Không có đường đăng.
-          const body = act.type === "approve" ? { action: "approve" } : { action: "dismiss", reason: act.type === "dismiss" || act.type === "skip" ? act.reason : undefined };
-          await api(`/cmo/video-packs/${card.id}`, jsonBody(body));
-          setToast(act.type === "approve" ? "Approved. Your downloads are being prepared." : "Skipped. Your CMO will pick different moments next time.");
-        } else if (card.department === "sales") {
+        if (card.department === "sales") {
           // Thread Reddit: chỉ "đã tự trả lời" hoặc "bỏ" — không có đường đăng.
           const body = act.type === "replied" ? { action: "replied" } : { action: "dismissed", reason: act.type === "dismiss" ? act.reason : undefined };
           await api(`/cmo/opportunities/${card.id}`, jsonBody(body));
@@ -231,21 +223,6 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
       try {
         await api(`/cmo/goals/${goal.id}`, jsonBody(act));
         setToast(act.action === "approve" ? "Goal approved. Your CMO plans the week around it." : "Goal dismissed. Ask your CMO for a different one.");
-        void refresh();
-        return true;
-      } catch (error) {
-        fail(error);
-        return false;
-      }
-    },
-    async brief(brief, act) {
-      try {
-        const result = await api<{ href: string | null }>(`/cmo/video-briefs/${brief.id}`, jsonBody(act));
-        if (act.action === "approve" && result.href) {
-          window.location.assign(result.href);
-          return true;
-        }
-        setToast("Skipped. Your CMO will try a different angle.");
         void refresh();
         return true;
       } catch (error) {

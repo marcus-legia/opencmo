@@ -74,12 +74,9 @@ const JOB = {
   // PostgREST trả `numeric` dưới dạng CHUỖI — mẫu cố ý để chuỗi ở đây.
   duration_seconds: "44.419",
   clips_requested: 1,
-  clip_length: "auto",
-  mode: "clip",
   aspect: "9:16",
   layout: "auto",
   captions: true,
-  segments: null,
   error: null,
   created_at: "2026-09-12T14:02:11.120Z",
   finished_at: "2026-09-12T14:02:27.030Z",
@@ -138,20 +135,6 @@ check("tỷ lệ preview đọc từ kích thước thật của bản xuất t�
   // 4:5 nằm ngoài ba tỷ lệ của trang: lấy tỷ lệ gần nhất, không về 9:16 mặc định.
   assert.equal(aspectOfSize(1080, 1350), "1:1");
   assert.equal(aspectOfSize(null, 1920), undefined);
-});
-
-check("segments của project: null nghĩa là để AI chọn", () => {
-  // `numeric` của PostgREST là chuỗi ở đây nữa — mốc thời gian đi thẳng vào
-  // phép tính vị trí trên thanh bar, nên cộng chuỗi sẽ vẽ sai khối.
-  const picked = projectShape({
-    ...JOB,
-    segments: [{ start: "12.5", end: "42.25" }],
-  });
-  assert.deepEqual(picked.segments, [{ start: 12.5, end: 42.25 }]);
-
-  // `[]` và null nói cùng một chuyện: người dùng không chọn đoạn nào.
-  assert.equal(projectShape({ ...JOB, segments: [] }).segments, null);
-  assert.equal(projectShape(JOB).segments, null);
 });
 
 check("project_page khớp project_page.json", () => {

@@ -18,7 +18,7 @@ export function GET() {
     "",
     `> ${SITE_DESCRIPTION}`,
     "",
-    "OpenCMO is software for founders. You enter your website; an AI CMO builds a strategy and a weekly plan, and three departments draft the work: Video (vertical clips with captions from recordings you own, a version per platform), Post (daily X posts in your voice) and Sales (public Reddit threads where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect.",
+    "OpenCMO is software for founders. You enter your website; an AI CMO builds a strategy and a weekly plan, and three departments draft the work: Video (an editor where you upload a video you recorded and edit it by asking: cuts, captions, B-roll, motion, a version per platform), Post (daily X posts in your voice) and Sales (public Reddit threads where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect.",
     "",
     "## Pricing",
     "",

@@ -1,5 +1,5 @@
 /**
- * W1 plan_week, W2 post_draft and W5 video_pack as registry cases. What they check is unchanged
+ * W1 plan_week and W2 post_draft as registry cases. What they check is unchanged
  * from the table-only `eval.ts`; W2's drafts now also go through the judge once they pass the code.
  *
  * Every case returns `${job}:${fixture}:run` first (the run finished and has the right shape), then
@@ -8,7 +8,6 @@
  *   W1 — finished, 5–10 items, at most one Reddit item a day, video only when the strategy mentions
  *        it, every item has a reason, no avoid words or invented numbers (code only)
  *   W2 — finished; each of the three versions passes `checkPost`, then the judge
- *   W5 — finished; each clip got real captions (not the hook-only fallback) that pass `checkCaptions`
  */
 
 import type { CaseResult } from "@/lib/eval/compare";
@@ -17,8 +16,7 @@ import { checkPost } from "../check-post";
 import { avoidList, knownNumbers, normalizeNumber } from "../context";
 import { cascade } from "../judge";
 import { memoryStore } from "../memory-store";
-import type { Documents, PlatformCaptions } from "../types";
-import { checkCaptions } from "../video-pack";
+import type { Documents } from "../types";
 import { registerCases, type EvalCase } from "./types";
 
 const BUDGET_MS = 240_000;
@@ -93,32 +91,4 @@ const w2: EvalCase = {
   },
 };
 
-const w5: EvalCase = {
-  job: "w5",
-  async run(fixture, env) {
-    const mem = memoryStore(fixture.docs, []);
-    mem.jobs.set("job-1", { status: "done", error: null, createdAt: new Date().toISOString(), title: "Founder talk", clips: fixture.clips });
-    const run = mem.enqueue("video_pack", { job_id: "job-1" });
-    await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
-    const pack = mem.packs.find((p) => p.runId === run.id);
-    const rules = { avoid: avoidList(fixture.docs), known: knownNumbers(fixture.docs) };
-    const results: CaseResult[] = [runResult(`w5:${fixture.name}:run`, env.epoch, run.status === "done", run.error ? [run.error] : [])];
-    for (const c of fixture.clips) {
-      const captions: PlatformCaptions | undefined = pack?.captions[c.id];
-      const id = `w5:${fixture.name}:clip-${c.idx}`;
-      if (!captions) {
-        results.push({ id, epoch: env.epoch, pass: false, decided_by: "code", notes: ["no captions"] });
-        continue;
-      }
-      // The hook-only fallback means the model's captions failed the checks twice.
-      const fellBack = captions.tiktok.trim() === c.hook.trim() && captions.threads.trim() === c.hook.trim();
-      const issues = [...(fellBack ? ["fell back to the hook"] : []), ...checkCaptions(captions, { ...rules, spoken: normalizeNumber(c.text) })];
-      env.log(`clip ${c.idx}${fellBack ? " (fell back to the hook)" : ""}`);
-      for (const [platform, text] of Object.entries(captions)) env.log(`  ${platform}: ${text.replace(/\n/g, " ⏎ ")}`);
-      results.push({ id, epoch: env.epoch, pass: issues.length === 0, decided_by: "code", ...(issues.length ? { notes: issues } : {}) });
-    }
-    return results;
-  },
-};
-
-registerCases([w1, w2, w5]);
+registerCases([w1, w2]);

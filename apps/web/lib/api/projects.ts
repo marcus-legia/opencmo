@@ -63,8 +63,8 @@ export function aspectOfSize(
 
 const JOB_COLUMNS =
   "id, source_url, name, title, pinned, status, stage, duration_seconds, " +
-  "clips_requested, clip_length, mode, aspect, layout, captions, " +
-  "segments, error, created_at, finished_at, attempt_started_at";
+  "clips_requested, aspect, layout, captions, " +
+  "error, created_at, finished_at, attempt_started_at";
 
 const CLIP_COLUMNS =
   "id, idx, hook, start_seconds, end_seconds, score, reason, storage_path, preview_path";
@@ -108,7 +108,7 @@ export async function projectDetail(
       .from("clips")
       .select(`${CLIP_COLUMNS}, settings_hash`)
       .eq("job_id", jobId)
-      .eq("kind", "moment")
+      .eq("kind", "full")
       .order("idx"),
     supabase.from("artifacts").select("kind").eq("job_id", jobId).eq("kind", "transcript").limit(1),
   ]);

@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
+import { uploadToEditor, showAssistant, signIn, state } from "./helpers";
 
 /**
  * Editor với ảnh làm đầu vào (plan Palmier P1-B/P2) và cổng trình duyệt dò tính năng.
@@ -16,7 +16,7 @@ import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page): Promise<{ clipId: string; projectId: string }> {
-  const projectId = await makeClipsInEditor(page, SOURCE_VIDEO);
+  const projectId = await uploadToEditor(page, SOURCE_VIDEO);
   return { clipId: /\/app\/editor\/([0-9a-f-]+)$/.exec(page.url())![1]!, projectId };
 }
 
@@ -157,8 +157,8 @@ test("library image as first frame, B-roll in one approval card, save_frame", as
   await page.getByTestId("generate-submit").click();
   await expect
     .poll(async () => JSON.stringify(await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()), { timeout: 30_000 })
-    // Dài bằng vùng làm việc của clip (workarea), từ giây 0, −18 dB.
-    .toMatch(/"workarea":\[0,(\d+)\].*"end":\1,"src":\{"generate":"audio","prompt":"soft piano bed","model":"fake-audio","duration":\1,"seed":\d+\},"volume":-18/);
+    // From second 0 at −18 dB, as long as the 30 s upload allows: capped at fake-audio's 22 s maximum.
+    .toMatch(/"workarea":\[0,30\].*"end":22,"src":\{"generate":"audio","prompt":"soft piano bed","model":"fake-audio","duration":22,"seed":\d+\},"volume":-18/);
 
   // --- G2: Edit with AI — sửa clip video AI đã có bằng lời -------------------------
   const current = (await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()) as { document: unknown };

@@ -19,7 +19,7 @@ test("project tự cập nhật khi bỏ lỡ event Realtime kết thúc", async
     headers: { ...headers, prefer: "return=representation" },
     data: {
       user_id: users.a.id,
-      source_url: "https://youtu.be/missed-realtime-event",
+      source_url: `storage://${users.a.id}/missed-realtime-event.mp4`,
       status: "running",
       stage: "render",
       clips_requested: 1,
@@ -52,8 +52,8 @@ test("project tự cập nhật khi bỏ lỡ event Realtime kết thúc", async
   });
 
   await page.goto(`/app/projects/${job.id}`);
-  await expect(page.getByRole("heading", { name: "Rendering your clips…" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No usable moments found" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Preparing it for the editor…" })).toBeVisible();
+  await expect(page.getByText("This video has no editable copy. Upload it again to edit it.")).toBeVisible({
     timeout: 8_000,
   });
 });

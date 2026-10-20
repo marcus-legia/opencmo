@@ -14,7 +14,7 @@ class FakeStore:
         self.jobs = deque()
         self.tasks = {
             kind: deque()
-            for kind in ("probe_media", "generate", "prepare_full", "transcribe_media", "transcribe_asset", "render_document", "capture_page", "zip")
+            for kind in ("probe_media", "generate", "transcribe_media", "transcribe_asset", "render_document", "capture_page")
         }
         self.claimed_kinds = []
         self.failed_tasks = []
@@ -80,35 +80,35 @@ def test_job_is_claimed_before_tasks_and_store_closes():
 
 def test_tasks_are_claimed_in_one_call_in_user_wait_priority():
     store = FakeStore()
-    store.tasks["zip"].append(Task("zip-1", "u1", "zip", attempt_id="a1"))
+    store.tasks["capture_page"].append(Task("capture-1", "u1", "capture_page", attempt_id="a1"))
     store.tasks["probe_media"].append(Task("probe-1", "u1", "probe_media", attempt_id="a2"))
     handled = []
 
     run_forever(
         lambda: store,
-        {kind: (lambda _store, item: handled.append(item.id)) for kind in ("zip", "probe_media")},
+        {kind: (lambda _store, item: handled.append(item.id)) for kind in ("capture_page", "probe_media")},
         sleep=lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
 
     # Một RPC mỗi lượt, mảng theo đúng thứ tự của task-kinds.json.
     assert store.claimed_kinds[0] == [
-        "probe_media", "generate", "prepare_full", "transcribe_media", "transcribe_asset", "render_document", "capture_page", "zip",
+        "probe_media", "generate", "transcribe_media", "transcribe_asset", "render_document", "capture_page",
     ]
-    assert handled == ["probe-1", "zip-1"]
+    assert handled == ["probe-1", "capture-1"]
     assert len(store.claimed_kinds) == 3
 
 
 def test_loop_dispatches_all_work_kinds():
     store = FakeStore()
     store.jobs.append(Job("job-1", "u1", "https://x", 1, attempt_id="a-job"))
-    for kind in ("probe_media", "render_document", "zip"):
+    for kind in ("probe_media", "render_document", "capture_page"):
         store.tasks[kind].append(Task(f"{kind}-1", "u1", kind, attempt_id=f"a-{kind}"))
     handled = []
     handlers = {
         "job": lambda _store, item: handled.append("job"),
         **{
             kind: (lambda _store, item, kind=kind: handled.append(kind))
-            for kind in ("probe_media", "render_document", "zip")
+            for kind in ("probe_media", "render_document", "capture_page")
         },
     }
 
@@ -118,19 +118,19 @@ def test_loop_dispatches_all_work_kinds():
         sleep=lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
 
-    assert handled == ["job", "probe_media", "render_document", "zip"]
+    assert handled == ["job", "probe_media", "render_document", "capture_page"]
 
 
 def test_task_handler_error_is_reported_in_english():
     store = FakeStore()
-    store.tasks["zip"].append(Task("t1", "u1", "zip", attempt_id="a1"))
+    store.tasks["capture_page"].append(Task("t1", "u1", "capture_page", attempt_id="a1"))
 
     def boom(_store, _item):
         raise RuntimeError("nội bộ")
 
     run_forever(
         lambda: store,
-        {"zip": boom},
+        {"capture_page": boom},
         sleep=lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
     assert store.failed_tasks == [("t1", "a1", TASK_FAILURE)]

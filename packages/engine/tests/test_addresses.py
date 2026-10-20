@@ -1,7 +1,7 @@
 """The shared address cases (`packages/contracts/private-addresses.json`), worker side.
 
-`apps/web/lib/net/address.check.ts` and pgTAP `180_private_video_urls` read the same file, so the
-three guards cannot disagree on any case in it.
+`apps/web/lib/net/address.check.ts` reads the same file, so the two guards cannot disagree on any
+case in it.
 """
 
 from __future__ import annotations
@@ -43,28 +43,3 @@ def test_literal_address(host: str, address: str | None) -> None:
 
 
 # ---- The worker's link check reads the same cases (no DNS: names resolve to a public address).
-
-@pytest.mark.parametrize("case", CASES, ids=[case["input"] for case in CASES])
-def test_validate_public_url_shared_case(monkeypatch: pytest.MonkeyPatch, case: dict) -> None:
-    from opencmo.worker import media
-
-    monkeypatch.setattr(media.socket, "getaddrinfo", lambda host, *_a, **_k: [
-        (media.socket.AF_INET, media.socket.SOCK_STREAM, 6, "", (literal_address(host) or "93.184.216.34", 443)),
-    ])
-    url = f"https://{case['input']}/video.mp4"
-    if case["blocked"]:
-        with pytest.raises(media.UnsafeSourceError):
-            media.validate_public_url(url)
-    else:
-        media.validate_public_url(url)
-
-
-@pytest.mark.parametrize("url", ["https://cdn.example.com:8443/v.mp4", "http://cdn.example.com:6379/"])
-def test_validate_public_url_allows_only_ports_80_and_443(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
-    from opencmo.worker import media
-
-    monkeypatch.setattr(media.socket, "getaddrinfo", lambda *_a, **_k: [
-        (media.socket.AF_INET, media.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
-    ])
-    with pytest.raises(media.UnsafeSourceError):
-        media.validate_public_url(url)

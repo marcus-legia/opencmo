@@ -5,14 +5,14 @@
 
 import type { DocumentKind } from "../documents";
 
-export type CmoJobKind = "plan_week" | "post_draft" | "sales_scan" | "video_pack" | "competitor_research" | "pull_metrics" | "summarize_memory" | "review_week";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "video_pack", "competitor_research", "pull_metrics", "summarize_memory", "review_week"];
+export type CmoJobKind = "plan_week" | "post_draft" | "sales_scan" | "competitor_research" | "pull_metrics" | "summarize_memory" | "review_week";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
-export type GoalMetric = "posts" | "replies" | "clips" | "views";
-export const GOAL_METRICS: GoalMetric[] = ["posts", "replies", "clips", "views"];
+export type GoalMetric = "posts" | "replies" | "views";
+export const GOAL_METRICS: GoalMetric[] = ["posts", "replies", "views"];
 export type Goal = { id: string; week: string; goal: string; metric: GoalMetric; target: number; status: "proposed" | "approved" | "rejected"; result: number | null };
-/** What a week reached: posts approved, Reddit replies the founder marked, clip packs approved, views on posts. */
+/** What a week reached: posts approved, Reddit replies the founder marked, views on posts. */
 export type WeekResults = Record<GoalMetric, number>;
 
 /** What a memory or a lesson is about; a job reads its own topic plus `general`. */
@@ -91,15 +91,6 @@ export type Opportunity = {
   gen?: { model: string; prompt_version: string };
 };
 
-/** Một clip của job cắt, đủ để viết caption và dựng thẻ (W5). */
-export type ClipInfo = { id: string; idx: number; hook: string; reason: string; start: number; end: number; score: number | null; text: string };
-
-/** Trạng thái job cắt clip mà W5 đang chờ. */
-export type ClipJob = { status: "queued" | "running" | "done" | "failed" | "cancelled"; error: string | null; createdAt: string; title: string | null; clips: ClipInfo[] };
-
-/** Caption cho năm nền tảng của MỘT clip. */
-export type PlatformCaptions = { tiktok: string; reels: string; shorts: string; facebook: string; threads: string };
-
 /** Who thinks for a run: OpenCMO's own models, or the founder's Claude through the inbox. */
 export type Brain = "opencmo" | "claude";
 
@@ -144,9 +135,6 @@ export interface CmoStore {
   /** Link thread đã từng thành thẻ (kể cả đã bỏ) — W4 không đưa lại. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
-  /** Job cắt clip của người dùng (W5); null khi không có hoặc không phải của họ. */
-  clipJob(userId: string, jobId: string): Promise<ClipJob | null>;
-  saveVideoPack(userId: string, runId: string, jobId: string, clips: Array<{ clip_id: string; hook: string; seconds: number; score: number | null }>, captions: Record<string, PlatformCaptions>): Promise<string>;
   /** Trả lượt về hàng đợi, hoãn `seconds` giây; false khi lượt đã bị nhận lại. */
   defer(run: QueuedRun, seconds: number, steps: Step[]): Promise<boolean>;
   /** W7: lưu điều học được; đọc bản mới nhất (Planner, X writer, CMO chat). */

@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
 import { sceneBox, videoRegionStats } from "./canvas";
-import { openProject, showAssistant, signIn, startClipsInEditor, state } from "./helpers";
+import { openProject, showAssistant, signIn, state, uploadToEditor } from "./helpers";
 
 /**
  * Đường đi đầy đủ của một người dùng: upload → chờ xử lý → sửa → export → tải.
@@ -28,45 +28,25 @@ test("upload, chỉnh, export và tải về", async ({ page }, testInfo) => {
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   const { users } = state();
   await signIn(page, users.a);
-  // --- upload thẳng lên Storage từ tab Clips của editor (không byte nào đi qua Next) ---
-  await openProject(page, await startClipsInEditor(page, SOURCE_VIDEO));
-
-  // Tải clip gốc và ZIP thật trước khi chạm editor: không cần export.
-  const originalReady = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download clip", exact: true }).click();
-  const original = await originalReady;
-  const originalPath = testInfo.outputPath("original.mp4");
-  await original.saveAs(originalPath);
-  expect(readFileSync(originalPath).subarray(4, 8).toString()).toBe("ftyp");
-  await page.getByRole("checkbox", { name: "Select all" }).check();
-  const zipReady = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download selected (.zip)", exact: true }).click();
-  const zip = await zipReady;
-  const zipPath = testInfo.outputPath("originals.zip");
-  await zip.saveAs(zipPath);
-  const names = execFileSync("python3", ["-c", "import sys,zipfile,json; z=zipfile.ZipFile(sys.argv[1]); print(json.dumps(z.namelist())); assert z.testzip() is None", zipPath], { encoding: "utf8" });
-  expect(JSON.parse(names)).toEqual(["clip-01.mp4"]);
-  await page.screenshot({ path: testInfo.outputPath("results-desktop.png"), fullPage: true });
+  // --- upload straight to Storage from the editor's Upload tab (no byte goes through Next) ---
+  const jobId = await uploadToEditor(page, SOURCE_VIDEO);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await openProject(page, jobId);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.screenshot({ path: testInfo.outputPath("results-mobile.png"), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("project-mobile.png"), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  // Thư viện dùng clip đầu tiên làm thumbnail phát được, không còn list text.
+  // The library shows the upload's editable clip as a playable thumbnail.
   await page.goto("/app/projects");
   const projectPreview = page.getByLabel(/Preview /).first();
   await expect(projectPreview).toBeVisible();
   await expect(projectPreview).toHaveAttribute("src", /\/api\/v1\/clips\/.+preview=1#t=0\.1$/);
-  // Thẻ project (giao diện "giấy & mực") là một link tới trang project, không còn chữ "Open project".
   await page.locator('a[href^="/app/projects/"]').first().click();
   await expect(page).toHaveURL(/\/app\/projects\/[0-9a-f-]+$/);
 
-  // --- mở editor ----------------------------------------------------------
-  //
-  // Nút Edit mở route edit của app; shell kiểm máy rồi dựng editor ngay tại chỗ.
-  // Chrome của Playwright là Chromium và cửa sổ 1280×900, nên nó được vào.
-  await page.getByRole("button", { name: "Edit clip" }).first().click();
+  // --- open the editor ----------------------------------------------------
+  await page.getByTestId("project-open-editor").click();
   await expect(page).toHaveURL(/\/app\/editor\/[0-9a-f-]+$/, { timeout: 60_000 });
   const clipId = /\/app\/editor\/([0-9a-f-]+)$/.exec(page.url())![1]!;
   await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 60_000 });
@@ -168,7 +148,7 @@ test("upload, chỉnh, export và tải về", async ({ page }, testInfo) => {
     );
   await expect.poll(hasCut, { timeout: 60_000, message: "lượt cắt bằng chữ không tới được document" }).toBe(true);
   const workarea = sceneOf(await documentOf()).workarea!;
-  expect(workarea[1] - workarea[0], "workarea phải ngắn lại đúng phần đã cắt").toBeLessThan(7.5);
+  expect(workarea[1] - workarea[0], "the workarea must shrink by the cut").toBeLessThan(29.5);
 
   await page.reload();
   await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 60_000 });
@@ -215,7 +195,7 @@ test("upload, chỉnh, export và tải về", async ({ page }, testInfo) => {
   ).trim();
   expect(probe, "tiếng của bản xuất là AAC").toBe("aac");
 
-  // File export là bản ĐÃ CẮT: ngắn hơn clip 8 giây đúng phần "in a" (~0.9s).
+  // The export is the CUT version: shorter than the 30-second upload by "in a" (~0.9s).
   const duration = Number(
     execFileSync(
       "ffprobe",
@@ -223,8 +203,8 @@ test("upload, chỉnh, export và tải về", async ({ page }, testInfo) => {
       { encoding: "utf8" },
     ).trim(),
   );
-  expect(duration, "export phải ra bản đã cắt bằng chữ").toBeLessThan(7.6);
-  expect(duration).toBeGreaterThan(6.5);
+  expect(duration, "the export must be the version cut by words").toBeLessThan(29.6);
+  expect(duration).toBeGreaterThan(28.5);
 
   // --- lịch sử: về lại bản engine sinh ra ----------------------------------
   await page.getByTestId("project-menu").click();

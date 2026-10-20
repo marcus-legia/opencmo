@@ -69,14 +69,14 @@ select is(
 
 -- ================================================================ claim
 insert into public.tasks (id, user_id, kind, clip_id, settings_hash, request_id) values
-  ('a6000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000a', 'zip',
+  ('a6000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000a', 'probe_media',
    'a2000000-0000-4000-8000-00000000000a', repeat('1', 64), gen_random_uuid()),
   ('a6000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-00000000000a', 'render_document',
    'a2100000-0000-4000-8000-00000000000a', repeat('2', 64), gen_random_uuid());
 
 select is(
-  (select kind from public.claim_next_task(array['zip'])),
-  'zip', 'claim_next_task lọc đúng loại việc'
+  (select kind from public.claim_next_task(array['probe_media'])),
+  'probe_media', 'claim_next_task lọc đúng loại việc'
 );
 
 select is(
@@ -96,7 +96,7 @@ select ok(
 
 -- Hàng đợi loại đó đã rỗng: trả 0 hàng chứ không trả một hàng toàn null.
 select is_empty(
-  $$ select id from public.claim_next_task(array['zip']) $$,
+  $$ select id from public.claim_next_task(array['probe_media']) $$,
   'hàng đợi rỗng thì claim không trả gì'
 );
 

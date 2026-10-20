@@ -31,20 +31,20 @@ export async function signIn(page: Page): Promise<void> {
   ]);
 }
 
-/** Upload the source video through the editor's Clips tab, as a user does, and open the first clip. */
+/** Upload the source video through the editor's Upload tab, as a user does, and open it. */
 export async function makeClip(page: Page, file: string): Promise<string> {
-  await page.goto("/app/editor?panel=clips");
-  await expect(page.getByTestId("clips-panel")).toBeVisible({ timeout: 180_000 });
-  await page.getByTestId("clips-file").setInputFiles(file);
-  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/editor/clipping") && r.request().method() === "POST", { timeout: 300_000 });
-  await page.getByTestId("clips-submit").click();
+  await page.goto("/app/editor?panel=upload");
+  await expect(page.getByTestId("upload-panel")).toBeVisible({ timeout: 180_000 });
+  await page.getByTestId("upload-file").setInputFiles(file);
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/editor/upload") && r.request().method() === "POST", { timeout: 300_000 });
+  await page.getByTestId("upload-submit").click();
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
   const jobId = ((await response.json()) as { id: string }).id;
   const job = page.locator(`[data-job="${jobId}"]`);
-  await expect(job.getByTestId("clips-open").first()).toBeVisible({ timeout: 900_000 });
+  await expect(job.getByTestId("upload-open")).toBeVisible({ timeout: 900_000 });
   const before = page.url();
-  await job.getByTestId("clips-open").first().click();
+  await job.getByTestId("upload-open").click();
   await page.waitForURL((url) => url.href !== before && /\/app\/editor\/[0-9a-f-]+$/.test(url.pathname), { timeout: 120_000 });
   return clipIdOf(page);
 }

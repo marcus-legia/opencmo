@@ -6,6 +6,18 @@ set search_path to public, extensions;
 
 select plan(33);
 
+-- An upload the user reserved and finished: what `create_upload_edit` consumes.
+create function pg_temp.upload(p_user uuid, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.upload_reservations (user_id, bucket, object_name, declared_size, content_type)
+  values (p_user, 'sources', p_user || '/' || p_name, 1000, 'video/mp4');
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('sources', p_user || '/' || p_name, '{"size": 100, "mimetype": "video/mp4"}');
+  return 'storage://' || p_user || '/' || p_name;
+end;
+$$;
+
 -- =========================================================== schema + quota
 select has_column('public', 'profiles', 'credit_balance', 'profiles có số dư materialized');
 select col_type_is('public', 'profiles', 'credit_balance', 'integer', 'số dư dùng integer');
@@ -111,7 +123,7 @@ begin
       values(v_user, 1 + (i % 17), 'Random top-up');
       v_kind := 'top_up';
     elsif v_pick = 1 then
-      -- `create_job` có hai trần riêng (20260921130000): 3 job mở cùng lúc và
+      -- `create_upload_edit` có hai trần riêng (20260921130000): 3 job mở cùng lúc và
       -- 10 lượt mỗi giờ. Chuỗi 200 thao tác này chạm cả hai. Rơi về top-up
       -- thay vì để chuỗi chết — thứ file này kiểm là SỐ HỌC CREDIT dưới thứ tự
       -- ngẫu nhiên; hai cái trần có test riêng ở 085. Cùng kiểu fallback mà hai
@@ -121,7 +133,7 @@ begin
       -- trần thêm vào sau này, và không phải chép lại con số ở hai nơi.
       perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
       begin
-        v_job := public.create_clip_job('https://youtu.be/billing-' || i, 1, p_ownership_confirmed => true);
+        v_job := public.create_upload_edit(pg_temp.upload(v_user, 'billing-' || i || '.mp4'));
         insert into billing_operation_jobs values(v_user, v_job.id);
         v_kind := 'hold';
       exception when sqlstate 'P0001' then
@@ -143,7 +155,7 @@ begin
         );
         -- Đóng job lại sau khi đối soát, đúng như production: `complete_job()`
         -- đặt trạng thái cuối cùng trong CÙNG giao dịch với settle. Không đóng
-        -- thì job nằm mãi ở `running` và đụng trần 3 job của `create_job`
+        -- thì job nằm mãi ở `running` và đụng trần 3 job của `create_upload_edit`
         -- (20260921130000) — một chi tiết của fixture, không phải của billing.
         update public.jobs set status = 'done' where id = v_job_id;
         v_kind := 'settle';
@@ -253,7 +265,7 @@ grant select, insert on deleted_job_result to authenticated;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"d4800000-0000-4000-8000-000000000001"}';
 insert into deleted_job_result
-select (public.create_clip_job('https://youtu.be/billing-delete', 1, p_ownership_confirmed => true)).id;
+select (public.create_upload_edit(pg_temp.upload('d4800000-0000-4000-8000-000000000001', 'billing-delete.mp4'))).id;
 reset role;
 update public.jobs set status = 'failed'
 where id = (select job_id from deleted_job_result);
@@ -277,9 +289,9 @@ select is(
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"d4300000-0000-4000-8000-000000000001"}';
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/billing-not-enough', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_upload_edit(pg_temp.upload('d4300000-0000-4000-8000-000000000001', 'billing-not-enough.mp4')) $$,
   'P0001', 'Not enough credits: 10 needed, 0 left. Top up on the Credits page.',
-  'create_job giữ nguyên lỗi thiếu credit'
+  'create_upload_edit keeps the not-enough-credits error'
 );
 reset role;
 

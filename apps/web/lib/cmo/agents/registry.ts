@@ -19,14 +19,14 @@ import "server-only";
  * the two tiers. `groq` is a spelling of `openai` on Groq's endpoint. Moving every agent to another
  * vendor is env only (docs/plans/editor/2026-10-20-editor-mcp-providers-plan.md, item 2).
  *
- * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, VIDEO, CHECKER, CAPTIONS,
+ * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, CHECKER, CAPTIONS,
  * WRITER, MOTION, DIRECTOR, MODERATION.
  * Two tiers: drafting agents use the big model (Sonnet, Gemini Pro), checking agents the small one (Haiku, Gemini
  * Flash) — a check does not need deep reasoning, and a separate context keeps the checker from being persuaded by
  * the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "video" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation";
 export type ProviderKind = "anthropic" | "gemini" | "openai";
 
 export const PROVIDER_KINDS: readonly ProviderKind[] = ["openai", "anthropic", "gemini"];
@@ -50,7 +50,6 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   x_writer: { id: "x_writer", label: "X writer", role: "Drafts X posts for the founder to approve and post.", tier: "draft" },
   sales: { id: "sales", label: "Sales", role: "Finds Reddit threads where people need the product and drafts helpful replies.", tier: "draft" },
   research: { id: "research", label: "Research", role: "Finds competitor and niche posts that outperform, and why they worked.", tier: "draft" },
-  video: { id: "video", label: "Video", role: "Writes captions for clips cut from the founder's own videos.", tier: "draft" },
   checker: { id: "checker", label: "Checker", role: "Reviews drafts and scores threads in a separate context.", tier: "check" },
   captions: { id: "captions", label: "Captions", role: "Translates captions in the editor.", tier: "check" },
   writer: { id: "writer", label: "Writer", role: "Writes the on-screen words of an intro or title card for a clip.", tier: "check" },

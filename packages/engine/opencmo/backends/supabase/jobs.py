@@ -154,15 +154,6 @@ class JobsMixin(_Http):
             raise
         return int(resp.json())
 
-    def publish_job_clip(self, job_id: str, attempt_id: str | None, clip: dict[str, Any]) -> bool:
-        """Công bố clip tải được ngay, không chờ các clip khác hay editor."""
-        response = self._rpc(
-            "publish_job_clip",
-            {"p_job_id": job_id, "p_attempt_id": attempt_id, "p_clip": clip},
-            idempotent=True,
-        )
-        return response.json() is True
-
     def complete_job_publication(
         self,
         job_id: str,

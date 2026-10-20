@@ -13,18 +13,16 @@ export const metadata: Metadata = { title: "AI CMO" };
 type Params = { site?: string; url?: string; source?: string; count?: string; length?: string };
 
 /**
- * Trang chính sau đăng nhập = AI CMO. Chưa có document thì là màn onboarding
- * (nhập website); có rồi là workspace 4 cột.
+ * The home page after sign-in = AI CMO. Without documents it is onboarding (enter a website);
+ * with them, the 4-column workspace.
  *
- * Link cũ trỏ `/app?url=…` / `?source=upload` (tạo clip) chuyển sang tab Clips của editor
- * (G1-c) giữ nguyên tham số.
+ * Old clip-making links (`/app?url=…`, `?source=upload`) land on the editor's Upload tab. A link
+ * is never imported, so `url` is dropped.
  */
 export default async function CmoHome({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   if (params.url || params.source || params.count || params.length) {
-    const keep = new URLSearchParams({ panel: "clips" });
-    for (const key of ["url", "count", "length"] as const) if (params[key]) keep.set(key, params[key]!);
-    redirect(`/app/editor?${keep.toString()}`);
+    redirect("/app/editor?panel=upload");
   }
 
   const supabase = await createServerClient();

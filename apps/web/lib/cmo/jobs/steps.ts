@@ -11,14 +11,12 @@ import { X_LIMIT } from "./check-post";
 import { InsightSchema } from "./competitor-research";
 import { DraftSchema, REVIEW_SYSTEM } from "./draft-post";
 import { PlanSchema } from "./plan-week";
-import { VIDEO_LIMITS } from "./playbook-video";
 import { ReviewSchema } from "./review-week";
 import { PASS_SCORE, QueriesSchema, ReplySchema, ScoreSchema } from "./sales-scan";
 import { LessonSchema } from "./summarize-memory";
-import { CaptionSchema } from "./video-pack";
 import type { CmoJobKind } from "./types";
 
-export type SubmitTool = "submit_plan" | "submit_post_draft" | "submit_sales_scan" | "submit_video_pack" | "submit_memory" | "submit_research";
+export type SubmitTool = "submit_plan" | "submit_post_draft" | "submit_sales_scan" | "submit_memory" | "submit_research";
 
 export type InboxStep = { kind: CmoJobKind; schema: z.ZodType; submit: SubmitTool };
 
@@ -29,7 +27,6 @@ export const INBOX_STEPS = {
   make_queries: { kind: "sales_scan", schema: QueriesSchema, submit: "submit_sales_scan" },
   score_thread: { kind: "sales_scan", schema: ScoreSchema, submit: "submit_sales_scan" },
   draft_reply: { kind: "sales_scan", schema: ReplySchema, submit: "submit_sales_scan" },
-  write_captions: { kind: "video_pack", schema: CaptionSchema, submit: "submit_video_pack" },
   summarize_memory: { kind: "summarize_memory", schema: LessonSchema, submit: "submit_memory" },
   competitor_research: { kind: "competitor_research", schema: InsightSchema, submit: "submit_research" },
 } satisfies Record<string, InboxStep>;
@@ -79,12 +76,6 @@ export function checkRubric(kind: CmoJobKind): string {
         `A thread becomes a card only when its score reaches ${PASS_SCORE} of 100. Pain (0-25) and Evidence (0-15) count only with a quote copied exactly from the thread; the server checks every quote. Timing and Reach are computed by the server.`,
         "Replies: help first, with advice the person can use without buying anything; mention the product at most once, at the end, saying plainly it is the founder's own; no links, no hype, under 120 words.",
         "Exclude health, medical, personal finance or legal advice, off-topic threads, and vendors promoting their own product.",
-        ...shared,
-      ].join("\n");
-    case "video_pack":
-      return [
-        `Caption limits (characters): ${Object.entries(VIDEO_LIMITS).map(([platform, limit]) => `${platform} ${limit}`).join(", ")}. Longer captions are cut.`,
-        "Numbers must be ones the founder says in the clip or that appear in the documents; a caption set that fails falls back to the clip's hook.",
         ...shared,
       ].join("\n");
     default:

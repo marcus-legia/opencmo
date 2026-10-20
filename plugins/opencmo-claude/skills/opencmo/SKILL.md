@@ -25,7 +25,7 @@ founder no credits. Media (AI images, video, voice, music, renders) does.
 4. **Price first, then confirm.** A tool that spends credits answers the first call with a price
    and a `confirm` code and spends nothing. Show the founder the price in one line and call again
    with `confirm` only after they agree in this conversation. Never confirm on your own.
-5. **Own media only.** Video clips come from the founder's own videos. No identifiable real
+5. **Own media only.** Video comes from the founder's own uploads. No identifiable real
    people, other brands' logos or cloned voices in generated media; the server moderates every
    prompt and frame and refuses what fails.
 
@@ -39,14 +39,13 @@ Claude" card that points here.
 ## The CMO inbox (`/inbox`)
 
 Each item is one model call a scheduled task could not make: the exact instructions, the full
-context OpenCMO built (documents, memories, last week's results, Reddit threads, clip
-transcripts…) and the JSON schema of the answer.
+context OpenCMO built (documents, memories, last week's results, Reddit threads…) and the JSON schema of the answer.
 
 1. `list_inbox` → pick the oldest open item → `get_inbox_item`.
 2. Do the task as the item's instructions say, with only its context. Before submitting, check
    your answer against `get_check_rubric` for its kind (the in-app reviewer's rules).
 3. Submit with the tool the item names (`submit_plan`, `submit_post_draft`, `submit_sales_scan`,
-   `submit_video_pack`, `submit_memory`, `submit_research`): `id`, `step`, `answer`.
+   `submit_memory`, `submit_research`): `id`, `step`, `answer`.
 4. `get_inbox_item` with `wait_seconds: 50`. Then one of three things:
    - **done** — the cards are in Approvals; tell the founder in one line.
    - **next step** — a Reddit scan goes queries → scores → replies; answer the new step.

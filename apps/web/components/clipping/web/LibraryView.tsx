@@ -166,7 +166,7 @@ export function LibraryView() {
             })
             .finally(() => setDeleteBusy(null));
         }}
-        onCreate={() => router.push("/app/editor?panel=clips")}
+        onCreate={() => router.push("/app/editor?panel=upload")}
         onBlank={() => {
           void createBlankEdit("9:16").then(
             (id) => router.push(`/app/editor/${id}`),

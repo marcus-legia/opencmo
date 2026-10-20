@@ -144,7 +144,7 @@ select throws_ok(
 -- Request id đã thuộc về một task KHÁC loại thì không đổi kind được.
 reset role;
 insert into public.tasks(id, user_id, kind, clip_id, job_id, status, request_id, payload)
-values ('f2500000-0000-4000-8000-00000000000f', 'f2000000-0000-4000-8000-00000000000a', 'zip',
+values ('f2500000-0000-4000-8000-00000000000f', 'f2000000-0000-4000-8000-00000000000a', 'transcribe_media',
         'f2200000-0000-4000-8000-00000000000a', 'f2100000-0000-4000-8000-00000000000a', 'cancelled',
         'f2400000-0000-4000-8000-00000000000f', '{}');
 set local role authenticated;

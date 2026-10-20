@@ -102,7 +102,7 @@ export function SettingsView({ mcpEndpoint, paid = false }: { mcpEndpoint?: stri
             <Skeleton height={56} radius="var(--ds-radius-lg)" />
           ) : defaultKit ? (
             <p>
-              New clips use <strong>{defaultKit.name}</strong>
+              New edits use <strong>{defaultKit.name}</strong>
               {kits.length > 1 ? ` · ${kits.length} kits saved` : ""}.
             </p>
           ) : (

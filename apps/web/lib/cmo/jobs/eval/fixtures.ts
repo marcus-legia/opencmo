@@ -5,12 +5,7 @@
  * invented one stands out).
  */
 
-import type { ClipInfo } from "../types";
 import type { EvalFixture } from "./types";
-
-const clip = (idx: number, hook: string, text: string): ClipInfo => ({
-  id: `clip-${idx}`, idx, hook, reason: "A clear, self-contained point", start: idx * 60, end: idx * 60 + 35, score: 0.8, text,
-});
 
 export const FIXTURES: EvalFixture[] = [
   {
@@ -24,10 +19,6 @@ export const FIXTURES: EvalFixture[] = [
       },
     },
     brief: "Why polite reminders on day 3, 7 and 14 get invoices paid",
-    clips: [
-      clip(0, "Most late invoices are forgotten, not refused", "Most late invoices are not refused. The client just forgot. So we send a polite reminder on day three, again on day seven, and a last one on day fourteen."),
-      clip(1, "Stop writing awkward follow-up emails", "I used to write every follow-up by hand and it felt awkward every time. Now the reminders go out on their own and I never chase anyone."),
-    ],
   },
   {
     name: "uptime",
@@ -37,9 +28,6 @@ export const FIXTURES: EvalFixture[] = [
       content_strategy: { pillars: [{ name: "Shipping safely", ideas: ["Roll back in one click", "The deploy checklist"] }] },
     },
     brief: "The one check every solo developer should run after a deploy",
-    clips: [
-      clip(0, "Which deploy broke the site?", "When the site goes down at night, the first question is which deploy did it. Pingwise ties every check to the last deploy, so a red check points at a change."),
-    ],
   },
   {
     name: "booking",
@@ -49,10 +37,6 @@ export const FIXTURES: EvalFixture[] = [
       content_strategy: { pillars: [{ name: "Fewer no-shows", ideas: ["Why deposits cut no-shows", "The reminder text that works"] }] },
     },
     brief: "How a small deposit cuts no-shows without scaring clients away",
-    clips: [
-      clip(0, "A small deposit changes who shows up", "Salon owners worry a deposit scares people off. In my experience it only filters out the people who were never going to come."),
-      clip(1, "The reminder text that works", "Send one short text the day before. Name, time, and a link to move the booking. That is all it needs."),
-    ],
   },
   {
     // Consumer app: the buyer is a parent at home, not a business; B2B phrasing reads wrong here.
@@ -80,10 +64,6 @@ export const FIXTURES: EvalFixture[] = [
       },
     },
     brief: "Planning dinners from what is already in the fridge instead of a recipe you have to shop for",
-    clips: [
-      clip(0, "Cook the fridge before you shop", "Before I write a shopping list I open the fridge. Half a bag of spinach, two eggs, some rice. That is tonight's dinner, not tomorrow's bin."),
-      clip(1, "Leftover rice is a head start", "Cold rice from yesterday fries better than fresh. Add the eggs, whatever vegetables are going soft, and soy sauce. Fifteen minutes."),
-    ],
   },
   {
     // A distinctive voice: drafts that slip into marketing tone should fail the judge here first.
@@ -106,9 +86,6 @@ export const FIXTURES: EvalFixture[] = [
       },
     },
     brief: "most users never hear about the features you ship",
-    clips: [
-      clip(0, "you shipped it. nobody knows.", "I shipped dark mode in March. In June a customer emailed asking for dark mode. That is the whole reason Shipnote exists."),
-    ],
   },
   {
     // Almost no numbers in the documents: any statistic in a draft is invented.
@@ -132,8 +109,5 @@ export const FIXTURES: EvalFixture[] = [
       },
     },
     brief: "Why pots crack while they dry and how to stop it",
-    clips: [
-      clip(0, "Your pot cracked while drying. Here is why.", "Most cracks start at the base. The rim dries first, the base stays wet, and the pot pulls itself apart. Cover the rim and let the base catch up."),
-    ],
   },
 ];
