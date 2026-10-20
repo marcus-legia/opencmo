@@ -17,6 +17,8 @@ process.env.OPENCMO_AI_FAKE = "1";
 // Only the fake catalog: with a real key in the shell, the real voice or video model would be picked.
 delete process.env.ELEVENLABS_API_KEY;
 delete process.env.FAL_KEY;
+// Any model key turns real moderation on (lib/cmo/agents/registry.ts): the fake must check.
+for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY"]) delete process.env[key];
 
 type Scene = { width: number; height: number; workarea?: number[]; children: unknown[] };
 const sceneOf = (document: ClipDocument) => document.stage.children[0] as unknown as Scene;

@@ -1,8 +1,8 @@
 /**
  * Which LLM provider can answer right now.
  *
- * The product runs on Claude or Gemini. When one of them cannot answer (no credit, a revoked key,
- * rate limits, an outage), a call moves to the other and the failed one is skipped for a while, so
+ * The product runs on Claude, Gemini or an OpenAI-compatible API (Groq…). When one of them cannot answer (no
+ * credit, a revoked key, rate limits, an outage), a call moves to the next and the failed one is skipped for a while, so
  * the next user does not pay for the same failure. The memory is per server instance: every
  * instance learns from its own first failure.
  *
@@ -12,7 +12,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ApiError } from "@google/genai";
 
-export type LlmProvider = "anthropic" | "gemini";
+import { OpenAiCompatError } from "./openai-compat";
+
+export type LlmProvider = "anthropic" | "gemini" | "openai";
 
 /**
  * `account`: the key or its credit; someone must fix it. `busy`: rate limit or outage; it passes.
@@ -40,6 +42,12 @@ export function outage(error: unknown): Outage | null {
     if (error.status === 400 && /api key/i.test(error.message)) return "account";
     if (error.status === 429 && /per_day/i.test(error.message)) return "quota";
     return error.status === 429 || error.status >= 500 ? "busy" : null;
+  }
+  if (error instanceof OpenAiCompatError) {
+    // 404: the model id is not on this endpoint, which only a configuration change fixes.
+    if (error.status === 401 || error.status === 402 || error.status === 403 || error.status === 404) return "account";
+    if (error.status === 429 && /per day|\(TPD\)|\(RPD\)|daily/i.test(error.message)) return "quota";
+    return error.status === 0 || error.status === 429 || error.status >= 500 ? "busy" : null;
   }
   return null;
 }
@@ -99,7 +107,7 @@ export async function withFailover<A extends Candidate, T>(
       if (!kind) throw error;
       if (shared(candidate)) markDown(candidate.provider, kind, candidate.model);
       if (index === 0) first = error;
-      if (kind === "account") console.error(`[llm] ${candidate.provider} cannot answer (key or credit)${index < order.length - 1 ? "; using the other provider" : ""}`);
+      if (kind === "account") console.error(`[llm] ${candidate.provider} cannot answer (key or credit)${index < order.length - 1 ? "; using the next provider" : ""}`);
     }
   }
   throw first;

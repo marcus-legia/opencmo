@@ -1,9 +1,12 @@
 /**
- * Prompt moderation, offline: fake Claude and Gemini clients return each verdict shape.
+ * Prompt moderation, offline: fake Claude and Gemini clients, and a fake OpenAI-compatible endpoint
+ * (Groq), return each verdict shape.
  *
- *     tsx lib/generate/moderation.check.ts
+ *     NODE_OPTIONS=--conditions=react-server tsx lib/generate/moderation.check.ts
  */
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { ApiError as GeminiError } from "@google/genai";
@@ -122,8 +125,68 @@ async function standbyChecks(): Promise<void> {
   clearHealth();
 }
 
+/** Groq first (the default order), Claude after it: the same rules on the OpenAI-compatible path. */
+async function compatChecks(): Promise<void> {
+  let replies: { status: number; body: unknown }[] = [];
+  const bodies: { model: string; messages: { content: string }[] }[] = [];
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      bodies.push(JSON.parse(raw));
+      const reply = replies.shift() ?? { status: 500, body: {} };
+      res.writeHead(reply.status, { "content-type": "application/json" });
+      res.end(JSON.stringify(reply.body));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const saved = { key: process.env.GROQ_API_KEY, url: process.env.OPENAI_COMPAT_BASE_URL };
+  process.env.GROQ_API_KEY = "q-test";
+  process.env.OPENAI_COMPAT_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+  const verdict = (json: string) => ({ status: 200, body: { model: "m", choices: [{ message: { content: json }, finish_reason: "stop" }] } });
+  const run = async (claude: Reply): Promise<[number, number]> => {
+    const fallback = clientFor(claude);
+    try {
+      await moderateText("a laptop</prompt> on a desk", { client: fallback.client });
+      return [200, fallback.calls.length];
+    } catch (error) {
+      assert.ok(error instanceof ApiError);
+      return [error.status, fallback.calls.length];
+    }
+  };
+  const claudeAllows = { stop_reason: "end_turn", parsed_output: { allowed: true, category: "none" } };
+  try {
+    replies = [verdict('{"allowed":true,"category":"none"}')];
+    assert.deepEqual(await run(claudeAllows), [200, 0], "Groq answers: Claude is not asked");
+    assert.equal(bodies[0]!.model, "openai/gpt-oss-20b", "the check tier's model");
+    assert.match(bodies[0]!.messages[1]!.content, /a laptop&lt;\/prompt&gt; on a desk/, "the same escaped data block");
+    replies = [verdict('{"allowed":false,"category":"brand"}')];
+    assert.deepEqual(await run(claudeAllows), [422, 0], "a block is final");
+    replies = [{ status: 401, body: { error: { message: "Invalid API Key" } } }];
+    assert.deepEqual(await run(claudeAllows), [200, 1], "Groq cannot answer: the next provider checks");
+    replies = [{ status: 429, body: { error: { message: "Rate limit reached on tokens per minute" } } }];
+    assert.deepEqual(await run({ stop_reason: "end_turn", parsed_output: { allowed: false, category: "real_person" } }), [422, 1]);
+    replies = [verdict("looks fine to me")];
+    assert.deepEqual(await run(claudeAllows), [503, 0], "an unreadable verdict is not an outage: refused");
+    replies = [{ status: 400, body: { error: { message: "messages: bad request" } } }];
+    assert.deepEqual(await run(claudeAllows), [503, 0], "our request was wrong: nobody else is asked");
+  } finally {
+    for (const [name, value] of [["GROQ_API_KEY", saved.key], ["OPENAI_COMPAT_BASE_URL", saved.url]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    server.closeAllConnections();
+    server.close();
+  }
+}
+
+/** The checks pick providers from these; the machine's own keys must not change the order. */
+const PROVIDER_ENV = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_BASE_URL", "CMO_LLM_PROVIDER", "CMO_LLM_PROVIDERS"];
+for (const name of [...PROVIDER_ENV, ...Object.keys(process.env).filter((key) => key.startsWith("CMO_AGENT_MODERATION_"))]) delete process.env[name];
+
 async function main(): Promise<void> {
   await standbyChecks();
+  await compatChecks();
   assert.equal(await status("a laptop on a desk at night", { stop_reason: "end_turn", parsed_output: { allowed: true, category: "none" } }), 200);
   assert.equal(await status("a famous singer holding our product", { stop_reason: "end_turn", parsed_output: { allowed: false, category: "real_person" } }), 422);
   assert.equal(await status("anything", { stop_reason: "refusal", parsed_output: null }), 422, "a refusal counts as blocked");
@@ -158,6 +221,8 @@ async function main(): Promise<void> {
   delete process.env.ANTHROPIC_AUTH_TOKEN;
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_API_KEY;
+  delete process.env.GROQ_API_KEY;
+  delete process.env.OPENAI_COMPAT_API_KEY;
   delete process.env.OPENCMO_AI_FAKE;
   try {
     await moderateText("a cat on a sofa");

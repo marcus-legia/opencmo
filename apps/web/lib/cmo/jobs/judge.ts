@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 
-import type { ProviderKind } from "@/lib/cmo/agents/registry";
+import { otherProvider, type ProviderKind } from "@/lib/cmo/agents/registry";
 import type { CaseResult } from "@/lib/eval/compare";
 import { usageUsd } from "@/lib/eval/prices";
 
@@ -61,7 +61,7 @@ const brief = (input: JudgeInput) =>
  */
 export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?: number }): Judge {
   const call: Call = opts.call ?? structured;
-  const prefer: ProviderKind = opts.drafter === "anthropic" ? "gemini" : "anthropic";
+  const prefer: ProviderKind = otherProvider(opts.drafter);
   return async (input) => {
     let cost = 0;
     const ask = <S extends z.ZodType>(label: string, prompt: string, schema: S) =>

@@ -1,7 +1,7 @@
 /**
  * /video moderation names the blocked pieces. Offline: fake moderation blocks text with [[flag]].
  *
- *     OPENCMO_AI_FAKE=1 tsx lib/agent/screen-pieces.check.ts
+ *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/screen-pieces.check.ts
  */
 import assert from "node:assert/strict";
 
@@ -9,7 +9,8 @@ import { screenPieces } from "./screen-pieces";
 
 async function main(): Promise<void> {
   process.env.OPENCMO_AI_FAKE = "1";
-  for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "FAL_KEY"]) delete process.env[key];
+  // Any provider key turns real moderation on (lib/cmo/agents/registry.ts).
+  for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "FAL_KEY"]) delete process.env[key];
   const spec = (prompt: string) => ({ prompt, aspectRatio: "9:16", duration: 5, seed: 1 });
   const clean = [
     { label: "Shot 1 (a laptop)", spec: spec("a laptop on a desk") },

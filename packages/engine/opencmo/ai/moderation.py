@@ -2,11 +2,15 @@
 
 The prompt was already checked on the web before credits were held
 (`apps/web/lib/generate/moderation.ts`); this checks what the model actually drew — a clean prompt
-can still produce an unsafe image. Two independent checks run on the image or on three video
-frames: fal's NSFW classifier, and Claude Haiku against the product rules (no identifiable real
-people, no other brands' logos, no sexual, violent or hateful content). When Claude itself cannot
-answer (no credit, a bad key, rate limits, an outage) and the worker has a Gemini key, Gemini Flash
-applies the same policy; a verdict is final and is never retried on the other model.
+can still produce an unsafe image. The image or three video frames go to a vision model against
+the product rules (no identifiable real people, no other brands' logos, no sexual, violent or
+hateful content), and to fal's NSFW classifier as a second opinion when the worker has a fal key.
+
+The vision model is the `moderation` agent of the web's registry, with the same env: providers are
+tried in the order of `CMO_LLM_PROVIDERS` (OpenAI-compatible such as Groq, then Claude, then Gemini
+when unset), each one the worker has a key for. When one cannot answer (no credit, a bad key, rate
+limits, an outage) the next applies the same policy; a verdict is final and is never retried on
+another model.
 
 Blocked -> a non-retryable `ProviderError`: the worker fails the task, the trigger refunds the
 credits, and the file never reaches the bucket.
@@ -37,6 +41,10 @@ NSFW_ENDPOINT = "https://fal.run/fal-ai/x-ailab/nsfw"
 CLAUDE_MODEL = os.environ.get("OPENCMO_MODERATION_MODEL", "claude-haiku-5-5")
 GEMINI_MODEL = os.environ.get("OPENCMO_MODERATION_GEMINI_MODEL", "gemini-flash-latest")
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+#: A model on the OpenAI-compatible endpoint that reads images (Groq's id at the time of writing).
+COMPAT_VISION_MODEL = os.environ.get("OPENCMO_MODERATION_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+PROVIDER_KINDS = ("openai", "anthropic", "gemini")
 _REAL_PERSON = "an identifiable real person (a recognisable public figure or celebrity); "
 
 
@@ -121,9 +129,9 @@ def production() -> bool:
 
 
 def ready() -> bool:
-    """Both checks have their keys. Production only enables AI images/video when the web side
-    says the same (`moderationReady`)."""
-    return bool(os.environ.get("FAL_KEY") and _anthropic_key())
+    """A policy checker has a key. Production only enables AI images/video when the web side says
+    the same (`moderationReady`); the deploy check keeps the keys alike."""
+    return bool(_policy_checkers())
 
 
 def _anthropic_key() -> str:
@@ -132,6 +140,30 @@ def _anthropic_key() -> str:
 
 def _gemini_key() -> str:
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+
+
+def _compat_key() -> str:
+    return os.environ.get("OPENAI_COMPAT_API_KEY") or os.environ.get("GROQ_API_KEY") or ""
+
+
+def _compat_base_url() -> str:
+    return (os.environ.get("OPENAI_COMPAT_BASE_URL") or GROQ_BASE_URL).rstrip("/")
+
+
+def _kind(name: str) -> str | None:
+    name = name.strip().lower()
+    return "openai" if name == "groq" else name if name in PROVIDER_KINDS else None
+
+
+def _provider_order() -> list[str]:
+    """`CMO_LLM_PROVIDERS` first, then any provider it leaves out (lib/cmo/agents/registry.ts)."""
+    listed = [kind for kind in (_kind(name) for name in os.environ.get("CMO_LLM_PROVIDERS", "").split(",")) if kind]
+    return list(dict.fromkeys([*listed, *PROVIDER_KINDS]))
+
+
+def _policy_checkers() -> list[str]:
+    keys = {"openai": _compat_key(), "anthropic": _anthropic_key(), "gemini": _gemini_key()}
+    return [kind for kind in _provider_order() if keys[kind]]
 
 
 def check_input(model: AiModel, path: Path) -> None:
@@ -202,8 +234,10 @@ def _after_generation(check) -> None:
 
 
 def check_images(images: list[Path], policy: str = POLICY) -> None:
-    """Runs both checks; either one flagging blocks. A check that cannot answer never passes."""
-    _check_nsfw(images)
+    """The policy check, plus fal's NSFW classifier when the worker has its key; either one flagging
+    blocks. A check that cannot answer never passes."""
+    if os.environ.get("FAL_KEY"):
+        _check_nsfw(images)
     _check_policy(images, policy)
 
 
@@ -230,26 +264,87 @@ def _check_nsfw(images: list[Path]) -> None:
         raise ProviderError(BLOCKED)
 
 
-class _ClaudeOut(Exception):
-    """Claude itself could not answer. `retryable`: it may answer in a moment (busy), as opposed
-    to a key or credit problem someone has to fix."""
+class _Out(Exception):
+    """A checker's provider could not answer. `retryable`: it may answer in a moment (busy), as
+    opposed to a key or credit problem someone has to fix."""
 
     def __init__(self, retryable: bool):
-        super().__init__("claude cannot answer")
+        super().__init__("checker cannot answer")
         self.retryable = retryable
 
 
 def _check_policy(images: list[Path], policy: str) -> None:
-    """Claude's verdict; Gemini's when Claude cannot answer and the worker has a Gemini key."""
-    try:
-        _check_claude(images, policy)
-    except _ClaudeOut as out:
-        if _gemini_key():
-            log.warning("Claude could not check the output; asking %s", GEMINI_MODEL)
-            _check_gemini(images, policy)
+    """The first checker's verdict; the next checker's only when a provider cannot answer."""
+    checks = {"openai": _check_compat, "anthropic": _check_claude, "gemini": _check_gemini}
+    order = _policy_checkers()
+    busy = False
+    for index, kind in enumerate(order):
+        try:
+            checks[kind](images, policy)
             return
-        # No standby: busy is retried in place, anything else is never delivered unchecked.
-        raise ProviderError(UNCHECKED, retryable=True) if out.retryable else ProviderError(BLOCKED) from out
+        except _Out as out:
+            busy = busy or out.retryable
+            if index + 1 < len(order):
+                log.warning("%s could not check the output; asking %s", kind, order[index + 1])
+    # Nobody answered: busy is retried in place, anything else is never delivered unchecked.
+    raise ProviderError(UNCHECKED, retryable=True) if busy else ProviderError(BLOCKED)
+
+
+def _out_for_status(status: int) -> _Out | None:
+    """The outage an HTTP status means, or None when the provider answered and our request is at fault."""
+    if status in (401, 402, 403, 404):
+        return _Out(retryable=False)
+    if status == 429 or status >= 500:
+        return _Out(retryable=True)
+    return None
+
+
+def _check_compat(images: list[Path], policy: str) -> None:
+    """An OpenAI-compatible vision model (Groq…), the verdict as JSON."""
+    content: list[dict] = [{"type": "image_url", "image_url": {"url": _data_url(image)}} for image in images]
+    content.append({"type": "text", "text": "Judge these images against the policy."})
+    schema = _Verdict.model_json_schema()
+
+    def post(response_format: dict, system: str) -> httpx.Response:
+        try:
+            return httpx.post(
+                f"{_compat_base_url()}/chat/completions",
+                headers={"Authorization": f"Bearer {_compat_key()}"},
+                json={
+                    "model": COMPAT_VISION_MODEL,
+                    "max_tokens": 1024,
+                    "temperature": 0,
+                    "response_format": response_format,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
+                },
+                timeout=60,
+            )
+        except httpx.HTTPError as exc:
+            raise _Out(retryable=True) from exc
+
+    response = post({"type": "json_schema", "json_schema": {"name": "verdict", "schema": schema}}, policy)
+    if response.status_code == 400 and ("response_format" in response.text or "json_schema" in response.text):
+        # A model without JSON schema output: JSON mode, the shape in the instructions.
+        response = post({"type": "json_object"}, f"{policy} Answer with one JSON object: {json.dumps(schema)}")
+    out = _out_for_status(response.status_code)
+    if out:
+        log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
+        raise out
+    if response.status_code >= 400:
+        log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
+        raise ProviderError(BLOCKED)
+    try:
+        choice = response.json()["choices"][0]
+        if choice.get("finish_reason") == "length":
+            # Cut off before the verdict: no answer, not a block. Retried like a busy check.
+            raise ProviderError(UNCHECKED, retryable=True)
+        verdict = _Verdict.model_validate_json(choice["message"]["content"], strict=True)
+    except (KeyError, IndexError, TypeError, ValueError):
+        log.warning("Output blocked: %s gave no verdict", COMPAT_VISION_MODEL)
+        raise ProviderError(BLOCKED) from None
+    if not verdict.allowed:
+        log.warning("Output blocked by the policy check (%s): %s", COMPAT_VISION_MODEL, verdict.category)
+        raise ProviderError(BLOCKED)
 
 
 def _check_gemini(images: list[Path], policy: str) -> None:
@@ -277,11 +372,12 @@ def _check_gemini(images: list[Path], policy: str) -> None:
             timeout=60,
         )
     except httpx.HTTPError as exc:
-        raise ProviderError(UNCHECKED, retryable=True) from exc
-    if response.status_code >= 500 or response.status_code == 429:
-        raise ProviderError(UNCHECKED, retryable=True)
-    if response.status_code >= 400:
+        raise _Out(retryable=True) from exc
+    out = _out_for_status(response.status_code)
+    if out or response.status_code >= 400:
         log.error("Gemini moderation returned %s: %s", response.status_code, response.text[:300])
+        if out:
+            raise out
         raise ProviderError(BLOCKED)
     data = response.json()
     try:
@@ -318,13 +414,13 @@ def _check_claude(images: list[Path], policy: str) -> None:
             **effort,
         )
     except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as exc:
-        raise _ClaudeOut(retryable=True) from exc
+        raise _Out(retryable=True) from exc
     except anthropic.APIStatusError as exc:
         log.error("Claude moderation returned %s: %s", exc.status_code, str(exc)[:300])
         # Anthropic reports an empty balance as a 400; a bad or revoked key as 401/403.
         unpaid = exc.status_code == 400 and "credit balance" in str(exc).lower()
         if exc.status_code in (401, 402, 403) or unpaid:
-            raise _ClaudeOut(retryable=False) from exc
+            raise _Out(retryable=False) from exc
         raise ProviderError(BLOCKED) from exc
     verdict = response.parsed_output
     if response.stop_reason == "max_tokens":

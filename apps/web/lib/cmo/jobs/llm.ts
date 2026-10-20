@@ -11,7 +11,8 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { ApiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
-import { resolveAgent, type AgentId, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
+import { agentCandidates, type AgentId, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
+import { compatJson, OpenAiCompatError } from "@/lib/openai-compat";
 
 import { outage, withFailover } from "@/lib/llm-health";
 
@@ -25,9 +26,9 @@ export function fakeAllowed(): boolean {
   return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
 }
 
-/** Agent chạy được: bản giả, hoặc đã có khoá cho provider của nó. */
+/** The agent can run: the fake, or the server has a key for some provider of it. */
 export function llmReady(agent: AgentId = "planner"): boolean {
-  return fakeAllowed() || Boolean(resolveAgent(agent).apiKey);
+  return fakeAllowed() || agentCandidates(agent).length > 0;
 }
 
 export type StructuredOptions<S extends z.ZodType> = {
@@ -109,10 +110,44 @@ async function structuredGemini<S extends z.ZodType>(opts: StructuredOptions<S>,
   return parsed.data;
 }
 
+async function structuredOpenAi<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
+  let answer;
+  try {
+    answer = await compatJson({
+      baseUrl: agent.baseUrl,
+      apiKey: agent.apiKey,
+      model: agent.model,
+      system: opts.system,
+      content: opts.prompt,
+      schema: z.toJSONSchema(opts.schema) as Record<string, unknown>,
+      maxTokens: opts.maxTokens ?? 8000,
+      timeoutMs: opts.timeoutMs,
+    });
+  } catch (error) {
+    if (outage(error)) throw error;
+    console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): OpenAI-compatible error`, error instanceof OpenAiCompatError ? error.status : "", error instanceof Error ? error.message : error);
+    throw new LlmError(opts.failure);
+  }
+  await opts.onUsage?.({ model: answer.model, input: answer.usage.input, output: answer.usage.output, cacheRead: answer.usage.cacheRead, cacheWrite: 0 });
+  const parsed = opts.schema.safeParse(answer.json);
+  if (!parsed.success) {
+    console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): output does not match the schema`, parsed.error.issues.slice(0, 3));
+    throw new LlmError(opts.failure);
+  }
+  return parsed.data;
+}
+
+/** One call on exactly this provider; an outage is thrown as is, for the caller to fall through. */
+export function structuredOn<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): Promise<z.infer<S>> {
+  if (agent.provider === "gemini") return structuredGemini(opts, agent);
+  if (agent.provider === "openai") return structuredOpenAi(opts, agent);
+  return structuredAnthropic(opts, agent);
+}
+
 /**
  * One structured call. The agent's configured provider answers; when that provider cannot (no
- * credit, a bad key, rate limits, an outage) and the server has a key for the other one, the call
- * runs there on that provider's model of the same tier.
+ * credit, a bad key, rate limits, an outage), the call runs on the next provider of the order the
+ * server has a key for (`CMO_LLM_PROVIDERS`), on that provider's model of the same tier.
  */
 export async function structured<S extends z.ZodType>(input: StructuredOptions<S>): Promise<z.infer<S>> {
   const opts: StructuredOptions<S> = usageListeners.size
@@ -124,16 +159,10 @@ export async function structured<S extends z.ZodType>(input: StructuredOptions<S
         },
       }
     : input;
-  const configured = opts.prefer ? resolveAgent(opts.agent, process.env, opts.prefer) : resolveAgent(opts.agent);
-  const other = resolveAgent(opts.agent, process.env, configured.provider === "anthropic" ? "gemini" : "anthropic");
-  const candidates = [configured, other].filter((agent) => agent.apiKey);
+  const candidates = agentCandidates(opts.agent, process.env, opts.prefer);
   if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
   try {
-    return await withFailover(
-      candidates,
-      (agent) => (agent.provider === "gemini" ? structuredGemini(opts, agent) : structuredAnthropic(opts, agent)),
-      (agent) => !agent.ownKey,
-    );
+    return await withFailover(candidates, (agent) => structuredOn(opts, agent), (agent) => !agent.ownKey);
   } catch (error) {
     if (error instanceof LlmError) throw error;
     const kind = outage(error);

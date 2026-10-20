@@ -23,7 +23,7 @@ Deploy:
         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
         SUPABASE_JWT_SECRET=...          # API key -> 5-minute user JWT
         SUPABASE_SERVICE_ROLE_KEY=...    # only for `api_key_owner`
-        ANTHROPIC_API_KEY=... FAL_KEY=... [GEMINI_API_KEY=...]   # prompt moderation
+        GROQ_API_KEY=... [ANTHROPIC_API_KEY=... GEMINI_API_KEY=... FAL_KEY=...]   # moderation, any provider
         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... \
         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run/mcp \
         OPENCMO_WEB_URL=https://opencmo.io \

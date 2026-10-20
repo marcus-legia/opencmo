@@ -65,6 +65,11 @@ engine pytest.
 
 ### 2. One provider layer, swapped by env
 
+**Status (2026-10-20):** first part in its own PR — registry kind `openai`, `CMO_LLM_PROVIDERS`, `structured()`
+on any OpenAI-compatible endpoint, moderation (web and worker) as the `moderation` agent with fal optional, the
+deploy check. Still to do: an OpenAI-compatible **chat** provider (the in-app CMO chat and the editor Assistant
+keep Claude/Gemini until then), a live run on Groq once `GROQ_API_KEY` is in, and the `creem` moderation backend.
+
 Goal: any agent or checker moves to another vendor by changing env on Vercel/Modal, with no code change.
 
 - **A third provider kind, `openai`: any OpenAI-compatible endpoint** (base URL + key + model). Groq is the first
