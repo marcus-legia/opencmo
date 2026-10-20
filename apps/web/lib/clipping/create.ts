@@ -21,6 +21,8 @@ import { MAX_SEGMENTS, segmentProblem } from "./segments";
 
 export { segmentProblem } from "./segments";
 
+const NO_MOMENTS = "Pick at least one moment to clip.";
+
 const segment = z.object({
   start: z.number().min(0).finite(),
   end: z.number().min(0).finite(),
@@ -28,10 +30,10 @@ const segment = z.object({
 
 export const createClipJobInput = z.object({
   source: z.string().min(1).max(2000),
+  // Kept for old callers: the clip count is always the number of moments.
   clips: z.number().int().min(1).max(10).default(5),
-  // Tên public ổn định dùng bởi form web và worker.
   clip_length: z.enum(["auto", "short", "medium", "long"]).default("auto"),
-  /** Các đoạn người dùng kéo trên thanh bar. Bỏ trống = để AI chọn khoảnh khắc. */
+  /** The moments the user picked on the picker; a clip job needs at least one (plan decision 8). */
   segments: z.array(segment).max(MAX_SEGMENTS).optional(),
   /** "full" tải nguyên video, không cắt và không burn phụ đề. */
   mode: z.enum(["clip", "full"]).default("clip"),
@@ -42,6 +44,10 @@ export const createClipJobInput = z.object({
   captions: z.boolean().default(true),
   /** Người dùng tick "This is my own video" — bắt buộc với link, SQL kiểm lại. */
   ownership_confirmed: z.boolean().default(false),
+}).superRefine((body, ctx) => {
+  // First of three gates (zod → `create_job()` → worker): AI moment picking is gone, so a clip job
+  // with no moments has nothing to cut.
+  if (body.mode === "clip" && !body.segments?.length) ctx.addIssue({ code: "custom", message: NO_MOMENTS });
 });
 export type CreateClipJobInput = z.infer<typeof createClipJobInput>;
 
@@ -55,11 +61,11 @@ export async function createClipJob(supabase: SupabaseClient, userId: string, bo
     throw new ApiError(422, "Confirm this is your own video to continue.");
   }
 
-  // Mảng rỗng KHÔNG phải lỗi: kéo một đoạn rồi xoá đi vẫn tạo được job, rơi về nhánh AI.
   const segments = body.segments?.length ? body.segments : null;
   if (body.mode === "full" && segments) {
     throw new ApiError(422, "Picked moments only apply when we clip your video.");
   }
+  if (body.mode === "clip" && !segments) throw new ApiError(422, NO_MOMENTS);
   if (segments) {
     const trouble = segmentProblem(segments);
     if (trouble) throw new ApiError(422, trouble);

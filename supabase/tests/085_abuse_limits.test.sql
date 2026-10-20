@@ -53,37 +53,37 @@ set local request.jwt.claims = '{"sub":"e5000000-0000-4000-8000-000000000001"}';
 -- Trước migration này allowlist CHỈ nằm ở `lib/api/source.ts`, nên gọi thẳng
 -- `rpc/create_job` nhét được url bất kỳ vào `jobs.source_url`.
 select throws_ok(
-  $$ select public.create_clip_job('http://169.254.169.254/latest/meta-data/', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('http://169.254.169.254/latest/meta-data/', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.',
   'endpoint metadata của máy ảo bị từ chối ngay trong SQL'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('file:///etc/passwd', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('file:///etc/passwd', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.',
   'file:// bị từ chối'
 );
 
 select lives_ok(
-  $$ select public.create_clip_job('https://cdn.example.com/video.mp4', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://cdn.example.com/video.mp4', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'host HTTPS công khai ngoài YouTube/Vimeo vẫn được nhận'
 );
 
 -- `youtube.com.evil.example` bắt đầu bằng một host hợp lệ nhưng không phải nó.
 select throws_ok(
-  $$ select public.create_clip_job('https://user:pass@example.com/video.mp4', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://user:pass@example.com/video.mp4', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.',
   'URL nhúng credential bị từ chối'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('ftp://cdn.example.com/video.mp4', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('ftp://cdn.example.com/video.mp4', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.',
   'scheme ngoài HTTP(S) bị từ chối'
 );
 
 select lives_ok(
-  $$ select public.create_clip_job('https://www.youtube.com/watch?v=ok', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://www.youtube.com/watch?v=ok', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'link YouTube hợp lệ vẫn qua'
 );
 
@@ -91,21 +91,21 @@ select lives_ok(
 -- qua được route. SQL phải nhận đúng cái route đã nhận, nếu không người dùng
 -- nhận "Paste a YouTube or Vimeo link." cho một link hoàn toàn dùng được.
 select lives_ok(
-  $$ select public.create_clip_job('https://www.YouTube.com/watch?v=ok-upper', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://www.YouTube.com/watch?v=ok-upper', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'host viết hoa vẫn qua — route đã hạ chữ trước khi so'
 );
 
 -- ===================================================== trần job đang chạy
 select pg_temp.drain_jobs('e5000000-0000-4000-8000-000000000001');
 select lives_ok(
-  $$ select public.create_clip_job('https://youtu.be/cap-1', 1, p_ownership_confirmed => true);
-     select public.create_clip_job('https://youtu.be/cap-2', 1, p_ownership_confirmed => true);
-     select public.create_clip_job('https://youtu.be/cap-3', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/cap-1', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
+     select public.create_clip_job('https://youtu.be/cap-2', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
+     select public.create_clip_job('https://youtu.be/cap-3', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'ba job mở cùng lúc vẫn tạo được'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/cap-4', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/cap-4', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'P0001', 'You already have 3 projects in progress. Please wait for one to finish.',
   'job thứ tư bị từ chối — hàng đợi không bị một người chiếm'
 );
@@ -113,14 +113,14 @@ select throws_ok(
 -- Trần đếm theo job MỞ, không theo tổng số: đóng bớt là tạo tiếp được.
 select pg_temp.drain_jobs('e5000000-0000-4000-8000-000000000001');
 select lives_ok(
-  $$ select public.create_clip_job('https://youtu.be/cap-5', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/cap-5', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'đóng job cũ thì tạo tiếp được'
 );
 
 -- Trần theo TỪNG người: user B không bị user A làm ảnh hưởng.
 set local request.jwt.claims = '{"sub":"e5000000-0000-4000-8000-000000000002"}';
 select lives_ok(
-  $$ select public.create_clip_job('https://youtu.be/other-user', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/other-user', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'trần tính riêng từng người'
 );
 set local request.jwt.claims = '{"sub":"e5000000-0000-4000-8000-000000000001"}';
@@ -144,7 +144,7 @@ begin
     -- sửa 0 hàng thay vì báo lỗi.
     perform pg_temp.drain_jobs('e5000000-0000-4000-8000-000000000003');
     begin
-      perform public.create_clip_job('https://youtu.be/rate-' || i, 1, p_ownership_confirmed => true);
+      perform public.create_clip_job('https://youtu.be/rate-' || i, 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
       v_created := v_created + 1;
     exception when others then
       v_blocked := sqlerrm;
@@ -188,14 +188,14 @@ declare v_job public.jobs; v_before int;
 begin
   -- Huỷ khi còn `queued`: chưa tốn gì, hoàn đủ.
   v_before := public.credit_balance('e5000000-0000-4000-8000-000000000002');
-  v_job := public.create_clip_job('https://youtu.be/cancel-queued', 1, p_ownership_confirmed => true);
+  v_job := public.create_clip_job('https://youtu.be/cancel-queued', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
   perform public.cancel_job(v_job.id);
   insert into cancel_probe values
     ('queued', public.credit_balance('e5000000-0000-4000-8000-000000000002') - v_before);
 
   -- Huỷ khi đã `running`: giữ lại đúng 1 credit.
   v_before := public.credit_balance('e5000000-0000-4000-8000-000000000002');
-  v_job := public.create_clip_job('https://youtu.be/cancel-running', 1, p_ownership_confirmed => true);
+  v_job := public.create_clip_job('https://youtu.be/cancel-running', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
   perform pg_temp.mark_running(v_job.id);
   perform public.cancel_job(v_job.id);
   insert into cancel_probe values

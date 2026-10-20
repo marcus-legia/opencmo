@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
 import { RESUME_VIDEO } from "./global-setup";
-import { openClipsPanel, signIn, state } from "./helpers";
+import { openClipsPanel, pickMoments, signIn, state } from "./helpers";
 
 test("TUS resumes after a chunk is cut off", async ({ page }) => {
   const { users, url, service } = state();
@@ -36,7 +36,9 @@ test("TUS resumes after a chunk is cut off", async ({ page }) => {
 
   // Tab Clips của editor: upload là đường chính.
   await page.getByTestId("clips-file").setInputFiles(RESUME_VIDEO);
-  await page.getByTestId("clips-submit").click();
+  await page.getByTestId("clips-pick").click();
+  await pickMoments(page, [[0, 2]]);
+  await page.getByTestId("picker-submit").click();
   await expect(page.getByText("Upload resume verified.", { exact: true })).toBeVisible({
     timeout: 90_000,
   });

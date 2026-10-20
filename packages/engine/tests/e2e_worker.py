@@ -42,8 +42,11 @@ log = logging.getLogger("opencmo.e2e")
 LOOPBACK = {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
 
 
-def _fixture_pipeline(source: str, cfg, **callbacks):
+def _fixture_pipeline(source: str, cfg, moments=None, **callbacks):
     """Thay bước transcribe/select bằng dữ liệu cố định, giữ nguyên phần render.
+
+    Picked moments (every clip job has them since manual picking only) are cut as given, one clip
+    each, like the engine's manual branch: no `select` stage.
 
     Transcript có `words` để editor thử được nhấn từng từ và cắt câu — thiếu nó
     thì nửa số thao tác trong `clip-flow.spec.ts` không có gì để bấm vào.
@@ -63,18 +66,18 @@ def _fixture_pipeline(source: str, cfg, **callbacks):
         "segments": [{"start": 0.4, "end": 3.6, "text": "we built this in a single weekend",
                       "words": words}],
     }
-    moment = Moment(0.0, 8.0, "We built this in a weekend", 9.0, "fixture")
+    picked = list(moments or [Moment(0.0, 8.0, "We built this in a weekend", 9.0, "fixture")])
 
     callbacks["on_progress"]("transcribe")
     callbacks["on_artifact"]("source", {"version": 1, "url": source, "title": info.title,
                                         "duration": duration})
     callbacks["on_artifact"]("transcript", transcript)
-    callbacks["on_progress"]("select")
+    if not moments:
+        callbacks["on_progress"]("select")
     callbacks["on_artifact"](
         "moments",
-        {"version": 1, "moments": [{"start": moment.start, "end": moment.end,
-                                    "hook": moment.hook, "reason": moment.reason,
-                                    "score": moment.score}]},
+        {"version": 1, "moments": [{"start": m.start, "end": m.end, "hook": m.hook,
+                                    "reason": m.reason, "score": m.score} for m in picked]},
     )
     callbacks["on_progress"]("render")
     callbacks["on_artifact"]("render_settings", {"version": 1, "width": cfg.clip_width,
@@ -82,26 +85,30 @@ def _fixture_pipeline(source: str, cfg, **callbacks):
                                                  "watermark": cfg.watermark,
                                                  "encoder": "libx264"})
 
-    tracks = callbacks["on_sections"]([moment], [(Path(source), 0.0)])
+    tracks = callbacks["on_sections"](picked, [(Path(source), 0.0)])
 
-    out = Path(cfg.out_dir) / "00-we-built-this-in-a-weekend.mp4"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "ffmpeg", "-v", "error", "-y", "-ss", "0", "-i", source, "-t", "8",
-            "-vf", (
-                f"scale={cfg.clip_width}:{cfg.clip_height}:force_original_aspect_ratio=increase,"
-                f"crop={cfg.clip_width}:{cfg.clip_height}"
-            ),
-            "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", str(out),
-        ],
-        check=True,
-    )
-    log.info("Fixture render xong (%d track)", len(tracks or []))
-    clip = Clip(0, moment, str(out))
-    if 0 not in callbacks.get("skip_indices", set()):
-        callbacks["on_clip"](clip)
-    return JobResult(info, [clip], Timings())
+    clips = []
+    for index, moment in enumerate(picked):
+        out = Path(cfg.out_dir) / f"{index:02d}-clip-{index + 1}.mp4"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-y", "-ss", f"{moment.start:.3f}", "-i", source,
+                "-t", f"{moment.end - moment.start:.3f}",
+                "-vf", (
+                    f"scale={cfg.clip_width}:{cfg.clip_height}:force_original_aspect_ratio=increase,"
+                    f"crop={cfg.clip_width}:{cfg.clip_height}"
+                ),
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", str(out),
+            ],
+            check=True,
+        )
+        clip = Clip(index, moment, str(out))
+        clips.append(clip)
+        if index not in callbacks.get("skip_indices", set()):
+            callbacks["on_clip"](clip)
+    log.info("Fixture render xong: %d clip (%d track)", len(clips), len(tracks or []))
+    return JobResult(info, clips, Timings())
 
 
 def _fixture_transcribe(audio: Path, cfg) -> Transcript:

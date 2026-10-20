@@ -5,6 +5,9 @@
  * editor, không còn trang `/app/video` riêng. Mỗi clip vẫn là một bản sửa riêng — nút Open
  * mở nó ở `/app/editor/<clip>`.
  *
+ * The user picks every moment on the full-size picker (`ClipPicker`, plan item 1): this panel
+ * chooses the video and lists the jobs. There is no AI picking, so no clip count or length.
+ *
  * Upload là đường chính. Dán link nằm sau "Use a link instead" và phải tick "Is this your
  * video?" (luật 3; `create_clip_job` là chốt thật). Không có "Don't clip": link + tải nguyên
  * video là đúng hình một content downloader — API vẫn nhận `mode: "full"` cho upload.
@@ -23,18 +26,20 @@ import { useLive } from "@/components/clipping/useLive";
 import { LinkPreview } from "@/components/clipping/web/LinkPreview";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import { youtubeId } from "@/components/clipping/web/YouTubePlayer";
-import { CLIP_COUNTS, CLIP_LENGTH_OPTIONS } from "@/lib/clip-options";
-import type { AspectRatio, ClipLength } from "@/lib/clipping-types";
+import type { AspectRatio } from "@/lib/clipping-types";
+import type { Segment } from "@/lib/clipping/segments";
 import { CREDITS_PER_MINUTE, JOB_HOLD_CREDITS } from "@/lib/credits";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 import { uploadResumable, type UploadHandle } from "@/lib/upload-tus";
+
+import { ClipPicker } from "./ClipPicker";
 
 type Granted = { bucket: string; objectName: string; source: string | null };
 // Chỉ bật/tắt (R4): kiểu phụ đề chọn trong editor, bằng đúng bộ preset của editor.
 type Captions = "on" | "off";
 
-/** Điền sẵn từ link cũ (`/app/video?url=…`, nút "Try again with longer clips"). */
-export type ClipsPrefill = { url?: string; count?: number; length?: ClipLength };
+/** From the picker URL (contract A1: `?panel=clips&picker=open&source=…&segments=…`) or "Pick again". */
+export type ClipsPrefill = { url?: string; segments?: Segment[]; open?: boolean };
 
 const ASPECTS: AspectRatio[] = ["9:16", "1:1", "16:9"];
 const CAPTIONS: { value: Captions; label: string }[] = [
@@ -43,17 +48,13 @@ const CAPTIONS: { value: Captions; label: string }[] = [
 ];
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
 
-// Chỉ nhớ "gu" (số clip, độ dài, phụ đề). Khung lấy theo bản đang mở mỗi lần.
+// Only the captions choice is remembered; the frame follows the open edit every time.
 const PREFS_KEY = "opencmo.clips.v1";
-function readPrefs(): { count?: number; length?: ClipLength; captions?: Captions } {
+function readPrefs(): { captions?: Captions } {
   try {
     const data = JSON.parse(window.localStorage.getItem(PREFS_KEY) ?? "{}") as Record<string, unknown>;
-    return {
-      count: CLIP_COUNTS.includes(Number(data.count)) ? Number(data.count) : undefined,
-      length: CLIP_LENGTH_OPTIONS.find((option) => option.value === data.length)?.value,
-      // Bản lưu cũ ghi tên kiểu ("bold"…): mọi giá trị khác "off" là đang bật.
-      captions: data.captions === undefined ? undefined : data.captions === "off" ? "off" : "on",
-    };
+    // Older saves stored a style name ("bold"…): anything but "off" means on.
+    return { captions: data.captions === undefined ? undefined : data.captions === "off" ? "off" : "on" };
   } catch {
     return {};
   }
@@ -95,8 +96,8 @@ export function ClipsPanel({
   const [duration, setDuration] = useState<number | null>(null);
   const [url, setUrl] = useState(prefill?.url ?? "");
   const [mine, setMine] = useState(false);
-  const [count, setCount] = useState(prefill?.count ?? 3);
-  const [length, setLength] = useState<ClipLength>(prefill?.length ?? "auto");
+  const [segments, setSegments] = useState<Segment[]>(prefill?.segments ?? []);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [aspect, setAspect] = useState<AspectRatio>(frame);
   const [captions, setCaptions] = useState<Captions>("on");
   const [busy, setBusy] = useState(false);
@@ -110,8 +111,6 @@ export function ClipsPanel({
 
   useLayoutEffect(() => {
     const prefs = readPrefs();
-    if (prefill?.count === undefined && prefs.count) setCount(prefs.count);
-    if (prefill?.length === undefined && prefs.length) setLength(prefs.length);
     if (prefs.captions) setCaptions(prefs.captions);
     prefsLoaded.current = true;
     // Một lần khi mount; giá trị điền sẵn đã nằm trong state.
@@ -120,14 +119,14 @@ export function ClipsPanel({
   useEffect(() => {
     if (!prefsLoaded.current) return;
     try {
-      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ count, length, captions }));
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify({ captions }));
     } catch {
-      // Storage bị chặn: lần sau về mặc định.
+      // Storage blocked: back to the default next time.
     }
-  }, [count, length, captions]);
+  }, [captions]);
   // Khung của bản đang mở tới sau lần vẽ đầu (renderer dựng xong) và đổi theo FrameBar.
   useEffect(() => setAspect(frame), [frame]);
-  // "Try again with longer clips" điền lại khi panel đang mở.
+  // The picker URL and "Pick again" fill the panel in while it is open; ownership is asked again.
   useEffect(() => {
     if (!prefill) return;
     if (prefill.url !== undefined) {
@@ -135,8 +134,8 @@ export function ClipsPanel({
       setUrl(prefill.url);
       setMine(false);
     }
-    if (prefill.count) setCount(prefill.count);
-    if (prefill.length) setLength(prefill.length);
+    setSegments(prefill.segments ?? []);
+    if (prefill.open && prefill.url && linkProvider(prefill.url).kind === "supported") setPickerOpen(true);
   }, [prefill]);
 
   const load = useCallback(async () => {
@@ -158,6 +157,7 @@ export function ClipsPanel({
     setError(null);
     uploaded.current = null;
     setDuration(null);
+    setSegments([]);
     const problem = next ? validateVideoFile(next, MAX_UPLOAD_BYTES) : null;
     if (problem) setError(problem);
     setFile(problem ? null : next);
@@ -181,13 +181,15 @@ export function ClipsPanel({
   }
 
   const provider = linkProvider(url);
-  const ready = linkMode ? provider.kind === "supported" && mine : Boolean(file);
+  // The video is chosen; Make clips also needs a moment and, for a link, the confirmation.
+  const chosen = linkMode ? provider.kind === "supported" : Boolean(file);
+  const ready = chosen && segments.length > 0 && (!linkMode || mine);
   const needsPlan = credits !== null && credits < JOB_HOLD_CREDITS;
   const estimate = !linkMode && duration ? Math.max(1, Math.ceil(duration / 60)) * CREDITS_PER_MINUTE : null;
   const short = estimate !== null && credits !== null && estimate > credits;
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit(event?: React.FormEvent) {
+    event?.preventDefault();
     if (busy || !ready) return;
     setBusy(true);
     setError(null);
@@ -202,8 +204,7 @@ export function ClipsPanel({
       setProgress(null);
       await api("/editor/clipping", jsonBody({
         source,
-        clips: count,
-        clip_length: length,
+        segments,
         aspect,
         layout: "auto",
         captions: captions === "on",
@@ -214,6 +215,8 @@ export function ClipsPanel({
       setDuration(null);
       setUrl("");
       setMine(false);
+      setSegments([]);
+      setPickerOpen(false);
       refreshAccount();
       await load();
     } catch (failure) {
@@ -224,16 +227,19 @@ export function ClipsPanel({
     }
   }
 
-  function retryLonger(job: ClippingJob) {
-    setLength("long");
-    setCount(job.clips_requested);
+  /** "Pick again": the job's link and moments back in the picker. An upload has to be chosen again. */
+  function pickAgain(job: ClippingJob) {
+    const moments = (job.segments ?? []).map((s) => ({ start: Number(s.start), end: Number(s.end) }));
     if (/^https?:\/\//i.test(job.source_name)) {
       setLinkMode(true);
       setUrl(job.source_name);
       setMine(false);
+      setSegments(moments);
+      setError(null);
+      setPickerOpen(true);
     } else {
       setLinkMode(false);
-      setError("Choose the video file again to retry with longer clips.");
+      setError("Choose the video file again to pick new moments.");
     }
   }
 
@@ -257,6 +263,8 @@ export function ClipsPanel({
               onChange={(event) => {
                 setUrl(event.target.value);
                 setMine(false);
+                // Moments belong to one video.
+                setSegments([]);
               }}
               onKeyDown={(event) => event.stopPropagation()}
             />
@@ -315,19 +323,15 @@ export function ClipsPanel({
           </div>
         )}
 
-        <div className="ed2-clips-row">
-          <label>
-            <span>Clips to find</span>
-            <select value={count} disabled={busy} onChange={(event) => setCount(Number(event.target.value))}>
-              {CLIP_COUNTS.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Clip length</span>
-            <select value={length} disabled={busy} onChange={(event) => setLength(event.target.value as ClipLength)}>
-              {CLIP_LENGTH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
+        <div className="ed2-clips-moments" data-testid="clips-moments">
+          <span>
+            {segments.length
+              ? `${segments.length} ${segments.length === 1 ? "moment" : "moments"} picked`
+              : "Pick the moments you want as clips."}
+          </span>
+          <button type="button" className="ed2-btn" disabled={busy || !chosen} onClick={() => setPickerOpen(true)} data-testid="clips-pick">
+            {segments.length ? "Edit moments" : "Pick moments"}
+          </button>
         </div>
         <fieldset className="ed2-clips-seg" role="radiogroup" aria-label="Aspect ratio">
           <legend>Frame</legend>
@@ -348,11 +352,11 @@ export function ClipsPanel({
           ))}
         </fieldset>
 
-        {error ? <p className="ed2-clips-error" role="alert">{error}</p> : null}
+        {error && !pickerOpen ? <p className="ed2-clips-error" role="alert">{error}</p> : null}
         {needsPlan ? (
           <a className="ed2-btn ed2-primary" href="/app/billing">Choose a plan to start</a>
         ) : (
-          <button type="submit" className="ed2-btn ed2-primary" disabled={busy || !ready} data-testid="clips-submit">
+          <button type="submit" className="ed2-btn ed2-primary" disabled={busy || !ready} data-testid="clips-submit" title={ready ? undefined : "Pick at least one moment to clip."}>
             {progress !== null ? `Uploading ${progress}%` : busy ? "Starting…" : "Make clips"}
           </button>
         )}
@@ -362,6 +366,25 @@ export function ClipsPanel({
           {short ? <> · <a href="/app/billing">Top up</a></> : null}
         </p>
       </form>
+
+      {pickerOpen && chosen ? (
+        <ClipPicker
+          source={linkMode ? { kind: "link", url: url.trim() } : { kind: "file", file: file! }}
+          segments={segments}
+          onSegments={setSegments}
+          aspect={aspect}
+          onAspect={setAspect}
+          captions={captions}
+          onCaptions={setCaptions}
+          mine={mine}
+          onMine={setMine}
+          busy={busy}
+          progress={progress}
+          error={error}
+          onSubmit={() => void submit()}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
 
       <section className="ed2-clips-jobs" aria-label="Your clip jobs">
         {jobs === null ? <p className="ed2-clips-hint">Loading…</p> : null}
@@ -381,8 +404,8 @@ export function ClipsPanel({
             {job.status === "failed" || job.status === "cancelled" ? <small className="ed2-clips-error">{job.error ?? stageLabel(job)}</small> : null}
             {job.status === "done" && job.clips_found.length === 0 && job.settings.mode !== "full" ? (
               <div className="ed2-clips-none">
-                <small>No usable moments found. Longer clips usually work.</small>
-                <button type="button" className="ed2-clips-switch" onClick={() => retryLonger(job)}>Try again with longer clips</button>
+                <small>No clips came out of these moments.</small>
+                <button type="button" className="ed2-clips-switch" onClick={() => pickAgain(job)} data-testid="clips-pick-again">Pick again</button>
               </div>
             ) : null}
             {job.clips_found.length ? (

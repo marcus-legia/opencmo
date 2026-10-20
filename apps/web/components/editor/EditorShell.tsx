@@ -45,7 +45,7 @@ import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { useAutoTranscripts } from "./library/useAutoTranscripts";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
 import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
-import { CLIP_COUNTS, CLIP_LENGTH_OPTIONS } from "@/lib/clip-options";
+import { parseSegments } from "@/lib/clipping/segments";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { AssistantClient } from "./assistant/client";
 import { capture, grab, inspectColor, waveform, withoutText, type InspectColorInput } from "./assistant/capture";
@@ -351,18 +351,18 @@ function Workspace({
   const [busy, setBusy] = useState(false);
   // Tab của panel Media (Palmier: Media / Index…). Assistant là panel riêng (layout.ts).
   const [leftTab, setLeftTab] = useState<"media" | "transcript" | "clips">("media");
-  // `?panel=clips` (rail cũ "New clips", `/app/video`, "Try again with longer clips"): mở tab
-  // Clips với link/tuỳ chọn điền sẵn, rồi xoá tham số khỏi URL — link không nằm lại trên thanh địa chỉ.
+  // `?panel=clips` (rail "New clips", `/app/video`, the MCP `make_clips` link): opens the Clips tab,
+  // and with `picker=open&source=…&segments=…` (contract A1) the full-size picker pre-filled. The
+  // parameters are then dropped from the URL so the link does not stay in the address bar.
   const search = useSearchParams();
   const pathname = usePathname();
   const [clipsPrefill, setClipsPrefill] = useState<ClipsPrefill | null>(null);
   useEffect(() => {
     if (search.get("panel") !== "clips") return;
-    const count = Number(search.get("count"));
     setClipsPrefill({
-      url: search.get("url") ?? undefined,
-      count: CLIP_COUNTS.includes(count) ? count : undefined,
-      length: CLIP_LENGTH_OPTIONS.find((option) => option.value === search.get("length"))?.value,
+      url: search.get("source") ?? search.get("url") ?? undefined,
+      segments: parseSegments(search.get("segments")),
+      open: search.get("picker") === "open",
     });
     openClips();
     router.replace(pathname, { scroll: false });

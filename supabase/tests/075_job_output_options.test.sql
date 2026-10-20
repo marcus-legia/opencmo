@@ -40,52 +40,52 @@ select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 -- --------------------------------------------------------------- mặc định
 -- Mặc định phải TRÙNG hành vi trước migration: job cũ không được đổi hình.
 select is(
-  (public.create_clip_job('https://youtu.be/def', 3, p_ownership_confirmed => true)).mode,
+  (public.create_clip_job('https://youtu.be/def', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).mode,
   'clip', 'mặc định là cắt clip'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/def2', 3, p_ownership_confirmed => true)).aspect,
+  (public.create_clip_job('https://youtu.be/def2', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).aspect,
   '9:16', 'mặc định vẫn là 9:16'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/def3', 3, p_ownership_confirmed => true)).layout,
+  (public.create_clip_job('https://youtu.be/def3', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).layout,
   'auto', 'mặc định layout là auto — fill khi có mặt, fit khi không'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/def4', 3, p_ownership_confirmed => true)).caption_preset,
+  (public.create_clip_job('https://youtu.be/def4', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).caption_preset,
   'bold', 'mặc định preset phụ đề là bold'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/def5', 3, p_ownership_confirmed => true)).captions,
+  (public.create_clip_job('https://youtu.be/def5', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).captions,
   true, 'mặc định có phụ đề'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 -- ------------------------------------------------------------- giữ lựa chọn
 select is(
-  (public.create_clip_job('https://youtu.be/keep', 3, 'auto', null,
+  (public.create_clip_job('https://youtu.be/keep', 3, 'auto', '[{"start":0,"end":30}]'::jsonb,
                      'clip', '16:9', 'fit', false, 'minimal', p_ownership_confirmed => true)).aspect,
   '16:9', 'create_job giữ tỷ lệ khung người dùng chọn'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/keep2', 3, 'auto', null,
+  (public.create_clip_job('https://youtu.be/keep2', 3, 'auto', '[{"start":0,"end":30}]'::jsonb,
                      'clip', '1:1', 'fit', false, 'minimal', p_ownership_confirmed => true)).layout,
   'fit', 'create_job giữ layout người dùng chọn'
 );
 
 select pg_temp.drain_jobs('d0000000-0000-4000-8000-00000000000d');
 select is(
-  (public.create_clip_job('https://youtu.be/keep3', 3, 'auto', null,
+  (public.create_clip_job('https://youtu.be/keep3', 3, 'auto', '[{"start":0,"end":30}]'::jsonb,
                      'clip', '1:1', 'fill', false, 'clean', p_ownership_confirmed => true)).caption_preset,
   'clean', 'create_job giữ preset phụ đề người dùng chọn'
 );
@@ -112,18 +112,18 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', null, 'clip', '4:3', p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', '[{"start":0,"end":30}]'::jsonb, 'clip', '4:3', p_ownership_confirmed => true) $$,
   '22023', null, 'tỷ lệ khung lạ bị từ chối'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', null,
+  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', '[{"start":0,"end":30}]'::jsonb,
        'clip', '9:16', 'stretch', p_ownership_confirmed => true) $$,
   '22023', null, 'layout lạ bị từ chối'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', null,
+  $$ select public.create_clip_job('https://youtu.be/x', 3, 'auto', '[{"start":0,"end":30}]'::jsonb,
        'clip', '9:16', 'fill', true, 'karaoke', p_ownership_confirmed => true) $$,
   '22023', null, 'preset phụ đề lạ bị từ chối'
 );

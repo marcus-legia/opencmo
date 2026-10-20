@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 
-import { formatSegments, parseSegments, pickerPath, segmentProblem } from "./segments";
+import { clock, formatSegments, freeMoment, markedMoment, moveEdge, parseSegments, pickerPath, segmentProblem } from "./segments";
 
 // Valid: unsorted input comes back sorted.
 assert.deepEqual(parseSegments("90-120.5,10-40"), [
@@ -65,3 +65,36 @@ assert.deepEqual(parseSegments(params.get("segments")), [
 assert.equal(pickerPath(), "/app/editor?panel=clips&picker=open");
 
 console.log("segments.check: ok");
+
+// ------------------------------------------------------------- editing helpers
+{
+  const two = [{ start: 10, end: 40 }, { start: 60, end: 90 }];
+
+  // A new moment stops at the next one and at the end of the video.
+  assert.deepEqual(freeMoment(two, 45, 300), { start: 45, end: 60 });
+  assert.deepEqual(freeMoment(two, 100, 300), { start: 100, end: 130 });
+  assert.deepEqual(freeMoment([], 290, 300), { start: 290, end: 300 });
+  assert.equal(freeMoment(two, 20, 300), null, "inside a moment");
+  assert.equal(freeMoment(two, 59.5, 300), null, "less than 1 s before the next");
+  assert.equal(freeMoment(Array.from({ length: 10 }, (_, i) => ({ start: i * 10, end: i * 10 + 5 })), 200, 300), null, "10 already");
+  assert.equal(freeMoment([], 0, 0), null, "duration unknown");
+
+  // Dragging never breaks a rule.
+  assert.deepEqual(moveEdge(two, 0, "end", 75, 300)[0], { start: 10, end: 60 }, "stops at the next moment");
+  assert.deepEqual(moveEdge(two, 1, "start", 5, 300)[1], { start: 40, end: 90 }, "stops at the previous moment");
+  assert.deepEqual(moveEdge(two, 0, "start", 39.8, 300)[0], { start: 39, end: 40 }, "keeps 1 s");
+  assert.deepEqual(moveEdge([{ start: 0, end: 10 }], 0, "end", 500, 1000)[0], { start: 0, end: 180 }, "keeps 180 s");
+  assert.deepEqual(moveEdge([{ start: 0, end: 10 }], 0, "end", 500, 50)[0], { start: 0, end: 50 }, "stays in the video");
+  for (const list of [moveEdge(two, 0, "end", 1e9, 300), moveEdge(two, 1, "start", -1e9, 300)]) {
+    assert.equal(segmentProblem(list), null);
+  }
+
+  // I then O, in either order.
+  assert.deepEqual(markedMoment(two, 120, 100), { moment: { start: 100, end: 120 } });
+  assert.match((markedMoment(two, 30, 50) as { problem: string }).problem, /overlap/);
+  assert.match((markedMoment([], 0, 200) as { problem: string }).problem, /3 minutes/);
+
+  assert.equal(clock(75.25), "1:15.3");
+  assert.equal(clock(3725), "1:02:05.0");
+  console.log("segments.check: editing helpers ok");
+}

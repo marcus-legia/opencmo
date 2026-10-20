@@ -2118,10 +2118,17 @@ async function main(): Promise<void> {
   await check("cắt clip từ editor: link không xác nhận chính chủ bị từ chối (G1-b)", async () => {
     const res = await callApi(a, "/editor/clipping", {
       method: "POST",
-      body: JSON.stringify({ source: "https://youtu.be/not-confirmed", clips: 1 }),
+      body: JSON.stringify({ source: "https://youtu.be/not-confirmed", segments: [{ start: 0, end: 10 }] }),
     });
     assert.equal(res.status, 422);
     assert.match((res.body as { detail: string }).detail, /own video/);
+    // Manual picking only: a clip job with no moments is refused before anything is held.
+    const none = await callApi(a, "/editor/clipping", {
+      method: "POST",
+      body: JSON.stringify({ source: "https://youtu.be/no-moments", ownership_confirmed: true, clips: 3 }),
+    });
+    assert.equal(none.status, 422);
+    assert.match((none.body as { detail: string }).detail, /Pick at least one moment to clip/);
     const list = await callApi(a, "/editor/clipping");
     assert.equal(list.status, 200);
     assert.ok(Array.isArray((list.body as { items: unknown[] }).items));

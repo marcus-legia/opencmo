@@ -96,15 +96,21 @@ Checklist:
     `segmentProblem` (empty list → "Pick at least one moment to clip."); `segments.check.ts` runs in `check:contracts`.
 - [ ] **A2 — Picker view.** Full-size player with timeline, for links and uploads; options; prefill from the URL.
   - **Accept:** typecheck; manual look at 1440 px and 390 px widths, light and dark.
+  - *Status (2026-10-20):* code in `components/editor/clipping/ClipPicker.tsx` and
+    `components/clipping/web/SegmentBar.tsx`; the manual look at 1440/390 px is still to do.
 - [ ] **A3 — Submit with segments.** Picked moments go out as `segments`; Make clips is disabled with none. No clip
   count or clip length options. "Try again with longer clips" becomes "Pick again" in both places.
   - **Accept:** the e2e from plan item 1 (two moments on an upload; `jobs.segments` set; no `select` step).
+  - *Status:* code done; `editor-clipping.spec.ts` has the two-moment case. The e2e run is still to report.
 - [ ] **A4 — After the job.** Each clip: Open, "Add voiceover" (opens Generate → Voiceover), "Add explainer" (points to
   `/explain` in Claude over MCP).
   - **Accept:** e2e clicks Open and lands in the edit; one full-size frame looked at.
-- [ ] **A5 — Manual-only guard.** zod, `create_job` migration and worker refuse a clip job without segments (plan
+- [x] **A5 — Manual-only guard.** zod, `create_job` migration and worker refuse a clip job without segments (plan
   item 1).
   - **Accept:** a 422 in the e2e, a pgTAP case and a worker pytest, each failing on today's code first.
+  - *Done:* zod (`create.check.ts`), migration `20261219000000` + pgTAP 184, worker
+    (`test_worker_manual_moments_guard.py`), each red on the old code first. The migration also gives `create_video_pack`
+    `p_segments` (owner, 2026-10-20); see Requests.
 
 ## Session B — Raw-clip fallback, MCP clips, look and listen over MCP
 
@@ -178,3 +184,13 @@ Checklist:
 ## Requests
 
 _Write requests to another session here: date, from, to, what._
+
+- **2026-10-20, A → C: video packs need picked moments.** Owner decision (2026-10-20): a CMO video pack is picked by hand
+  like any clip job. A's migration `20261219000000_manual_clip_moments.sql` gives `create_video_pack` a fourth argument,
+  `p_segments jsonb`, and passes it to `create_job`, which refuses a clip job without moments ("Pick at least one moment
+  to clip."). Until C wires it, "New video pack" fails with that message. C, please:
+  - `app/api/v1/cmo/video-packs/route.ts`: accept `segments` (same zod shape and `segmentProblem` as
+    `lib/clipping/create.ts`) and send `p_segments`; drop `clips`.
+  - `components/cmo/workspace/NewVideoPack.tsx`: open A's full-size picker (`components/editor/clipping/ClipPicker.tsx`,
+    props documented there) on the chosen file or link, and send the picked moments. The caption step is unchanged.
+  - Status: open.

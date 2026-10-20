@@ -52,24 +52,49 @@ export async function openClipsPanel(page: Page): Promise<void> {
 }
 
 /**
- * Upload một video qua tab Clips và tạo job. Trả id job (đọc từ response) — các test cần trang
- * project (tải ZIP, đổi khung) mở `/app/projects/<id>`.
+ * Picks moments on the full-size picker (seconds of the source): click the timeline to seek, `I`,
+ * click again, `O`. The picker must be open and the video loaded.
+ */
+export async function pickMoments(page: Page, moments: [number, number][]): Promise<void> {
+  const picker = page.getByTestId("clip-picker");
+  await expect(picker.getByTestId("picker-add")).toBeEnabled({ timeout: 60_000 });
+  const track = picker.locator(".clip-picker-track");
+  const duration = Number(await picker.getByTestId("picker-video").evaluate((video: HTMLVideoElement) => video.duration));
+  const box = (await track.boundingBox())!;
+  const seek = async (seconds: number) => {
+    await track.click({ position: { x: (seconds / duration) * box.width, y: box.height / 2 } });
+  };
+  for (const [start, end] of moments) {
+    await seek(start);
+    await page.keyboard.press("i");
+    await seek(end);
+    await page.keyboard.press("o");
+  }
+  await expect(picker.getByTestId("picker-moment")).toHaveCount(moments.length);
+}
+
+/**
+ * Upload một video qua tab Clips, chọn moment trên picker và tạo job. Trả id job (đọc từ response) —
+ * các test cần trang project (tải ZIP, đổi khung) mở `/app/projects/<id>`.
  */
 export async function startClipsInEditor(
   page: Page,
   file: string,
-  options: { aspect?: "9:16" | "1:1" | "16:9" } = {},
+  options: { aspect?: "9:16" | "1:1" | "16:9"; moments?: [number, number][] } = {},
 ): Promise<string> {
   await openClipsPanel(page);
   await page.getByTestId("clips-file").setInputFiles(file);
   if (options.aspect) await page.getByTestId("clips-panel").getByRole("radio", { name: options.aspect }).check({ force: true });
+  await page.getByTestId("clips-pick").click();
+  await pickMoments(page, options.moments ?? [[0, 8]]);
   const created = page.waitForResponse(
     (response) => response.url().endsWith("/api/v1/editor/clipping") && response.request().method() === "POST",
     { timeout: 120_000 },
   );
-  await page.getByTestId("clips-submit").click();
+  await page.getByTestId("picker-submit").click();
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
+  await expect(page.getByTestId("clip-picker")).toHaveCount(0);
   return ((await response.json()) as { id: string }).id;
 }
 

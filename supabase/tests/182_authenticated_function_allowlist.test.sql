@@ -75,7 +75,7 @@ insert into allowed values
   ('create_clip_job(text,integer,text,jsonb,text,text,text,boolean,text,boolean)'),
   ('create_full_edit(uuid)'),
   ('create_generation(uuid,uuid,text,jsonb,text,uuid)'),
-  ('create_video_pack(text,boolean,integer)'),
+  ('create_video_pack(text,boolean,integer,jsonb)'),
   ('credit_balance(uuid)'),
   ('delete_brand_kit(uuid)'),
   ('delete_editor_skill(text)'),

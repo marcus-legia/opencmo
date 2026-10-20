@@ -44,7 +44,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e7000000-0000-4000-8000-000000000001"}';
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/paywall', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/paywall', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'P0001', 'Not enough credits: 10 needed, 0 left. Top up on the Credits page.',
   'tài khoản mới không tạo được job cho tới khi mua gói'
 );
@@ -59,7 +59,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e7000000-0000-4000-8000-000000000001"}';
 
 select lives_ok(
-  $$ select public.create_clip_job('https://youtu.be/paywall-paid', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/paywall-paid', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'nạp credit xong thì tạo job được ngay'
 );
 

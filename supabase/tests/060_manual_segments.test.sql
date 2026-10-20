@@ -33,22 +33,21 @@ set local request.jwt.claims = '{"sub":"c0000000-0000-4000-8000-00000000000c"}';
 select has_column('public', 'jobs', 'segments', 'jobs có cột segments');
 
 select pg_temp.drain_jobs('c0000000-0000-4000-8000-00000000000c');
-select is(
-  (public.create_clip_job('https://youtu.be/no-seg', 3, p_ownership_confirmed => true)).segments,
-  null, 'không chọn đoạn nào thì segments là null — nhánh AI như cũ'
+-- Manual picking only (20261219000000): no moments, or an empty list, is refused before credits
+-- are held; nothing falls back to AI selection any more.
+select throws_ok(
+  $$ select public.create_clip_job('https://youtu.be/no-seg', 3, p_ownership_confirmed => true) $$,
+  '22023', 'Pick at least one moment to clip.', 'a clip job with no moments is refused'
 );
 
-select pg_temp.drain_jobs('c0000000-0000-4000-8000-00000000000c');
--- Mảng rỗng KHÔNG phải lỗi: kéo một đoạn rồi xoá nó đi vẫn phải tạo được job.
-select is(
-  (public.create_clip_job('https://youtu.be/empty', 3, 'auto', '[]'::jsonb, p_ownership_confirmed => true)).segments,
-  null, 'mảng rỗng được coi là "để AI chọn"'
+select throws_ok(
+  $$ select public.create_clip_job('https://youtu.be/empty', 3, 'auto', '[]'::jsonb, p_ownership_confirmed => true) $$,
+  '22023', 'Pick at least one moment to clip.', 'an empty list of moments is refused too'
 );
 
-select pg_temp.drain_jobs('c0000000-0000-4000-8000-00000000000c');
 select is(
-  (public.create_clip_job('https://youtu.be/empty2', 3, 'auto', '[]'::jsonb, p_ownership_confirmed => true)).clips_requested,
-  3, 'mảng rỗng thì vẫn dùng số clip người dùng chọn'
+  (public.create_clip_job('https://youtu.be/whole', 3, 'auto', null, 'full', p_ownership_confirmed => true)).mode,
+  'full', 'a whole-video job still needs no moments'
 );
 
 select pg_temp.drain_jobs('c0000000-0000-4000-8000-00000000000c');

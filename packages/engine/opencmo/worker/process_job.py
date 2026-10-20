@@ -62,6 +62,9 @@ CLIP_LENGTHS = {
 }
 
 
+NO_MOMENTS = "Pick at least one moment to clip."
+
+
 # Trần độ dài một đoạn người dùng tự chọn. Trùng số của `create_job()` và của
 # route `POST /jobs` — ba chốt chặn cùng một luật, và SQL là chốt thật.
 MAX_SEGMENT_SECONDS = 180.0
@@ -292,6 +295,13 @@ def process(store: Any, job: Job) -> None:
                     job.id, time.monotonic() - run.started,
                 )
                 return
+
+            # Last of three gates (zod → `create_job()` → here): AI moment picking is gone from the
+            # product, so a clip job never reaches the `select` step. Checked before the source is
+            # resolved, which downloads an upload. A retry of a job from before the gate keeps the
+            # moments it stored on its first attempt.
+            if not job.segments and not store.list_artifacts(job.id, "moments"):
+                raise UserMessageError(NO_MOMENTS)
 
             source_url = job.source_url
             if source_url.startswith("storage://"):

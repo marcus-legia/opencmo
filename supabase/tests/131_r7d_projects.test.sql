@@ -16,10 +16,10 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1310000-0000-4000-8000-00000000000a"}';
 
 create temporary table made as
-  select (public.create_clip_job('https://youtube.com/watch?v=r7dclip0001', 3, 'auto', null, 'clip', '9:16', 'auto', true, 'bold', true)).id as clip_job;
+  select (public.create_clip_job('https://youtube.com/watch?v=r7dclip0001', 3, 'auto', '[{"start":0,"end":30}]'::jsonb, 'clip', '9:16', 'auto', true, 'bold', true)).id as clip_job;
 alter table made add column blank_clip uuid, add column pack jsonb;
 update made set blank_clip = public.create_blank_edit('Launch teaser', '9:16');
-update made set pack = public.create_video_pack('https://youtube.com/watch?v=r7dpack0001', true, 3);
+update made set pack = public.create_video_pack('https://youtube.com/watch?v=r7dpack0001', true, 3, '[{"start":0,"end":30}]'::jsonb);
 
 select is((select kind from public.projects where job_id = (select clip_job from made)), 'clip', 'create_clip_job → project clip');
 select is((select p.kind from public.projects p join public.clips c on c.job_id = p.job_id where c.id = (select blank_clip from made)),

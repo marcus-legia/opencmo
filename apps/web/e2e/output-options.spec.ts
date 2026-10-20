@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { openClipsPanel, openProject, signIn, state } from "./helpers";
+import { openClipsPanel, openProject, pickMoments, signIn, state } from "./helpers";
 
 /**
  * Lựa chọn đầu ra "Don't clip" (mode full). Đổi khung sau khi clip xong nằm trong editor.
@@ -41,8 +41,11 @@ test("Don't clip delivers the whole video without opening the editor", async ({ 
     await route.continue({ postData: JSON.stringify({ source: body.source, mode: "full" }) });
   });
   await page.getByTestId("clips-file").setInputFiles(SOURCE_VIDEO);
+  // The panel needs a picked moment to submit; the route above turns the request into "full".
+  await page.getByTestId("clips-pick").click();
+  await pickMoments(page, [[0, 5]]);
   const created = page.waitForResponse((response) => response.url().endsWith("/api/v1/editor/clipping") && response.request().method() === "POST", { timeout: 120_000 });
-  await page.getByTestId("clips-submit").click();
+  await page.getByTestId("picker-submit").click();
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
   await openProject(page, ((await response.json()) as { id: string }).id);

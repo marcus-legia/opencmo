@@ -1,12 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, openClipsPanel, signIn, state } from "./helpers";
+import { makeClipsInEditor, openClipsPanel, signIn, startClipsInEditor, state } from "./helpers";
 
 /**
  * G1-c: cắt clip là một tính năng của editor. Rail không còn "New clips"; `/app/video` cũ dẫn
  * vào tab Clips; dán link phải tick "Is this your video?" (luật 3, server cũng chặn); upload →
  * clip → Open mở đúng clip đó như một bản sửa riêng.
+ *
+ * Manual picking only (plan item 1): Make clips needs a picked moment, the server refuses a clip
+ * job without one, and each picked moment comes out as one clip of that length.
  */
 
 test("tab Clips: link cần xác nhận chính chủ, upload ra clip mở được", async ({ page }, testInfo) => {
@@ -24,23 +27,32 @@ test("tab Clips: link cần xác nhận chính chủ, upload ra clip mở đư�
   await expect(page).toHaveURL(/\/app\/editor\/[0-9a-f-]+$/);
   await expect(page.getByRole("tab", { name: "Clips" })).toHaveAttribute("aria-selected", "true");
 
-  // Link: nút khoá tới khi tick xác nhận; gửi thẳng API mà không xác nhận thì bị chặn.
+  // Link: the button stays locked without the confirmation and without a moment; the API refuses both.
   const panel = page.getByTestId("clips-panel");
   await panel.getByTestId("clips-use-link").click();
   await panel.getByTestId("clips-url").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   await expect(panel.getByTestId("clips-submit")).toBeDisabled();
   await expect(panel.getByText("Is this your YouTube video?")).toBeVisible();
   await panel.getByTestId("clips-own").check();
-  await expect(panel.getByTestId("clips-submit")).toBeEnabled();
+  await expect(panel.getByTestId("clips-submit")).toBeDisabled();
+  await expect(panel.getByTestId("clips-pick")).toBeEnabled();
   // Sửa link là phải xác nhận lại.
   await panel.getByTestId("clips-url").fill("https://www.youtube.com/watch?v=aqz-KE-bpKQ");
   await expect(panel.getByTestId("clips-own")).not.toBeChecked();
   await expect(panel.getByTestId("clips-submit")).toBeDisabled();
-  const refused = await page.request.post("/api/v1/editor/clipping", {
-    data: { source: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", clips: 1 },
+  const unconfirmed = await page.request.post("/api/v1/editor/clipping", {
+    data: { source: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", segments: [{ start: 0, end: 10 }] },
   });
-  expect(refused.status()).toBe(422);
-  expect(await refused.text()).toContain("Confirm this is your own video");
+  expect(unconfirmed.status()).toBe(422);
+  expect(await unconfirmed.text()).toContain("Confirm this is your own video");
+  for (const body of [
+    { source: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", ownership_confirmed: true, clips: 3 },
+    { source: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", ownership_confirmed: true, segments: [] },
+  ]) {
+    const noMoments = await page.request.post("/api/v1/editor/clipping", { data: body });
+    expect(noMoments.status()).toBe(422);
+    expect(await noMoments.text()).toContain("Pick at least one moment to clip.");
+  }
 
   for (const width of [1366, 1904]) {
     await page.setViewportSize({ width, height: 900 });
@@ -57,6 +69,17 @@ test("tab Clips: link cần xác nhận chính chủ, upload ra clip mở đư�
   const project = await (await page.request.get(`/api/v1/projects/${jobId}`)).json();
   expect(JSON.stringify(project)).toContain(clipId);
   await page.screenshot({ path: testInfo.outputPath("clips-opened-1366.png") });
+
+  // Two moments on the upload: the job stores them and each comes out as one clip of that length.
+  const twoJob = await startClipsInEditor(page, SOURCE_VIDEO, { moments: [[2, 8], [12, 20]] });
+  await expect(page.locator(`[data-job="${twoJob}"]`).getByTestId("clips-open")).toHaveCount(2, { timeout: 150_000 });
+  const two = (await (await page.request.get(`/api/v1/projects/${twoJob}`)).json()) as {
+    segments: { start: number; end: number }[];
+    clips: { moment: { start: number; end: number } }[];
+  };
+  expect(two.segments.map((s) => [Number(s.start), Number(s.end)])).toEqual([[2, 8], [12, 20]].map(([a, b]) => [expect.closeTo(a, 0), expect.closeTo(b, 0)]));
+  expect(two.clips.map((clip) => clip.moment.end - clip.moment.start)).toEqual([expect.closeTo(6, 0), expect.closeTo(8, 0)]);
+  await page.screenshot({ path: testInfo.outputPath("clips-two-moments-1366.png") });
 
   // Tab Clips của clip vừa mở vẫn thấy job (danh sách theo tài khoản, không theo bản sửa).
   await openClipsPanel(page);

@@ -71,9 +71,9 @@ select 'e1800000-0000-4000-8000-00000000000a', 50, 'test';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1800000-0000-4000-8000-00000000000a"}';
 
-select throws_ok($$ select public.create_clip_job('https://[::ffff:7f00:1]/v.mp4', 3, p_ownership_confirmed => true) $$,
+select throws_ok($$ select public.create_clip_job('https://[::ffff:7f00:1]/v.mp4', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.', 'IPv4-mapped loopback is refused');
-select throws_ok($$ select public.create_clip_job('http://metadata.google.internal/computeMetadata/v1/', 3, p_ownership_confirmed => true) $$,
+select throws_ok($$ select public.create_clip_job('http://metadata.google.internal/computeMetadata/v1/', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Paste a public HTTP or HTTPS video link.', 'the metadata name is refused');
 select is((select count(*)::int from public.jobs where user_id = 'e1800000-0000-4000-8000-00000000000a'), 0, '...and no job was created');
 

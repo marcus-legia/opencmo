@@ -5,7 +5,7 @@
  * git là thứ không bao giờ nhỏ lại, và fixture này chỉ là `testsrc2` + `sine`.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, truncateSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -15,9 +15,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const HERE = __dirname;
 const ROOT = join(HERE, "..", "..", "..");
 export const FIXTURE_DIR = join(HERE, "fixtures");
-export const SOURCE_VIDEO = join(FIXTURE_DIR, "talk-30s.mp4");
+// `E2E_VIDEO_CODEC=vp9` for a machine with only Playwright's Chromium, which plays no H.264: the
+// clip picker has to play the source to pick a moment. CI uses Chrome and H.264.
+const VP9 = process.env.E2E_VIDEO_CODEC === "vp9";
+const EXT = VP9 ? "webm" : "mp4";
+export const SOURCE_VIDEO = join(FIXTURE_DIR, `talk-30s.${EXT}`);
 export const BROLL_VIDEO = join(FIXTURE_DIR, "broll-5s.mp4");
-export const RESUME_VIDEO = join(FIXTURE_DIR, "resume-300mb.mp4");
+// A real 3 s video padded to 300 MB: the picker has to play it to pick a moment before upload.
+export const RESUME_VIDEO = join(FIXTURE_DIR, `resume-300mb-v2.${EXT}`);
 const STATE = join(FIXTURE_DIR, "state.json");
 
 export type E2EUser = { email: string; password: string; id: string };
@@ -41,8 +46,11 @@ function video(path: string, seconds: number, size: string): void {
       "-v", "error", "-y",
       "-f", "lavfi", "-i", `testsrc2=size=${size}:rate=25:duration=${seconds}`,
       "-f", "lavfi", "-i", `sine=frequency=440:duration=${seconds}`,
-      "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-      "-c:a", "aac", path,
+      "-shortest",
+      ...(VP9 && path.endsWith(".webm")
+        ? ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "1M", "-c:a", "libopus"]
+        : ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac"]),
+      path,
     ],
     { stdio: "inherit" },
   );
@@ -93,8 +101,19 @@ export default async function globalSetup(): Promise<void> {
   video(SOURCE_VIDEO, 30, "1280x720");
   video(BROLL_VIDEO, 5, "1280x720");
   if (!existsSync(RESUME_VIDEO)) {
-    const fd = openSync(RESUME_VIDEO, "w");
-    closeSync(fd);
+    // `+faststart` puts the index first, so the zeros after the last box do not stop playback.
+    spawnSync(
+      "ffmpeg",
+      [
+        "-v", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=3",
+        ...(VP9
+          ? ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8"]
+          : ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]),
+        RESUME_VIDEO,
+      ],
+      { stdio: "inherit" },
+    );
     truncateSync(RESUME_VIDEO, 300 * 1024 * 1024);
   }
 

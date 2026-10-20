@@ -121,7 +121,7 @@ begin
       -- trần thêm vào sau này, và không phải chép lại con số ở hai nơi.
       perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
       begin
-        v_job := public.create_clip_job('https://youtu.be/billing-' || i, 1, p_ownership_confirmed => true);
+        v_job := public.create_clip_job('https://youtu.be/billing-' || i, 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true);
         insert into billing_operation_jobs values(v_user, v_job.id);
         v_kind := 'hold';
       exception when sqlstate 'P0001' then
@@ -253,7 +253,7 @@ grant select, insert on deleted_job_result to authenticated;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"d4800000-0000-4000-8000-000000000001"}';
 insert into deleted_job_result
-select (public.create_clip_job('https://youtu.be/billing-delete', 1, p_ownership_confirmed => true)).id;
+select (public.create_clip_job('https://youtu.be/billing-delete', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).id;
 reset role;
 update public.jobs set status = 'failed'
 where id = (select job_id from deleted_job_result);
@@ -277,7 +277,7 @@ select is(
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"d4300000-0000-4000-8000-000000000001"}';
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/billing-not-enough', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/billing-not-enough', 1, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   'P0001', 'Not enough credits: 10 needed, 0 left. Top up on the Credits page.',
   'create_job giữ nguyên lỗi thiếu credit'
 );

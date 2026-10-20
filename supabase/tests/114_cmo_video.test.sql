@@ -22,7 +22,7 @@ select throws_ok($$ select public.create_video_pack('https://youtu.be/mine-1', f
   '22023', 'Confirm that this is your own video.', 'link phải có xác nhận chính chủ');
 select is((select count(*) from public.jobs), 0::bigint, 'không có job khi bị từ chối');
 
-create temp table p1 as select public.create_video_pack('https://youtu.be/mine-1', true, 5) as v;
+create temp table p1 as select public.create_video_pack('https://youtu.be/mine-1', true, 5, '[{"start":0,"end":30},{"start":60,"end":90}]'::jsonb) as v;
 grant select on p1 to authenticated, service_role;
 select is((select count(*) from public.jobs), 1::bigint, 'tạo đúng một job');
 select is((select source from public.video_ownership), 'link', 'xác nhận ghi cùng job');

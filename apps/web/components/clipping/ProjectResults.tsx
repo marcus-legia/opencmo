@@ -8,6 +8,7 @@ import { ApiError, api, type ApiFn } from "./api";
 import { ClipResultRow } from "./ClipResultRow";
 import { segmentsForClip } from "./clip-presentation";
 import { projectHref } from "./ProjectLibrary";
+import { pickerPath } from "@/lib/clipping/segments";
 
 type SortKey = "time" | "score" | "duration";
 
@@ -109,26 +110,17 @@ export function ProjectResults({
   }
 
   if (project.clips.length === 0) {
-    // Một cú bấm để thử lại với clip dài hơn: link nguồn và số clip điền sẵn ở
-    // màn tạo. Nguồn upload thì không có link để điền — về màn tạo trống.
+    // "Pick again": a link comes back in the picker with the same moments; an upload has no link to
+    // fill in, so the picker opens on the Clips tab to choose the file again.
     const isLink = /^https?:\/\//i.test(project.source_name);
-    const retry = isLink
-      ? `/app/editor?${new URLSearchParams({
-          panel: "clips",
-          url: project.source_name,
-          length: "long",
-          count: String(project.clips_requested),
-        })}`
-      : `/app/editor?${new URLSearchParams({ panel: "clips", length: "long", count: String(project.clips_requested) })}`;
+    const moments = (project.segments ?? []).map((s) => ({ start: Number(s.start), end: Number(s.end) }));
+    const again = isLink ? pickerPath({ source: project.source_name, segments: moments }) : pickerPath();
     return (
       <div className="processing-panel">
-        <h2>No usable moments found</h2>
-        <p>
-          Nothing fit the clip length you chose. Longer clips usually work, or try a video
-          with more speech.
-        </p>
-        <a className="primary-button" href={retry}>
-          Try again with longer clips
+        <h2>No clips came out of these moments</h2>
+        <p>The moments you picked gave no usable clip. Pick them again, or try a video with more speech.</p>
+        <a className="primary-button" href={again}>
+          Pick again
         </a>
       </div>
     );

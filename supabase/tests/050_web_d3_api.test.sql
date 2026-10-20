@@ -207,17 +207,17 @@ select throws_ok(
 
 -- ================================================================ create_job
 select is(
-  (public.create_clip_job('https://youtu.be/x', 3, 'short', p_ownership_confirmed => true)).clip_length,
+  (public.create_clip_job('https://youtu.be/x', 3, 'short', p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).clip_length,
   'short', 'create_job giữ lựa chọn độ dài clip'
 );
 
 select is(
-  (public.create_clip_job('https://youtu.be/y', 3, p_ownership_confirmed => true)).clip_length,
+  (public.create_clip_job('https://youtu.be/y', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).clip_length,
   'auto', 'không chọn thì mặc định auto'
 );
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/z', 3, 'tuỳ-tiện', p_ownership_confirmed => true) $$,
+  $$ select public.create_clip_job('https://youtu.be/z', 3, 'tuỳ-tiện', p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true) $$,
   '22023', 'Choose a clip length.', 'giá trị lạ bị từ chối'
 );
 

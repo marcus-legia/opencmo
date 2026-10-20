@@ -62,3 +62,60 @@ export function pickerPath(input: { source?: string; segments?: Segment[] } = {}
   if (input.segments?.length) params.set("segments", formatSegments(input.segments));
   return `/app/editor?${params.toString()}`;
 }
+
+/** A new moment from "Add a moment" is this long when the gap allows. */
+export const NEW_MOMENT_SECONDS = 30;
+
+const sorted = (segments: Segment[]) => [...segments].sort((a, b) => a.start - b.start);
+
+/**
+ * The moment "Add a moment" (or `O` without a mark) makes at the playhead: up to 30 s, stopping at
+ * the next moment and the end of the video. Null when the playhead sits inside a moment, there is
+ * no room for 1 s, or 10 moments are already picked.
+ */
+export function freeMoment(segments: Segment[], at: number, duration: number): Segment | null {
+  if (segments.length >= MAX_SEGMENTS || !(duration > 0)) return null;
+  const start = Math.min(Math.max(0, at), duration);
+  if (segments.some((s) => start >= s.start && start < s.end)) return null;
+  const next = sorted(segments).find((s) => s.start > start);
+  const end = Math.min(start + NEW_MOMENT_SECONDS, next ? next.start : duration, duration);
+  return end - start >= MIN_SEGMENT_SECONDS ? { start, end } : null;
+}
+
+/**
+ * Moves one edge of a moment, kept inside the video, 1–180 s long and clear of its neighbours, so a
+ * drag can never produce a list `segmentProblem` refuses.
+ */
+export function moveEdge(segments: Segment[], index: number, edge: "start" | "end", value: number, duration: number): Segment[] {
+  const list = sorted(segments);
+  const moment = list[index];
+  if (!moment) return list;
+  const previousEnd = list[index - 1]?.end ?? 0;
+  const nextStart = list[index + 1]?.start ?? duration;
+  const next = { ...moment };
+  if (edge === "start") {
+    const low = Math.max(previousEnd, moment.end - MAX_SEGMENT_SECONDS);
+    next.start = Math.min(Math.max(value, low), moment.end - MIN_SEGMENT_SECONDS);
+  } else {
+    const high = Math.min(nextStart, moment.start + MAX_SEGMENT_SECONDS, duration);
+    next.end = Math.max(Math.min(value, high), moment.start + MIN_SEGMENT_SECONDS);
+  }
+  list[index] = next;
+  return list;
+}
+
+/** `I` then `O`: the marked range as a moment, or the rule it breaks. */
+export function markedMoment(segments: Segment[], mark: number, at: number): { moment: Segment } | { problem: string } {
+  const moment = { start: Math.min(mark, at), end: Math.max(mark, at) };
+  const problem = segmentProblem([...segments, moment]);
+  return problem ? { problem } : { moment };
+}
+
+/** `m:ss` (or `h:mm:ss`) with tenths, for the moment list and the handles. */
+export function clock(seconds: number): string {
+  const total = Math.max(0, seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = (total % 60).toFixed(1).padStart(4, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}

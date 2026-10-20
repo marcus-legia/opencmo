@@ -91,10 +91,14 @@ class FakeStore:
         return {"status": "running", "attempt_id": "attempt-1"}
 
 
+# Two picked moments: a clip job without them never reaches the pipeline (manual picking only).
+MOMENTS = [{"start": 10.0, "end": 40.0}, {"start": 50.0, "end": 80.0}]
+
+
 def _job() -> Job:
     return Job(
         id="job-1", user_id="user-1", source_url="https://youtube.com/watch?v=test",
-        clips_requested=2, attempt=1, attempt_id="attempt-1",
+        clips_requested=2, attempt=1, attempt_id="attempt-1", segments=list(MOMENTS),
     )
 
 
@@ -191,7 +195,7 @@ def test_process_job_upload_mat_tra_dung_message(monkeypatch):
     store = FakeStore()
     job = Job(
         id="job-1", user_id="user-1", source_url="storage://user-1/source.mp4",
-        clips_requested=1, attempt=1, attempt_id="attempt-1",
+        clips_requested=1, attempt=1, attempt_id="attempt-1", segments=list(MOMENTS[:1]),
     )
     monkeypatch.setattr(
         process_job,
@@ -282,26 +286,20 @@ def test_segments_cua_job_di_thang_vao_run_pipeline(monkeypatch, tmp_path):
     assert [(m.start, m.end) for m in nhan["moments"]] == [(1.0, 10.0), (20.0, 30.0)]
 
 
-def test_khong_co_segments_thi_van_la_nhanh_ai(monkeypatch, tmp_path):
+def test_no_segments_fails_without_running_the_pipeline(monkeypatch):
+    """AI moment picking is gone: no moments means no pipeline run and a clear error."""
     store = FakeStore()
-    nhan: dict = {}
 
-    def run(url, cfg, **kwargs):
-        nhan["moments"] = kwargs.get("moments", "khong-truyen")
-        return _fake_pipeline(tmp_path)(url, cfg, **{k: v for k, v in kwargs.items() if k != "moments"})
+    def never(*_args, **_kwargs):
+        raise AssertionError("the pipeline must not run without moments")
 
-    monkeypatch.setattr(process_job, "run_pipeline", run)
-    monkeypatch.setattr(job_editor, "face_track", lambda *_a, **_k: [])
-    monkeypatch.setattr(
-        job_editor, "make_editor_proxy", lambda _s, out, **_k: (out.write_bytes(b"p"), out)[1]
-    )
-    monkeypatch.setattr(
-        job_editor, "probe_file", lambda _p: SimpleNamespace(duration=9.0, width=960, height=540)
-    )
+    monkeypatch.setattr(process_job, "run_pipeline", never)
+    job = _job()
+    job.segments = None
 
-    process_job.process(store, _job())
+    process_job.process(store, job)
 
-    assert nhan["moments"] is None
+    assert ("fail", "Pick at least one moment to clip.") in [call[:2] for call in store.calls]
 
 
 def test_chosen_moments_sap_xep_kep_tran_va_dat_ten_tieng_anh():

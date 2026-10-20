@@ -60,7 +60,9 @@ waits for budget. This plan is the zero-API work that makes the sold product usa
   `components/clipping/OutputOptions.tsx`.
   - `SegmentBar` had: two handles per segment, dragging seeks the player, 1–180 s, ≤ 10, no overlap, `freeGap` for a
     new 30 s moment.
-  - Recover with `git show d1f6d623^:apps/web/components/clipping/web/SegmentBar.tsx`.
+  - Recover with `git show d1f6d623^:apps/web/components/clipping/web/SegmentBar.tsx`. *(2026-10-20, Session A: the
+    commit is in neither repository's history now, on any branch or PR ref, so `SegmentBar` was written again from
+    this description.)*
 - `components/clipping/web/YouTubePlayer.tsx` (`useYouTubePlayer`, IFrame API on youtube-nocookie) still exists, but
   nothing uses the hook. CSP already allows it (`next.config.ts`).
 - `components/editor/clipping/ClipsPanel.tsx` never sends `segments`.

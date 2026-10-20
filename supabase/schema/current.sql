@@ -4460,6 +4460,8 @@ begin
       raise exception 'Picked moments only apply when we clip your video.' using errcode = '22023';
     end if;
     v_clips := 1;
+  elsif v_segments is null then
+    raise exception 'Pick at least one moment to clip.' using errcode = '22023';
   end if;
 
   if v_segments is not null then
@@ -4555,10 +4557,10 @@ $_$;
 
 
 --
--- Name: create_video_pack(text, boolean, integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: create_video_pack(text, boolean, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.create_video_pack(p_source text, p_confirmed boolean DEFAULT false, p_clips integer DEFAULT 5) RETURNS jsonb
+CREATE FUNCTION public.create_video_pack(p_source text, p_confirmed boolean DEFAULT false, p_clips integer DEFAULT 5, p_segments jsonb DEFAULT NULL::jsonb) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -4575,7 +4577,8 @@ begin
   if exists (select 1 from public.cmo_runs where user_id = v_user and kind = 'video_pack' and status in ('queued', 'running')) then
     raise exception 'Your last video pack is still being made.' using errcode = 'P0001';
   end if;
-  v_job := public.create_job(v_source, coalesce(p_clips, 5), 'auto', null, 'clip', '9:16', 'auto', true, 'bold');
+  -- create_job refuses a clip job without moments and sets the clip count from them.
+  v_job := public.create_job(v_source, coalesce(p_clips, 5), 'auto', p_segments, 'clip', '9:16', 'auto', true, 'bold');
   update public.projects set kind = 'video_pack' where job_id = v_job.id;
   insert into public.video_ownership (job_id, user_id, source, url)
   values (v_job.id, v_user, case when v_upload then 'upload' else 'link' end, case when v_upload then null else v_source end);

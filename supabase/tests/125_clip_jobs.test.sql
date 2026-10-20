@@ -17,7 +17,7 @@ set local request.jwt.claims = '{"sub":"e1250000-0000-4000-8000-00000000000a"}';
 select throws_ok($$ select public.create_clip_job('https://youtu.be/mine', 3) $$,
   '22023', 'Confirm this is your own video to continue.', 'link không xác nhận bị từ chối');
 select is((select count(*)::int from public.jobs where user_id = 'e1250000-0000-4000-8000-00000000000a'), 0, '...và không tạo job, không giữ credit');
-create temp table made as select (public.create_clip_job('https://youtu.be/mine', 3, p_ownership_confirmed => true)).id as job_id;
+create temp table made as select (public.create_clip_job('https://youtu.be/mine', 3, p_segments => '[{"start":0,"end":30}]'::jsonb, p_ownership_confirmed => true)).id as job_id;
 select is((select source || ':' || url from public.video_ownership where job_id = (select job_id from made)), 'link:https://youtu.be/mine', 'có xác nhận: ghi video_ownership kèm link');
 select ok(exists (select 1 from public.credit_ledger where job_id = (select job_id from made) and reason = 'Hold for new job'), 'giữ credit như create_job');
 select throws_ok($$ select public.create_job('https://youtu.be/bypass', 3) $$, '42501', null, 'gọi thẳng create_job bị chặn');
