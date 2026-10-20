@@ -11,7 +11,7 @@
 import type { DocumentKind } from "./documents";
 
 export type Department = "post" | "sales" | "video";
-export type JobId = "W0" | "W1" | "W2" | "W3" | "W4" | "W5" | "W6" | "W7" | "W8" | "W9";
+export type JobId = "W0" | "W1" | "W2" | "W3" | "W4" | "W6" | "W7" | "W8" | "W9";
 
 /** Một agent trong danh sách "Your agents": department × nền tảng. */
 export type AgentSummary = {
@@ -64,37 +64,7 @@ export type SalesCard = {
   createdAt: string;
 };
 
-export type ClipPreview = {
-  id: string;
-  title: string;
-  seconds: number;
-  hook: string;
-  /** Video xem trước (bản preview của engine); vắng = chỉ hiện hook. */
-  previewUrl?: string;
-  /** Chữ từng nền tảng cho clip này (W5): tiktok, reels, shorts, facebook, threads. */
-  captions?: Record<string, string>;
-  /** Bản tải về sau khi duyệt: task export trên worker. */
-  download?: { taskId: string; status: "queued" | "running" | "done" | "failed" | "cancelled" } | null;
-};
-
-export type VideoCard = {
-  id: string;
-  priority: Priority;
-  department: "video";
-  title: string;
-  source: string;
-  clips: ClipPreview[];
-  platforms: string[];
-  projectId: string | null;
-  createdAt: string;
-  /** Thẻ thật: chờ duyệt, hoặc đã duyệt và đang/đã dựng bản tải về. Mẫu thì vắng. */
-  state?: "review" | "approved";
-};
-
-export type InboxCard = PostCard | SalesCard | VideoCard;
-
-/** A video brief from the CMO (P3): approving it opens the project with the brief in the assistant. */
-export type BriefView = { id: string; projectId: string; projectTitle: string; hook: string; broll: string; visuals: string; pacing: string; createdAt: string };
+export type InboxCard = PostCard | SalesCard;
 
 /** A weekly goal (P2): proposed ones wait for the founder; the approved one shows progress. */
 export type GoalView = {
@@ -102,7 +72,7 @@ export type GoalView = {
   /** Monday of the goal's week. */
   week: string;
   goal: string;
-  metric: "posts" | "replies" | "clips" | "views";
+  metric: "posts" | "replies" | "views";
   target: number;
   status: "proposed" | "approved";
   /** Reached so far this week (approved goal of the current week only). */
@@ -156,8 +126,8 @@ export type CalendarItem = {
   reason: string;
   /** Mục `planned` thật: sửa/xoá được. Mục mẫu và mục đã thành bài thì không. */
   editable: boolean;
-  /** Mục video còn mở: link tab Clips của editor (người dùng tự đưa video của họ). */
-  clipsHref?: string;
+  /** An open video item: link to the editor's Upload panel (the user records and uploads their own video). */
+  editorHref?: string;
 };
 
 export type ChatMessage = { id: string; role: "user" | "cmo"; text: string };
@@ -178,8 +148,6 @@ export type Workspace = {
   inbox: InboxCard[];
   /** This week's and next week's goals, proposed or approved. */
   goals: GoalView[];
-  /** Video briefs waiting for the founder (P3). */
-  briefs: BriefView[];
   calendar: CalendarItem[];
   insight: InsightView | null;
   /** Tab Social: số liệu bài đăng (W6). */
@@ -195,11 +163,10 @@ export type Workspace = {
 
 export const DEPARTMENT_LABEL: Record<Department, string> = { post: "Post", sales: "Sales", video: "Video" };
 
-/** Ba agent mặc định — mô tả là goal của từng department, cố định theo sản phẩm. */
+/** The default agents; each description is its department's goal, fixed by the product. */
 export const AGENTS: Omit<AgentSummary, "ready" | "nextRun" | "runnable">[] = [
   { department: "post", name: "X Agent", channels: "X", goal: "A post on X every day, in your voice.", unit: ["post", "posts"] },
   { department: "sales", name: "Reddit Agent", channels: "Reddit", goal: "Conversations worth joining, with a reply drafted.", unit: ["conversation", "conversations"] },
-  { department: "video", name: "Video Agent", channels: "TikTok · Reels · Shorts · Facebook · Threads", goal: "Short videos from the recordings you already have.", unit: ["clip pack", "clip packs"] },
 ];
 
 export const JOB_TITLE: Record<JobId, string> = {
@@ -208,7 +175,6 @@ export const JOB_TITLE: Record<JobId, string> = {
   W2: "Draft X post",
   W3: "Publish",
   W4: "Scan Reddit",
-  W5: "Video pack",
   W6: "Pull numbers",
   W7: "Competitor research",
   W8: "Weekly memory",

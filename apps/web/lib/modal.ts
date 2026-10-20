@@ -21,8 +21,8 @@ export type WakePayload =
   | { task_id: string };
 
 /**
- * Modal's `submit` takes `{job_id}` OR `{task_id}` (D2 Task 4.1); previews, exports, B-roll probes
- * and ZIPs go through the task branch.
+ * Modal's `submit` takes `{job_id}` OR `{task_id}` (D2 Task 4.1); exports, media probes
+ * and generations go through the task branch.
  *
  * A server without the worker token (the MCP server on Modal: it faces the internet, and that
  * token starts any job) calls `wake` instead, with `OPENCMO_WAKE_TOKEN`. That only brings the next

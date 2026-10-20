@@ -1,22 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Số việc đang chờ người dùng duyệt — dòng phụ "N waiting" của Dashboard trên rail.
+ * How many items wait for the user's decision: the "N waiting" line under Dashboard on the rail.
  *
- * Cùng điều kiện với mục "Awaiting your approval" của `loadWorkspace()`: bài X
- * `in_review`, thread Reddit `in_review`, gói video `in_review`. Bài/gói đã
- * duyệt (chờ đăng, chờ tải) không tính — đó không còn là việc phải quyết.
+ * Same rule as "Awaiting your approval" in `loadWorkspace()`: X posts and Reddit threads
+ * `in_review`. Approved posts (waiting to be posted) do not count: nothing is left to decide.
  *
- * Đọc dưới RLS bằng client của phiên, chỉ đếm (`head: true`), không kéo hàng.
- * Lỗi thì trả null: đây là chữ phụ trên rail, không được làm hỏng shell.
+ * Read under RLS with the session's client, counting only (`head: true`). Errors return null:
+ * this is a hint on the rail and must not break the shell.
  */
 export async function cmoPending(supabase: SupabaseClient): Promise<number | null> {
   const count = (table: string) => supabase.from(table).select("id", { count: "exact", head: true }).eq("status", "in_review");
-  const [posts, threads, packs] = await Promise.all([
-    count("content_items").eq("department", "post"),
-    count("opportunities"),
-    count("video_packs"),
-  ]);
-  if (posts.error || threads.error || packs.error) return null;
-  return (posts.count ?? 0) + (threads.count ?? 0) + (packs.count ?? 0);
+  const [posts, threads] = await Promise.all([count("content_items").eq("department", "post"), count("opportunities")]);
+  if (posts.error || threads.error) return null;
+  return (posts.count ?? 0) + (threads.count ?? 0);
 }

@@ -11,8 +11,8 @@ HTTPS and WebSockets arrive as CONNECT tunnels; plain HTTP as absolute-form requ
 per connection (`Connection: close`) so a kept-alive proxy connection can never carry a request
 for a second, unchecked host.
 
-yt-dlp (and the ffmpeg it starts for sections) uses the same proxy when the worker has no
-outbound proxy of its own: `shared_proxy_url()` runs one for the whole process on a thread.
+Synchronous callers use the same proxy when the worker has no outbound proxy of its own:
+`shared_proxy_url()` runs one for the whole process on a thread.
 """
 
 from __future__ import annotations
@@ -188,7 +188,7 @@ class GuardProxy:
 
 
 class GuardProxyThread:
-    """A `GuardProxy` on its own event-loop thread, for synchronous callers such as yt-dlp.
+    """A `GuardProxy` on its own event-loop thread, for synchronous callers.
 
     `with GuardProxyThread(guard) as proxy:` → `proxy.url`.
     """

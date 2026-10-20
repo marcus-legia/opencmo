@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(17);
+select plan(18);
 
 select hasnt_table('public', 'video_ownership', 'video ownership confirmations are gone');
 select hasnt_table('public', 'video_packs', 'video packs are gone');
@@ -46,6 +46,10 @@ select throws_ok(
 );
 select is(public.cmo_job_price('video_pack'), 0, 'video packs have no price');
 select is(public.cmo_job_daily_limit('video_pack'), 0, 'and no daily allowance');
+select throws_ok(
+  $$ select public.cmo_propose_goal('e1900000-0000-4000-8000-00000000000a', null, date_trunc('week', current_date)::date, 'Approve 3 clip packs', 'clips', 3) $$,
+  '22023', 'The goal must count posts, replies or views.', 'a clips goal is refused: video packs are gone'
+);
 
 select * from finish();
 rollback;

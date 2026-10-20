@@ -2693,11 +2693,6 @@ html[data-theme] .rail-avatar {
   background: var(--ds-ink-3);
   overflow: hidden;
 }
-.processing-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 .processing-thumb.is-empty {
   display: flex;
   align-items: center;
@@ -2718,65 +2713,6 @@ html[data-theme] .rail-avatar {
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
-.clip-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 22px;
-}
-.clip-tile {
-  position: relative;
-  width: 92px;
-  border-radius: var(--ds-radius-sm);
-  background: var(--ds-ink-3);
-  overflow: hidden;
-}
-/*
-  Ô chưa có clip nhấp nháy chậm. Đây là thứ duy nhất trên màn này chuyển động
-  khi chưa có clip nào — và là lý do người dùng tin máy đang chạy.
-*/
-.clip-tile.is-waiting {
-  animation: clip-tile-pulse 1.8s ease-in-out infinite;
-}
-@keyframes clip-tile-pulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.9; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .clip-tile.is-waiting {
-    animation: none;
-    opacity: 0.6;
-  }
-}
-.clip-tile.is-ready {
-  border: 1px solid var(--ds-peach);
-  /* Ô vừa xong nảy một nhịp. Đây là phản hồi cho một sự kiện có thật — clip
-     vừa được publish — chứ không phải animation chào sân. */
-  animation: clip-tile-land var(--ds-dur-slow) var(--ds-ease-out);
-}
-@keyframes clip-tile-land {
-  0% { transform: scale(0.9); opacity: 0; }
-  60% { transform: scale(1.03); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-.clip-tile video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.clip-tile span {
-  position: absolute;
-  inset: auto 0 0;
-  padding: 10px 6px 5px;
-  background: linear-gradient(transparent, rgb(0 0 0 / 80%));
-  color: #fff;
-  font-size: 10px;
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 
 @media (max-width: 560px) {
   .processing-head {
@@ -2785,9 +2721,6 @@ html[data-theme] .rail-avatar {
   }
   .processing-thumb {
     width: 100%;
-  }
-  .clip-tile {
-    width: calc(33.333% - 7px);
   }
 }
 

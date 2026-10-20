@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 const DIR = join(import.meta.dirname, "..", "lib", "cmo", "skills");
 const OUT = join(DIR, "index.gen.ts");
-const AGENTS = new Set(["cmo", "onboarding", "planner", "x_writer", "sales", "research", "video", "checker", "captions"]);
+const AGENTS = new Set(["cmo", "onboarding", "planner", "x_writer", "sales", "research", "checker", "captions"]);
 
 type Skill = { name: string; description: string; agents: string[]; source: string; license: string; kind: "playbook" | "library"; body: string };
 

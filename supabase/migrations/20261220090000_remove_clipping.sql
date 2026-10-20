@@ -80,6 +80,48 @@ alter table public.cmo_inbox add constraint cmo_inbox_kind_check check (kind in 
 alter table public.projects drop constraint if exists projects_kind_check;
 alter table public.projects add constraint projects_kind_check check (kind in ('clip', 'edit'));
 
+-- Weekly goals counted approved video packs as `clips`; with the packs gone that metric has
+-- nothing left to count.
+delete from public.cmo_goals where metric = 'clips';
+alter table public.cmo_goals drop constraint if exists cmo_goals_metric_check;
+alter table public.cmo_goals add constraint cmo_goals_metric_check check (metric in ('posts', 'replies', 'views'));
+
+create or replace function public.cmo_put_goal(p_user uuid, p_run uuid, p_week date, p_goal text, p_metric text, p_target integer)
+returns public.cmo_goals language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  v_row public.cmo_goals;
+begin
+  if p_week is null or extract(isodow from p_week) <> 1 then
+    raise exception 'The week must start on a Monday.' using errcode = '22023';
+  end if;
+  if p_week < date_trunc('week', current_date)::date or p_week > date_trunc('week', current_date)::date + 7 then
+    raise exception 'Goals are for this week or next week.' using errcode = '22023';
+  end if;
+  if p_goal is null or char_length(trim(p_goal)) < 3 or char_length(p_goal) > 300 then
+    raise exception 'Describe the goal in 3 to 300 characters.' using errcode = '22023';
+  end if;
+  if p_metric is null or p_metric not in ('posts', 'replies', 'views') then
+    raise exception 'The goal must count posts, replies or views.' using errcode = '22023';
+  end if;
+  if p_target is null or p_target < 1 or p_target > 1000000 then
+    raise exception 'The target must be between 1 and 1,000,000.' using errcode = '22023';
+  end if;
+  select * into v_row from public.cmo_goals where user_id = p_user and week = p_week for update;
+  if found and v_row.status = 'approved' then
+    raise exception 'This week''s goal is already approved. Edit it on the goal card.' using errcode = 'P0001';
+  end if;
+  insert into public.cmo_goals (user_id, run_id, week, goal, metric, target)
+  values (p_user, p_run, p_week, trim(p_goal), p_metric, p_target)
+  on conflict (user_id, week) do update
+    set goal = excluded.goal, metric = excluded.metric, target = excluded.target, run_id = excluded.run_id,
+        status = 'proposed', decided_at = null, created_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+revoke all on function public.cmo_put_goal(uuid, uuid, date, text, text, integer) from public, anon, authenticated;
+
 -- ================================================================ the one way to start a project
 
 -- An uploaded video → a job the worker turns into one editable clip. Charging credits and creating

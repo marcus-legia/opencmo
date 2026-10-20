@@ -2198,7 +2198,7 @@ CREATE TABLE public.cmo_goals (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     decided_at timestamp with time zone,
     CONSTRAINT cmo_goals_goal_check CHECK (((char_length(goal) >= 3) AND (char_length(goal) <= 300))),
-    CONSTRAINT cmo_goals_metric_check CHECK ((metric = ANY (ARRAY['posts'::text, 'replies'::text, 'clips'::text, 'views'::text]))),
+    CONSTRAINT cmo_goals_metric_check CHECK ((metric = ANY (ARRAY['posts'::text, 'replies'::text, 'views'::text]))),
     CONSTRAINT cmo_goals_result_check CHECK ((result >= 0)),
     CONSTRAINT cmo_goals_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'approved'::text, 'rejected'::text]))),
     CONSTRAINT cmo_goals_target_check CHECK (((target >= 1) AND (target <= 1000000))),
@@ -2759,8 +2759,8 @@ begin
   if p_goal is null or char_length(trim(p_goal)) < 3 or char_length(p_goal) > 300 then
     raise exception 'Describe the goal in 3 to 300 characters.' using errcode = '22023';
   end if;
-  if p_metric is null or p_metric not in ('posts', 'replies', 'clips', 'views') then
-    raise exception 'The goal must count posts, replies, clips or views.' using errcode = '22023';
+  if p_metric is null or p_metric not in ('posts', 'replies', 'views') then
+    raise exception 'The goal must count posts, replies or views.' using errcode = '22023';
   end if;
   if p_target is null or p_target < 1 or p_target > 1000000 then
     raise exception 'The target must be between 1 and 1,000,000.' using errcode = '22023';

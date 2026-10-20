@@ -15,7 +15,6 @@ import type { Actions } from "./actions";
 const METRIC_LABEL: Record<GoalView["metric"], [string, string]> = {
   posts: ["post approved", "posts approved"],
   replies: ["Reddit reply", "Reddit replies"],
-  clips: ["clip pack approved", "clip packs approved"],
   views: ["view", "views"],
 };
 

@@ -109,8 +109,8 @@ export function WorkspaceShell({
   const hrefRef = useRef(hrefFor);
   hrefRef.current = hrefFor;
 
-  // Phím tắt: "N" tạo clip mới, "/" tìm project. Không chạy trong editor (nó có
-  // bảng phím riêng) và không chạy khi người dùng đang gõ.
+  // Shortcuts: "N" uploads a new video, "/" searches projects. Not inside the editor (it has its
+  // own keymap) and not while the user is typing.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;

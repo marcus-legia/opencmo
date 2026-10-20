@@ -29,8 +29,8 @@ import { WorkspaceShell, type WorkspaceNavView } from "../WorkspaceShell";
 const HREF: Record<WorkspaceNavView, string> = {
   home: "/app",
   plan: "/app?doc=product",
-  // "New clips" không còn trên rail (G1-c); phím N vẫn mở tab Clips của editor.
-  video: "/app/editor?panel=clips",
+  // Not on the rail (G1-c); the N key opens the editor's Upload tab.
+  video: "/app/editor?panel=upload",
   editor: "/app/editor",
   projects: "/app/projects",
   brand: "/app/brand",

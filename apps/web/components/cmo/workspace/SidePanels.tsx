@@ -209,9 +209,9 @@ export function CalendarRow({ item, actions }: { item: CalendarItem; actions: Ac
       <span className={`cmo-dept is-${item.department}`}>{DEPARTMENT_LABEL[item.department]}</span>
       <span className="cmo-cal-idea">{item.idea}</span>
       {item.reason ? <small className="cmo-cal-why">{item.reason}</small> : null}
-      {item.clipsHref ? (
-        <a className="cmo-cal-clips" href={item.clipsHref} data-testid="cmo-make-clips">
-          Make clips
+      {item.editorHref ? (
+        <a className="cmo-cal-clips" href={item.editorHref} data-testid="cmo-upload-video">
+          Upload video
         </a>
       ) : null}
       {item.editable ? (

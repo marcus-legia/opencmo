@@ -51,7 +51,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List drafts waiting for the user's approval, posts approved or published in the last 14 days, Reddit conversations (community, score, status) waiting for the user to reply, and video packs (clips with hooks, status).",
+      "List drafts waiting for the user's approval, posts approved or published in the last 14 days and Reddit conversations (community, score, status) waiting for the user to reply.",
     schema: EMPTY,
     strict: true,
   },
@@ -63,18 +63,16 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       "x_writer: draft an X post, three versions, into Approvals (1 credit).",
       "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
-      "video: a short-video task. The founder must bring their OWN video, so this always becomes a calendar item with a \"Make clips\" button that opens the editor; you cannot upload or confirm ownership for them.",
+      "video: a short-video task. The founder records and uploads their OWN video, so this always becomes a calendar item with an \"Upload video\" button that opens the editor; you cannot upload video for them.",
       "when: \"now\" runs it in the background (result in Approvals within a minute). A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
     schema: {
       type: "object",
       properties: {
         agent: { type: "string", enum: ["planner", "x_writer", "sales", "research", "video"] },
-        brief: { type: "string", description: "One to three sentences. For video: what the clips should be about." },
+        brief: { type: "string", description: "One to three sentences. For video: what the video should say." },
         when: { type: "string", description: "\"now\" or a date YYYY-MM-DD." },
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
-        clips: { type: "integer", description: "Video only: how many clips (1-10)." },
-        clip_length: { type: "string", enum: ["auto", "short", "medium", "long"], description: "Video only." },
       },
       required: ["agent", "brief"],
       additionalProperties: false,
@@ -137,41 +135,19 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "set_week_goal",
     description:
-      "Propose one measurable goal for this week or next week, like \"Approve and post 5 posts on X\" (metric posts, target 5). It appears as a card the founder approves or edits; it is not the goal until they do. Metrics: posts (X posts approved), replies (Reddit threads the founder replied to), clips (clip packs approved), views (views on their posts).",
+      "Propose one measurable goal for this week or next week, like \"Approve and post 5 posts on X\" (metric posts, target 5). It appears as a card the founder approves or edits; it is not the goal until they do. Metrics: posts (X posts approved), replies (Reddit threads the founder replied to), views (views on their posts).",
     schema: {
       type: "object",
       properties: {
         week: { type: "string", enum: ["this", "next"] },
         goal: { type: "string", description: "One sentence, 3 to 300 characters." },
-        metric: { type: "string", enum: ["posts", "replies", "clips", "views"] },
+        metric: { type: "string", enum: ["posts", "replies", "views"] },
         target: { type: "integer", description: "1 to 1,000,000." },
       },
       required: ["week", "goal", "metric", "target"],
       additionalProperties: false,
     },
     strict: true,
-  },
-  // CMO → editor assistant bridge (architecture P3).
-  {
-    name: "create_video_brief",
-    description: [
-      "Write an editing brief for clips the founder already cut from their OWN video: the hook, b-roll, visuals and pacing.",
-      "It becomes a card in Approvals. If the founder approves it, the project opens with the brief filled into the editor assistant; they send it, and every edit still needs their approval there.",
-      "project_id is a video pack's job_id from list_approvals; omit it to use their latest project with clips. You cannot cut new clips or upload video.",
-    ].join(" "),
-    schema: {
-      type: "object",
-      properties: {
-        project_id: { type: "string" },
-        hook: { type: "string", description: "The opening line or on-screen hook, up to 200 characters." },
-        broll: { type: "string", description: "B-roll or cutaway ideas, up to 600 characters." },
-        visuals: { type: "string", description: "Captions, colors, layout, up to 600 characters." },
-        pacing: { type: "string", description: "Cut rhythm and length, up to 300 characters." },
-      },
-      required: ["hook"],
-      additionalProperties: false,
-    },
-    strict: false,
   },
   // Last, so the cached prompt prefix stays the same.
   {
@@ -194,7 +170,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   },
 ];
 
-const WRITES = new Set(["create_task", "remember", "set_week_goal", "create_video_brief", "update_document"]);
+const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document"]);
 export const isCmoWrite = (name: string) => WRITES.has(name);
 
 /**
@@ -215,25 +191,16 @@ const taskInput = z.object({
   brief: z.string().trim().min(3).max(300),
   when: z.string().trim().regex(/^(now|\d{4}-\d{2}-\d{2})$/).default("now"),
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
-  clips: z.number().int().min(1).max(10).optional(),
-  clip_length: z.enum(["auto", "short", "medium", "long"]).optional(),
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
 const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
 const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });
-const briefInput = z.object({
-  project_id: z.string().uuid().optional(),
-  hook: z.string().trim().min(1).max(200),
-  broll: z.string().trim().max(600).default(""),
-  visuals: z.string().trim().max(600).default(""),
-  pacing: z.string().trim().max(300).default(""),
-});
 const goalInput = z.object({
   week: z.enum(["this", "next"]),
   goal: z.string().trim().min(3).max(300),
-  metric: z.enum(["posts", "replies", "clips", "views"]),
+  metric: z.enum(["posts", "replies", "views"]),
   target: z.number().int().min(1).max(1_000_000),
 });
 
@@ -294,33 +261,25 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         .eq("status", "in_review")
         .order("score", { ascending: false })
         .limit(10);
-      const { data: packs } = await supabase
-        .from("video_packs")
-        .select("id, job_id, status, clips, created_at, decided_at")
-        .in("status", ["in_review", "approved"])
-        .gte("created_at", since)
-        .order("created_at", { ascending: false })
-        .limit(5);
-      const count = (rows?.length ?? 0) + (threads?.length ?? 0) + (packs?.length ?? 0);
-      return { ok: true, content: data({ items: rows ?? [], reddit_conversations: threads ?? [], video_packs: packs ?? [] }), summary: `Read Approvals (${count} items)` };
+      const count = (rows?.length ?? 0) + (threads?.length ?? 0);
+      return { ok: true, content: data({ items: rows ?? [], reddit_conversations: threads ?? [] }), summary: `Read Approvals (${count} items)` };
     }
     case "create_task": {
       const parsed = taskInput.safeParse(input);
       if (!parsed.success) return invalid("agent must be planner, x_writer, sales, research or video; brief 3-300 characters; when \"now\" or YYYY-MM-DD.");
       const task = parsed.data;
-      // Video luôn lên lịch (luật 3: chính người dùng đưa video của họ vào editor); có ngày cũng vậy.
+      // Video is always scheduled (the user uploads their own video in the editor), with or without a date.
       const scheduled = task.agent === "video" || task.when !== "now";
       try {
         if (scheduled) {
           if (task.agent === "planner" || task.agent === "research") return invalid(`The ${task.agent} only runs now.`);
           const day = task.when === "now" ? isoDay() : task.when;
-          const body = task.agent === "video" ? { brief: task.brief, clips: task.clips ?? 3, clip_length: task.clip_length ?? "auto" } : { brief: task.brief };
           const item = await rpcOrThrow<{ id: string; day: string }>(supabase, "cmo_add_item", {
             p_department: DEPARTMENT_OF[task.agent],
             p_idea: task.brief,
             p_day: day,
             p_reason: "Added by your CMO",
-            p_body: body,
+            p_body: { brief: task.brief },
           });
           return { ok: true, content: JSON.stringify({ scheduled: true, item_id: item.id, day: item.day }), summary: task.agent === "video" ? "Added a video task to the calendar" : `Scheduled for ${item.day}` };
         }
@@ -388,7 +347,7 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
     }
     case "set_week_goal": {
       const parsed = goalInput.safeParse(input);
-      if (!parsed.success) return invalid("week must be this or next; goal 3 to 300 characters; metric posts, replies, clips or views; target 1 to 1,000,000.");
+      if (!parsed.success) return invalid("week must be this or next; goal 3 to 300 characters; metric posts, replies or views; target 1 to 1,000,000.");
       const week = isoDay(parsed.data.week === "next" ? 7 : 0, new Date(`${mondayOf()}T00:00:00Z`));
       await rpcOrThrow(supabase, "cmo_set_week_goal", { p_week: week, p_goal: parsed.data.goal, p_metric: parsed.data.metric, p_target: parsed.data.target });
       return {
@@ -397,35 +356,16 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         summary: "Proposed a weekly goal",
       };
     }
-    case "create_video_brief": {
-      const parsed = briefInput.safeParse(input);
-      if (!parsed.success) return invalid("hook is required (up to 200 characters); broll and visuals up to 600; pacing up to 300; project_id must be a project id.");
-      let project = parsed.data.project_id ?? null;
-      if (!project) {
-        // Latest finished clipping project: under RLS, so only the founder's own videos.
-        const { data: latest } = await supabase.from("jobs").select("id").eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle();
-        project = (latest as { id: string } | null)?.id ?? null;
-      }
-      if (!project) return { ok: false, content: JSON.stringify({ error: "The founder has no clips yet. Suggest they make clips from one of their own videos first." }), summary: "No project with clips" };
-      const { hook, broll, visuals, pacing } = parsed.data;
-      await rpcOrThrow(supabase, "cmo_create_video_brief", { p_job: project, p_hook: hook, p_broll: broll, p_visuals: visuals, p_pacing: pacing });
-      return {
-        ok: true,
-        content: JSON.stringify({ created: true, project_id: project, note: "The brief is a card in Approvals. Nothing is edited until the founder approves it and then approves the assistant's changes." }),
-        summary: "Wrote a video brief",
-      };
-    }
     default:
       return { ok: false, content: JSON.stringify({ error: `Unknown tool ${name}.` }), summary: "Unknown tool" };
   }
 }
 
-/** Trạng thái nối sau câu lệnh: số việc đang chờ duyệt + lịch hôm nay, ngắn để rẻ. */
+/** State appended after the request: items awaiting approval + today's calendar, short to stay cheap. */
 export async function cmoState(supabase: SupabaseClient): Promise<string> {
-  const [{ data: pending }, { data: threads }, { data: packs }, { data: today }, { data: runs }, { data: memories }] = await Promise.all([
+  const [{ data: pending }, { data: threads }, { data: today }, { data: runs }, { data: memories }] = await Promise.all([
     supabase.from("content_items").select("id", { count: "exact", head: false }).eq("status", "in_review").limit(20),
     supabase.from("opportunities").select("id").eq("status", "in_review").limit(20),
-    supabase.from("video_packs").select("id").eq("status", "in_review").limit(5),
     supabase.from("content_items").select("department, platform, idea, status").eq("day", isoDay()).limit(10),
     supabase.from("cmo_runs").select("kind, status").in("status", ["queued", "running"]).limit(5),
     // Most important unexpired notes first (memory tier 2); lessons below are tier 3.
@@ -442,7 +382,6 @@ export async function cmoState(supabase: SupabaseClient): Promise<string> {
     today: isoDay(),
     awaiting_approval: pending?.length ?? 0,
     reddit_conversations_waiting: threads?.length ?? 0,
-    video_packs_waiting: packs?.length ?? 0,
     calendar_today: today ?? [],
     jobs_running: runs ?? [],
     memories: ((memories ?? []) as { body: string }[]).map((m) => m.body),

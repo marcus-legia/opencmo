@@ -28,7 +28,7 @@ select throws_ok(
 );
 select throws_ok(
   $$ select public.cmo_propose_goal('e1400000-0000-4000-8000-00000000000a', null, (select this_week from w), 'Get followers', 'followers', 5) $$,
-  '22023', 'The goal must count posts, replies, clips or views.', 'only metrics we can measure'
+  '22023', 'The goal must count posts, replies or views.', 'only metrics we can measure'
 );
 select is(
   (select count(*)::int from public.enqueue_cmo_run_for('e1400000-0000-4000-8000-00000000000a', 'review_week', '{}') where credits = 0),

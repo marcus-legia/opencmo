@@ -11,7 +11,7 @@ import { ApiError } from "./errors";
 import type { SupabaseClient } from "./handler";
 
 /** Kind mà web đọc qua `/tasks`; mỗi giá trị phải có trong `task-kinds.json` (`task-kinds.check.ts`). */
-export const RENDER_TASK_KINDS = ["probe_media", "zip", "render_document"] as const;
+export const RENDER_TASK_KINDS = ["probe_media", "render_document"] as const;
 export type RenderTaskKind = (typeof RENDER_TASK_KINDS)[number];
 
 export type RenderTask = {
@@ -87,17 +87,15 @@ export function taskShape(task: RawTask, url: string | null): RenderTask {
 }
 
 /**
- * Task + link kết quả.
+ * Task + its result link.
  *
- * Preview trả mp4, ZIP trả file zip. Export của WORKER không ký ở đây: nó có ba
- * file và đi qua `GET /exports/[id]/file?kind=` để tên file tải về do server đặt.
+ * A WORKER export is not signed here: it has three files and goes through
+ * `GET /exports/[id]/file?kind=` so the server names the download.
  *
- * `render_document` — export vẽ document trên server — thì CÓ ký ở đây (cùng
- * `finalize`, bản xuất trình duyệt cũ trước A4b, để link cũ còn tải được). Nó chỉ có
- * đúng một file, và editor mới không có trang kết quả nào để dẫn người dùng
- * tới: nó đang đứng trong editor, vừa bấm Export xong. Thiếu nhánh này thì file
- * đã render, đã upload, đã đóng watermark vẫn nằm im trong bucket và không
- * đường nào lấy ra — đường tiền kết thúc ở một cái ngõ cụt im lặng.
+ * `render_document` — the server-side export of a document — IS signed here. It has exactly one
+ * file, and the editor has no results page to send the user to: they are in the editor, having
+ * just pressed Export. Without this branch the rendered, uploaded, watermarked file would sit in
+ * the bucket with no way out.
  */
 export async function taskWithUrl(
   task: RawTask,
@@ -105,12 +103,7 @@ export async function taskWithUrl(
 ): Promise<RenderTask> {
   if (task.status !== "done") return taskShape(task, null);
 
-  const entry =
-    task.kind === "zip"
-      ? fileEntry(task, "zip")
-      : task.kind === "render_document"
-        ? fileEntry(task, "mp4")
-        : null;
+  const entry = task.kind === "render_document" ? fileEntry(task, "mp4") : null;
 
   if (!entry) return taskShape(task, null);
   return taskShape(
@@ -118,11 +111,7 @@ export async function taskWithUrl(
     await signedObjectUrl(entry.bucket, entry.object, {
       // Bản giao khách phải rơi xuống ổ đĩa chứ không mở ra trong tab; chỉ thẻ
       // <video> trên trang project xin bản phát tại chỗ.
-      download: options.inline
-        ? undefined
-        : task.kind === "zip"
-          ? "opencmo-clips.zip"
-          : "opencmo-clip.mp4",
+      download: options.inline ? undefined : "opencmo-clip.mp4",
       ...(options.client ? { client: options.client } : {}),
     }),
   );

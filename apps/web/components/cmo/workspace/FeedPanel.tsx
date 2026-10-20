@@ -15,10 +15,8 @@ import type { AgentSummary, InboxCard, Workspace } from "@/lib/cmo/workspace";
 
 import { xIntent, type Actions } from "./actions";
 import { AgentMark } from "./AgentMark";
-import { BriefCards } from "./BriefCards";
 import { CardDrawer } from "./CardDrawer";
 import { GoalCards } from "./GoalCards";
-import { NewVideoPack } from "./NewVideoPack";
 import { PanelHead } from "./PanelHead";
 import { ago, when } from "./time";
 
@@ -29,16 +27,15 @@ const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 function preview(card: InboxCard): string {
   if (card.department === "post") return card.finalText ?? card.text;
-  if (card.department === "sales") return `${card.thread.community}: “${card.thread.title}” ${card.thread.snippet}`;
-  return `From ${card.source}. ${card.clips.map((c) => c.title).join(" · ")}`;
+  return `${card.thread.community}: “${card.thread.title}” ${card.thread.snippet}`;
 }
 
 export function FeedPanel({ ws, actions }: Props) {
   const [inboxOpen, setInboxOpen] = useState(true);
   const [agentsOpen, setAgentsOpen] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
-  // Chờ duyệt trước (việc của bạn bây giờ), đã duyệt chờ đăng sau; trong mỗi nhóm theo mức gấp.
-  const waiting = (c: InboxCard) => ((c.department === "post" || c.department === "video") && c.state === "approved" ? 1 : 0);
+  // Waiting for a decision first (your work now), approved-and-waiting-to-post after; by priority within each.
+  const waiting = (c: InboxCard) => (c.department === "post" && c.state === "approved" ? 1 : 0);
   const cards = [...ws.inbox].sort((a, b) => waiting(a) - waiting(b) || RANK[a.priority] - RANK[b.priority] || b.createdAt.localeCompare(a.createdAt));
   const openCard = ws.inbox.find((c) => c.id === openId) ?? null;
   const agentName = (card: InboxCard) => ws.agents.find((a) => a.department === card.department)?.name ?? "Agent";
@@ -50,18 +47,17 @@ export function FeedPanel({ ws, actions }: Props) {
       <div className="cmo-section">
         <button type="button" className="cmo-section-head" aria-expanded={inboxOpen} onClick={() => setInboxOpen(!inboxOpen)}>
           <span>Awaiting your approval</span>
-          <small>{cards.filter((c) => !waiting(c)).length + ws.goals.filter((g) => g.status === "proposed").length + ws.briefs.length}</small>
+          <small>{cards.filter((c) => !waiting(c)).length + ws.goals.filter((g) => g.status === "proposed").length}</small>
           <Icon name={inboxOpen ? "chevron-up" : "chevron-down"} size={16} />
         </button>
         {inboxOpen ? <GoalCards goals={ws.goals} actions={actions} /> : null}
-        {inboxOpen ? <BriefCards briefs={ws.briefs} actions={actions} /> : null}
         {inboxOpen ? (
           cards.length === 0 ? (
             <div className="cmo-empty-card">
               <p><strong>Nothing to review yet.</strong></p>
               <p>
-                Drafts from your agents land here: posts for X, Reddit conversations worth joining, and clips from your
-                videos. Nothing goes out until you approve it.
+                Drafts from your agents land here: posts for X and Reddit conversations worth joining. Nothing goes out
+                until you approve it.
               </p>
             </div>
           ) : (
@@ -96,8 +92,6 @@ export function FeedPanel({ ws, actions }: Props) {
 function AgentRow({ agent, actions }: { agent: AgentSummary; actions: Actions }) {
   const [open, setOpen] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [packOpen, setPackOpen] = useState(false);
-  const video = agent.department === "video";
   const unit = agent.ready === 1 ? agent.unit[0] : agent.unit[1];
   return (
     <li className="cmo-agent-row" data-open={open || undefined}>
@@ -122,31 +116,14 @@ function AgentRow({ agent, actions }: { agent: AgentSummary; actions: Actions })
             disabled={!agent.runnable || starting}
             title={agent.runnable ? undefined : agent.department === "sales" ? "Reddit scanning is not set up yet" : "This agent is not connected yet"}
             onClick={async () => {
-              // Video cần một video của người dùng — mở hộp chọn thay vì chạy ngay.
-              if (video) return setPackOpen(true);
               setStarting(true);
               await actions.run(agent.department === "sales" ? "sales_scan" : "post_draft");
               setStarting(false);
             }}
           >
-            {video ? (
-              <><Icon name="plus" size={14} /> New video pack</>
-            ) : (
-              <><Icon name="refresh-cw" size={14} /> Run now</>
-            )}
+            <Icon name="refresh-cw" size={14} /> Run now
           </button>
         </div>
-      ) : null}
-      {video ? (
-        <NewVideoPack
-          open={packOpen}
-          onClose={() => setPackOpen(false)}
-          onStarted={() => {
-            setPackOpen(false);
-            actions.toast("Making your clips. Your video pack shows up here in a few minutes.");
-            void actions.refresh();
-          }}
-        />
       ) : null}
     </li>
   );
@@ -156,7 +133,7 @@ function FeedCard({ card, agentName, actions, onOpen }: { card: InboxCard; agent
   const [skipping, setSkipping] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const approved = (card.department === "post" || card.department === "video") && card.state === "approved";
+  const approved = card.department === "post" && card.state === "approved";
   const sales = card.department === "sales";
 
   async function act(fn: () => Promise<boolean>) {
@@ -179,7 +156,7 @@ function FeedCard({ card, agentName, actions, onOpen }: { card: InboxCard; agent
         )}
       </header>
       <button type="button" className="cmo-feed-open" onClick={onOpen}>
-        <strong>{card.department === "video" ? `${card.clips.length} clips ready` : card.title}</strong>
+        <strong>{card.title}</strong>
         <span>{preview(card)}</span>
       </button>
       {sales ? (
@@ -212,7 +189,7 @@ function FeedCard({ card, agentName, actions, onOpen }: { card: InboxCard; agent
           />
           <div className="cmo-feed-actions">
             <button type="button" className="text-button" onClick={() => setSkipping(false)} disabled={busy}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={busy}>{sales ? "Dismiss" : card.department === "video" ? "Skip pack" : "Skip post"}</button>
+            <button type="submit" className="primary-button" disabled={busy}>{sales ? "Dismiss" : "Skip post"}</button>
           </div>
         </form>
       ) : (
@@ -235,20 +212,11 @@ function FeedCard({ card, agentName, actions, onOpen }: { card: InboxCard; agent
                 </button>
               </>
             )
-          ) : card.department === "sales" ? (
+          ) : (
             <>
               <button type="button" className="text-button" disabled={busy} onClick={() => setSkipping(true)}>Dismiss</button>
               <button type="button" className="primary-button" onClick={onOpen}>View reply</button>
             </>
-          ) : (
-            approved ? (
-              <button type="button" className="primary-button" onClick={onOpen}>Downloads</button>
-            ) : (
-              <>
-                <button type="button" className="text-button" disabled={busy} onClick={() => setSkipping(true)}>Skip</button>
-                <button type="button" className="primary-button" onClick={onOpen}>Review clips</button>
-              </>
-            )
           )}
         </div>
       )}
