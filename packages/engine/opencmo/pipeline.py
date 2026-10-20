@@ -125,6 +125,11 @@ def _transcript_for_moments(
     again: 40 seconds instead of 45 minutes, which is the whole point of this branch. `lead_in`
     is the padding at the start of each section file, so the cut starts there and spans exactly
     the window the user picked, for both yt-dlp and local sources.
+
+    A speech-to-text error on one section (no key, an empty quota, the network) leaves that clip
+    without captions instead of failing the job: the sections are already cut and paid for, and
+    the user can add captions later in the editor (plan item 8). Rendering copes with an empty
+    transcript. Every section failing gives an empty Scribe transcript, the same shape as before.
     """
     subs = None if cfg.force_transcribe else src.fetch_subtitles(url, cfg, work_dir)
     if subs is not None:
@@ -141,8 +146,13 @@ def _transcript_for_moments(
             start=lead_in,
             duration=moment.duration,
         )
-        part = transcribe.transcribe_audio(audio, cfg)
-        audio.unlink(missing_ok=True)
+        try:
+            part = transcribe.transcribe_audio(audio, cfg)
+        except Exception as exc:  # noqa: BLE001 - any Scribe failure only costs this clip its captions
+            log.warning("Moment %d has no captions: speech-to-text failed (%s)", index + 1, type(exc).__name__)
+            continue
+        finally:
+            audio.unlink(missing_ok=True)
         language = part.language
         segments.extend(_shift(part.segments, moment.start))
 

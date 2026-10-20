@@ -141,8 +141,13 @@ Checklist:
   A1.
   - **Accept:** `server.check.ts` cases (valid → link, overlap → error result, no segments → error result); manual
     run in claude.ai.
-- [ ] **B6 — Raw clips when transcription fails.** Plan item 8. Start here; it depends on no one.
+- [x] **B6 — Raw clips when transcription fails.** Plan item 8. Start here; it depends on no one.
   - **Accept:** the two failing-first pytest cases of item 8; one full-size frame looked at; budgets hold.
+  - *Done (2026-10-20):* `pipeline._transcript_for_moments` logs a warning and skips captions for a section whose
+    speech-to-text fails; `tests/test_pipeline_raw_clips.py` (both cases red first). Real render with no ElevenLabs key
+    on a 40 s local video, two moments: both clips out (10 s, 12 s, 1080×1920), frame at 5 s of the full-size clip 2
+    shows source 0:25 and no captions. **Not measured:** peak RAM and the 45-minute budget (`/usr/bin/time` is not
+    installed here); the change adds no media work, only a `try` around the Scribe call.
 - [ ] **B7 — `capture_frame` over MCP.** Plan item 10a plus the `look` Modal function. After B6; depends on no one.
   - **Accept:** `server.check.ts` cases; the frame-vs-export match test; one contact sheet looked at; peak RAM measured.
 - [ ] **B8 — `inspect_color`, `media_grab`, `media_waveform`.** Plan items 10b–10d on the same function.
