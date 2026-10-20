@@ -23,12 +23,12 @@ log = logging.getLogger(__name__)
 
 _ENDPOINT = "https://api.elevenlabs.io/v1/speech-to-text"
 _TIMEOUT = httpx.Timeout(300.0, connect=15.0)
-# Scribe accepts far larger files; this cap keeps the upload short so the "45 minutes -> 5 clips
-# in under 3 minutes" budget holds (32 kbps mono fits ~100 minutes).
+# Scribe accepts far larger files; this cap keeps the upload short so a long video transcribes
+# in one request (32 kbps mono fits ~100 minutes).
 TRANSCRIBE_MAX_BYTES = 24 * 1024 * 1024
 
-# A new segment starts after a sentence ends or after a pause, so captions and moment
-# selection get sentence-sized lines like the old Whisper segments.
+# A new segment starts after a sentence ends or after a pause, so captions
+# get sentence-sized lines like the old Whisper segments.
 _SENTENCE_END = (".", "?", "!", "…", "。", "？", "！")
 _PAUSE_SECONDS = 0.8
 _MAX_SEGMENT_SECONDS = 12.0

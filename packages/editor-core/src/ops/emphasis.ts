@@ -28,12 +28,14 @@ export const emphasizeWordsInput = z
 		element_id: speechElement,
 		/** Exact words from the transcript: one to three words each, the ones to colour. */
 		quotes: z.array(z.string().trim().min(1).max(60)).max(40),
+		/** Words by id instead of quotes (the editor's transcript selection): exact even when the words repeat. */
+		word_ids: z.array(z.string().min(1).max(64)).max(400).optional(),
 		/** Clear the layer's emphasis first (a style rerun). With no quotes: remove all emphasis. */
 		clear: z.boolean().optional(),
 		/** Take these words OUT of the emphasis instead of adding them. */
 		remove: z.boolean().optional(),
 	})
-	.refine((input) => input.quotes.length > 0 || input.clear, 'Give quotes to emphasize, or clear: true.');
+	.refine((input) => input.quotes.length > 0 || (input.word_ids?.length ?? 0) > 0 || input.clear, 'Give quotes to emphasize, or clear: true.');
 type EmphasizeWords = z.infer<typeof emphasizeWordsInput>;
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
@@ -61,6 +63,7 @@ export const emphasizeWords = {
 	input: emphasizeWordsInput,
 	describe: (input: EmphasizeWords) => {
 		const list = input.quotes.map((quote) => `"${quote.length > 30 ? `${quote.slice(0, 29)}…` : quote}"`).join(', ');
+		if (input.word_ids?.length) return input.remove ? 'Remove the emphasis from the selected words' : 'Emphasize the selected words';
 		if (!input.quotes.length) return 'Remove the caption emphasis';
 		return input.remove ? `Remove the emphasis from ${list}` : `Emphasize ${list}`;
 	},
@@ -78,6 +81,19 @@ export const emphasizeWords = {
 			const starts = words.filter((word) => word.start >= hit.start - 0.001 && word.end <= hit.end + 0.001).map((word) => sourceStart(word));
 			if (starts.length) found.push({ start: round(Math.min(...starts)), end: round(Math.max(...starts)) });
 		}
+		// Selected words: one range per run of neighbours, so a selection over a cut stays two phrases.
+		const picked = new Set(input.word_ids ?? []);
+		let run: number[] = [];
+		const close = () => {
+			if (run.length) found.push({ start: round(Math.min(...run)), end: round(Math.max(...run)) });
+			run = [];
+		};
+		for (const word of words) {
+			if (word.id !== undefined && picked.has(word.id)) run.push(sourceStart(word));
+			else close();
+		}
+		close();
+		if (picked.size && !found.length) throw new OpFailure('Those words are not on screen in this clip.');
 		const next = clone(document);
 		const layer = captionsLayer(next, input.element_id);
 		if (!layer) throw new OpFailure('This clip has no captions to emphasize.');

@@ -27,10 +27,10 @@ export const isDocView = (value: string | null): value is DocView => !!value && 
 
 /** Việc nào đọc tài liệu nào — dòng "Used by" ở cột Brief và đầu sheet. */
 export const USED_BY: Record<DocView, string[]> = {
-  product: ["X Agent", "Reddit Agent", "Video Agent"],
+  product: ["X Agent", "Reddit Agent"],
   strategy: ["X Agent", "Weekly plan"],
   competitors: ["Reddit Agent", "Weekly plan"],
-  content_strategy: ["X Agent", "Video Agent", "Weekly plan"],
+  content_strategy: ["X Agent", "Weekly plan"],
   calendar: ["X Agent", "Reddit Agent"],
 };
 

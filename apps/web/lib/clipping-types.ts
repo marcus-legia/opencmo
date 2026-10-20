@@ -19,31 +19,12 @@ export type ProjectStatus =
 export type ProcessingStage =
   | "queued"
   | "probe"
-  | "transcribe"
-  | "select"
   | "download"
-  // Hai stage này worker đã ghi từ lâu; thiếu chúng ở đây nên UI phải ép
-  // `(stage as string)` để so sánh — một chỗ ép kiểu che đúng cái nó nên bắt.
-  | "reframe"
   | "render"
-  | "prepare_editor"
+  | "transcribe"
   | "done"
   | "failed"
   | "cancelled";
-
-/** Khoá phải trùng lựa chọn độ dài mà worker hỗ trợ. */
-export type ClipLength = "auto" | "short" | "medium" | "long";
-
-/** Một đoạn người dùng tự kéo trên thanh bar. Mốc theo VIDEO NGUỒN. */
-export type SourceSegment = { start: number; end: number };
-
-/**
- * "clip" cắt video thành nhiều đoạn ngắn; "full" chỉ tải nguyên bản về.
- *
- * `full` không transcribe và không render lại, nên project của nó không có
- * transcript, không có revision và không mở được editor.
- */
-export type JobMode = "clip" | "full";
 
 /**
  * Khung hình chọn lúc TẠO job. Khác `FrameLayout` của revision ở đúng một giá
@@ -53,10 +34,6 @@ export type JobMode = "clip" | "full";
 export type JobLayout = "auto" | "fill" | "fit";
 
 export type ProjectSettings = {
-  clip_length: ClipLength;
-  min_seconds: number;
-  max_seconds: number;
-  mode: JobMode;
   aspect: AspectRatio;
   layout: JobLayout;
   captions: boolean;
@@ -130,11 +107,6 @@ export type Project = {
   settings: ProjectSettings;
   /** Lúc attempt gần nhất bắt đầu; null khi chưa worker nào nhận. */
   attempt_started_at: string | null;
-  /**
-   * Các đoạn người dùng tự chọn. `null` nghĩa là đã để AI chọn khoảnh khắc —
-   * đúng hành vi của mọi project tạo trước khi có thanh bar.
-   */
-  segments: SourceSegment[] | null;
   clips: ProjectClip[];
   /** Preview của clip đầu tiên trên trang thư viện; null khi chưa có clip. */
   thumbnail_url?: string | null;

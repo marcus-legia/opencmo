@@ -137,13 +137,13 @@ def test_refund_timeout_cannot_leave_failed_job_unrefunded(monkeypatch):
     import opencmo.worker.process_job
 
     server = _FakeServer()
-    monkeypatch.setattr(opencmo.worker.process_job, "run_pipeline", _boom)
+    monkeypatch.setattr(opencmo.worker.process_job, "_process_upload", _boom)
 
     # `process` không được ném: lỗi chốt job thuộc về reconciler, không phải
-    # Modal retry chạy lại cả pipeline.
+    # Modal retry chạy lại cả job.
     opencmo.worker.process_job.process(
         _store(server.handler),
-        Job(id=JOB, user_id="u", source_url="https://youtu.be/x", clips_requested=3),
+        Job(id=JOB, user_id="u", source_url="storage://u/x.mp4", clips_requested=1),
     )
 
     assert not (server.status == "failed" and not server.refunded)

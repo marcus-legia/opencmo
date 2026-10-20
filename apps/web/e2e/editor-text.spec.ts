@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, signIn, state } from "./helpers";
+import { uploadToEditor, signIn, state } from "./helpers";
 
 /**
  * E4: kiểu chữ như Palmier. Vẽ một lớp chữ bằng công cụ Text, bật hộp nền + gạch dưới,
@@ -10,7 +10,7 @@ import { makeClipsInEditor, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page) {
-  await makeClipsInEditor(page, SOURCE_VIDEO);
+  await uploadToEditor(page, SOURCE_VIDEO);
 }
 
 test("kiểu chữ (nền, gạch, footage, tilt, lật) và Guides trên preview", async ({ page }, testInfo) => {

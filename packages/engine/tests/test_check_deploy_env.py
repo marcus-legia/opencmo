@@ -10,6 +10,7 @@ from opencmo.deploy_env import MCP, MOTION, VERCEL, WORKER
 MCP_URL = "https://ws--opencmo-mcp.us-east.modal.run/mcp"
 URLS = {
     "OPENCMO_WAKE_URL": "https://ws--opencmo-wake.us-east.modal.run",
+    "OPENCMO_LOOK_URL": "https://ws--opencmo-look.us-east.modal.run",
     "MOTION_PREVIEW_URL": "https://ws--opencmo-motion-preview.us-east.modal.run",
 }
 
@@ -120,3 +121,32 @@ def test_a_url_pasted_on_the_wrong_line_is_reported():
     assert problems == [
         f"opencmo-mcp:OPENCMO_WAKE_URL points at the wrong endpoint (expected a URL with '--opencmo-wake.', got {URLS['MOTION_PREVIEW_URL']})"
     ]
+
+
+def test_moderation_needs_one_provider_key_per_place_not_anthropic_or_fal():
+    seen = _healthy()
+    for place, key in [(p, k) for shared in env.SHARED if shared.what in ("Anthropic key", "fal key") for p, k in shared.holders]:
+        seen[place][key] = None
+    problems, _ = env.check(seen)
+    assert problems == [], "Groq alone is enough"
+    for key in env.MODERATION_KEYS:
+        seen[WORKER][key] = None
+    problems, _ = env.check(seen)
+    assert problems and all("opencmo: no moderation key" in problem or "Groq key" in problem for problem in problems)
+
+
+def test_an_optional_key_set_somewhere_must_be_set_and_equal_everywhere():
+    seen = _healthy()
+    seen[MCP]["GROQ_API_KEY"] = None
+    problems, _ = env.check(seen)
+    assert "Groq key: opencmo-mcp:GROQ_API_KEY is not set" in problems
+
+
+def test_the_look_token_must_match_and_its_url_name_the_look_endpoint():
+    # The MCP server sends OPENCMO_LOOK_TOKEN to the worker's `look` endpoint, which checks it.
+    seen = _healthy()
+    seen[WORKER]["OPENCMO_LOOK_TOKEN"] = env.fingerprint("OPENCMO_LOOK_TOKEN", "other")
+    seen[MCP]["OPENCMO_LOOK_URL"] = URLS["OPENCMO_WAKE_URL"]
+    problems, _ = env.check(seen)
+    assert any(problem.startswith("look token differs") for problem in problems)
+    assert any("OPENCMO_LOOK_URL points at the wrong endpoint" in problem for problem in problems)

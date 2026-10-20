@@ -14,10 +14,10 @@ insert into auth.users (id, email) values
 insert into public.cmo_memories (user_id, type, body) values
   ('e1390000-0000-4000-8000-00000000000a', 'feedback', 'Skipped the X post "Pricing": too salesy'),
   ('e1390000-0000-4000-8000-00000000000a', 'feedback', 'Dismissed the Reddit thread "Help": not our buyer'),
-  ('e1390000-0000-4000-8000-00000000000a', 'feedback', 'Skipped a video pack: wrong angle');
+  ('e1390000-0000-4000-8000-00000000000a', 'feedback', 'Something else entirely: wrong angle');
 select is(
   (select array_agg(topic order by topic) from public.cmo_memories where user_id = 'e1390000-0000-4000-8000-00000000000a'),
-  array['post', 'sales', 'video'],
+  array['general', 'post', 'sales'],
   'skip reasons are filed under their topic'
 );
 select is(

@@ -378,6 +378,18 @@ export function TranscriptPanel({
                 Restore
               </button>
             ) : null}
+            {anyKept ? (
+              <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-emphasize" title="Color these words in the captions"
+                onClick={() => act([{ op: "emphasize_words", quotes: [], word_ids: ids() }])}>
+                Emphasize
+              </button>
+            ) : null}
+            {anyKept ? (
+              <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-unemphasize"
+                onClick={() => act([{ op: "emphasize_words", quotes: [], word_ids: ids(), remove: true }])}>
+                Plain
+              </button>
+            ) : null}
             {canTitle && !titleDraft ? (
               <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-add-title" title="A name tag that appears when these words are spoken" onClick={startTitle}>
                 Add title

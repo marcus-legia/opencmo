@@ -7,7 +7,7 @@
  * một lớp `captions` mới qua `insert_captions` (tránh chỗ của phụ đề đang chạy cùng lúc), nên Undo gỡ được như mọi thao tác khác.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { captionCredits, captionsNode, mediaOf, sourceRange, TRANSCRIPT_SRC } from "@/lib/editor/captions-source";
 import { TRANSLATE_LANGUAGES } from "@/lib/editor/captions-translate";
@@ -21,6 +21,25 @@ import type { Entity, InspectorContext } from "./shared";
 export { mediaOf };
 
 const POLL_MS = 1000;
+
+type Features = { captions: boolean; translate: boolean };
+/** Read once per page: which paid helpers this server runs (`/api/v1/editor/features`). */
+let features: Promise<Features> | null = null;
+const ALL: Features = { captions: true, translate: true };
+
+function useFeatures(): Features {
+  const [value, setValue] = useState<Features>(ALL);
+  useEffect(() => {
+    let live = true;
+    // On a failed read, keep the buttons: the request itself still reports its own error.
+    features ??= fetch("/api/v1/editor/features").then((response) => (response.ok ? (response.json() as Promise<Features>) : ALL)).catch(() => ALL);
+    void features.then((next) => live && setValue(next));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return value;
+}
 
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -36,6 +55,7 @@ function parentFor(ctx: InspectorContext, parent: Entity | null): string {
 
 export function GenerateCaptionsSection({ ctx, parent, clipId }: { ctx: InspectorContext; parent: Entity | null; clipId: string }) {
   const { node } = ctx;
+  const available = useFeatures().captions;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const media = mediaOf(node);
@@ -107,10 +127,11 @@ export function GenerateCaptionsSection({ ctx, parent, clipId }: { ctx: Inspecto
   };
   return (
     <Section title="Captions" testid="ins-media-captions">
-      <button type="button" className="ed2-btn" data-testid="generate-captions" disabled={busy || !mediaId} onClick={() => void run()}>
+      <button type="button" className="ed2-btn" data-testid="generate-captions" disabled={busy || !mediaId || !available} onClick={() => void run()}>
         {busy ? "Creating captions…" : `Generate captions (${credits} credit${credits === 1 ? "" : "s"})`}
       </button>
-      {!mediaId ? <p className="ed2-hint">Captions need the file stored with this project. Wait for it to finish uploading.</p> : null}
+      {!available ? <p className="ed2-hint">Automatic captions are not set up on this server yet.</p> : null}
+      {available && !mediaId ? <p className="ed2-hint">Captions need the file stored with this project. Wait for it to finish uploading.</p> : null}
       {error ? (
         <p className="ed2-hint" role="alert">
           {error}
@@ -184,6 +205,7 @@ export function VoiceoverCaptionsSection({ ctx }: { ctx: InspectorContext }) {
 
 export function TranslateCaptionsRow({ ctx, parent, clipId }: { ctx: InspectorContext; parent: Entity | null; clipId: string }) {
   const { node } = ctx;
+  const available = useFeatures().translate;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const match = typeof node.src === "string" ? TRANSCRIPT_SRC.exec(node.src) : null;
@@ -206,6 +228,13 @@ export function TranslateCaptionsRow({ ctx, parent, clipId }: { ctx: InspectorCo
       setBusy(false);
     }
   };
+  if (!available) {
+    return (
+      <Row label="Translate">
+        <span className="ed2-hint" data-testid="translate-unavailable">Translation is not set up on this server yet.</span>
+      </Row>
+    );
+  }
   return (
     <>
       <Row label="Translate">

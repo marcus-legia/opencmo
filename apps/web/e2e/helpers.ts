@@ -29,11 +29,9 @@ export async function signIn(page: Page, user: E2EUser): Promise<void> {
   ]);
 }
 
-/** Chờ project chạy xong. Worker fixture render thật nên vẫn mất vài chục giây. */
-export async function waitForClips(page: Page): Promise<void> {
-  await expect(page.getByRole("heading", { name: /clips? ready/i })).toBeVisible({
-    timeout: 150_000,
-  });
+/** Waits for an upload to finish processing on its project page. The fixture worker renders for real. */
+export async function waitForReady(page: Page): Promise<void> {
+  await expect(page.getByTestId("project-open-editor")).toBeVisible({ timeout: 150_000 });
 }
 
 /** Mở panel Assistant (cột riêng theo bố cục Palmier, mặc định ẩn ở màn hẹp). */
@@ -43,52 +41,49 @@ export async function showAssistant(page: Page): Promise<void> {
   await expect(page.getByLabel("Message the assistant")).toBeVisible();
 }
 
-/** Mở tab Clips của editor (G1-c) — chỗ duy nhất tạo clip từ video dài. */
-export async function openClipsPanel(page: Page): Promise<void> {
-  await page.goto("/app/editor?panel=clips");
-  // Lần đầu mở route editor ở server dev có thể phải biên dịch: chờ rộng tay.
-  await expect(page.getByTestId("clips-panel")).toBeVisible({ timeout: 120_000 });
-  await expect(page).not.toHaveURL(/panel=clips/);
+/** Opens the editor's Upload tab: the one way a project starts. */
+export async function openUploadPanel(page: Page): Promise<void> {
+  await page.goto("/app/editor?panel=upload");
+  // The first visit to the editor route on the dev server may compile: wait generously.
+  await expect(page.getByTestId("upload-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(page).not.toHaveURL(/panel=upload/);
 }
 
-/**
- * Upload một video qua tab Clips và tạo job. Trả id job (đọc từ response) — các test cần trang
- * project (tải ZIP, đổi khung) mở `/app/projects/<id>`.
- */
-export async function startClipsInEditor(
+/** Uploads a video from the Upload tab and starts its job. Returns the job (project) id. */
+export async function startUpload(
   page: Page,
   file: string,
   options: { aspect?: "9:16" | "1:1" | "16:9" } = {},
 ): Promise<string> {
-  await openClipsPanel(page);
-  await page.getByTestId("clips-file").setInputFiles(file);
-  if (options.aspect) await page.getByTestId("clips-panel").getByRole("radio", { name: options.aspect }).check({ force: true });
+  await openUploadPanel(page);
+  await page.getByTestId("upload-file").setInputFiles(file);
+  if (options.aspect) await page.getByTestId("upload-panel").getByRole("radio", { name: options.aspect }).check({ force: true });
   const created = page.waitForResponse(
-    (response) => response.url().endsWith("/api/v1/editor/clipping") && response.request().method() === "POST",
+    (response) => response.url().endsWith("/api/v1/editor/upload") && response.request().method() === "POST",
     { timeout: 120_000 },
   );
-  await page.getByTestId("clips-submit").click();
+  await page.getByTestId("upload-submit").click();
   const response = await created;
   expect(response.ok(), await response.text()).toBeTruthy();
   return ((await response.json()) as { id: string }).id;
 }
 
-/** Upload → chờ clip → Open: editor mở clip đầu tiên của job vừa tạo. */
-export async function makeClipsInEditor(page: Page, file: string): Promise<string> {
-  const jobId = await startClipsInEditor(page, file);
+/** Upload → wait for processing → Open: the editor opens the upload's one editable clip. */
+export async function uploadToEditor(page: Page, file: string): Promise<string> {
+  const jobId = await startUpload(page, file);
   const job = page.locator(`[data-job="${jobId}"]`);
-  await expect(job.getByTestId("clips-open").first()).toBeVisible({ timeout: 150_000 });
-  // Đang đứng ở một bản sửa khác: chờ URL ĐỔI, không chỉ khớp mẫu /app/editor/<id>.
+  await expect(job.getByTestId("upload-open")).toBeVisible({ timeout: 150_000 });
+  // Standing in another edit: wait for the URL to CHANGE, not just to match /app/editor/<id>.
   const current = page.url();
-  await job.getByTestId("clips-open").first().click();
+  await job.getByTestId("upload-open").click();
   await page.waitForURL((url) => url.href !== current && /\/app\/editor\/[0-9a-f-]+$/.test(url.pathname), { timeout: 60_000 });
   await expect(page.getByTestId("editor-v2")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Loading media…")).toHaveCount(0, { timeout: 120_000 });
   return jobId;
 }
 
-/** Trang kết quả của job (My projects), chờ xong. */
+/** The project page of a job (My projects), once it is ready. */
 export async function openProject(page: Page, jobId: string): Promise<void> {
   await page.goto(`/app/projects/${jobId}`);
-  await waitForClips(page);
+  await waitForReady(page);
 }

@@ -39,12 +39,24 @@ select is(
   0, 'không có dòng ledger nào được sinh ra lúc đăng ký'
 );
 
+-- An upload the user reserved and finished: what `create_upload_edit` consumes.
+create function pg_temp.upload(p_user uuid, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.upload_reservations (user_id, bucket, object_name, declared_size, content_type)
+  values (p_user, 'sources', p_user || '/' || p_name, 1000, 'video/mp4');
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('sources', p_user || '/' || p_name, '{"size": 100, "mimetype": "video/mp4"}');
+  return 'storage://' || p_user || '/' || p_name;
+end;
+$$;
+
 -- Và đó là ý nghĩa thật của "hard": đăng ký xong chưa tạo được job.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e7000000-0000-4000-8000-000000000001"}';
 
 select throws_ok(
-  $$ select public.create_clip_job('https://youtu.be/paywall', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_upload_edit(pg_temp.upload(auth.uid(), 'paywall.mp4')) $$,
   'P0001', 'Not enough credits: 10 needed, 0 left. Top up on the Credits page.',
   'tài khoản mới không tạo được job cho tới khi mua gói'
 );
@@ -59,7 +71,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e7000000-0000-4000-8000-000000000001"}';
 
 select lives_ok(
-  $$ select public.create_clip_job('https://youtu.be/paywall-paid', 1, p_ownership_confirmed => true) $$,
+  $$ select public.create_upload_edit(pg_temp.upload(auth.uid(), 'paywall-paid.mp4')) $$,
   'nạp credit xong thì tạo job được ngay'
 );
 

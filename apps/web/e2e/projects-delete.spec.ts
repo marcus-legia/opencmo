@@ -7,9 +7,8 @@ const project: Project = {
   id: "55555555-5555-4555-8555-555555555555", source_name: "Disposable video", title: "Remove me",
   favorite: false, status: "done", stage: "done", duration: 90, clips_requested: 1,
   error: null, created_at: "2026-09-21T00:00:00.000Z", finished_at: "2026-09-21T00:01:00.000Z",
-  attempt_started_at: "2026-09-21T00:00:00.000Z", segments: null, has_transcript: false,
-  settings: { clip_length: "auto", min_seconds: 15, max_seconds: 60, mode: "clip",
-    aspect: "9:16", layout: "auto", captions: true },
+  attempt_started_at: "2026-09-21T00:00:00.000Z", has_transcript: false,
+  settings: { aspect: "9:16", layout: "auto", captions: true },
   clips: [],
 };
 

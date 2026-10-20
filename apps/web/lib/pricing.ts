@@ -63,8 +63,8 @@ export const PLANS: Plan[] = [
     // vì liệt kê tính năng của một thứ không chạy được.
     features: [
       "No monthly credits — pick a plan to add more",
-      "Auto captions, face-tracked 9:16",
-      "Watermarked clips",
+      "Auto captions",
+      "Watermarked exports",
       "Account deleted 30 days after sign-up unless you buy a plan",
     ],
   },

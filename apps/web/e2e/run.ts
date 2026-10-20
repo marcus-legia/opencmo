@@ -71,6 +71,16 @@ function readEnv(): NodeJS.ProcessEnv {
     ELEVENLABS_API_KEY: "",
     FAL_KEY: "",
     ANTHROPIC_API_KEY: "",
+    GEMINI_API_KEY: "",
+    GROQ_API_KEY: "",
+    SCRAPECREATORS_API_KEY: "",
+    // `OPENCMO_ENV=production` in that file makes `isProduction()` true, which turns the fake
+    // models off: every Assistant turn then went to the real Gemini.
+    OPENCMO_ENV: "",
+    // Without these the server wakes the production worker on Modal for every local job.
+    OPENCMO_WAKE_URL: "",
+    OPENCMO_WAKE_TOKEN: "",
+    NEXT_PUBLIC_SENTRY_DSN: "",
     NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3100",
     MODAL_SUBMIT_URL: "",
     OPENCMO_WORKER_TOKEN: "",

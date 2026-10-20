@@ -72,7 +72,7 @@ function fakeDrafts(site: SiteSnapshot): OnboardingDrafts {
       pillars: [{ name: "What we are building", why: "Shows progress in public.", ideas: [`What ${name} does in one sentence`] }],
       x: "Post one useful idea a day.",
       reddit: "Answer questions where people describe the problem you solve.",
-      short_video: "Cut short clips from calls and demos you already record.",
+      short_video: "Record one short demo or idea a week and edit it in the editor.",
       cadence: "One post a day, one video a week.",
     },
   };

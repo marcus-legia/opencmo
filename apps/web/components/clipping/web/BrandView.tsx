@@ -260,7 +260,7 @@ export function BrandView() {
       const body = jsonBody({ name: draft.name, kit: draft.kit }, draft.id ? "PUT" : "POST");
       const row = await api<KitRow>(draft.id ? `/brand-kits/${draft.id}` : "/brand-kits", body);
       await reload(row.id);
-      setNotice("Saved. New clips will use your default brand kit.");
+      setNotice("Saved. New edits will use your default brand kit.");
     });
 
   const onLogo = (file: File | undefined) =>
@@ -340,7 +340,7 @@ export function BrandView() {
     <section className="brand-view" data-testid="brand-view">
       <header className="brand-head">
         <h1 className="brand-title">Brand kit</h1>
-        <p className="brand-lead">Set your colors, fonts, captions and logo once. New clips, visuals and 3D scenes use your default kit, so they come out on brand.</p>
+        <p className="brand-lead">Set your colors, fonts, captions and logo once. New edits, visuals and 3D scenes use your default kit, so they come out on brand.</p>
       </header>
       {error ? <Notice>{error}</Notice> : null}
       {notice ? <p className="brand-notice" role="status">{notice}</p> : null}
@@ -547,7 +547,7 @@ export function BrandView() {
                     await reload(draft.id!);
                   })}
                 >
-                  Use for new clips
+                  Use for new edits
                 </button>
               ) : null}
               <button type="button" className="brand-ghost" disabled={busy} data-testid="brand-export" onClick={() => void exportKit()}>

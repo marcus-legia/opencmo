@@ -46,7 +46,7 @@ export const INSTRUCTIONS = [
   "Explainers: read_guide explainer and get_explainer_kit, write the storyboard (say / label / visual per beat) and show it to the user before writing code; preview_explainer until the stills match the beats with no issues (up to 3 rounds); then add_explainer.",
   "Credits: a tool marked as costing credits first answers with the price and a confirm code, spending nothing. Show the price to the user and call it again with only clip_id and confirm after they agree. Never confirm on your own.",
   "Slow work (generations, explainers, exports) returns an id at once: poll with get_generation, wait_for_media or get_export instead of calling the tool again.",
-  "There is no browser here: tools that capture editor frames are not available. To see a result, preview it (preview_explainer) or give the user open_in_editor's link.",
+  "Look before you say done: capture_frame draws the clip as the export will (frames, visible layers and their boxes). Call it after changing the frame, cutting, or adding text or media. inspect_color, media_grab and media_waveform measure color, look inside library files and find pauses. If looking is not set up, give the user open_in_editor's link.",
   "Nothing is ever posted for the user: OpenCMO drafts, the user publishes.",
 ].join("\n");
 

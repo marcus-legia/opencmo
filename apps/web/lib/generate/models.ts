@@ -25,7 +25,7 @@ export const aiFakeEnabled = (): boolean =>
  * Voice runs on the worker, which holds the ElevenLabs key. `OPENCMO_VOICE_ENABLED=1` lists the voice
  * tools on a server that must not hold the key (the MCP server on Modal).
  */
-const voiceEnabled = (): boolean => Boolean(process.env.ELEVENLABS_API_KEY) || process.env.OPENCMO_VOICE_ENABLED === "1";
+export const voiceEnabled = (): boolean => Boolean(process.env.ELEVENLABS_API_KEY) || process.env.OPENCMO_VOICE_ENABLED === "1";
 
 /**
  * Provider nào bật được trên máy chủ này. Khoá nằm ở worker (Modal secret) chứ

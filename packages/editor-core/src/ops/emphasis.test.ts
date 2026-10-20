@@ -63,6 +63,18 @@ describe('emphasize_words', () => {
 		expect(emphasized(document, ctx)).toEqual(['free', '24', 'skills']);
 	});
 
+	it('word_ids picks the selected words even when the same word is said earlier', async () => {
+		const ctx = memory();
+		// "is" appears once, "it" once; select "it has" by id and one far word: two separate phrases.
+		const words = normalize(TRANSCRIPT).flatMap((segment) => segment.words);
+		const ids = [words[6]!.id!, words[7]!.id!, words[3]!.id!];
+		const { document } = await applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [], word_ids: ids }], ctx);
+		expect(emphasized(document, ctx)).toEqual(['one', 'it', 'has']);
+		const off = await applyOps(document, [{ op: 'emphasize_words', quotes: [], word_ids: [words[3]!.id!], remove: true }], ctx);
+		expect(emphasized(off.document, ctx)).toEqual(['it', 'has']);
+		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [], word_ids: ['nope'] }], ctx)).rejects.toThrow(/not on screen/);
+	});
+
 	it('emphasis survives a cut: removing other words keeps it on the same words', async () => {
 		const ctx = memory();
 		const um = normalize(TRANSCRIPT)[0]!.words[1]!.id!;

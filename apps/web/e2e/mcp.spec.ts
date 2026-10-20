@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, signIn, state } from "./helpers";
+import { uploadToEditor, signIn, state } from "./helpers";
 
 /**
  * MCP: an API key made in Settings → an MCP client calls the MCP server (packages/mcp-server, run
@@ -79,7 +79,7 @@ test("MCP: API key, edit a clip, two-step media generation, revoke", async ({ pa
   const user = state().users.a;
   await setPlan(user.id, "starter");
   await signIn(page, user);
-  const projectId = await makeClipsInEditor(page, SOURCE_VIDEO);
+  const projectId = await uploadToEditor(page, SOURCE_VIDEO);
   const clipId = /\/app\/editor\/([0-9a-f-]+)$/.exec(page.url())![1]!;
 
   // The retired route points at the new server.

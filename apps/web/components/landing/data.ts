@@ -26,11 +26,11 @@ export const DEPTS: Dept[] = [
     name: "Video Department",
     goal: "An AI video editor you edit by asking.",
     steps: [
-      "Cuts clips from recordings you own, framed on the speaker",
+      "Upload a video you recorded, then cut it by editing the transcript",
       "Ask the agent to change the edit, the animation or a 3D scene",
-      "Adds captions and a voice-over, then schedules after you approve",
+      "Adds captions and a voice-over, and exports a version per platform",
     ],
-    result: "Short videos from the recordings you already have.",
+    result: "Finished videos from what you record, edited by asking.",
     channels: ["tiktok", "instagram", "youtubeshorts", "facebook", "threads"],
   },
   {
@@ -103,7 +103,7 @@ export function savePercent(p: Prices): number {
 
 /** Cách làm thường: ước tính, trang có ghi chú ngay dưới bảng. */
 export const USUAL_STACK = [
-  { who: "Freelance video editor", what: "4 short clips a week, with captions", price: 480 },
+  { who: "Freelance video editor", what: "4 short videos a week, with captions", price: 480 },
   { who: "Voice-over and caption tools", what: "Two subscriptions", price: 45 },
   { who: "Social media manager", what: "Posts for X, LinkedIn, Threads, Facebook and Reddit", price: 350 },
   { who: "Scheduling tool", what: "Queue and publish", price: 35 },
@@ -112,7 +112,7 @@ export const USUAL_STACK = [
 
 export const INCLUDED = [
   { icon: DEPT_ICON.cmo, title: "AI CMO", body: "Reads your site and plans your week around one goal" },
-  { icon: DEPT_ICON.video, title: "Video department", body: "Edits clips and 3D scenes when you ask, with captions and voice-over" },
+  { icon: DEPT_ICON.video, title: "Video department", body: "Edits your videos and 3D scenes when you ask, with captions and voice-over" },
   { icon: DEPT_ICON.post, title: "Post department", body: "Drafts for X, LinkedIn, Threads, Facebook and Reddit" },
   { icon: DEPT_ICON.sales, title: "Sales department", body: "Finds the conversations where people need what you sell, on 9 platforms" },
 ];
@@ -120,7 +120,7 @@ export const INCLUDED = [
 export function faqs(p: Prices): { q: string; a: string }[] {
   return [
     { q: "What is an AI marketing team?", a: "OpenCMO gives you three AI departments led by an AI CMO. Video edits your recordings into short videos, Post writes posts for X, LinkedIn, Threads, Facebook and Reddit, and Sales finds conversations where people need what you built. You approve everything." },
-    { q: "Does OpenCMO post anything without me?", a: "No. Every post, clip and reply waits in your inbox until you approve it. You can also edit or skip it." },
+    { q: "Does OpenCMO post anything without me?", a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
     { q: "Can I edit videos by asking?", a: "Yes. In the editor you ask the AI agent to change the edit, the animation or a 3D scene. It also writes captions and records a voice-over." },
     { q: "Which platforms does Sales search?", a: "Public conversations on Reddit, X, LinkedIn, Facebook groups, Threads, Hacker News, Indie Hackers, YouTube comments and Quora. It drafts a reply; you post it yourself." },
     { q: "Will it like, follow or DM people for me?", a: "No. There are no automated likes, follows, DMs or replies. OpenCMO drafts; you decide what to say and where." },
@@ -139,7 +139,7 @@ export const MENUS: Menu[] = [
     id: "product", label: "Product", width: 380, cols: 1,
     items: [
       mi("AI CMO", "Turns one goal into a weekly plan", "/ai-cmo", { icon: DEPT_ICON.cmo }),
-      mi("AI video editor", "Edit clips, captions and 3D by asking", "/ai-video-editor", { icon: DEPT_ICON.video }),
+      mi("AI video editor", "Edit video, captions and 3D by asking", "/ai-video-editor", { icon: DEPT_ICON.video }),
       mi("AI post writer", "Posts for X, LinkedIn, Threads and more", "/ai-post-writer", { icon: DEPT_ICON.post }),
       mi("Customer conversations", "Find people asking for what you built", "/find-customers", { icon: DEPT_ICON.sales }),
       mi("Brand kit", "Your colors, fonts and captions", "/brand-kit", { icon: LUCIDE.palette }),
@@ -152,7 +152,7 @@ export const MENUS: Menu[] = [
       mi("Indie hackers", "Launch and grow in public", "/for/indie-hackers", { icon: LUCIDE.rocket }),
       mi("SaaS startups", "Content from what you ship", "/for/saas", { icon: LUCIDE.layers }),
       mi("Agencies", "One team for every client", "/for/agencies", { icon: LUCIDE.briefcase }),
-      mi("Creators & coaches", "Clips from every recording", "/for/creators", { icon: LUCIDE.mic }),
+      mi("Creators & coaches", "Edit every recording by asking", "/for/creators", { icon: LUCIDE.mic }),
     ],
   },
   {
@@ -174,7 +174,7 @@ export const MENUS: Menu[] = [
       mi("Blog", "Founder-led marketing, week by week", "/blog", { icon: LUCIDE.book }),
       mi("Guides", "Playbooks for each channel", "/guides", { icon: LUCIDE.compass }),
       mi("Free tools", "Hook, caption and post generators", "/tools", { icon: LUCIDE.wand }),
-      mi("Compare", "OpenCMO vs Buffer, Opus Clip, Hootsuite", "/compare", { icon: LUCIDE.scale }),
+      mi("Compare", "OpenCMO vs Buffer, Hootsuite", "/compare", { icon: LUCIDE.scale }),
       mi("Changelog", "What shipped this month", "/changelog", { icon: LUCIDE.history }),
     ],
   },
@@ -191,6 +191,6 @@ export const FOOTER_COLUMNS: { title: string; links: FootLink[] }[] = [
   { title: "Solutions", links: [fl("Solo founders", "/for/solo-founders"), fl("Indie hackers", "/for/indie-hackers"), fl("SaaS startups", "/for/saas"), fl("Agencies", "/for/agencies"), fl("Creators & coaches", "/for/creators")] },
   { title: "Channels", links: [fl("TikTok videos", "/channels/tiktok"), fl("YouTube Shorts", "/channels/youtube-shorts"), fl("Instagram Reels", "/channels/instagram-reels"), fl("LinkedIn posts", "/channels/linkedin"), fl("Reddit marketing", "/channels/reddit"), fl("X posts", "/channels/x")] },
   { title: "Free tools", links: [fl("Video hook generator", "/tools/hook-generator"), fl("Caption generator", "/tools/caption-generator"), fl("LinkedIn post generator", "/tools/linkedin-post-generator"), fl("X thread writer", "/tools/x-thread-writer"), fl("Reddit thread finder", "/tools/reddit-thread-finder")] },
-  { title: "Resources", links: [fl("Blog", "/blog"), fl("Guides", "/guides"), fl("OpenCMO vs Buffer", "/compare/buffer"), fl("OpenCMO vs Opus Clip", "/compare/opus-clip"), fl("OpenCMO vs Hootsuite", "/compare/hootsuite"), fl("Changelog", "/changelog")] },
+  { title: "Resources", links: [fl("Blog", "/blog"), fl("Guides", "/guides"), fl("OpenCMO vs Buffer", "/compare/buffer"), fl("OpenCMO vs Hootsuite", "/compare/hootsuite"), fl("Changelog", "/changelog")] },
   { title: "Connect", links: [fl("X", "#", "x"), fl("LinkedIn", "#", "linkedin"), fl("YouTube", "#", "youtube"), fl("TikTok", "#", "tiktok"), fl("Reddit", "#", "reddit")] },
 ];

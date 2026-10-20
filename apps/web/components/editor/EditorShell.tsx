@@ -44,8 +44,7 @@ import { EditVideoPanel } from "./generate/EditVideoPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { useAutoTranscripts } from "./library/useAutoTranscripts";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
-import { aspectOf, ClipsPanel, type ClipsPrefill } from "./clipping/ClipsPanel";
-import { CLIP_COUNTS, CLIP_LENGTH_OPTIONS } from "@/lib/clip-options";
+import { aspectOf, UploadPanel } from "./upload/UploadPanel";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { AssistantClient } from "./assistant/client";
 import { capture, grab, inspectColor, waveform, withoutText, type InspectColorInput } from "./assistant/capture";
@@ -175,6 +174,8 @@ function Workspace({
   const previewSeq = useRef(0);
   const doc = preview ?? state.document;
   const [selection, setSelection] = useState<string[]>([]);
+  // "Copy style" remembers one element; "Paste style" runs `copy_settings` from it onto the selection.
+  const [styleSource, setStyleSource] = useState<string | null>(null);
   const [solo, setSolo] = useState<string | null>(null);
   // Lớp Assistant vừa đổi (học Palmier §A6): nháy trên timeline ~2,5 giây.
   const [flash, setFlash] = useState<string[]>([]);
@@ -350,31 +351,25 @@ function Workspace({
   // Op: một lượt sửa = một commit = một bước Undo.
   const [busy, setBusy] = useState(false);
   // Tab của panel Media (Palmier: Media / Index…). Assistant là panel riêng (layout.ts).
-  const [leftTab, setLeftTab] = useState<"media" | "transcript" | "clips">("media");
-  // `?panel=clips` (rail cũ "New clips", `/app/video`, "Try again with longer clips"): mở tab
-  // Clips với link/tuỳ chọn điền sẵn, rồi xoá tham số khỏi URL — link không nằm lại trên thanh địa chỉ.
+  const [leftTab, setLeftTab] = useState<"media" | "transcript" | "upload">("media");
+  // `?panel=upload` (old links say `?panel=clips`: the rail, `/app/video`): open the Upload tab,
+  // then drop the parameter from the URL.
   const search = useSearchParams();
   const pathname = usePathname();
-  const [clipsPrefill, setClipsPrefill] = useState<ClipsPrefill | null>(null);
   useEffect(() => {
-    if (search.get("panel") !== "clips") return;
-    const count = Number(search.get("count"));
-    setClipsPrefill({
-      url: search.get("url") ?? undefined,
-      count: CLIP_COUNTS.includes(count) ? count : undefined,
-      length: CLIP_LENGTH_OPTIONS.find((option) => option.value === search.get("length"))?.value,
-    });
-    openClips();
+    const panel = search.get("panel");
+    if (panel !== "upload" && panel !== "clips") return;
+    openUpload();
     router.replace(pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, pathname, router]);
   const layout = useEditorLayout();
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
-  // Tab Clips nằm trong panel Media: panel đang ẩn thì hiện ra trước.
-  const openClips = () => {
+  // The Upload tab lives in the Media panel: show the panel first if it is hidden.
+  const openUpload = () => {
     if (!layoutRef.current.visible.media) layoutRef.current.toggle("media");
-    setLeftTab("clips");
+    setLeftTab("upload");
   };
   // Assistant đang sửa clip: khoá mềm canvas (CNV-09) — sửa tay giữa chừng sẽ va với bài của nó.
   const [assistantBusy, setAssistantBusy] = useState(false);
@@ -879,7 +874,7 @@ function Workspace({
       testid: "menu-new-project",
       onSelect: () => void createBlankEdit("9:16").then((id) => leave(`/app/editor/${id}`), (error: Error) => setNotice(error.message)),
     },
-    { label: "Make clips from a video…", onSelect: () => openClips(), testid: "menu-new-clips" },
+    { label: "Upload a video…", onSelect: () => openUpload(), testid: "menu-upload" },
     { kind: "separator" },
     {
       kind: "sub",
@@ -1178,6 +1173,28 @@ function Workspace({
     item("Copy", "copy"),
     item("Paste", "paste"),
     { kind: "separator" },
+    { label: "Copy style", disabled: selection.length !== 1, onSelect: () => setStyleSource(selection[0] ?? null), testid: "menu-copy-style" },
+    {
+      label: "Paste style",
+      disabled: !styleSource || !selection.length || selection.every((id) => id === styleSource),
+      onSelect: () => styleSource && void run([{ op: "copy_settings", from_id: styleSource, to_ids: selection.filter((id) => id !== styleSource) }]),
+      testid: "menu-paste-style",
+    },
+    ...(selection.length >= 2
+      ? ([
+          {
+            kind: "sub",
+            label: "Animate one by one",
+            testid: "menu-stagger",
+            items: (["fade", "slideUp", "pop", "grow"] as const).map((type) => ({
+              label: { fade: "Fade in", slideUp: "Slide up", pop: "Pop", grow: "Grow" }[type],
+              onSelect: () => void run([{ op: "stagger", element_ids: selection.slice(0, 40), type, step: 0.15 }]),
+              testid: `menu-stagger-${type}`,
+            })),
+          },
+        ] satisfies MenuItem[])
+      : []),
+    { kind: "separator" },
     item("Put on one row", "oneRow", "menu-one-row"),
     item("Select all", "selectAll"),
     { kind: "separator" },
@@ -1362,7 +1379,7 @@ function Workspace({
       <section className="ed2-left" {...panel("media")} aria-label="Media">
         {splitter("media")}
         <div className="ed2-left-tabs" role="tablist">
-          {(["media", "transcript", "clips"] as const).map((tab) => (
+          {(["media", "transcript", "upload"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1372,7 +1389,7 @@ function Workspace({
               data-testid={`tab-${tab}`}
               onClick={() => setLeftTab(tab)}
             >
-              {tab === "media" ? "Media" : tab === "transcript" ? "Transcript" : "Clips"}
+              {tab === "media" ? "Media" : tab === "transcript" ? "Transcript" : "Upload"}
             </button>
           ))}
         </div>
@@ -1382,10 +1399,9 @@ function Workspace({
             transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
           />
-        ) : leftTab === "clips" ? (
-          <ClipsPanel
+        ) : leftTab === "upload" ? (
+          <UploadPanel
             frame={sceneWidth && sceneHeight ? aspectOf(sceneWidth, sceneHeight) : "9:16"}
-            prefill={clipsPrefill}
             onOpen={(id) => void leave(`/app/editor/${id}`)}
           />
         ) : (

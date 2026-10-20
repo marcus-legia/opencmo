@@ -97,7 +97,7 @@ registerGroup({
     {
       name: "read_guide",
       title: "Read a guide",
-      description: `Read an OpenCMO editing guide (also the resources ${GUIDE_URI}{name}). Available: ${GUIDE_NAMES.join(", ")}. Read "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture frames, use preview_explainer or open_in_editor instead.`,
+      description: `Read an OpenCMO editing guide (also the resources ${GUIDE_URI}{name}). Available: ${GUIDE_NAMES.join(", ")}. Read "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture, call capture_frame (the same clip seconds in times, or count for a contact sheet); if looking is not set up, give the user open_in_editor's link.`,
       inputSchema: guideInput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input) {

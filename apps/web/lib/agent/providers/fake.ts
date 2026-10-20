@@ -251,7 +251,9 @@ function script(history: StoredMessage[]): unknown[] {
         const layer = found.find((node) => node.kind === "captions" && typeof node.src === "string" && node.src.startsWith("assets/transcripts/"));
         return layer ? [use("translate_captions", { element_id: layer.id, language: "Spanish" })] : [text("There are no saved captions to translate.")];
       }
-      const broll = found.find((node) => node.kind === "rect" && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
+      // The first B-roll without a captions layer linked to it (`source`): the tool refuses a second one.
+      const captioned = new Set(found.filter((node) => node.kind === "captions").map((node) => node.source));
+      const broll = found.find((node) => node.kind === "rect" && !captioned.has(node.id) && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
       return broll ? [use("add_captions", { element_id: broll.id })] : [text("There is no B-roll video to caption.")];
     }
     if (previous.includes("plan_video")) {
@@ -656,61 +658,9 @@ function script(history: StoredMessage[]): unknown[] {
 }
 
 /**
- * Kịch bản trang project:
- *   "style"/"caption" → list_clips → apply_to_clips(mọi clip, set_caption_style classic #FFD400)
- *   "hook"            → list_clips → trả lời bằng chữ
- *   còn lại           → trả lời bằng chữ
- * Sau thẻ duyệt: đọc kết quả, nói bao nhiêu clip đã đổi (hoặc bị từ chối).
- */
-function projectScript(history: StoredMessage[]): unknown[] {
-  const user = [...history].reverse().find((message) => message.role === "user");
-  const blocks = (user?.content ?? []) as Block[];
-  const results = blocks.filter((block) => block.type === "tool_result");
-  // Câu lệnh của lượt: tin nhắn user gần nhất không phải kết quả tool.
-  const promptMessage = [...history]
-    .reverse()
-    .find((message) => message.role === "user" && !(message.content as Block[]).some((block) => block.type === "tool_result"));
-  const turnPrompt = ((promptMessage?.content ?? []) as Block[])
-    .map((block) => block.text ?? "")
-    .join(" ")
-    .split("<project_state>")[0]!
-    .toLowerCase();
-
-  if (results.length) {
-    const assistant = [...history].reverse().find((message) => message.role === "assistant");
-    const previous = anthropicFormat.callsIn(assistant?.content ?? []).map((call) => call.name);
-    const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
-    if (previous.includes("list_clips")) {
-      const clips = (JSON.parse(raw) as { untrusted_data?: { clips?: Array<{ id: string; hook: string | null; number: number }> } }).untrusted_data?.clips ?? [];
-      if (/hook/.test(turnPrompt)) {
-        const best = clips[0];
-        return [text(best ? `Clip ${best.number} has the strongest hook: "${best.hook ?? ""}".` : "This project has no clips yet.")];
-      }
-      return [
-        text(`Applying the caption style to ${clips.length} clips.`),
-        use("apply_to_clips", {
-          clip_ids: clips.map((clip) => clip.id),
-          ops: [{ op: "set_caption_style", preset: "classic", colors: ["#FFD400"] }],
-        }),
-      ];
-    }
-    if (previous.includes("apply_to_clips")) {
-      const parsed = JSON.parse(raw) as { declined?: boolean; results?: Array<{ ok: boolean }> };
-      if (parsed.declined) return [text("Okay, I left the clips as they were.")];
-      const done = (parsed.results ?? []).filter((item) => item.ok).length;
-      return [text(`Updated ${done} of ${(parsed.results ?? []).length} clips.`)];
-    }
-    return [text("Done.")];
-  }
-
-  if (/style|caption|hook/.test(turnPrompt)) return [text("Reading the clips."), use("list_clips", {})];
-  return [text("I can change captions, frames and text across the clips in this project.")];
-}
-
-/**
  * Kịch bản CMO chat (scope `cmo`, nhận ra nhờ tool `create_task`):
  *   "research"        → search_reddit → create_task sales (brief kèm URL đầu tiên)
- *   "clip"/"video"    → create_task video (mục lịch có nút Make clips)
+ *   "clip"/"video"    → create_task video (a calendar item with an Upload video button)
  *   "plan"            → create_task planner
  *   "draft"/"post"    → create_task x_writer
  *   "calendar"        → list_calendar → nói số mục
@@ -761,7 +711,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
     }
     if (previous.includes("create_task")) {
       const parsed = JSON.parse(raw) as { started?: boolean; scheduled?: boolean; day?: string; error?: string };
-      if (parsed.scheduled) return [text(`Added to your calendar for ${parsed.day}. Open it there to make the clips from your own video.`)];
+      if (parsed.scheduled) return [text(`Added to your calendar for ${parsed.day}. Open it there to upload your video.`)];
       if (!parsed.started) return [text(`I could not start that: ${parsed.error ?? "unknown error"}`)];
       return [text("On it. The result will show up in the app within a minute, and nothing goes out until you approve it.")];
     }
@@ -784,7 +734,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   const lower = ask.toLowerCase();
   if (/remember/.test(lower)) return [use("remember", { note: ask.replace(/^.*?remember( that)?:?\s*/i, "").trim().slice(0, 200) || ask.trim() })];
   if (/\bgoal\b/.test(lower)) {
-    const metric = /repl/.test(lower) ? "replies" : /clip/.test(lower) ? "clips" : /view/.test(lower) ? "views" : "posts";
+    const metric = /repl/.test(lower) ? "replies" : /view/.test(lower) ? "views" : "posts";
     return [use("set_week_goal", { week: "this", goal: ask.replace(/^.*?goal:?\s*/i, "").trim().slice(0, 300) || ask.trim(), metric, target: Number(/\d+/.exec(lower)?.[0] ?? 5) })];
   }
   if (/\bupdate\b/.test(lower) && /\bdoc/.test(lower)) {
@@ -794,7 +744,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   const site = /\bread\b/.test(lower) ? /\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b/.exec(lower)?.[1] : undefined;
   if (site) return [text("Reading the site."), use("read_site", { url: site })];
   if (/research/.test(lower)) return [text("Looking at Reddit first."), use("search_reddit", { query: "late invoices" })];
-  if (/clip|video/.test(lower)) return [text("Adding a video task."), use("create_task", { agent: "video", brief: "Clips about how you onboard a new client", clips: 3, clip_length: "short" })];
+  if (/clip|video/.test(lower)) return [text("Adding a video task."), use("create_task", { agent: "video", brief: "A short video about how you onboard a new client" })];
   if (/reddit/.test(lower)) return [text("Scanning Reddit for people who need this."), use("create_task", { agent: "sales", brief: "People who struggle with the problem we solve", when: "now" })];
   if (/plan/.test(lower)) return [text("Planning your week."), use("create_task", { agent: "planner", brief: "A balanced week from the content strategy", when: "now" })];
   if (/draft|post/.test(lower)) return [text("Drafting a post for X."), use("create_task", { agent: "x_writer", brief: "A post from the content strategy", when: "now" })];
@@ -808,11 +758,10 @@ export const fakeProvider: Provider = {
   ...anthropicFormat,
   failureMessage: () => "Something went wrong. Please try again.",
   async step({ history, tools }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
-    const project = tools.some((tool) => tool.name === "apply_to_clips");
     const cmo = tools.some((tool) => tool.name === "create_task");
     const content = [
       { type: "thinking", thinking: "Deciding which tool fits.", signature: "fake" },
-      ...(cmo ? cmoScript(history) : project ? projectScript(history) : script(history)),
+      ...(cmo ? cmoScript(history) : script(history)),
     ];
     onDelta({ type: "thinking", text: "Deciding which tool fits." });
     for (const block of content as Array<{ type: string; text?: string; id?: string; name?: string }>) {

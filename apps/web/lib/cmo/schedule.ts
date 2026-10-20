@@ -16,7 +16,7 @@ import { socialReaderReady } from "@/lib/cmo/social/reddit";
  * finished (the Monday plan, for one).
  */
 /** Loops that call a model: for a founder in mode B they go to the inbox instead. */
-const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "video_pack", "competitor_research", "summarize_memory", "review_week"]);
+const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "competitor_research", "summarize_memory", "review_week"]);
 
 export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number; inbox: number }> {
   const today = isoDay();

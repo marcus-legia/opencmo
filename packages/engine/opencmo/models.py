@@ -6,8 +6,8 @@ và không ràng buộc engine vào một framework nào.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -70,71 +70,3 @@ class Transcript:
                 )
             )
         return out
-
-
-@dataclass
-class Moment:
-    """Một khoảnh khắc do LLM chọn ra từ transcript."""
-
-    start: float
-    end: float
-    hook: str
-    score: float = 0.0
-    reason: str = ""
-
-    @property
-    def duration(self) -> float:
-        return self.end - self.start
-
-
-@dataclass
-class Clip:
-    index: int
-    moment: Moment
-    path: str
-    preview_path: str | None = None
-    width: int = 1080
-    height: int = 1920
-    # Khung ĐÃ DÙNG để render clip này, không phải khung người dùng yêu cầu:
-    # `layout="auto"` chỉ giải được sau khi bám mặt chạy, và revision đầu tiên
-    # của editor phải mở ra đúng thứ người dùng vừa tải về.
-    layout: str = "fill"
-    focus_x: float = 0.5
-
-
-@dataclass
-class SourceInfo:
-    """Metadata lấy từ bước probe, trước khi tải bất cứ thứ gì."""
-
-    url: str
-    title: str
-    duration: float
-    uploader: str = ""
-    has_subtitles: bool = False
-    extractor: str = ""
-
-
-@dataclass
-class Timings:
-    """Đo từng bước. Dùng để kiểm chứng ngân sách < 3 phút ở ARCHITECTURE.md §2."""
-
-    probe: float = 0.0
-    transcript: float = 0.0
-    select: float = 0.0
-    download: float = 0.0
-    render: float = 0.0
-
-    @property
-    def total(self) -> float:
-        return self.probe + self.transcript + self.select + self.download + self.render
-
-
-@dataclass
-class JobResult:
-    source: SourceInfo
-    clips: list[Clip] = field(default_factory=list)
-    timings: Timings = field(default_factory=Timings)
-    transcript_source: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)

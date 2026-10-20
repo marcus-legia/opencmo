@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, signIn, state } from "./helpers";
+import { uploadToEditor, signIn, state } from "./helpers";
 
 /**
  * E3: tab Adjust trên video của clip. Thêm effect chỉnh màu trên pixel qua inspector
@@ -13,7 +13,7 @@ import { makeClipsInEditor, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page) {
-  await makeClipsInEditor(page, SOURCE_VIDEO);
+  await uploadToEditor(page, SOURCE_VIDEO);
 }
 
 /** Độ sáng trung bình (0–255) giữa khung preview. */

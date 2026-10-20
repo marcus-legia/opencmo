@@ -56,7 +56,7 @@ export const ContentStrategySchema = z.object({
     .describe("Three or four content pillars"),
   x: z.string().describe("How to use X (Twitter) for this product"),
   reddit: z.string().describe("Which conversations on Reddit matter and how to join them helpfully"),
-  short_video: z.string().describe("What short videos to make from recordings the founder already has"),
+  short_video: z.string().describe("What short videos the founder should record and edit"),
   cadence: z.string().describe("A realistic weekly rhythm for a solo founder"),
 });
 

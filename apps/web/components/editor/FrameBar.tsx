@@ -302,6 +302,18 @@ export function FrameBar({
           {mode === "fill" ? "Fill" : "Fit"}
         </button>
       ))}
+      {onLayout ? (
+        <button
+          type="button"
+          className="ed2-chip"
+          data-testid="frame-punch-in"
+          disabled={busy}
+          title="Zoom in a little on every other shot between cuts, centred on the speaker"
+          onClick={() => onLayout({ op: "punch_in" })}
+        >
+          Punch in
+        </button>
+      ) : null}
     </div>
   );
 }

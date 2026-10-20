@@ -1,16 +1,14 @@
 /**
- * Chạy THẬT, không chỉ kiểm lúc typecheck.
+ * Runs for real, not only at typecheck time.
  *
  *     cd apps/web && npx tsx lib/api/source.check.ts
  *
- * `sourceProblem` là hai chốt chặn cùng lúc: SSRF qua yt-dlp, và "job trỏ vào
- * file của người khác". Cả hai đều hỏng LẶNG LẼ nếu sai — job vẫn chạy, clip
- * vẫn ra, chỉ là từ nguồn đáng lẽ không được chạm tới.
+ * `sourceProblem` guards "a job pointing at someone else's file" and refuses links. Both fail
+ * silently if wrong — the job would still run, just from a source it must never touch.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
-import { sourceProblem } from "./source";
+import { sourceProblem, UPLOAD_ONLY, validateVideoFile } from "./source";
 import { rejectReason, storageExtension } from "../upload";
 
 const ME = "11111111-1111-4111-8111-111111111111";
@@ -43,54 +41,16 @@ check("đường dẫn vượt thư mục bị chặn dù segment đầu đúng"
   assert.notEqual(sourceProblem(`storage://${ME}/sub/x.mp4`, ME), null);
 });
 
-check("link HTTPS công khai được chấp nhận (trừ Vimeo, xem dưới)", () => {
-  assert.equal(sourceProblem("https://www.youtube.com/watch?v=abc", ME), null);
-  assert.equal(sourceProblem("https://youtu.be/abc", ME), null);
-  assert.equal(sourceProblem("https://www.tiktok.com/@creator/video/123", ME), null);
-  assert.equal(sourceProblem("https://cdn.example.com/video.mp4", ME), null);
-  assert.equal(sourceProblem("http://cdn.example.com/video.mp4", ME), null);
-});
-
-check("scheme không phải web và URL có credential bị chặn", () => {
-  for (const url of [
-    "file:///etc/passwd",
-    "ftp://example.com/video.mp4",
-    "https://user:pass@example.com/video.mp4",
-  ]) {
-    assert.notEqual(sourceProblem(url, ME), null, `phải chặn: ${url}`);
+check("links are refused: only the user's own upload starts a job", () => {
+  for (const link of ["https://www.youtube.com/watch?v=abc", "https://cdn.example.com/v.mp4", "http://127.0.0.1/", ""]) {
+    assert.equal(sourceProblem(link, ME), UPLOAD_ONLY, link);
   }
 });
 
-check("IP và host nội bộ bị chặn trước khi tạo job", () => {
-  for (const url of [
-    "http://169.254.169.254/latest/meta-data/",
-    "https://127.0.0.1/video.mp4",
-    "https://localhost/video.mp4",
-    "https://192.168.1.20/video.mp4",
-  ]) {
-    assert.match(sourceProblem(url, ME) ?? "", /private|local/);
-  }
-});
-
-type Case = { input: string; blocked: boolean; why: string };
-const CASES: Case[] = JSON.parse(
-  readFileSync(new URL("../../../../packages/contracts/private-addresses.json", import.meta.url), "utf8"),
-);
-
-for (const { input, blocked, why } of CASES) {
-  check(`shared case ${input} (${why})`, () => {
-    for (const url of [`https://${input}/video.mp4`, `http://${input}/video.mp4`]) {
-      if (blocked) assert.match(sourceProblem(url, ME) ?? "", /private|local/, url);
-      else assert.equal(sourceProblem(url, ME), null, url);
-    }
-  });
-}
-
-check("only ports 80 and 443", () => {
-  assert.equal(sourceProblem("https://cdn.example.com:443/v.mp4", ME), null);
-  for (const url of ["https://cdn.example.com:8443/v.mp4", "http://cdn.example.com:6379/"]) {
-    assert.notEqual(sourceProblem(url, ME), null, url);
-  }
+check("empty and oversized files are refused before the upload starts", () => {
+  assert.equal(validateVideoFile({ size: 0 }, 10), "This file is empty.");
+  assert.match(validateVideoFile({ size: 11 }, 10) ?? "", /smaller than/);
+  assert.equal(validateVideoFile({ size: 10 }, 10), null);
 });
 
 check("upload không bị giới hạn theo container hay phần mở rộng", () => {
@@ -101,16 +61,9 @@ check("upload không bị giới hạn theo container hay phần mở rộng", (
   assert.equal(storageExtension("concert.MTS"), "mts");
 });
 
-check("link Vimeo bị chặn trước khi giữ credit (DRM, UAT production 29/09)", () => {
-  for (const link of ["https://vimeo.com/76979871", "https://player.vimeo.com/video/1", "https://www.vimeo.com/2"]) {
-    assert.match(sourceProblem(link, ME) ?? "", /Vimeo links can't be imported/);
-  }
-  assert.equal(sourceProblem("https://notvimeo.com/1", ME), null);
-});
-
 if (failures.length > 0) {
   console.error(`${failures.length} kiểm tra hỏng:`);
   for (const line of failures) console.error(`  - ${line}`);
   process.exit(1);
 }
-console.log("sourceProblem: mọi kiểm tra xanh");
+console.log("sourceProblem: all checks passed");

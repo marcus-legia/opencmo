@@ -1,7 +1,7 @@
 /**
  * Who thinks for a founder right now (docs/mcp-on-modal-plan.md, "Mode switch").
  *
- * `opencmo`: our Anthropic/Gemini keys, paid with agent credits. `claude`: the founder's own Claude
+ * `opencmo`: our model keys (`lib/cmo/agents/registry.ts`), paid with agent credits. `claude`: the founder's own Claude
  * over MCP; the CMO cron writes to the inbox and the Assistant shows "Continue in Claude". It is
  * `claude` when the founder cannot pay for one Assistant turn, or when neither provider can answer
  * for an account reason (no key, a revoked key, no balance). A busy provider is not a reason:
@@ -13,7 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { AGENT_HOLD_CREDITS } from "@/lib/agent/limits";
-import { resolveAgent } from "@/lib/cmo/agents/registry";
+import { agentCandidates } from "@/lib/cmo/agents/registry";
 import { accountDown, type LlmProvider } from "@/lib/llm-health";
 import { isProduction } from "@/lib/production";
 
@@ -31,11 +31,14 @@ export function decideBrain(input: { credits: number; providersUp: number; force
   return { brain: "opencmo", reason: "ok", credits };
 }
 
-/** Providers with a shared key on this server that no recent call found out of credit or revoked. */
+/**
+ * Providers with a shared key on this server that no recent call found out of credit or revoked.
+ * The scripted model (`OPENCMO_AGENT_FAKE`, never in production) counts as one: CI and e2e run
+ * without real keys and must still take OpenCMO's path.
+ */
 export function providersUp(env: NodeJS.ProcessEnv = process.env, now: number = Date.now()): number {
-  const configured = resolveAgent("planner", env);
-  const other = resolveAgent("planner", env, configured.provider === "anthropic" ? "gemini" : "anthropic");
-  return [configured, other].filter((agent) => agent.apiKey && !accountDown(agent.provider as LlmProvider, now)).length;
+  if (env.OPENCMO_AGENT_FAKE === "1" && !isProduction()) return 1;
+  return agentCandidates("planner", env).filter((agent) => !accountDown(agent.provider as LlmProvider, now)).length;
 }
 
 /** Dev and e2e only: `OPENCMO_BRAIN=claude` runs the inbox path with the keys still set. */

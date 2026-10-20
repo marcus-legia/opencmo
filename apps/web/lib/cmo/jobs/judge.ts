@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 
-import type { ProviderKind } from "@/lib/cmo/agents/registry";
+import { otherProvider, type ProviderKind } from "@/lib/cmo/agents/registry";
 import type { CaseResult } from "@/lib/eval/compare";
 import { usageUsd } from "@/lib/eval/prices";
 
@@ -61,7 +61,7 @@ const brief = (input: JudgeInput) =>
  */
 export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?: number }): Judge {
   const call: Call = opts.call ?? structured;
-  const prefer: ProviderKind = opts.drafter === "anthropic" ? "gemini" : "anthropic";
+  const prefer: ProviderKind = otherProvider(opts.drafter);
   return async (input) => {
     let cost = 0;
     const ask = <S extends z.ZodType>(label: string, prompt: string, schema: S) =>
@@ -118,7 +118,7 @@ export function fakeJudge(): Judge {
 
 /**
  * One graded output: code issues decide alone (`decided_by: "code"`), otherwise the judge does.
- * `judge: null` keeps a case code-only (W1's plan shape, W5's captions).
+ * `judge: null` keeps a case code-only (W1's plan shape).
  */
 export async function cascade(id: string, epoch: number, issues: string[], judge: Judge | null, input: JudgeInput): Promise<CaseResult> {
   if (issues.length) return { id, epoch, pass: false, decided_by: "code", notes: issues };

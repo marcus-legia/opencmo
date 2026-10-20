@@ -19,6 +19,14 @@ from opencmo.ai.providers.fake import FakeProvider
 from opencmo.backends.supabase import Task
 from opencmo.worker import generate_task
 
+
+@pytest.fixture(autouse=True)
+def _no_moderation_keys(monkeypatch):
+    """Any one provider key turns output moderation on: the machine's own keys must not send these
+    tests' images to a real model."""
+    for name in ("GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
 ROOT = Path(__file__).resolve().parents[3]
 
 

@@ -1,4 +1,5 @@
-"""Output moderation: fal's NSFW classifier plus Claude, both must pass; failures never pass."""
+"""Output moderation: fal's NSFW classifier plus the policy checker (Groq, Claude or Gemini), both must pass;
+failures never pass."""
 
 from __future__ import annotations
 
@@ -22,6 +23,9 @@ def image(tmp_path):
 
 @pytest.fixture(autouse=True)
 def keys(monkeypatch):
+    # The machine's own keys must not change which checker runs.
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_BASE_URL", "CMO_LLM_PROVIDERS", "ANTHROPIC_AUTH_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FAL_KEY", "fal")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "claude")
 
@@ -155,7 +159,7 @@ def test_client_error_from_a_check_blocks(monkeypatch, image):
 
 
 def test_skipped_without_keys(monkeypatch, image):
-    monkeypatch.delenv("FAL_KEY")
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
     monkeypatch.setattr(moderation.httpx, "post", lambda *_a, **_k: pytest.fail("no call without keys"))
     moderation.check_output(get_model("fal-nano-banana"), {"prompt": "x"}, image)
     assert not moderation.ready()
@@ -163,7 +167,7 @@ def test_skipped_without_keys(monkeypatch, image):
 
 def test_production_without_keys_refuses_instead_of_skipping(monkeypatch, image):
     """Live, missing keys must not mean unchecked AI media: the task fails and is refunded."""
-    monkeypatch.delenv("FAL_KEY")
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
     monkeypatch.setenv("OPENCMO_ENV", "production")
     with pytest.raises(ProviderError) as blocked:
         moderation.check_output(get_model("fal-nano-banana"), {"prompt": "x"}, image)
@@ -321,3 +325,90 @@ def test_without_a_gemini_key_an_unpaid_claude_still_blocks(monkeypatch, image):
         moderation.check_images([image])
     assert not err.value.retryable
     assert seen["gemini"] == []
+
+
+# ---------------------------------------------------------------- OpenAI-compatible (Groq) first
+
+
+def _compat(monkeypatch, replies):
+    """fal answers clean; the OpenAI-compatible endpoint answers `replies` in turn: (status, body or content)."""
+    seen = {"compat": []}
+    queue = list(replies)
+
+    def post(url, **kwargs):
+        if url.endswith("/chat/completions"):
+            seen["compat"].append({"url": url, **kwargs})
+            status, answer = queue.pop(0)
+            body = answer if isinstance(answer, dict) else {"choices": [{"message": {"content": answer}, "finish_reason": "stop"}]}
+            return httpx.Response(status, json=body, request=httpx.Request("POST", url))
+        return httpx.Response(200, json={"has_nsfw_concepts": [False]}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(moderation.httpx, "post", post)
+    return seen
+
+
+def test_groq_checks_first_and_its_verdict_is_final(monkeypatch, image):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    claude = _claude(monkeypatch)
+    seen = _compat(monkeypatch, [(200, ALLOW)])
+    moderation.check_images([image], moderation.CAPTURE_POLICY)
+    (request,) = seen["compat"]
+    assert request["url"] == f"{moderation.GROQ_BASE_URL}/chat/completions"
+    assert request["headers"]["Authorization"] == "Bearer q"
+    body = request["json"]
+    assert body["model"] == moderation.COMPAT_VISION_MODEL
+    assert body["messages"][0]["content"] == moderation.CAPTURE_POLICY, "the same policy"
+    assert body["messages"][1]["content"][0]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert claude == {}, "Claude is not asked"
+
+    _compat(monkeypatch, [(200, BLOCK)])
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert str(err.value) == moderation.BLOCKED and not err.value.retryable
+    assert claude == {}, "a block is never retried on another model"
+
+
+@pytest.mark.parametrize("status", [401, 404, 429, 503])
+def test_claude_checks_when_groq_cannot_answer(monkeypatch, image, status):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    claude = _claude(monkeypatch, allowed=False)
+    _compat(monkeypatch, [(status, {"error": {"message": "nope"}})])
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert str(err.value) == moderation.BLOCKED and claude["system"] == moderation.POLICY
+
+
+def test_a_model_without_json_schema_gets_json_mode(monkeypatch, image):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    seen = _compat(monkeypatch, [(400, {"error": {"message": "response_format json_schema is not supported"}}), (200, ALLOW)])
+    moderation.check_images([image])
+    assert [r["json"]["response_format"]["type"] for r in seen["compat"]] == ["json_schema", "json_object"]
+
+
+def test_groq_alone_is_enough_without_fal_or_claude(monkeypatch, image):
+    """fal is a second opinion, not a requirement: the vision policy check covers sexual content."""
+    monkeypatch.delenv("FAL_KEY")
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    assert moderation.ready()
+    seen = _compat(monkeypatch, [(200, ALLOW)])
+    moderation.check_images([image])
+    assert len(seen["compat"]) == 1
+    for unreadable in ("looks fine", '{"allowed": "yes"}'):
+        _compat(monkeypatch, [(200, unreadable)])
+        with pytest.raises(ProviderError) as err:
+            moderation.check_images([image])
+        assert str(err.value) == moderation.BLOCKED
+    _compat(monkeypatch, [(503, {"error": {"message": "over capacity"}})])
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert err.value.retryable, "busy and nobody else: tried again in place"
+
+
+def test_the_order_follows_cmo_llm_providers(monkeypatch, image):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("CMO_LLM_PROVIDERS", "anthropic,groq")
+    claude = _claude(monkeypatch)
+    seen = _compat(monkeypatch, [])
+    moderation.check_images([image])
+    assert claude["system"] == moderation.POLICY and seen["compat"] == []

@@ -33,6 +33,7 @@ PLAIN_KEYS = frozenset(
         "OPENCMO_MCP_URL",
         "OPENCMO_WEB_URL",
         "OPENCMO_WAKE_URL",
+        "OPENCMO_LOOK_URL",
         "MOTION_PREVIEW_URL",
         "OPENCMO_ENV",
         "OPENCMO_MOTION",
@@ -47,12 +48,15 @@ class Shared:
 
     what: str
     holders: tuple[tuple[str, str], ...]  # (place, key)
+    #: Unset everywhere is fine; set anywhere, every holder must hold the same value.
+    optional: bool = False
 
 
 SHARED = (
     Shared("explainer preview token", ((VERCEL, "MOTION_PREVIEW_TOKEN"), (MOTION, "MOTION_PREVIEW_TOKEN"), (MCP, "MOTION_PREVIEW_TOKEN"))),
     Shared("explainer preview URL", ((VERCEL, "MOTION_PREVIEW_URL"), (MCP, "MOTION_PREVIEW_URL"))),
     Shared("wake token", ((WORKER, "OPENCMO_WAKE_TOKEN"), (MCP, "OPENCMO_WAKE_TOKEN"))),
+    Shared("look token", ((WORKER, "OPENCMO_LOOK_TOKEN"), (MCP, "OPENCMO_LOOK_TOKEN"))),
     Shared("worker token", ((VERCEL, "OPENCMO_WORKER_TOKEN"), (WORKER, "OPENCMO_WORKER_TOKEN"))),
     Shared("CMO cron secret", ((VERCEL, "CRON_SECRET"), (WORKER, "CRON_SECRET"))),
     Shared("cleanup cron secret", ((VERCEL, "CRON_CLEANUP_SECRET"), (WORKER, "CRON_CLEANUP_SECRET"))),
@@ -61,8 +65,9 @@ SHARED = (
     Shared("Supabase anon key", ((VERCEL, "NEXT_PUBLIC_SUPABASE_ANON_KEY"), (MCP, "NEXT_PUBLIC_SUPABASE_ANON_KEY"))),
     Shared("Supabase service role key", ((VERCEL, "SUPABASE_SERVICE_ROLE_KEY"), (WORKER, "SUPABASE_SERVICE_ROLE_KEY"), (MCP, "SUPABASE_SERVICE_ROLE_KEY"))),
     Shared("Supabase JWT secret", ((VERCEL, "SUPABASE_JWT_SECRET"), (MCP, "SUPABASE_JWT_SECRET"))),
-    Shared("Anthropic key", ((VERCEL, "ANTHROPIC_API_KEY"), (WORKER, "ANTHROPIC_API_KEY"), (MCP, "ANTHROPIC_API_KEY"))),
-    Shared("fal key", ((VERCEL, "FAL_KEY"), (FAL, "FAL_KEY"), (MCP, "FAL_KEY"))),
+    Shared("Anthropic key", ((VERCEL, "ANTHROPIC_API_KEY"), (WORKER, "ANTHROPIC_API_KEY"), (MCP, "ANTHROPIC_API_KEY")), optional=True),
+    Shared("Groq key", ((VERCEL, "GROQ_API_KEY"), (WORKER, "GROQ_API_KEY"), (MCP, "GROQ_API_KEY")), optional=True),
+    Shared("fal key", ((VERCEL, "FAL_KEY"), (FAL, "FAL_KEY"), (MCP, "FAL_KEY")), optional=True),
     Shared("ElevenLabs key", ((VERCEL, "ELEVENLABS_API_KEY"), (VOICE, "ELEVENLABS_API_KEY"))),
 )
 
@@ -73,8 +78,6 @@ MCP_REQUIRED = (
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_JWT_SECRET",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "ANTHROPIC_API_KEY",
-    "FAL_KEY",
     "MOTION_PREVIEW_URL",
     "MOTION_PREVIEW_TOKEN",
     "OPENCMO_MCP_URL",
@@ -82,10 +85,16 @@ MCP_REQUIRED = (
     "OPENCMO_MCP_CONFIRM_KEY",
     "OPENCMO_WAKE_URL",
     "OPENCMO_WAKE_TOKEN",
+    "OPENCMO_LOOK_URL",
     "OPENCMO_VOICE_ENABLED",
     "OPENCMO_MOTION",
     "OPENCMO_ENV",
 )
+
+# AI media is checked by a model (`moderation` agent, any provider): prompts on Vercel and in the MCP
+# server, what is drawn on the worker. Each must hold a key of at least one provider.
+MODERATION_KEYS = ("GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY")
+MODERATION_PLACES = (VERCEL, WORKER, MCP)
 
 # The containers that face the internet or run model-written code must not hold these (#74).
 FORBIDDEN = (
@@ -108,6 +117,7 @@ MCP_URL_HOLDERS = ((VERCEL, "OPENCMO_MCP_URL"), (MCP, "OPENCMO_MCP_URL"))
 # a URL pasted on the wrong line points at another endpoint, which answers 401 with its own message.
 ENDPOINT_LABELS = (
     (MCP, "OPENCMO_WAKE_URL", "--opencmo-wake."),
+    (MCP, "OPENCMO_LOOK_URL", "--opencmo-look."),
     (MCP, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
     (VERCEL, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
     (MCP, "OPENCMO_MCP_URL", "--opencmo-mcp."),
@@ -121,6 +131,8 @@ def keys_to_read(place: str) -> list[str]:
     keys |= {key for holder, key, _ in EXPECTED if holder == place}
     if place == MCP:
         keys |= set(MCP_REQUIRED)
+    if place in MODERATION_PLACES:
+        keys |= set(MODERATION_KEYS)
     for holder, forbidden in FORBIDDEN:
         if holder == place:
             keys |= set(forbidden)
@@ -156,6 +168,8 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
 
     for shared in SHARED:
         values: dict[str, str] = {}
+        if shared.optional and all(get(place, key) is None for place, key in shared.holders):
+            continue
         for place, key in shared.holders:
             if place not in seen:
                 continue
@@ -182,6 +196,11 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
         for key in MCP_REQUIRED:
             if not get(MCP, key):
                 problems.append(f"{MCP}:{key} is missing (the MCP server needs it)")
+
+    for place in MODERATION_PLACES:
+        # "" is a Vercel Sensitive value the CLI cannot read: set, just hidden.
+        if place in seen and all(get(place, key) is None for key in MODERATION_KEYS):
+            problems.append(f"{place}: no moderation key ({' / '.join(MODERATION_KEYS)}): AI media cannot be checked")
 
     for place, forbidden in FORBIDDEN:
         if place in seen:

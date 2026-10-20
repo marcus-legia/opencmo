@@ -53,14 +53,6 @@ APP_NAME = "opencmo"
 # vòng lặp phía web, spam) không đẻ ra hàng trăm container trong một phút.
 SWEEP_BATCH = 10
 
-# Model bám mặt được NƯỚNG SẴN vào image thay vì tải lúc chạy: worker khởi động
-# nguội cho từng job, tải lại mỗi lần là thêm một điểm hỏng vì mạng.
-FACE_MODEL_REMOTE = "/root/models/blaze_face_short_range.tflite"
-FACE_MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/face_detector/"
-    "blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
-)
-
 NODE_VERSION = "22.22.2"
 WEB_ROOT = "/root/web"
 _ENGINE = Path(__file__).parent
@@ -83,7 +75,7 @@ def _with_node(img: modal.Image) -> modal.Image:
     )
 
 
-def _with_engine(img: modal.Image, *, face: bool) -> modal.Image:
+def _with_engine(img: modal.Image) -> modal.Image:
     # Cài engine từ chính repo này. Đổi sang `.pip_install("opencmo-engine")`
     # nếu sau này publish lên PyPI.
     #
@@ -112,11 +104,7 @@ def _with_engine(img: modal.Image, *, face: bool) -> modal.Image:
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )
-    # Cài KÈM extra [face] cho worker CPU. Không có MediaPipe thì engine tự rơi về
-    # cắt căn giữa — chạy vẫn ra file, nhưng đo trên video thật cho thấy người nói
-    # bị cắt mất nửa người khi họ không đứng giữa khung. Đây không phải tính năng
-    # phụ. Image GPU chỉ render 3D, không bám mặt.
-    return img.run_commands(f"pip install '/root/engine{'[face]' if face else ''}'")
+    return img.run_commands("pip install /root/engine")
 
 
 def _with_media(img: modal.Image) -> modal.Image:
@@ -132,29 +120,18 @@ cpu_image = (
     # và thiếu font thì ffmpeg vẫn chạy — chỉ là clip ra không có chữ. Đúng kiểu
     # lỗi im lặng mà CLAUDE.md cảnh báo.
     #
-    # `libegl1`/`libgles2` là cho MediaPipe, không phải cho ffmpeg: Tasks API nạp
-    # `tasks/c/libmediapipe.so` bằng ctypes lúc chạy, và file đó NEEDED đúng hai
-    # thư viện này (`objdump -p` để kiểm lại). Thiếu chúng thì
-    # `FaceDetector.create_from_options` ném `OSError: libEGL.so.1` — mà
-    # `reframe.py` KHÔNG bắt lỗi đó (chỉ fallback khi thiếu hẳn MediaPipe), nên
-    # cả job chết. Máy dev có sẵn nên lỗi này chỉ lộ ra trên Modal.
     # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
     # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
     .apt_install(
-        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2",
+        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig",
         "fonts-noto-cjk", "fonts-noto-core", "fonts-noto-color-emoji",
     )
 )
 cpu_image = (
-    _with_engine(cpu_image, face=True)
+    _with_engine(cpu_image)
     # Cho `submit` — web app là TypeScript nên không gọi được `run_job.spawn()`
     # trực tiếp; nó cần một endpoint HTTP.
     .pip_install("fastapi[standard]")
-    .run_commands(
-        "mkdir -p /root/models",
-        f"curl -sSLf -o {FACE_MODEL_REMOTE} {FACE_MODEL_URL}",
-    )
-    .env({"OPENCMO_FACE_MODEL": FACE_MODEL_REMOTE})
 )
 # Export trên server (task `render_document`). Chỉ ba package exporter cần cùng
 # font/Lottie của clip. Không kéo cả monorepo: Next, Playwright là vài trăm MB
@@ -217,7 +194,7 @@ gpu_image = (
 )
 gpu_image = (
     # Font tiêu đề của Brand Kit: cùng file woff2 mà editor và exporter 2D dùng.
-    _with_media(_with_engine(gpu_image, face=False))
+    _with_media(_with_engine(gpu_image))
     .add_local_dir(_PACKAGES / "clip-three", remote_path=f"{WEB_ROOT}/packages/clip-three", copy=True, ignore=_NODE_IGNORE)
     .run_commands(
         f"cd {WEB_ROOT}/packages/clip-three && npm install --omit=dev --no-audit --no-fund",
@@ -250,7 +227,7 @@ motion_image = (
     )
 )
 motion_image = (
-    _with_media(_with_engine(_with_node(motion_image), face=False))
+    _with_media(_with_engine(_with_node(motion_image)))
     # For the `motion_preview` endpoint.
     .pip_install("fastapi[standard]")
     .add_local_dir(_PACKAGES / "clip-motion", remote_path=f"{WEB_ROOT}/packages/clip-motion", copy=True, ignore=_NODE_IGNORE)
@@ -294,22 +271,10 @@ capture_image = (
     .pip_install(f"playwright=={CAPTURE_PLAYWRIGHT}")
     .run_commands("playwright install --with-deps chromium")
 )
-capture_image = _with_engine(capture_image, face=False)
+capture_image = _with_engine(capture_image)
 
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
-
-# Proxy tách riêng một secret vì `modal secret create --force` THAY cả secret
-# chứ không thêm key — nhét chung vào `opencmo` thì mỗi lần đổi mật khẩu proxy
-# phải gõ lại toàn bộ khoá Supabase/Anthropic.
-#
-#   modal secret create opencmo-proxy \
-#     OPENCMO_PROXY='http://USER:PASS_country-us_session-XXXXXXXX_lifetime-10m@geo.iproyal.com:12321'
-#
-# Bắt buộc sticky session: link googlevideo ký kèm IP (`ip` nằm trong `sparams`),
-# proxy xoay IP mỗi request thì lấy link một IP, tải bằng IP khác → 403.
-# Chỉ gắn vào hàm chạy yt-dlp; `submit` và `sweep` không tải gì từ YouTube.
-proxy_secret = modal.Secret.from_name("opencmo-proxy")
 
 # Khoá ElevenLabs tách riêng, cùng lý do: thêm vào `opencmo` bằng `--force` là
 # phải gõ lại mọi khoá cũ. Thiếu nó thì web (Vercel CÓ khoá) vẫn bán voiceover
@@ -317,7 +282,7 @@ proxy_secret = modal.Secret.from_name("opencmo-proxy")
 #
 #   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # cùng khoá với Vercel
 #
-# `run_job` and `probe` need it for transcripts (ElevenLabs Scribe); `run_task` for captions of
+# `run_job` needs it for an upload's transcript (ElevenLabs Scribe); `run_task` for captions of
 # library files.
 voice_secret = modal.Secret.from_name("opencmo-voice")
 
@@ -354,7 +319,7 @@ def _record_call(store, job, call) -> None:
 
 
 @app.function(
-    secrets=[secret, proxy_secret, voice_secret],
+    secrets=[secret, voice_secret],
     timeout=1800,
     cpu=4,
     memory=4096,
@@ -379,7 +344,7 @@ def run_job(job_id: str, attempt_id: str) -> None:
 
 
 @app.function(
-    secrets=[secret, proxy_secret, voice_secret, fal_secret],
+    secrets=[secret, voice_secret, fal_secret],
     timeout=1800,
     cpu=4,
     memory=4096,
@@ -525,6 +490,40 @@ class MotionPreview:
                 return self.session.preview(job, Path(tmp))
             except RuntimeError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.function(secrets=[secret], timeout=140, cpu=2, memory=2048, max_containers=10)
+@modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-look")
+def look(payload: dict) -> dict:
+    """Look and listen for Claude over MCP (editor-MCP plan, item 1): `{token, user_id, clip_id, op, input,
+    document, manifest}` → `{images: [base64 JPEG], data}` or `{error}`.
+
+    The MCP server calls this with `OPENCMO_LOOK_TOKEN`, not the worker token, which that
+    internet-facing container must not hold. The clip's ownership is checked again here with the
+    service role before any source is downloaded (`opencmo.worker.look`). A request draws at most
+    12 frames with the export's renderer; nothing is stored. `timeout` stays under Modal's 150 s
+    cut for web endpoints.
+
+    UNTESTED on Modal (2026-10-20): needs `modal deploy modal_app.py` and `OPENCMO_LOOK_TOKEN` in
+    the `opencmo` secret (same value as in `opencmo-mcp`). `opencmo.worker.look` runs in
+    `tests/test_worker_look.py`, and once end to end against a local clip-export.
+    """
+    import hmac
+
+    from fastapi import HTTPException
+
+    from opencmo.worker.look import look as run_look
+
+    expected = os.environ.get("OPENCMO_LOOK_TOKEN", "")
+    given = str(payload.pop("token", "") or "")
+    if not expected or not hmac.compare_digest(expected, given):
+        raise HTTPException(status_code=401, detail="Invalid look token.")
+    store = _store()
+    try:
+        with tempfile.TemporaryDirectory(prefix="opencmo-look-") as tmp:
+            return run_look(store, payload, Path(tmp))
+    finally:
+        store.close()
 
 
 @app.function(secrets=[secret], timeout=30)
@@ -723,51 +722,3 @@ def cleanup() -> None:
         log.error("OPENCMO_WEB_URL or CRON_CLEANUP_SECRET missing: cleanup did not run")
         return
     log.info("Cleanup: %s", cmo_dispatch.call_cron(url, token, "/api/cron/cleanup", timeout=75.0))
-
-
-@app.local_entrypoint()
-def main(url: str, clips: int = 3, transcribe: bool = False) -> None:
-    """Chạy thử một video mà không cần database.
-
-        modal run modal_app.py --url "https://youtube.com/watch?v=..."
-        modal run modal_app.py --url "..." --clips 5 --transcribe   # budget: speech-to-text, not subtitles
-
-    Dùng để kiểm chứng ngày 11/9: engine chạy được trên hạ tầng Modal chưa, và
-    YouTube có chặn IP của Modal không.
-    """
-    frame = probe.remote(url, clips, transcribe)
-    if frame:
-        # Thư mục tạm trong container bị xoá khi hàm trả về, nên đây là cách duy
-        # nhất để NHÌN clip render trên cloud — xem mục "Kiểm chứng" ở CLAUDE.md.
-        Path("modal-kiem.png").write_bytes(frame)
-        print("frame clip đầu tiên (t=8s): modal-kiem.png — mở ra xem")
-
-
-@app.function(secrets=[secret, proxy_secret, voice_secret], timeout=1800, cpu=4, memory=4096)
-def probe(url: str, clips: int, transcribe: bool = False) -> bytes | None:
-    """Chạy pipeline, in thời gian từng bước, trả về một frame của clip đầu."""
-    import subprocess
-
-    from opencmo.config import Config
-    from opencmo.pipeline import run_pipeline
-
-    print(f"proxy      : {'CÓ' if os.environ.get('OPENCMO_PROXY') else 'KHÔNG'}")
-    with tempfile.TemporaryDirectory() as out:
-        result = run_pipeline(url, Config(out_dir=Path(out), force_transcribe=transcribe), clip_count=clips)
-        t = result.timings
-        print(f"nguồn      : {result.source.title} ({result.source.duration:.0f}s)")
-        print(f"transcript : {t.transcript:.1f}s (nguồn: {result.transcript_source})")
-        print(f"chọn đoạn  : {t.select:.1f}s")
-        print(f"tải đoạn   : {t.download:.1f}s")
-        print(f"render     : {t.render:.1f}s")
-        print(f"TỔNG       : {t.total:.1f}s — {len(result.clips)} clip")
-
-        if not result.clips:
-            return None
-        frame = Path(out) / "kiem.png"
-        subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-ss", "8", "-i", result.clips[0].path,
-             "-frames:v", "1", str(frame)],
-            check=True,
-        )
-        return frame.read_bytes()

@@ -37,7 +37,7 @@ The queue needs no separate service: the `jobs`/`tasks` tables plus `claim_*` fu
 | | Can it run ffmpeg? |
 |---|---|
 | Supabase Edge Functions | **No.** Deno blocks subprocesses; also a 400 s wall-clock and 2 s CPU limit |
-| Vercel Functions | Duration is enough, but the runtime has no ffmpeg/yt-dlp, `/tmp` is small, and web-request compute pricing is the wrong tool for batch video |
+| Vercel Functions | Duration is enough, but the runtime has no ffmpeg, `/tmp` is small, and web-request compute pricing is the wrong tool for batch video |
 | **Modal** | Right tool: a custom image with ffmpeg, per-second billing, true scale-to-zero |
 
 Modal is Python-native: the image is defined in Python, so there is no Dockerfile or registry
@@ -118,9 +118,10 @@ make a purchase are deleted 30 days after sign-up through the same queue.
 ## 2. Resource budget — hard constraints
 
 > ### Peak RAM per job < 2 GB
-> ### 45-minute video → 5 clips in under 3 minutes
 
-These are **constraints**, not goals. Changes that break them are rejected.
+This is a **constraint**, not a goal. Changes that break it are rejected. Processing an upload
+(probe → remux into the editor master → transcript) has no time budget yet: measure it with
+`/usr/bin/time -v` on a long upload and record it here.
 
 RAM matters twice in the cloud: it sets the container size, and the container size sets the
 bill.
@@ -130,12 +131,10 @@ bill.
 1. **Never load video frames into application memory.** Every transform is a streaming
    `ffmpeg` subprocess; ffmpeg uses constant memory regardless of video length.
 2. **No MoviePy** or any frame-by-frame Python library. MoviePy keeps frames as numpy arrays;
-   one raw 1080p frame is ~6 MB, and a few hundred of them is gigabytes. This is the main
-   reason other open-source clipping tools crash machines.
+   one raw 1080p frame is ~6 MB, and a few hundred of them is gigabytes.
 3. **No Whisper `large` fp32 locally** — the weights alone are ~6 GB. Transcription uses an
    API.
-4. **Never download the whole source video.** See §3.
-5. **Cap parallel work** by available cores and memory.
+4. **Cap parallel work** by available cores and memory.
 
 > Full RAM → swap → everything slows down by an order of magnitude. Most "30 minutes per
 > video" numbers from older tools are a machine fighting swap, not computing. **Fix RAM and
@@ -145,38 +144,31 @@ bill.
 
 ## 3. Pipeline
 
-The key idea: **transcript first, video second.** Never download a 45-minute video.
+An upload becomes **one editable project**: the whole video, its master and its transcript.
+The clipping pipeline (link downloads, AI moment selection, vertical clips) was removed on
+2026-10-20 — payment providers forbid clipping tools and content downloaders.
 
 ```
-1. Probe metadata                                          │ 2–5 s
+1. Probe the upload through a signed URL (header only)     │ refuse what the editor cannot hold
                     ↓
-2. Get a transcript
-   a. Try the platform's existing captions (a few KB)      │ 2–5 s
-   b. None → download AUDIO ONLY (~40 MB) → speech-to-text │ 20–40 s
+2. Settle credits on the real length
                     ↓
-3. LLM reads the transcript → picks N moments              │ 5–10 s
-   returns [{start, end, hook, score, reason}]
+3. Download the user's own upload once → remux into the     │ -c copy: I/O, not CPU
+   editor master
                     ↓
-4. DOWNLOAD ONLY THOSE SECTIONS (~50 MB)                   │ 20–40 s
+4. Extract audio → speech-to-text (Scribe)                 │ a failure publishes without words
                     ↓
-5. Per clip: reframe to 9:16 + burn captions + preview     │ 30–60 s
-   (parallel, capped)
-                    ↓
-                 ~2 minutes total
+5. Publish ONE `full` clip: settings, master, transcript    │ one transaction
 ```
 
-**2a before 2b** is the second-biggest optimization: many videos already have captions, which
-skips both the audio download and the transcription call.
-
-**Step 4 is the biggest:** ~1 GB becomes ~90 MB — bandwidth, disk and time in one move.
-
-Uploaded files follow the same order on a local proxy copy.
+Everything after that — cuts, captions, B-roll, motion, generated shots — is a document edit,
+rendered by `clip-render` and exported by `clip-export` on the worker.
 
 ---
 
 ## 4. ffmpeg traps
 
-**Position of `-ss`** — for a clip near the end of a long video this is a 10× difference:
+**Position of `-ss`** — for a seek near the end of a long video this is a 10× difference:
 
 ```bash
 # WRONG — decodes from 0 to 1800 s before cutting
@@ -186,27 +178,13 @@ ffmpeg -i in.mp4 -ss 1800 -t 20 out.mp4
 ffmpeg -ss 1800 -i in.mp4 -t 20 out.mp4
 ```
 
-**Hardware encoders** — 5–20× faster than `libx264`:
-
-| Environment | Encoder |
-|---|---|
-| NVIDIA | `h264_nvenc` |
-| Intel iGPU (Linux) | `h264_qsv` or `h264_vaapi` |
-| AMD (Linux) | `h264_vaapi` |
-| macOS | `h264_videotoolbox` |
-| Cloud container without GPU | `libx264 -preset veryfast` |
-
 > ⚠️ **`ffmpeg -encoders` lists what was COMPILED IN, not the hardware you have.** A typical
 > build lists `h264_nvenc` on a machine with only an Intel iGPU, and calling it fails at run
-> time. **Always probe with a real one-frame test encode** and cache the result — see
-> `packages/engine/opencmo/media/encoder.py`.
+> time. Probe any hardware encoder with a real one-frame test encode before relying on it.
 
-**Captions** — generate an `.ass` file and burn it with the `subtitles` filter so ffmpeg
-renders text in C. Never draw text onto frames from Python.
-
-**Face tracking** — detect at **3–5 frames per second**, then interpolate and smooth the crop
-path. Faces don't move faster than that; this cuts inference by ~90% and gives a smoother
-result.
+**User media is untrusted.** ffmpeg sniffs content, so an "upload" can be an HLS playlist
+pointing at arbitrary URLs or local files: read it with an explicit format or the demuxer
+allowlist (`USER_MEDIA_FORMATS` / `USER_INPUT`).
 
 ---
 
@@ -234,23 +212,10 @@ storage behind a few functions, so the provider can still be swapped.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Language | Python 3.11+ (3.12 for face tracking) | The video and AI ecosystem lives here |
-| Video download | `yt-dlp` | Supports the platforms users publish on |
+| Language | Python 3.11+ | The video and AI ecosystem lives here |
 | Video processing | `ffmpeg` subprocess | Streaming, constant RAM |
-| Face tracking | MediaPipe — **required** | See the warning below |
 | Transcript | ElevenLabs Scribe (word timestamps) | Upload capped at 24 MB |
-| Moment selection | Claude Haiku | Structured output |
 | Runtime | Modal | Scale-to-zero |
-
-> ⚠️ **Face tracking is not optional, even though the code can fall back.** Without
-> MediaPipe the engine falls back to a centre crop and still produces an mp4 — so it is easy
-> to think it works. On a real TEDx talk that produced a clip with **the speaker cut in half
-> at the left edge**. With face tracking, the face centre measured at x = 0.37 and the speaker
-> was framed correctly. Across one interview, face centres of 5 clips ranged from 0.46 to
-> 0.87 — a centre crop ruins at least two of them.
->
-> MediaPipe needs **Python ≤ 3.12**, and version 1.0 removed `mp.solutions` — use the Tasks
-> API only.
 
 **Why two languages:** video processing and AI live in Python; auth, billing and UI live in
 TypeScript. Forcing one language costs more than it saves.
@@ -259,16 +224,9 @@ TypeScript. Forcing one language costs more than it saves.
 
 ## 6. Video sources
 
-In order of preference — **lowest risk first**:
-
-| Priority | Source | Notes |
-|---|---|---|
-| 1 | Direct upload (resumable, straight to Storage) | The main path |
-| 2 | Cloud storage / meeting recordings the user owns | Legitimate by construction |
-| 3 | A link to the user's **own** video | Requires the "Is this your video?" confirmation, recorded with the job |
-
-OpenCMO only processes video the user owns. There is no field on the landing page for pasting
-someone else's video, and link imports are gated by the ownership confirmation.
+OpenCMO only edits video the user made. **Upload is the only way in** (resumable, straight to
+Storage). There is no link import: a link plus a full download is the shape of a content
+downloader, and it was removed with the clipping tool.
 
 ---
 
@@ -276,8 +234,8 @@ someone else's video, and link imports are gated by the ownership confirmation.
 
 1. **Storage behind a small wrapper** (`lib/storage.ts`) — the app never calls a provider SDK
    directly, so the storage provider can be swapped when egress costs demand it.
-2. **Low-resolution previews + full-quality downloads.** Users watch many clips to choose;
-   every view is egress. A ~500 kbps preview cuts egress 5–10×.
+2. **Low-resolution previews + full-quality downloads.** Every view of a project card is
+   egress; a short low-bitrate preview cuts it 5–10×.
 
 Plus: **clips are deleted 7 days after a project finishes.** It keeps storage bounded and
 avoids keeping copies of video indefinitely.
@@ -345,8 +303,8 @@ The editor's single source of truth is a **clip document**: JSON validated by a 
   text, computed by SQL and returned on every read/write). The client sends back the exact
   string the server returned, so there are no two hash implementations to keep in sync.
 
-The engine's own render path still delivers the first clips of every job; every later export
-goes through the document.
+The worker publishes an upload as one document over its master; every export goes through the
+document.
 
 The editor targets desktop browsers (Chrome, Edge, Safari 17+, Firefox). `DeviceCheck` detects
 **features**, not browser names; phones get a guidance screen.
@@ -381,7 +339,7 @@ artifact linked there.
 
 | Question when adding a feature | Answer |
 |---|---|
-| Does it touch ffmpeg, MediaPipe, a GPU or large video files? | Python on Modal (`packages/engine`) |
+| Does it touch ffmpeg, a GPU or large video files? | Python on Modal (`packages/engine`) |
 | Everything else: agents, CMO jobs, API, editor | TypeScript on Vercel (`apps/web`, `packages/*`) |
 | Does it write data or move credits? | An RPC in Supabase |
 
@@ -421,24 +379,23 @@ lesson. Skip reasons expire after 90 days; notes the founder typed do not.
 
 ### Weekly goal loop
 
-`cmo_goals` holds at most one goal per week, counted in `posts`, `replies`, `clips` or `views`.
+`cmo_goals` holds at most one goal per week, counted in `posts`, `replies` or `views`.
 The CMO proposes (chat tool `set_week_goal`, or `review_week` for next week); it becomes the goal
 only when the founder approves the card in Approvals. `review_week` (Sunday, free) records the
 result, writes the lesson and proposes the next goal; W1 plans around the approved goal. Chat tool
 `get_run_result` lets the CMO check on work it handed out.
 
-### CMO → editor assistant
+### Video in the CMO
 
-Chat tool `create_video_brief` writes a brief (hook, b-roll, visuals, pacing) for a project the
-founder already clipped from their own video. Approving the card opens the project with the brief
-prefilled in the project assistant; the founder sends it and approves each change there. The CMO
-never applies edits.
+Video stays a topic in the weekly plan: a video item on the calendar links to the editor's Upload
+tab, and the founder records and uploads the video themselves. The CMO never edits video; video
+packs and video briefs were removed with the clipping tool (2026-10-20).
 
 ### Providers: one per function
 
 | Function | Provider | Called from |
 |---|---|---|
-| Agent LLM | one default: `CMO_LLM_PROVIDER` (web) = `OPENCMO_LLM_PROVIDER` (engine); choose with `npm run cmo:eval` | Vercel, Modal (moment selection) |
+| Agent LLM | one default: `CMO_LLM_PROVIDER` (web) = `OPENCMO_LLM_PROVIDER` (engine); choose with `npm run cmo:eval` | Vercel |
 | Moderation | OpenAI moderations (free) | Vercel, Modal |
 | Image, video, voice, sound generation | fal for every model, including Veo, Nano Banana, Gemini TTS and ElevenLabs (voice with word timestamps, sound effects, music); the direct ElevenLabs adapter stays only as a fallback | Modal |
 | Transcripts | ElevenLabs Scribe | Modal |

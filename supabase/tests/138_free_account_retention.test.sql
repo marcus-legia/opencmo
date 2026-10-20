@@ -42,7 +42,7 @@ select is(public.account_is_paid('e1380000-0000-4000-8000-000000000011'), true, 
 insert into public.jobs (id, user_id, source_url, kind)
 values ('e1380000-0000-4000-8000-0000000000aa', 'e1380000-0000-4000-8000-000000000010', 'editor://blank', 'edit');
 insert into public.tasks (user_id, job_id, kind, status, request_id)
-values ('e1380000-0000-4000-8000-000000000010', 'e1380000-0000-4000-8000-0000000000aa', 'zip', 'running', gen_random_uuid());
+values ('e1380000-0000-4000-8000-000000000010', 'e1380000-0000-4000-8000-0000000000aa', 'transcribe_media', 'running', gen_random_uuid());
 
 insert into storage.objects (bucket_id, name) values
   ('media', 'e1380000-0000-4000-8000-00000000000a/j/a.png'),

@@ -1,18 +1,15 @@
 "use client";
 
 /**
- * Một project trên web: tiến trình, lỗi, hoặc kết quả.
+ * One uploaded video on the web: progress, the error, or the way into the editor.
  *
- * `useLive` nghe hàng `jobs` của đúng project này và gọi lại
- * `GET /projects/[id]`. Polling 5 giây vẫn chạy như lưới an toàn vì Realtime có
- * thể bỏ lỡ một event dù channel còn kết nối; subscription `clips` dùng chung
- * lần đọc của `jobs` nên không mở timer thứ hai.
+ * `useLive` listens to this project's `jobs` row and re-reads `GET /projects/[id]`. The 5-second
+ * poll still runs as a safety net, because Realtime can miss an event while the channel stays up;
+ * the `clips` subscription shares the `jobs` read, so it opens no second timer.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-
-import { FULL_EDIT_MAX_SECONDS, FullEditButton } from "@/components/editor/FullEditButton";
 import { useRouter } from "next/navigation";
 
 import type { Project } from "@/lib/clipping-types";
@@ -20,32 +17,21 @@ import type { Project } from "@/lib/clipping-types";
 import { ApiError, api, jsonBody } from "../api";
 import { PageSkeleton } from "../Skeleton";
 import { ProcessingView, stageLabel } from "../ProcessingView";
-import { ProjectAssistant } from "./ProjectAssistant";
-import { ProjectResults } from "../ProjectResults";
-import { CLIP_LENGTH_OPTIONS } from "../ProjectSettings";
-import { clock } from "../ClipResultRow";
 import { Notice, Toast } from "../ui";
 import { useLive } from "../useLive";
 
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
 
-type ZipTask = { id: string; status: string; error: string | null; url: string | null };
+/** `m:ss`, or `h:mm:ss` past an hour. */
+function duration(seconds: number): string {
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
 
-export function ProjectView({ projectId, briefId = null }: { projectId: string; briefId?: string | null }) {
-  // A video brief from the CMO (approved in Approvals): its text is prefilled in the assistant.
-  const [brief, setBrief] = useState<string | null>(null);
-  useEffect(() => {
-    if (!briefId) return;
-    let live = true;
-    api<{ prompt: string; project_id: string }>(`/cmo/video-briefs/${briefId}`)
-      .then((found) => {
-        if (live && found.project_id === projectId) setBrief(found.prompt);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [briefId, projectId]);
+export function ProjectView({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [missing, setMissing] = useState(false);
@@ -53,10 +39,7 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [focusClip, setFocusClip] = useState<string | null>(null);
-  const [zipTask, setZipTask] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [zipError, setZipError] = useState<string | null>(null);
   const request = useRef(0);
   const reading = useRef(false);
   const actionPending = useRef(false);
@@ -89,12 +72,9 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
   useLive("jobs", `id=eq.${projectId}`, () => void load(), live);
   useLive("clips", `job_id=eq.${projectId}`, () => void load(), live, false);
 
-  // Tiến độ trên tiêu đề tab: người dùng chuyển tab khác trong lúc chờ vẫn thấy
-  // "(2/5) Rendering…" mà không phải quay lại. Trả tiêu đề cũ khi xong hoặc rời trang.
-  const activeTitle =
-    project && !TERMINAL.has(project.status)
-      ? `(${project.clips.length}/${Math.max(project.clips_requested, project.clips.length)}) ${stageLabel(project)}`
-      : null;
+  // Progress in the tab title: a user waiting in another tab still sees the stage. The old title
+  // comes back when it finishes or the page closes.
+  const activeTitle = project && !TERMINAL.has(project.status) ? stageLabel(project) : null;
   useEffect(() => {
     if (!activeTitle) return;
     const original = document.title;
@@ -103,41 +83,6 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
       document.title = original;
     };
   }, [activeTitle]);
-
-  // Lỗi mạng giữ task để lần đọc sau tiếp tục thay vì tạo ZIP trùng.
-  const checkZip = useCallback(async () => {
-    if (!zipTask) return;
-    try {
-      const task = await api<ZipTask>(`/tasks/${zipTask}`);
-      setZipError(null);
-      if (task.status === "done" && task.url) {
-        setZipTask(null);
-        window.location.href = task.url;
-      } else if (["failed", "cancelled"].includes(task.status)) {
-        setZipTask(null);
-        setZipError(task.error ?? "Could not pack those clips. Select Download again to retry.");
-      } else if (task.status === "done") {
-        setZipError("Your ZIP is ready, but its download link is unavailable. Retry checking the download.");
-      }
-    } catch (err) {
-      setZipError(err instanceof Error ? err.message : "Could not check your download. We will keep trying.");
-    }
-  }, [zipTask]);
-  useLive("tasks", zipTask && `id=eq.${zipTask}`, () => void checkZip());
-  useEffect(() => { void checkZip(); }, [checkZip]);
-
-  async function downloadZip(clipIds: string[], variant: "original" | "edited") {
-    await run(async () => {
-      setZipError(null);
-      const task = await api<ZipTask>(
-        `/projects/${projectId}/exports.zip`,
-        jsonBody({ clip_ids: clipIds, request_id: crypto.randomUUID(), ...(variant === "original" ? { variant } : {}) }),
-      );
-      if (task.status === "done" && task.url) window.location.href = task.url;
-      else if (["failed", "cancelled"].includes(task.status)) setZipError(task.error ?? "Could not pack those clips. Please try again.");
-      else setZipTask(task.id);
-    });
-  }
 
   async function run(action: () => Promise<void>) {
     if (actionPending.current) return;
@@ -159,8 +104,8 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
       <section className="job-detail">
         <div className="empty-state">
           <p>This project is no longer in your library.</p>
-          <button type="button" className="primary-button" onClick={() => router.push("/app/editor?panel=clips")}>
-            Create new clips
+          <button type="button" className="primary-button" onClick={() => router.push("/app/editor?panel=upload")}>
+            Upload a video
           </button>
         </div>
       </section>
@@ -175,18 +120,18 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
     );
   }
 
+  // An upload becomes exactly one editable clip (`kind = 'full'`).
+  const editable = project.clips[0] ?? null;
+
   return (
     <section className="job-detail">
-      {/* Breadcrumb thay nút quay lại: nói rõ đang đứng ở đâu, không chỉ nói
-          đường ra. */}
       <nav className="crumbs" aria-label="Breadcrumb">
         <Link href="/app/projects">My projects</Link>
         <span aria-hidden="true">/</span>
         <b>{project.title || project.source_name || "Your video"}</b>
       </nav>
       {error && <Notice>{error}</Notice>}
-      {loadError && <Notice>{loadError} Your last loaded clips are still available. <button type="button" className="secondary-button" onClick={() => void load()}>Refresh project</button></Notice>}
-      {zipError && <Notice>{zipError}{zipTask && <button type="button" className="secondary-button" onClick={() => void checkZip()}>Retry download check</button>}</Notice>}
+      {loadError && <Notice>{loadError} <button type="button" className="secondary-button" onClick={() => void load()}>Refresh project</button></Notice>}
 
       <div className="project-head">
         <div className="project-head-text">
@@ -240,18 +185,15 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
 
           <p className="source-detail">
             {project.source_name}
-            {project.duration ? ` · ${clock(project.duration)}` : ""}
-            {` · ${project.clips_requested} ${project.clips_requested === 1 ? "clip" : "clips"}`}
-            {` · ${
-              CLIP_LENGTH_OPTIONS.find((o) => o.value === project.settings.clip_length)?.label ?? ""
-            }`}
+            {project.duration ? ` · ${duration(project.duration)}` : ""}
           </p>
         </div>
 
-        {/* E2-c: video upload đã xử lý xong mở được nguyên file trong editor. */}
-        {project.status === "done" && !/^https?:\/\//i.test(project.source_name) && (project.duration ?? 0) > 0 && (project.duration ?? 0) <= FULL_EDIT_MAX_SECONDS ? (
+        {project.status === "done" && editable ? (
           <div className="project-actions">
-            <FullEditButton jobId={project.id} onOpen={(href) => router.push(href)} />
+            <button type="button" className="primary-button" data-testid="project-open-editor" onClick={() => router.push(`/app/editor/${editable.id}`)}>
+              Open in editor
+            </button>
           </div>
         ) : null}
       </div>
@@ -281,7 +223,7 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
               : "Processing was cancelled"}
           </h2>
           {project.error && <p>{project.error}</p>}
-          <p>{project.clips.length ? "Your completed clips are still available below. Retry to finish remaining clips or prepare their editing tools." : "Try again, or use a different public link or upload the video file."}</p>
+          <p>Try again, or upload a different video.</p>
           <div className="panel-actions">
             <button
               type="button"
@@ -296,30 +238,14 @@ export function ProjectView({ projectId, briefId = null }: { projectId: string; 
             >
               {project.status === "failed" ? "Retry video" : "Process again"}
             </button>
-            <button type="button" className="secondary-button" onClick={() => router.push("/app/editor?panel=clips")}>Use another video</button>
+            <button type="button" className="secondary-button" onClick={() => router.push("/app/editor?panel=upload")}>Use another video</button>
           </div>
         </div>
       )}
 
-      {(project.status === "done" || project.clips.length > 0) && (
-        <ProjectResults
-          key={project.id}
-          project={project}
-          apiFn={api}
-          focusClipId={focusClip}
-          onFocusClip={setFocusClip}
-          onEditClip={(clipId) =>
-            router.push(`/app/editor/${clipId}`)
-          }
-          zipBusy={busy || zipTask !== null}
-          onDownloadOriginals={(clipIds) => void downloadZip(clipIds, "original")}
-          onDownloadEdits={(clipIds) => void downloadZip(clipIds, "edited")}
-          onRefresh={() => void load()}
-
-        />
+      {project.status === "done" && !editable && (
+        <Notice>This video has no editable copy. Upload it again to edit it.</Notice>
       )}
-
-      {project.clips.length > 0 && <ProjectAssistant jobId={project.id} brief={brief} onChanged={() => void load()} />}
 
       <Toast message={toast} onDone={() => setToast(null)} />
     </section>

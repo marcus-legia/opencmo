@@ -23,13 +23,15 @@ Deploy:
         NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
         SUPABASE_JWT_SECRET=...          # API key -> 5-minute user JWT
         SUPABASE_SERVICE_ROLE_KEY=...    # only for `api_key_owner`
-        ANTHROPIC_API_KEY=... FAL_KEY=... [GEMINI_API_KEY=...]   # prompt moderation
+        GROQ_API_KEY=... [ANTHROPIC_API_KEY=... GEMINI_API_KEY=... FAL_KEY=...]   # moderation, any provider
         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... \
         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run/mcp \
         OPENCMO_WEB_URL=https://opencmo.io \
         OPENCMO_MCP_CONFIRM_KEY=...      # signs confirm codes; its own random value
         OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret
+        OPENCMO_LOOK_URL=https://<workspace>--opencmo-look.<region>.modal.run \
+        OPENCMO_LOOK_TOKEN=...           # capture_frame & co.; same value as in `opencmo`
         OPENCMO_VOICE_ENABLED=1          # list voice tools; the worker holds the voice key
         OPENCMO_MOTION=modal             # explainers (preview_explainer, add_explainer); unset hides them
         OPENCMO_ENV=production           # turns on the production-only guards (isProduction())

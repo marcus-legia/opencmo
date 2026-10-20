@@ -169,15 +169,15 @@ export function ProjectLibrary({
         </div>
       ) : (
         <ul className="project-list">
-          {/* Ô đầu luôn là lối tạo mới: người vào thư viện phần lớn là để làm
-              thêm clip, không phải để ngắm cái đã có. */}
+          {/* The first tile is always the way to start: most people open the library to make
+              something new, not to look at what they have. */}
           <li>
             <button type="button" className="card-new" onClick={onCreate}>
               <span className="card-new-plus">
                 <Icon name="plus" size={22} />
               </span>
-              <b>New clips</b>
-              <small>Upload a video you own, or open it in the editor.</small>
+              <b>Upload a video</b>
+              <small>Upload a video you made and edit it in the editor.</small>
             </button>
           </li>
           {projects.map((project) => {

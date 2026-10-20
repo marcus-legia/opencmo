@@ -1,19 +1,17 @@
 "use client";
 
 /**
- * Ngăn kéo bên phải khi bấm một thẻ trong Inbox: toàn bộ chi tiết để quyết định.
+ * The drawer on the right when an Inbox card is clicked: every detail needed to decide.
  *
- * Mỗi loại đúng nút của nó (san-pham.md §3.3):
- * - bài X: Approve · Edit · Skip, ba phiên bản, đếm 280 ký tự;
- * - thread Reddit: Open thread · Copy reply · I replied · Dismiss — KHÔNG có nút đăng;
- * - gói video: xem clip, caption từng nền tảng (Copy) · Approve all · Open in editor · Skip;
- *   đã duyệt thì Download từng clip — người dùng tự đăng, không có nút đăng.
+ * Each kind has exactly its own buttons (san-pham.md §3.3):
+ * - X post: Approve · Edit · Skip, three versions, a 280-character count;
+ * - Reddit thread: Open thread · Copy reply · I replied · Dismiss — NO post button.
  */
 
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/icons";
-import type { InboxCard, PostCard, SalesCard, VideoCard } from "@/lib/cmo/workspace";
+import type { InboxCard, PostCard, SalesCard } from "@/lib/cmo/workspace";
 
 import { xIntent, type Actions } from "./actions";
 import { AgentMark } from "./AgentMark";
@@ -45,7 +43,7 @@ export function CardDrawer({ card, agentName, onClose, actions }: Props) {
             <AgentMark department={card.department} size={28} />
             <div>
               <p className="cmo-feed-agent">{agentName} · <time dateTime={card.createdAt} suppressHydrationWarning>{ago(card.createdAt)}</time></p>
-              <h2 id="cmo-drawer-title">{card.department === "video" ? `${card.clips.length} clips ready` : card.title}</h2>
+              <h2 id="cmo-drawer-title">{card.title}</h2>
             </div>
             <button type="button" className="cmo-icon-btn" onClick={onClose} aria-label="Close">
               <Icon name="x" size={18} />
@@ -53,7 +51,6 @@ export function CardDrawer({ card, agentName, onClose, actions }: Props) {
           </header>
           {card.department === "post" ? <PostDetail key={card.id} card={card} act={act} /> : null}
           {card.department === "sales" ? <SalesDetail key={card.id} card={card} act={act} onToast={actions.toast} /> : null}
-          {card.department === "video" ? <VideoDetail key={card.id} card={card} act={act} onToast={actions.toast} /> : null}
         </div>
       ) : null}
     </dialog>
@@ -195,131 +192,6 @@ function SalesDetail({ card, act, onToast }: { card: SalesCard; act: Actions["ca
           <button type="button" className="secondary-button" disabled={busy} onClick={() => void run({ type: "replied" })}>I replied</button>
           <button type="button" className="text-button" disabled={busy} onClick={() => setDismissing(true)}>Dismiss</button>
         </div>
-      )}
-    </>
-  );
-}
-
-const PLATFORM_LABEL: [string, string][] = [
-  ["tiktok", "TikTok"],
-  ["reels", "Instagram Reels"],
-  ["shorts", "YouTube Shorts title"],
-  ["facebook", "Facebook Reels"],
-  ["threads", "Threads"],
-];
-
-const length = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-
-function VideoDetail({ card, act, onToast }: { card: VideoCard; act: Actions["card"]; onToast: (message: string) => void }) {
-  const [pick, setPick] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [skipping, setSkipping] = useState(false);
-  const [reason, setReason] = useState("");
-  const approved = card.state === "approved";
-  const clip = card.clips[pick] ?? card.clips[0];
-  const editHref = (id: string) => `/app/editor/${id}`;
-  const run = async (a: Parameters<Actions["card"]>[1]) => {
-    setBusy(true);
-    await act(card, a);
-    setBusy(false);
-  };
-  async function copy(text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      onToast(`${label} copied. Paste it when you post from your own account`);
-    } catch {
-      onToast("Could not copy. Select the text and copy it");
-    }
-  }
-
-  return (
-    <>
-      <p className="cmo-video-source"><Icon name="film" size={14} /> {card.source}</p>
-      <ol className={`cmo-clips${card.state ? " is-real" : ""}`} aria-label="Clips">
-        {card.clips.map((c, i) => (
-          <li key={c.id} className="cmo-clip">
-            <button type="button" className="cmo-clip-pick" aria-pressed={i === pick} onClick={() => setPick(i)} aria-label={`Clip ${i + 1}: ${c.title}`}>
-              {c.previewUrl ? (
-                <video src={c.previewUrl} preload="metadata" muted playsInline controls={i === pick} onClick={(e) => i !== pick && e.preventDefault()} />
-              ) : (
-                <span className="cmo-clip-frame" aria-hidden><span>{c.hook}</span></span>
-              )}
-              <span className="cmo-clip-title">{c.title}</span>
-              <span className="cmo-clip-len">{length(c.seconds)}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-
-      {clip?.captions ? (
-        <div className="cmo-captions" aria-label={`Captions for clip ${pick + 1}`}>
-          {PLATFORM_LABEL.filter(([key]) => clip.captions?.[key]).map(([key, label]) => (
-            <div key={key} className="cmo-caption">
-              <p className="cmo-caption-head">
-                {label}
-                <small>{[...(clip.captions?.[key] ?? "")].length} characters</small>
-                <button type="button" className="cmo-icon-btn" aria-label={`Copy ${label} caption`} onClick={() => void copy(clip.captions?.[key] ?? "", label)}>
-                  <Icon name="copy" size={14} />
-                </button>
-              </p>
-              <p>{clip.captions?.[key]}</p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="cmo-why"><b>Goes to:</b> {card.platforms.join(", ")}, with a caption written for each.</p>
-      )}
-
-      {approved ? (
-        <>
-          <p className="cmo-why">
-            <b>Approved.</b> Your CMO tightened the pauses and the caption timing. Download each clip, then post it from your
-            own accounts with the captions above.
-          </p>
-          <ul className="cmo-downloads">
-            {card.clips.map((c, i) => (
-              <li key={c.id}>
-                <span>Clip {i + 1}</span>
-                {c.download?.status === "done" ? (
-                  <a href={`/api/v1/tasks/${c.download.taskId}/file`}>Download MP4</a>
-                ) : c.download?.status === "failed" || c.download?.status === "cancelled" || !c.download ? (
-                  <a href={editHref(c.id)}>Export failed. Open in editor</a>
-                ) : (
-                  <span className="cmo-muted">Preparing…</span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <div className="cmo-card-actions">
-            {clip ? <a className="secondary-button" href={editHref(clip.id)}>Open clip {pick + 1} in editor</a> : null}
-          </div>
-        </>
-      ) : skipping ? (
-        <form
-          className="cmo-skip"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run({ type: "dismiss", reason: reason.trim() || undefined });
-          }}
-        >
-          <label htmlFor={`skip-${card.id}`}>Why skip it? <small>Optional. Your CMO learns from it.</small></label>
-          <input id={`skip-${card.id}`} value={reason} maxLength={400} onChange={(e) => setReason(e.target.value)} placeholder="Wrong moments, too long, not on brand…" />
-          <div className="cmo-feed-actions">
-            <button type="button" className="text-button" onClick={() => setSkipping(false)} disabled={busy}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={busy}>Skip pack</button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <p className="cmo-why">Approve to get downloads: pauses removed and captions timed in short phrases. Nothing is posted for you.</p>
-          <div className="cmo-card-actions">
-            <button type="button" className="primary-button" disabled={busy} onClick={() => void run({ type: "approve" })}>
-              {busy ? "Preparing…" : "Approve all"}
-            </button>
-            {clip ? <a className="secondary-button" href={editHref(clip.id)}>Open in editor</a> : null}
-            <button type="button" className="text-button" disabled={busy} onClick={() => setSkipping(true)}>Skip</button>
-          </div>
-        </>
       )}
     </>
   );

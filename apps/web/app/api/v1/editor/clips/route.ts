@@ -54,7 +54,7 @@ export const GET = withApi({}, async ({ supabase }) => {
         project_id: row.job_id,
         project: job.name ?? job.title ?? sourceName(job.source_url),
         label: row.hook?.trim() || `Clip ${row.idx + 1}`,
-        kind: row.kind ?? "moment",
+        kind: row.kind ?? "full",
         edited_at: editedAt.get(row.id) ?? null,
       };
     })

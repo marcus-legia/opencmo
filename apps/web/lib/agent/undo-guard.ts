@@ -16,10 +16,10 @@ export type Written = { first: number; last: number; lastHash?: string };
 
 type Saved = { version?: unknown; document_hash?: unknown };
 
-export type ToolCallRow = { name: string; result: (Saved & { clips?: ({ clip_id: string } & Saved)[]; [key: string]: unknown }) | null };
+export type ToolCallRow = { name: string; result: (Saved & { [key: string]: unknown }) | null };
 
-/** Versions per clip a turn wrote: every finished call's `version` (clip chat), or each clip in `apply_to_clips` (project chat). */
-export function writtenVersions(rows: ToolCallRow[], clipId: string | null): Map<string, Written> {
+/** Versions a turn wrote on its clip: every finished call that saved carries the `version` it saved. */
+export function writtenVersions(rows: ToolCallRow[], clipId: string): Map<string, Written> {
   const map = new Map<string, Written>();
   const widen = (id: string, saved: Saved | null | undefined) => {
     const version = saved?.version;
@@ -31,10 +31,7 @@ export function writtenVersions(rows: ToolCallRow[], clipId: string | null): Map
     const lastHash = newest ? hash : seen.lastHash;
     map.set(id, { first: Math.min(seen.first, version), last: Math.max(seen.last, version), ...(lastHash ? { lastHash } : {}) });
   };
-  for (const row of rows) {
-    if (clipId) widen(clipId, row.result);
-    else if (row.name === "apply_to_clips") for (const clip of row.result?.clips ?? []) widen(clip.clip_id, clip);
-  }
+  for (const row of rows) widen(clipId, row.result);
   return map;
 }
 

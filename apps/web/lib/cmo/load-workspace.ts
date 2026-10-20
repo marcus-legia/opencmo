@@ -10,7 +10,7 @@ import { isoDay, type CmoJobKind, type CompetitorInsight, type ItemRow, type Sco
 import { socialReaderReady } from "./social/reddit";
 import { loadCmoState } from "./state";
 import { suggestFixes } from "./suggest";
-import { AGENTS, type BriefView, type CalendarItem, type ClipPreview, type GoalView, type InboxCard, type InsightView, type Metrics, type JobId, type LogEntry, type PostCard, type SalesCard, type VideoCard, type Workspace } from "./workspace";
+import { AGENTS, type CalendarItem, type GoalView, type InboxCard, type InsightView, type Metrics, type JobId, type LogEntry, type PostCard, type SalesCard, type Workspace } from "./workspace";
 
 type CmoRunRow = {
   id: string;
@@ -23,49 +23,7 @@ type CmoRunRow = {
   created_at: string;
 };
 
-const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", video_pack: "W5", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9" };
-
-type VideoPackRow = {
-  id: string;
-  job_id: string;
-  status: "in_review" | "approved";
-  clips: { clip_id: string; hook: string; seconds: number; score: number | null }[];
-  captions: Record<string, Record<string, string>>;
-  exports: { clip_id: string; task_id: string }[];
-  created_at: string;
-  jobs: { title: string | null; source_url: string } | { title: string | null; source_url: string }[] | null;
-};
-
-const VIDEO_PLATFORMS = ["TikTok", "Reels", "Shorts", "Facebook", "Threads"];
-
-/** Gói video (W5) → thẻ. `tasks`: trạng thái bản export theo id, cho nút Download. */
-function toVideoCard(row: VideoPackRow, tasks: Map<string, NonNullable<ClipPreview["download"]>["status"]>): VideoCard {
-  const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
-  const exportOf = new Map(row.exports.map((item) => [item.clip_id, item.task_id]));
-  return {
-    id: row.id,
-    priority: "medium",
-    department: "video",
-    title: `${row.clips.length} clips ready`,
-    source: job?.title || (job?.source_url?.startsWith("storage://") ? "Your upload" : (job?.source_url ?? "Your video")),
-    clips: row.clips.map((clip, index) => {
-      const taskId = exportOf.get(clip.clip_id);
-      return {
-        id: clip.clip_id,
-        title: clip.hook || `Clip ${index + 1}`,
-        seconds: clip.seconds,
-        hook: clip.hook,
-        previewUrl: `/api/v1/clips/${clip.clip_id}/file?preview=1`,
-        captions: row.captions[clip.clip_id] ?? {},
-        download: taskId ? { taskId, status: tasks.get(taskId) ?? "queued" } : null,
-      };
-    }),
-    platforms: VIDEO_PLATFORMS,
-    projectId: row.job_id,
-    createdAt: row.created_at,
-    state: row.status === "approved" ? "approved" : "review",
-  };
-}
+const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9" };
 
 type OpportunityRow = {
   id: string;
@@ -139,24 +97,15 @@ function toCalendar(item: ItemRow): CalendarItem {
     idea: item.idea,
     reason: item.reason,
     editable: item.status === "planned",
-    ...(item.department === "video" && item.status === "planned" ? { clipsHref: clipsHref(item.body) } : {}),
+    ...(item.department === "video" && item.status === "planned" ? { editorHref: "/app/editor?panel=upload" } : {}),
   };
-}
-
-/** Mục video → tab Clips của editor, điền sẵn số clip/độ dài từ brief (H3). Người dùng tự đưa video. */
-function clipsHref(body: Record<string, unknown>): string {
-  const params = new URLSearchParams({ panel: "clips" });
-  const clips = Number(body.clips);
-  if ([1, 3, 5, 8, 10].includes(clips)) params.set("count", String(clips));
-  if (["auto", "short", "medium", "long"].includes(String(body.clip_length))) params.set("length", String(body.clip_length));
-  return `/app/editor?${params}`;
 }
 
 /** Dòng trạng thái thanh trên: nói thật việc đang ở đâu. */
 function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
   const active = runs.find((r) => r.status === "running" || r.status === "queued");
   if (active) {
-    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", video_pack: "making your video pack", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week" }[active.kind];
+    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week" }[active.kind];
     return { text: `Your CMO is ${what}. Follow along in Activity.`, tone: "running" };
   }
   const latest = runs[0];
@@ -172,7 +121,7 @@ function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
  */
 export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace> {
   const today = isoDay();
-  const [state, { data: runRows }, { data: itemRows }, { data: oppRows }, { data: packRows }] = await Promise.all([
+  const [state, { data: runRows }, { data: itemRows }, { data: oppRows }] = await Promise.all([
     loadCmoState(supabase),
     supabase.from("cmo_runs").select("id, kind, status, input, error, steps, output, created_at").order("created_at", { ascending: false }).limit(20),
     supabase
@@ -187,19 +136,8 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
       .eq("status", "in_review")
       .order("score", { ascending: false })
       .limit(30),
-    // Gói đã duyệt còn hiện 3 ngày: chỗ người dùng tải bản export về.
-    supabase
-      .from("video_packs")
-      .select("id, job_id, status, clips, captions, exports, created_at, jobs(title, source_url)")
-      .or(`status.eq.in_review,and(status.eq.approved,decided_at.gte.${new Date(Date.now() - 3 * 86_400_000).toISOString()})`)
-      .order("created_at", { ascending: false })
-      .limit(10),
   ]);
-  const [realMetrics, insight, goals, briefs] = await Promise.all([loadMetrics(supabase), loadInsight(supabase), loadGoals(supabase), loadBriefs(supabase)]);
-  const packs = (packRows ?? []) as unknown as VideoPackRow[];
-  const taskIds = packs.flatMap((pack) => pack.exports.map((item) => item.task_id));
-  const { data: taskRows } = taskIds.length ? await supabase.from("tasks").select("id, status").in("id", taskIds) : { data: [] };
-  const taskStatus = new Map(((taskRows ?? []) as { id: string; status: NonNullable<ClipPreview["download"]>["status"] }[]).map((task) => [task.id, task.status]));
+  const [realMetrics, insight, goals] = await Promise.all([loadMetrics(supabase), loadInsight(supabase), loadGoals(supabase)]);
   const demo = demoAllowed();
   const runs = (runRows ?? []) as CmoRunRow[];
   const items = (itemRows ?? []) as ItemRow[];
@@ -216,7 +154,6 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
   const realInbox: InboxCard[] = [
     ...items.filter((i) => i.department === "post" && (i.status === "in_review" || i.status === "approved")).map(toPostCard),
     ...((oppRows ?? []) as OpportunityRow[]).map(toSalesCard),
-    ...packs.map((pack) => toVideoCard(pack, taskStatus)),
   ];
   // Lịch 7 ngày: mục còn `planned` (sửa được) và mục đã thành bài trong tuần (chỉ xem).
   const realCalendar = items.filter((i) => i.day >= today && i.day <= isoDay(6)).map(toCalendar);
@@ -227,7 +164,7 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
   const calendar = realCalendar.length || !demo ? realCalendar : demoCalendar();
   const log = realLog.length > 1 || !demo ? realLog : [...demoLog(), ...realLog];
   const chatLive = agentChatProvider("cmo") !== null;
-  const awaiting = realInbox.filter((c) => !((c.department === "post" || c.department === "video") && c.state === "approved")).length;
+  const awaiting = realInbox.filter((c) => !(c.department === "post" && c.state === "approved")).length;
 
   return {
     demo,
@@ -238,15 +175,13 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
     documents,
     agents: AGENTS.map((agent) => ({
       ...agent,
-      ready: inbox.filter((card) => card.department === agent.department && !((card.department === "post" || card.department === "video") && card.state === "approved")).length,
+      ready: inbox.filter((card) => card.department === agent.department && !(card.department === "post" && card.state === "approved")).length,
       // Reddit Agent chạy theo lịch chỉ khi lịch có mục Reddit; nút Run now luôn có khi đọc được Reddit.
       nextRun: agent.department === "post" ? nextMorning() : agent.department === "sales" ? nextSalesRun(calendar) : demo ? nextMorning() : null,
-      // Video Agent: luôn chạy được — gói không cần model để cắt clip; caption rơi về bản từ hook khi chưa có model.
-      runnable: (agent.department === "post" && llmReady("x_writer")) || (agent.department === "sales" && llmReady("sales") && socialReaderReady()) || agent.department === "video",
+      runnable: (agent.department === "post" && llmReady("x_writer")) || (agent.department === "sales" && llmReady("sales") && socialReaderReady()),
     })),
     inbox,
     goals,
-    briefs,
     calendar,
     metrics: realMetrics ?? (demo ? demoMetrics() : null),
     insight,
@@ -267,27 +202,12 @@ async function progressOf(supabase: SupabaseClient, metric: GoalView["metric"], 
     for (const row of (data ?? []) as { item_id: string; views: number }[]) best.set(row.item_id, Math.max(best.get(row.item_id) ?? 0, Number(row.views)));
     return [...best.values()].reduce((a, b) => a + b, 0);
   }
-  const table = { posts: "content_items", replies: "opportunities", clips: "video_packs" }[metric];
-  const statuses = { posts: ["approved", "published"], replies: ["replied"], clips: ["approved"] }[metric];
+  const table = { posts: "content_items", replies: "opportunities" }[metric];
+  const statuses = { posts: ["approved", "published"], replies: ["replied"] }[metric];
   let query = supabase.from(table).select("id", { count: "exact", head: true }).in("status", statuses).gte("decided_at", since);
   if (metric === "posts") query = query.eq("department", "post");
   const { count } = await query;
   return count ?? 0;
-}
-
-/** Video briefs waiting for a decision (P3), with the project's title for the card. */
-async function loadBriefs(supabase: SupabaseClient): Promise<BriefView[]> {
-  const { data } = await supabase
-    .from("cmo_video_briefs")
-    .select("id, job_id, hook, broll, visuals, pacing, created_at, jobs(title)")
-    .eq("status", "in_review")
-    .order("created_at", { ascending: false })
-    .limit(10);
-  type Row = { id: string; job_id: string; hook: string; broll: string; visuals: string; pacing: string; created_at: string; jobs: { title: string | null } | { title: string | null }[] | null };
-  return ((data ?? []) as unknown as Row[]).map((row) => {
-    const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
-    return { id: row.id, projectId: row.job_id, projectTitle: job?.title || "Your video", hook: row.hook, broll: row.broll, visuals: row.visuals, pacing: row.pacing, createdAt: row.created_at };
-  });
 }
 
 /** This week's and next week's goals (P2). Progress is live for this week's approved goal. */

@@ -28,11 +28,11 @@ export function EditorHome() {
 
   const open = useCallback(async () => {
     setError(null);
-    // Giữ tham số như `?panel=clips` (từ /app/video cũ) khi chuyển vào bản sửa.
+    // Keep parameters such as `?panel=upload` when moving into the edit.
     const query = search.toString();
-    // Chuyển hẳn trang (không qua router client): trang này chỉ để chuyển hướng, và e2e
-    // G1-c thấy `router.replace` đôi khi treo transition ở "Opening the editor…" khi vào lại
-    // `/app/editor?panel=clips` từ một bản sửa đang mở.
+    // A full navigation (not the client router): this page only redirects, and e2e G1-c saw
+    // `router.replace` sometimes hang at "Opening the editor…" when re-entering
+    // `/app/editor?panel=upload` from an open edit.
     const go = (id: string) => window.location.replace(`/app/editor/${id}${query ? `?${query}` : ""}`);
     try {
       const response = await fetch("/api/v1/editor/clips");

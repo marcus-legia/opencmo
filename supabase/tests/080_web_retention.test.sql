@@ -56,8 +56,8 @@ insert into public.tasks (id, user_id, kind, clip_id, settings_hash, status, req
        'srt', jsonb_build_object('bucket','renders','object','d0000000-0000-4000-8000-00000000d001/d2000000-0000-4000-8000-00000000d001/task/att/clip.srt'),
        'txt', jsonb_build_object('bucket','renders','object','d0000000-0000-4000-8000-00000000d001/d2000000-0000-4000-8000-00000000d001/task/att/clip.txt')),
      'sections', jsonb_build_array(jsonb_build_object('bucket','sources','object','d0000000-0000-4000-8000-00000000d001/d1000000-0000-4000-8000-00000000d001/sections/task-x/att/0-2000.mp4'))))),
-  -- ZIP của cùng project.
-  ('d4000000-0000-4000-8000-00000000d002', 'd0000000-0000-4000-8000-00000000d001', 'zip',
+  -- Another finished task of the same project with a file in its manifest.
+  ('d4000000-0000-4000-8000-00000000d002', 'd0000000-0000-4000-8000-00000000d001', 'transcribe_media',
    null, null, 'done', 'd4900000-0000-4000-8000-00000000d002', null,
    jsonb_build_object('manifest', jsonb_build_object('files', jsonb_build_object(
      'zip', jsonb_build_object('bucket','renders','object','d0000000-0000-4000-8000-00000000d001/zips/project.zip'))))),

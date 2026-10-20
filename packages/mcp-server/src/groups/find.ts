@@ -43,7 +43,7 @@ registerGroup({
       name: "list_projects",
       title: "List projects",
       description:
-        "List the user's video projects (the clips cut from one of their videos), and their New edits (blank edits for AI videos and explainers, each one clip), newest first.",
+        "List the user's video projects (each one video they uploaded, edited as one clip), and their New edits (blank edits for AI videos and explainers, each one clip), newest first.",
       inputSchema: projectsInput,
       outputSchema: projectsOutput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -65,7 +65,7 @@ registerGroup({
     {
       name: "list_clips",
       title: "List clips",
-      description: "List the clips of a project: id, number, hook, kind and length. Every clip tool takes one of these ids as clip_id.",
+      description: "List the clip of a project (an upload becomes one editable clip): id, number, hook, kind and length. Every clip tool takes one of these ids as clip_id.",
       inputSchema: clipsInput,
       outputSchema: clipsOutput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
