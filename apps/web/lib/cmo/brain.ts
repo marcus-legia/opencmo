@@ -31,8 +31,13 @@ export function decideBrain(input: { credits: number; providersUp: number; force
   return { brain: "opencmo", reason: "ok", credits };
 }
 
-/** Providers with a shared key on this server that no recent call found out of credit or revoked. */
+/**
+ * Providers with a shared key on this server that no recent call found out of credit or revoked.
+ * The scripted model (`OPENCMO_AGENT_FAKE`, never in production) counts as one: CI and e2e run
+ * without real keys and must still take OpenCMO's path.
+ */
 export function providersUp(env: NodeJS.ProcessEnv = process.env, now: number = Date.now()): number {
+  if (env.OPENCMO_AGENT_FAKE === "1" && !isProduction()) return 1;
   return agentCandidates("planner", env).filter((agent) => !accountDown(agent.provider as LlmProvider, now)).length;
 }
 

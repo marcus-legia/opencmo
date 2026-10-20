@@ -45,7 +45,7 @@ export function ContextPanel({ ws, actions, onCollapse }: { ws: Workspace; actio
     })),
     { view: "calendar", icon: "calendar", title: "Content calendar", ready: ws.calendar.length > 0, hint: "Fills in when the CMO plans your first week", usedBy: USED_BY.calendar },
     // Brand kit là màn công cụ riêng của Video (editor đọc nó), không phải văn bản để đọc.
-    { view: null, href: "/app/brand", icon: "palette", title: "Design Guide", ready: true, hint: "", usedBy: ["Video Agent", "Editor"] },
+    { view: null, href: "/app/brand", icon: "palette", title: "Design Guide", ready: true, hint: "", usedBy: ["Editor"] },
   ];
   /** Chip gợi ý mang `?doc=<kind>` (hoặc `#kind` của bản cũ): mở đúng tài liệu trong sheet. */
   const docOf = (href: string): DocView => (href.match(/[?&]doc=([a-z_]+)/)?.[1] ?? href.match(/#([a-z_]+)/)?.[1] ?? "product") as DocView;

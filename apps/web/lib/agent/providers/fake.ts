@@ -251,7 +251,9 @@ function script(history: StoredMessage[]): unknown[] {
         const layer = found.find((node) => node.kind === "captions" && typeof node.src === "string" && node.src.startsWith("assets/transcripts/"));
         return layer ? [use("translate_captions", { element_id: layer.id, language: "Spanish" })] : [text("There are no saved captions to translate.")];
       }
-      const broll = found.find((node) => node.kind === "rect" && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
+      // The first B-roll without a captions layer linked to it (`source`): the tool refuses a second one.
+      const captioned = new Set(found.filter((node) => node.kind === "captions").map((node) => node.source));
+      const broll = found.find((node) => node.kind === "rect" && !captioned.has(node.id) && Array.isArray(node.paints) && (node.paints as { type?: string }[]).some((paint) => paint.type === "video"));
       return broll ? [use("add_captions", { element_id: broll.id })] : [text("There is no B-roll video to caption.")];
     }
     if (previous.includes("plan_video")) {

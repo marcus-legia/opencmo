@@ -157,8 +157,8 @@ test("library image as first frame, B-roll in one approval card, save_frame", as
   await page.getByTestId("generate-submit").click();
   await expect
     .poll(async () => JSON.stringify(await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()), { timeout: 30_000 })
-    // Dài bằng vùng làm việc của clip (workarea), từ giây 0, −18 dB.
-    .toMatch(/"workarea":\[0,(\d+)\].*"end":\1,"src":\{"generate":"audio","prompt":"soft piano bed","model":"fake-audio","duration":\1,"seed":\d+\},"volume":-18/);
+    // From second 0 at −18 dB, as long as the 30 s upload allows: capped at fake-audio's 22 s maximum.
+    .toMatch(/"workarea":\[0,30\].*"end":22,"src":\{"generate":"audio","prompt":"soft piano bed","model":"fake-audio","duration":22,"seed":\d+\},"volume":-18/);
 
   // --- G2: Edit with AI — sửa clip video AI đã có bằng lời -------------------------
   const current = (await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()) as { document: unknown };

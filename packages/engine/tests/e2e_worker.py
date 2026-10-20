@@ -58,6 +58,10 @@ def _fixture_file_transcript(asset: dict, audio: Path) -> Transcript:
     """Replaces Scribe for the automatic file transcript: a fixture's sidecar when it has one, so a
     spec can rely on known fillers, pauses and retakes; otherwise the library captions fixture."""
     assert audio.stat().st_size > 0
+    if str(asset.get("name") or "").startswith("no-auto-"):
+        # A file whose free automatic run failed: specs that test the PAID captions path use one,
+        # otherwise they race this run and find the transcript already there (free).
+        raise RuntimeError("fixture: no automatic transcript for this file")
     sidecar = FIXTURES / f"{asset.get('name') or ''}.transcript.json"
     if not sidecar.is_file():
         return _fixture_transcribe(audio, None)
