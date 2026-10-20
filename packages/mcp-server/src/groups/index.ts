@@ -4,6 +4,7 @@
  */
 
 import "./find";
+import "./clips";
 import "./studio";
 import "./generations";
 import "./explainer";

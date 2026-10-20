@@ -137,10 +137,14 @@ Checklist:
 
 - [ ] ~~B1 — Measure~~, ~~B2 — Cut bytes~~, ~~B4 — Probe and subtitle retries~~: deferred with plan item 2 until
   IPRoyal has credit.
-- [ ] **B5 — `make_clips` MCP tool.** No job; validates with A1's `segmentProblem`; returns the picker link. Waits for
+- [x] **B5 — `make_clips` MCP tool.** No job; validates with A1's `segmentProblem`; returns the picker link. Waits for
   A1.
   - **Accept:** `server.check.ts` cases (valid → link, overlap → error result, no segments → error result); manual
     run in claude.ai.
+  - *Done (2026-10-20):* `apps/web/lib/mcp/make-clips.ts` (body: `sourceProblem` + `segmentProblem` + A1's `pickerPath`),
+    `packages/mcp-server/src/groups/clips.ts`. `server.check.ts`: valid → sorted link; overlap, none, upload and a private
+    address → error results; `npm run build` bundles it. **Untested:** the manual claude.ai run (needs the deployed
+    server, O4) and opening a pre-filled link in the e2e (needs a playable YouTube embed); noted in `clips.ts`.
 - [x] **B6 — Raw clips when transcription fails.** Plan item 8. Start here; it depends on no one.
   - **Accept:** the two failing-first pytest cases of item 8; one full-size frame looked at; budgets hold.
   - *Done (2026-10-20):* `pipeline._transcript_for_moments` logs a warning and skips captions for a section whose

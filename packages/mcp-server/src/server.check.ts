@@ -212,6 +212,33 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.deepEqual(registry.templates().map((template) => template.uriTemplate), ["opencmo://skills/mine/{name}"]);
 }
 
+// ------------------------------------------------------------ make_clips (plan item 5)
+
+{
+  const makeClips = tools.find((tool) => tool.name === "make_clips")!;
+  assert.ok(makeClips, "make_clips is offered");
+  assert.equal(byName.make_clips!.annotations?.readOnlyHint, true, "make_clips creates nothing");
+  assert.ok(!makeClips.costsCredits, "make_clips costs nothing");
+  const valid = await callTool(makeClips, { url: "https://www.youtube.com/watch?v=abcdefghijk", segments: [{ start: 90, end: 120 }, { start: 10, end: 40 }] }, ctx);
+  assert.ok(!valid.isError, JSON.stringify(valid));
+  const link = new URL((valid.structuredContent as { picker_url: string }).picker_url);
+  assert.equal(link.pathname, "/app/editor");
+  assert.equal(link.searchParams.get("picker"), "open");
+  assert.equal(link.searchParams.get("source"), "https://www.youtube.com/watch?v=abcdefghijk");
+  assert.equal(link.searchParams.get("segments"), "10-40,90-120", "sorted, in seconds");
+  assert.match((valid.structuredContent as { message: string }).message, /No clips are made/);
+  const overlap = await callTool(makeClips, { url: "https://youtu.be/abcdefghijk", segments: [{ start: 10, end: 40 }, { start: 30, end: 60 }] }, ctx);
+  assert.equal(overlap.isError, true);
+  assert.match(JSON.stringify(overlap.content), /overlap/);
+  const none = await callTool(makeClips, { url: "https://youtu.be/abcdefghijk", segments: [] }, ctx);
+  assert.equal(none.isError, true);
+  assert.match(JSON.stringify(none.content), /Pick at least one moment/);
+  const upload = await callTool(makeClips, { url: `storage://${ctx.userId}/a.mp4`, segments: [{ start: 0, end: 10 }] }, ctx);
+  assert.equal(upload.isError, true, "uploads are picked in the editor");
+  const internal = await callTool(makeClips, { url: "http://169.254.169.254/latest", segments: [{ start: 0, end: 10 }] }, ctx);
+  assert.equal(internal.isError, true, "the same source rules as createClipJob");
+}
+
 console.log(`mcp-server checks passed (${names.length} tools, ${registry.prompts().length} prompts, ${registry.resources().length} resources)`);
 }
 
