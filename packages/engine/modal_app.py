@@ -527,6 +527,40 @@ class MotionPreview:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.function(secrets=[secret], timeout=140, cpu=2, memory=2048, max_containers=10)
+@modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-look")
+def look(payload: dict) -> dict:
+    """Look and listen for Claude over MCP (plan item 10): `{token, user_id, clip_id, op, input,
+    document, manifest}` → `{images: [base64 JPEG], data}` or `{error}`.
+
+    The MCP server calls this with `OPENCMO_LOOK_TOKEN`, not the worker token, which that
+    internet-facing container must not hold. The clip's ownership is checked again here with the
+    service role before any source is downloaded (`opencmo.worker.look`). A request draws at most
+    12 frames with the export's renderer; nothing is stored. `timeout` stays under Modal's 150 s
+    cut for web endpoints.
+
+    UNTESTED on Modal (2026-10-20): needs `modal deploy modal_app.py` and `OPENCMO_LOOK_TOKEN` in
+    the `opencmo` secret (same value as in `opencmo-mcp`). `opencmo.worker.look` runs in
+    `tests/test_worker_look.py`, and once end to end against a local clip-export.
+    """
+    import hmac
+
+    from fastapi import HTTPException
+
+    from opencmo.worker.look import look as run_look
+
+    expected = os.environ.get("OPENCMO_LOOK_TOKEN", "")
+    given = str(payload.pop("token", "") or "")
+    if not expected or not hmac.compare_digest(expected, given):
+        raise HTTPException(status_code=401, detail="Invalid look token.")
+    store = _store()
+    try:
+        with tempfile.TemporaryDirectory(prefix="opencmo-look-") as tmp:
+            return run_look(store, payload, Path(tmp))
+    finally:
+        store.close()
+
+
 @app.function(secrets=[secret], timeout=30)
 @modal.fastapi_endpoint(method="POST")
 def submit(payload: dict) -> dict:

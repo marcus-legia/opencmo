@@ -4,6 +4,7 @@
  */
 
 import "./find";
+import "./look";
 import "./studio";
 import "./generations";
 import "./explainer";
