@@ -3,8 +3,9 @@
 **An AI CMO for solo founders.** Paste your website, and OpenCMO learns your business, plans
 the week, and drafts the work across three departments — you approve everything that goes out.
 
-- **Video** — turn your own long-form video into vertical 9:16 clips with captions and face
-  tracking, polish them in a full timeline editor, and write per-platform captions.
+- **Video** — upload a video you recorded and edit it whole in a timeline editor: cut it by
+  editing the transcript, add captions, B-roll, motion and generated shots by asking, and export
+  a version per platform. Or start from a blank edit.
 - **Post** — draft X posts from your strategy; you review, approve and publish to your own account.
 - **Sales** — find Reddit threads where people need what you sell, score them with evidence,
   and draft replies that **you** post yourself.
@@ -45,9 +46,9 @@ opencmo/
 │       ├── e2e/                Playwright end-to-end tests
 │       └── e2e-compat/         Safari/Firefox compatibility tests
 ├── packages/
-│   ├── engine/                 Python engine: transcript → selected sections → face-tracked
-│   │                           reframe → burned-in captions, all via streaming ffmpeg;
-│   │                           CLI locally, Modal worker in production (modal_app.py)
+│   ├── engine/                 Python engine: an upload → editor master + transcript, exports,
+│   │                           media generation, all via streaming ffmpeg;
+│   │                           Modal worker in production (modal_app.py)
 │   ├── contracts/              JSON contracts shared by Python and TypeScript
 │   │                           (task kinds, AI model catalog, document schemas)
 │   ├── clip-doc/               the clip document: zod schema, validation, migrations
@@ -74,8 +75,7 @@ opencmo/
 ```
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the decisions behind this shape, including the
-two hard budgets every change must respect: **peak RAM per job < 2 GB** and **a 45-minute
-video → 5 clips in under 3 minutes**.
+hard budget every change must respect: **peak RAM per job < 2 GB**.
 
 ## Getting started
 
@@ -86,7 +86,7 @@ and FFmpeg/ffprobe.
 ```bash
 npm ci
 uv venv --python 3.12 packages/engine/.venv312
-uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[face,worker,dev]'
+uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[worker,dev]'
 cp apps/web/.env.example apps/web/.env.local   # fill in what you need; most keys are optional
 npm run dev                                    # web on http://127.0.0.1:3000
 ```
@@ -94,14 +94,11 @@ npm run dev                                    # web on http://127.0.0.1:3000
 `npm run dev` checks Docker, starts the local Supabase stack if needed, loads its keys, and
 runs Next.js and the worker together. Without the worker, jobs sit in `queued` with no error.
 
-Use Python **3.12**: MediaPipe (face tracking) has no wheel for newer versions, and without it
-the engine silently falls back to a centre crop.
-
 Sign-in is Google OAuth. For local sign-in through the UI, create an OAuth client and set
 `SUPABASE_AUTH_GOOGLE_CLIENT_ID` / `SUPABASE_AUTH_GOOGLE_SECRET` (see `supabase/config.toml`);
 the test suites sign in with a password through the Auth API and need no Google setup.
 
-AI features need three provider keys: Anthropic (agents, moment selection and moderation),
+AI features need three provider keys: Anthropic (agents and moderation),
 fal (images, video, voice and sound, plus image safety checks) and ElevenLabs (transcripts). With `OPENCMO_AGENT_FAKE=1` and `OPENCMO_AI_FAKE=1` the app runs
 with deterministic fake providers, which is what the tests use.
 

@@ -160,14 +160,20 @@ Done:
   - Kept `jobs_source_url_check` admitting http(s): RPC + worker refuse links; tightening = rewriting ~50 fixtures
   - Kept job-scoped `agent_sessions` machinery (opener RPC dropped) — drop in a follow-up
 
-Todo (web app does NOT typecheck yet):
-- [ ] `lib/api/shapes.ts`: drop `clip_length`/`mode`/`segments` (types in `lib/clipping-types.ts` already trimmed); update `tests/contracts/clipping/*.json`, `shapes.check.ts`
-- [ ] Step 1 — `lib/editor/upload.ts` + `POST/GET /api/v1/editor/upload` (calls `create_upload_edit`, `wakeWorker`); GET lists recent uploads with their `full` clip id
-- [ ] Step 1 — `components/editor/upload/UploadPanel.tsx` from `ClipsPanel` (keep TUS upload, frame, captions; drop link mode, count/length, moments); tab "Upload", `?panel=upload`, menu "Upload a video…"
-- [ ] Step 2 — delete: `ClipsPanel`, `api/v1/editor/clipping/**`, `api/v1/jobs`, `lib/clipping/create.ts`, link branch of `lib/api/source.ts` (+ `source.check.ts`), `lib/clip-options.ts`, `FullEditButton`, `projects/[id]/{full-edit,exports.zip,transcript}`, `clips/[id]/source`, `source-preview`, `SourceInput`, `LinkPreview`, `YouTubePlayer`, `app/app/video` (redirect to `/app/editor?panel=upload`), `clip-presentation*`
-- [ ] Step 2 — rework `ProjectView` (processing → open editor; failed → retry) and `ProcessingView` (stages probe/download/render/transcribe, no tiles/YouTube thumb)
-- [ ] Step 2 — verify the partial (unreviewed) agent edits: CMO W5/briefs (`lib/cmo/**`, `components/cmo/**`, `cmo-tools.ts`, cmo MCP) and project assistant (`lib/agent/{scope,prompt,project-tools,providers/fake}`, sessions route, `packages/mcp-server`)
-- [ ] Step 2 — copy: landing `data.ts`, `layout.tsx`, `llms.txt`, `pricing.ts`, blog posts, MCP descriptions
-- [ ] Step 5 — e2e fixtures (`helpers.ts` → `uploadToEditor`), delete clipping specs; `check:contracts`, `contract.check.ts`
-- [ ] Step 5 — docs: CLAUDE.md (budgets, traps, project paragraph), READMEs, ARCHITECTURE
-- [ ] Verify: `npm run typecheck && npm run build`, `check:contracts`, MCP check/build, engine pytest/ruff, pgTAP in CI; mark PR ready; retarget to `main` after #88 merges
+Done in the second session (2026-10-20):
+- [x] `lib/api/shapes.ts` / contracts JSON: clip_length, mode, segments gone; `JOB_COLUMNS` no longer reads dropped columns
+- [x] Step 1 — `lib/editor/upload.ts` + `POST/GET /api/v1/editor/upload`; `components/editor/upload/UploadPanel.tsx`; tab "Upload", `?panel=upload` (old `?panel=clips` and `/app?url=` land there), menu "Upload a video…"
+- [x] Step 2 — deletions listed above; `ProjectView` (processing → Open in editor; failed → retry) and `ProcessingView` (probe/download/render/transcribe)
+- [x] Step 2 — CMO W5 + video briefs gone from the workspace (cards, drawer, Video Agent, goal metric `clips`, `create_video_brief`, `submit_video_pack`); video stays a calendar topic with an "Upload video" link; project assistant prompt and fake script gone
+- [x] Migration: goal metric `clips` dropped (`cmo_goals_metric_check`, `cmo_put_goal`), pgTAP updated; `schema/current.sql` regenerated
+- [x] Copy: landing, `<title>`, `llms.txt`, pricing, blog (clipping post removed, 308 to short-form-video-for-founders), short-video playbook, MCP descriptions, Claude plugin skill
+- [x] Step 5 — e2e helpers (`uploadToEditor`, `openUploadPanel`), clipping specs deleted, specs reworked; `tests/e2e_worker.py` rewritten for the upload path; `contract.check.ts` cases removed/added
+- [x] Step 5 — docs: CLAUDE.md, README, engine README, ARCHITECTURE, engine `.env.example`
+
+Verified: web `tsc` clean, `check:contracts` green, `next build` green; MCP server check/test/build green; engine
+ruff clean; pgTAP 101 files / 1527 tests green on the local Supabase stack.
+
+Left for the owner's machine:
+- [ ] e2e with real Chrome (`npm run test:e2e`), `check:api` on the live local stack
+- [ ] A real upload → edit → export, and peak RAM of the upload path with `/usr/bin/time -v`
+- [ ] Deploy order: Modal worker → `supabase db push` → Vercel; retarget the PR to `main` after #88 merges
