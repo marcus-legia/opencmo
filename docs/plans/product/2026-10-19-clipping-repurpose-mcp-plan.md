@@ -411,6 +411,8 @@ rendered on the worker with no outside API.
   every link job fails at probe. Without the secret, yt-dlp goes out through the built-in guard proxy
   (`capture/guard.py:244`, no setup) from Modal's IPs, which YouTube may block. `deploy_env.py` does not require
   `OPENCMO_PROXY`.
+- **O7** For item 10: one new value, `OPENCMO_LOOK_TOKEN`, in both the `opencmo` (worker) and `opencmo-mcp` secrets, and
+  `OPENCMO_LOOK_URL` (the `look` endpoint printed by `modal deploy modal_app.py`) in `opencmo-mcp`.
 - **O6** Run the item 9a spike on your own claude.ai (paid plan, Cowork) after O2 and O4, then the 7-day check.
 
 ## Not doing

@@ -152,10 +152,19 @@ Checklist:
     on a 40 s local video, two moments: both clips out (10 s, 12 s, 1080×1920), frame at 5 s of the full-size clip 2
     shows source 0:25 and no captions. **Not measured:** peak RAM and the 45-minute budget (`/usr/bin/time` is not
     installed here); the change adds no media work, only a `try` around the Scribe call.
-- [ ] **B7 — `capture_frame` over MCP.** Plan item 10a plus the `look` Modal function. After B6; depends on no one.
+- [x] **B7 — `capture_frame` over MCP.** Plan item 10a plus the `look` Modal function. After B6; depends on no one.
   - **Accept:** `server.check.ts` cases; the frame-vs-export match test; one contact sheet looked at; peak RAM measured.
-- [ ] **B8 — `inspect_color`, `media_grab`, `media_waveform`.** Plan items 10b–10d on the same function.
+  - *Done (2026-10-20):* `clip-export/src/look.ts` (+ `clip-export look` CLI), `opencmo/worker/look.py`, the
+    `modal_app.look` endpoint, `apps/web/lib/mcp/look.ts`, `packages/mcp-server/src/groups/look.ts`. `look.test.ts`: the
+    capture cell and the exported MP4 frame agree on the fixture's gray (frame 30 = 120); `test_worker_look.py`:
+    ownership before any download, the export's sources, Node errors as sentences. Contact sheets looked at (6-cell
+    and 4-cell, grid labels and layer boxes right). Server instructions now say to call `capture_frame` before done.
+    **Untested:** the deployed endpoint and a real MCP client (needs O4 + the two secrets below); peak RAM not measured
+    (`/usr/bin/time` missing; a call decodes at most 12 frames, no encode).
+- [x] **B8 — `inspect_color`, `media_grab`, `media_waveform`.** Plan items 10b–10d on the same function.
   - **Accept:** `server.check.ts` cases per tool; a waveform case on a fixture with a known 2 s silence.
+  - *Done:* same endpoint and group. `inspect_color` and `grab` in `look.test.ts`; waveform in `test_worker_look.py`
+    (tone 0-2 s, silence 2-4 s, tone 4-6 s → silence [2, 4]; a window in file seconds). Same untested part as B7.
 - [ ] **B9 — Versions, then `save_frame`.** Plan items 10f and 10e.
   - **Accept:** a restore round trip in `server.check.ts` (edit → list → restore → document equals the old one); pgTAP
     if a new RPC is needed (ask in Requests for numbers).
@@ -211,4 +220,13 @@ _Write requests to another session here: date, from, to, what._
     `lib/clipping/create.ts`) and send `p_segments`; drop `clips`.
   - `components/cmo/workspace/NewVideoPack.tsx`: open A's full-size picker (`components/editor/clipping/MomentPicker.tsx`,
     props documented there) on the chosen file or link, and send the picked moments. The caption step is unchanged.
+  - Status: open.
+
+- **2026-10-20, B → C: two secrets and the guides' tool name.**
+  - `opencmo/deploy_env.py` (C's): add `Shared("look token", ((WORKER, "OPENCMO_LOOK_TOKEN"), (MCP, "OPENCMO_LOOK_TOKEN")))`
+    and `OPENCMO_LOOK_URL` to `MCP_REQUIRED` (the `look` endpoint's URL, `…-look.modal.run`). Until then capture_frame
+    and friends answer "Looking at frames is not set up".
+  - `apps/web/lib/agent/guides.ts`: the guides say `capture`; over MCP the tool is `capture_frame` (and `media_waveform`,
+    `media_grab`, `inspect_color` keep their names). Map the name when a guide is read over MCP, as `get_transcript` →
+    `get_video_transcript` is mapped for the CMO tools.
   - Status: open.

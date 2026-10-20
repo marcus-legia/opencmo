@@ -5,6 +5,7 @@
 
 import "./find";
 import "./clips";
+import "./look";
 import "./studio";
 import "./generations";
 import "./explainer";
