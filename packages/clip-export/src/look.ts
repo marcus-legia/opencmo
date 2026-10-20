@@ -7,6 +7,8 @@
  *   0.25/0.5/0.75 guides), plus the visible layers per frame, top first, with id and 0-1 box.
  * - `inspect_color`: colour numbers of one frame without text or captions (`scopeStats`).
  * - `grab`: frames inside a library video or image, as a sheet (ffmpeg, no renderer).
+ * - `frame`: one large frame without text or captions, for `save_frame` (an image model would
+ *   redraw any text it sees, garbled).
  *
  * Only the asked frames are decoded and drawn; nothing is encoded to video. Same inputs and
  * output shape as the browser tools, so guides and skills keep one vocabulary. Keep the two in
@@ -35,13 +37,15 @@ const COLOR_EDGE = 512;
 export const MAX_TIMES = 12;
 
 export const LookSchema = JobSchema.pick({ document: true, media: true, transcripts: true, fonts: true, lottie: true, scene: true }).extend({
-  op: z.enum(['capture', 'inspect_color', 'grab']),
+  op: z.enum(['capture', 'inspect_color', 'grab', 'frame']),
   times: z.array(z.number().min(0)).max(MAX_TIMES).optional(),
   start: z.number().min(0).optional(),
   end: z.number().min(0).optional(),
   count: z.number().int().min(1).max(MAX_TIMES).optional(),
   grid: z.boolean().optional(),
   time: z.number().min(0).optional(),
+  /** `frame`: long edge in pixels (the in-app save_frame asks 1280). */
+  edge: z.number().int().min(256).max(1920).optional(),
   element_id: z.string().max(200).optional(),
   /** `grab`: the downloaded library file and its seconds. */
   file: z.string().min(1).optional(),
@@ -261,6 +265,13 @@ async function inspectColor(job: LookJob): Promise<LookResult> {
   return { images: [], data: { time: Math.round(time * 100) / 100, ...(job.element_id ? { element_id: job.element_id, box: region } : {}), ...stats, guide: COLOR_GUIDE } };
 }
 
+async function frame(job: LookJob): Promise<LookResult> {
+  const time = job.time ?? 0;
+  const { drawn } = await drawFrames(job, withoutText(validate(job.document)), () => [time], job.edge ?? 1280);
+  const item = drawn[0]!;
+  return { images: [jpeg(item.canvas)], data: { time: Math.round(time * 100) / 100, width: item.canvas.width, height: item.canvas.height } };
+}
+
 /** Frames inside a library file. `-ss` before `-i` (input seeking), the demuxer allowlist on. */
 async function grab(job: LookJob): Promise<LookResult> {
   if (!job.file) return { error: 'grab needs a file.' };
@@ -287,6 +298,7 @@ export async function lookJob(raw: unknown): Promise<LookResult> {
   const job = LookSchema.parse(raw);
   if (job.op === 'capture') return capture(job);
   if (job.op === 'inspect_color') return inspectColor(job);
+  if (job.op === 'frame') return frame(job);
   return grab(job);
 }
 

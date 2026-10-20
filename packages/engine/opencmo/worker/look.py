@@ -34,7 +34,7 @@ from opencmo.worker.render_document_task import (
 
 log = logging.getLogger(__name__)
 
-OPS = ("capture", "inspect_color", "grab", "waveform")
+OPS = ("capture", "inspect_color", "frame", "grab", "waveform")
 #: Well under Modal's 150 s web limit: a request decodes at most 12 frames.
 NODE_TIMEOUT = 100
 MAX_TIMES = 12
@@ -175,9 +175,13 @@ def look(store: Any, request: dict[str, Any], root: Path) -> dict[str, Any]:
     params = request.get("input") or {}
     try:
         clip, job = _owned_clip(store, user_id, clip_id)
-        if op in ("capture", "inspect_color"):
+        if op in ("capture", "inspect_color", "frame"):
             spec = _document_job(store, request, clip, job, root)
-            keep = ("times", "start", "end", "count", "grid") if op == "capture" else ("time", "element_id")
+            keep = {
+                "capture": ("times", "start", "end", "count", "grid"),
+                "inspect_color": ("time", "element_id"),
+                "frame": ("time", "edge"),
+            }[op]
             spec.update({"op": op, **{key: params[key] for key in keep if key in params}})
             if isinstance(spec.get("times"), list):
                 spec["times"] = spec["times"][:MAX_TIMES]

@@ -73,8 +73,8 @@ for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor",
   assert.ok(names.includes(name), `${name} is offered`);
 }
 // Browser-only in the app; over MCP `capture` is `capture_frame`, and the look group draws on the worker.
-for (const name of ["capture_frame", "inspect_color", "media_grab", "media_waveform"]) assert.ok(names.includes(name), `${name} is offered`);
-for (const name of ["capture", "preview_3d", "save_frame", "ask_user", "update_plan", "undo", "request_export"]) {
+for (const name of ["capture_frame", "inspect_color", "media_grab", "media_waveform", "save_frame", "list_versions", "restore_version"]) assert.ok(names.includes(name), `${name} is offered`);
+for (const name of ["capture", "preview_3d", "ask_user", "update_plan", "undo", "request_export"]) {
   assert.ok(!names.includes(name), `${name} is not offered over MCP`);
 }
 for (const tool of tools) {
@@ -235,6 +235,11 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.match(JSON.stringify(limited.content), /60 times an hour/);
   delete process.env.OPENCMO_LOOK_URL;
   delete process.env.OPENCMO_LOOK_TOKEN;
+  const saveFrame = tools.find((tool) => tool.name === "save_frame")!;
+  const notSaved = await callTool(saveFrame, { clip_id: "11111111-1111-4111-8111-111111111111", time: 1 }, ctx);
+  assert.match(JSON.stringify(notSaved.content), /not set up/, "save_frame stops before reserving anything when looking is not set up");
+  assert.equal(byName.restore_version!.annotations?.destructiveHint, true);
+  assert.equal(byName.list_versions!.annotations?.readOnlyHint, true);
 }
 
 console.log(`mcp-server checks passed (${names.length} tools, ${registry.prompts().length} prompts, ${registry.resources().length} resources)`);

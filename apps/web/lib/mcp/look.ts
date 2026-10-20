@@ -61,7 +61,7 @@ export const mediaWaveformInput = z.object({
   min_silence: z.number().min(0.05).max(10).optional().describe("Shortest silence to list, seconds (default 0.4)."),
 });
 
-export type LookOp = "capture" | "inspect_color" | "grab" | "waveform";
+export type LookOp = "capture" | "inspect_color" | "frame" | "grab" | "waveform";
 export type LookAnswer = { images: string[]; data: Record<string, unknown> } | { error: string };
 
 /** The worker's answer, or an error sentence. Throws only on a programming error. */
