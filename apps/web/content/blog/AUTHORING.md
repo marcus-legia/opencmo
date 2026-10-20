@@ -80,8 +80,8 @@ not a feature page. A reader must learn how to do the thing even if they never u
    the FAQ in the body.
 7. **At least 2 internal links**: to `/` and/or `/blog/<slug>` of a post that exists.
 8. End with a short summary. The page adds the CTA box.
-9. **Length:** at least 500 words of prose. Posts dated 2026-10-17 or later: 500–800 words
-   (blocks don't count).
+9. **Length** (prose only; blocks don't count): posts dated 2026-10-21 or later aim for about
+   1,000 words (900–1,200). Posts from 2026-10-17 to 2026-10-20: 500–800. Older posts: at least 500.
 
 ## Visual blocks
 
