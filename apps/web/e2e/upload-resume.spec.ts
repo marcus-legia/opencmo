@@ -1,3 +1,5 @@
+import { extname } from "node:path";
+
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
@@ -49,5 +51,5 @@ test("TUS resumes after a chunk is cut off", async ({ page }) => {
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const { data, error } = await admin.storage.from("sources").list(users.b.id);
   expect(error).toBeNull();
-  expect(data?.filter((item) => item.name.endsWith(".mp4"))).toHaveLength(1);
+  expect(data?.filter((item) => item.name.endsWith(extname(RESUME_VIDEO)))).toHaveLength(1);
 });

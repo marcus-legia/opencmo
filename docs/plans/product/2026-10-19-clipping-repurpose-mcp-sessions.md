@@ -104,8 +104,8 @@ Checklist:
   - **Accept:** the e2e from plan item 1 (two moments on an upload; `jobs.segments` set; no `select` step).
   - *Done:* `editor-clipping.spec.ts` green (two moments → 2 clips of 6 s and 8 s; no moments → 422). Run here with
     `E2E_VIDEO_CODEC=vp9` and Playwright's Chromium, which DeviceCheck refuses for lack of H.264, so the run stubbed
-    `canPlayType` locally (not committed); CI's Chrome needs neither. `output-options` and `upload-resume` were updated
-    for the picker but not run here.
+    `canPlayType` locally (not committed); CI's Chrome needs neither. `output-options` and `upload-resume` (updated for
+    the picker) pass the same way.
 - [ ] **A4 — After the job.** Each clip: Open, "Add voiceover" (opens Generate → Voiceover), "Add explainer" (points to
   `/explain` in Claude over MCP).
   - **Accept:** e2e clicks Open and lands in the edit; one full-size frame looked at.

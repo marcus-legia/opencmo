@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { extname } from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
@@ -27,7 +28,7 @@ test("Don't clip delivers the whole video without opening the editor", async ({ 
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const sourceCount = async () => {
     const { data } = await admin.storage.from("sources").list(users.a.id, { limit: 1000 });
-    return (data ?? []).filter((item) => item.id && item.name.endsWith(".mp4")).length;
+    return (data ?? []).filter((item) => item.id && item.name.endsWith(extname(SOURCE_VIDEO))).length;
   };
   const before = await sourceCount();
 
@@ -59,8 +60,10 @@ test("Don't clip delivers the whole video without opening the editor", async ({ 
   const file = await ready;
   const path = test.info().outputPath("full.mp4");
   await file.saveAs(path);
-  // File thật, không phải một trang lỗi đặt tên .mp4.
-  expect(readFileSync(path).subarray(4, 8).toString()).toBe("ftyp");
+  // File thật, không phải một trang lỗi đặt tên .mp4: the MP4 `ftyp` box, or the WebM/EBML magic in vp9 mode.
+  const bytes = readFileSync(path);
+  if (SOURCE_VIDEO.endsWith(".webm")) expect(bytes.subarray(0, 4).toString("hex")).toBe("1a45dfa3");
+  else expect(bytes.subarray(4, 8).toString()).toBe("ftyp");
 
   // Và Storage KHÔNG giữ hai bản của cùng một video: lượt upload thêm một file
   // vào `sources`, lượt giao nhân bản nó sang `clips` rồi xoá bản nguồn — nên
