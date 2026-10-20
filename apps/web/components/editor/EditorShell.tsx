@@ -175,6 +175,8 @@ function Workspace({
   const previewSeq = useRef(0);
   const doc = preview ?? state.document;
   const [selection, setSelection] = useState<string[]>([]);
+  // "Copy style" remembers one element; "Paste style" runs `copy_settings` from it onto the selection.
+  const [styleSource, setStyleSource] = useState<string | null>(null);
   const [solo, setSolo] = useState<string | null>(null);
   // Lớp Assistant vừa đổi (học Palmier §A6): nháy trên timeline ~2,5 giây.
   const [flash, setFlash] = useState<string[]>([]);
@@ -1177,6 +1179,28 @@ function Workspace({
     item("Cut", "cut"),
     item("Copy", "copy"),
     item("Paste", "paste"),
+    { kind: "separator" },
+    { label: "Copy style", disabled: selection.length !== 1, onSelect: () => setStyleSource(selection[0] ?? null), testid: "menu-copy-style" },
+    {
+      label: "Paste style",
+      disabled: !styleSource || !selection.length || selection.every((id) => id === styleSource),
+      onSelect: () => styleSource && void run([{ op: "copy_settings", from_id: styleSource, to_ids: selection.filter((id) => id !== styleSource) }]),
+      testid: "menu-paste-style",
+    },
+    ...(selection.length >= 2
+      ? ([
+          {
+            kind: "sub",
+            label: "Animate one by one",
+            testid: "menu-stagger",
+            items: (["fade", "slideUp", "pop", "grow"] as const).map((type) => ({
+              label: { fade: "Fade in", slideUp: "Slide up", pop: "Pop", grow: "Grow" }[type],
+              onSelect: () => void run([{ op: "stagger", element_ids: selection.slice(0, 40), type, step: 0.15 }]),
+              testid: `menu-stagger-${type}`,
+            })),
+          },
+        ] satisfies MenuItem[])
+      : []),
     { kind: "separator" },
     item("Put on one row", "oneRow", "menu-one-row"),
     item("Select all", "selectAll"),

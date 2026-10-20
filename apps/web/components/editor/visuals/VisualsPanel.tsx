@@ -37,7 +37,7 @@ function IconTile({ name, onPick }: { name: string; onPick: () => void }) {
   );
 }
 
-type Kind = "icon" | "animation" | "pointer" | "diagram" | "chart" | "graph" | "title" | "3d" | "studio";
+type Kind = "icon" | "animation" | "pointer" | "diagram" | "chart" | "graph" | "title" | "hook" | "list" | "3d" | "studio";
 
 const KINDS: { kind: Kind; label: string }[] = [
   { kind: "icon", label: "Icon" },
@@ -47,6 +47,8 @@ const KINDS: { kind: Kind; label: string }[] = [
   { kind: "chart", label: "Chart" },
   { kind: "graph", label: "Graph" },
   { kind: "title", label: "Title" },
+  { kind: "hook", label: "Hook" },
+  { kind: "list", label: "List" },
   { kind: "3d", label: "3D" },
   { kind: "studio", label: "3D Studio" },
 ];
@@ -199,6 +201,9 @@ export function VisualsPanel({
   const [theme, setTheme] = useState<(typeof THEMES)[number]>("midnight");
   const [titleKind, setTitleKind] = useState<TitleInput["kind"]>("lowerThird");
   const [titleSub, setTitleSub] = useState("");
+  const [hookTop, setHookTop] = useState("");
+  const [hookBottom, setHookBottom] = useState("");
+  const [listText, setListText] = useState("Plan the week\nDraft the posts\nApprove and publish");
   const [titleLook, setTitleLook] = useState<TitleInput["look"]>("bar");
   const [titleSide, setTitleSide] = useState<TitleSide>("left");
   const [titleMotion, setTitleMotion] = useState<TitleInput["motion"]>("standard");
@@ -227,6 +232,14 @@ export function VisualsPanel({
       setTitleLook((input.look as TitleInput["look"] | undefined) ?? "bar");
       setTitleSide((input.side as TitleSide | undefined) ?? (kindOf === "chapter" ? "center" : "left"));
       setTitleMotion((input.motion as TitleInput["motion"] | undefined) ?? "standard");
+    } else if (selected.op === "add_hook_title") {
+      setKind("hook");
+      const hook = (input.lines as string[] | undefined) ?? [];
+      setHookTop(hook[0] ?? "");
+      setHookBottom(hook[1] ?? "");
+    } else if (selected.op === "add_list") {
+      setKind("list");
+      setListText(((input.items as { label: string; meta?: string }[] | undefined) ?? []).map((item) => (item.meta ? `${item.label} | ${item.meta}` : item.label)).join("\n"));
     }
     setTitle(typeof input.title === "string" ? input.title : "");
   }, [selected]);
@@ -262,6 +275,21 @@ export function VisualsPanel({
       return { type: chart, data: chart === "stat" ? values.slice(0, 1) : values.slice(0, 12), ...(unit ? { unit } : {}), ...titled };
     }
     if (kind === "graph") return expr.trim() ? { expr: expr.trim(), label: `y = ${expr.trim()}`, ...titled } : null;
+    if (kind === "hook") {
+      const hook = [hookTop, hookBottom].map((line) => line.trim().slice(0, 40)).filter(Boolean);
+      return hook.length ? { lines: hook } : null;
+    }
+    if (kind === "list") {
+      // "Label | fact" per line; the fact is optional ("12.4k", "free").
+      const items = lines(listText)
+        .slice(0, 7)
+        .map((line) => {
+          const [label, meta] = line.split("|").map((part) => part.trim());
+          return { label: (label ?? "").slice(0, 40), ...(meta ? { meta: meta.slice(0, 16) } : {}) };
+        })
+        .filter((item) => item.label);
+      return items.length >= 2 ? { items } : null;
+    }
     if (kind === "title") {
       if (!title.trim()) return null;
       return { kind: titleKind, title: title.trim().slice(0, 60), ...(titleSub.trim() ? { sub: titleSub.trim().slice(0, 80) } : {}), look: titleLook, side: titleSide, motion: titleMotion };
@@ -297,8 +325,8 @@ export function VisualsPanel({
   const studioModel = liveModel(STUDIO_MODEL) ?? aiModel(STUDIO_MODEL);
   const studioCredits = studioModel ? priceOf(studioModel, { prompt: "x" }) : 1;
 
-  const add = (op: string, extra: Record<string, unknown>) => onRun([{ op, ...at(op === "add_title" ? 5.5 : 4), ...extra }]);
-  const opFor: Record<Kind, string> = { icon: "add_icon", animation: "add_lottie", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", title: "add_title", "3d": "add_3d", studio: "add_3d_studio" };
+  const add = (op: string, extra: Record<string, unknown>) => onRun([{ op, ...at(op === "add_title" ? 5.5 : op === "add_list" ? 6 : 4), ...extra }]);
+  const opFor: Record<Kind, string> = { icon: "add_icon", animation: "add_lottie", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", title: "add_title", hook: "add_hook_title", list: "add_list", "3d": "add_3d", studio: "add_3d_studio" };
   const editing = selected && selected.op === opFor[kind] ? selected : null;
 
   return (
@@ -536,6 +564,25 @@ export function VisualsPanel({
         </>
       ) : null}
 
+      {kind === "hook" ? (
+        <>
+          <input className="ed2-select" style={{ flex: "none" }} aria-label="First line" placeholder="First line: the topic, e.g. 3 posts a day" maxLength={40} data-testid="visuals-hook-top" value={hookTop} onChange={(event) => setHookTop(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
+          <input className="ed2-select" style={{ flex: "none" }} aria-label="Second line (optional)" placeholder="Second line: the promise, e.g. in 10 minutes (optional)" maxLength={40} data-testid="visuals-hook-bottom" value={hookBottom} onChange={(event) => setHookBottom(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
+        </>
+      ) : null}
+
+      {kind === "list" ? (
+        <textarea
+          className="ed2-asst-input"
+          aria-label="Items, one per line"
+          placeholder={"One item per line, 2 to 7. Add a short fact after a bar: Free tier | $0"}
+          data-testid="visuals-list-items"
+          value={listText}
+          onChange={(event) => setListText(event.target.value)}
+          onKeyDown={(event) => event.stopPropagation()}
+        />
+      ) : null}
+
       {kind === "3d" ? (
         <>
           <input className="ed2-select" aria-label="Surface formula in x and y" placeholder="z = …  e.g. sin(x) cos(y)" value={surface} onChange={(event) => setSurface(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
@@ -598,7 +645,7 @@ export function VisualsPanel({
         </>
       ) : null}
 
-      {kind !== "pointer" && kind !== "icon" && kind !== "title" ? (
+      {kind !== "pointer" && kind !== "icon" && kind !== "title" && kind !== "hook" && kind !== "list" ? (
         <div className="ed2-row ed2-wrap" aria-label="Region">
           {(Object.keys(REGIONS) as RegionName[]).map((name) => (
             <button key={name} type="button" className="ed2-chip" aria-pressed={region === name} data-testid={`visuals-region-${name}`} onClick={() => setRegion(name)}>
@@ -627,9 +674,9 @@ export function VisualsPanel({
         </div>
       ) : null}
 
-      {kind === "diagram" || kind === "chart" || kind === "graph" || kind === "title" ? (
+      {kind === "diagram" || kind === "chart" || kind === "graph" || kind === "title" || kind === "hook" || kind === "list" ? (
         <div className="ed2-row">
-          {kind === "title" ? (
+          {kind === "title" || kind === "hook" || kind === "list" ? (
             <span className="ed2-grow" />
           ) : (
             <input className="ed2-select ed2-grow" aria-label="Title (optional)" placeholder="Title (optional)" value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
@@ -653,7 +700,7 @@ export function VisualsPanel({
             className="ed2-btn ed2-primary"
             disabled={busy || !spec()}
             data-testid="visuals-add"
-            title={kind === "title" ? "In your brand colors, inside the safe area and above the captions" : undefined}
+            title={kind === "title" || kind === "hook" ? "In your brand colors, inside the safe area and above the captions" : undefined}
             onClick={() => {
               const extra = spec();
               if (extra) add(opFor[kind], extra);
