@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
+import { uploadToEditor, showAssistant, signIn, state } from "./helpers";
 
 /**
  * Editor với ảnh làm đầu vào (plan Palmier P1-B/P2) và cổng trình duyệt dò tính năng.
@@ -16,7 +16,7 @@ import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page): Promise<{ clipId: string; projectId: string }> {
-  const projectId = await makeClipsInEditor(page, SOURCE_VIDEO);
+  const projectId = await uploadToEditor(page, SOURCE_VIDEO);
   return { clipId: /\/app\/editor\/([0-9a-f-]+)$/.exec(page.url())![1]!, projectId };
 }
 

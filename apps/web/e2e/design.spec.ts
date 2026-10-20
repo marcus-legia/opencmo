@@ -41,13 +41,11 @@ test("landing, đăng nhập và các màn workspace giữ bố cục và điề
   await signIn(page, state().users.b);
   // Editor cần màn máy tính (điện thoại nhận màn hướng dẫn).
   await page.setViewportSize({ width: 1440, height: 960 });
-  // Link tạo clip cũ (`/app?url=`) mở tab Clips của editor với link điền sẵn (G1-c), rồi
-  // xoá tham số khỏi URL. Lần đầu mở route editor ở server dev có thể phải biên dịch.
+  // Old clip-making links (`/app?url=`) open the editor's Upload tab; the link itself is dropped.
+  // The first visit to the editor route on the dev server may compile.
   await page.goto("/app?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dexample");
-  await expect(page.getByTestId("clips-url")).toHaveValue("https://www.youtube.com/watch?v=example", { timeout: 120_000 });
+  await expect(page.getByTestId("upload-panel").getByRole("button", { name: "Choose video", exact: true })).toBeVisible({ timeout: 120_000 });
   await expect(page).toHaveURL(/\/app\/editor\/[0-9a-f-]+$/);
-  await page.goto("/app?source=upload");
-  await expect(page.getByTestId("clips-panel").getByRole("button", { name: "Choose video", exact: true })).toBeVisible({ timeout: 60_000 });
 
   await page.setViewportSize({ width: 1440, height: 960 });
   // `/app` là màn AI CMO 4 cột: rail cố ý thu thành cột icon ở đó (26361b4). Mở/thu rail

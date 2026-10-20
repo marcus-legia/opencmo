@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
 import { SOURCE_VIDEO } from "./global-setup";
-import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
+import { uploadToEditor, showAssistant, signIn, state } from "./helpers";
 
 /**
  * E4-e: phụ đề cho một video thư viện (worker e2e: ffmpeg thật, Groq giả) → lớp captions
@@ -12,7 +12,7 @@ import { makeClipsInEditor, showAssistant, signIn, state } from "./helpers";
  */
 
 async function openEditor(page: Page) {
-  await makeClipsInEditor(page, SOURCE_VIDEO);
+  await uploadToEditor(page, SOURCE_VIDEO);
 }
 
 const balance = async (page: Page) => ((await (await page.request.get("/api/v1/account")).json()) as { credits: number }).credits;

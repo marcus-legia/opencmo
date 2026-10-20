@@ -2,12 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
 import { RESUME_VIDEO } from "./global-setup";
-import { openClipsPanel, signIn, state } from "./helpers";
+import { openUploadPanel, signIn, state } from "./helpers";
 
 test("TUS resumes after a chunk is cut off", async ({ page }) => {
   const { users, url, service } = state();
   await signIn(page, users.b);
-  await openClipsPanel(page);
+  await openUploadPanel(page);
 
   let patches = 0;
   let interrupted = false;
@@ -25,7 +25,7 @@ test("TUS resumes after a chunk is cut off", async ({ page }) => {
 
   // Stop after Storage succeeds: this test isolates resumability and does not
   // spend another minute rendering the same fixture.
-  await page.route("**/api/v1/editor/clipping", async (route) => {
+  await page.route("**/api/v1/editor/upload", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     await route.fulfill({
       status: 409,
@@ -34,9 +34,8 @@ test("TUS resumes after a chunk is cut off", async ({ page }) => {
     });
   });
 
-  // Tab Clips của editor: upload là đường chính.
-  await page.getByTestId("clips-file").setInputFiles(RESUME_VIDEO);
-  await page.getByTestId("clips-submit").click();
+  await page.getByTestId("upload-file").setInputFiles(RESUME_VIDEO);
+  await page.getByTestId("upload-submit").click();
   await expect(page.getByText("Upload resume verified.", { exact: true })).toBeVisible({
     timeout: 90_000,
   });

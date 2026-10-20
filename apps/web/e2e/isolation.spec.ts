@@ -21,7 +21,7 @@ test("user B không mở được project của user A", async ({ page }) => {
     },
     data: {
       user_id: users.a.id,
-      source_url: "https://youtu.be/isolation",
+      source_url: `storage://${users.a.id}/isolation.mp4`,
       status: "done",
       stage: "done",
       clips_requested: 1,

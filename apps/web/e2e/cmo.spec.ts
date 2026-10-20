@@ -72,18 +72,8 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   await drawer.getByRole("button", { name: "I replied" }).click();
   await expect(page.getByTestId("cmo-feed-sales")).toHaveCount(before - 1);
 
-  // W5: Video Agent → New video pack. Link chỉ gửi được sau khi xác nhận chính chủ (luật sản phẩm 3).
-  await page.getByRole("button", { name: /^Video Agent/ }).click();
-  await page.getByRole("button", { name: "New video pack" }).click();
-  const pack = page.getByRole("dialog", { name: "New video pack" });
-  await pack.getByRole("button", { name: "Paste a link instead" }).click();
-  await pack.getByLabel("Paste a public video link").fill("https://youtu.be/dQw4w9WgXcQ");
-  const make = pack.getByRole("button", { name: "Make my clips" });
-  await expect(make).toBeDisabled();
-  await pack.getByRole("checkbox", { name: /Is this your YouTube video\?/ }).check();
-  await expect(make).toBeEnabled();
-  await pack.getByRole("button", { name: "Cancel" }).click();
-  await expect(pack).toBeHidden();
+  // Video packs are gone with the clipping tool: no Video Agent in the departments.
+  await expect(page.getByRole("button", { name: /^Video Agent/ })).toHaveCount(0);
 
   // Activity: console mở ngay dưới thanh trên (không phải hộp thoại), ghi từng bước của W1, W2 và W4.
   await page.getByTestId("cmo-log-open").click();
@@ -138,13 +128,13 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   const { data: briefed } = await admin.from("cmo_runs").select("input").eq("user_id", userId).eq("kind", "sales_scan").order("created_at", { ascending: false }).limit(1);
   expect(String((briefed?.[0]?.input as { brief?: string })?.brief)).toContain("reddit.com");
 
-  // Việc video: thành mục lịch có nút Make clips mở tab Clips của editor (người dùng tự đưa video).
-  await page.getByLabel("Ask your CMO").fill("Make clips from my onboarding video");
+  // A video task becomes a calendar item whose Upload video link opens the editor (the user brings their own video).
+  await page.getByLabel("Ask your CMO").fill("Plan a short video about onboarding");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".cmo-msg.is-cmo").last()).toContainText("Added to your calendar", { timeout: 60_000 });
-  const makeClips = page.getByTestId("cmo-make-clips").first();
-  await expect(makeClips).toBeVisible({ timeout: 30_000 });
-  await expect(makeClips).toHaveAttribute("href", "/app/editor?panel=clips&count=3&length=short");
+  const uploadVideo = page.getByTestId("cmo-upload-video").first();
+  await expect(uploadVideo).toBeVisible({ timeout: 30_000 });
+  await expect(uploadVideo).toHaveAttribute("href", "/app/editor?panel=upload");
 
   // Chat mới + lịch sử: cuộc vừa rồi nằm trong danh sách và mở lại được.
   await page.getByRole("button", { name: "New conversation" }).click();

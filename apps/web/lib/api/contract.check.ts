@@ -345,21 +345,6 @@ async function main(): Promise<void> {
     assert.equal((await callApi(null, `/clips/${clipId}/file`)).status, 401);
   });
 
-  await check("GET /projects/[id]/transcript trả artifact", async () => {
-    const res = await callApi(a, `/projects/${jobId}/transcript`);
-    assert.equal(res.status, 200);
-    assert.ok((res.body as { transcript: unknown }).transcript);
-  });
-
-  // Không gọi YouTube thật ở đây (CI có thể không có mạng ra ngoài): chỉ kiểm
-  // hai chốt chặn — phải đăng nhập, và host ngoài YouTube bị từ chối (chống SSRF).
-  await check("GET /source-preview cần đăng nhập và chỉ nhận link YouTube", async () => {
-    assert.equal((await callApi(null, "/source-preview?url=https%3A%2F%2Fyoutu.be%2Fx")).status, 401);
-    const other = await callApi(a, `/source-preview?url=${encodeURIComponent("http://169.254.169.254/latest")}`);
-    assert.equal(other.status, 400);
-    assert.equal((await callApi(a, "/source-preview?url=not-a-url")).status, 400);
-  });
-
   await check("GET /account trả account, quota ngày và mốc reset UTC", async () => {
     const res = await callApi(a, "/account");
     assert.equal(res.status, 200);
@@ -516,10 +501,6 @@ async function main(): Promise<void> {
       body: JSON.stringify({ favorite: false }),
     });
     assert.equal(res.status, 404);
-  });
-
-  await check("B không đọc được transcript của A", async () => {
-    assert.equal((await callApi(b, `/projects/${jobId}/transcript`)).status, 404);
   });
 
   // Mutant caught: route hard-deletes without calling the ownership-checked
@@ -1760,170 +1741,6 @@ async function main(): Promise<void> {
     assert.equal(foreign.status, 404);
   });
 
-  // ------------------------------------------- Assistant ở trang project (P4)
-  // Clip thứ hai CỐ Ý chưa có draft lẫn proxy: `apply_to_clips` phải báo nó lỗi
-  // mà không làm hỏng clip kia, rồi Retry qua `/editor/ops` sau khi sửa xong.
-  const { jobId: pJob, clipId: pClip, proxyPath: pProxy } = await seedProject(a.userId);
-  const { data: clip2Row, error: clip2Error } = await admin
-    .from("clips")
-    .insert({ job_id: pJob, idx: 1, hook: "Second clip", start_seconds: 40, end_seconds: 60, source_start: 40, source_end: 60 })
-    .select()
-    .single();
-  if (clip2Error || !clip2Row) throw new Error(`seed clip 2: ${clip2Error?.message}`);
-  const clip2 = (clip2Row as { id: string }).id;
-  // Document đã lưu dưới dạng chuỗi: đủ để so "có đổi không" và tìm một màu.
-  const sourceOf = async (id: string) =>
-    JSON.stringify(((await admin.from("editor_projects").select("document").eq("clip_id", id).maybeSingle()).data as { document: unknown } | null)?.document ?? null);
-  const setStyle = async (id: string, color: string) => {
-    const project = (await callApi(a, `/editor/project?clip_id=${id}`)).body as { version: number };
-    const res = await callApi(a, "/editor/ops", {
-      method: "POST",
-      body: JSON.stringify({ clip_id: id, expected_version: project.version, ops: [{ op: "set_caption_style", preset: "classic", colors: [color] }] }),
-    });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-  };
-  await admin.from("credit_ledger").insert({ user_id: a.userId, delta: 20, reason: "contract check grant p4" });
-  await setStyle(pClip, "#FFFFFF");
-
-  let projectSession = "";
-  type ProjectView = {
-    session: {
-      scope: string;
-      turns: {
-        number: number;
-        status: string;
-        reply: string;
-        can_undo: boolean;
-        pending: { id: string; card?: { clips: unknown[]; changes: string[] } }[];
-        actions: { name: string; summary: string; failed?: { clip_id: string }[]; ops?: unknown[] }[];
-      }[];
-    };
-  };
-  const projectView = async () => (await callApi(a, `/agent/sessions?job_id=${pJob}`)).body as ProjectView;
-
-  await check("Assistant project: mở phiên theo job_id, người khác 404", async () => {
-    const empty = await callApi(a, `/agent/sessions?job_id=${pJob}`);
-    assert.equal(empty.status, 200, JSON.stringify(empty.body));
-    assert.equal((empty.body as { session: unknown }).session, null);
-    const opened = await callApi(a, "/agent/sessions", { method: "POST", body: JSON.stringify({ job_id: pJob }) });
-    assert.equal(opened.status, 200, JSON.stringify(opened.body));
-    projectSession = (opened.body as { id: string }).id;
-    assert.notEqual(projectSession, agentSession, "phiên project tách khỏi phiên clip");
-    assert.equal((opened.body as { scope: string }).scope, "project");
-    assert.equal((await callApi(b, `/agent/sessions?job_id=${pJob}`)).status, 404);
-    assert.equal((await callApi(b, "/agent/sessions", { method: "POST", body: JSON.stringify({ job_id: pJob }) })).status, 404);
-  });
-
-  await check("Assistant project: câu hỏi chỉ đọc, không thẻ duyệt, không ghi", async () => {
-    const before = await sourceOf(pClip);
-    const res = await callSse(a, `/agent/sessions/${projectSession}/turns`, { prompt: "Which clip has the strongest hook?" });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.ok(!res.events.some((event) => event.event === "approval_request"));
-    assert.equal(res.events.at(-1)!.data.status, "done");
-    assert.equal(await sourceOf(pClip), before);
-  });
-
-  let pendingId = "";
-  await check("Assistant project: apply_to_clips dừng ở thẻ duyệt, chưa ghi gì", async () => {
-    const before = await sourceOf(pClip);
-    const res = await callSse(a, `/agent/sessions/${projectSession}/turns`, { prompt: "Use the same caption style on every clip" });
-    const request = res.events.find((event) => event.event === "approval_request");
-    assert.ok(request, JSON.stringify(res.events.map((event) => event.event)));
-    const card = request.data.card as { clips: { id: string }[]; changes: string[] };
-    assert.deepEqual(card.clips.map((clip) => clip.id).sort(), [pClip, clip2].sort());
-    assert.ok(card.changes.length > 0 && card.changes.every((change) => typeof change === "string" && change.length > 0));
-    assert.equal(res.events.at(-1)!.data.status, "awaiting_approval");
-    pendingId = request.data.id as string;
-    assert.equal(await sourceOf(pClip), before, "chưa duyệt thì chưa ghi");
-
-    const view = await projectView();
-    assert.equal(view.session.turns.at(-1)!.pending[0]!.card!.clips.length, 2, "thẻ còn sau khi tải lại");
-    const busy = await callSse(a, `/agent/sessions/${projectSession}/turns`, { prompt: "again" });
-    assert.equal(busy.status, 409);
-    const foreign = await callSse(b, `/agent/sessions/${projectSession}/approvals`, { decisions: [{ tool_use_id: pendingId, approved: true }] });
-    assert.equal(foreign.status, 404);
-  });
-
-  await check("Assistant project: Cancel không ghi, model được báo là bị từ chối", async () => {
-    const before = await sourceOf(pClip);
-    const res = await callSse(a, `/agent/sessions/${projectSession}/approvals`, { decisions: [{ tool_use_id: pendingId, approved: false }] });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal(res.events.at(-1)!.data.status, "done");
-    assert.equal(await sourceOf(pClip), before);
-    const turn = (await projectView()).session.turns.at(-1)!;
-    assert.match(turn.reply, /left the clips/);
-    assert.equal(turn.can_undo, false, "lượt bị từ chối không có gì để undo");
-  });
-
-  let failedOps: unknown[] = [];
-  let failTurn = 0;
-  await check("Assistant project: Approve ghi clip tốt, liệt kê clip lỗi kèm op để Retry", async () => {
-    const first = await callSse(a, `/agent/sessions/${projectSession}/turns`, { prompt: "Use the same caption style on every clip" });
-    const id = first.events.find((event) => event.event === "approval_request")!.data.id as string;
-    const res = await callSse(a, `/agent/sessions/${projectSession}/approvals`, { decisions: [{ tool_use_id: id, approved: true }] });
-    assert.ok(res.events.some((event) => event.event === "project_changed"));
-    assert.ok(res.events.some((event) => event.event === "tool_result" && event.data.summary === "Changed 1 of 2 clips"));
-    assert.match(await sourceOf(pClip), /FFD400/i);
-    const turn = (await projectView()).session.turns.at(-1)!;
-    assert.match(turn.reply, /Updated 1 of 2 clips/);
-    const action = turn.actions.find((item) => item.name === "apply_to_clips")!;
-    assert.deepEqual(action.failed!.map((clip) => clip.clip_id), [clip2]);
-    assert.ok(action.ops!.length > 0);
-    failedOps = action.ops!;
-    failTurn = turn.number;
-    assert.equal(turn.can_undo, true);
-  });
-
-  // Sửa clip 2 như worker làm: settings gốc + proxy trong manifest.
-  await admin
-    .from("clips")
-    .update({ settings: { source_start: 40, source_end: 60 }, settings_hash: "b".repeat(64) })
-    .eq("id", clip2);
-  const { data: jobRow } = await admin.from("jobs").select("media_manifest").eq("id", pJob).single();
-  const manifest = (jobRow as { media_manifest: { proxies: Record<string, unknown> } }).media_manifest;
-  await admin
-    .from("jobs")
-    .update({ media_manifest: { ...manifest, proxies: { ...manifest.proxies, [clip2]: { bucket: "sources", object: pProxy, width: 960, height: 540, duration: 22, offset: 39 } } } })
-    .eq("id", pJob);
-
-  await check("Assistant project: Retry clip lỗi = cùng op qua /editor/ops, không gọi model", async () => {
-    const project = (await callApi(a, `/editor/project?clip_id=${clip2}`)).body as { version: number };
-    const res = await callApi(a, "/editor/ops", {
-      method: "POST",
-      body: JSON.stringify({
-        clip_id: clip2,
-        expected_version: project.version,
-        ops: failedOps,
-        checkpoint: { kind: "manual", label: `Before retrying assistant request ${failTurn}` },
-      }),
-    });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.match(await sourceOf(clip2), /FFD400/i);
-  });
-
-  await check("Assistant project: Undo chỉ trả lại clip lượt đó đã đổi", async () => {
-    const res = await callApi(a, `/agent/sessions/${projectSession}/turns/${failTurn}/undo`, { method: "POST" });
-    assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.deepEqual((res.body as { clips: { clip_id: string; ok: boolean }[] }).clips, [{ clip_id: pClip, ok: true }]);
-    assert.doesNotMatch(await sourceOf(pClip), /FFD400/i);
-    assert.match(await sourceOf(clip2), /FFD400/i, "Retry là sửa tay của người dùng, không thuộc lượt");
-  });
-
-  await check("Assistant project: Undo một lượt đổi hai clip trả lại cả hai", async () => {
-    await setStyle(clip2, "#00FF00");
-    const first = await callSse(a, `/agent/sessions/${projectSession}/turns`, { prompt: "Use the same caption style on every clip" });
-    const id = first.events.find((event) => event.event === "approval_request")!.data.id as string;
-    const res = await callSse(a, `/agent/sessions/${projectSession}/approvals`, { decisions: [{ tool_use_id: id, approved: true }] });
-    assert.ok(res.events.some((event) => event.event === "tool_result" && event.data.summary === "Changed 2 of 2 clips"));
-    const turn = (await projectView()).session.turns.at(-1)!;
-    const undo = await callApi(a, `/agent/sessions/${projectSession}/turns/${turn.number}/undo`, { method: "POST" });
-    assert.equal(undo.status, 200, JSON.stringify(undo.body));
-    assert.doesNotMatch(await sourceOf(pClip), /FFD400/i);
-    assert.match(await sourceOf(clip2), /00FF00/i);
-    assert.doesNotMatch(await sourceOf(clip2), /FFD400/i);
-    assert.equal((await callApi(b, `/agent/sessions/${projectSession}/turns/${turn.number}/undo`, { method: "POST" })).status, 404);
-  });
-
   // ------------------------------------------------ Generate (AI Studio P5)
   // Server phải chạy với OPENCMO_AI_FAKE=1: model giả, không tốn tiền.
   await check("Generate: catalog JSON và bảng ai_models là một", async () => {
@@ -2107,22 +1924,13 @@ async function main(): Promise<void> {
     await admin.storage.from("sources").remove([bare.proxyPath]);
   });
 
-  await check("nguồn ngoài allowlist bị từ chối ở POST /jobs", async () => {
-    const res = await callApi(a, "/jobs", {
-      method: "POST",
-      body: JSON.stringify({ source: "http://169.254.169.254/", clips: 1 }),
-    });
-    assert.equal(res.status, 422);
-  });
-
-  await check("cắt clip từ editor: link không xác nhận chính chủ bị từ chối (G1-b)", async () => {
-    const res = await callApi(a, "/editor/clipping", {
-      method: "POST",
-      body: JSON.stringify({ source: "https://youtu.be/not-confirmed", clips: 1 }),
-    });
-    assert.equal(res.status, 422);
-    assert.match((res.body as { detail: string }).detail, /own video/);
-    const list = await callApi(a, "/editor/clipping");
+  await check("POST /editor/upload refuses links and other users' uploads", async () => {
+    const link = await callApi(a, "/editor/upload", { method: "POST", body: JSON.stringify({ source: "https://youtu.be/x" }) });
+    assert.equal(link.status, 422);
+    assert.match((link.body as { detail: string }).detail, /Upload the video file/);
+    const other = await callApi(a, "/editor/upload", { method: "POST", body: JSON.stringify({ source: `storage://${b.userId}/x.mp4` }) });
+    assert.equal(other.status, 422);
+    const list = await callApi(a, "/editor/upload");
     assert.equal(list.status, 200);
     assert.ok(Array.isArray((list.body as { items: unknown[] }).items));
   });
