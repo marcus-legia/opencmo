@@ -8,9 +8,9 @@ import type { CaseResult } from "@/lib/eval/compare";
 
 import type { Judge } from "../judge";
 import type { drainCmoQueue } from "../runner";
-import type { ClipInfo, Documents } from "../types";
+import type { Documents } from "../types";
 
-export type EvalFixture = { name: string; docs: Documents; brief: string; clips: ClipInfo[] };
+export type EvalFixture = { name: string; docs: Documents; brief: string };
 
 export type EvalEnv = {
   drain: typeof drainCmoQueue;
@@ -25,7 +25,7 @@ export type EvalEnv = {
 };
 
 export type EvalCase = {
-  /** Selected with `--job`: "w1", "w2", "w5", "w0", "w4", … */
+  /** Selected with `--job`: "w1", "w2", "w0", "w4", … */
   job: string;
   /**
    * `true` runs the case once per epoch with no shared fixture (it brings its own, e.g. site

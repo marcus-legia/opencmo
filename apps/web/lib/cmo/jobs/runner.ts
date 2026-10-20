@@ -18,11 +18,10 @@ import { salesScan } from "./sales-scan";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
-import { videoPack } from "./video-pack";
 import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
 
 /**
- * Việc chưa làm tiếp được (vd W5 chờ worker cắt clip): ném cái này, lượt về
+ * Việc chưa làm tiếp được (vd chờ một việc bên ngoài): ném cái này, lượt về
  * hàng đợi và hoãn `seconds` giây — không phải hỏng, không hoàn credit.
  */
 export class Deferred extends Error {
@@ -58,7 +57,6 @@ export const JOBS: Record<CmoJobKind, Job> = {
   plan_week: planWeek,
   post_draft: draftPost,
   sales_scan: salesScan,
-  video_pack: videoPack,
   competitor_research: competitorResearch,
   pull_metrics: pullMetrics,
   summarize_memory: summarizeMemory,

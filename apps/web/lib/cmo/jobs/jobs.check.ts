@@ -19,9 +19,8 @@ import { toPlanItems } from "./plan-week";
 import { drainCmoQueue } from "./runner";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, threadBlock, timingScore } from "./sales-scan";
 import { parseRedditSearch, type RedditThread } from "../social/reddit";
-import { checkCaptions } from "./video-pack";
 import { memoryStore } from "./memory-store";
-import { isoDay, type ClipJob, type Documents, type ItemRow, type MemoryEvent, type PlatformCaptions } from "./types";
+import { isoDay, type Documents, type ItemRow, type MemoryEvent } from "./types";
 
 async function main() {
   const docs: Documents = {
@@ -165,47 +164,6 @@ async function main() {
   assert.ok(queried.length > 0, "the injected search was asked");
   assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
 
-  // W5: chờ job clip (hoãn, không tính lần thử) → xong thì viết caption năm nền tảng và ghi thẻ.
-  const mem5 = memoryStore(docs);
-  const started = new Date().toISOString();
-  mem5.jobs.set("job1", { status: "running", error: null, createdAt: started, title: "Talk", clips: [] });
-  const w5 = mem5.enqueue("video_pack", { job_id: "job1" });
-  await drainCmoQueue(mem5.store);
-  assert.equal(w5.status, "queued", "job chưa xong: lượt về hàng đợi");
-  assert.equal(w5.attempt, 0, "lần chờ không tính vào trần");
-  assert.ok(w5.notBefore && w5.notBefore > Date.now(), "có mốc hoãn");
-  assert.equal(w5.steps[0]?.status, "running", "bước chờ vẫn 'running', không 'failed'");
-  assert.equal(await drainCmoQueue(mem5.store), 0, "chưa tới mốc thì không chạy lại");
-  mem5.jobs.set("job1", {
-    status: "done", error: null, createdAt: started, title: "Talk",
-    clips: [1, 2, 3].map((n) => ({ id: `c${n}`, idx: n, hook: `Hook ${n}`, reason: "Strong moment", start: n * 60, end: n * 60 + 35, score: 80, text: "Clients paid on day 7." })),
-  });
-  w5.notBefore = 0;
-  await drainCmoQueue(mem5.store);
-  assert.equal(w5.status, "done", `W5 xong (${w5.error})`);
-  assert.deepEqual(w5.steps.map((s) => s.tool), ["wait_clips", "read_doc", "write_captions", "create_card"]);
-  assert.equal(mem5.packs.length, 1, "một thẻ gói video");
-  assert.deepEqual(Object.keys(mem5.packs[0]!.captions).sort(), ["c1", "c2", "c3"]);
-  for (const set of Object.values(mem5.packs[0]!.captions)) {
-    assert.deepEqual(Object.keys(set).sort(), ["facebook", "reels", "shorts", "threads", "tiktok"], "đủ năm nền tảng");
-  }
-
-  // Job hỏng: lượt hỏng (credit hoàn ở complete_cmo_run), câu lỗi hiện được cho người dùng.
-  const mem6 = memoryStore(docs);
-  mem6.jobs.set("bad", { status: "failed", error: "The video is private.", createdAt: started, title: null, clips: [] });
-  const w6 = mem6.enqueue("video_pack", { job_id: "bad" });
-  await drainCmoQueue(mem6.store);
-  assert.equal(w6.status, "failed");
-  assert.match(String(w6.error), /The video is private/);
-
-  // checkCaptions: độ dài theo nền tảng, từ cấm, số bịa (số có trong lời clip thì được).
-  const ok: PlatformCaptions = { tiktok: "Paid on day 7.", reels: "Paid on day 7.\n#freelance", shorts: "Get paid on time", facebook: "Would this work for you?", threads: "Get paid sooner." };
-  assert.deepEqual(checkCaptions(ok, { avoid: ["revolutionary"], known: new Set(), spoken: "" }), []);
-  assert.ok(checkCaptions({ ...ok, shorts: "x".repeat(101) }, { avoid: [], known: new Set(), spoken: "" })[0]!.includes("shorts"));
-  assert.ok(checkCaptions({ ...ok, tiktok: "A revolutionary tool" }, { avoid: ["revolutionary"], known: new Set(), spoken: "" }).length === 1);
-  assert.ok(checkCaptions({ ...ok, threads: "We grew 340%" }, { avoid: [], known: new Set(), spoken: "" }).length === 1, "phần trăm bịa");
-  assert.deepEqual(checkCaptions({ ...ok, threads: "Saved 45 hours" }, { avoid: [], known: new Set(), spoken: "we saved 45 hours" }), [], "số có trong lời clip");
-
   // CMO chat không bao giờ có tool đăng/trả lời: mọi thứ ra ngoài đi qua Approvals.
   const { CMO_TOOL_SPECS } = await import("../../agent/cmo-tools");
   const names = CMO_TOOL_SPECS.map((t) => t.name);
@@ -318,7 +276,7 @@ async function main() {
   const nextWeek = isoDay(7, new Date(`${week}T00:00:00Z`));
   const mem9 = memoryStore(docs, []);
   mem9.goals.push({ id: "g1", week, goal: "Approve 3 posts on X", metric: "posts", target: 3, status: "approved", result: null });
-  Object.assign(mem9.results, { posts: 4, replies: 1, clips: 0, views: 120 });
+  Object.assign(mem9.results, { posts: 4, replies: 1, views: 120 });
   const w9 = mem9.enqueue("review_week");
   await drainCmoQueue(mem9.store);
   assert.equal(w9.status, "done", `weekly review done (${w9.error})`);
@@ -429,7 +387,7 @@ async function main() {
   const sqlModes = [...(migration.match(/edit_mode in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(sqlModes, [...EDIT_MODES], "EDIT_MODES matches the SQL constraint");
 
-  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W5, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
+  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }
 
 main().catch((error) => {

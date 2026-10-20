@@ -21,18 +21,6 @@ async function main() {
   );
   assert.deepEqual(clipTurn.get("clip-1"), { first: 7, last: 9 });
 
-  // Versions from a project chat: per clip, from apply_to_clips only.
-  const projectTurn = writtenVersions(
-    [
-      { name: "apply_to_clips", result: { clips: [{ clip_id: "a", version: 3 }, { clip_id: "b", version: 12 }] } },
-      { name: "apply_to_clips", result: { clips: [{ clip_id: "a", version: 4 }] } },
-      { name: "list_clips", result: { version: 99 } },
-    ],
-    null,
-  );
-  assert.deepEqual(projectTurn.get("a"), { first: 3, last: 4 });
-  assert.deepEqual(projectTurn.get("b"), { first: 12, last: 12 });
-
   const written = { first: 7, last: 9 };
   assert.equal(await unchangedSince({ version: 9, document: doc("x") }, written, null), true, "still at the turn's version: restore");
   assert.equal(await unchangedSince({ version: 10, document: doc("x") }, written, null), false, "a manual save after the turn: refuse");
@@ -50,11 +38,6 @@ async function main() {
   assert.deepEqual(hashed, { first: 7, last: 9, lastHash: "h9" }, "the hash belongs to the newest write, whatever the row order");
   assert.equal(await unchangedSince({ version: 12, document: doc("x"), document_hash: "h9" }, hashed, null), true, "library saves after the turn: restore");
   assert.equal(await unchangedSince({ version: 12, document: doc("y"), document_hash: "h12" }, hashed, null), false, "document edited after the turn: refuse");
-  assert.equal(
-    writtenVersions([{ name: "apply_to_clips", result: { clips: [{ clip_id: "a", version: 3, document_hash: "ha3" }] } }], null).get("a")?.lastHash,
-    "ha3",
-    "project chat records the hash per clip",
-  );
 
   // A newer turn was undone first: the clip holds that turn's checkpoint.
   const checkpoint = async () => doc("after turn");

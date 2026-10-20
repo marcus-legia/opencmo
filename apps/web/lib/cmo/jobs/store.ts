@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { ClipJob, CmoStore, CompetitorInsight, Documents, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, CompetitorInsight, Documents, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -80,16 +80,15 @@ export function supabaseStore(admin: BaseClient): CmoStore {
         const { count: n } = await query;
         return n ?? 0;
       };
-      const [posts, replies, clips, { data: measured }] = await Promise.all([
+      const [posts, replies, { data: measured }] = await Promise.all([
         count("content_items", ["approved", "published"], { column: "department", value: "post" }),
         count("opportunities", ["replied"]),
-        count("video_packs", ["approved"]),
         admin.from("post_metrics").select("item_id, views").eq("user_id", userId).gte("measured_at", since).limit(1000),
       ]);
       // Several measurements per post: keep the highest per post, then add them up.
       const best = new Map<string, number>();
       for (const row of (measured ?? []) as { item_id: string; views: number }[]) best.set(row.item_id, Math.max(best.get(row.item_id) ?? 0, Number(row.views)));
-      return { posts, replies, clips, views: [...best.values()].reduce((a, b) => a + b, 0) };
+      return { posts, replies, views: [...best.values()].reduce((a, b) => a + b, 0) };
     },
     async proposeGoal(userId, runId, week, goal) {
       const { data, error } = await admin.rpc("cmo_propose_goal", {
@@ -128,48 +127,6 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
     },
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
-    async clipJob(userId, jobId) {
-      const { data: job } = await admin
-        .from("jobs")
-        .select("id, status, error, created_at, title")
-        .eq("id", jobId)
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (!job) return null;
-      const row = job as { status: ClipJob["status"]; error: string | null; created_at: string; title: string | null };
-      if (row.status !== "done") return { status: row.status, error: row.error, createdAt: row.created_at, title: row.title, clips: [] };
-      const [{ data: clips }, { data: artifact }] = await Promise.all([
-        admin.from("clips").select("id, idx, hook, reason, start_seconds, end_seconds, score").eq("job_id", jobId).eq("kind", "moment").order("idx"),
-        admin.from("artifacts").select("data").eq("job_id", jobId).eq("kind", "transcript").order("version", { ascending: false }).limit(1).maybeSingle(),
-      ]);
-      // Lời nói trong từng clip: caption viết từ cái người xem thật sự nghe.
-      const segments = ((artifact?.data as { segments?: { start: number; end: number; text: string }[] } | null)?.segments ?? []);
-      return {
-        status: row.status,
-        error: row.error,
-        createdAt: row.created_at,
-        title: row.title,
-        clips: ((clips ?? []) as { id: string; idx: number; hook: string | null; reason: string | null; start_seconds: number; end_seconds: number; score: number | null }[]).map((clip) => ({
-          id: clip.id,
-          idx: clip.idx,
-          hook: clip.hook ?? "",
-          reason: clip.reason ?? "",
-          start: Number(clip.start_seconds),
-          end: Number(clip.end_seconds),
-          score: clip.score === null ? null : Number(clip.score),
-          text: segments
-            .filter((segment) => segment.end > clip.start_seconds && segment.start < clip.end_seconds)
-            .map((segment) => segment.text.trim())
-            .join(" ")
-            .slice(0, 4000),
-        })),
-      };
-    },
-    async saveVideoPack(userId, runId, jobId, clips, captions) {
-      const row = one<{ id: string }>(await rpc("cmo_save_video_pack", { p_user: userId, p_run: runId, p_job: jobId, p_clips: clips, p_captions: captions }));
-      if (!row) throw new Error("cmo_save_video_pack: không trả về hàng");
-      return row.id;
-    },
     defer: (run, seconds, steps) => rpc<boolean>("cmo_defer_run", { p_run: run.id, p_attempt: run.attempt, p_seconds: seconds, p_steps: steps }),
     async saveInsight(userId, runId, body) {
       await rpc("cmo_save_insight", { p_user: userId, p_run: runId, p_kind: "competitors", p_body: body });

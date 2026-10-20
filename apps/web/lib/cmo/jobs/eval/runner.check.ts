@@ -9,7 +9,7 @@ import { fakeJudge } from "../judge";
 import { runCases, tableRow } from "./runner";
 import type { EvalCase, EvalFixture } from "./types";
 
-const fixture = (name: string): EvalFixture => ({ name, docs: {}, brief: "", clips: [] });
+const fixture = (name: string): EvalFixture => ({ name, docs: {}, brief: "" });
 const FIXTURES = [fixture("a"), fixture("b"), fixture("c")];
 
 async function main() {

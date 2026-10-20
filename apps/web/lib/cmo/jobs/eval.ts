@@ -6,7 +6,7 @@
  *   npm run cmo:eval -- --provider gemini --yes --job w1,w2      # some jobs only
  *   npm run cmo:eval -- --provider anthropic --yes --epochs 3 --max-usd 2 --compare base.json
  *
- * Cases come from a registry (`eval/types.ts`): W1/W2/W5 in `eval/core.ts`, the rest from every
+ * Cases come from a registry (`eval/types.ts`): W1/W2 in `eval/core.ts`, the rest from every
  * file in `eval/cases/`. Each runs the real job (prompts, schemas, checks, fixes) against an
  * in-memory store, then is graded by code first and, where a case asks for it, by the cascade
  * judge (`judge.ts`) on the provider that did not draft.

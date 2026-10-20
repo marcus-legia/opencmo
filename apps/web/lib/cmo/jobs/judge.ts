@@ -118,7 +118,7 @@ export function fakeJudge(): Judge {
 
 /**
  * One graded output: code issues decide alone (`decided_by: "code"`), otherwise the judge does.
- * `judge: null` keeps a case code-only (W1's plan shape, W5's captions).
+ * `judge: null` keeps a case code-only (W1's plan shape).
  */
 export async function cascade(id: string, epoch: number, issues: string[], judge: Judge | null, input: JudgeInput): Promise<CaseResult> {
   if (issues.length) return { id, epoch, pass: false, decided_by: "code", notes: issues };

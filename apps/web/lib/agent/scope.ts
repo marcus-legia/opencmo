@@ -1,10 +1,9 @@
 /**
- * Phạm vi của một phiên Assistant: CLIP (editor) hay PROJECT (trang project).
+ * The scope of an Assistant session: CLIP (the editor) or CMO (the CMO chat).
  *
- * Vòng lặp không biết mình đang sửa một clip hay nhiều clip: phạm vi cho nó
- * bộ tool, system prompt, trạng thái để nối sau lượt ghi, và cách xử lý từng
- * tool call — chạy ngay, chờ trình duyệt (`capture_frames`), hay chờ người
- * duyệt (`apply_to_clips`).
+ * The loop does not know which one it runs: the scope gives it the tools, the system prompt, the
+ * state appended after writes, and how each tool call is handled — run now, wait for the browser
+ * (`capture_frames`), or wait for the user to approve (priced tools).
  */
 
 import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
@@ -19,21 +18,9 @@ import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
-import {
-  applyInput,
-  approvalCard,
-  clipLabel,
-  projectClips,
-  runApply,
-  runProjectRead,
-  validateApply,
-  PROJECT_TOOL_SPECS,
-  type ApprovalCard,
-  type ClipOutcome,
-} from "./project-tools";
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
 import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, runCmoTool, type CmoTurn } from "./cmo-tools";
-import { CMO_SYSTEM_PROMPT, PROJECT_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
+import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
 import { styleIndex } from "./styles";
@@ -93,7 +80,7 @@ const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover",
 export type Plan =
   | { kind: "run" }
   | { kind: "browser"; input: unknown }
-  | { kind: "approval"; input: unknown; card: ApprovalCard | ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> }
+  | { kind: "approval"; input: unknown; card: ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
 
@@ -104,7 +91,7 @@ export type QuestionCard = { question: string; options: string[]; multi: boolean
 export type Approved = { outcome: ToolOutcome; extra: Record<string, unknown>; wrote: boolean };
 
 export interface Scope {
-  kind: "clip" | "project" | "cmo";
+  kind: "clip" | "cmo";
   tools: ToolSpec[];
   system: string;
   /** Khối `<project_state>` nối sau câu lệnh và sau lượt ghi. */
@@ -487,42 +474,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
 function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {
   if (!report.issues.length) return "<check>ok</check>";
   return `<check>${JSON.stringify({ ok: report.ok, issues: report.issues.slice(0, 20) })}</check>`;
-}
-
-export function projectScope(supabase: SupabaseClient, jobId: string, turn: Turn, checkpointed: boolean): Scope {
-  const checkpoint = checkpointing(supabase, turn, checkpointed);
-  const env = { supabase, jobId };
-  return {
-    kind: "project",
-    tools: PROJECT_TOOL_SPECS,
-    system: PROJECT_SYSTEM_PROMPT,
-    async state() {
-      const clips = await projectClips(supabase, jobId);
-      return projectStateBlock({ clips: clips.map((clip) => ({ id: clip.id, number: clip.idx + 1, hook: clipLabel(clip) })) });
-    },
-    async plan(call) {
-      if (call.name !== "apply_to_clips") return { kind: "run" };
-      const valid = await validateApply(env, call.input);
-      if (typeof valid === "string") {
-        return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: valid }), summary: "Could not prepare the change" };
-      }
-      return { kind: "approval", input: valid, card: await approvalCard(env, valid) };
-    },
-    run: (call) => runProjectRead(call.name, call.input, env),
-    async decide(_call, input, approved) {
-      const parsed = applyInput.parse(input);
-      if (!approved) {
-        return {
-          outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined this change." }), summary: "Declined" },
-          extra: { ops: parsed.ops },
-          wrote: false,
-        };
-      }
-      const { outcome, clips, versions } = await runApply(env, parsed, checkpoint.label, checkpoint.mark);
-      return { outcome, extra: { ops: parsed.ops, clips: clips satisfies ClipOutcome[] }, wrote: versions > 0 };
-    },
-    isWrite: (name) => name === "apply_to_clips",
-  };
 }
 
 /**
