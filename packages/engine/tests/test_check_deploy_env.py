@@ -10,6 +10,7 @@ from opencmo.deploy_env import MCP, MOTION, VERCEL, WORKER
 MCP_URL = "https://ws--opencmo-mcp.us-east.modal.run/mcp"
 URLS = {
     "OPENCMO_WAKE_URL": "https://ws--opencmo-wake.us-east.modal.run",
+    "OPENCMO_LOOK_URL": "https://ws--opencmo-look.us-east.modal.run",
     "MOTION_PREVIEW_URL": "https://ws--opencmo-motion-preview.us-east.modal.run",
 }
 
@@ -139,3 +140,13 @@ def test_an_optional_key_set_somewhere_must_be_set_and_equal_everywhere():
     seen[MCP]["GROQ_API_KEY"] = None
     problems, _ = env.check(seen)
     assert "Groq key: opencmo-mcp:GROQ_API_KEY is not set" in problems
+
+
+def test_the_look_token_must_match_and_its_url_name_the_look_endpoint():
+    # The MCP server sends OPENCMO_LOOK_TOKEN to the worker's `look` endpoint, which checks it.
+    seen = _healthy()
+    seen[WORKER]["OPENCMO_LOOK_TOKEN"] = env.fingerprint("OPENCMO_LOOK_TOKEN", "other")
+    seen[MCP]["OPENCMO_LOOK_URL"] = URLS["OPENCMO_WAKE_URL"]
+    problems, _ = env.check(seen)
+    assert any(problem.startswith("look token differs") for problem in problems)
+    assert any("OPENCMO_LOOK_URL points at the wrong endpoint" in problem for problem in problems)

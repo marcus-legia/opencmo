@@ -72,7 +72,9 @@ assert.equal(new Set(names).size, names.length, "tool names are unique");
 for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "wait_for_media", "plan_video"]) {
   assert.ok(names.includes(name), `${name} is offered`);
 }
-for (const name of ["capture", "media_waveform", "preview_3d", "save_frame", "media_grab", "inspect_color", "ask_user", "update_plan", "undo", "request_export"]) {
+// Browser-only in the app; over MCP `capture` is `capture_frame`, and the look group draws on the worker.
+for (const name of ["capture_frame", "inspect_color", "media_grab", "media_waveform", "save_frame", "list_versions", "restore_version"]) assert.ok(names.includes(name), `${name} is offered`);
+for (const name of ["capture", "preview_3d", "ask_user", "update_plan", "undo", "request_export"]) {
   assert.ok(!names.includes(name), `${name} is not offered over MCP`);
 }
 for (const tool of tools) {
@@ -210,6 +212,34 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.match(kit, /^# Explainer scene-code kit/);
   assert.ok(!kit.includes("## 4."), "the kit is the code section only");
   assert.deepEqual(registry.templates().map((template) => template.uriTemplate), ["opencmo://skills/mine/{name}"]);
+}
+
+// ------------------------------------------------------------ look (editor-MCP plan, item 1)
+
+{
+  const capture = tools.find((tool) => tool.name === "capture_frame")!;
+  assert.equal(byName.capture_frame!.annotations?.readOnlyHint, true);
+  assert.ok(!capture.costsCredits, "looking is free for the user");
+  delete process.env.OPENCMO_LOOK_URL;
+  delete process.env.OPENCMO_LOOK_TOKEN;
+  const unset = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111", times: [1] }, ctx);
+  assert.equal(unset.isError, true);
+  assert.match(JSON.stringify(unset.content), /not set up/, "no endpoint: a clear error, never a hang");
+  const tooMany = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111", times: Array.from({ length: 13 }, (_, i) => i) }, ctx);
+  assert.equal(tooMany.isError, true, "at most 12 frames");
+  // The hourly cap answers before anything is read or posted.
+  process.env.OPENCMO_LOOK_URL = "http://127.0.0.1:9/look";
+  process.env.OPENCMO_LOOK_TOKEN = "t";
+  const capped = { ...ctx, supabase: { rpc: async () => ({ data: false, error: null }) } as never };
+  const limited = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111" }, capped);
+  assert.match(JSON.stringify(limited.content), /60 times an hour/);
+  delete process.env.OPENCMO_LOOK_URL;
+  delete process.env.OPENCMO_LOOK_TOKEN;
+  const saveFrame = tools.find((tool) => tool.name === "save_frame")!;
+  const notSaved = await callTool(saveFrame, { clip_id: "11111111-1111-4111-8111-111111111111", time: 1 }, ctx);
+  assert.match(JSON.stringify(notSaved.content), /not set up/, "save_frame stops before reserving anything when looking is not set up");
+  assert.equal(byName.restore_version!.annotations?.destructiveHint, true);
+  assert.equal(byName.list_versions!.annotations?.readOnlyHint, true);
 }
 
 console.log(`mcp-server checks passed (${names.length} tools, ${registry.prompts().length} prompts, ${registry.resources().length} resources)`);

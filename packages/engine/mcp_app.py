@@ -30,6 +30,8 @@ Deploy:
         OPENCMO_MCP_CONFIRM_KEY=...      # signs confirm codes; its own random value
         OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret
+        OPENCMO_LOOK_URL=https://<workspace>--opencmo-look.<region>.modal.run \
+        OPENCMO_LOOK_TOKEN=...           # capture_frame & co.; same value as in `opencmo`
         OPENCMO_VOICE_ENABLED=1          # list voice tools; the worker holds the voice key
         OPENCMO_MOTION=modal             # explainers (preview_explainer, add_explainer); unset hides them
         OPENCMO_ENV=production           # turns on the production-only guards (isProduction())
