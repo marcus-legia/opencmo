@@ -1,4 +1,4 @@
-"""`look` for Claude over MCP (plan item 10, B7/B8): ownership first, then the export's sources.
+"""`look` for Claude over MCP (editor-MCP plan, item 1): ownership first, then the export's sources.
 
 The Node drawing itself is covered by `packages/clip-export/src/look.test.ts`; here `_node` is
 replaced so only the worker's part runs: who may look, which files are fetched, the waveform.

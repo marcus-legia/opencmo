@@ -1,5 +1,5 @@
 /**
- * Look at a clip on the server (plan item 10, Session B): the frames the in-app Assistant gets
+ * Look at a clip on the server (editor-MCP plan, item 1): the frames the in-app Assistant gets
  * from its browser tools (`apps/web/components/editor/assistant/capture.ts`), drawn here by the
  * same renderer the export uses, so Claude over MCP sees exactly what will be exported.
  *

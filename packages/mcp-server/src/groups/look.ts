@@ -1,5 +1,5 @@
 /**
- * Look and listen (plan item 10): the in-app Assistant's browser tools, drawn on the worker for
+ * Look and listen (editor-MCP plan, item 1): the in-app Assistant's browser tools, drawn on the worker for
  * clients with no browser. Same names and inputs as in the app where they exist (`capture` is
  * `capture_frame` here, the name the guides use over MCP), so guides and skills keep one
  * vocabulary. Bodies: `apps/web/lib/mcp/look.ts`.

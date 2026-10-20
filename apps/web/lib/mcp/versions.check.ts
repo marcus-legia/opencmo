@@ -3,7 +3,7 @@
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/mcp/versions.check.ts
  *
- * list_versions / restore_version over MCP (plan item 10f): a restore saves the old document
+ * list_versions / restore_version over MCP (editor-MCP plan, item 1): a restore saves the old document
  * behind the optimistic lock, after a checkpoint of the current one.
  */
 import assert from "node:assert/strict";

@@ -214,7 +214,7 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.deepEqual(registry.templates().map((template) => template.uriTemplate), ["opencmo://skills/mine/{name}"]);
 }
 
-// ------------------------------------------------------------ look (plan item 10)
+// ------------------------------------------------------------ look (editor-MCP plan, item 1)
 
 {
   const capture = tools.find((tool) => tool.name === "capture_frame")!;

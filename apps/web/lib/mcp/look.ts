@@ -1,5 +1,5 @@
 /**
- * Look and listen over MCP (plan item 10): the bodies of capture_frame, inspect_color, media_grab
+ * Look and listen over MCP (editor-MCP plan, item 1): the bodies of capture_frame, inspect_color, media_grab
  * and media_waveform. In the app these run in the user's browser; over MCP there is no browser, so
  * the clip is drawn on the worker by the export's own renderer (`opencmo/worker/look.py` →
  * `clip-export look`).

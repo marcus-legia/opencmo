@@ -530,7 +530,7 @@ class MotionPreview:
 @app.function(secrets=[secret], timeout=140, cpu=2, memory=2048, max_containers=10)
 @modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-look")
 def look(payload: dict) -> dict:
-    """Look and listen for Claude over MCP (plan item 10): `{token, user_id, clip_id, op, input,
+    """Look and listen for Claude over MCP (editor-MCP plan, item 1): `{token, user_id, clip_id, op, input,
     document, manifest}` → `{images: [base64 JPEG], data}` or `{error}`.
 
     The MCP server calls this with `OPENCMO_LOOK_TOKEN`, not the worker token, which that

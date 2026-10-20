@@ -1,5 +1,5 @@
 /**
- * Versions (plan item 10f): MCP has no undo; these list and restore the editor's Version history.
+ * Versions (editor-MCP plan, item 1): MCP has no undo; these list and restore the editor's Version history.
  * Bodies: `apps/web/lib/mcp/versions.ts`.
  */
 

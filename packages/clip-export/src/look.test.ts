@@ -1,5 +1,5 @@
 /**
- * `look` (plan item 10): frames drawn for Claude over MCP must be the frames the export draws.
+ * `look` (editor-MCP plan, item 1): frames drawn for Claude over MCP must be the frames the export draws.
  * Real ffmpeg, like `clip-export.test.ts`: frame N of the fixture is gray level 4N, so the gray
  * of a cell tells which source frame it shows.
  */

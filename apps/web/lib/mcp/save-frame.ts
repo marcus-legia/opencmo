@@ -1,5 +1,5 @@
 /**
- * `save_frame` over MCP (plan item 10e): one frame of the clip, without text or captions, saved to
+ * `save_frame` over MCP (editor-MCP plan, item 1): one frame of the clip, without text or captions, saved to
  * the library folder Frames so `generate_media` can use it as `start_image` / `end_image`.
  *
  * It takes the same steps as the editor's upload (`components/editor/library/store.ts`), every write

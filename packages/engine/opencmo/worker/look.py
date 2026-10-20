@@ -1,4 +1,4 @@
-"""Look at a clip for Claude over MCP (plan item 10): capture_frame, inspect_color, media_grab,
+"""Look at a clip for Claude over MCP (editor-MCP plan, item 1): capture_frame, inspect_color, media_grab,
 media_waveform.
 
 The web app reads the clip's document and library manifest under the user's RLS and posts them

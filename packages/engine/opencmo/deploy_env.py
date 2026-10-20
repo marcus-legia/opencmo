@@ -33,6 +33,7 @@ PLAIN_KEYS = frozenset(
         "OPENCMO_MCP_URL",
         "OPENCMO_WEB_URL",
         "OPENCMO_WAKE_URL",
+        "OPENCMO_LOOK_URL",
         "MOTION_PREVIEW_URL",
         "OPENCMO_ENV",
         "OPENCMO_MOTION",
@@ -53,6 +54,7 @@ SHARED = (
     Shared("explainer preview token", ((VERCEL, "MOTION_PREVIEW_TOKEN"), (MOTION, "MOTION_PREVIEW_TOKEN"), (MCP, "MOTION_PREVIEW_TOKEN"))),
     Shared("explainer preview URL", ((VERCEL, "MOTION_PREVIEW_URL"), (MCP, "MOTION_PREVIEW_URL"))),
     Shared("wake token", ((WORKER, "OPENCMO_WAKE_TOKEN"), (MCP, "OPENCMO_WAKE_TOKEN"))),
+    Shared("look token", ((WORKER, "OPENCMO_LOOK_TOKEN"), (MCP, "OPENCMO_LOOK_TOKEN"))),
     Shared("worker token", ((VERCEL, "OPENCMO_WORKER_TOKEN"), (WORKER, "OPENCMO_WORKER_TOKEN"))),
     Shared("CMO cron secret", ((VERCEL, "CRON_SECRET"), (WORKER, "CRON_SECRET"))),
     Shared("cleanup cron secret", ((VERCEL, "CRON_CLEANUP_SECRET"), (WORKER, "CRON_CLEANUP_SECRET"))),
@@ -82,6 +84,7 @@ MCP_REQUIRED = (
     "OPENCMO_MCP_CONFIRM_KEY",
     "OPENCMO_WAKE_URL",
     "OPENCMO_WAKE_TOKEN",
+    "OPENCMO_LOOK_URL",
     "OPENCMO_VOICE_ENABLED",
     "OPENCMO_MOTION",
     "OPENCMO_ENV",
@@ -108,6 +111,7 @@ MCP_URL_HOLDERS = ((VERCEL, "OPENCMO_MCP_URL"), (MCP, "OPENCMO_MCP_URL"))
 # a URL pasted on the wrong line points at another endpoint, which answers 401 with its own message.
 ENDPOINT_LABELS = (
     (MCP, "OPENCMO_WAKE_URL", "--opencmo-wake."),
+    (MCP, "OPENCMO_LOOK_URL", "--opencmo-look."),
     (MCP, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
     (VERCEL, "MOTION_PREVIEW_URL", "--opencmo-motion-preview."),
     (MCP, "OPENCMO_MCP_URL", "--opencmo-mcp."),

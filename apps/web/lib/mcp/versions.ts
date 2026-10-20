@@ -1,5 +1,5 @@
 /**
- * Version history over MCP (plan item 10f): MCP has no `undo`, so without these a bad edit could
+ * Version history over MCP (editor-MCP plan, item 1): MCP has no `undo`, so without these a bad edit could
  * only be reverted by the user in the editor's Version history.
  *
  * - `list_versions`: the checkpoints of a clip (`editor_revisions`, immutable), newest first, and
