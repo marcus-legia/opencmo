@@ -22,10 +22,12 @@ const ALLOWED_TAGS = new Set([
   "img", "table", "thead", "tbody", "tr", "th", "td", "code", "pre", "hr", "br", "sup", "sub", "mark", "small",
 ]);
 /**
- * Posts from this date on are the short, visual format: 500–800 words of prose and at
+ * Posts from this date on are the visual format: a word range (see `LONG_FROM`) and at
  * least three blocks of two kinds. Older posts were written before blocks existed.
  */
 const VISUAL_FROM = "2026-10-17";
+/** From this date the owner wants fuller lessons: about 1,000 words of prose (900–1,200). */
+const LONG_FROM = "2026-10-21";
 const ALLOWED_ATTRS = new Set(["id", "href", "src", "alt", "title", "width", "height", "colspan", "rowspan", "loading", "rel", "target"]);
 
 function checkSlug(slug: string): string[] {
@@ -84,7 +86,8 @@ function checkBlocks(post: Post): string[] {
     errors.push("needs at least one data or 3D block (chart, stats, leaderboard or scene)");
   }
   if (post.segments[0]?.kind === "block") errors.push("open with a paragraph, not a block");
-  if (post.words > 800) errors.push(`body has ${post.words} words (visual posts: 500–800)`);
+  const [min, max] = post.date >= LONG_FROM ? [900, 1200] : [500, 800];
+  if (post.words < min || post.words > max) errors.push(`body has ${post.words} words (posts from this date: ${min}–${max})`);
   return errors;
 }
 
