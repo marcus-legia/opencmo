@@ -102,6 +102,29 @@ describe('emphasize_words', () => {
 		expect(captions(none.document).emphasis).toBeUndefined();
 	});
 
+	it('a selection on both sides of a cut stays two phrases, so restoring the cut words does not emphasize them', async () => {
+		const ctx = memory();
+		const words = normalize(TRANSCRIPT)[0]!.words;
+		const cut = await applyOps(SOURCE, [{ op: 'remove_words', word_ids: [words[2]!.id!, words[3]!.id!] }], ctx);
+		const { document } = await applyOps(cut.document, [{ op: 'emphasize_words', quotes: [], word_ids: [words[1]!.id!, words[4]!.id!] }], ctx);
+		expect(captions(document).emphasis).toEqual([{ start: 2.5, end: 2.5 }, { start: 4, end: 4 }]);
+		const back = await applyOps(document, [{ op: 'restore_words', word_ids: [words[2]!.id!, words[3]!.id!] }], ctx);
+		expect(emphasized(back.document, ctx)).toEqual(['um', 'is']);
+	});
+
+	it('an id that is not in the clip fails instead of being dropped', async () => {
+		const words = normalize(TRANSCRIPT).flatMap((segment) => segment.words);
+		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [], word_ids: [words[0]!.id!, 'nope'] }], memory())).rejects.toThrow(/1 of the selected words/);
+	});
+
+	it('taking one word out of a phrase keeps the rest of it', async () => {
+		const ctx = memory();
+		const words = normalize(TRANSCRIPT)[1]!.words;
+		const phrase = await applyOps(SOURCE, [{ op: 'emphasize_words', quotes: ['it has 24 skills'] }], ctx);
+		const off = await applyOps(phrase.document, [{ op: 'emphasize_words', quotes: [], word_ids: [words[1]!.id!], remove: true }], ctx);
+		expect(emphasized(off.document, ctx)).toEqual(['it', '24', 'skills']);
+	});
+
 	it('a quote not in the transcript fails with the quote error; nothing to do fails too', async () => {
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: ['compound interest'] }], memory())).rejects.toThrow(/not in this clip's transcript/);
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [] }], memory())).rejects.toThrow(/quotes to emphasize/);

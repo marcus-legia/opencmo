@@ -246,3 +246,4 @@ export function mediaSources(
   return out;
 }
 export { censorTranscript, censorWord } from './profanity.ts';
+export { captureTimes, COLOR_GUIDE, MAX_LOOK_TIMES, visibleAt, withoutText, type LookBox, type LookTimes, type VisibleLayer } from './look.ts';

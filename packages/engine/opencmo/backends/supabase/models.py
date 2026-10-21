@@ -56,14 +56,6 @@ class Job:
     status: str = "queued"
     attempt: int = 0
     attempt_id: str | None = None
-    # Người dùng chọn lúc tạo project ("auto" khi job cũ chưa có cột này).
-    clip_length: str = "auto"
-    # Các đoạn người dùng tự kéo trên thanh bar, `[{"start": s, "end": e}, …]`.
-    # None nghĩa là "để AI chọn" — đúng hành vi của mọi job trước cột này.
-    segments: list[dict[str, Any]] | None = None
-    # Tuỳ chọn đầu ra, chọn lúc tạo project. Mặc định trùng hành vi trước khi
-    # có các cột này, nên job cũ chạy lại vẫn ra đúng thứ đã giao cho người dùng.
-    mode: str = "clip"
     aspect: str = "9:16"
     layout: str = "auto"
     captions: bool = True
@@ -79,11 +71,6 @@ class Job:
             status=row.get("status") or "queued",
             attempt=int(row.get("attempt") or 0),
             attempt_id=row.get("attempt_id"),
-            clip_length=row.get("clip_length") or "auto",
-            # `[]` từ database được coi là None: một mảng rỗng không mô tả được
-            # đoạn nào, và rơi về nhánh AI là hành vi an toàn hơn job chết.
-            segments=list(row.get("segments") or []) or None,
-            mode=row.get("mode") or "clip",
             aspect=row.get("aspect") or "9:16",
             layout=row.get("layout") or "auto",
             captions=bool(row.get("captions", True)),

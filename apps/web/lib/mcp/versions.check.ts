@@ -48,7 +48,7 @@ function fakeSupabase(start: { document: unknown; generated: unknown }) {
       return { data: row, error: null };
     }
     if (name === "save_editor_document") {
-      if (args.p_expected_version !== state.project.version) return { data: null, error: { code: "40001", message: "This clip was changed in another tab." } };
+      if (args.p_expected_version !== state.project.version) return { data: null, error: { code: "P0409", message: "This clip was changed in another tab." } };
       state.project = { ...state.project, document: args.p_document, version: state.project.version + 1 };
       return { data: { ...state.project, document_hash: "h", updated_at: "now", manifest: null }, error: null };
     }
@@ -84,6 +84,27 @@ async function main() {
   assert.ok(!gone.ok && /no longer available/.test(gone.message));
   const other = await listVersions(client, "22222222-2222-4222-8222-222222222222");
   assert.ok(!other.ok && /not found/.test(other.message), "another user's clip reads as not found under RLS");
+
+  const again = await restoreVersion(client, CLIP, "original");
+  assert.ok(again.ok && again.value.unchanged === true, "restoring what is already there is a no-op");
+  assert.equal(state.calls.at(-1), "save_editor_document", "and writes nothing");
+
+  const before = state.revisions.length;
+  state.revisions.push({ id: "00000000-0000-4000-8000-0000000000aa", clip_id: CLIP, number: 99, kind: "manual", label: null, created_at: "", document: { version: 1, stage: "broken" } });
+  const unreadable = await restoreVersion(client, CLIP, "00000000-0000-4000-8000-0000000000aa");
+  assert.ok(!unreadable.ok && /older editor/.test(unreadable.message), JSON.stringify(unreadable));
+  assert.equal(state.revisions.length, before + 1, "no checkpoint for a restore that cannot happen");
+
+  const racing = fakeSupabase({ document: doc("A"), generated: doc("Original") });
+  // The editor saves between the read and the restore's save.
+  const calls = racing.client as { rpc: (name: string, args: Record<string, unknown>) => Promise<unknown> };
+  const realRpc = calls.rpc;
+  calls.rpc = async (name, args) => {
+    if (name === "save_editor_document") racing.state.project = { ...racing.state.project, version: racing.state.project.version + 1 };
+    return realRpc(name, args);
+  };
+  const raced = await restoreVersion(racing.client, CLIP, "original");
+  assert.ok(!raced.ok && /changed while restoring/.test(raced.message), JSON.stringify(raced));
 
   const noOriginal = fakeSupabase({ document: doc("A"), generated: null });
   const none = await restoreVersion(noOriginal.client, CLIP, "original");

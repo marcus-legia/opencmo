@@ -22,7 +22,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { agentCandidates, providerOrder, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 import { outage } from "@/lib/llm-health";
-import { compatJson, OpenAiCompatError } from "@/lib/openai-compat";
+import { compatJson, OpenAiCompatError, OpenAiCompatTimeout } from "@/lib/openai-compat";
 
 import { aiFakeEnabled } from "./models";
 import { isProduction } from "@/lib/production";
@@ -193,7 +193,9 @@ export async function moderateText(text: string, { kind, client, gemini }: { kin
       break;
     } catch (error) {
       const next = order[index + 1];
-      if (next && outage(error)) {
+      // A timed-out check is not an outage of the provider (`outage` keeps other features on it),
+      // but this prompt still has no verdict: the next checker answers it, as the worker does.
+      if (next && (outage(error) || timedOut(error))) {
         console.error(`[moderation] ${checker.provider} could not answer; asking ${next.provider}`, statusOf(error));
         continue;
       }
@@ -203,5 +205,7 @@ export async function moderateText(text: string, { kind, client, gemini }: { kin
   }
   if (!verdict?.allowed) throw new ApiError(422, BLOCKED_MESSAGE);
 }
+
+const timedOut = (error: unknown) => error instanceof OpenAiCompatTimeout || error instanceof Anthropic.APIConnectionTimeoutError;
 
 const statusOf = (error: unknown) => (error instanceof Anthropic.APIError || error instanceof GeminiError || error instanceof OpenAiCompatError ? error.status : "");

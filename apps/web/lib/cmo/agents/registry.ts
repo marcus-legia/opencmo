@@ -69,7 +69,12 @@ function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"], env: Node
 
 const sharedKey = (provider: ProviderKind, env: NodeJS.ProcessEnv): string => {
   if (provider === "gemini") return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || "";
-  if (provider === "openai") return env.OPENAI_COMPAT_API_KEY || env.GROQ_API_KEY || "";
+  if (provider === "openai") {
+    // Groq's own key first on Groq, the compat key first elsewhere: a key never goes to another
+    // vendor's endpoint when both are set (the worker's moderation pairs them the same way).
+    const onGroq = !env.OPENAI_COMPAT_BASE_URL?.trim() || env.OPENAI_COMPAT_BASE_URL.trim().replace(/\/+$/, "") === GROQ_BASE_URL;
+    return (onGroq ? env.GROQ_API_KEY || env.OPENAI_COMPAT_API_KEY : env.OPENAI_COMPAT_API_KEY || env.GROQ_API_KEY) || "";
+  }
   return env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
 };
 

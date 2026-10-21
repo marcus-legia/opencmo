@@ -74,12 +74,22 @@ def _job(**overrides) -> Job:
 @pytest.fixture
 def media(monkeypatch):
     """ffmpeg and Scribe stand-ins: the probe says 300 s, the master is a copy, Scribe hears words."""
-    said = {"transcript": Transcript(segments=[TranscriptSegment(0.0, 1.0, "Hi there", words=[Word(0.0, 0.5, "Hi"), Word(0.5, 1.0, "there")])])}
-    monkeypatch.setattr(process_job, "probe_file", lambda _path: SimpleNamespace(duration=300.0, width=1920, height=1080))
+    said = {
+        "transcript": Transcript(segments=[TranscriptSegment(0.0, 1.0, "Hi there", words=[Word(0.0, 0.5, "Hi"), Word(0.5, 1.0, "there")])]),
+        "header": 300.0,
+        "master": 300.0,
+        "probes": [],
+    }
+
+    def probe(path, **kwargs):
+        said["probes"].append((path, kwargs))
+        seconds = said["master"] if str(path).endswith("master.mp4") else said["header"]
+        return SimpleNamespace(duration=seconds, width=1920, height=1080)
+
+    monkeypatch.setattr(process_job, "probe_file", probe)
 
     def master(_source, out, **_kwargs):
         out.write_bytes(b"master")
-        return 0.0
 
     def preview(_source, out, **_kwargs):
         out.write_bytes(b"preview")
@@ -148,6 +158,39 @@ def test_a_video_longer_than_the_editor_holds_fails_before_charging(media, monke
     (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
     assert "Videos up to 2 minutes" in failure
     assert not [call for call in store.calls if call[0] in ("settle", "download")]
+
+
+def test_the_upload_url_is_probed_through_the_demuxer_allowlist(media):
+    process_job.process(FakeStore(), _job())
+    (_url, kwargs), _master = media["probes"]
+    assert kwargs == {"user_url": True}
+
+
+@pytest.mark.parametrize("header", [0.0, float("nan")])
+def test_a_video_without_a_readable_length_fails_before_charging(media, header):
+    media["header"] = header
+    store = FakeStore()
+    process_job.process(store, _job())
+    (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
+    assert failure == process_job.LENGTH_UNKNOWN
+    assert not [call for call in store.calls if call[0] in ("settle", "download")]
+
+
+def test_a_master_longer_than_its_header_fails_and_publishes_nothing(media):
+    media["header"], media["master"] = 10.0, 7200.0
+    store = FakeStore()
+    process_job.process(store, _job())
+    (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
+    assert "minutes can be edited" in failure
+    assert not [call for call in store.calls if call[0] == "publish"]
+
+
+def test_a_master_that_disagrees_with_the_billed_length_fails(media):
+    media["header"], media["master"] = 10.0, 60.0
+    store = FakeStore()
+    process_job.process(store, _job())
+    (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
+    assert failure == process_job.LENGTH_MISMATCH
 
 
 def test_an_upload_over_the_size_limit_fails_before_charging(media, monkeypatch):

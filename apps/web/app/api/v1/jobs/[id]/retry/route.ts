@@ -18,16 +18,10 @@ export const POST = withApi(
   async ({ supabase, params }) => {
     const job = firstRow(
       await rpcOrThrow<JobRow | JobRow[]>(supabase, "retry_job", { p_job_id: params.id }),
-    ) as (JobRow & { user_id: string; watermark: boolean }) | null;
+    ) as JobRow | null;
 
     if (job) {
-      after(async () => { await wakeWorker({
-        id: job.id,
-        user_id: job.user_id,
-        source_url: job.source_url,
-        clips_requested: job.clips_requested,
-        watermark: job.watermark,
-      }); });
+      after(async () => { await wakeWorker({ id: job.id }); });
     }
     return projectDetail(supabase, params.id);
   },

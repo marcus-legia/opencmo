@@ -17,17 +17,16 @@ import { api, jsonBody } from "@/components/clipping/api";
 import { stageLabel } from "@/components/clipping/ProcessingView";
 import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
-import { validateVideoFile } from "@/lib/api/source";
 import type { AspectRatio } from "@/lib/clipping-types";
 import { CREDITS_PER_MINUTE, JOB_HOLD_CREDITS } from "@/lib/credits";
-import { MAX_UPLOAD_BYTES } from "@/lib/upload";
+import { ASPECTS } from "@/lib/settings-schema";
+import { formatBytes, MAX_EDIT_SECONDS, MAX_UPLOAD_BYTES, rejectReason, TOO_LONG } from "@/lib/upload";
 import { uploadResumable, type UploadHandle } from "@/lib/upload-tus";
 
 type Granted = { bucket: string; objectName: string; source: string | null };
 // On/off only: the caption style is picked in the editor, from the editor's own presets.
 type Captions = "on" | "off";
 
-const ASPECTS: AspectRatio[] = ["9:16", "1:1", "16:9"];
 const CAPTIONS: { value: Captions; label: string }[] = [
   { value: "on", label: "On" },
   { value: "off", label: "Off" },
@@ -61,12 +60,7 @@ function probeDuration(file: File): Promise<number | null> {
   });
 }
 
-export function aspectOf(width: number, height: number): AspectRatio {
-  const ratio = width / height;
-  return ratio > 1.3 ? "16:9" : ratio > 0.8 ? "1:1" : "9:16";
-}
-
-export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (clipId: string) => void }) {
+export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRatio; onOpen: (clipId: string) => void; hidden?: boolean }) {
   const { credits, userId, refreshAccount } = useShellAccount();
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -80,6 +74,8 @@ export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (cl
   const uploaded = useRef<{ file: File; source: string } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const prefsLoaded = useRef(false);
+  // The file whose length is being read: a slower read of an earlier pick must not land on this one.
+  const probing = useRef<File | null>(null);
 
   useLayoutEffect(() => {
     const saved = readCaptions();
@@ -96,6 +92,8 @@ export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (cl
   }, [captions]);
   // The open edit's frame arrives after the first paint (once the renderer is up) and follows the FrameBar.
   useEffect(() => setAspect(frame), [frame]);
+  // The panel stays mounted across tabs; leaving the editor stops a transfer nobody can see.
+  useEffect(() => () => upload.current?.abort(), []);
 
   const load = useCallback(async () => {
     try {
@@ -116,10 +114,21 @@ export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (cl
     setError(null);
     uploaded.current = null;
     setDuration(null);
-    const problem = next ? validateVideoFile(next, MAX_UPLOAD_BYTES) : null;
+    const problem = next ? rejectReason(next.name, next.size) : null;
     if (problem) setError(problem);
     setFile(problem ? null : next);
-    if (next && !problem) void probeDuration(next).then(setDuration);
+    probing.current = problem ? null : next;
+    if (!next || problem) return;
+    void probeDuration(next).then((seconds) => {
+      if (probing.current !== next) return;
+      if (seconds !== null && seconds > MAX_EDIT_SECONDS) {
+        setError(TOO_LONG);
+        setFile(null);
+        probing.current = null;
+        return;
+      }
+      setDuration(seconds);
+    });
   }
 
   async function sendFile(video: File): Promise<string> {
@@ -167,7 +176,7 @@ export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (cl
   }
 
   return (
-    <div className="ed2-clips" data-testid="upload-panel">
+    <div className="ed2-clips" data-testid="upload-panel" hidden={hidden}>
       <form className="ed2-clips-form" onSubmit={submit} noValidate>
         <h3>Edit a video you made</h3>
         <p className="ed2-clips-hint">Your upload opens as its own edit, with a transcript you can cut by words.</p>
@@ -184,7 +193,7 @@ export function UploadPanel({ frame, onOpen }: { frame: AspectRatio; onOpen: (cl
           }}
         >
           <strong>{file ? file.name : "Drop your video here"}</strong>
-          {file ? <small>{(file.size / 1024 / 1024).toFixed(1)} MB</small> : <small>Any video format · up to 2 GB</small>}
+          {file ? <small>{(file.size / 1024 / 1024).toFixed(1)} MB</small> : <small>Any video format · up to {formatBytes(MAX_UPLOAD_BYTES)} and {MAX_EDIT_SECONDS / 60} minutes</small>}
           <input
             ref={picker}
             type="file"

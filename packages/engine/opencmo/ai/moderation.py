@@ -22,6 +22,7 @@ import base64
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -142,12 +143,22 @@ def _gemini_key() -> str:
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
 
 
-def _compat_key() -> str:
-    return os.environ.get("OPENAI_COMPAT_API_KEY") or os.environ.get("GROQ_API_KEY") or ""
-
-
 def _compat_base_url() -> str:
     return (os.environ.get("OPENAI_COMPAT_BASE_URL") or GROQ_BASE_URL).rstrip("/")
+
+
+def _compat_key() -> str:
+    """The key for `_compat_base_url()`: Groq's own key first on Groq, the compat key first
+    elsewhere, so a key is not sent to another vendor's endpoint when both are set."""
+    groq, compat = os.environ.get("GROQ_API_KEY") or "", os.environ.get("OPENAI_COMPAT_API_KEY") or ""
+    return (groq or compat) if _compat_base_url() == GROQ_BASE_URL else (compat or groq)
+
+
+def _compat_ready() -> bool:
+    """The default vision model is a Groq id: another endpoint needs its own model named."""
+    return bool(_compat_key()) and (
+        _compat_base_url() == GROQ_BASE_URL or bool(os.environ.get("OPENCMO_MODERATION_VISION_MODEL"))
+    )
 
 
 def _kind(name: str) -> str | None:
@@ -162,7 +173,7 @@ def _provider_order() -> list[str]:
 
 
 def _policy_checkers() -> list[str]:
-    keys = {"openai": _compat_key(), "anthropic": _anthropic_key(), "gemini": _gemini_key()}
+    keys = {"openai": _compat_ready(), "anthropic": _anthropic_key(), "gemini": _gemini_key()}
     return [kind for kind in _provider_order() if keys[kind]]
 
 
@@ -299,6 +310,12 @@ def _out_for_status(status: int) -> _Out | None:
     return None
 
 
+def _unfenced(text: str) -> str:
+    """JSON mode answers sometimes arrive inside a Markdown code fence."""
+    match = re.fullmatch(r"\s*```(?:json)?\s*(.*?)\s*```\s*", text or "", re.DOTALL)
+    return match.group(1) if match else text
+
+
 def _check_compat(images: list[Path], policy: str) -> None:
     """An OpenAI-compatible vision model (Groq…), the verdict as JSON."""
     content: list[dict] = [{"type": "image_url", "image_url": {"url": _data_url(image)}} for image in images]
@@ -331,14 +348,16 @@ def _check_compat(images: list[Path], policy: str) -> None:
         log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
         raise out
     if response.status_code >= 400:
+        # Our request was refused (image too large, unknown model…): no verdict, so the next
+        # checker is asked; with none left the output is blocked, never passed unchecked.
         log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
-        raise ProviderError(BLOCKED)
+        raise _Out(retryable=False)
     try:
         choice = response.json()["choices"][0]
         if choice.get("finish_reason") == "length":
             # Cut off before the verdict: no answer, not a block. Retried like a busy check.
             raise ProviderError(UNCHECKED, retryable=True)
-        verdict = _Verdict.model_validate_json(choice["message"]["content"], strict=True)
+        verdict = _Verdict.model_validate_json(_unfenced(choice["message"]["content"]), strict=True)
     except (KeyError, IndexError, TypeError, ValueError):
         log.warning("Output blocked: %s gave no verdict", COMPAT_VISION_MODEL)
         raise ProviderError(BLOCKED) from None

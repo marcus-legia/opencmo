@@ -227,12 +227,30 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.match(JSON.stringify(unset.content), /not set up/, "no endpoint: a clear error, never a hang");
   const tooMany = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111", times: Array.from({ length: 13 }, (_, i) => i) }, ctx);
   assert.equal(tooMany.isError, true, "at most 12 frames");
-  // The hourly cap answers before anything is read or posted.
+  // The clip is read under RLS first, so a wrong id does not spend the hour's looks; then the cap
+  // answers before anything is posted to the worker.
   process.env.OPENCMO_LOOK_URL = "http://127.0.0.1:9/look";
   process.env.OPENCMO_LOOK_TOKEN = "t";
-  const capped = { ...ctx, supabase: { rpc: async () => ({ data: false, error: null }) } as never };
-  const limited = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111" }, capped);
+  const hits: string[] = [];
+  const lookClient = (clip: unknown) => {
+    const project = {
+      clip_id: "11111111-1111-4111-8111-111111111111", document_hash: "h", manifest: null, version: 1, updated_at: "now",
+      document: { version: 1, stage: { children: [{ kind: "scene", name: "A", width: 1080, height: 1920, fill: "#000000", active: true, workarea: [0, 10], children: [] }] } },
+    };
+    const rows: Record<string, unknown> = { clips: clip, editor_projects: project };
+    const query = (table: string) => {
+      const builder = { select: () => builder, eq: () => builder, maybeSingle: async () => ({ data: rows[table] ?? null, error: null }) };
+      return builder;
+    };
+    return { from: query, rpc: async (name: string) => (hits.push(name), { data: false, error: null }) } as never;
+  };
+  const ownClip = { id: "11111111-1111-4111-8111-111111111111", job_id: "j", idx: 0, kind: "blank", jobs: { id: "j", status: "done", aspect: "9:16", duration_seconds: null, media_manifest: null } };
+  const missing = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111" }, { ...ctx, supabase: lookClient(null) });
+  assert.match(JSON.stringify(missing.content), /not found/);
+  assert.deepEqual(hits, [], "a clip that is not the caller's spends no look");
+  const limited = await callTool(capture, { clip_id: "11111111-1111-4111-8111-111111111111" }, { ...ctx, supabase: lookClient(ownClip) });
   assert.match(JSON.stringify(limited.content), /60 times an hour/);
+  assert.deepEqual(hits, ["rate_limit_hit"]);
   delete process.env.OPENCMO_LOOK_URL;
   delete process.env.OPENCMO_LOOK_TOKEN;
   const saveFrame = tools.find((tool) => tool.name === "save_frame")!;

@@ -19,7 +19,7 @@ export type Action = {
   /** Input đã rút gọn: dòng tool mở ra xem được, như panel chat của DS. */
   input?: unknown;
   view?: { plan?: PlanItem[]; touched?: string[]; exports?: { frame: string; task_id: string }[] };
-  /** `apply_to_clips`: clip lỗi (để Retry) và op đã áp — Retry chạy lại đúng op đó. */
+  /** Old project chats' `apply_to_clips` (removed with clipping): the clips that failed and the ops, shown read-only. */
   failed?: { clip_id: string; label: string; error?: string }[];
   ops?: unknown[];
 };

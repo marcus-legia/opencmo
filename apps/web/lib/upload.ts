@@ -22,6 +22,15 @@ export const SOURCE_PREFIX = "storage://";
  */
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
+/**
+ * The longest video the editor holds, in seconds. The worker refuses longer ones with the same
+ * number (`MAX_EDIT_SECONDS` in packages/engine/opencmo/worker/process_job.py); the Upload panel
+ * refuses them when the file is picked, before any byte is sent or credit held.
+ */
+export const MAX_EDIT_SECONDS = 900;
+
+export const TOO_LONG = `Videos up to ${MAX_EDIT_SECONDS / 60} minutes can be edited. Trim it and upload it again.`;
+
 export function isSourceUpload(url: string): boolean {
   return url.startsWith(SOURCE_PREFIX);
 }

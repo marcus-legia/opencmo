@@ -14,7 +14,7 @@ import type { Readable } from 'node:stream';
 import { createCanvas, type Canvas, type ImageData } from '@napi-rs/canvas';
 
 import type { Probe } from './probe.ts';
-import { USER_INPUT } from './inputs.ts';
+import { userInput } from './inputs.ts';
 
 /** Đọc tiếp tối đa chừng này khung thay vì mở luồng mới. */
 const SKIP_LIMIT_SECONDS = 2;
@@ -73,7 +73,7 @@ class Stream {
     const child = spawn(
       'ffmpeg',
       // File media của người dùng: chỉ demuxer media thường (inputs.ts).
-      ['-v', 'error', '-nostdin', '-threads', '1', '-ss', seek.toFixed(6), ...USER_INPUT, '-i', this.file, '-an', '-sn', '-vf', filters, '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'],
+      ['-v', 'error', '-nostdin', '-threads', '1', '-ss', seek.toFixed(6), ...userInput(this.file), '-i', this.file, '-an', '-sn', '-vf', filters, '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'],
       { stdio: ['ignore', 'pipe', 'ignore'] },
     );
     this.process = child;

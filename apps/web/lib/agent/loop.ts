@@ -13,7 +13,7 @@ import "server-only";
  *
  * A turn has no overall step limit; it PAUSES between two requests when:
  * - a tool runs in the tab (`capture`, `media_waveform`, `media_grab`, `save_frame`) → `awaiting_browser`;
- * - a priced approval card (`generate_media`, `apply_to_clips`) → `awaiting_approval`;
+ * - a priced approval card (`generate_media`) → `awaiting_approval`;
  * - the agent asks (`ask_user`) → `awaiting_input`;
  * - one request hits its time limit → `awaiting_continue` ('time'): the tab continues on its own;
  * - one request hits `MAX_STEPS` → `awaiting_continue` ('steps'): the tab continues on its own;

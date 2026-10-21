@@ -67,50 +67,40 @@ def test_upload_source_tu_choi_path_khong_canonical(source_url: str):
         media.upload_object_name(job)
 
 
-@pytest.fixture
-def keyed_video(tmp_path: Path) -> Path:
-    """20 giây, keyframe mỗi 2 giây — đủ để mép cắt KHÔNG trùng mốc yêu cầu."""
-    target = tmp_path / "keyed.mp4"
+def _video(target: Path, *, audio: list[str], video: list[str] | None = None) -> Path:
     run(
         [
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
             "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-            "-t", "20", "-c:v", "libx264", "-preset", "ultrafast",
-            "-g", "60", "-sc_threshold", "0", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", str(target),
+            "-t", "4", *(video or ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]),
+            *audio, str(target),
         ],
         timeout=120,
     )
     return target
 
 
-def test_keyframe_at_or_before_lui_ve_mep_that(keyed_video: Path):
-    assert media.keyframe_at_or_before(keyed_video, 0.0) == 0.0
-    assert media.keyframe_at_or_before(keyed_video, 1.5) == 0.0
-    # Đúng mốc keyframe thì trả về chính nó, không lùi thêm một GOP: lùi thừa
-    # là hai giây video thừa trong mọi master.
-    assert media.keyframe_at_or_before(keyed_video, 4.0) == pytest.approx(4.0, abs=0.05)
-    assert media.keyframe_at_or_before(keyed_video, 7.3) == pytest.approx(6.0, abs=0.05)
-
-
-def test_keyframe_at_or_before_file_hong_tra_ve_dau_file(tmp_path: Path):
-    """Không đọc được thì cắt từ đầu: master to hơn, nhưng `offset` vẫn ĐÚNG."""
-    broken = tmp_path / "broken.mp4"
-    broken.write_bytes(b"not a video")
-    assert media.keyframe_at_or_before(broken, 9.0) == 0.0
-
-
-def test_make_editor_master_giu_do_dai_va_bao_dung_mep_cat(tmp_path: Path, keyed_video: Path):
+def test_make_editor_master_copies_the_whole_video_at_source_size(tmp_path: Path):
+    source = _video(tmp_path / "talk.mp4", audio=["-c:a", "aac"])
     out = tmp_path / "master.mp4"
-    begin = media.make_editor_master(keyed_video, out, start=7.3, duration=6.0)
-
-    assert begin == pytest.approx(6.0, abs=0.05)
+    media.make_editor_master(source, out)
     info = probe_file(str(out))
-    # Độ dài phải phủ HẾT cửa sổ yêu cầu, tính từ mép keyframe thật. Thiếu phần
-    # bù `start - begin` là cụt đuôi clip đúng bằng khoảng lùi — và không ai
-    # thấy cho tới lúc xem lại bản đã xuất.
-    assert info.duration == pytest.approx((7.3 - begin) + 6.0, abs=0.2)
-    # `-c copy`: độ phân giải nguồn, không phải 540p của proxy.
-    assert (info.width, info.height) == (640, 360)
-    assert info.has_audio
+    assert info.duration == pytest.approx(4.0, abs=0.2)
+    assert (info.width, info.height) == (640, 360) and info.has_audio
+
+
+@pytest.mark.parametrize(
+    ("name", "audio", "video"),
+    [
+        ("camera.avi", ["-c:a", "adpcm_ima_wav"], ["-c:v", "mpeg4"]),
+        ("recording.webm", ["-c:a", "libvorbis"], ["-c:v", "libvpx", "-b:v", "500k"]),
+        ("capture.mkv", ["-c:a", "aac"], ["-c:v", "huffyuv"]),
+    ],
+)
+def test_make_editor_master_encodes_what_mp4_cannot_hold(tmp_path: Path, name, audio, video):
+    source = _video(tmp_path / name, audio=audio, video=video)
+    out = tmp_path / "master.mp4"
+    media.make_editor_master(source, out)
+    info = probe_file(str(out))
+    assert info.has_audio and info.duration == pytest.approx(4.0, abs=0.3)

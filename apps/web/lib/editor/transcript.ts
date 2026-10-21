@@ -51,8 +51,8 @@ export async function transcriptFromArtifact(
   if (!artifact) {
     throw new ApiError(
       404,
-      "This video was processed before transcripts were saved. " +
-        "Process it again to edit its captions.",
+      "This video has no transcript: no speech was found when it was processed. " +
+        "Select the video and use Generate captions in the Inspector to make one.",
     );
   }
 

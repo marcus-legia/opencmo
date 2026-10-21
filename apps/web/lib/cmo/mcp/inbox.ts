@@ -210,7 +210,7 @@ export const INBOX_TOOLS: CmoMcpTool[] = [
     name: "list_inbox",
     title: "List the CMO inbox",
     description:
-      "List the CMO work waiting for you: weekly plans, X drafts, Reddit scans, video pack captions, memory summaries the schedule prepared while OpenCMO's own AI was not thinking for the founder. Each item has an id for get_inbox_item.",
+      "List the CMO work waiting for you: weekly plans, X drafts, Reddit scans, memory summaries the schedule prepared while OpenCMO's own AI was not thinking for the founder. Each item has an id for get_inbox_item.",
     inputSchema: listInput,
     annotations: { readOnlyHint: true, openWorldHint: false },
     run: listInbox,

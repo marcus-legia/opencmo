@@ -44,7 +44,7 @@ import { EditVideoPanel } from "./generate/EditVideoPanel";
 import { ASSET_DRAG, LibraryPanel } from "./library/LibraryPanel";
 import { useAutoTranscripts } from "./library/useAutoTranscripts";
 import { TranscriptPanel } from "./transcript/TranscriptPanel";
-import { aspectOf, UploadPanel } from "./upload/UploadPanel";
+import { UploadPanel } from "./upload/UploadPanel";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { AssistantClient } from "./assistant/client";
 import { capture, grab, inspectColor, waveform, withoutText, type InspectColorInput } from "./assistant/capture";
@@ -840,6 +840,15 @@ function Workspace({
       if (blob) download(blob, record.path.split("/").pop() ?? "asset");
     }
   };
+  // A copied style whose element was deleted since cannot be pasted.
+  const styleFrom = useMemo(() => {
+    if (!styleSource) return null;
+    let found = false;
+    walk(state.document, ({ entity }) => {
+      if (entity.id === styleSource) found = true;
+    });
+    return found ? styleSource : null;
+  }, [state.document, styleSource]);
   /** File ▸ Asset ▸ Remove unused media: record không element nào trỏ tới. */
   const removeUnused = () => {
     const used = new Set<string>();
@@ -1176,8 +1185,14 @@ function Workspace({
     { label: "Copy style", disabled: selection.length !== 1, onSelect: () => setStyleSource(selection[0] ?? null), testid: "menu-copy-style" },
     {
       label: "Paste style",
-      disabled: !styleSource || !selection.length || selection.every((id) => id === styleSource),
-      onSelect: () => styleSource && void run([{ op: "copy_settings", from_id: styleSource, to_ids: selection.filter((id) => id !== styleSource) }]),
+      disabled: !styleFrom || !selection.length || selection.every((id) => id === styleFrom),
+      onSelect: () => {
+        if (!styleFrom) return;
+        const targets = selection.filter((id) => id !== styleFrom);
+        // `copy_settings` takes 50 targets per op: one batch of ops is still one undo step.
+        const ops = Array.from({ length: Math.ceil(targets.length / 50) }, (_, index) => ({ op: "copy_settings", from_id: styleFrom, to_ids: targets.slice(index * 50, index * 50 + 50) }));
+        void run(ops);
+      },
       testid: "menu-paste-style",
     },
     ...(selection.length >= 2
@@ -1375,8 +1390,8 @@ function Workspace({
         hidden={layout.maximized === "agent"}
         style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}
       >
-      {hideUI || !layout.visible.media ? null : (
-      <section className="ed2-left" {...panel("media")} aria-label="Media">
+      {/* Hidden, not unmounted: an upload in flight lives in the Upload tab's state. */}
+      <section className="ed2-left" {...panel("media")} hidden={hideUI || !layout.visible.media} aria-label="Media">
         {splitter("media")}
         <div className="ed2-left-tabs" role="tablist">
           {(["media", "transcript", "upload"] as const).map((tab) => (
@@ -1399,12 +1414,7 @@ function Workspace({
             transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
           />
-        ) : leftTab === "upload" ? (
-          <UploadPanel
-            frame={sceneWidth && sceneHeight ? aspectOf(sceneWidth, sceneHeight) : "9:16"}
-            onOpen={(id) => void leave(`/app/editor/${id}`)}
-          />
-        ) : (
+        ) : leftTab === "transcript" ? (
           <TranscriptPanel
             doc={state.document}
             context={opContext}
@@ -1413,9 +1423,13 @@ function Workspace({
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
             selection={selection}
           />
-        )}
+        ) : null}
+        <UploadPanel
+          hidden={leftTab !== "upload"}
+          frame={sceneWidth && sceneHeight ? frameAspect(sceneWidth, sceneHeight) : "9:16"}
+          onOpen={(id) => void leave(`/app/editor/${id}`)}
+        />
       </section>
-      )}
       <main
         className="ed2-main"
         {...panel("preview")}

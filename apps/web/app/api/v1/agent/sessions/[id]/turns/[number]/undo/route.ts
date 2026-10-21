@@ -83,7 +83,9 @@ export const POST = withApi({}, async ({ supabase, params }) => {
   if (["running", "awaiting_browser", "awaiting_approval"].includes(row.status)) {
     throw new ApiError(409, "Wait for the assistant to finish before undoing.");
   }
-  if (!row.checkpoint_id || !clipId) throw new ApiError(422, "This request did not change the clip.");
+  // Old project-chat sessions (removed with clipping) have no clip: their history is read-only.
+  if (!clipId) throw new ApiError(410, "Undo is not available for project chats. Restore a version from Version history in the editor.");
+  if (!row.checkpoint_id) throw new ApiError(422, "This request did not change the clip.");
   const { data: newer } = await supabase
     .from("agent_turns")
     .select("number")
@@ -105,17 +107,17 @@ export const POST = withApi({}, async ({ supabase, params }) => {
     .limit(1)
     .maybeSingle();
   const next = nextRow as { id: string } | null;
-  const written = writtenVersions(await turnCalls(supabase, row.id), clipId);
+  const written = writtenVersions(await turnCalls(supabase, row.id));
 
   await clipContext(supabase, clipId);
   const nextCheckpoint = next ? await turnCheckpoint(supabase, next.id) : undefined;
   const later = next
     ? {
-        written: writtenVersions(await turnCalls(supabase, next.id), clipId).get(clipId),
+        written: writtenVersions(await turnCalls(supabase, next.id)),
         checkpoint: nextCheckpoint ? () => revisionDocument(supabase, nextCheckpoint) : undefined,
       }
     : null;
-  const project = await restoreClip(supabase, clipId, row.checkpoint_id, number, (current) => unchangedSince(current, written.get(clipId), later));
+  const project = await restoreClip(supabase, clipId, row.checkpoint_id, number, (current) => unchangedSince(current, written, later));
   await rpcOrThrow(supabase, "agent_mark_undone", { p_turn_id: row.id });
   return {
     project: { clip_id: project.clip_id, document: project.document, document_hash: project.document_hash, version: project.version },

@@ -3,7 +3,7 @@ import { EXPLAINER_MODEL } from "@opencmo/editor-core";
 
 import { ApiError } from "@/lib/api/errors";
 import { clipContext } from "@/lib/api/clips";
-import { notFound, rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
+import { rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
 import { agentChatProvider, agentProvider, assistantDown, availableModels, providerForModel } from "@/lib/agent/model";
 import { sessionView, type SessionRow } from "@/lib/agent/view";
 import { availableModels as generationModels } from "@/lib/generate/models";
@@ -11,12 +11,6 @@ import { availableModels as generationModels } from "@/lib/generate/models";
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f-]{36}$/;
-
-/** Project (job) của người dùng hiện tại, dưới RLS — 404 cho project người khác. */
-async function ownJob(supabase: SupabaseClient, jobId: string): Promise<void> {
-  const { data } = await supabase.from("jobs").select("id").eq("id", jobId).maybeSingle();
-  if (!data) throw notFound("Project not found.");
-}
 
 /** Model được chọn: model client xin nếu server bật nó, không thì mặc định. */
 function pickModel(wanted: string | null | undefined): string | null {
@@ -49,16 +43,14 @@ async function listSessions(supabase: SupabaseClient, where: { clipId: string } 
 }
 
 /**
- * Phiên Assistant của một clip (`?clip_id=`, editor) hoặc của cả project
- * (`?job_id=`, trang project), ở hình dạng panel vẽ được. Phiên gắn với
- * model: `?model=` chọn model (trong số server bật), `?session_id=` mở một
- * phiên cũ trong lịch sử. `available: false` khi server chưa có khoá API —
- * panel nói thẳng thay vì để người dùng gõ vào một ô không bao giờ trả lời.
+ * The Assistant session of a clip (`?clip_id=`, the editor) or the CMO chat (`?scope=cmo`), in the
+ * shape the panel draws. A session is tied to a model: `?model=` picks one the server enables,
+ * `?session_id=` opens an older session from the history. `available: false` when the server has
+ * no API key, so the panel says so instead of offering a box that never answers.
  */
 export const GET = withApi({}, async ({ supabase, request }) => {
   const params = new URL(request.url).searchParams;
   const clipId = params.get("clip_id");
-  const jobId = params.get("job_id");
   const sessionId = params.get("session_id");
   const cmo = params.get("scope") === "cmo";
   let blank = false;
@@ -67,17 +59,14 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   } else if (clipId !== null) {
     if (!UUID.test(clipId)) throw new ApiError(422, "clip_id: Invalid");
     blank = (await clipContext(supabase, clipId)).clip.kind === "blank";
-  } else if (jobId !== null) {
-    if (!UUID.test(jobId)) throw new ApiError(422, "job_id: Invalid");
-    await ownJob(supabase, jobId);
   } else {
-    throw new ApiError(422, "clip_id, job_id or scope: Required");
+    throw new ApiError(422, "clip_id or scope: Required");
   }
   if (sessionId !== null && !UUID.test(sessionId)) throw new ApiError(422, "session_id: Invalid");
 
   const model = pickModel(params.get("model"));
   let query = supabase.from("agent_sessions").select("id, clip_id, job_id, model, lock_until");
-  query = cmo ? query.eq("scope", "cmo") : clipId !== null ? query.eq("clip_id", clipId) : query.eq("job_id", jobId!);
+  query = cmo ? query.eq("scope", "cmo") : query.eq("clip_id", clipId!);
   if (sessionId) query = query.eq("id", sessionId);
   // Phiên của model đang chọn: phiên của model khác không chạy tiếp được.
   else if (model) query = query.eq("model", model);
@@ -92,18 +81,17 @@ export const GET = withApi({}, async ({ supabase, request }) => {
     broll: generationModels().some((item) => (item.kind === "image" || item.kind === "video") && !item.limits.scene),
     // "Explain a concept" starts a New edit: only there, and only when explainers can render here.
     explain: blank && generationModels().some((item) => item.id === EXPLAINER_MODEL),
-    sessions: cmo ? await listSessions(supabase, { cmo: true }) : clipId !== null ? await listSessions(supabase, { clipId }) : [],
+    sessions: cmo ? await listSessions(supabase, { cmo: true }) : await listSessions(supabase, { clipId: clipId! }),
     session: session ? await sessionView(supabase, session) : null,
   };
 });
 
 const body = z.union([
   z.object({ clip_id: z.string().uuid(), model: z.string().max(64).optional(), new: z.boolean().optional() }),
-  z.object({ job_id: z.string().uuid() }),
   z.object({ scope: z.literal("cmo"), new: z.boolean().optional() }),
 ]);
 
-/** Mở (hoặc trả lại) phiên của clip này — `new` là "New chat" —, của cả project, hoặc CMO chat (`scope: "cmo"`). */
+/** Opens (or returns) this clip's session (`new` is "New chat"), or the CMO chat (`scope: "cmo"`). Project chat is gone with clipping. */
 export const POST = withApi({ body }, async ({ supabase, body }) => {
   let session: SessionRow;
   if ("clip_id" in body) {
@@ -114,15 +102,10 @@ export const POST = withApi({ body }, async ({ supabase, body }) => {
       p_clip_id: body.clip_id,
       p_model: model,
     });
-  } else if ("scope" in body) {
+  } else {
     const provider = agentChatProvider("cmo");
     if (!provider) throw new ApiError(503, "Your CMO is not available yet.");
     session = await rpcOrThrow<SessionRow>(supabase, "agent_open_cmo_session", { p_model: provider.model, p_new: body.new ?? false });
-  } else {
-    const provider = agentProvider();
-    if (!provider) throw new ApiError(503, "The assistant is not available yet.");
-    await ownJob(supabase, body.job_id);
-    session = await rpcOrThrow<SessionRow>(supabase, "agent_open_project_session", { p_job_id: body.job_id, p_model: provider.model });
   }
   return sessionView(supabase, session);
 });

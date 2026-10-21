@@ -38,18 +38,12 @@ export async function createUploadEdit(supabase: SupabaseClient, userId: string,
     p_aspect: body.aspect,
     p_captions: body.captions,
   });
-  const row = (Array.isArray(job) ? job[0] : job) as JobRow & { user_id: string; watermark: boolean };
+  const row = (Array.isArray(job) ? job[0] : job) as JobRow;
   if (!row) throw new ApiError(500, "Could not create the project.");
 
   // A failed wake is fine: the job is already 'queued' and `sweep()` picks it up.
   after(async () => {
-    await wakeWorker({
-      id: row.id,
-      user_id: row.user_id,
-      source_url: row.source_url,
-      clips_requested: row.clips_requested,
-      watermark: row.watermark,
-    });
+    await wakeWorker({ id: row.id });
   });
   return projectShape(row);
 }

@@ -39,6 +39,8 @@ USER_MEDIA_FORMATS = (
 )
 #: Tham số đặt TRƯỚC `-i` của một file người dùng đã tải về máy.
 USER_INPUT = ["-protocol_whitelist", "file", "-format_whitelist", USER_MEDIA_FORMATS]
+#: The same allowlist for a user file read through a signed Storage URL (http for the local stack).
+USER_HTTP_INPUT = ["-protocol_whitelist", "http,https,tls,tcp", "-format_whitelist", USER_MEDIA_FORMATS]
 
 
 def run(

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { USER_INPUT } from './inputs.ts';
+import { userInput } from './inputs.ts';
 
 const run = promisify(execFile);
 
@@ -20,7 +20,7 @@ export async function probe(file: string): Promise<Probe> {
   const { stdout } = await run('ffprobe', [
     '-v', 'error',
     // File của người dùng: chỉ demuxer media thường (inputs.ts).
-    ...USER_INPUT,
+    ...userInput(file),
     '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,r_frame_rate,color_space,channels:stream_side_data=rotation:stream_tags=rotate:format=duration',
     '-of', 'json',
     file,
