@@ -3,7 +3,7 @@ import { clipContext } from "@/lib/api/clips";
 import { notFound, rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@opencmo/clip-doc";
 
-import { EDITED_AFTER_MESSAGE, unchangedSince, writtenVersions, type ToolCallRow } from "@/lib/agent/undo-guard";
+import { EDITED_AFTER_MESSAGE, turnOpen, unchangedSince, writtenVersions, type ToolCallRow } from "@/lib/agent/undo-guard";
 import { readEditorProject, type EditorProjectRow } from "@/lib/editor/apply";
 import { projectDocument, saveDocument } from "@/lib/editor/document";
 
@@ -80,7 +80,7 @@ export const POST = withApi({}, async ({ supabase, params }) => {
     .maybeSingle();
   if (!turn) throw notFound("Assistant turn not found.");
   const row = turn as { id: string; status: string; checkpoint_id: string | null };
-  if (["running", "awaiting_browser", "awaiting_approval"].includes(row.status)) {
+  if (turnOpen(row.status)) {
     throw new ApiError(409, "Wait for the assistant to finish before undoing.");
   }
   // Old project-chat sessions (removed with clipping) have no clip: their history is read-only.

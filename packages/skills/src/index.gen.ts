@@ -11,6 +11,7 @@ export const SKILLS = [
       "title.hook",
       "speaker.punchIn",
       "proof.card",
+      "proof.capture",
       "transition.whip"
     ],
     "preset": {

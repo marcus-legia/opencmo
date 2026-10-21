@@ -495,8 +495,26 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   const started: { id: string; credits_reserved: number; reused: boolean }[] = [];
   // Only what this approval started: a reused generation belongs to an earlier placement (another
   // card, an MCP retry), and cancelling it would take that media away too.
-  const cancelAll = () =>
-    Promise.all(started.filter((item) => !item.reused).map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id }).catch(() => undefined)));
+  // Returns the credits it could not give back, so no answer claims a refund that did not happen.
+  const cancelAll = async (): Promise<number> => {
+    const mine = started.filter((item) => !item.reused);
+    const results = await Promise.allSettled(mine.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id })));
+    let held = 0;
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return;
+      held += mine[index]!.credits_reserved;
+      console.error("[agent] cancel_generation failed", mine[index]!.id, result.reason);
+    });
+    return held;
+  };
+  const stopped = (held: number): ToolOutcome =>
+    held
+      ? {
+          ok: false,
+          content: JSON.stringify({ stopped: true, message: `The user stopped the assistant. Nothing was placed on the clip, but ${held} held credits could not be returned yet: tell the user.` }),
+          summary: "Stopped",
+        }
+      : STOPPED;
   const runs = [
     ...[prepared.spec, ...(prepared.variants ?? [])].map((spec) => ({ model: prepared.model, spec })),
     ...(prepared.extra ?? []),
@@ -534,10 +552,7 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
   // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
   // Stop pressed while the credits were held: give them back before anything lands on the clip.
-  if (env.alive && !(await env.alive())) {
-    await cancelAll();
-    return { outcome: STOPPED };
-  }
+  if (env.alive && !(await env.alive())) return { outcome: stopped(await cancelAll()) };
   const applied = await env.applyOp(prepared.op);
   if (!applied.ok) {
     // Không đặt được lên clip (vd clip vừa đổi ở tab khác): huỷ lượt sinh để
