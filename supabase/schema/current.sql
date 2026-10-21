@@ -467,6 +467,7 @@ declare
 begin
   perform public.agent_owned_session(p_session_id, v_user);
   perform public.lock_credit_owner(v_user);
+  perform 1 from public.agent_sessions where id = p_session_id for update;
   select * into v_turn from public.agent_turns
   where session_id = p_session_id and status = 'awaiting_continue' and pause_reason = 'budget'
   order by number desc limit 1
@@ -882,7 +883,7 @@ declare
   v_count integer := 0;
 begin
   for v_turn in
-    select t.id, t.status, t.session_id
+    select t.id, t.status, t.session_id, s.user_id
     from public.agent_turns t
     join public.agent_sessions s on s.id = t.session_id
     where (t.status in ('running', 'awaiting_browser') and (s.lock_until is null or s.lock_until < now()))
@@ -890,8 +891,12 @@ begin
     order by t.created_at
     limit 200
   loop
-    -- Same lock order as agent_stop and agent_resume_turn (session, then turn); a session in use
-    -- right now is left for the next sweep.
+    -- Credit owner, then session, as every turn RPC; a user or session in use right now is left
+    -- for the next sweep.
+    perform 1 from public.profiles where id = v_turn.user_id for update skip locked;
+    if not found and exists (select 1 from public.profiles where id = v_turn.user_id) then
+      continue;
+    end if;
     perform 1 from public.agent_sessions where id = v_turn.session_id for update skip locked;
     if not found then
       continue;
@@ -988,26 +993,43 @@ CREATE FUNCTION public.agent_record_usage_for(p_user uuid, p_turn_id uuid, p_mod
     AS $$
 declare
   v_total bigint;
+  v_turn public.agent_turns;
+  v_credits int;
 begin
   perform public.agent_owned_turn(p_turn_id, p_user);
   if least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
     raise exception 'Invalid usage.' using errcode = '22023';
   end if;
+  -- Same lock as agent_close_turn: a close either counts this row or sees the turn closed after it.
+  perform public.lock_credit_owner(p_user);
   insert into public.agent_usage(turn_id, model, input_tokens, output_tokens,
     cache_read_tokens, cache_write_tokens, micro_usd)
   values (p_turn_id, left(coalesce(p_model, 'unknown'), 64), p_input, p_output, p_cache_read, p_cache_write,
     public.agent_micro_usd(p_model, p_input, p_output, p_cache_read, p_cache_write));
   select coalesce(sum(micro_usd), 0)::bigint into v_total from public.agent_usage where turn_id = p_turn_id;
+
+  select * into v_turn from public.agent_turns where id = p_turn_id for update;
+  if v_turn.status not in ('running', 'awaiting_browser', 'awaiting_approval', 'awaiting_input', 'awaiting_continue') then
+    -- Already settled: charge what this usage adds, up to the hold the user approved and never
+    -- past the balance (the hold was given back at the close and may be spent since).
+    v_credits := least(v_turn.hold_credits, public.agent_credits(v_total));
+    if v_credits > coalesce(v_turn.credits, 0) then
+      v_credits := coalesce(v_turn.credits, 0)
+        + least(v_credits - coalesce(v_turn.credits, 0), greatest(public.credit_balance(p_user), 0));
+      perform public.credit_settle(p_user, 'agent_turn', p_turn_id, v_credits, 'Assistant usage after Stop');
+      update public.agent_turns set credits = v_credits where id = p_turn_id;
+    end if;
+  end if;
   return public.agent_credits(v_total);
 end;
 $$;
 
 
 --
--- Name: agent_resume_turn(uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: agent_resume_turn(uuid, text, text[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.agent_resume_turn(p_session_id uuid) RETURNS public.agent_turns
+CREATE FUNCTION public.agent_resume_turn(p_session_id uuid, p_waiting text DEFAULT NULL::text, p_tool_use_ids text[] DEFAULT NULL::text[]) RETURNS public.agent_turns
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -1016,6 +1038,7 @@ declare
   v_turn public.agent_turns;
 begin
   perform public.agent_owned_session(p_session_id, v_user);
+  perform public.lock_credit_owner(v_user);
   perform 1 from public.agent_sessions where id = p_session_id for update;
   select * into v_turn from public.agent_turns
   where session_id = p_session_id
@@ -1024,6 +1047,16 @@ begin
   for update;
   if not found then
     raise exception 'The assistant is not waiting for you.' using errcode = 'P0001';
+  end if;
+  if p_waiting is not null and v_turn.status <> p_waiting then
+    raise exception 'The assistant is not waiting for that any more. Reload the chat.' using errcode = 'P0001';
+  end if;
+  if p_tool_use_ids is not null and exists (
+    select unnest(p_tool_use_ids)
+    except
+    select tool_use_id from public.agent_tool_calls where turn_id = v_turn.id and status = 'pending'
+  ) then
+    raise exception 'The assistant is not waiting for that any more. Reload the chat.' using errcode = 'P0001';
   end if;
   -- Out of held credits: only agent_extend_hold lets the turn continue.
   if v_turn.status = 'awaiting_continue' and v_turn.pause_reason = 'budget' then
@@ -1083,7 +1116,8 @@ declare
   v_turn public.agent_turns;
 begin
   perform public.agent_owned_session(p_session_id, v_user);
-  -- Same lock as agent_resume_turn and agent_begin_turn: Stop waits for a resume in flight.
+  -- Credit owner, then session, as agent_begin_turn: Stop waits for a resume in flight.
+  perform public.lock_credit_owner(v_user);
   perform 1 from public.agent_sessions where id = p_session_id for update;
   select * into v_turn from public.agent_turns
   where session_id = p_session_id

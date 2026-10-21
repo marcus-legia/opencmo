@@ -19,6 +19,25 @@ export type StopReason = "end" | "tool" | "max_tokens" | "refusal";
 
 export type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number };
 
+/**
+ * Thrown by `step` when the user's Stop aborted the stream: what the call used up to then, so the
+ * turn is billed for it like any other call.
+ */
+export class StepAborted extends Error {
+  constructor(
+    readonly usage: Usage,
+    readonly model: string,
+  ) {
+    super("The model call was stopped.");
+  }
+}
+
+/**
+ * Output tokens of a stream cut short: providers report output only at the end, so it is
+ * estimated from what was streamed (about 4 characters a token) when nothing larger was reported.
+ */
+export const streamedTokens = (characters: number, reported = 0): number => Math.max(reported, Math.ceil(characters / 4));
+
 export type Step = {
   /** Khối assistant NATIVE — lưu nguyên vào `agent_messages`. */
   content: unknown[];

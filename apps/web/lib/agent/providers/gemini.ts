@@ -16,7 +16,7 @@ import { ApiError, FinishReason, GoogleGenAI, type Content, type Part } from "@g
 import type { ToolSpec } from "../tools";
 import { NOT_COMPLETED } from "./anthropic";
 import { callId, geminiFormat } from "./gemini-history";
-import type { Delta, Provider, Step, StepRequest, StoredMessage, ToolCall } from "./types";
+import { StepAborted, streamedTokens, type Delta, type Provider, type Step, type StepRequest, type StoredMessage, type ToolCall } from "./types";
 
 /** Latest Pro; override with `AGENT_GEMINI_MODEL` (e.g. a pinned id from `models.list`). */
 export const GEMINI_MODEL = process.env.AGENT_GEMINI_MODEL || "gemini-pro-latest";
@@ -121,30 +121,37 @@ export function geminiProvider(apiKey: string, client?: Pick<GoogleGenAI, "model
       let usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
       let model = modelId;
 
-      for await (const chunk of stream) {
-        if (chunk.promptFeedback?.blockReason) blocked = true;
-        const candidate = chunk.candidates?.[0];
-        for (const part of candidate?.content?.parts ?? []) {
-          parts.push(part);
-          if (part.functionCall) {
-            onDelta({ type: "tool_start", id: callId(part, parts.length - 1), name: part.functionCall.name ?? "" });
-          } else if (part.text) {
-            onDelta({ type: part.thought ? "thinking" : "text", text: part.text });
+      let streamed = 0;
+      try {
+        for await (const chunk of stream) {
+          if (chunk.promptFeedback?.blockReason) blocked = true;
+          const candidate = chunk.candidates?.[0];
+          for (const part of candidate?.content?.parts ?? []) {
+            parts.push(part);
+            if (part.functionCall) {
+              onDelta({ type: "tool_start", id: callId(part, parts.length - 1), name: part.functionCall.name ?? "" });
+            } else if (part.text) {
+              streamed += part.text.length;
+              onDelta({ type: part.thought ? "thinking" : "text", text: part.text });
+            }
+          }
+          if (candidate?.finishReason) finish = candidate.finishReason;
+          if (chunk.modelVersion) model = chunk.modelVersion;
+          const meta = chunk.usageMetadata;
+          if (meta) {
+            const cached = meta.cachedContentTokenCount ?? 0;
+            usage = {
+              // `promptTokenCount` includes the cached part; the cached part is billed at the cache price.
+              input: Math.max(0, (meta.promptTokenCount ?? 0) - cached),
+              output: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
+              cacheRead: cached,
+              cacheWrite: 0,
+            };
           }
         }
-        if (candidate?.finishReason) finish = candidate.finishReason;
-        if (chunk.modelVersion) model = chunk.modelVersion;
-        const meta = chunk.usageMetadata;
-        if (meta) {
-          const cached = meta.cachedContentTokenCount ?? 0;
-          usage = {
-            // `promptTokenCount` includes the cached part; the cached part is billed at the cache price.
-            input: Math.max(0, (meta.promptTokenCount ?? 0) - cached),
-            output: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
-            cacheRead: cached,
-            cacheWrite: 0,
-          };
-        }
+      } catch (err) {
+        if (signal?.aborted) throw new StepAborted({ ...usage, output: streamedTokens(streamed, usage.output) }, model);
+        throw err;
       }
 
       const calls: ToolCall[] = geminiFormat.callsIn(parts);

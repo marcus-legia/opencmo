@@ -107,11 +107,26 @@ export async function continueTurn(
   options: { extend?: boolean } = {},
 ) {
   const { session, provider } = await loadSession(supabase, sessionId);
-  const turn = await rpcOrThrow<Turn>(supabase, options.extend ? "agent_extend_hold" : "agent_resume_turn", {
-    p_session_id: session.id,
-  });
+  // Name the pause being answered: the tool calls answered, or a Continue. A late request from
+  // another tab then fails instead of answering (and cancelling) a newer pause.
+  const resume = answers.length
+    ? { p_tool_use_ids: answers.map((answer) => answer.tool_use_id) }
+    : { p_waiting: "awaiting_continue" };
+  const turn = options.extend
+    ? await rpcOrThrow<Turn>(supabase, "agent_extend_hold", { p_session_id: session.id })
+    : await rpcOrThrow<Turn>(supabase, "agent_resume_turn", { p_session_id: session.id, ...resume });
   const ledger = serviceLedger(userId);
-  const scope = await scopeFor(supabase, session, turn, ledger);
+  let scope: Awaited<ReturnType<typeof scopeFor>>;
+  try {
+    scope = await scopeFor(supabase, session, turn, ledger);
+  } catch (error) {
+    // The turn is running again (and an extend already held more credits): close it, or the clip
+    // reads "already working" until the reaper and the hold stays taken.
+    await ledger("agent_finish_turn", { p_turn_id: turn.id, p_status: "failed", p_error: "The assistant could not continue this request." }).catch(
+      (closeError: unknown) => console.error("agent: closing a turn that could not continue failed", turn.id, closeError),
+    );
+    throw error;
+  }
   return sseResponse(async (emit) => {
     emit("turn", { number: turn.number });
     await resumeTurn({ supabase, ledger, provider, scope, turn, emit, extended: options.extend === true }, answers);
