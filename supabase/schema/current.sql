@@ -5851,7 +5851,8 @@ begin
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
       or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
-      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600);
+      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600)
+      or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then

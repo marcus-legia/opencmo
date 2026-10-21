@@ -12,6 +12,17 @@
 -- Clips cut by the old pipeline, every job that imported a link (their sources are not the user's
 -- upload), then clipping jobs that have nothing left to open. Storage objects go through the delete
 -- triggers, not by hand.
+-- Credits still held by anything deleted below go back first (web rule 5): a link job or a video
+-- pack in flight at deploy time would otherwise keep its hold forever. Finished work keeps its charge.
+select public.refund_job(j.id, 'Refund: link imports were removed')
+from public.jobs j
+where j.status in ('queued', 'running')
+  and (j.source_url !~ '^(storage|editor)://'
+       or j.id in (select job_id from public.projects where kind = 'video_pack'));
+select public.credit_refund(r.user_id, 'cmo_run', r.id, 'Refund: video packs were removed')
+from public.cmo_runs r
+where r.kind = 'video_pack' and r.status in ('queued', 'running');
+
 delete from public.clips where kind = 'moment';
 delete from public.jobs where source_url !~ '^(storage|editor)://';
 delete from public.jobs j
@@ -22,6 +33,8 @@ where j.kind = 'clip'
 delete from public.tasks where kind in ('zip', 'prepare_full');
 delete from public.cmo_inbox where kind = 'video_pack';
 delete from public.cmo_runs where kind = 'video_pack';
+-- The job carries the project row (`projects.job_id` cascades), its clips and storage.
+delete from public.jobs where id in (select job_id from public.projects where kind = 'video_pack');
 delete from public.projects where kind = 'video_pack';
 
 -- ================================================================ functions and tables
