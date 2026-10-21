@@ -43,6 +43,9 @@ function fakeSupabase(start: { document: unknown; generated: unknown }) {
   const rpc = async (name: string, args: Record<string, unknown>) => {
     state.calls.push(name);
     if (name === "checkpoint_editor_project") {
+      if (args.p_expected_version != null && args.p_expected_version !== state.project.version) {
+        return { data: null, error: { code: "P0409", message: "This clip was changed in another tab." } };
+      }
       const row = { id: `00000000-0000-4000-8000-00000000000${state.revisions.length + 1}`, clip_id: CLIP, number: state.revisions.length + 1, kind: String(args.p_kind), label: String(args.p_label), created_at: "2026-10-20T00:00:00Z", document: state.project.document };
       state.revisions.push(row);
       return { data: row, error: null };
@@ -105,6 +108,19 @@ async function main() {
   };
   const raced = await restoreVersion(racing.client, CLIP, "original");
   assert.ok(!raced.ok && /changed while restoring/.test(raced.message), JSON.stringify(raced));
+
+  // The editor autosaves while restore_version reads and validates: refused at the checkpoint, so
+  // no "before restoring" version is left for a restore that never happened.
+  const stale = fakeSupabase({ document: doc("A"), generated: doc("Original") });
+  const staleCalls = stale.client as { rpc: (name: string, args: Record<string, unknown>) => Promise<unknown> };
+  const staleRpc = staleCalls.rpc;
+  staleCalls.rpc = async (name, args) => {
+    if (name === "checkpoint_editor_project") stale.state.project = { ...stale.state.project, version: stale.state.project.version + 1 };
+    return staleRpc(name, args);
+  };
+  const late = await restoreVersion(stale.client, CLIP, "original");
+  assert.ok(!late.ok && /changed while restoring/.test(late.message), JSON.stringify(late));
+  assert.equal(stale.state.revisions.length, 0, "no phantom version");
 
   const noOriginal = fakeSupabase({ document: doc("A"), generated: null });
   const none = await restoreVersion(noOriginal.client, CLIP, "original");

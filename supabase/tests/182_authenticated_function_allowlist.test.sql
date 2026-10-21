@@ -47,7 +47,7 @@ insert into allowed values
   ('capture_daily_limit()'),
   ('charge_caption_translation(uuid,numeric)'),
   ('check_transcript_body(text)'),
-  ('checkpoint_editor_project(uuid,text,text)'),
+  ('checkpoint_editor_project(uuid,text,text,integer)'),
   ('cmo_add_item(text,text,date,text,jsonb)'),
   ('cmo_as_written()'),
   ('cmo_chat_save_document(text,jsonb)'),

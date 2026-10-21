@@ -30,6 +30,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { saveDocument } from "@/lib/editor/document";
+import { ensureProject } from "@/lib/editor/project";
 import { wakeWorker } from "@/lib/modal";
 
 import { lookAt } from "./look";
@@ -76,7 +77,7 @@ export async function saveFrame(supabase: SupabaseClient, userId: string, input:
   if (!base64 || !seen) return { error: "The frame could not be drawn." };
   const bytes = Buffer.from(base64, "base64");
 
-  const { context, project } = seen;
+  const { context } = seen;
   const jobId = context.clip.job_id;
   const objectName = `${userId}/${jobId}/${randomUUID()}.jpg`;
   // Same reservation and content type as the editor's upload (`/api/v1/uploads`, `upload-tus.ts`):
@@ -92,13 +93,23 @@ export async function saveFrame(supabase: SupabaseClient, userId: string, input:
     p_name: `${stem}.jpg`,
     p_request_id: randomUUID(),
   });
-  if (registered.task_id) await wakeWorker({ task_id: registered.task_id });
-
   const width = Number(shot.data.width) || 0;
   const height = Number(shot.data.height) || 0;
-  const { manifest, path } = frameRecord(project.manifest, { stem, mediaId: registered.asset.id, width, height, now: new Date().toISOString() });
+  const now = new Date().toISOString();
+  // The look took seconds: save on the project as it is NOW (an open editor autosaves meanwhile),
+  // once more if it moves again between this read and the save.
+  const save = async () => {
+    const current = await ensureProject(supabase, context, input.clip_id);
+    const record = frameRecord(current.manifest, { stem, mediaId: registered.asset.id, width, height, now });
+    await saveDocument(supabase, input.clip_id, current.version, current.document, { manifest: record.manifest });
+    return record.path;
+  };
+  let path: string;
   try {
-    await saveDocument(supabase, input.clip_id, project.version, project.document, { manifest });
+    path = await save().catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 409) return save();
+      throw err;
+    });
   } catch (err) {
     // The asset's delete trigger removes the Storage object too.
     await rpcOrThrow(supabase, "delete_media_asset", { p_asset_id: registered.asset.id }).catch((cleanup) => console.error("[mcp] save_frame cleanup", cleanup));
@@ -107,6 +118,9 @@ export async function saveFrame(supabase: SupabaseClient, userId: string, input:
     }
     throw err;
   }
+  // Only a frame that landed in the library is checked: woken before, a failed save left the
+  // worker probing an object the cleanup had just deleted.
+  if (registered.task_id) await wakeWorker({ task_id: registered.task_id });
 
   return {
     images: [base64],

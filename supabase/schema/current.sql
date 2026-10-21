@@ -1809,10 +1809,10 @@ CREATE TABLE public.editor_revisions (
 
 
 --
--- Name: checkpoint_editor_project(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: checkpoint_editor_project(uuid, text, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.checkpoint_editor_project(p_clip_id uuid, p_kind text, p_label text) RETURNS public.editor_revisions
+CREATE FUNCTION public.checkpoint_editor_project(p_clip_id uuid, p_kind text, p_label text, p_expected_version integer DEFAULT NULL::integer) RETURNS public.editor_revisions
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -1839,6 +1839,10 @@ begin
 
   if not found then
     raise exception 'This clip has no editor project yet.' using errcode = 'P0002';
+  end if;
+  -- Same refusal as save_editor_document: the write that follows would fail on this version.
+  if p_expected_version is not null and v_row.version is distinct from p_expected_version then
+    raise exception 'This clip was changed in another tab.' using errcode = 'P0409';
   end if;
 
   v_hash := public.editor_document_hash(v_row.document);

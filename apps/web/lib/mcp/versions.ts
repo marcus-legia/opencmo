@@ -74,9 +74,17 @@ export async function restoreVersion(supabase: SupabaseClient, clipId: string, v
     return { ok: true, value: { restored: label, version: current.version, kept_as: null, unchanged: true, message: `The edit already matches ${label}; nothing changed.` } };
   }
   // Keep what is there now, so this restore can be undone the same way.
-  const checkpoint = await rpcOrThrow<RevisionRow>(supabase, "checkpoint_editor_project", { p_clip_id: clipId, p_kind: "agent", p_label: `MCP: before restoring ${label}` });
+  // Tied to the version read above: an edit saved since refuses here, before a checkpoint for a
+  // restore that will not happen lands in Version history.
+  let checkpoint: RevisionRow;
   let saved;
   try {
+    checkpoint = await rpcOrThrow<RevisionRow>(supabase, "checkpoint_editor_project", {
+      p_clip_id: clipId,
+      p_kind: "agent",
+      p_label: `MCP: before restoring ${label}`,
+      p_expected_version: current.version,
+    });
     saved = await saveDocument(supabase, clipId, current.version, restored);
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
