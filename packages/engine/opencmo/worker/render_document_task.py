@@ -255,17 +255,32 @@ class _Sources:
         return self.root / f"src-{self.count}{suffix}"
 
     def media(self, src: Any) -> Path:
+        stored = self._stored(src)
+        if isinstance(stored, Path):
+            return stored
+        bucket, object_name = stored
+        dest = self._path(Path(object_name).suffix or ".bin")
+        self.store.download_object(bucket, object_name, dest, max_bytes=MAX_SOURCE_BYTES)
+        return dest
+
+    def media_url(self, src: Any, expires_in: int = 600) -> str | Path:
+        """A signed URL for a stored video or audio source, so a reader that seeks (a look at a
+        few frames) does not download the whole file. Brand logos and captures stay downloads."""
+        stored = self._stored(src)
+        if isinstance(stored, Path):
+            return stored
+        return self.store.sign_object_url(stored[0], stored[1], expires_in)
+
+    def _stored(self, src: Any) -> tuple[str, str] | Path:
+        """Where `src` lives in Storage as `(bucket, object)`, under the export's ownership rules,
+        or the downloaded file for sources that are fetched another way."""
         if src == MASTER:
             if not self.master.get("object"):
                 raise SourceError(
                     "This clip was processed before server export was available. "
                     "Process the video again to export it here."
                 )
-            dest = self._path(".mp4")
-            self.store.download_object(
-                self.master.get("bucket") or "renders", self.master["object"], dest, max_bytes=MAX_SOURCE_BYTES
-            )
-            return dest
+            return self.master.get("bucket") or "renders", self.master["object"]
         if isinstance(src, str) and src.startswith(BRAND_PREFIX):
             return self._brand(src[len(BRAND_PREFIX):])
         if isinstance(src, str) and src.startswith(CAPTURE_PREFIX):
@@ -279,7 +294,7 @@ class _Sources:
             # open (closed after Approve, MCP), the paid file is still in the project: find it.
             done = self._finished_generation(src)
             if done:
-                return self._media_asset(done, name)
+                return self._media_object(done, name)
         if record is None:
             raise SourceError(f"{name} is not in this project's library. Add it again, then export.")
         cloud = record.get("cloud") or {}
@@ -292,7 +307,7 @@ class _Sources:
                 f"{name} was only saved on the device that added it, so Export can't use it. "
                 "Remove it from the clip, then export."
             )
-        return self._media_asset(media_id, name)
+        return self._media_object(media_id, name)
 
     def _finished_generation(self, declaration: dict[str, Any]) -> str | None:
         if self.generations is None:
@@ -302,7 +317,7 @@ class _Sources:
                 return str(row["media_asset_id"])
         return None
 
-    def _media_asset(self, media_id: str, name: str) -> Path:
+    def _media_object(self, media_id: str, name: str) -> tuple[str, str]:
         row = self.store.get_media_asset(media_id)
         if (
             not row
@@ -312,9 +327,7 @@ class _Sources:
             or not str(row.get("storage_path") or "").startswith("media/")
         ):
             raise SourceError(f"{name} is no longer stored with this project.")
-        dest = self._path(Path(str(row["storage_path"])).suffix or ".bin")
-        self.store.download_object("media", str(row["storage_path"])[len("media/"):], dest, max_bytes=MAX_SOURCE_BYTES)
-        return dest
+        return "media", str(row["storage_path"])[len("media/"):]
 
     def _brand(self, object_name: str) -> Path:
         """Logo Brand Kit (`brand:<uid>/logo-<uuid>.png`). Document do người dùng

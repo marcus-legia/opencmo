@@ -1,27 +1,30 @@
 """Look at a clip for Claude over MCP (editor-MCP plan, item 1): capture_frame, inspect_color, media_grab,
 media_waveform.
 
-The web app reads the clip's document and library manifest under the user's RLS and posts them
-here with the worker token (`modal_app.look`). This module checks the clip belongs to that user,
-downloads only the sources the asked frames need with the export's own rules (`_Sources`), and
-hands drawing to the Node exporter (`clip-export look`, the renderer the export uses). Waveforms
-are ffmpeg only. Nothing is stored and no video is encoded: a request is a few decoded frames.
+The MCP server reads the clip's document and library manifest under the user's RLS and posts
+them here with `OPENCMO_LOOK_TOKEN` (`modal_app.look`; deliberately not the worker token). This
+module checks the clip belongs to that user and resolves sources with the export's own rules
+(`_Sources`). Videos and audio are read through short-lived signed URLs, so a look seeks to a few
+frames instead of downloading a whole master; images and transcripts are small downloads. Drawing
+is the Node exporter's (`clip-export look`, the renderer the export uses); waveforms are ffmpeg
+only. Nothing is stored and no video is encoded.
 
-Budgets: decoding happens in ffmpeg subprocesses (`clip-export` probes and decodes with `-ss`
-before `-i`, behind the demuxer allowlist); no frame enters Python memory.
+Budgets: decoding happens in ffmpeg subprocesses (`-ss` before `-i`, behind the demuxer
+allowlist, HTTP only for signed URLs); no frame enters Python memory.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from opencmo.media.ffmpeg import USER_INPUT
+from opencmo.media.ffmpeg import USER_HTTP_INPUT, USER_INPUT
 from opencmo.worker.render_document_task import (
     CLIP_EXPORT,
     EDITOR_FONTS,
@@ -40,6 +43,8 @@ NODE_TIMEOUT = 100
 MAX_TIMES = 12
 WAVEFORM_BUCKETS = 60
 NOT_FOUND = "That clip was not found. Use list_clips to find its id."
+NO_VIDEO = "This clip has no video to listen to. Pass the library path of a video or audio file."
+STREAMED = ("video", "audio")
 
 
 class LookError(Exception):
@@ -83,6 +88,8 @@ def _document_job(store: Any, request: dict[str, Any], clip: dict[str, Any], job
     for entry in plan["sources"]:
         if entry["kind"] == "transcript":
             transcripts.append({"src": entry["src"], "file": str(sources.transcript(entry["src"]))})
+        elif entry["kind"] in STREAMED:
+            media.append({"src": entry["src"], "file": str(sources.media_url(entry["src"]))})
         else:
             media.append({"src": entry["src"], "file": str(sources.media(entry["src"]))})
     return {
@@ -98,51 +105,56 @@ def _db(value: float) -> float:
     return round(max(-60.0, value), 1)
 
 
-def waveform_of(file: Path, start: float | None, end: float | None, threshold_db: float, min_silence: float) -> dict[str, Any]:
-    """Coarse dB levels and the silent stretches of `file`, in the file's seconds.
+def _input(file: str | Path) -> list[str]:
+    return USER_HTTP_INPUT if str(file).startswith(("https://", "http://")) else USER_INPUT
 
-    Two streaming ffmpeg passes over the audio only (`-vn`): `astats` per bucket and
-    `silencedetect`. `-ss` before `-i` when a window is asked.
+
+def waveform_of(file: str | Path, start: float | None, end: float | None, threshold_db: float, min_silence: float) -> dict[str, Any]:
+    """Coarse dB levels and the silent stretches of `file` (a path or a signed URL), in the file's
+    seconds.
+
+    One streaming ffmpeg pass over the audio only (`-vn`): `astats` per bucket, then
+    `silencedetect`, chained in one filter. `-ss` before `-i` when a window is asked.
     """
+    guard = _input(file)
     probe = subprocess.run(
-        ["ffprobe", "-v", "error", *USER_INPUT, "-show_entries", "format=duration", "-of", "csv=p=0", str(file)],
+        ["ffprobe", "-v", "error", *guard, "-show_entries", "format=duration", "-of", "csv=p=0", str(file)],
         capture_output=True, text=True, timeout=30, check=False,
     )
     try:
         total = float(probe.stdout.strip() or 0)
     except ValueError:
         total = 0.0
-    if total <= 0:
+    if not math.isfinite(total) or total <= 0:
         raise LookError("No sound could be read from this file.")
     begin = max(0.0, start or 0.0)
     finish = min(total, end if end is not None else total)
     if finish <= begin:
         raise LookError("start must be before end, inside the file.")
     span = finish - begin
-    window = ["-ss", f"{begin:.3f}", *USER_INPUT, "-i", str(file), "-t", f"{span:.3f}", "-vn"]
     bucket = span / WAVEFORM_BUCKETS
-    # One astats reset per bucket: peak level of each slice, printed as frame metadata.
-    levels_run = subprocess.run(
-        ["ffmpeg", "-v", "error", *window, "-af",
-         (f"aresample=8000,asetnsamples=n={max(1, round(bucket * 8000))}:p=0,astats=metadata=1:reset=1,"
-          "ametadata=print:key=lavfi.astats.Overall.Peak_level:file=-"),
-         "-f", "null", "-"],
+    # One astats reset per bucket prints each slice's peak to stdout; silencedetect logs to stderr.
+    filters = (
+        f"aresample=8000,asetnsamples=n={max(1, round(bucket * 8000))}:p=0,astats=metadata=1:reset=1,"
+        "ametadata=print:key=lavfi.astats.Overall.Peak_level:file=-,"
+        f"silencedetect=noise={threshold_db}dB:d={min_silence}"
+    )
+    result = subprocess.run(
+        ["ffmpeg", "-v", "info", "-nostats", "-ss", f"{begin:.3f}", *guard, "-i", str(file), "-t", f"{span:.3f}",
+         "-vn", "-af", filters, "-f", "null", "-"],
         capture_output=True, text=True, timeout=120, check=False,
     )
     levels: list[float] = []
-    for line in levels_run.stdout.splitlines():
+    for line in result.stdout.splitlines():
         if "Peak_level=" in line:
             raw = line.split("=", 1)[1].strip()
             levels.append(_db(float(raw)) if raw not in ("-inf", "inf", "nan") else -60.0)
+    levels = levels[:WAVEFORM_BUCKETS]
     if not levels:
         raise LookError("No sound could be read from this file.")
-    silence_run = subprocess.run(
-        ["ffmpeg", "-v", "info", "-nostats", *window, "-af", f"silencedetect=noise={threshold_db}dB:d={min_silence}", "-f", "null", "-"],
-        capture_output=True, text=True, timeout=120, check=False,
-    )
     silences: list[dict[str, float]] = []
     opened: float | None = None
-    for line in silence_run.stderr.splitlines():
+    for line in result.stderr.splitlines():
         started = re.search(r"silence_start: (-?[\d.]+)", line)
         ended = re.search(r"silence_end: (-?[\d.]+)", line)
         if started:
@@ -156,10 +168,20 @@ def waveform_of(file: Path, start: float | None, end: float | None, threshold_db
         "start": round(begin, 2),
         "end": round(finish, 2),
         "seconds_per_level": round(span / len(levels), 3),
-        "levels_db": levels[:WAVEFORM_BUCKETS],
+        "levels_db": levels,
         "threshold_db": threshold_db,
         "silences": silences,
     }
+
+
+def _number(params: dict[str, Any], key: str, default: float | None, *, low: float, high: float) -> float | None:
+    """A finite number inside `[low, high]` from untrusted input, or a sentence Claude can fix."""
+    value = params.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low <= value <= high:
+        raise LookError(f"{key} must be a number from {low:g} to {high:g}.")
+    return float(value)
 
 
 def look(store: Any, request: dict[str, Any], root: Path) -> dict[str, Any]:
@@ -188,11 +210,14 @@ def look(store: Any, request: dict[str, Any], root: Path) -> dict[str, Any]:
             return _render(spec, root)
         sources = _sources(store, user_id, clip, job, request.get("manifest") or {}, root)
         path = params.get("path")
-        # A library file is named by its path, as in the in-app tools; `_Sources` matches it.
-        src = MASTER if (op == "waveform" and not path) else str(path or "")
+        if path is not None and not isinstance(path, str):
+            return {"error": "path must be a library path."}
         if not path and op == "grab":
             return {"error": "media_grab needs the library path of a video or image."}
-        file = sources.media(src)
+        if not path and not sources.master.get("object"):
+            return {"error": NO_VIDEO}
+        # A library file is named by its path, as in the in-app tools; `_Sources` matches it.
+        file = sources.media_url(path or MASTER)
         if op == "grab":
             spec = {"op": "grab", "file": str(file), "document": {"version": 1, "stage": {"children": []}},
                     "media": [], "transcripts": [], "fonts": str(EDITOR_FONTS), "lottie": str(EDITOR_LOTTIE),
@@ -200,10 +225,10 @@ def look(store: Any, request: dict[str, Any], root: Path) -> dict[str, Any]:
             return _render(spec, root)
         data = waveform_of(
             file,
-            params.get("start"),
-            params.get("end"),
-            float(params.get("threshold_db") if params.get("threshold_db") is not None else -35),
-            float(params.get("min_silence") if params.get("min_silence") is not None else 0.4),
+            _number(params, "start", None, low=0, high=86400),
+            _number(params, "end", None, low=0, high=86400),
+            _number(params, "threshold_db", -35.0, low=-90, high=0),  # type: ignore[arg-type]
+            _number(params, "min_silence", 0.4, low=0.05, high=30),  # type: ignore[arg-type]
         )
         return {"images": [], "data": {"path": path or MASTER, **data}}
     except (LookError, SourceError) as exc:

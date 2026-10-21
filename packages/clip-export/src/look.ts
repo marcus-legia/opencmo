@@ -11,8 +11,8 @@
  *   redraw any text it sees, garbled).
  *
  * Only the asked frames are decoded and drawn; nothing is encoded to video. Same inputs and
- * output shape as the browser tools, so guides and skills keep one vocabulary. Keep the two in
- * step when one changes.
+ * output shape as the browser tools; the rules both share (times, visible layers, text removal,
+ * colour guide) live once in `@opencmo/clip-render` (`look.ts`).
  */
 
 import { execFile } from 'node:child_process';
@@ -21,10 +21,10 @@ import { promisify } from 'node:util';
 
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { validate, type ClipDocument } from '@opencmo/clip-doc';
-import { createRenderer, mediaSources, scopeStats, type MediaHost } from '@opencmo/clip-render';
+import { captureTimes, COLOR_GUIDE, createRenderer, FPS, MAX_LOOK_TIMES, mediaSources, pickScene, scopeStats, visibleAt, withoutText, type LookBox, type MediaHost } from '@opencmo/clip-render';
 import { z } from 'zod';
 
-import { USER_INPUT } from './inputs.ts';
+import { userInput } from './inputs.ts';
 import { JobSchema, sourceKey } from './job.ts';
 import { probe, type Probe } from './probe.ts';
 import { loadHost, registerFonts } from './segment.ts';
@@ -34,7 +34,8 @@ const run = promisify(execFile);
 /** Long edge of one sheet cell: 12 portrait cells come out near 800×1100, readable and small. */
 const CELL_EDGE = 360;
 const COLOR_EDGE = 512;
-export const MAX_TIMES = 12;
+export const MAX_TIMES = MAX_LOOK_TIMES;
+export { captureTimes, withoutText };
 
 export const LookSchema = JobSchema.pick({ document: true, media: true, transcripts: true, fonts: true, lottie: true, scene: true }).extend({
   op: z.enum(['capture', 'inspect_color', 'grab', 'frame']),
@@ -122,71 +123,18 @@ function withGrid(source: Canvas): Canvas {
   return canvas;
 }
 
-type Box = { node: { id?: string; kind: string; text?: unknown; src?: unknown; name?: unknown }; visible: boolean; matrix: number[]; box: number[]; start: number; end: number };
-
-/** Layers on screen at a frame, top first, with their 0-1 box of the frame. */
-function visibleAt(boxes: Box[], frame: number, scene: { width: number; height: number }) {
-  const out: Array<{ id: string; kind: string; label?: string; box: number[] }> = [];
-  for (const item of boxes) {
-    const { node } = item;
-    if (!item.visible || !node.id || frame < item.start || frame >= item.end) continue;
-    if (['group', 'sequence', 'scene', 'audio'].includes(node.kind)) continue;
-    const [bx, by, bw, bh] = item.box as [number, number, number, number];
-    if (!(bw > 0 && bh > 0)) continue;
-    const [a, b, c, d, e, f] = item.matrix as [number, number, number, number, number, number];
-    const corners = [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]].map(([x, y]) => [a * x! + c * y! + e, b * x! + d * y! + f]);
-    const xs = corners.map((p) => p[0]! / scene.width);
-    const ys = corners.map((p) => p[1]! / scene.height);
-    const clamp = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
-    const rect = [clamp(Math.min(...xs)), clamp(Math.min(...ys)), clamp(Math.max(...xs)), clamp(Math.max(...ys))];
-    if (rect[2]! <= rect[0]! || rect[3]! <= rect[1]!) continue;
-    const raw = typeof node.text === 'string' ? node.text : typeof node.name === 'string' ? node.name : typeof node.src === 'string' ? node.src : '';
-    out.push({ id: node.id, kind: node.kind, ...(raw ? { label: raw.trim().slice(0, 40) } : {}), box: rect });
-  }
-  return out.reverse().slice(0, 15);
-}
-
-/** The document without captions and text: white letters skew the white point. */
-export function withoutText(document: ClipDocument): ClipDocument {
-  const strip = (node: unknown): unknown => {
-    if (!node || typeof node !== 'object') return node;
-    const record = node as { children?: unknown[]; stage?: unknown };
-    if (record.stage) return { ...record, stage: strip(record.stage) };
-    if (!Array.isArray(record.children)) return node;
-    return {
-      ...record,
-      children: record.children
-        .filter((child) => !(child && typeof child === 'object' && ['captions', 'text'].includes((child as { kind?: string }).kind ?? '')))
-        .map(strip),
-    };
-  };
-  return strip(document) as ClipDocument;
-}
-
-/** Seconds to draw: `times`, or `count` frames evenly spread over `[start, end)`. */
-export function captureTimes(job: Pick<LookJob, 'times' | 'start' | 'end' | 'count'>, length: number): number[] {
-  if (job.times?.length) return job.times.slice(0, MAX_TIMES);
-  const start = Math.max(0, job.start ?? 0);
-  const end = Math.min(length, job.end ?? length);
-  const count = Math.max(1, Math.min(MAX_TIMES, job.count ?? 6));
-  if (end <= start) return [start];
-  const step = (end - start) / count;
-  return Array.from({ length: count }, (_, index) => Math.round((start + step * (index + 0.5)) * 100) / 100);
-}
-
-const COLOR_GUIDE =
-  'black/median/white are luma 0-1 (healthy: black 0.02-0.06, white 0.9-0.98). clipped* = share of crushed or blown pixels (keep under 0.02 unless it is a stylistic choice). average = mean RGB: on a neutral scene a channel well above the others is a color cast. saturation 0-1 (natural footage ~0.1-0.3). histogram = 16 luma bins, dark to bright.';
-
 async function probesOf(job: LookJob, document: ClipDocument): Promise<Record<string, Probe>> {
   const files = new Map(job.media.map((entry) => [sourceKey(entry.src), entry.file]));
-  const probes: Record<string, Probe> = {};
+  const wanted = new Map<string, string>();
   for (const { kind, src } of mediaSources(document)) {
     if (kind !== 'video' && kind !== 'audio') continue;
     const key = sourceKey(src);
     const file = files.get(key);
-    if (file) probes[key] ??= await probe(file);
+    if (file) wanted.set(key, file);
   }
-  return probes;
+  // In parallel: each probe of a signed URL is a network round trip.
+  const entries = await Promise.all([...wanted].map(async ([key, file]) => [key, await probe(file)] as const));
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -198,17 +146,19 @@ async function drawFrames(job: LookJob, document: ClipDocument, pick: (length: n
   const probes = await probesOf(job, document);
   const full = { ...job, document, out: '/dev/null', resolution: 1080 as const, crf: 18 };
   const { host, frames, current, loadImages } = await loadHost(full, probes);
-  const planner = createRenderer(document, host as MediaHost, { scene: job.scene });
-  const length = planner.range.frames / 30;
-  const seconds = pick(length);
-  const scale = edge / Math.max(planner.scene.width, planner.scene.height);
+  const scene = pickScene(document, job.scene);
+  const scale = edge / Math.max(scene.width, scene.height);
   const renderer = createRenderer(document, host as MediaHost, { scene: job.scene, scale });
-  const width = Math.round(planner.scene.width * scale);
-  const height = Math.round(planner.scene.height * scale);
+  // `range` counts timeline frames at FPS; the scene's own rate only sets the export's frame grid.
+  const length = renderer.range.frames / FPS;
+  const lastFrame = 1 / ((scene as { fps?: number }).fps ?? FPS);
+  const seconds = pick(length);
+  const width = Math.round(scene.width * scale);
+  const height = Math.round(scene.height * scale);
   const drawn: { time: number; canvas: Canvas; layers: ReturnType<typeof visibleAt> }[] = [];
   try {
     for (const time of seconds) {
-      const frame = renderer.exportFrame(Math.min(Math.max(0, time), Math.max(0, length - 1 / 30)));
+      const frame = renderer.exportFrame(Math.min(Math.max(0, time), Math.max(0, length - lastFrame)));
       frames.beginFrame();
       current.clear();
       const needs = renderer.needs(frame);
@@ -221,7 +171,7 @@ async function drawFrames(job: LookJob, document: ClipDocument, pick: (length: n
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext('2d');
       renderer.render(ctx as never, frame);
-      drawn.push({ time, canvas, layers: visibleAt(renderer.layout(frame, ctx as never) as unknown as Box[], frame, planner.scene) });
+      drawn.push({ time, canvas, layers: visibleAt(renderer.layout(frame, ctx as never) as unknown as LookBox[], frame, scene) });
     }
   } finally {
     frames.close();
@@ -282,7 +232,7 @@ async function grab(job: LookJob): Promise<LookResult> {
   for (const time of times) {
     const { stdout } = await run(
       'ffmpeg',
-      ['-v', 'error', ...(still ? [] : ['-ss', String(Math.min(time, Math.max(0, info.duration - 0.05)))]), ...USER_INPUT, '-i', job.file,
+      ['-v', 'error', ...(still ? [] : ['-ss', String(Math.min(time, Math.max(0, info.duration - 0.05)))]), ...userInput(job.file), '-i', job.file,
         '-frames:v', '1', '-vf', `scale='if(gt(iw,ih),${CELL_EDGE},-2)':'if(gt(iw,ih),-2,${CELL_EDGE})'`, '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'],
       { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 },
     );

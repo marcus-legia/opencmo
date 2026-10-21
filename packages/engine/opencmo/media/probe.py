@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from .ffmpeg import USER_INPUT, run
+from .ffmpeg import USER_HTTP_INPUT, USER_INPUT, run
 
 
 @dataclass
@@ -36,12 +36,14 @@ def _parse_fps(raw: str) -> float:
         return 0.0
 
 
-def probe_file(path: str, *, local_only: bool = False) -> MediaInfo:
-    """`local_only`: file do NGƯỜI DÙNG đưa lên — chỉ cho giao thức `file`, để một file thật ra là
-    playlist HLS không khiến ffprobe đi lấy URL tuỳ ý (SSRF). Pipeline vẫn probe được URL stream."""
+def probe_file(path: str, *, local_only: bool = False, user_url: bool = False) -> MediaInfo:
+    """`local_only`: a file the USER supplied, read over `file` only. `user_url`: a user file read
+    through a signed URL. Both apply the demuxer allowlist, so a "video" that is really an HLS
+    playlist cannot make ffprobe fetch arbitrary URLs or local files (SSRF)."""
+    guard = USER_INPUT if local_only else USER_HTTP_INPUT if user_url else []
     proc = run(
         [
-            "ffprobe", "-v", "error", *(USER_INPUT if local_only else []),
+            "ffprobe", "-v", "error", *guard,
             "-print_format", "json",
             "-show_format", "-show_streams",
             path,

@@ -12,11 +12,13 @@
  */
 
 import type { ClipDocument } from "@opencmo/clip-doc";
-import { createRenderer, scopeStats, type MediaHost } from "@opencmo/clip-render";
+import { captureTimes, COLOR_GUIDE, createRenderer, scopeStats, visibleAt, withoutText, type LookBox, type MediaHost } from "@opencmo/clip-render";
 
 import { framePresented, nextFrame } from "../frames";
 import { keyOf } from "../media";
 import { beatsOf, loadPeaks } from "../timeline/peaks";
+
+export { withoutText };
 
 /** Cạnh dài một ô của sheet: 12 ô dọc 9:16 ra ảnh ~800×1100 — đủ đọc chữ, nhỏ để gửi. */
 const CELL_EDGE = 360;
@@ -129,42 +131,6 @@ function withGrid(source: OffscreenCanvas): OffscreenCanvas {
   return canvas;
 }
 
-type Box = { node: { id?: string; kind: string; text?: unknown; src?: unknown; name?: unknown }; visible: boolean; matrix: number[]; box: number[]; start: number; end: number };
-
-/** Lớp đang thấy ở một frame, trên cùng trước, kèm hộp 0–1 của khung — để agent gọi đúng id cái nó thấy. */
-function visibleAt(boxes: Box[], frame: number, scene: { width: number; height: number }) {
-  const out: Array<{ id: string; kind: string; label?: string; box: number[] }> = [];
-  for (const item of boxes) {
-    const { node } = item;
-    if (!item.visible || !node.id || frame < item.start || frame >= item.end) continue;
-    if (node.kind === "group" || node.kind === "sequence" || node.kind === "scene" || node.kind === "audio") continue;
-    const [bx, by, bw, bh] = item.box as [number, number, number, number];
-    if (!(bw > 0 && bh > 0)) continue;
-    const [a, b, c, d, e, f] = item.matrix as [number, number, number, number, number, number];
-    const corners = [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]].map(([x, y]) => [a * x! + c * y! + e, b * x! + d * y! + f]);
-    const xs = corners.map((p) => p[0]! / scene.width);
-    const ys = corners.map((p) => p[1]! / scene.height);
-    const clamp = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
-    const rect = [clamp(Math.min(...xs)), clamp(Math.min(...ys)), clamp(Math.max(...xs)), clamp(Math.max(...ys))];
-    if (rect[2]! <= rect[0]! || rect[3]! <= rect[1]!) continue;
-    const raw = typeof node.text === "string" ? node.text : typeof node.name === "string" ? node.name : typeof node.src === "string" ? node.src : "";
-    out.push({ id: node.id, kind: node.kind, ...(raw ? { label: raw.trim().slice(0, 40) } : {}), box: rect });
-  }
-  // Danh sách layout theo thứ tự vẽ (dưới → trên): đảo để lớp trên cùng đứng đầu.
-  return out.reverse().slice(0, 15);
-}
-
-/** Giây cần chụp: `times`, hoặc `count` khung đều trong `[start, end)` (mặc định cả bản xuất). */
-function captureTimes(input: CaptureInput, length: number): number[] {
-  if (input.times?.length) return input.times.slice(0, 12);
-  const start = Math.max(0, input.start ?? 0);
-  const end = Math.min(length, input.end ?? length);
-  const count = Math.max(1, Math.min(12, input.count ?? 6));
-  if (end <= start) return [start];
-  const step = (end - start) / count;
-  return Array.from({ length: count }, (_, index) => Math.round((start + step * (index + 0.5)) * 100) / 100);
-}
-
 /** Thẻ đã tới đúng giây (host cộng 1ms) và khung đó đã giải mã xong. */
 function settled(video: HTMLVideoElement, seconds: number): boolean {
   const target = Math.min(seconds, Number.isFinite(video.duration) ? video.duration : seconds);
@@ -234,7 +200,7 @@ export async function capture(document: ClipDocument, media: Host, input: Captur
     seek(frame);
     await drawSettled(() => renderer.render(ctx as never, frame), tracking);
     // Đo lớp bằng bộ đo chữ của chính canvas này (hộp chữ đúng như lúc vẽ), rồi mới kẻ lưới đè lên.
-    layers.push({ time, visible: visibleAt(renderer.layout(frame, ctx as never) as unknown as Box[], frame, probe.scene) });
+    layers.push({ time, visible: visibleAt(renderer.layout(frame, ctx as never) as unknown as LookBox[], frame, probe.scene) });
     cells.push({ canvas: grid ? withGrid(canvas) : canvas, label: stamp(time) });
   }
   const images = separate ? await Promise.all(cells.map((cell) => toBase64(cell.canvas))) : [await sheet(cells)];
@@ -274,7 +240,7 @@ export async function inspectColor(document: ClipDocument, media: Host, input: I
   await drawSettled(() => renderer.render(ctx as never, frame), tracking);
   let region = [0, 0, 1, 1];
   if (input.element_id) {
-    const layer = visibleAt(renderer.layout(frame, ctx as never) as unknown as Box[], frame, probe.scene).find((item) => item.id === input.element_id);
+    const layer = visibleAt(renderer.layout(frame, ctx as never) as unknown as LookBox[], frame, probe.scene).find((item) => item.id === input.element_id);
     if (!layer) return { error: `"${input.element_id}" is not visible at ${stamp(time)}. Pick a time when it is on screen (capture lists visible layers).` };
     region = layer.box;
   }
@@ -284,30 +250,6 @@ export async function inspectColor(document: ClipDocument, media: Host, input: I
   const h = Math.max(1, Math.ceil(region[3]! * height) - y);
   const stats = scopeStats(ctx.getImageData(x, y, w, h).data);
   return { data: { time: Math.round(time * 100) / 100, ...(input.element_id ? { element_id: input.element_id, box: region } : {}), ...stats, guide: COLOR_GUIDE } };
-}
-
-/** Câu đọc số cho model — ngưỡng của một khung "đúng sáng" bình thường. */
-const COLOR_GUIDE =
-  "black/median/white are luma 0-1 (healthy: black 0.02-0.06, white 0.9-0.98). clipped* = share of crushed or blown pixels (keep under 0.02 unless it is a stylistic choice). average = mean RGB: on a neutral scene a channel well above the others is a color cast. saturation 0-1 (natural footage ~0.1-0.3). histogram = 16 luma bins, dark to bright.";
-
-/**
- * Bản document KHÔNG có phụ đề và chữ: frame làm đầu vào cho model sinh (AI transition,
- * video nối tiếp) mà có chữ thì model vẽ lại chữ đó — méo và không xoá được.
- */
-export function withoutText(document: ClipDocument): ClipDocument {
-  const strip = (node: unknown): unknown => {
-    if (!node || typeof node !== "object") return node;
-    const record = node as { children?: unknown[]; stage?: unknown };
-    if (record.stage) return { ...record, stage: strip(record.stage) };
-    if (!Array.isArray(record.children)) return node;
-    return {
-      ...record,
-      children: record.children
-        .filter((child) => !(child && typeof child === "object" && ["captions", "text"].includes((child as { kind?: string }).kind ?? "")))
-        .map(strip),
-    };
-  };
-  return strip(document) as ClipDocument;
 }
 
 export type WaveformInput = { path?: string; start?: number; end?: number; threshold_db?: number; min_silence?: number };

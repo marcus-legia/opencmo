@@ -24,7 +24,7 @@ def image(tmp_path):
 @pytest.fixture(autouse=True)
 def keys(monkeypatch):
     # The machine's own keys must not change which checker runs.
-    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_BASE_URL", "CMO_LLM_PROVIDERS", "ANTHROPIC_AUTH_TOKEN"):
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_BASE_URL", "OPENCMO_MODERATION_VISION_MODEL", "CMO_LLM_PROVIDERS", "ANTHROPIC_AUTH_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FAL_KEY", "fal")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "claude")
@@ -368,7 +368,7 @@ def test_groq_checks_first_and_its_verdict_is_final(monkeypatch, image):
     assert claude == {}, "a block is never retried on another model"
 
 
-@pytest.mark.parametrize("status", [401, 404, 429, 503])
+@pytest.mark.parametrize("status", [400, 401, 404, 413, 429, 503])
 def test_claude_checks_when_groq_cannot_answer(monkeypatch, image, status):
     monkeypatch.setenv("GROQ_API_KEY", "q")
     claude = _claude(monkeypatch, allowed=False)
@@ -412,3 +412,30 @@ def test_the_order_follows_cmo_llm_providers(monkeypatch, image):
     seen = _compat(monkeypatch, [])
     moderation.check_images([image])
     assert claude["system"] == moderation.POLICY and seen["compat"] == []
+
+
+def test_the_groq_endpoint_gets_the_groq_key_when_both_keys_are_set(monkeypatch, image):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "sk-openai")
+    seen = _compat(monkeypatch, [(200, ALLOW)])
+    moderation.check_images([image])
+    assert seen["compat"][0]["headers"]["Authorization"] == "Bearer q"
+
+
+def test_another_endpoint_gets_the_compat_key_and_needs_its_own_vision_model(monkeypatch, image):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "sk-other")
+    monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "https://openrouter.example/api/v1")
+    assert not moderation.ready(), "the default vision model is a Groq id"
+    monkeypatch.setenv("OPENCMO_MODERATION_VISION_MODEL", "vendor/vision")
+    assert moderation.ready()
+    seen = _compat(monkeypatch, [(200, ALLOW)])
+    moderation.check_images([image])
+    assert seen["compat"][0]["headers"]["Authorization"] == "Bearer sk-other"
+
+
+def test_a_fenced_json_verdict_is_read(monkeypatch, image):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    _compat(monkeypatch, [(200, "```json\n" + ALLOW + "\n```")])
+    moderation.check_images([image])

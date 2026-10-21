@@ -20,10 +20,12 @@ JOB = "j-1"
 
 
 class FakeStore:
-    def __init__(self, master: Path | None = None, owner: str = USER) -> None:
+    def __init__(self, master: Path | None = None, owner: str = USER, has_master: bool = True) -> None:
         self.master = master
         self.owner = owner
+        self.has_master = has_master
         self.downloads: list[tuple[str, str]] = []
+        self.signed: list[tuple[str, str]] = []
 
     def get_clip(self, clip_id):
         return {"id": clip_id, "job_id": JOB} if clip_id == CLIP else None
@@ -31,8 +33,13 @@ class FakeStore:
     def get_job_row(self, job_id):
         if job_id != JOB:
             return None
-        masters = {CLIP: {"bucket": "renders", "object": "u-1/j-1/master.mp4", "transcript": "u-1/j-1/t.json"}}
+        masters = {CLIP: {"bucket": "renders", "object": "u-1/j-1/master.mp4", "transcript": "u-1/j-1/t.json"}} if self.has_master else {}
         return {"id": JOB, "user_id": self.owner, "media_manifest": {"masters": masters}}
+
+    def sign_object_url(self, bucket, name, expires_in=3600):
+        # A local path stands in for the signed URL; HTTP reads are covered in test_user_media_inputs.
+        self.signed.append((bucket, name))
+        return str(self.master)
 
     def download_object(self, bucket, name, dest, max_bytes=None):
         self.downloads.append((bucket, name))
@@ -67,7 +74,7 @@ def test_unknown_clip_and_unknown_op(tmp_path):
     assert "Unknown" in look_mod.look(FakeStore(), _request("delete"), tmp_path)["error"]
 
 
-def test_capture_fetches_the_planned_sources_and_draws_in_node(monkeypatch, tmp_path, media):
+def test_capture_streams_the_planned_video_instead_of_downloading_it(monkeypatch, tmp_path, media):
     calls: list[tuple] = []
 
     def fake_node(command, file, *rest, timeout):
@@ -84,7 +91,8 @@ def test_capture_fetches_the_planned_sources_and_draws_in_node(monkeypatch, tmp_
     out = look_mod.look(store, _request("capture", document={"version": 1}, input={"times": [1.0, 2.0]}), tmp_path)
     assert out == {"images": ["AAAA"], "data": {"times": [1.0, 2.0]}}
     assert [c[0] for c in calls] == ["plan", "look"]
-    assert store.downloads == [("renders", "u-1/j-1/master.mp4")]
+    assert store.signed == [("renders", "u-1/j-1/master.mp4")]
+    assert store.downloads == [], "a look never downloads the whole master"
 
 
 def test_frame_passes_only_its_own_fields(monkeypatch, tmp_path):
@@ -133,3 +141,36 @@ def test_waveform_window_is_in_file_seconds(tmp_path, media):
     assert [(round(s["start"]), round(s["end"])) for s in data["silences"]] == [(3, 4)]
     with pytest.raises(look_mod.LookError):
         look_mod.waveform_of(media, 5.0, 4.0, -35, 0.4)
+
+
+def test_waveform_of_a_blank_edit_says_there_is_no_video(tmp_path):
+    out = look_mod.look(FakeStore(has_master=False), _request("waveform"), tmp_path)
+    assert out == {"error": look_mod.NO_VIDEO}
+
+
+@pytest.mark.parametrize("bad", [{"start": "1"}, {"threshold_db": float("nan")}, {"min_silence": True}, {"path": 3}])
+def test_waveform_refuses_malformed_input_with_a_sentence(tmp_path, media, bad):
+    out = look_mod.look(FakeStore(master=media), _request("waveform", input=bad), tmp_path)
+    assert set(out) == {"error"}
+
+
+def test_waveform_levels_and_their_seconds_agree(tmp_path, media):
+    data = look_mod.waveform_of(media, 0.0, 5.03, -35, 0.4)
+    assert len(data["levels_db"]) <= look_mod.WAVEFORM_BUCKETS
+    assert data["seconds_per_level"] == round(5.03 / len(data["levels_db"]), 3)
+
+
+def test_waveform_reads_a_signed_url_by_seeking(tmp_path, media):
+    import functools
+    import http.server
+    import threading
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(media.parent))
+    handler.log_message = lambda *_args: None
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        data = look_mod.waveform_of(f"http://127.0.0.1:{server.server_address[1]}/{media.name}", 0.0, None, -35, 0.4)
+    finally:
+        server.shutdown()
+    assert [(round(s["start"]), round(s["end"])) for s in data["silences"]] == [(2, 4)]

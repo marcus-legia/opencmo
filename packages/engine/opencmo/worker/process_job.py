@@ -17,6 +17,7 @@ State of a run lives in `job_context`, uploads and their cleanup in `job_uploads
 from __future__ import annotations
 
 import logging
+import math
 import os
 import tempfile
 import time
@@ -55,22 +56,41 @@ log = logging.getLogger(__name__)
 
 __all__ = ["RENDERS_BUCKET", "process"]
 
-# Trần dung lượng một video upload. Gói Supabase Free kẹp mỗi object ở 50 MB dù bucket khai
-# 2 GB (COSTS.md), nên con số này là biến môi trường: nâng gói xong chỉ cần đổi nó.
+# Supabase Free caps an object at 50 MB whatever the bucket says (COSTS.md), so the cap is an
+# env var: raise it with the plan.
 MAX_UPLOAD_BYTES = int(os.environ.get("OPENCMO_MAX_FULL_BYTES") or 2 * 1024**3)
 
-# Same cap as the RPC `full_edit_max_seconds()`: the editor holds a project this long at most.
+# The editor holds a project this long at most. The web Upload panel refuses longer files at pick
+# time with the same number (`MAX_EDIT_SECONDS` in apps/web/lib/upload.ts).
 MAX_EDIT_SECONDS = float(os.environ.get("OPENCMO_MAX_EDIT_SECONDS") or 900)
 
-# Vài giây đầu là đủ cho một thumbnail phát được trên thẻ project.
+# A few seconds are enough for a playable thumbnail on the project card.
 PREVIEW_SECONDS = 15.0
 
-# Đủ lâu cho một lượt probe header qua HTTP.
+# Long enough for one header probe over HTTP.
 SIGNED_URL_SECONDS = 1800
 
 
+# Container and stream lengths differ by a frame or two; more than this means the header lied.
+LENGTH_TOLERANCE_SECONDS = 2.0
+
+LENGTH_UNKNOWN = "We could not read this video's length. Export it again as MP4 and upload that copy."
+LENGTH_MISMATCH = "This video's length does not match its file header. Export it again as MP4 and upload that copy."
+
+
+def _editable_length(seconds: float) -> float:
+    """The length the editor may hold, or a user error: unknown, zero or over the cap."""
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise UserMessageError(LENGTH_UNKNOWN)
+    if seconds > MAX_EDIT_SECONDS:
+        raise UserMessageError(
+            f"Videos up to {int(MAX_EDIT_SECONDS // 60)} minutes can be edited. Trim it and upload it again."
+        )
+    return seconds
+
+
 def _size_label(size: float) -> str:
-    """Câu lỗi phải nói con số người dùng nhận ra. "0.0 GB" thì không."""
+    """A number the user recognises: "0.0 GB" is not one."""
     if size >= 1024**3:
         return f"{size / 1024**3:.1f} GB"
     return f"{size / 1024**2:.0f} MB"
@@ -101,7 +121,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     store, job, root = run.store, run.job, run.root
     assert root is not None
     if not job.source_url.startswith("storage://"):
-        # Links were removed with the clipping tool; `create_job` refuses them too.
+        # Links were removed with the clipping tool; `create_upload_edit` refuses them too.
         raise UserMessageError("Upload the video file to edit it.")
     work = root / "work"
     work.mkdir(parents=True, exist_ok=True)
@@ -117,16 +137,13 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
             f"This video is {_size_label(size)}, which is over the {_size_label(MAX_UPLOAD_BYTES)} "
             "upload limit. Use a shorter video."
         )
-    # ffprobe qua HTTP chỉ đọc phần header, không kéo cả file.
-    duration = probe_file(store.sign_object_url(SOURCES_BUCKET, source_object, SIGNED_URL_SECONDS)).duration
-    if duration > MAX_EDIT_SECONDS:
-        raise UserMessageError(
-            f"Videos up to {int(MAX_EDIT_SECONDS // 60)} minutes can be edited. Trim it and upload it again."
-        )
+    # ffprobe over HTTP reads the header only, not the whole file.
+    url = store.sign_object_url(SOURCES_BUCKET, source_object, SIGNED_URL_SECONDS)
+    duration = _editable_length(probe_file(url, user_url=True).duration)
     title = Path(source_object).name
     run.check_lease()
 
-    # Tính tiền theo phút nguồn: người dùng trả cho độ dài video họ đưa vào.
+    # Billed on source minutes: the user pays for the length of the video they bring.
     store.settle(job.id, duration, attempt_id=job.attempt_id)
 
     run.set_stage("download")
@@ -137,13 +154,16 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
         raise UploadUnavailableError(UPLOAD_UNAVAILABLE) from exc
     run.check_lease()
 
-    # Retry giữ nguyên ID clip: đổi ID là editor và link cũ mất chỗ trỏ.
+    # A retry keeps the clip id: a new id would break the editor and old links.
     clip_id = previous["id"] if previous else str(uuid.uuid4())
 
     run.set_stage("render")
     master = work / "master.mp4"
-    begin = make_editor_master(source, master)
+    make_editor_master(source, master)
     master_info = probe_file(str(master))
+    # The header can lie or be missing: the remuxed master is the real length, and it was billed.
+    if _editable_length(master_info.duration) > duration + LENGTH_TOLERANCE_SECONDS:
+        raise UserMessageError(LENGTH_MISMATCH)
     master_object = run.uploads.put(
         RENDERS_BUCKET, f"{job.user_id}/{clip_id}/master/{job.attempt_id}.mp4", master, content_type="video/mp4"
     )
@@ -204,7 +224,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
                     "width": master_info.width,
                     "height": master_info.height,
                     "duration": master_info.duration,
-                    "offset": begin,
+                    "offset": 0.0,
                 }
             },
         },
@@ -216,7 +236,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     try:
         store.remove_objects(SOURCES_BUCKET, [source_object])
     except Exception:
-        log.warning("Không xoá được nguồn %s sau khi giao", source_object, exc_info=True)
+        log.warning("Could not remove the upload %s after publishing", source_object, exc_info=True)
 
 
 def process(store: Any, job: Job) -> None:

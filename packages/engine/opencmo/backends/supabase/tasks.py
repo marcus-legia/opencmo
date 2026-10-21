@@ -62,29 +62,6 @@ class TasksMixin(_Http):
         )
         return resp.json() is True
 
-    def complete_full_edit(
-        self,
-        task_id: str,
-        attempt_id: str | None,
-        *,
-        settings: dict[str, Any],
-        settings_hash: str,
-        master: dict[str, Any],
-    ) -> bool:
-        """Công bố chế độ cả video (E2-c): revision #1 + draft + master + xong task, một giao dịch."""
-        resp = self._rpc(
-            "complete_full_edit",
-            {
-                "p_task_id": task_id,
-                "p_attempt_id": attempt_id,
-                "p_settings": settings,
-                "p_settings_hash": settings_hash,
-                "p_master": master,
-            },
-            idempotent=True,
-        )
-        return resp.json() is True
-
     def complete_media_captions(self, task_id: str, attempt_id: str | None, body: str) -> str | None:
         """Ghi transcript phụ đề (E4-e) + xong task, một giao dịch; trả hash nội dung."""
         resp = self._rpc(
