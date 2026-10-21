@@ -11,10 +11,12 @@
  * Everything runs under the user's RLS: someone else's clip or version reads as not found.
  */
 
+import { canonicalJson, DocumentInvalidError, validate, type ClipDocument } from "@opencmo/clip-doc";
 import { z } from "zod";
 
+import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { checkedDocument, projectDocument, saveDocument } from "@/lib/editor/document";
+import { saveDocument } from "@/lib/editor/document";
 
 export const listVersionsInput = z.object({ clip_id: z.string().uuid().describe("The clip (from list_clips).") });
 export const restoreVersionInput = z.object({
@@ -35,9 +37,11 @@ async function project(supabase: SupabaseClient, clipId: string): Promise<Projec
 }
 
 export async function listVersions(supabase: SupabaseClient, clipId: string): Promise<VersionsAnswer> {
-  const current = await project(supabase, clipId);
+  const [current, { data }] = await Promise.all([
+    project(supabase, clipId),
+    supabase.from("editor_revisions").select("id, number, kind, label, created_at").eq("clip_id", clipId).order("number", { ascending: false }).limit(50),
+  ]);
   if (!current) return { ok: false, message: NOT_FOUND };
-  const { data } = await supabase.from("editor_revisions").select("id, number, kind, label, created_at").eq("clip_id", clipId).order("number", { ascending: false }).limit(50);
   const versions = ((data ?? []) as RevisionRow[]).map((row) => ({ id: row.id, number: row.number, kind: row.kind, label: row.label, created_at: row.created_at }));
   return { ok: true, value: { original: current.generated_document != null, versions, message: `${versions.length} saved ${versions.length === 1 ? "version" : "versions"}. Restore one with restore_version; the current edit is kept as a version first.` } };
 }
@@ -58,10 +62,28 @@ export async function restoreVersion(supabase: SupabaseClient, clipId: string, v
     document = row.document;
     label = `version ${row.number}`;
   }
+  // Validated before anything is written: a version this editor can no longer read leaves no trace.
+  let restored: ClipDocument;
+  try {
+    restored = validate(document);
+  } catch (err) {
+    if (err instanceof DocumentInvalidError) return { ok: false, message: `${label[0]!.toUpperCase()}${label.slice(1)} was saved by an older editor and cannot be restored. Pick another version.` };
+    throw err;
+  }
+  if (canonicalJson(restored) === canonicalJson(current.document)) {
+    return { ok: true, value: { restored: label, version: current.version, kept_as: null, unchanged: true, message: `The edit already matches ${label}; nothing changed.` } };
+  }
   // Keep what is there now, so this restore can be undone the same way.
   const checkpoint = await rpcOrThrow<RevisionRow>(supabase, "checkpoint_editor_project", { p_clip_id: clipId, p_kind: "agent", p_label: `MCP: before restoring ${label}` });
-  const restored = checkedDocument(projectDocument({ document }));
-  const saved = await saveDocument(supabase, clipId, current.version, restored);
+  let saved;
+  try {
+    saved = await saveDocument(supabase, clipId, current.version, restored);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      return { ok: false, message: "The edit changed while restoring (the editor or the Assistant saved it). Call list_versions and restore again." };
+    }
+    throw err;
+  }
   return {
     ok: true,
     value: { restored: label, version: saved.version, kept_as: checkpoint?.id ?? null, message: `Restored ${label}. The edit before it is kept as a version.` },

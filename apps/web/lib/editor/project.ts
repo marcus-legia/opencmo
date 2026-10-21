@@ -178,3 +178,8 @@ export async function ensureBlankProject(supabase: SupabaseClient, context: Clip
   });
   return withDocument(created);
 }
+
+/** The clip's project, made on first open: a blank edit gets an empty document, an upload its generated edit. */
+export function ensureProject(supabase: SupabaseClient, context: ClipContext, clipId: string): Promise<EditorProject> {
+  return context.clip.kind === "blank" ? ensureBlankProject(supabase, context, clipId) : ensureEditorProject(supabase, context, clipId);
+}

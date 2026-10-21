@@ -19,9 +19,9 @@
 
 import { z } from "zod";
 
-import { clipContext } from "@/lib/api/clips";
+import { clipContext, type ClipContext } from "@/lib/api/clips";
 import type { SupabaseClient } from "@/lib/api/handler";
-import { ensureBlankProject, ensureEditorProject } from "@/lib/editor/project";
+import { ensureProject, type EditorProject } from "@/lib/editor/project";
 
 /** At most this many frames per call, like the in-app `capture`. */
 export const MAX_LOOK_TIMES = 12;
@@ -64,6 +64,9 @@ export const mediaWaveformInput = z.object({
 export type LookOp = "capture" | "inspect_color" | "frame" | "grab" | "waveform";
 export type LookAnswer = { images: string[]; data: Record<string, unknown> } | { error: string };
 
+/** The clip's context and project, read under the user's RLS before the worker is asked. */
+export type LookedAt = { context: ClipContext; project: EditorProject };
+
 /** The worker's answer, or an error sentence. Throws only on a programming error. */
 export async function requestLook(
   supabase: SupabaseClient,
@@ -71,45 +74,63 @@ export async function requestLook(
   op: LookOp,
   input: { clip_id: string } & Record<string, unknown>,
 ): Promise<LookAnswer> {
+  return (await lookAt(supabase, userId, op, input)).answer;
+}
+
+/** `requestLook` that also hands back the clip and project it read, for a caller that writes next. */
+export async function lookAt(
+  supabase: SupabaseClient,
+  userId: string,
+  op: LookOp,
+  input: { clip_id: string } & Record<string, unknown>,
+): Promise<{ answer: LookAnswer; seen?: LookedAt }> {
   const url = process.env.OPENCMO_LOOK_URL;
   const token = process.env.OPENCMO_LOOK_TOKEN;
-  if (!url || !token) return { error: NOT_SET_UP };
-
-  const { data: allowed, error: limited } = await supabase.rpc("rate_limit_hit", { p_bucket: "mcp_look", p_limit: LOOK_LIMIT, p_window_seconds: 3600 });
-  if (limited) return { error: FAILED };
-  if (allowed === false) return { error: `You can look at frames ${LOOK_LIMIT} times an hour. Try again later, or give the user open_in_editor's link.` };
+  if (!url || !token) return { answer: { error: NOT_SET_UP } };
 
   const { clip_id, ...params } = input;
-  let document: unknown = null;
-  let manifest: unknown = null;
+  let seen: LookedAt;
   try {
     const context = await clipContext(supabase, clip_id);
-    const project = context.clip.kind === "blank" ? await ensureBlankProject(supabase, context, clip_id) : await ensureEditorProject(supabase, context, clip_id);
-    document = project.document;
-    manifest = project.manifest ?? null;
+    seen = { context, project: await ensureProject(supabase, context, clip_id) };
   } catch {
-    return { error: "That clip was not found. Use list_clips to find its id." };
+    return { answer: { error: "That clip was not found. Use list_clips to find its id." } };
   }
+
+  // Counted only once the clip is the caller's: a wrong id does not spend the hour's looks.
+  const { data: allowed, error: limited } = await supabase.rpc("rate_limit_hit", { p_bucket: "mcp_look", p_limit: LOOK_LIMIT, p_window_seconds: 3600 });
+  if (limited) {
+    console.error("[mcp] look rate limit", limited.message);
+    return { answer: { error: FAILED } };
+  }
+  if (allowed === false) return { answer: { error: `You can look at frames ${LOOK_LIMIT} times an hour. Try again later, or give the user open_in_editor's link.` } };
 
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, user_id: userId, clip_id, op, input: params, document, manifest }),
+      body: JSON.stringify({ token, user_id: userId, clip_id, op, input: params, document: seen.project.document, manifest: seen.project.manifest ?? null }),
       signal: AbortSignal.timeout(LOOK_TIMEOUT_MS),
     });
   } catch (error) {
     console.error("[mcp] look unreachable", error);
-    return { error: FAILED };
+    return { answer: { error: FAILED } };
   }
   if (!res.ok) {
     console.error("[mcp] look", res.status, (await res.text()).slice(0, 500));
-    return { error: FAILED };
+    return { answer: { error: FAILED } };
   }
-  const body = (await res.json()) as LookAnswer;
-  if (!body || typeof body !== "object") return { error: FAILED };
-  if ("error" in body) return { error: String(body.error) };
-  if (!Array.isArray(body.images)) return { error: FAILED };
-  return body;
+  let body: LookAnswer;
+  try {
+    body = (await res.json()) as LookAnswer;
+  } catch (error) {
+    // A gateway or cold-start page can answer 200 with HTML.
+    console.error("[mcp] look answered without JSON", error);
+    return { answer: { error: FAILED } };
+  }
+  if (!body || typeof body !== "object") return { answer: { error: FAILED } };
+  if ("error" in body) return { answer: { error: String(body.error) } };
+  if (!Array.isArray(body.images)) return { answer: { error: FAILED } };
+  return { answer: body, seen };
 }

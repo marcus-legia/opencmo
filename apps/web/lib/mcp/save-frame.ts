@@ -13,6 +13,10 @@
  *
  * The bytes pass through the MCP server on Modal, never through Next.js on Vercel (web rule 3).
  *
+ * The project version is the one read before the upload: if the editor or the Assistant saves in
+ * between, the manifest save loses the optimistic lock and the new asset is deleted again, so a
+ * failed save leaves no orphan in the library or Storage.
+ *
  * UNTESTED end to end (2026-10-20): needs a database, Storage, the deployed `look` endpoint and the
  * probe task; only the manifest step (`frameRecord`) runs in `save-frame.check.ts`. Note: an image
  * model needs fal budget, which is why the plan ranks this last.
@@ -23,13 +27,12 @@ import { randomUUID } from "node:crypto";
 import { addAsset, normalizeManifest, type Manifest } from "@opencmo/clip-assets";
 import { z } from "zod";
 
-import { clipContext } from "@/lib/api/clips";
+import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { saveDocument } from "@/lib/editor/document";
-import { ensureBlankProject, ensureEditorProject } from "@/lib/editor/project";
 import { wakeWorker } from "@/lib/modal";
 
-import { requestLook } from "./look";
+import { lookAt } from "./look";
 
 export const saveFrameInput = z.object({
   clip_id: z.string().uuid(),
@@ -67,18 +70,19 @@ export function frameRecord(
 export const frameStem = (time: number, name?: string) => (name || `frame-${time.toFixed(1)}s`).replace(/[^\w.-]+/g, "-").slice(0, 60);
 
 export async function saveFrame(supabase: SupabaseClient, userId: string, input: z.infer<typeof saveFrameInput>): Promise<SaveFrameAnswer> {
-  const shot = await requestLook(supabase, userId, "frame", { clip_id: input.clip_id, time: input.time, edge: 1280 });
+  const { answer: shot, seen } = await lookAt(supabase, userId, "frame", { clip_id: input.clip_id, time: input.time, edge: 1280 });
   if ("error" in shot) return shot;
   const base64 = shot.images[0];
-  if (!base64) return { error: "The frame could not be drawn." };
+  if (!base64 || !seen) return { error: "The frame could not be drawn." };
   const bytes = Buffer.from(base64, "base64");
 
-  const context = await clipContext(supabase, input.clip_id);
+  const { context, project } = seen;
   const jobId = context.clip.job_id;
   const objectName = `${userId}/${jobId}/${randomUUID()}.jpg`;
-  // Same reservation the editor's upload asks for (`/api/v1/uploads`, kind "media").
+  // Same reservation and content type as the editor's upload (`/api/v1/uploads`, `upload-tus.ts`):
+  // the reservation trigger admits `video/%` only, and the probe task reads the real type.
   await rpcOrThrow(supabase, "reserve_upload", { p_bucket: "media", p_object_name: objectName, p_size: bytes.length, p_content_type: "video/x-upload", p_project_id: jobId });
-  const { error: uploadError } = await supabase.storage.from("media").upload(objectName, bytes, { contentType: "image/jpeg", upsert: false });
+  const { error: uploadError } = await supabase.storage.from("media").upload(objectName, bytes, { contentType: "video/x-upload", upsert: false });
   if (uploadError) return { error: "The frame could not be saved to the library. Try again." };
 
   const stem = frameStem(input.time, input.name);
@@ -90,11 +94,19 @@ export async function saveFrame(supabase: SupabaseClient, userId: string, input:
   });
   if (registered.task_id) await wakeWorker({ task_id: registered.task_id });
 
-  const project = context.clip.kind === "blank" ? await ensureBlankProject(supabase, context, input.clip_id) : await ensureEditorProject(supabase, context, input.clip_id);
   const width = Number(shot.data.width) || 0;
   const height = Number(shot.data.height) || 0;
   const { manifest, path } = frameRecord(project.manifest, { stem, mediaId: registered.asset.id, width, height, now: new Date().toISOString() });
-  await saveDocument(supabase, input.clip_id, project.version, project.document, { manifest });
+  try {
+    await saveDocument(supabase, input.clip_id, project.version, project.document, { manifest });
+  } catch (err) {
+    // The asset's delete trigger removes the Storage object too.
+    await rpcOrThrow(supabase, "delete_media_asset", { p_asset_id: registered.asset.id }).catch((cleanup) => console.error("[mcp] save_frame cleanup", cleanup));
+    if (err instanceof ApiError && err.status === 409) {
+      return { error: "The edit changed while the frame was saved (the editor or the Assistant saved it). Call save_frame again." };
+    }
+    throw err;
+  }
 
   return {
     images: [base64],
