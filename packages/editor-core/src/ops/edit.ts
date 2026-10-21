@@ -19,7 +19,7 @@ import { z } from 'zod';
 
 import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
-import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, speechOffset, writeCaptionState } from '../captions';
+import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, speechOffset, speechRate, writeCaptionState } from '../captions';
 import { clone, followsTranscript, isMasterSound, sceneOf, type Entity } from '../doc';
 import { keptRanges, round } from '../transcript';
 import { speechElement } from './captions';
@@ -308,7 +308,7 @@ export const setAudioRoll = {
     if (!state?.window || !state.removed.length) throw new OpFailure('This clip has no cuts yet: cut words or pauses first, then shape the cut.');
     const kept = keptRanges(state.window, state.removed);
     const offset = speechOffset(document, elementId);
-    const starts = segmentStarts(kept).map((start) => round(start + offset));
+    const starts = segmentStarts(kept, speechRate(document, elementId)).map((start) => round(start + offset));
     const roll = { ...readCutRoll(document, elementId) };
     if (input.at === undefined) {
       if (input.seconds !== 0) throw new OpFailure('Give the clip second of the cut.');

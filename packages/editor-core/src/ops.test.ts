@@ -153,6 +153,7 @@ describe("id từ ổn định", () => {
 });
 
 const kinds = (document: ClipDocument) => nodes(document).map((node) => node.kind);
+const scene_ = (document: ClipDocument) => document.stage.children[0] as unknown as Record<string, unknown>;
 const find = (document: ClipDocument, kind: string) => nodes(document).find((node) => node.kind === kind) as Record<string, unknown> | undefined;
 
 describe("applyOps", () => {
@@ -166,6 +167,22 @@ describe("applyOps", () => {
     expect(kinds(document)).toContain("sequence");
     // Id stamp cho mọi phần tử — kể cả các đoạn video mới của sequence.
     expect(summarizeProject(document).elements.every((element) => element.id)).toBe(true);
+  });
+
+  it("remove_words on a video played at 2x lays the segments end to end, captions at the same rate", async () => {
+    const fast = structuredClone(SOURCE);
+    const scene = fast.stage.children[0] as unknown as { children: Record<string, unknown>[] };
+    scene.children.find((node) => node.kind === "video")!.playbackRate = 2;
+    const { document } = await applyOps(fast, [{ op: "remove_words", word_ids: [ids[3], ids[4]] }], memoryContext());
+    const segments = (find(document, "sequence")!.children as Record<string, number>[]).filter((node) => (node as { kind?: unknown }).kind === "video");
+    expect(segments.length).toBe(2);
+    const [first, second] = segments as [Record<string, number>, Record<string, number>];
+    const frames = (seconds: number) => Math.round(seconds * 30);
+    // The second segment starts where the first one ends on the timeline: half its source length.
+    expect(frames(second.start!)).toBe(Math.round((frames(first.sourceOut!) - frames(first.sourceIn!)) / 2));
+    const lengths = segments.reduce((sum, node) => sum + Math.round((frames(node.sourceOut!) - frames(node.sourceIn!)) / 2), 0);
+    expect(frames((scene_(document).workarea as number[])[1]!)).toBe(lengths);
+    expect(find(document, "captions")).toMatchObject({ playbackRate: 2 });
   });
 
   it("remove_words có độ chặt: ăn khoảng hở, chừa đúng phần lặng cạnh từ còn lại", async () => {

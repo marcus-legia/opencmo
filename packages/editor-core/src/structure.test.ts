@@ -231,6 +231,18 @@ describe('nhiều timeline (E2-a)', () => {
     expect(copy!.x as number).toBeGreaterThan(1080);
   });
 
+  it('create_timeline from: captions in the copy name the copy of their video', async () => {
+    const base = doc([
+      { kind: 'video', id: 'v2', src: 'b.mp4', end: 5 },
+      { kind: 'captions', id: 'cap', src: 'b.json', source: 'v2' },
+    ]);
+    const out = await run(base, [{ op: 'create_timeline', from: 'sc' }]);
+    const [video, captions] = scenes(out)[1]!.children!;
+    expect(video!.id).not.toBe('v2');
+    expect(captions!.source).toBe(video!.id);
+    expect(scenes(out)[0]!.children![1]!.source).toBe('v2');
+  });
+
   it('op thường chỉ sửa timeline đang mở', async () => {
     const out = await two();
     const copyCard = scenes(out)[1]!.children![0]!.id as string;
