@@ -67,11 +67,11 @@ def test_upload_source_tu_choi_path_khong_canonical(source_url: str):
         media.upload_object_name(job)
 
 
-def _video(target: Path, *, audio: list[str], video: list[str] | None = None) -> Path:
+def _video(target: Path, *, audio: list[str], video: list[str] | None = None, size: str = "640x360") -> Path:
     run(
         [
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30",
+            "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
             "-t", "4", *(video or ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]),
             *audio, str(target),
@@ -104,3 +104,20 @@ def test_make_editor_master_encodes_what_mp4_cannot_hold(tmp_path: Path, name, a
     media.make_editor_master(source, out)
     info = probe_file(str(out))
     assert info.has_audio and info.duration == pytest.approx(4.0, abs=0.3)
+
+
+def test_a_full_encode_fits_inside_the_cap_and_keeps_the_aspect(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(media, "MAX_ENCODE_SIDE", 320)
+    source = _video(tmp_path / "tall.mkv", audio=["-c:a", "pcm_s16le"], video=["-c:v", "huffyuv"], size="360x640")
+    out = tmp_path / "master.mp4"
+    media.make_editor_master(source, out)
+    info = probe_file(str(out))
+    assert (info.width, info.height) == (180, 320) and info.has_audio
+
+
+def test_a_full_encode_never_upscales(tmp_path: Path):
+    source = _video(tmp_path / "small.mkv", audio=["-c:a", "pcm_s16le"], video=["-c:v", "huffyuv"])
+    out = tmp_path / "master.mp4"
+    media.make_editor_master(source, out)
+    info = probe_file(str(out))
+    assert (info.width, info.height) == (640, 360)
