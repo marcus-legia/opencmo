@@ -15,6 +15,8 @@ class MediaInfo:
     height: int
     fps: float
     has_audio: bool
+    video_codec: str = ""
+    pix_fmt: str = ""
 
     @property
     def is_vertical(self) -> bool:
@@ -66,4 +68,6 @@ def probe_file(path: str, *, local_only: bool = False, user_url: bool = False) -
         height=int(video.get("height") or 0),
         fps=_parse_fps(str(video.get("r_frame_rate", "0/1"))),
         has_audio=has_audio,
+        video_codec=str(video.get("codec_name") or ""),
+        pix_fmt=str(video.get("pix_fmt") or ""),
     )
