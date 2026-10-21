@@ -20,7 +20,7 @@ class UploadUnavailableError(ValueError):
 
 
 def upload_object_name(job: Job) -> str:
-    """Trả storage key canonical ``user_id/filename`` của nguồn upload."""
+    """The upload's canonical storage key, ``user_id/filename``."""
     raw = job.source_url.removeprefix("storage://")
     decoded = unquote(raw)
     parts = decoded.split("/")

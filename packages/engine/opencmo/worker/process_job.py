@@ -240,7 +240,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
 
 
 def process(store: Any, job: Job) -> None:
-    """Xử lý một job đã claim; mọi ghi cuối đều được fence bằng attempt id."""
+    """Runs a claimed job; every final write is fenced by its attempt id."""
     run = JobRun(store=store, job=job, uploads=Uploads(store))
 
     try:
@@ -252,10 +252,10 @@ def process(store: Any, job: Job) -> None:
             run.root = Path(tmp)
             previous = {int(row["idx"]): row for row in store.list_clips(job.id)}
             _process_upload(run, previous=previous.get(0))
-            log.info("Job %s sẵn sàng để sửa sau %.2fs", job.id, time.monotonic() - run.started)
+            log.info("Job %s ready to edit after %.2fs", job.id, time.monotonic() - run.started)
 
     except StaleAttemptError:
-        log.warning("Job %s attempt %s đã mất lease", job.id, job.attempt_id)
+        log.warning("Job %s attempt %s lost its lease", job.id, job.attempt_id)
         run.uploads.cleanup(job.id)
     except InsufficientCreditsError as exc:
         store.fail(job.id, job.attempt_id, str(exc))
@@ -264,8 +264,8 @@ def process(store: Any, job: Job) -> None:
         store.fail(job.id, job.attempt_id, UPLOAD_UNAVAILABLE)
         run.uploads.cleanup(job.id)
     except TransientError:
-        # Sau timeout của publication, chỉ DB mới biết giao dịch đã commit hay
-        # chưa. Không fail/xoá khi chưa đọc lại được trạng thái canonical.
+        # After a publication timeout only the database knows whether it committed: nothing is
+        # failed or removed until the canonical state is read back.
         if run.publication_sent:
             row = store.get_job_row(job.id)
             if row and row.get("status") == "done" and row.get("attempt_id") == job.attempt_id:
@@ -274,7 +274,7 @@ def process(store: Any, job: Job) -> None:
                 run.uploads.cleanup(job.id)
         raise
     except Exception as exc:
-        log.exception("Job %s lỗi", job.id)
+        log.exception("Job %s failed", job.id)
         if run.publication_sent and _attempt_is_published(store, job):
             return
         store.fail(job.id, job.attempt_id, processing_error(exc, run.stage))
