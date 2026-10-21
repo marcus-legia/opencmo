@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api/errors";
-import { rpcOrThrow, withApi } from "@/lib/api/handler";
+import { withApi } from "@/lib/api/handler";
 import { projectShape, type JobRow } from "@/lib/api/shapes";
 import { createUploadEdit, createUploadEditInput } from "@/lib/editor/upload";
 
@@ -17,7 +17,16 @@ const LIMIT = 12;
 export const POST = withApi({ body: createUploadEditInput }, async ({ supabase, user, body }) => createUploadEdit(supabase, user.id, body));
 
 export const GET = withApi({}, async ({ supabase }) => {
-  const jobs = await rpcOrThrow<JobRow[]>(supabase, "list_projects", { p_limit: LIMIT });
+  // Uploads only (`storage://` sources): blank New edits are projects too, and would fill the list.
+  const listed = await supabase
+    .from("jobs")
+    .select("*")
+    .like("source_url", "storage://%")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(LIMIT);
+  if (listed.error) throw new ApiError(503, "Could not load your uploads. Please try again.");
+  const jobs = (listed.data ?? []) as JobRow[];
   const ids = jobs.map((job) => job.id);
   const clips = ids.length
     ? await supabase.from("clips").select("id, job_id, storage_path, preview_path").in("job_id", ids).eq("kind", "full")

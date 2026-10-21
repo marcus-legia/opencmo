@@ -8,8 +8,8 @@
  */
 import assert from "node:assert/strict";
 
-import { sourceProblem, UPLOAD_ONLY, validateVideoFile } from "./source";
-import { rejectReason, storageExtension } from "../upload";
+import { sourceProblem, UPLOAD_ONLY } from "./source";
+import { MAX_UPLOAD_BYTES, rejectReason, storageExtension } from "../upload";
 
 const ME = "11111111-1111-4111-8111-111111111111";
 const THEM = "22222222-2222-4222-8222-222222222222";
@@ -48,9 +48,10 @@ check("links are refused: only the user's own upload starts a job", () => {
 });
 
 check("empty and oversized files are refused before the upload starts", () => {
-  assert.equal(validateVideoFile({ size: 0 }, 10), "This file is empty.");
-  assert.match(validateVideoFile({ size: 11 }, 10) ?? "", /smaller than/);
-  assert.equal(validateVideoFile({ size: 10 }, 10), null);
+  assert.equal(rejectReason("talk.mp4", 0), "That file is empty.");
+  assert.equal(rejectReason("talk.mp4", 3 * 1024 ** 3), "That file is 3.0 GB. The limit is 2.0 GB.");
+  assert.notEqual(rejectReason("talk.mp4", MAX_UPLOAD_BYTES + 1), null);
+  assert.equal(rejectReason("talk.mp4", MAX_UPLOAD_BYTES), null);
 });
 
 check("upload không bị giới hạn theo container hay phần mở rộng", () => {

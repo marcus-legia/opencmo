@@ -8,13 +8,6 @@
 
 export const UPLOAD_ONLY = "Upload the video file to edit it.";
 
-/** Client-side check before a file is sent; the bucket and `reserve_upload` enforce the real limits. */
-export function validateVideoFile(file: { size: number }, maxBytes: number): string | null {
-  if (file.size <= 0) return "This file is empty.";
-  if (file.size > maxBytes) return `Videos must be smaller than ${Math.round(maxBytes / 1024 ** 3)} GB.`;
-  return null;
-}
-
 export function sourceProblem(source: string, userId: string): string | null {
   if (!source.startsWith("storage://")) return UPLOAD_ONLY;
   // The `storage://...` string comes from the client. Without the owner check anyone could start

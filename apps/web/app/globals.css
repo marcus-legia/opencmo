@@ -5875,7 +5875,9 @@ span.ed2-asst-model {
   display: grid;
 }
 .ed2-area[hidden],
-.ed2-agent[hidden] {
+.ed2-agent[hidden],
+.ed2-left[hidden],
+.ed2-clips[hidden] {
   display: none;
 }
 .ed2-area > .ed2-main {

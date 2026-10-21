@@ -58,6 +58,34 @@ function merged(ranges: Range[]): Range[] {
 	return out;
 }
 
+/**
+ * `before` with the words `taken` covers taken out: un-emphasizing one word of a phrase keeps the
+ * rest of it. `starts` are the clip's word starts in source order; a range with none of them (another
+ * part of the source) is kept as it is.
+ */
+function without(before: Range[], taken: Range[], starts: number[]): Range[] {
+	const inside = (range: Range, start: number) => start >= range.start - 0.002 && start <= range.end + 0.002;
+	const out: Range[] = [];
+	for (const range of before) {
+		const own = starts.filter((start) => inside(range, start));
+		if (!own.length) {
+			out.push(range);
+			continue;
+		}
+		let run: number[] = [];
+		const close = () => {
+			if (run.length) out.push({ start: round(Math.min(...run)), end: round(Math.max(...run)) });
+			run = [];
+		};
+		for (const start of own) {
+			if (taken.some((cut) => inside(cut, start))) close();
+			else run.push(start);
+		}
+		close();
+	}
+	return merged(out);
+}
+
 export const emphasizeWords = {
 	name: 'emphasize_words',
 	input: emphasizeWordsInput,
@@ -70,10 +98,13 @@ export const emphasizeWords = {
 	async apply(document: ClipDocument, input: EmphasizeWords, ctx: OpContext) {
 		const model = await loadCaptions(document, ctx, input.element_id);
 		if (!model) throw new OpFailure('This clip has no transcript to find those words in.');
-		// The words on screen, in source seconds: inside the clip's window and not cut.
-		const words = model.transcript
+		// The clip's words in source order, cut ones included: a cut word ends a selected phrase.
+		const inWindow = model.transcript
 			.flatMap((segment) => segment.words)
-			.filter((word) => word.end > model.window.start && word.start < model.window.end && !isRemoved(word, model.removed));
+			.filter((word) => word.end > model.window.start && word.start < model.window.end);
+		const cut = (word: (typeof inWindow)[number]) => isRemoved(word, model.removed);
+		// The words on screen, in source seconds.
+		const words = inWindow.filter((word) => !cut(word));
 		const found: Range[] = [];
 		for (const quote of input.quotes) {
 			const hit = findQuote(words, quote);
@@ -81,26 +112,34 @@ export const emphasizeWords = {
 			const starts = words.filter((word) => word.start >= hit.start - 0.001 && word.end <= hit.end + 0.001).map((word) => sourceStart(word));
 			if (starts.length) found.push({ start: round(Math.min(...starts)), end: round(Math.max(...starts)) });
 		}
-		// Selected words: one range per run of neighbours, so a selection over a cut stays two phrases.
+		// Selected words: one range per run of neighbours on screen, so a selection over a cut stays
+		// two phrases (restoring the cut words later does not emphasize them).
 		const picked = new Set(input.word_ids ?? []);
-		let run: number[] = [];
-		const close = () => {
-			if (run.length) found.push({ start: round(Math.min(...run)), end: round(Math.max(...run)) });
-			run = [];
+		const known = new Set(inWindow.map((word) => word.id));
+		const unknown = [...picked].filter((id) => !known.has(id)).length;
+		if (unknown && unknown < picked.size) throw new OpFailure(`${unknown} of the selected words are not in this clip. Select words from its transcript.`);
+		const ranges = (keep: (word: (typeof inWindow)[number]) => boolean): Range[] => {
+			const out: Range[] = [];
+			let run: number[] = [];
+			const close = () => {
+				if (run.length) out.push({ start: round(Math.min(...run)), end: round(Math.max(...run)) });
+				run = [];
+			};
+			for (const word of inWindow) {
+				if (!cut(word) && keep(word)) run.push(sourceStart(word));
+				else close();
+			}
+			close();
+			return out;
 		};
-		for (const word of words) {
-			if (word.id !== undefined && picked.has(word.id)) run.push(sourceStart(word));
-			else close();
-		}
-		close();
-		if (picked.size && !found.length) throw new OpFailure('Those words are not on screen in this clip.');
+		const fromIds = picked.size ? ranges((word) => word.id !== undefined && picked.has(word.id)) : [];
+		found.push(...fromIds);
+		if (picked.size && !fromIds.length) throw new OpFailure('Those words are not on screen in this clip.');
 		const next = clone(document);
 		const layer = captionsLayer(next, input.element_id);
 		if (!layer) throw new OpFailure('This clip has no captions to emphasize.');
 		const before = input.clear ? [] : ((layer.emphasis as Range[] | undefined) ?? []);
-		const after = input.remove
-			? before.filter((range) => !found.some((cut) => cut.start <= range.end + 0.002 && cut.end >= range.start - 0.002))
-			: merged([...before, ...found]);
+		const after = input.remove ? without(before, found, inWindow.map((word) => sourceStart(word))) : merged([...before, ...found]);
 		if (after.length > MAX_EMPHASIS) throw new OpFailure(`A captions layer holds at most ${MAX_EMPHASIS} emphasized phrases.`);
 		if (after.length) layer.emphasis = after;
 		else delete layer.emphasis;

@@ -171,7 +171,13 @@ export function TranscriptPanel({
   const single = selected.length === 1 ? selected[0]! : null;
   const anyKept = selected.some((entry) => !removed(entry.word));
   const anyRemoved = selected.some((entry) => removed(entry.word));
-  const ids = () => selected.map((entry) => entry.word.id!);
+  // Words without an id cannot be named to an op.
+  const ids = () => selected.flatMap((entry) => (entry.word.id === undefined ? [] : [entry.word.id]));
+  // `emphasize_words` takes 400 ids per op; one batch of ops is still one undo step.
+  const emphasis = (remove: boolean) => {
+    const all = ids();
+    return Array.from({ length: Math.ceil(all.length / 400) }, (_, index) => ({ op: "emphasize_words", quotes: [], word_ids: all.slice(index * 400, index * 400 + 400), ...(remove ? { remove: true } : {}) }));
+  };
   const cutWords = () => ({ op: "remove_words", word_ids: ids(), ...(tightness === "words" ? {} : { tightness }) });
 
   const act = (ops: unknown[], clear = false) => {
@@ -380,13 +386,13 @@ export function TranscriptPanel({
             ) : null}
             {anyKept ? (
               <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-emphasize" title="Color these words in the captions"
-                onClick={() => act([{ op: "emphasize_words", quotes: [], word_ids: ids() }])}>
+                onClick={() => act(emphasis(false))}>
                 Emphasize
               </button>
             ) : null}
             {anyKept ? (
               <button type="button" className="ed2-btn" disabled={busy} data-testid="transcript-unemphasize"
-                onClick={() => act([{ op: "emphasize_words", quotes: [], word_ids: ids(), remove: true }])}>
+                onClick={() => act(emphasis(true))}>
                 Plain
               </button>
             ) : null}

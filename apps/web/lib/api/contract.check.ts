@@ -1930,9 +1930,13 @@ async function main(): Promise<void> {
     assert.match((link.body as { detail: string }).detail, /Upload the video file/);
     const other = await callApi(a, "/editor/upload", { method: "POST", body: JSON.stringify({ source: `storage://${b.userId}/x.mp4` }) });
     assert.equal(other.status, 422);
+    const blank = await callApi(a, "/editor/new", { method: "POST", body: JSON.stringify({ aspect: "9:16" }) });
+    assert.equal(blank.status, 200, JSON.stringify(blank.body));
     const list = await callApi(a, "/editor/upload");
     assert.equal(list.status, 200);
-    assert.ok(Array.isArray((list.body as { items: unknown[] }).items));
+    const items = (list.body as { items: { source_url?: string; source_name?: string }[] }).items;
+    assert.ok(Array.isArray(items));
+    assert.ok(items.every((item) => !JSON.stringify(item).includes("editor://")), "blank New edits are not uploads");
   });
 
   await check("tài khoản free: banner có hạn; quá 30 ngày thì cron xoá user + file", async () => {
