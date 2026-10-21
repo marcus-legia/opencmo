@@ -20,11 +20,11 @@ import { z } from 'zod';
 import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 
 import { activeRoll, readCaptionState, readCutRoll, rollKey, segmentStarts, speechOffset, writeCaptionState } from '../captions';
-import { clone, isMasterSound, sceneOf, type Entity } from '../doc';
+import { clone, followsTranscript, isMasterSound, sceneOf, type Entity } from '../doc';
 import { keptRanges, round } from '../transcript';
 import { speechElement } from './captions';
 import { OpFailure, type OpContext } from './context';
-import { nodeById, parentOrigin, placeOf, timesOf } from './timeline';
+import { detach, moveTo, nodeById, parentOrigin, placeOf, rippleFollowers, timesOf } from './timeline';
 
 const elementId = z.string().min(1).max(64);
 const seconds = (frames: number): number => Math.round((frames / FPS) * 1e4) / 1e4;
@@ -138,20 +138,20 @@ export const rippleDelete = {
     if (!t) throw new OpFailure('That element is not in the active scene.');
     const gap = t.end - t.start;
     const { list } = placeOf(next, entity);
-    // Anh em bắt đầu từ mép cuối trở đi dời lên đúng độ dài đã xoá — chỉ trong cùng cha.
-    const followers = list.filter((sibling) => {
-      if (sibling === entity) return false;
-      const st = times.get(sibling as unknown as ClipNode);
-      return st !== undefined && st.start >= t.end;
-    });
-    if (followers.some((sibling) => isMasterSound(sibling as unknown as ClipNode) || sibling.kind === 'captions')) {
+    // Everything in the same parent from the deleted clip's end onward moves up by its length,
+    // clip by clip inside rows and groups (a row has no start of its own to shift).
+    const followers = rippleFollowers(
+      list.filter((sibling) => sibling !== entity),
+      times,
+      t.end,
+    );
+    if (followers.some((sibling) => followsTranscript(sibling as unknown as ClipNode))) {
       throw new OpFailure("Closing this gap would move the clip's own video or captions. Delete it without closing the gap.");
     }
-    list.splice(list.indexOf(entity), 1);
+    detach(next, entity);
     for (const sibling of followers) {
-      if (typeof sibling.start === 'number') sibling.start = Math.max(0, seconds(Math.round(sibling.start * FPS) - gap));
-      else continue;
-      if (typeof sibling.end === 'number') sibling.end = seconds(Math.round(sibling.end * FPS) - gap);
+      const st = times.get(sibling as unknown as ClipNode)!;
+      moveTo(sibling, st, Math.max(0, st.start - gap));
     }
     return next;
   },
@@ -182,19 +182,16 @@ export const makeRoom = {
     const times = timesOf(next, ctx);
     const at = Math.round(input.at * FPS);
     const gap = Math.round(input.seconds * FPS);
-    const followers = ((scene.children as Entity[] | undefined) ?? []).filter((child) => {
-      const t = times.get(child as unknown as ClipNode);
-      // `timesOf` đếm bằng FRAME (như ripple_delete).
-      return t !== undefined && t.start >= at;
-    });
+    // Clip by clip, inside rows and groups too: a row has no start of its own, and a row that
+    // began before `at` still holds clips after it.
+    const followers = rippleFollowers((scene.children as Entity[] | undefined) ?? [], times, at);
     if (!followers.length) return document;
-    if (followers.some((child) => isMasterSound(child as unknown as ClipNode) || child.kind === 'captions')) {
+    if (followers.some((child) => followsTranscript(child as unknown as ClipNode))) {
       throw new OpFailure("Making room here would move the clip's own video or captions. Add the media on top instead, or make room after them.");
     }
     for (const child of followers) {
       const t = times.get(child as unknown as ClipNode)!;
-      child.start = seconds(t.start + gap);
-      if (typeof child.end === 'number') child.end = seconds(t.end + gap);
+      moveTo(child, t, t.start + gap);
     }
     return next;
   },

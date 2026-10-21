@@ -11,7 +11,7 @@ import { byId, clone, copyOf, sceneOf, walk, type Entity } from '../doc';
 import { LANE_NAME, laneOf, placeInRow, rowName } from '../tracks';
 import { OpFailure, type OpContext } from './context';
 import { checked } from './project';
-import { nodeById, placeOf, settle, timesOf } from './timeline';
+import { detach, nodeById, placeOf, settle, timesOf } from './timeline';
 
 const elementId = z.string().min(1).max(64);
 const node = z.record(z.string(), z.unknown()).refine((value) => typeof value.kind === 'string', 'A node needs a kind.');
@@ -44,16 +44,6 @@ const LANE_RULE: Record<string, string> = {
   text: 'Text can only share a row with text.',
   graphic: 'Shapes and visuals can only share a row with shapes and visuals.',
 };
-
-/** Gỡ một node khỏi chỗ cũ; sequence rỗng sau đó thì gỡ luôn. */
-function detach(document: ClipDocument, entity: Entity): void {
-  const from = placeOf(document, entity);
-  from.list.splice(from.list.indexOf(entity), 1);
-  if (from.list.length === 0 && from.parent.kind === 'sequence') {
-    const outer = placeOf(document, from.parent);
-    outer.list.splice(outer.list.indexOf(from.parent), 1);
-  }
-}
 
 /** Con trực tiếp của scene chứa `entity` (chính nó nếu nó nằm thẳng dưới scene). */
 function topOf(document: ClipDocument, entity: Entity): Entity {
