@@ -103,7 +103,7 @@ export async function projectDetail(
 ): Promise<Project> {
   const job = await jobRowOrThrow(supabase, jobId);
 
-  const [clipsResult, transcriptResult] = await Promise.all([
+  const [clipsResult, transcriptResult, mastersResult] = await Promise.all([
     supabase
       .from("clips")
       .select(`${CLIP_COLUMNS}, settings_hash`)
@@ -111,9 +111,11 @@ export async function projectDetail(
       .eq("kind", "full")
       .order("idx"),
     supabase.from("artifacts").select("kind").eq("job_id", jobId).eq("kind", "transcript").limit(1),
+    // An upload's transcript sits beside its master (`process_job.py`); `artifacts` holds older ones.
+    supabase.from("jobs").select("media_manifest").eq("id", jobId).maybeSingle(),
   ]);
 
-  if (clipsResult.error || transcriptResult.error) {
+  if (clipsResult.error || transcriptResult.error || mastersResult.error) {
     throw new ApiError(503, "Could not refresh your clips. Please try again.");
   }
   const clipRows = (clipsResult.data ?? []) as unknown as (ClipRow & { settings_hash: string | null })[];
@@ -191,5 +193,7 @@ export async function projectDetail(
     }),
   );
 
-  return projectShape(job, clips, (transcriptResult.data ?? []).length > 0);
+  const masters = ((mastersResult.data as { media_manifest: { masters?: Record<string, { transcript?: string | null }> } | null } | null)?.media_manifest?.masters) ?? {};
+  const transcribed = Object.values(masters).some((master) => Boolean(master?.transcript)) || (transcriptResult.data ?? []).length > 0;
+  return projectShape(job, clips, transcribed);
 }

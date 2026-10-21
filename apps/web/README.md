@@ -41,7 +41,7 @@ Migrations and pgTAP tests live at the **repository root** (`supabase/migrations
 ## Six rules of the web app
 
 1. **The app never inserts directly into product tables.** Charging credits and creating work
-   must happen in one transaction, so every entry point is an RPC (`create_job()`, …).
+   must happen in one transaction, so every entry point is an RPC (`create_upload_edit()`, …).
 2. **Don't filter by `user_id` in queries as a substitute for RLS.** RLS already filters, and
    unlike a hand-written condition it cannot be forgotten.
 3. **The app never proxies media.** It signs a URL and redirects.

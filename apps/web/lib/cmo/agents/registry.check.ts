@@ -56,6 +56,11 @@ assert.equal(resolveAgent("planner", base).baseUrl, "", "only openai has an endp
 const router = { ...groq, CMO_AGENT_SALES_PROVIDER: "groq", CMO_AGENT_SALES_BASE_URL: "https://openrouter.ai/api/v1/", CMO_AGENT_SALES_API_KEY: "r-sales" } as unknown as NodeJS.ProcessEnv;
 assert.deepEqual([resolveAgent("sales", router).provider, resolveAgent("sales", router).baseUrl, resolveAgent("sales", router).ownKey], ["openai", "https://openrouter.ai/api/v1", true]);
 assert.equal(resolveAgent("sales", router, "openai").baseUrl, GROQ_BASE_URL, "failover never uses one agent's own endpoint");
+// Both shared keys set: Groq's key goes to Groq, the compat key to the endpoint it was set for.
+const twoKeys = { ...groq, OPENAI_COMPAT_API_KEY: "sk-other" } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("planner", twoKeys).apiKey, "q-shared", "the compat key is not sent to Groq");
+const elsewhere = { ...twoKeys, OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1" } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("planner", elsewhere).apiKey, "sk-other", "nor the Groq key to another endpoint");
 
 // The order: CMO_LLM_PROVIDERS first, the rest after; candidates only with a key, the configured one first.
 assert.deepEqual(providerOrder({} as NodeJS.ProcessEnv), ["openai", "anthropic", "gemini"]);

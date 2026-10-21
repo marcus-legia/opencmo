@@ -91,6 +91,8 @@ async function standbyChecks(): Promise<void> {
   assert.deepEqual(await withStandby(noCredit, blocked), [422, 1]);
   assert.deepEqual(await withStandby(new Anthropic.APIConnectionError({ message: "socket hang up" }), allowed), [200, 1]);
   assert.deepEqual(await withStandby(noCredit, { blocked: true }), [422, 1], "Gemini's own safety block counts as blocked");
+  // A timed-out check has no verdict either: the standby answers it, as the worker's check does.
+  assert.deepEqual(await withStandby(new Anthropic.APIConnectionTimeoutError(), allowed), [200, 1]);
 
   // Neither can answer, or the standby's answer cannot be read: nothing unchecked goes through.
   assert.deepEqual(await withStandby(noCredit, new GeminiError({ status: 503, message: "unavailable" })), [503, 1]);

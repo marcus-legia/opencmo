@@ -30,13 +30,7 @@ async function main(): Promise<void> {
   assert.deepEqual(taskPayload, { token: "test-token", task_id: "task-1" });
 
   const jobPayload = await capturePayload(() =>
-    wakeWorker({
-      id: "job-1",
-      user_id: "user-1",
-      source_url: "https://youtu.be/example",
-      clips_requested: 3,
-      watermark: false,
-    }),
+    wakeWorker({ id: "job-1" }),
   );
   assert.deepEqual(jobPayload, { token: "test-token", job_id: "job-1" });
 

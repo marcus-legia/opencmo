@@ -10,15 +10,8 @@
  * mỗi phút — sẽ nhặt nó lên. Đánh sập việc tạo job chỉ vì lưới an toàn phải làm
  * việc là đổi một chậm trễ 60 giây lấy một lỗi đỏ trước mặt người dùng.
  */
-export type WakePayload =
-  | {
-      id: string;
-      user_id: string;
-      source_url: string;
-      clips_requested: number;
-      watermark: boolean;
-    }
-  | { task_id: string };
+/** The worker reads the job or task from the database; the wake carries only its id. */
+export type WakePayload = { id: string } | { task_id: string };
 
 /**
  * Modal's `submit` takes `{job_id}` OR `{task_id}` (D2 Task 4.1); exports, media probes

@@ -30,7 +30,7 @@ load_allowed_env() {
   while IFS='=' read -r key value; do
     [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
     case "$key" in
-      ANTHROPIC_API_KEY|ELEVENLABS_API_KEY|FAL_KEY|OPENCMO_SELECT_MODEL|OPENCMO_SCRIBE_MODEL|OPENCMO_PROXY|OPENCMO_ENCODER|OPENCMO_WATERMARK|OPENCMO_MAX_PARALLEL)
+      ANTHROPIC_API_KEY|ELEVENLABS_API_KEY|FAL_KEY|OPENCMO_SCRIBE_MODEL|OPENCMO_WATERMARK)
         export "$key=$(strip_value "$value")"
         ;;
     esac

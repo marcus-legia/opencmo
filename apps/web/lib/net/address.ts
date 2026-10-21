@@ -7,7 +7,7 @@
  * Teredo, NAT64), and `2130706433` / `0x7f.1` for 127.0.0.1 — `new URL` turns the last two into
  * dotted quads, which is why callers must check `url.hostname`, never the raw string.
  *
- * No Node imports: `lib/api/source.ts` uses this and is also bundled for the browser.
+ * No Node imports: it may be bundled for the browser.
  */
 
 /** The only ports we fetch on; anything else is refused whatever the scheme. */

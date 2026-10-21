@@ -1,13 +1,9 @@
 /**
- * Hợp đồng API clipping: project, clip, draft/revision, transcript, export.
+ * API shapes of projects, clips, revisions, transcripts and exports, matching
+ * `packages/engine/opencmo/editing/models.py`.
  *
- * Khớp với `packages/engine/opencmo/editing/models.py` và API local. JSON mẫu
- * dùng chung ở `tests/contracts/clipping/`: engine kiểm API trả đúng các khoá
- * trong mẫu, `clipping-contract.check.ts` kiểm mẫu có đủ trường kiểu này yêu cầu.
- *
- * Mọi mốc thời gian trong `RevisionSettings` tính theo VIDEO NGUỒN.
+ * Every time in `RevisionSettings` is in SOURCE video seconds.
  */
-
 
 export type ProjectStatus =
   | "queued"
@@ -37,30 +33,6 @@ export type ProjectSettings = {
   aspect: AspectRatio;
   layout: JobLayout;
   captions: boolean;
-};
-
-export type LocalHealth = {
-  ready: boolean;
-  checks: Record<string, boolean>;
-  max_upload_bytes: number;
-  max_parallel: number;
-  /** Trần dung lượng của `.local-data`; 0 là không giới hạn. */
-  max_workspace_bytes: number;
-};
-
-export type StorageUsage = {
-  root: string;
-  total_bytes: number;
-  free_bytes: number;
-  max_workspace_bytes: number;
-  folders: { name: string; bytes: number; files: number }[];
-};
-
-export type StorageCleanup = {
-  busy: boolean;
-  /** Mô tả ngắn từng thứ đã xoá, để UI nói con số thật thay vì "đã dọn xong". */
-  removed: string[];
-  freed_bytes: number;
 };
 
 export type Moment = {
@@ -118,11 +90,6 @@ export type Project = {
   clip_count?: number;
   /** Chỉ có ở `GET /projects/{id}`. */
   has_transcript?: boolean;
-};
-
-export type UpdateProjectRequest = {
-  title?: string;
-  favorite?: boolean;
 };
 
 export type ProjectPage = {
@@ -184,25 +151,6 @@ export type EditorMedia = {
   status?: "pending" | "ready" | "failed";
   error?: string | null;
 };
-export type EditorSource = {
-  url: string;
-  offset: number;
-  width: number;
-  height: number;
-  /**
-   * Bản local: tâm crop tính sẵn cho TỪNG đoạn cắt — nghĩa là server chạy lại
-   * bám mặt mỗi lần người dùng kéo một mép cắt.
-   */
-  focus?: number[];
-  /**
-   * Bản web: mẫu bám mặt thô `[thời gian nguồn, x, diện tích]` do worker lấy
-   * MỘT lần lúc xử lý job. Client tự tra theo khoảng đang phát, nên kéo cắt
-   * không tốn thêm một lượt MediaPipe nào.
-   */
-  face_track?: [number, number, number][];
-  duration?: number | null;
-};
-
 export type TranscriptWord = { start: number; end: number; text: string };
 
 export type TranscriptSegment = {
@@ -222,12 +170,3 @@ export type TranscriptArtifact = {
   };
 };
 
-export type PreviewResponse = {
-  url: string;
-  cached: boolean;
-};
-
-export type CreateExportRequest = {
-  revision_id: string;
-  request_id: string;
-};

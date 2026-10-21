@@ -17,9 +17,9 @@ async function main() {
       { name: "get_tree", result: { summary: "read" } },
       { name: "generate_media", result: { summary: "b", version: 9 } },
     ],
-    "clip-1",
   );
-  assert.deepEqual(clipTurn.get("clip-1"), { first: 7, last: 9 });
+  assert.deepEqual(clipTurn, { first: 7, last: 9 });
+  assert.equal(writtenVersions([{ name: "get_tree", result: { summary: "read" } }]), undefined, "a turn that saved nothing");
 
   const written = { first: 7, last: 9 };
   assert.equal(await unchangedSince({ version: 9, document: doc("x") }, written, null), true, "still at the turn's version: restore");
@@ -33,8 +33,7 @@ async function main() {
       { name: "edit", result: { summary: "b", version: 9, document_hash: "h9" } },
       { name: "edit", result: { summary: "c", version: 8, document_hash: "h8" } },
     ],
-    "clip-1",
-  ).get("clip-1");
+  );
   assert.deepEqual(hashed, { first: 7, last: 9, lastHash: "h9" }, "the hash belongs to the newest write, whatever the row order");
   assert.equal(await unchangedSince({ version: 12, document: doc("x"), document_hash: "h9" }, hashed, null), true, "library saves after the turn: restore");
   assert.equal(await unchangedSince({ version: 12, document: doc("y"), document_hash: "h12" }, hashed, null), false, "document edited after the turn: refuse");

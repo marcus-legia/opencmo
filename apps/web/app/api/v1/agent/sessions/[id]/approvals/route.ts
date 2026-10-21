@@ -15,9 +15,9 @@ const body = z.object({
 });
 
 /**
- * Approve/Cancel một thẻ duyệt (`apply_to_clips`), rồi lượt chạy tiếp — cùng
- * Server-Sent Events với route `turns`. Tool đang chờ mà không có quyết định
- * nào thì tính là Cancel: Assistant không bao giờ tự ghi lên nhiều clip.
+ * Approve or Cancel an approval card (a priced `generate_media`), then the turn continues on the
+ * same Server-Sent Events as the `turns` route. A waiting tool with no decision counts as Cancel:
+ * the Assistant never spends credits the user did not approve.
  */
 export const POST = withApi({ body }, async ({ supabase, user, body, params }) =>
   continueTurn(

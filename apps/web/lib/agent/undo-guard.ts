@@ -19,20 +19,20 @@ type Saved = { version?: unknown; document_hash?: unknown };
 export type ToolCallRow = { name: string; result: (Saved & { [key: string]: unknown }) | null };
 
 /** Versions a turn wrote on its clip: every finished call that saved carries the `version` it saved. */
-export function writtenVersions(rows: ToolCallRow[], clipId: string): Map<string, Written> {
-  const map = new Map<string, Written>();
-  const widen = (id: string, saved: Saved | null | undefined) => {
-    const version = saved?.version;
-    if (typeof version !== "number") return;
-    const hash = typeof saved?.document_hash === "string" ? saved.document_hash : undefined;
-    const seen = map.get(id);
-    if (!seen) return void map.set(id, { first: version, last: version, ...(hash ? { lastHash: hash } : {}) });
-    const newest = version > seen.last;
-    const lastHash = newest ? hash : seen.lastHash;
-    map.set(id, { first: Math.min(seen.first, version), last: Math.max(seen.last, version), ...(lastHash ? { lastHash } : {}) });
-  };
-  for (const row of rows) widen(clipId, row.result);
-  return map;
+export function writtenVersions(rows: ToolCallRow[]): Written | undefined {
+  let seen: Written | undefined;
+  for (const { result } of rows) {
+    const version = result?.version;
+    if (typeof version !== "number") continue;
+    const hash = typeof result?.document_hash === "string" ? result.document_hash : undefined;
+    if (!seen) {
+      seen = { first: version, last: version, ...(hash ? { lastHash: hash } : {}) };
+      continue;
+    }
+    const lastHash = version > seen.last ? hash : seen.lastHash;
+    seen = { first: Math.min(seen.first, version), last: Math.max(seen.last, version), ...(lastHash ? { lastHash } : {}) };
+  }
+  return seen;
 }
 
 /**
