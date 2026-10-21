@@ -5,7 +5,10 @@ import { ApiError } from "@/lib/api/errors";
 import { clipContext } from "@/lib/api/clips";
 import { rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
 import { agentChatProvider, agentProvider, assistantDown, availableModels, providerForModel } from "@/lib/agent/model";
+import { blankEdit, clipToolSpecs } from "@/lib/agent/scope";
+import { slashCommandsFor } from "@/lib/agent/slash";
 import { sessionView, type SessionRow } from "@/lib/agent/view";
+import { readEditorProject } from "@/lib/editor/apply";
 import { availableModels as generationModels } from "@/lib/generate/models";
 
 export const dynamic = "force-dynamic";
@@ -54,11 +57,18 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   const sessionId = params.get("session_id");
   const cmo = params.get("scope") === "cmo";
   let blank = false;
+  // The slash menu offers what this clip's Assistant can do: the tools its scope will have.
+  let slash: { name: string; label: string; hint: string }[] = [];
   if (cmo) {
     // Phiên CMO chat không gắn clip/project: RLS theo user_id là đủ.
   } else if (clipId !== null) {
     if (!UUID.test(clipId)) throw new ApiError(422, "clip_id: Invalid");
-    blank = (await clipContext(supabase, clipId)).clip.kind === "blank";
+    const context = await clipContext(supabase, clipId);
+    blank = context.clip.kind === "blank";
+    // No editor document yet: nothing on the clip has a transcript, as `blankEdit` reads it.
+    const document = await readEditorProject(supabase, clipId).then((project) => project.document, () => null);
+    const tools = clipToolSpecs({ blank: document ? blankEdit(context, document) : blank }).map((tool) => tool.name);
+    slash = slashCommandsFor(tools).map(({ name, label, hint }) => ({ name, label, hint }));
   } else {
     throw new ApiError(422, "clip_id or scope: Required");
   }
@@ -81,6 +91,7 @@ export const GET = withApi({}, async ({ supabase, request }) => {
     broll: generationModels().some((item) => (item.kind === "image" || item.kind === "video") && !item.limits.scene),
     // "Explain a concept" starts a New edit: only there, and only when explainers can render here.
     explain: blank && generationModels().some((item) => item.id === EXPLAINER_MODEL),
+    slash,
     sessions: cmo ? await listSessions(supabase, { cmo: true }) : await listSessions(supabase, { clipId: clipId! }),
     session: session ? await sessionView(supabase, session) : null,
   };

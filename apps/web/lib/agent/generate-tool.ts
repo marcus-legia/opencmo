@@ -426,6 +426,12 @@ export async function prepareScene(input: unknown, plan: PlanStudio, save: (code
 /** Giọng dùng được lúc này; tên giọng là duy nhất trên mọi model (giọng quyết định model). */
 const voiceModels = () => availableModels().filter((model) => model.kind === "voice");
 
+/** The voice model that speaks `voice`, or the refusal naming the voices there are. */
+export function voiceModelFor(voice: string): AiModel | string {
+  const model = voiceModels().find((candidate) => candidate.limits.voices?.includes(voice));
+  return model ?? `voice: choose one of ${voiceModels().flatMap((entry) => entry.limits.voices ?? []).join(", ")}.`;
+}
+
 /** Tool có khi máy chủ bật ít nhất một model giọng. */
 export function voiceoverToolSpec(): ToolSpec | null {
   const voices = voiceModels().flatMap((model) => model.limits.voices ?? []);
@@ -447,8 +453,8 @@ export async function prepareVoiceover(input: unknown, plan: PlanVoiceover): Pro
     const issue = parsed.error.issues[0];
     return `${issue?.path.join(".") ?? ""}: ${issue?.message ?? "Invalid input."}`;
   }
-  const model = voiceModels().find((candidate) => candidate.limits.voices?.includes(parsed.data.voice));
-  if (!model) return `voice: choose one of ${voiceModels().flatMap((entry) => entry.limits.voices ?? []).join(", ")}.`;
+  const model = voiceModelFor(parsed.data.voice);
+  if (typeof model === "string") return model;
   const request = { op: "add_voiceover" as const, ...parsed.data, seed: parsed.data.seed ?? randomInt(0, 2_147_483_647) };
   let planned: Awaited<ReturnType<PlanVoiceover>>;
   try {

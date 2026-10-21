@@ -85,7 +85,7 @@ export async function startTurn(supabase: SupabaseClient, userId: string, sessio
   const turn = await rpcOrThrow<Turn>(supabase, "agent_begin_turn", {
     p_session_id: session.id,
     p_prompt: prompt,
-    p_content: provider.userTurn(prompt, `${slashDirective(prompt)}${attachmentText(attachments)}${state}`, images),
+    p_content: provider.userTurn(prompt, `${slashDirective(prompt, scope.tools.map((tool) => tool.name))}${attachmentText(attachments)}${state}`, images),
   });
   pending.id = turn.id;
   return sseResponse(async (emit) => {

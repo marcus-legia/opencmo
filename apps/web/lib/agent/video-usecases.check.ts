@@ -28,7 +28,8 @@ async function main(): Promise<void> {
   const { createVideoToolSpec, prepareCreateVideo, videoPieces } = await import("./create-video");
   const { generateCard } = await import("./generate-tool");
   const { screenPieces } = await import("./screen-pieces");
-  const { slashDirective } = await import("./slash");
+  const { musicModel, slashCommandsFor, slashDirective } = await import("./slash");
+  const { clipToolSpecs } = await import("./scope");
   const { SYSTEM_PROMPT } = await import("./prompt");
   const { readGuide } = await import("./guides");
   const { memoryWorkspace } = await import("./workspace");
@@ -171,10 +172,26 @@ async function main(): Promise<void> {
     assert.equal((asked.planned.prepared.op as unknown as { voice?: { voice: string } }).voice?.voice, "Test B");
   }
 
+  // 9b. A voice no model speaks is refused before any planning: dropped silently, the video had no voice.
+  {
+    const asked = await ask({ prompt: "a 20-second video about a notes app", seconds: 20, voice: "Narrator" });
+    if (!("error" in asked) || !asked.error) assert.fail("an unknown voice is refused");
+    assert.match(asked.error, /voice: choose one of/);
+  }
+
   // 10. How a request reaches create_video: /video names it; a plain request relies on the prompt.
   {
-    assert.match(slashDirective("/video a 20-second video about notes"), /call create_video/);
-    assert.equal(slashDirective("make me a 20-second video about notes"), "");
+    const tools = clipToolSpecs().map((spec) => spec.name);
+    assert.match(slashDirective("/video a 20-second video about notes", tools), /call create_video/);
+    assert.equal(slashDirective("make me a 20-second video about notes", tools), "");
+    // /music asks for the music model by name: the first audio model makes 22 s sound effects.
+    const { AI_MODELS } = await import("@opencmo/editor-core/generate");
+    assert.equal(musicModel(AI_MODELS), "elevenlabs-music", "the music model, not the first audio model (sound effects)");
+    assert.match(slashDirective("/music calm lo-fi", tools), new RegExp(`model "${musicModel()}"`));
+    // Without the tool (no video model on the server) the menu drops /video and the directive says so.
+    const noVideo = tools.filter((name) => name !== "create_video");
+    assert.ok(!slashCommandsFor(noVideo).some((command) => command.name === "video"));
+    assert.match(slashDirective("/video a clip", noVideo), /not available here/);
     assert.match(SYSTEM_PROMPT, /create_video/, "a plain \"make me a video\" must be routed by the system prompt");
     assert.match(readGuide("blank"), /create_video/, "the blank-edit guide must send a whole video to create_video");
     // The editor can export (request_export): a prompt that says otherwise makes the model refuse "export it".

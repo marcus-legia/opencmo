@@ -36,7 +36,7 @@ import { api } from "@/components/clipping/api";
 import type { RenderTask } from "@/lib/api/tasks";
 
 import type { ToolAnswer } from "./capture";
-import { SLASH_COMMANDS } from "@/lib/agent/slash";
+import type { SlashMenuItem } from "@/lib/agent/slash";
 
 import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
@@ -105,6 +105,7 @@ export function AssistantPanel({
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [broll, setBroll] = useState(false);
   const [explain, setExplain] = useState(false);
+  const [commands, setCommands] = useState<SlashMenuItem[]>([]);
   const [model, setModel] = useState<string | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [session, setSession] = useState<SessionView | null>(null);
@@ -114,7 +115,7 @@ export function AssistantPanel({
   const [draft, setDraft] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
   // "/vi" → the commands that start with it; gone once a space follows the command.
-  const slashMatches = /^\/[a-z]*$/.test(draft) ? SLASH_COMMANDS.filter((command) => command.name.startsWith(draft.slice(1))) : [];
+  const slashMatches = /^\/[a-z]*$/.test(draft) ? commands.filter((command) => command.name.startsWith(draft.slice(1))) : [];
   const pickSlash = (name: string) => {
     setDraft(`/${name} `);
     setSlashIndex(0);
@@ -150,6 +151,7 @@ export function AssistantPanel({
         setAvailable(next.available);
         setBroll(Boolean(next.broll));
         setExplain(Boolean(next.explain));
+        setCommands(next.slash ?? []);
         setModels(next.models);
         setSessions(next.sessions);
         setModel(next.model ?? undefined);
