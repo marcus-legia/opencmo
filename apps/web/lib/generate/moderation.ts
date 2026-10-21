@@ -20,7 +20,7 @@ import { ApiError as GeminiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
-import { agentCandidates, providerOrder, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
+import { agentCandidates, GROQ_BASE_URL, providerOrder, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 import { outage } from "@/lib/llm-health";
 import { compatJson, OpenAiCompatError, OpenAiCompatTimeout } from "@/lib/openai-compat";
 
@@ -35,11 +35,20 @@ export const BLOCKED_MESSAGE = "This request goes against our content policy. Ch
 const UNCHECKED_MESSAGE = "Could not check this request. Please try again.";
 
 /**
- * Real moderation runs on this server — production only enables AI images/video when true. The
- * worker checks what is drawn with the same keys (`opencmo/ai/moderation.py`; the deploy check
- * keeps them alike).
+ * A checker that can also judge the drawn frames, as the worker does (`_compat_ready` in
+ * `opencmo/ai/moderation.py`): its default vision model is a Groq id, so an OpenAI-compatible
+ * endpoint elsewhere counts only with OPENCMO_MODERATION_VISION_MODEL named.
  */
-export const moderationReady = (): boolean => agentCandidates("moderation").length > 0;
+const checksFrames = (agent: ResolvedAgent, env: NodeJS.ProcessEnv): boolean =>
+  agent.provider !== "openai" || agent.baseUrl === GROQ_BASE_URL || Boolean(env.OPENCMO_MODERATION_VISION_MODEL?.trim());
+
+/**
+ * Real moderation runs on this server — production only enables AI images/video when true. The
+ * worker checks what is drawn with the same keys and vision model (the deploy check keeps them
+ * alike): enabled without a frame checker, every generation is charged and then refused.
+ */
+export const moderationReady = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  agentCandidates("moderation", env).some((agent) => checksFrames(agent, env));
 
 export const POLICY = `You moderate prompts for an AI image, video and audio generator used by small businesses for marketing.
 Block a prompt when it asks for any of:

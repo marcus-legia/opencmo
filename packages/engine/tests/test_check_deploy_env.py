@@ -30,6 +30,11 @@ def _healthy() -> dict[str, dict[str, str | None]]:
         seen[MCP].setdefault(key, URLS.get(key) or env.fingerprint(key, f"value of {key}"))
     for place, key, expected in env.EXPECTED:
         seen[place][key] = expected
+    # Groq, the default endpoint: no compat URL or vision model named.
+    for shared in env.SHARED:
+        if shared.what in ("OpenAI-compatible endpoint", "moderation vision model"):
+            for place, key in shared.holders:
+                seen[place][key] = None
     return seen
 
 
@@ -133,6 +138,21 @@ def test_moderation_needs_one_provider_key_per_place_not_anthropic_or_fal():
         seen[WORKER][key] = None
     problems, _ = env.check(seen)
     assert problems and all("opencmo: no moderation key" in problem or "Groq key" in problem for problem in problems)
+
+
+def test_the_worker_must_be_able_to_check_frames_on_another_endpoint():
+    seen = _healthy()
+    for place, key in [(p, k) for shared in env.SHARED if shared.what == "Anthropic key" for p, k in shared.holders]:
+        seen[place][key] = None
+    for place in (VERCEL, WORKER, MCP):
+        seen[place]["OPENAI_COMPAT_BASE_URL"] = "https://openrouter.ai/api/v1"
+        seen[place]["OPENAI_COMPAT_API_KEY"] = env.fingerprint("OPENAI_COMPAT_API_KEY", "sk")
+    problems, _ = env.check(seen)
+    assert any("moderation cannot check images" in problem for problem in problems), problems
+    for place in (VERCEL, WORKER, MCP):
+        seen[place]["OPENCMO_MODERATION_VISION_MODEL"] = "vendor/vision"
+    problems, _ = env.check(seen)
+    assert problems == [], problems
 
 
 def test_an_optional_key_set_somewhere_must_be_set_and_equal_everywhere():
