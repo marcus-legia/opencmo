@@ -155,6 +155,25 @@ describe('split_elements', () => {
     expect(kids.map((kid) => [kid.start, kid.end])).toEqual([[undefined, 2], [2, 3], [3, 6]]);
   });
 
+  it('a duplicated id splits once and leaves the other layers alone', async () => {
+    const out = await run(doc([
+      { kind: 'rect', id: 'a', name: 'A', end: 6 },
+      { kind: 'rect', id: 'z', name: 'Z', start: 8, end: 9 },
+    ]), [{ op: 'split_elements', element_ids: ['a', 'a'], at: 3 }]);
+    const [wrapped, other] = scene(out).children as unknown as Array<{ kind: string; name?: string; children?: unknown[] }>;
+    expect(wrapped).toMatchObject({ kind: 'sequence' });
+    expect(wrapped!.children).toHaveLength(2);
+    expect(other).toMatchObject({ name: 'Z' });
+  });
+
+  it("with nothing picked, the clip's own video and captions are not split", async () => {
+    const master = { kind: 'video', id: 'm', src: 'assets/master.mp4', end: 10 };
+    const out = await run(doc([master, { kind: 'rect', id: 'r', name: 'R', end: 10 }]), [{ op: 'split_elements', at: 4 }], ctx({ 'assets/master.mp4': 10 }));
+    expect(scene(out).children[0]).toMatchObject({ id: 'm', kind: 'video' });
+    expect(scene(out).children[1]).toMatchObject({ kind: 'sequence' });
+    await expect(run(doc([master]), [{ op: 'split_elements', element_ids: ['m'], at: 4 }], ctx({ 'assets/master.mp4': 10 }))).rejects.toThrow(/transcript/);
+  });
+
   it('mốc ngay mép clip thì không có gì để cắt', async () => {
     const base = doc([{ kind: 'rect', id: 'a', start: 1, end: 2 }]);
     expect(await run(base, [{ op: 'split_elements', at: 1 }])).toBe(base);

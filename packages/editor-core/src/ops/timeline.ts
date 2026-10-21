@@ -328,13 +328,18 @@ export const splitElements = {
     const next = clone(document);
     const frame = Math.round(input.at * FPS);
     const scene = activeScene(next) as unknown as Entity;
-    const targets = input.element_ids?.length
-      ? input.element_ids.map((id) => nodeById(next, id))
+    const picked = Boolean(input.element_ids?.length);
+    const targets = picked
+      ? [...new Set(input.element_ids!.map((id) => nodeById(next, id)))]
       : ((scene.children as Entity[] | undefined) ?? []);
+    if (picked && targets.some((entity) => followsTranscript(entity as unknown as ClipNode))) {
+      throw new OpFailure("The clip's own video and captions are cut from the transcript, not split.");
+    }
     const times = timesOf(next, ctx);
-    // Sequence không phải một clip: vết cắt rơi vào con mà mốc đang nằm trong.
-    const units = targets
-      .flatMap((entity) => (entity.kind === 'sequence' ? ((entity.children as Entity[]) ?? []) : [entity]))
+    // A sequence or spanning group is not one clip: the cut lands in the clip under the playhead.
+    // With nothing picked, the transcript-timed layers are left alone.
+    const units = [...new Set(targets.flatMap((entity) => clipsIn(entity, times)))]
+      .filter((entity) => !followsTranscript(entity as unknown as ClipNode))
       .filter((entity) => {
         const t = times.get(entity as unknown as ClipNode);
         return t && timed(entity) && t.start < frame && frame < t.end;
@@ -357,6 +362,7 @@ export const splitElements = {
     for (const { entity, copy, parent, list } of pairs) {
       if (CONTAINERS.has(parent.kind as string) && parent.kind !== 'scene') continue;
       const at = list.indexOf(entity);
+      if (at < 0) continue;
       list.splice(list.indexOf(copy), 1);
       list.splice(at, 1, { kind: 'sequence', name: nextName(next, 'Sequence'), children: [entity, copy] });
     }
