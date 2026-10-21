@@ -83,6 +83,16 @@ describe('lookJob (real ffmpeg)', () => {
     expect(Math.abs(cell.gray - exported)).toBeLessThan(6);
   });
 
+  it('capture: a time at the very end of a 60 fps scene draws the last frame, not one past it', async () => {
+    const fast = structuredClone(document);
+    (fast.stage.children[0] as { fps?: number }).fps = 60;
+    const result = await lookJob({ ...base(), document: validate(fast), op: 'capture', times: [2], grid: false });
+    if ('error' in result) throw new Error(result.error);
+    const layers = result.data.layers as { visible: { id: string }[] }[];
+    expect(layers[0]!.visible.map((layer) => layer.id)).toEqual(['speaker']);
+    expect((await grayOf(result.images[0]!)).gray).toBeGreaterThan(200);
+  });
+
   it('capture: evenly spread frames when no times are given, at most 12', async () => {
     const result = await lookJob({ ...base(), op: 'capture', count: 4 });
     if ('error' in result) throw new Error(result.error);
