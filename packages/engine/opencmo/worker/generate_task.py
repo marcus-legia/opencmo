@@ -27,7 +27,7 @@ from opencmo.ai.catalog import (
     validate_spec,
     with_row,
 )
-from opencmo.ai.moderation import check_input, check_input_video, check_output
+from opencmo.ai.moderation import check_input, check_input_video, check_output, check_prompt
 from opencmo.ai.providers import ProviderError, adapter_for
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Task
@@ -265,6 +265,8 @@ def process(store: Any, task: Task) -> None:
     object_name = ""
     with task_workspace(store, task, "generate") as (heartbeat, root):
         try:
+            # Before any download or provider call: the web checked this text, a direct RPC call did not.
+            check_prompt(model, spec)
             try:
                 inputs = _prepare_inputs(store, task, model, spec, root, generation)
             except SpecError as exc:

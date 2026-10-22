@@ -4,7 +4,7 @@
 -- A new function is on this surface by default (Postgres grants EXECUTE to PUBLIC). This test
 -- fails until it is either listed here — a conscious decision that users may call it directly,
 -- with its own ownership checks and limits — or revoked from `authenticated`.
--- Known debt: `create_generation` skips the route's moderation; PR #71's billing work removes it.
+-- `create_generation` skips the route's moderation when called directly; the worker checks the prompt again (`check_prompt`).
 create extension if not exists pgtap with schema extensions;
 
 begin;

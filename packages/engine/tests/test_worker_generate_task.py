@@ -263,6 +263,18 @@ def test_anh_bi_kiem_duyet_chan_thi_hong_va_khong_len_bucket(monkeypatch):
     assert store.completed is None
 
 
+def test_a_blocked_prompt_fails_the_task_before_the_provider_runs(monkeypatch):
+    # create_generation is callable straight through PostgREST, past the web's moderation.
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    spec = {"prompt": "a red fox [[flag]]", "aspectRatio": "1:1"}
+    store = FakeStore(_generation(spec=spec, spec_hash=generate_task.spec_hash("fake-image", spec)))
+    ran: list = []
+    monkeypatch.setattr(generate_task, "_prepare_inputs", lambda *args, **_: ran.append(args) or {})
+    generate_task.process(store, _task())
+    assert store.failed == ["This request goes against our content policy. Your credits were refunded."]
+    assert ran == [] and store.uploaded == []
+
+
 def test_kiem_duyet_bo_qua_canh_3d_cua_minh():
     from opencmo.ai.catalog import get_model
     from opencmo.ai.moderation import needs_check
