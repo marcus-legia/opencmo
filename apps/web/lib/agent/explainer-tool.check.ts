@@ -104,6 +104,39 @@ async function main() {
   assert.ok(Object.keys(toolSchema.properties).indexOf("direction") < Object.keys(toolSchema.properties).indexOf("code"));
   assert.match(explainerToolSpecs().find((spec) => spec.name === "preview_explainer")!.description, /up to 6 rounds/);
 
+  // A5: images from the user's library. An unknown path is refused before any preview; a known one reaches the
+  // preview as a signed URL and the spec as the library object only.
+  const OBJECT = "11111111-1111-4111-8111-111111111111/j/screen.png";
+  const lookupImage = async (path: string) => (path === "Uploads/screen.png" ? OBJECT : null);
+  const signAssets = async (refs: { name: string; ref: string }[]) => refs.map((ref) => ({ name: ref.name, src: `https://project.supabase.co/storage/v1/object/sign/media/${ref.ref}?token=t` }));
+  const withImage = { ...input, assets: [{ name: "screen", image: "Uploads/screen.png" }] };
+  const unknown = await runPreviewExplainer({ ...input, assets: [{ name: "screen", image: "Uploads/nope.png" }] }, {
+    preview: async () => assert.fail("must not render"),
+    lookupImage,
+    signAssets,
+  });
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.content, /assets\.0\.image: \\"Uploads\/nope\.png\\" is not an image saved to the cloud yet/);
+  let withAssets: MotionJob | null = null;
+  const shown = await runPreviewExplainer(withImage, {
+    preview: async (sent) => {
+      withAssets = sent;
+      return { ok: true, stills: [{ t: 1, file: "a.jpg" }], issues: [], estimated: true, images: ["AAAA"] };
+    },
+    lookupImage,
+    signAssets,
+  });
+  assert.equal(shown.ok, true);
+  assert.deepEqual(withAssets!.assets, [{ name: "screen", src: `https://project.supabase.co/storage/v1/object/sign/media/${OBJECT}?token=t` }]);
+  const badName = await runPreviewExplainer({ ...input, assets: [{ name: "Screen", image: "Uploads/screen.png" }] }, { preview: async () => assert.fail("must not render"), lookupImage, signAssets });
+  assert.match(badName.content, /assets\.0\.name/);
+  const withRefs = await prepareExplainer({ ...withImage, voice: "Aria" }, { previewed: async () => [input.code], save: async () => "a".repeat(64), lookupImage });
+  assert.ok(typeof withRefs !== "string", String(withRefs));
+  assert.deepEqual((withRefs.spec.scene as { assets?: unknown }).assets, [{ name: "screen", ref: OBJECT }], "the spec holds the library object, never a URL");
+  assert.match(explainerCard(withRefs, "clip").changes[1]!, /Images from your library: Uploads\/screen\.png/);
+  const missingRef = await prepareExplainer({ ...input, voice: "Aria", assets: [{ name: "screen", image: "Uploads/nope.png" }] }, { previewed: async () => [input.code], save: async () => assert.fail("must not save"), lookupImage });
+  assert.match(String(missingRef), /^assets\.0\.image: /);
+
   // The editor captions explainers that have no captions layer yet, and only those.
   const explainer = (id: string) => ({
     kind: "rect",

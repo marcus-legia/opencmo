@@ -13,6 +13,7 @@ import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
+import { previewAssets } from "@/lib/motion/assets";
 import { previewMotion } from "@/lib/motion/preview";
 import { moderateText, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
@@ -198,6 +199,15 @@ export const blankEdit = (context: ClipContext, document: ClipDocument): boolean
 export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
   const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
   const env = { workspace };
+  /** A finished image in the clip's library (an upload, an AI image, a saved frame) → its `media` object, under RLS. */
+  const lookupImage = async (path: string): Promise<string | null> => {
+    const snapshot = await workspace.read();
+    const assets = ((snapshot.manifest as { assets?: unknown[] } | null)?.assets ?? []) as { path?: string; type?: string; state?: string; cloud?: { mediaId?: string } }[];
+    const record = assets.find((item) => item.path === path && item.type === "IMAGE" && !item.state && item.cloud?.mediaId);
+    if (!record?.cloud?.mediaId) return null;
+    const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: record.cloud.mediaId }).catch(() => null)) as { startImage?: string } | null;
+    return resolved?.startImage ?? null;
+  };
   const start = await workspace.read();
   const blank = blankEdit(context, start.document);
   return {
@@ -275,15 +285,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
             const snapshot = await workspace.read();
             return quoteRange(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest), quote, { min: 1.5, max: 5 });
           },
-          // Ảnh AI đã xong trong thư viện clip → tên object (dưới RLS, đúng project).
-          async (path) => {
-            const snapshot = await workspace.read();
-            const assets = ((snapshot.manifest as { assets?: unknown[] } | null)?.assets ?? []) as { path?: string; type?: string; state?: string; cloud?: { mediaId?: string } }[];
-            const record = assets.find((item) => item.path === path && item.type === "IMAGE" && !item.state && item.cloud?.mediaId);
-            if (!record?.cloud?.mediaId) return null;
-            const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: record.cloud.mediaId }).catch(() => null)) as { startImage?: string } | null;
-            return resolved?.startImage ?? null;
-          },
+          lookupImage,
           target,
         );
         if (typeof prepared === "string") {
@@ -329,6 +331,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           // Code previewed in this turn: add_explainer only takes code the model has looked at.
           previewed: host.previewed,
           save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
+          lookupImage,
           ...(accent ? { accent } : {}),
         });
         if (typeof prepared === "string") {
@@ -410,7 +413,12 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                 : call.name === "preview_explainer"
                   ? workspace.read().then(({ document }) => {
                       const accent = readBrand(document)?.colors.accent;
-                      return runPreviewExplainer(call.input, { preview: previewMotion, ...(accent ? { accent } : {}) });
+                      return runPreviewExplainer(call.input, {
+                        preview: previewMotion,
+                        lookupImage,
+                        signAssets: (refs) => previewAssets(supabase, refs),
+                        ...(accent ? { accent } : {}),
+                      });
                     })
                   : runTool(call.name, call.input, env),
     async decide(call, input, approved) {

@@ -33,7 +33,7 @@ import { ApiError } from "@/lib/api/errors";
 import { normalizeSpec } from "@/lib/generate/create";
 import { availableModels } from "@/lib/generate/models";
 
-import type { PreparedGeneration } from "./generate-tool";
+import type { LookupImage, PreparedGeneration } from "./generate-tool";
 import type { Image } from "./providers/types";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -92,6 +92,35 @@ const direction = z
   .max(3000, "too long: at most 3000 characters.")
   .describe(DIRECTION_HELP);
 
+/** Same rule as `ASSET_NAME` in `packages/clip-motion/src/job.ts`. */
+const ASSET_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+
+const assetsField = z
+  .array(
+    z.object({
+      name: z.string().regex(ASSET_NAME, "lowercase letters, digits and dashes, starting with a letter (at most 32)").describe('The name scene code uses: <kit.Image name="screen" …/>.'),
+      image: z.string().min(1).max(500).describe("Library path of an image saved to the cloud (list_library: an upload, a finished AI image, or a frame from save_frame)."),
+    }),
+  )
+  .max(6)
+  .refine((list) => new Set(list.map((item) => item.name)).size === list.length, "give each image a different name")
+  .optional()
+  .describe("The user's own images the scene shows with kit.Image (product screenshots, a logo), at most 6. Prefer real screens over drawn mock-ups.");
+
+/** Signed preview URLs for `{name, ref}`, or a sentence for the model (`apps/web/lib/motion/assets.ts`). */
+export type SignAssets = (refs: { name: string; ref: string }[]) => Promise<{ name: string; src: string }[] | string>;
+
+/** Each `{name, image}` → `{name, ref}`, or the message naming the first image that is not usable. */
+async function assetRefs(assets: { name: string; image: string }[] | undefined, lookupImage: LookupImage | undefined): Promise<{ name: string; ref: string }[] | string> {
+  const refs: { name: string; ref: string }[] = [];
+  for (const [index, asset] of (assets ?? []).entries()) {
+    const ref = lookupImage ? await lookupImage(asset.image) : null;
+    if (!ref) return `assets.${index}.image: "${asset.image}" is not an image saved to the cloud yet. Use an uploaded image, a finished AI image or save_frame, and wait until it is ready.`;
+    refs.push({ name: asset.name, ref });
+  }
+  return refs;
+}
+
 const sceneFields = {
   title: z.string().trim().min(1).max(60).describe('Short name of the explainer (price card, layer name), e.g. "How Shazam hears a song".'),
   beats: z.array(beat).min(3).max(16).describe("The script, one entry per beat of about 4 s, in order."),
@@ -104,6 +133,7 @@ const sceneFields = {
     .enum(EXPLAINER_PERSONALITIES)
     .optional()
     .describe("The motion of the whole video: premium (calm, smooth), corporate (crisp, clear), playful (bouncy), energetic (fast, punchy). Default premium."),
+  assets: assetsField,
 };
 
 export const previewExplainerInput = z.object({
@@ -135,6 +165,8 @@ export type MotionJob = {
   personality?: ExplainerPersonality;
   /** Preview only: seconds to render stills at. */
   stills?: number[];
+  /** Images for kit.Image: signed URLs in a preview. */
+  assets?: { name: string; src: string }[];
 };
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
@@ -205,10 +237,20 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
 export const SUBJECT_CHECK =
   'Before anything else, write one line per still: "shows X; the beat says Y" (Y = the things that beat\'s say names). Fix every beat where X is not Y, then preview again.';
 
-export async function runPreviewExplainer(input: unknown, env: { preview: PreviewMotion; accent?: string }): Promise<ToolOutcome> {
+export async function runPreviewExplainer(
+  input: unknown,
+  env: { preview: PreviewMotion; accent?: string; lookupImage?: LookupImage; signAssets?: SignAssets },
+): Promise<ToolOutcome> {
   const parsed = previewExplainerInput.safeParse(input);
   if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: issueOf(parsed.error) }), summary: "Invalid explainer" };
   const job = previewJob(parsed.data, env.accent);
+  if (parsed.data.assets?.length) {
+    // Before any render: a path that is not the user's saved image is the model's to fix.
+    const refs = await assetRefs(parsed.data.assets, env.lookupImage);
+    const signed = typeof refs === "string" ? refs : env.signAssets ? await env.signAssets(refs) : "Images are not available for previews here.";
+    if (typeof signed === "string") return { ok: false, content: JSON.stringify({ INVALID_INPUT: signed }), summary: "Invalid explainer" };
+    job.assets = signed;
+  }
   let result: MotionPreview;
   try {
     result = await env.preview(job);
@@ -247,7 +289,7 @@ export async function runPreviewExplainer(input: unknown, env: { preview: Previe
 export type PreviewedCodes = () => Promise<string[]>;
 
 export type PreparedExplainer = PreparedGeneration & {
-  explainer: { title: string; beats: StoryboardBeat[]; voice: string; theme?: ExplainerTheme; personality?: ExplainerPersonality };
+  explainer: { title: string; beats: StoryboardBeat[]; voice: string; theme?: ExplainerTheme; personality?: ExplainerPersonality; images?: string[] };
 };
 
 /**
@@ -256,7 +298,7 @@ export type PreparedExplainer = PreparedGeneration & {
  */
 export async function prepareExplainer(
   input: unknown,
-  env: { previewed: PreviewedCodes; save: (code: string) => Promise<string>; accent?: string },
+  env: { previewed: PreviewedCodes; save: (code: string) => Promise<string>; accent?: string; lookupImage?: LookupImage },
 ): Promise<PreparedExplainer | string> {
   const parsed = addExplainerInput.safeParse(input);
   if (!parsed.success) return issueOf(parsed.error);
@@ -269,6 +311,8 @@ export async function prepareExplainer(
   if (!(await env.previewed()).includes(request.code)) {
     return "Preview this exact code with preview_explainer first (in this request), fix what it reports, then add it.";
   }
+  const refs = await assetRefs(request.assets, env.lookupImage);
+  if (typeof refs === "string") return refs;
   let hash: string;
   try {
     hash = await env.save(request.code);
@@ -284,6 +328,8 @@ export async function prepareExplainer(
     beats,
     ...(env.accent ? { accent: env.accent } : {}),
     ...lookOf(request),
+    // Library object names only: SQL and the worker check the owner, the worker inlines the pixels.
+    ...(refs.length ? { assets: refs } : {}),
   };
   let spec: GenerationSpec;
   try {
@@ -311,7 +357,7 @@ export async function prepareExplainer(
     spec,
     op,
     credits: priceOf(model, spec),
-    explainer: { title: request.title, beats: request.beats, voice: request.voice, ...lookOf(request) },
+    explainer: { title: request.title, beats: request.beats, voice: request.voice, ...lookOf(request), ...(refs.length ? { images: request.assets!.map((asset) => asset.image) } : {}) },
   };
 }
 
@@ -336,6 +382,7 @@ export function explainerCard(prepared: PreparedExplainer, clipId: string) {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       `Explainer “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio}${look ? ` · ${look}` : ""} · voice ${prepared.explainer.voice} · ${credits}`,
+      ...(prepared.explainer.images?.length ? [`Images from your library: ${prepared.explainer.images.join(", ")}`] : []),
       ...prepared.explainer.beats.map(
         (item, index) => `Beat ${index + 1} · Voice: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
       ),
