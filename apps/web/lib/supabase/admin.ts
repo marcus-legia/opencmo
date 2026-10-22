@@ -13,7 +13,8 @@ import { createClient } from "@supabase/supabase-js";
  * như worker Python — gọi RPC chỉ-service kèm user id tường minh), và bước tra
  * chủ khoá API của MCP (`lib/mcp/auth.ts`: chỉ `api_key_owner`; mọi tool sau đó
  * chạy dưới RLS bằng JWT ngắn hạn của chính user), and the Assistant's ledger (`lib/agent/ledger.ts`:
- * usage, messages, tool calls and settlement for the user the route verified). Không bao giờ
+ * usage, messages, tool calls and settlement for the user the route verified), and caption translation
+ * refunds (`lib/editor/captions-run.ts`: after the server's own LLM call failed). Không bao giờ
  * import từ component, kể cả server component: chỉ cần một lần lỡ tay bọc nó
  * vào code chạy phía client là khóa này ra ngoài. `server-only` ở trên là chốt
  * cứng cho đúng câu đó.

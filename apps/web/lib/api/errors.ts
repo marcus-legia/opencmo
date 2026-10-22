@@ -75,6 +75,10 @@ export function apiErrorFromPostgrest(error: PostgrestLikeError): ApiError {
     (error.message === "You have reached today's limit for this plan." ||
       error.message === "You have reached your storage limit for this plan." ||
       error.message === "Too many projects started. Please wait a while and try again." ||
+      error.message === "Too many retries. Please wait a while and try again." ||
+      error.message === "You have saved a lot of changes in the last hour. Wait a few minutes and try again." ||
+      error.message === "Too many confirm codes in the last hour. Try again later." ||
+      error.message === "Too many new conversations in the last hour. Try again later." ||
       error.message === "Too many assistant requests. Try again in a few minutes." ||
       error.message === "You can rebuild your plan 5 times a day. Try again tomorrow, or edit the documents directly." ||
       error.message === "You have reached today's limit for this task. Try again tomorrow." ||

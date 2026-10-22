@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Brand } from "@/components/brand/Brand";
-import { allowedRedirectHost, PAID_PLAN_CONSENT, paidUser, UNKNOWN_APP_CONSENT } from "@/lib/auth/consent";
+import { allowedRedirectHost, isLoopbackRedirect, PAID_PLAN_CONSENT, paidUser, UNKNOWN_APP_CONSENT } from "@/lib/auth/consent";
 import { createServerClient } from "@/lib/supabase/server";
 
 import { ConsentButtons } from "./ConsentButtons";
@@ -65,7 +65,10 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
       </ul>
       <ConsentButtons authorizationId={data.authorization_id} />
       <p className="auth-consent-note">
-        Redirects to {hostOf(data.redirect_uri)}. You can disconnect it any time in Settings.
+        {isLoopbackRedirect(data.redirect_uri)
+          ? `Sends the approval to an app on this computer (${hostOf(data.redirect_uri)}). Allow it only if you just started connecting from that app.`
+          : `Redirects to ${hostOf(data.redirect_uri)}.`}{" "}
+        You can disconnect it any time in Settings.
       </p>
     </Consent>
   );

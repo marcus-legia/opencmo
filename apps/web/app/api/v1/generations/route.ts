@@ -22,7 +22,8 @@ const body = z.object({
  * Cùng spec trong cùng project đang chạy/đã xong → trả lại lượt cũ
  * (`reused: true`), không trừ credit lần hai.
  */
-export const POST = withApi({ body }, async ({ supabase, body }) => {
+// Each request can run a paid moderation call before SQL checks credits or limits.
+export const POST = withApi({ body, rateLimit: { bucket: "generations", limit: 120, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   const result = await createGeneration(supabase, {
     jobId: body.job_id,
     clipId: body.clip_id ?? null,

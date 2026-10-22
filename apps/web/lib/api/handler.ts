@@ -105,8 +105,8 @@ async function readJson(request: NextRequest): Promise<unknown> {
     throw new ApiError(413, "That request is too large.");
   }
   const text = await request.text();
-  // `content-length` có thể vắng mặt (chunked) — đo lại trên chuỗi thật.
-  if (text.length > MAX_BODY_BYTES) {
+  // `content-length` may be missing (chunked): measure the real body, in bytes, not UTF-16 units.
+  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
     throw new ApiError(413, "That request is too large.");
   }
   if (!text) return undefined;

@@ -6,7 +6,7 @@
  */
 
 import { MASTER_SRC } from "@opencmo/editor-core";
-import { specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
+import { priceOf, specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
 
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
@@ -102,6 +102,14 @@ async function pinClipVideo(supabase: SupabaseClient, request: CreateRequest, mo
   return spec;
 }
 
+/** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */
+async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
+  const { data, error } = await supabase.from("profiles").select("credit_balance").maybeSingle<{ credit_balance: number | null }>();
+  if (error) throw error;
+  const left = Number(data?.credit_balance ?? 0);
+  if (left < needed) throw new ApiError(409, `Not enough credits: ${needed} needed, ${left} left. Top up on the Credits page.`);
+}
+
 export type PreparedCreate = { request: CreateRequest; model: AiModel; spec: GenerationSpec };
 
 /**
@@ -124,6 +132,8 @@ export async function checkGeneration(supabase: SupabaseClient, request: CreateR
   } else {
     spec = normalizeSpec(model, input);
   }
+  // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it.
+  await requireCredits(supabase, priceOf(model, spec));
   // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
   await moderateText(specText(spec).join("\n"), { kind: model.kind });
   return { request, model, spec };

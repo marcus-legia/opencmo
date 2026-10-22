@@ -102,6 +102,12 @@ select throws_ok($$ select public.agent_open_cmo_session('fake', true) $$,
   'P0001', 'Too many new conversations in the last hour. Try again later.', 'the 31st new conversation is refused');
 select is((public.agent_open_cmo_session('fake', false)).scope, 'cmo', 'reopening the latest conversation is not capped');
 
+-- ================================================================ rate limits
+select is(public.rate_limit_hit('generations', 120, 3600), true, 'the generations route has its bucket');
+select is(public.rate_limit_hit('mcp_preview', 30, 3600), true, 'MCP previews: the old cap still works');
+select is(public.rate_limit_hit('mcp_preview', 60, 3600), true, 'MCP previews: the cap of motion quality A3 works');
+select throws_ok($$ select public.rate_limit_hit('generations', 1000, 3600) $$, '22023', 'Invalid rate limit.', 'the caller cannot raise its own cap');
+
 -- ================================================================ privileges
 reset role;
 select ok(not has_function_privilege('authenticated', 'public.enforce_write_budget()', 'execute'), 'users cannot call the budget trigger');
