@@ -149,7 +149,6 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // Như session.ts: kịch bản clip gắn vào câu lệnh đầu, rồi mới tới trạng thái.
   const start = workspace.snapshot();
   const about = await clipContextBlock(start.document, await workspace.opContext(start.document, start.manifest), FIXTURE_ABOUT);
-  const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt)}${about}${await state()}`) }];
   const usage: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const tools: string[] = [];
   const calls: { name: string; input: unknown }[] = [];
@@ -168,6 +167,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   // Same profile as the app: an edit with no video that has a transcript has no cut-by-words tools.
   const blank = !speechSources((await workspace.read()).document).length;
   const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
+  const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt, toolSpecs.map((spec) => spec.name))}${about}${await state()}`) }];
   const generations: PreparedGeneration[] = [];
 
   for (;;) {

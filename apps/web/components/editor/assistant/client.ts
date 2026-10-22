@@ -9,6 +9,7 @@
  */
 
 import type { ClipDocument } from "@opencmo/clip-doc";
+import type { SlashMenuItem } from "@/lib/agent/slash";
 
 import type { DocumentSession } from "@/lib/editor/session";
 
@@ -140,6 +141,7 @@ export class AssistantClient {
       models: ModelChoice[];
       broll?: boolean;
       explain?: boolean;
+      slash?: SlashMenuItem[];
       sessions: SessionSummary[];
       session: SessionView | null;
     }>(`sessions?${query}`);

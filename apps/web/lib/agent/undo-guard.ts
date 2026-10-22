@@ -55,3 +55,11 @@ export async function unchangedSince(
   if (newer.written.first !== written.last + 1) return false;
   return canonicalJson(current.document) === canonicalJson(await newer.checkpoint());
 }
+
+/**
+ * A turn that is still open: running or paused for the user. `agent_mark_undone` refuses the same
+ * statuses, so the route must too, BEFORE it restores the clip: refusing afterwards would leave the
+ * clip rolled back and the turn not marked undone.
+ */
+const OPEN = new Set(["running", "awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"]);
+export const turnOpen = (status: string): boolean => OPEN.has(status);

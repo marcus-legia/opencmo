@@ -31,7 +31,7 @@ insert into allowed values
   ('agent_open_session(uuid,text)'),
   ('agent_pause_turn(uuid,text)'),
   ('agent_raise_hold_3d(uuid)'),
-  ('agent_resume_turn(uuid)'),
+  ('agent_resume_turn(uuid,text,text[])'),
   ('agent_set_checkpoint(uuid,uuid)'),
   ('agent_stop(uuid)'),
   ('ai_check_spec(ai_models,jsonb)'),

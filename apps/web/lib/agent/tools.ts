@@ -725,7 +725,9 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
   const of = source && speechCount(document) > 1 ? ` of ${source.name}` : "";
 
   if (name === "find_silences") {
-    const options = silencesInput.parse(input ?? {});
+    const parsed = silencesInput.safeParse(input ?? {});
+    if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: parsed.error.issues[0]?.message }), summary: "Could not find pauses" };
+    const options = parsed.data;
     const silences = findSilences(model, { minGap: options.min_gap, keep: options.keep });
     return {
       ok: true,

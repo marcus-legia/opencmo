@@ -11,7 +11,7 @@ import type { GoogleGenAI } from "@google/genai";
 
 import { closeDanglingCalls, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
-import type { Delta } from "./providers/types";
+import { StepAborted, type Delta } from "./providers/types";
 import { BROWSER_INPUTS, TOOL_SPECS } from "./tools";
 
 // ---------------------------------------------------------------- tool
@@ -182,6 +182,7 @@ assert.deepEqual(
 );
 
 await geminiChecks();
+await stoppedStepChecks();
 console.log("agent providers: mọi kiểm tra xanh");
 }
 
@@ -281,3 +282,32 @@ for (const name of ["preview_explainer", "add_explainer", "find_icons", "find_lo
   assert.ok(ALWAYS_LOADED.has(name), `${name} is always loaded`);
 }
 assert.ok(TOOL_SPECS.some((tool) => tool.name === "find_icons") && TOOL_SPECS.some((tool) => tool.name === "find_lotties"), "find_icons and find_lotties are real tools");
+
+/** Stop mid-stream: the call is still billed for what it used (input known, output streamed so far). */
+async function stoppedStepChecks(): Promise<void> {
+  const controller = new AbortController();
+  const client = {
+    models: {
+      generateContentStream: async () =>
+        (async function* () {
+          yield {
+            candidates: [{ content: { role: "model", parts: [{ text: "x".repeat(400) }] } }],
+            usageMetadata: { promptTokenCount: 3000, cachedContentTokenCount: 1000 },
+          };
+          controller.abort();
+          throw new Error("The operation was aborted.");
+        })(),
+    },
+  } as unknown as Pick<GoogleGenAI, "models">;
+  const stopped = await geminiProvider("test", client)
+    .step(
+      { history: [{ role: "user", content: geminiFormat.userTurn("write", "") }], tools: [], system: "s", signal: controller.signal },
+      () => undefined,
+    )
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+  assert.ok(stopped instanceof StepAborted, "a stopped stream reports what it used");
+  assert.deepEqual(stopped.usage, { input: 2000, output: 100, cacheRead: 1000, cacheWrite: 0 }, "output estimated from 400 streamed characters");
+}

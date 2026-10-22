@@ -5,11 +5,14 @@
  */
 import assert from "node:assert/strict";
 
-import { unchangedSince, writtenVersions } from "./undo-guard";
+import { turnOpen, unchangedSince, writtenVersions } from "./undo-guard";
 
 const doc = (label: string) => ({ version: 1, stage: { label } });
 
 async function main() {
+  // Paused for an answer or a Continue is still open: undo is refused before the clip is touched.
+  for (const status of ["running", "awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"]) assert.ok(turnOpen(status), status);
+  for (const status of ["done", "failed", "stopped"]) assert.ok(!turnOpen(status), status);
   // Versions from a clip chat: every finished call that saved; calls without one are ignored.
   const clipTurn = writtenVersions(
     [
