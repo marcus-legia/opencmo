@@ -75,7 +75,7 @@ pushed) → B3 (after A3 and A5) → B6.
 - [x] B2 Clip timing and the silent worker path
 - [x] B1 `motion-clip` in the catalog and SQL
 - [x] B3 `silent` in the tools and the op
-- [ ] B6 OpenCMO logo reveal + phone carousel, after frames
+- [x] B6 OpenCMO logo reveal + phone carousel, after frames
 
 ## Shared files
 
