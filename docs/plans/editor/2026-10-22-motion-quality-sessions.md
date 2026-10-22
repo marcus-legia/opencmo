@@ -71,7 +71,7 @@ test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`;
 pushed) → B3 (after A3 and A5) → B6.
 
 - [x] B4 Display face, phone and browser frames
-- [ ] B5 Template library (3 ports) + `list_motion_templates` / `get_motion_template`
+- [x] B5 Template library (3 ports) + `list_motion_templates` / `get_motion_template`
 - [x] B2 Clip timing and the silent worker path
 - [x] B1 `motion-clip` in the catalog and SQL
 - [ ] B3 `silent` in the tools and the op

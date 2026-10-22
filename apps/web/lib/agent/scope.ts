@@ -41,7 +41,7 @@ import {
   voiceoverToolSpec,
   type PreparedGeneration,
 } from "./generate-tool";
-import { addExplainerInput, explainerCard, explainerText, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "./explainer-tool";
+import { addExplainerInput, explainerCard, explainerText, explainerToolSpecs, MOTION_TEMPLATE_TOOLS, prepareExplainer, runMotionTemplateTool, runPreviewExplainer } from "./explainer-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
@@ -410,7 +410,9 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
               ? runTurnTool(call.name, call.input, { supabase, clipId, ...(host.turnId ? { turnId: host.turnId } : {}) })
               : call.name === WAIT_TOOL_SPEC.name
                 ? runWaitForMedia(call.input, { supabase, clipId })
-                : call.name === "preview_explainer"
+                : MOTION_TEMPLATE_TOOLS.has(call.name)
+                  ? Promise.resolve(runMotionTemplateTool(call.name, call.input))
+                  : call.name === "preview_explainer"
                   ? workspace.read().then(({ document }) => {
                       const accent = readBrand(document)?.colors.accent;
                       return runPreviewExplainer(call.input, {

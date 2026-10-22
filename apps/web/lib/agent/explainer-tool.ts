@@ -28,6 +28,7 @@ import {
   type Op,
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
+import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
 import { ApiError } from "@/lib/api/errors";
 import { normalizeSpec } from "@/lib/generate/create";
@@ -183,6 +184,53 @@ const issueOf = (error: z.ZodError) => {
   return `${issue?.path.join(".") ?? ""}: ${issue?.message ?? "Invalid input."}`;
 };
 
+/**
+ * Motion templates (ported from Opus's MIT remakes, `packages/clip-motion/templates`): finished silent clips a model
+ * starts from instead of a blank scene. Free, no clip needed; the MCP server registers the same two tools.
+ */
+export const MOTION_TEMPLATE_TOOLS = new Set(["list_motion_templates", "get_motion_template"]);
+
+export const getMotionTemplateInput = z.object({ id: z.string().min(1).max(60).describe("A template id from list_motion_templates.") });
+
+export const motionTemplateSpecs = (): ToolSpec[] => [
+  {
+    name: "list_motion_templates",
+    description:
+      "List the motion templates: finished silent clips (a brand reveal, a phone carousel of app screens, an analytics card) with their format, length and slots. Start from one when it fits the moment instead of writing a scene from scratch. Free.",
+    schema: { type: "object", properties: {}, additionalProperties: false },
+    strict: false,
+  },
+  {
+    name: "get_motion_template",
+    description:
+      "Get one motion template: its scene code (edit only the SLOTS at the top: texts, colours, and image names you pass as assets), its direction (the motion spec, already valid for preview_explainer), its beats with seconds and its format. Keep the motion as it is; preview it, then add it. Free.",
+    schema: sanitize(z.toJSONSchema(getMotionTemplateInput, { io: "input" })).schema as Record<string, unknown>,
+    strict: false,
+  },
+];
+
+export function runMotionTemplateTool(name: string, input: unknown): ToolOutcome {
+  if (name === "list_motion_templates") {
+    const templates = MOTION_TEMPLATES.map(({ id, title, description, kind, format, seconds, slots }) => ({ id, title, description, kind, format, seconds, slots }));
+    return { ok: true, content: JSON.stringify({ templates, next: "get_motion_template { id } for its code, direction and beats." }), summary: `${templates.length} motion templates` };
+  }
+  const parsed = getMotionTemplateInput.safeParse(input);
+  if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: issueOf(parsed.error) }), summary: "Invalid template" };
+  const template = motionTemplate(parsed.data.id);
+  if (!template) {
+    const ids = MOTION_TEMPLATES.map((item) => item.id).join(", ");
+    return { ok: false, content: JSON.stringify({ error: `Unknown template "${parsed.data.id}": use one of ${ids}.` }), summary: "Unknown template" };
+  }
+  return {
+    ok: true,
+    content: JSON.stringify({
+      ...template,
+      how: "Copy code and change only the values in SLOTS (an image slot takes an asset name you also pass in assets, from the user's library). Send direction and beats as they are, adjusting only the words. Preview with the template's format, then add it.",
+    }),
+    summary: `Template: ${template.title}`,
+  };
+}
+
 /** The voices the model offers; the tool lists them so the model never guesses a name. */
 const voicesOf = () => explainerModel()?.limits.voices ?? [];
 
@@ -190,6 +238,7 @@ const voicesOf = () => explainerModel()?.limits.voices ?? [];
 export function explainerToolSpecs(): ToolSpec[] {
   if (!explainerModel()) return [];
   return [
+    ...motionTemplateSpecs(),
     {
       name: "preview_explainer",
       description:

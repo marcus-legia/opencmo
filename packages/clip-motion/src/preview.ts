@@ -101,7 +101,7 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 	}
 	const issues = [...stills, ...probes]
 		.sort((a, b) => a.frame - b.frame)
-		.flatMap((still) => (still.boxes ? layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }) : []));
+		.flatMap((still) => (still.boxes ? layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }, { clip: job.kind === 'clip' }) : []));
 	issues.push(...beatIssues(probeList.map((probe, i) => ({ beat: probe.beat, boxes: probes[i]?.boxes ?? null }))));
 	const byFrame = new Map(probes.map((probe) => [probe.frame, probe.boxes]));
 	const pairs = probes.flatMap((probe) => {

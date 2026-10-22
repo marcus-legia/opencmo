@@ -37,7 +37,7 @@ import { errorResult, registerGroup, type McpResult, type McpTool, type McpToolC
 /** In-app only: they need the user at the screen, or a turn to belong to. */
 const SKIP = new Set(["update_plan", "ask_user", "undo"]);
 /** Need no clip: registered without clip_id by the guides and explainer groups. */
-export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties"]);
+export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "list_motion_templates", "get_motion_template"]);
 
 /** Tools whose in-app version waits on an approval card: here, price → confirm. */
 export const PRICED = new Set([

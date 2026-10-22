@@ -31,6 +31,16 @@ describe('layoutIssues', () => {
 	});
 });
 
+describe('layoutIssues for a silent clip', () => {
+	it('lets marks cross the edges and the field stay empty, but not text', () => {
+		const phone: LaidBox = { kind: 'mark', name: 'Phone', x: -60, y: 200, w: 300, h: 640 };
+		expect(layoutIssues([phone], frame, { clip: true })).toEqual([]);
+		const low: LaidBox = { kind: 'text', name: 'Low', x: 800, y: 900, w: 300, h: 60, size: 52 };
+		expect(layoutIssues([phone, low], frame, { clip: true })).toEqual(['Text "Low" leaves the safe area on the bottom (the caption zone) at 4.0 s.']);
+		expect(layoutIssues([phone], frame).length).toBeGreaterThan(0);
+	});
+});
+
 describe('beatIssues', () => {
 	const icon: LaidBox = { kind: 'mark', name: 'Icon virus', x: 800, y: 400, w: 200, h: 200 };
 	const label: LaidBox = { kind: 'text', name: 'A harmless piece', x: 800, y: 90, w: 320, h: 60, size: 52 };

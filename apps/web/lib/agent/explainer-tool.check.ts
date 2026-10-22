@@ -21,6 +21,7 @@ import {
   previewExplainerInput,
   previewJob,
   REVIEW_CHECKLIST,
+  runMotionTemplateTool,
   runPreviewExplainer,
   SUBJECT_CHECK,
   type MotionJob,
@@ -136,6 +137,17 @@ async function main() {
   assert.match(explainerCard(withRefs, "clip").changes[1]!, /Images from your library: Uploads\/screen\.png/);
   const missingRef = await prepareExplainer({ ...input, voice: "Aria", assets: [{ name: "screen", image: "Uploads/nope.png" }] }, { previewed: async () => [input.code], save: async () => assert.fail("must not save"), lookupImage });
   assert.match(String(missingRef), /^assets\.0\.image: /);
+
+  // B5: motion templates. The list is short; an unknown id answers with the ids; a template comes with its code.
+  const listed = runMotionTemplateTool("list_motion_templates", {});
+  assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel"]);
+  const nope = runMotionTemplateTool("get_motion_template", { id: "nope" });
+  assert.equal(nope.ok, false);
+  assert.match(nope.content, /Unknown template \\"nope\\": use one of analytics-glow, mark-lockup, phone-carousel\./);
+  const lockup = JSON.parse(runMotionTemplateTool("get_motion_template", { id: "mark-lockup" }).content) as { code: string; direction: string; format: string };
+  assert.match(lockup.code, /const SLOTS = \{/);
+  assert.equal(lockup.format, "16:9");
+  assert.ok(lockup.direction.length >= 120);
 
   // The editor captions explainers that have no captions layer yet, and only those.
   const explainer = (id: string) => ({

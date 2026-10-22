@@ -21,7 +21,11 @@ function quote(name: string): string {
 	return name.length > 40 ? `"${name.slice(0, 37)}…"` : `"${name}"`;
 }
 
-export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }): string[] {
+/**
+ * `clip`: a silent motion clip (logo reveal, carousel) is designed motion, not a narrated diagram: marks may cross
+ * the frame's edges and the frame may be mostly field. Text keeps every rule.
+ */
+export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }, options: { clip?: boolean } = {}): string[] {
 	const { width, height } = frame;
 	const at = `at ${frame.seconds.toFixed(1)} s`;
 	const issues: string[] = [];
@@ -38,7 +42,7 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 
 	const tolerance = 2;
 	const safe = { left: width * SAFE.left - tolerance, right: width * SAFE.right + tolerance, top: height * SAFE.top - tolerance, bottom: height * SAFE.bottom + tolerance };
-	for (const box of boxes) {
+	for (const box of options.clip ? texts : boxes) {
 		const sides = [
 			box.x < safe.left ? 'left' : null,
 			box.x + box.w > safe.right ? 'right' : null,
@@ -53,6 +57,7 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 		if (box.size !== undefined && box.size < minimum - 0.5) issues.push(`Text ${quote(box.name)} is ${Math.round(box.size)} px, under the ${Math.round(minimum)} px minimum ${at}.`);
 	}
 
+	if (options.clip) return issues;
 	// Coverage of the safe area by anything tagged, on a coarse grid.
 	const cellW = (safe.right - safe.left) / GRID;
 	const cellH = (safe.bottom - safe.top) / GRID;

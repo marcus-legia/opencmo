@@ -69,6 +69,13 @@ async function main() {
 const tools = await registry.tools(ctx);
 const names = tools.map((tool) => tool.name);
 assert.equal(new Set(names).size, names.length, "tool names are unique");
+// Motion templates need no clip (B5).
+for (const name of ["list_motion_templates", "get_motion_template"]) {
+  const tool = tools.find((item) => item.name === name);
+  assert.ok(tool, `${name} is offered`);
+  assert.ok(!("clip_id" in (describeTool(tool).inputSchema.properties ?? {})), `${name} needs no clip`);
+}
+assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_template")!, { id: "nope" }, ctx)).content), /use one of analytics-glow/);
 for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "wait_for_media", "plan_video"]) {
   assert.ok(names.includes(name), `${name} is offered`);
 }

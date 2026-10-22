@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-import { EXPLAINER_CODE_CHARS } from "@/lib/agent/explainer-tool";
+import { EXPLAINER_CODE_CHARS, getMotionTemplateInput, runMotionTemplateTool } from "@/lib/agent/explainer-tool";
 import { iconsInput, lottiesInput, runTool } from "@/lib/agent/tools";
 import type { AgentWorkspace } from "@/lib/agent/workspace";
 import { availableModels, loadCatalog } from "@/lib/generate/models";
@@ -79,6 +79,24 @@ registerGroup({
         if (!model) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
       },
+    },
+    {
+      name: "list_motion_templates",
+      title: "List motion templates",
+      description:
+        "Finished silent motion clips to start from (a brand reveal, a phone carousel of app screens, an analytics card): id, format, length and slots. Free, no clip needed.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("list_motion_templates", input)),
+    },
+    {
+      name: "get_motion_template",
+      title: "Get a motion template",
+      description:
+        "One motion template: scene code with SLOTS to edit, its direction (a valid motion spec), beats with seconds and format. Keep the motion, change the slots, preview with preview_explainer, then add it. Free, no clip needed.",
+      inputSchema: getMotionTemplateInput,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("get_motion_template", input)),
     },
     {
       name: "find_icons",

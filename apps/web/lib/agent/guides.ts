@@ -329,6 +329,8 @@ Show the storyboard in your reply — for each beat: say, label and visual — p
 - Each beat transforms the picture: a virus splits, an antibody locks on, a coin pile grows. No slideshow of separate pictures.
 - Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
 
+Motion templates: list_motion_templates shows finished silent clips (a brand reveal, a phone carousel of app screens, an analytics card). When one fits the moment, get_motion_template, change only its SLOTS (texts, colours, image names you also pass as assets) and keep its motion, direction and beats: they were reviewed frame by frame.
+
 After the go, before any code, write the direction (the tools' direction field, 120-3000 characters): the motion spec you will code from, with numbers.
 - Per beat: the one visual centre (where the eye goes), then every move: what, from → to in pixels or % of the frame, start and end in seconds of the beat, and the curve (ease-out for entrances, ease-in-out for moves, a spring for pops).
 - The reveal order, and what stays alive between moves (the ambient layer, a slow camera push).
