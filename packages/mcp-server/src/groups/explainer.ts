@@ -18,6 +18,7 @@ import {
   EXPLAINER_PERSONALITIES,
   EXPLAINER_THEMES,
   LOTTIE_PACK,
+  MOTION_CLIP_MODEL,
 } from "@opencmo/editor-core";
 
 import { errorResult, registerGroup } from "../registry";
@@ -38,6 +39,7 @@ const kitOutput = z.object({
   formats: z.array(z.string()),
   limits: z.record(z.string(), z.unknown()),
   price: z.string(),
+  silent_clip: z.union([z.string(), z.record(z.string(), z.string())]),
   lotties: z.array(z.string()),
   read_first: z.array(z.string()),
 });
@@ -55,6 +57,7 @@ registerGroup({
       async run(_input, { supabase }) {
         await loadCatalog(supabase);
         const model = availableModels().find((item) => item.id === EXPLAINER_MODEL);
+        const clip = availableModels().find((item) => item.id === MOTION_CLIP_MODEL);
         const price = model?.price;
         const result = {
           available: Boolean(model),
@@ -73,6 +76,14 @@ registerGroup({
           price: price
             ? `${price.credits} credit${price.credits === 1 ? "" : "s"} per started 10 s, plus ${price.voiceKchars ?? 0} per started 1,000 characters of narration. add_explainer quotes the exact price first.`
             : "Explainers are not available on this server.",
+          silent_clip: clip
+            ? {
+                what: "silent: true on preview_explainer / add_explainer: a 3-30 s animation with no voice (an intro, a logo reveal, a product moment). list_motion_templates has finished ones to start from.",
+                beats: "1 to 8, each with seconds (0.5-30), adding up to at most 30 s",
+                seconds: "the beats' seconds, rounded up (3-30)",
+                price: `${clip.price.credits} credit${clip.price.credits === 1 ? "" : "s"} per started 10 s, no voice.`,
+              }
+            : "Silent motion clips are not available on this server.",
           lotties: LOTTIE_PACK.map((entry) => entry.name),
           read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "find_icons and find_lotties for every noun of the narration"],
         };

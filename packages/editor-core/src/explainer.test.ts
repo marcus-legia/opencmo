@@ -312,3 +312,40 @@ describe('motion-clip spec (B1)', () => {
 	});
 });
 
+describe('add_explainer with a silent motion clip (B3)', () => {
+	const clipOp = {
+		op: 'add_explainer',
+		title: 'Logo reveal',
+		format: '16:9',
+		duration: 5,
+		spec: {
+			prompt: 'Motion clip: Logo reveal',
+			aspectRatio: '16:9',
+			duration: 5,
+			seed: 3,
+			scene: { template: 'clip', code_ref: CODE_REF, title: 'Logo reveal', beats: [{ say: 'The mark lands.', seconds: 2 }, { say: 'The name rises.', seconds: 3 }] },
+		},
+	};
+
+	it('places one video layer of model motion-clip, with no voice and no captions layer', async () => {
+		const { document } = await applyOps(blank, [clipOp], ctx);
+		expect(() => validate(document)).not.toThrow();
+		const scene = sceneNode(document);
+		expect(scene).toMatchObject({ width: 1920, height: 1080, workarea: [0, 5] });
+		expect(scene.children).toHaveLength(1);
+		const layer = scene.children![0]!;
+		expect(layer).toMatchObject({ kind: 'rect', name: 'Motion clip: Logo reveal', end: 5 });
+		expect(layer.paints![0]!.src).toMatchObject({ generate: 'video', model: 'motion-clip', duration: 5, scene: { template: 'clip' } });
+		expect('voice' in layer.paints![0]!.src).toBe(false);
+		expect(describeOp(clipOp as never)).toBe('Add the motion clip "Logo reveal" (5s, 16:9)');
+		// No narration, so nothing to caption.
+		const { document: same } = await applyOps(document, [{ op: 'sync_explainer', element_id: layer.id as string, words: [{ text: 'x', start: 0, end: 1 }] }], ctx).catch(() => ({ document }));
+		expect(JSON.stringify(same)).not.toContain('"captions"');
+	});
+
+	it('refuses a clip spec with a voice and an explainer scene without one', async () => {
+		await expect(applyOps(blank, [{ ...clipOp, spec: { ...clipOp.spec, voice: 'Aria' } }], ctx)).rejects.toThrow();
+		await expect(applyOps(blank, [{ ...op('16:9'), spec: { ...spec('16:9', 20), voice: undefined } }], ctx)).rejects.toThrow();
+	});
+});
+

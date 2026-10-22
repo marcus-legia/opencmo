@@ -329,6 +329,7 @@ Show the storyboard in your reply — for each beat: say, label and visual — p
 - Each beat transforms the picture: a virus splits, an antibody locks on, a coin pile grows. No slideshow of separate pictures.
 - Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
 
+Silent motion clips (silent: true): 3-30 s with no voice, for an intro, a logo reveal or a product moment (a new feature on a phone, a number that grew). Every beat gives its seconds (0.5-30, at most 8 beats, 30 s in all); say is the storyboard line, never read aloud. Use them when the picture is the message; when the idea needs explaining, make a narrated explainer.
 Motion templates: list_motion_templates shows finished silent clips (a brand reveal, a phone carousel of app screens, an analytics card). When one fits the moment, get_motion_template, change only its SLOTS (texts, colours, image names you also pass as assets) and keep its motion, direction and beats: they were reviewed frame by frame.
 
 After the go, before any code, write the direction (the tools' direction field, 120-3000 characters): the motion spec you will code from, with numbers.

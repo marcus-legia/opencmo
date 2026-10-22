@@ -14,8 +14,11 @@ import { randomInt } from "node:crypto";
 
 import { z } from "zod";
 import {
+  CLIP_MAX_SECONDS,
+  clipSeconds,
   EXPLAINER_FORMATS,
   EXPLAINER_MODEL,
+  MOTION_CLIP_MODEL,
   EXPLAINER_PERSONALITIES,
   EXPLAINER_THEMES,
   ExplainerBeatSchema,
@@ -52,10 +55,11 @@ const beat = z.object({
     .min(1)
     .max(160)
     .describe('What is drawn in this beat, naming the icons, Lotties or kit shapes, e.g. "a syringe enters left; a virus icon splits into 3 grey fragments".'),
+  seconds: z.number().min(0.5).max(30).optional().describe("Silent clips only: how long this beat lasts, 0.5-30 s. A narrated explainer is timed by its voice."),
 });
 
 /** A storyboard beat: the spec's `{ say, label? }` plus the picture, which stays out of the spec. */
-export type StoryboardBeat = ExplainerBeat & { visual: string };
+export type StoryboardBeat = ExplainerBeat & { visual: string; seconds?: number };
 
 /** Previews per explainer: the render → look → fix loop that made the Opus remakes good took about 5. */
 export const PREVIEW_ROUNDS = 6;
@@ -124,7 +128,11 @@ async function assetRefs(assets: { name: string; image: string }[] | undefined, 
 
 const sceneFields = {
   title: z.string().trim().min(1).max(60).describe('Short name of the explainer (price card, layer name), e.g. "How Shazam hears a song".'),
-  beats: z.array(beat).min(3).max(16).describe("The script, one entry per beat of about 4 s, in order."),
+  beats: z.array(beat).min(1).max(16).describe("The script, one entry per beat of about 4 s, in order: 3-16 beats narrated, 1-8 timed beats for a silent clip."),
+  silent: z
+    .boolean()
+    .optional()
+    .describe("true: a silent motion clip of 3-30 s (an intro, a logo reveal, a product moment): no voice, every beat gives its seconds, `say` is the storyboard line. Default false: a narrated explainer."),
   // Before `code` on purpose: models fill fields in order, so the spec is written before the code.
   direction,
   code: z.string().min(1).max(EXPLAINER_CODE_CHARS).describe('The body of (React, R, kit) => { …; return function Scene() { … } } with JSX, no imports (read_guide "explainer").'),
@@ -137,27 +145,47 @@ const sceneFields = {
   assets: assetsField,
 };
 
-export const previewExplainerInput = z.object({
-  ...sceneFields,
-  times: z
-    .array(z.number().finite().min(0))
-    .max(PREVIEW_TIMES)
-    .optional()
-    .describe(`Seconds to render stills at (at most ${PREVIEW_TIMES}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
-});
+/** The rules that depend on `silent`, in one place for both tools. */
+function silentRules(value: { silent?: boolean; beats: { seconds?: number }[]; voice?: string }, ctx: z.RefinementCtx) {
+  if (!value.silent) {
+    if (value.beats.length < 3) ctx.addIssue({ code: "custom", path: ["beats"], message: "a narrated explainer has 3 to 16 beats." });
+    return;
+  }
+  if (value.voice !== undefined) ctx.addIssue({ code: "custom", path: ["voice"], message: "a silent clip has no narration." });
+  if (value.beats.length > 8) ctx.addIssue({ code: "custom", path: ["beats"], message: "a silent clip has 1 to 8 beats." });
+  let total = 0;
+  value.beats.forEach((item, i) => {
+    if (item.seconds === undefined) ctx.addIssue({ code: "custom", path: ["beats", i, "seconds"], message: "every beat of a silent clip says how many seconds it lasts (0.5-30)." });
+    else total += item.seconds;
+  });
+  if (total > CLIP_MAX_SECONDS + 1e-9) ctx.addIssue({ code: "custom", path: ["beats"], message: `a silent clip lasts at most ${CLIP_MAX_SECONDS} seconds; its beats add up to ${Math.round(total * 10) / 10}.` });
+}
 
-export const addExplainerInput = z.object({
-  ...sceneFields,
-  code: sceneFields.code.describe("The scene code exactly as last previewed with preview_explainer in this request."),
-  voice: z.string().min(1).max(100).describe("A premade narration voice from the list in this tool's description."),
-  start: z.number().finite().min(0).optional().describe("Clip seconds where it starts. Default: the playhead, or 0 on a blank clip."),
-});
+export const previewExplainerInput = z
+  .object({
+    ...sceneFields,
+    times: z
+      .array(z.number().finite().min(0))
+      .max(PREVIEW_TIMES)
+      .optional()
+      .describe(`Seconds to render stills at (at most ${PREVIEW_TIMES}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
+  })
+  .superRefine(silentRules);
+
+export const addExplainerInput = z
+  .object({
+    ...sceneFields,
+    code: sceneFields.code.describe("The scene code exactly as last previewed with preview_explainer in this request."),
+    voice: z.string().min(1).max(100).optional().describe("A premade narration voice from the list in this tool's description. Leave it out for a silent clip."),
+    start: z.number().finite().min(0).optional().describe("Clip seconds where it starts. Default: the playhead, or 0 on a blank clip."),
+  })
+  .superRefine(silentRules);
 
 /** What `previewMotion` takes: the `MotionJob` of `packages/clip-motion/src/job.ts`. */
 export type MotionJob = {
   title: string;
   code: string;
-  beats: ExplainerBeat[];
+  beats: (ExplainerBeat & { seconds?: number })[];
   format: ExplainerFormat;
   duration: number;
   seed: number;
@@ -166,6 +194,8 @@ export type MotionJob = {
   personality?: ExplainerPersonality;
   /** Preview only: seconds to render stills at. */
   stills?: number[];
+  /** A silent motion clip: beats timed by their own seconds. */
+  kind?: "clip";
   /** Images for kit.Image: signed URLs in a preview. */
   assets?: { name: string; src: string }[];
 };
@@ -178,6 +208,7 @@ export type MotionPreview =
 export type PreviewMotion = (job: MotionJob) => Promise<MotionPreview>;
 
 const explainerModel = () => availableModels().find((model) => model.id === EXPLAINER_MODEL);
+const clipModel = () => availableModels().find((model) => model.id === MOTION_CLIP_MODEL);
 
 const issueOf = (error: z.ZodError) => {
   const issue = error.issues[0];
@@ -236,7 +267,7 @@ const voicesOf = () => explainerModel()?.limits.voices ?? [];
 
 /** Both tools exist only when the server has the explainer model (local CLI, Modal, or fake). */
 export function explainerToolSpecs(): ToolSpec[] {
-  if (!explainerModel()) return [];
+  if (!explainerModel() && !clipModel()) return [];
   return [
     ...motionTemplateSpecs(),
     {
@@ -248,7 +279,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     },
     {
       name: "add_explainer",
-      description: `Render an animated explainer (15-90 s, narrated, one video layer) from code you previewed with preview_explainer in this request. It costs credits: the user sees the beats, the voice and the price and must approve. Voices: ${voicesOf().join(", ")}.`,
+      description: `Render an animated explainer (15-90 s, narrated) or, with silent: true, a silent motion clip (3-30 s: an intro, a logo reveal, a product moment), as one video layer, from code you previewed with preview_explainer in this request. It costs credits: the user sees the beats, the voice and the price and must approve. Voices: ${voicesOf().join(", ")}.`,
       schema: sanitize(z.toJSONSchema(addExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
       approval: true,
@@ -258,6 +289,8 @@ export function explainerToolSpecs(): ToolSpec[] {
 
 /** The spec's beats: `visual` is for the user and the model, not the render (and the scene must stay ≤ 4000 bytes). */
 const specBeats = (beats: readonly StoryboardBeat[]): ExplainerBeat[] => beats.map((item) => ({ say: item.say, ...(item.label ? { label: item.label } : {}) }));
+/** A silent clip's beats keep their seconds: they time the render. */
+const clipBeats = (beats: readonly StoryboardBeat[]) => beats.map((item) => ({ ...specBeats([item])[0]!, seconds: item.seconds ?? 0 }));
 
 /** `theme` / `personality` when the model chose them: absent means the v1 look and motion. */
 const lookOf = (input: { theme?: ExplainerTheme; personality?: ExplainerPersonality }) => ({
@@ -267,13 +300,14 @@ const lookOf = (input: { theme?: ExplainerTheme; personality?: ExplainerPersonal
 
 /** The job a preview renders: the duration is estimated from the narration (real timings come with the voice). */
 export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?: string): MotionJob {
-  const beats = specBeats(input.beats);
+  const beats = input.silent ? clipBeats(input.beats) : specBeats(input.beats);
   return {
+    ...(input.silent ? { kind: "clip" as const } : {}),
     title: input.title,
     code: input.code,
     beats,
     format: input.format,
-    duration: explainerSeconds(beats),
+    duration: input.silent ? clipSeconds(clipBeats(input.beats)) : explainerSeconds(beats),
     seed: 0,
     ...(accent ? { accent } : {}),
     ...lookOf(input),
@@ -338,7 +372,8 @@ export async function runPreviewExplainer(
 export type PreviewedCodes = () => Promise<string[]>;
 
 export type PreparedExplainer = PreparedGeneration & {
-  explainer: { title: string; beats: StoryboardBeat[]; voice: string; theme?: ExplainerTheme; personality?: ExplainerPersonality; images?: string[] };
+  /** `voice` absent: a silent motion clip. */
+  explainer: { title: string; beats: StoryboardBeat[]; voice?: string; theme?: ExplainerTheme; personality?: ExplainerPersonality; images?: string[] };
 };
 
 /**
@@ -351,11 +386,12 @@ export async function prepareExplainer(
 ): Promise<PreparedExplainer | string> {
   const parsed = addExplainerInput.safeParse(input);
   if (!parsed.success) return issueOf(parsed.error);
-  const model = explainerModel();
-  if (!model) return "Explainers are not available.";
   const request = parsed.data;
+  const silent = request.silent === true;
+  const model = silent ? clipModel() : explainerModel();
+  if (!model) return silent ? "Silent motion clips are not available." : "Explainers are not available.";
   const voices = model.limits.voices ?? [];
-  if (!voices.includes(request.voice)) return `voice: choose one of ${voices.join(", ")}.`;
+  if (!silent && (!request.voice || !voices.includes(request.voice))) return `voice: choose one of ${voices.join(", ")}.`;
   // Same rule as the guide: only code the model has looked at goes out for credits.
   if (!(await env.previewed()).includes(request.code)) {
     return "Preview this exact code with preview_explainer first (in this request), fix what it reports, then add it.";
@@ -368,10 +404,10 @@ export async function prepareExplainer(
   } catch (err) {
     return err instanceof ApiError ? err.message : "Could not save the explainer code.";
   }
-  const beats = specBeats(request.beats);
-  const duration = explainerSeconds(beats);
+  const beats = silent ? clipBeats(request.beats) : specBeats(request.beats);
+  const duration = silent ? clipSeconds(clipBeats(request.beats)) : explainerSeconds(beats);
   const scene = {
-    template: "explainer" as const,
+    template: silent ? ("clip" as const) : ("explainer" as const),
     code_ref: hash,
     title: request.title,
     beats,
@@ -383,10 +419,10 @@ export async function prepareExplainer(
   let spec: GenerationSpec;
   try {
     spec = normalizeSpec(model, {
-      prompt: `Explainer: ${request.title}`.slice(0, model.limits.maxPromptChars),
+      prompt: `${silent ? "Motion clip" : "Explainer"}: ${request.title}`.slice(0, model.limits.maxPromptChars),
       aspectRatio: request.format,
       duration,
-      voice: request.voice,
+      ...(silent ? {} : { voice: request.voice }),
       seed: randomInt(0, 2_147_483_647),
       scene,
     });
@@ -406,7 +442,7 @@ export async function prepareExplainer(
     spec,
     op,
     credits: priceOf(model, spec),
-    explainer: { title: request.title, beats: request.beats, voice: request.voice, ...lookOf(request), ...(refs.length ? { images: request.assets!.map((asset) => asset.image) } : {}) },
+    explainer: { title: request.title, beats: request.beats, ...(silent ? {} : { voice: request.voice }), ...lookOf(request), ...(refs.length ? { images: request.assets!.map((asset) => asset.image) } : {}) },
   };
 }
 
@@ -430,10 +466,11 @@ export function explainerCard(prepared: PreparedExplainer, clipId: string) {
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
-      `Explainer “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio}${look ? ` · ${look}` : ""} · voice ${prepared.explainer.voice} · ${credits}`,
+      `${prepared.explainer.voice ? "Explainer" : "Motion clip"} “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio}${look ? ` · ${look}` : ""} · ${prepared.explainer.voice ? `voice ${prepared.explainer.voice}` : "No narration"} · ${credits}`,
       ...(prepared.explainer.images?.length ? [`Images from your library: ${prepared.explainer.images.join(", ")}`] : []),
       ...prepared.explainer.beats.map(
-        (item, index) => `Beat ${index + 1} · Voice: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
+        (item, index) =>
+          `Beat ${index + 1} · ${prepared.explainer.voice ? "Voice" : `${item.seconds ?? 0}s`}: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
       ),
     ],
     credits: prepared.credits,

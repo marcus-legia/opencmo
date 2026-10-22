@@ -138,6 +138,42 @@ async function main() {
   const missingRef = await prepareExplainer({ ...input, voice: "Aria", assets: [{ name: "screen", image: "Uploads/nope.png" }] }, { previewed: async () => [input.code], save: async () => assert.fail("must not save"), lookupImage });
   assert.match(String(missingRef), /^assets\.0\.image: /);
 
+  // B3: silent motion clips. Timed beats, kind "clip", no voice, model motion-clip, a card without narration.
+  const silentBeats = [
+    { say: "The mark lands.", visual: "the tile settles", seconds: 2 },
+    { say: "The name rises.", label: "OpenCMO", visual: "the name rises letter by letter", seconds: 2.5 },
+  ];
+  const silentInput = { ...input, silent: true, beats: silentBeats };
+  let silentJob: MotionJob | null = null;
+  const silentPreview = await runPreviewExplainer(silentInput, {
+    preview: async (sent) => {
+      silentJob = sent;
+      return { ok: true, stills: [{ t: 1, file: "a.jpg" }], issues: [], estimated: false, images: ["AAAA"] };
+    },
+  });
+  assert.equal(silentPreview.ok, true, silentPreview.content);
+  assert.equal(silentJob!.kind, "clip");
+  assert.equal(silentJob!.duration, 5);
+  assert.deepEqual(silentJob!.beats.map((item) => item.seconds), [2, 2.5]);
+  const withVoice = await prepareExplainer({ ...silentInput, voice: "Aria" }, { previewed: async () => [input.code], save: async () => "a".repeat(64) });
+  assert.equal(withVoice, "voice: a silent clip has no narration.");
+  const untimed = await runPreviewExplainer({ ...silentInput, beats: [{ say: "No time.", visual: "x" }] }, { preview: async () => assert.fail("must not render") });
+  assert.match(untimed.content, /beats\.0\.seconds/);
+  const tooLong = await runPreviewExplainer({ ...silentInput, beats: [{ say: "a", visual: "x", seconds: 20 }, { say: "b", visual: "y", seconds: 11 }] }, { preview: async () => assert.fail("must not render") });
+  assert.match(tooLong.content, /at most 30 seconds/);
+  const silentPrepared = await prepareExplainer(silentInput, { previewed: async () => [input.code], save: async () => "a".repeat(64) });
+  assert.ok(typeof silentPrepared !== "string", String(silentPrepared));
+  assert.equal(silentPrepared.model.id, "motion-clip");
+  assert.equal(silentPrepared.spec.duration, 5);
+  assert.ok(!("voice" in silentPrepared.spec), "a silent clip's spec has no voice");
+  assert.deepEqual((silentPrepared.spec.scene as { template: string; beats: unknown[] }).beats, [{ say: "The mark lands.", seconds: 2 }, { say: "The name rises.", label: "OpenCMO", seconds: 2.5 }]);
+  assert.equal((silentPrepared.spec.scene as { template: string }).template, "clip");
+  const silentCard = explainerCard(silentPrepared, "clip");
+  assert.match(silentCard.changes[0]!, /^Motion clip “.*” · 5s · 16:9 .*· No narration · 1 credit$/);
+  assert.match(silentCard.changes[1]!, /^Beat 1 · 2s: “The mark lands\.”/);
+  const narrated = await runPreviewExplainer({ ...input, beats: input.beats.slice(0, 2) }, { preview: async () => assert.fail("must not render") });
+  assert.match(narrated.content, /3 to 16 beats/);
+
   // B5: motion templates. The list is short; an unknown id answers with the ids; a template comes with its code.
   const listed = runMotionTemplateTool("list_motion_templates", {});
   assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel"]);
