@@ -85,5 +85,13 @@ describe('timing', () => {
 		expect(partners[0]!.beat).toBe(0);
 		expect(partners.at(-1)!.beat).toBe(15);
 	});
-});
 
+	it('a clip of beats 1.5 s and 2 s spans frames 0-45 and 45-105 in a 4 s timeline', () => {
+		const timeline = buildTimeline({ kind: 'clip', beats: [{ say: 'The mark lands.', seconds: 1.5 }, { say: 'The name rises.', seconds: 2 }], duration: 4 });
+		expect(timeline.estimated).toBe(false);
+		expect(timeline.frames).toBe(120);
+		expect(timeline.beats.map(({ from, to }) => [from, to])).toEqual([[0, 45], [45, 105]]);
+		expect(cueFrame(timeline.beats[1]!, 'rises')).toBeGreaterThan(45);
+		expect(cueFrame(timeline.beats[1]!, 'rises')).toBeLessThan(105);
+	});
+});

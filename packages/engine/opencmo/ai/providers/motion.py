@@ -76,11 +76,18 @@ def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) 
     `code` is attached by the worker after loading it by `scene.code_ref`.
     """
     scene = spec["scene"]
+    clip = scene.get("template") == "clip"
     job: dict[str, Any] = {
+        # A silent clip times its beats by their own seconds; an explainer by the voice.
+        **({"kind": "clip"} if clip else {}),
         "title": str(scene["title"]).strip(),
         "code": spec["code"],
         "beats": [
-            {"say": str(beat["say"]).strip(), **({"label": str(beat["label"]).strip()} if beat.get("label") else {})}
+            {
+                "say": str(beat["say"]).strip(),
+                **({"label": str(beat["label"]).strip()} if beat.get("label") else {}),
+                **({"seconds": beat["seconds"]} if clip else {}),
+            }
             for beat in scene["beats"]
         ],
         "format": spec["aspectRatio"],
@@ -93,9 +100,14 @@ def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) 
     if spec.get("motionAssets"):
         # Inlined by the worker (`motion_assets`) before the render: the CLI never fetches them.
         job["assets"] = spec["motionAssets"]
-    if words:
+    if words and not clip:
         job["words"] = words
     return job
+
+
+def is_clip(spec: dict[str, Any]) -> bool:
+    """A silent motion clip (`motion-clip`): no voice is made and the MP4 has no audio stream."""
+    return (spec.get("scene") or {}).get("template") == "clip"
 
 
 #: Same rules as `ASSET_NAME`, `MAX_ASSETS` and `MAX_ASSET_BYTES` in packages/clip-motion/src/job.ts.
@@ -444,7 +456,7 @@ class MotionLocalProvider(ProviderAdapter):
         self._words: list[dict[str, Any]] | None = None
 
     def submit(self, model: AiModel, spec: dict[str, Any], workdir: Path) -> str:
-        audio, self._words = make_voice(spec, workdir, self._voice)
+        audio, self._words = (None, None) if is_clip(spec) else make_voice(spec, workdir, self._voice)
         return str(render_local(motion_job(spec, self._words), audio, workdir))
 
     def poll(self, ref: str) -> Poll:
@@ -474,8 +486,8 @@ class MotionModalProvider(ProviderAdapter):
 
     def submit(self, model: AiModel, spec: dict[str, Any], workdir: Path) -> str:
         self._workdir = workdir
-        audio, self._words = make_voice(spec, workdir, self._voice)
-        payload = {"job": motion_job(spec, self._words), "audio": audio.read_bytes()}
+        audio, self._words = (None, None) if is_clip(spec) else make_voice(spec, workdir, self._voice)
+        payload = {"job": motion_job(spec, self._words), **({"audio": audio.read_bytes()} if audio is not None else {})}
         try:
             function = self._modal.Function.from_name(MODAL_APP, MODAL_FUNCTION)
             call = function.spawn(payload)

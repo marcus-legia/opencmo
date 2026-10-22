@@ -17,7 +17,25 @@ function tokens(text: string): string[] {
 	return text.split(/\s+/).filter(Boolean);
 }
 
-export function buildTimeline(job: Pick<MotionJob, 'beats' | 'duration' | 'words'>): Timeline {
+/**
+ * A silent clip: each beat lasts its own `seconds`, back to back from frame 0; what is left after the last beat is
+ * a hold on the end state. Its storyboard words are spread evenly over the beat, so `kit.cue` still lands inside it.
+ */
+function clipTimeline(job: Pick<MotionJob, 'beats' | 'duration'>): Timeline {
+	const frames = job.duration * FPS;
+	let from = 0;
+	const beats = job.beats.map((beat) => {
+		const to = Math.max(from + 1, Math.min(frames, from + Math.round((beat.seconds ?? 0) * FPS)));
+		const list = tokens(beat.say);
+		const span = { from, to, frames: to - from, words: list.map((text, k) => ({ text, key: wordKey(text), frame: from + Math.floor(((to - from) * k) / Math.max(1, list.length)) })) };
+		from = to;
+		return span;
+	});
+	return { estimated: false, frames, beats };
+}
+
+export function buildTimeline(job: Pick<MotionJob, 'beats' | 'duration' | 'words'> & { kind?: MotionJob['kind'] }): Timeline {
+	if (job.kind === 'clip') return clipTimeline(job);
 	const frames = job.duration * FPS;
 	const last = frames - 1;
 	const perBeat = job.beats.map((beat) => tokens(beat.say));

@@ -569,3 +569,46 @@ def test_a_clip_spec_takes_timed_beats_and_no_voice() -> None:
         validate_spec(clip_model(), {**CLIP_SPEC, "scene": {**CLIP_SPEC["scene"], "template": "explainer"}})
     with pytest.raises(SpecError, match="explainer script is not valid"):
         validate_spec(model(), {**CLIP_SPEC, "voice": "Aria", "duration": 15})
+
+
+class _NoVoice:
+    def run(self, *_args, **_kwargs):
+        raise AssertionError("a silent clip must not make a voice")
+
+
+def test_a_clip_renders_without_calling_the_voice(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen = _fake_cli(monkeypatch)
+    provider = MotionLocalProvider(voice=_NoVoice())
+    ref = provider.submit(clip_model(), {**CLIP_SPEC, "code": CODE}, tmp_path)
+    assert provider.fetch(ref, tmp_path).words is None
+    [call] = seen
+    assert "--audio" not in call["args"]
+    job = call["job"]
+    assert job["kind"] == "clip" and "words" not in job
+    assert job["beats"] == [{"say": "The mark lands.", "seconds": 2}, {"say": "The name rises.", "label": "OpenCMO", "seconds": 3}]
+
+
+def test_a_clip_on_modal_sends_no_audio(tmp_path: Path) -> None:
+    sent: list[dict] = []
+    functions = SimpleNamespace(
+        Function=SimpleNamespace(from_name=lambda *_: SimpleNamespace(spawn=lambda payload: sent.append(payload) or SimpleNamespace(object_id="fc-1"))),
+    )
+    MotionModalProvider(functions=functions, voice=_NoVoice()).submit(clip_model(), {**CLIP_SPEC, "code": CODE}, tmp_path)
+    assert "audio" not in sent[0] and sent[0]["job"]["kind"] == "clip"
+
+
+_CLIP_MOTION_READY = (Path(motion.CLIP_MOTION).parent.parent / "node_modules").exists() or (Path(motion.CLIP_MOTION).parents[3] / "node_modules" / "remotion").exists()
+
+
+@pytest.mark.skipif(not _CLIP_MOTION_READY or not Path("/opt/pw-browsers").exists(), reason="needs clip-motion's Node deps and Chromium")
+def test_a_clip_mp4_has_no_audio_stream(tmp_path: Path) -> None:
+    code = "return function Scene() { return <kit.Stage><kit.Icon name=\"rocket\" x={960} y={500} size={300} /></kit.Stage>; };"
+    spec = {**CLIP_SPEC, "duration": 3, "code": code, "scene": {**CLIP_SPEC["scene"], "beats": [{"say": "Lift off.", "seconds": 3}]}}
+    out = MotionLocalProvider(voice=_NoVoice()).submit(clip_model(), spec, tmp_path)
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-f", "mov", "-show_entries", "stream=codec_type:format=duration", "-of", "json", out],
+        capture_output=True, text=True, check=True,
+    )
+    info = json.loads(probe.stdout)
+    assert [stream["codec_type"] for stream in info["streams"]] == ["video"]
+    assert abs(float(info["format"]["duration"]) - 3) < 0.1
