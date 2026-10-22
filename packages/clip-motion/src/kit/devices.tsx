@@ -51,10 +51,11 @@ function useShadow(): string {
 	return theme === 'paper' ? '0 30px 70px rgba(40, 32, 20, 0.22), 0 8px 18px rgba(40, 32, 20, 0.12)' : `0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px ${alpha(palette.ink, 0.12)}`;
 }
 
-function Screen({ box, radius, image, children, Image }: { box: Box; radius: number; image?: string; children?: React.ReactNode; Image: (props: ImageProps) => React.ReactNode }) {
+/** `statusBar`: px at the top of the screen kept for the phone's status bar, so an image starts below the island. */
+function Screen({ box, radius, image, statusBar = 0, children, Image }: { box: Box; radius: number; image?: string; statusBar?: number; children?: React.ReactNode; Image: (props: ImageProps) => React.ReactNode }) {
 	return (
-		<div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: radius, overflow: 'hidden' }}>
-			{image !== undefined ? <Image name={image} x={0} y={0} w={box.w} h={box.h} /> : null}
+		<div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: radius, overflow: 'hidden', background: statusBar ? '#FFFFFF' : undefined }}>
+			{image !== undefined ? <Image name={image} x={0} y={statusBar} w={box.w} h={box.h - statusBar} /> : null}
 			{children}
 		</div>
 	);
@@ -62,7 +63,7 @@ function Screen({ box, radius, image, children, Image }: { box: Box; radius: num
 
 /** `kit.Phone` and `kit.Browser`, bound to this job's images. */
 export function makeDevices(Image: (props: ImageProps) => React.ReactNode) {
-	function Frame({ name, props, outer, screen, radius, screenRadius, body, chrome }: { name: string; props: DeviceProps; outer: Box; screen: Box; radius: number; screenRadius: number; body: string; chrome?: React.ReactNode }) {
+	function Frame({ name, props, outer, screen, radius, screenRadius, body, chrome, statusBar }: { name: string; props: DeviceProps; outer: Box; screen: Box; radius: number; screenRadius: number; body: string; chrome?: React.ReactNode; statusBar?: number }) {
 		const life = useLife(props, ease.hero, 18);
 		const shadow = useShadow();
 		if (!life.visible) return null;
@@ -72,7 +73,8 @@ export function makeDevices(Image: (props: ImageProps) => React.ReactNode) {
 				<MarkTag name={name} target={{ ...outer, cx: props.x, cy: props.y }} />
 				<div style={{ position: 'absolute', left: outer.x, top: outer.y, width: outer.w, height: outer.h, borderRadius: radius, background: body, boxShadow: shadow }} />
 				{chrome}
-				<Screen box={screen} radius={screenRadius} image={props.image} Image={Image}>
+				<MarkTag name={`${name} screen`} target={{ ...screen, cx: screen.x + screen.w / 2, cy: screen.y + screen.h / 2 }} />
+				<Screen box={screen} radius={screenRadius} image={props.image} statusBar={statusBar} Image={Image}>
 					{props.children}
 				</Screen>
 			</div>
@@ -92,7 +94,9 @@ export function makeDevices(Image: (props: ImageProps) => React.ReactNode) {
 		const chrome = (
 			<div style={{ position: 'absolute', left: props.x - island.w / 2, top: screen.y + screenW * 0.035, width: island.w, height: island.h, borderRadius: island.h, background: '#05070C', zIndex: 2 }} />
 		);
-		return <Frame name="Phone" props={props} outer={outer} screen={screen} radius={radius} screenRadius={radius - bezel} body={theme === 'paper' ? '#1D2733' : '#0B0F17'} chrome={<div style={{ position: 'absolute', inset: 0, zIndex: 3 }}>{chrome}</div>} />;
+		// Web pages and app screenshots start under the status bar on a real phone, not under the island.
+		const statusBar = screenW * 0.14;
+		return <Frame name="Phone" props={props} outer={outer} screen={screen} radius={radius} screenRadius={radius - bezel} body={theme === 'paper' ? '#1D2733' : '#0B0F17'} statusBar={statusBar} chrome={<div style={{ position: 'absolute', inset: 0, zIndex: 3 }}>{chrome}</div>} />;
 	}
 
 	function Browser(props: DeviceProps) {

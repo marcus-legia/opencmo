@@ -136,13 +136,19 @@ describe('kit device frames and the display face', () => {
 	it('a phone holds the image inside its bezel, on a 9:19.5 screen', { timeout: 120_000 }, async () => {
 		const boxes = await stillOf("const { Stage, Phone } = kit;\nreturn function Scene() { return <Stage><Phone image=\"screen\" x={540} y={960} w={600} at={0} dur={1} /></Stage>; };", '9:16');
 		const phone = box(boxes, 'Phone');
-		const screen = box(boxes, 'Image screen');
+		const screen = box(boxes, 'Phone screen');
+		const image = box(boxes, 'Image screen');
 		expect(phone.w).toBeCloseTo(600, 0);
 		expect(screen.x).toBeGreaterThan(phone.x);
 		expect(screen.y).toBeGreaterThan(phone.y);
 		expect(screen.x + screen.w).toBeLessThan(phone.x + phone.w);
 		expect(screen.y + screen.h).toBeLessThan(phone.y + phone.h);
 		expect(screen.h / screen.w).toBeCloseTo(19.5 / 9, 2);
+		// The image fills the screen under the status bar, so the island never covers it.
+		expect(image.x).toBeCloseTo(screen.x, 0);
+		expect(image.w).toBeCloseTo(screen.w, 0);
+		expect(image.y).toBeCloseTo(screen.y + screen.w * 0.14, 0);
+		expect(image.y + image.h).toBeCloseTo(screen.y + screen.h, 0);
 		expect(phone.x + phone.w / 2).toBeCloseTo(540, 0);
 		expect(phone.y + phone.h / 2).toBeCloseTo(960, 0);
 	});

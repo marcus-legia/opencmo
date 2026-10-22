@@ -104,11 +104,11 @@ function Petal({ angle, p }) {
   );
 }
 
-function Tile({ t }) {
+function Tile({ t, blurred }) {
   const s = tileState(t);
   const accent = SLOTS.accent;
   return (
-    <div data-box="mark" data-name="Logo tile" style={{ position: 'absolute', left: CX - C, top: s.cy - C, width: TILE, height: TILE, transform: `rotate(${s.rot}deg) scale(${s.scale})`, filter: 'url(#tile-blur)' }}>
+    <div data-box="mark" data-name="Logo tile" style={{ position: 'absolute', left: CX - C, top: s.cy - C, width: TILE, height: TILE, transform: `rotate(${s.rot}deg) scale(${s.scale})`, filter: blurred ? 'url(#tile-blur)' : undefined }}>
       <svg width={TILE} height={TILE} viewBox={`0 0 ${TILE} ${TILE}`} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
         <defs>
           <linearGradient id="tile-fill" x1="0" y1="0" x2="0" y2={TILE} gradientUnits="userSpaceOnUse">
@@ -180,7 +180,8 @@ return function Scene() {
           <filter id="tag-blur" x="-10%" y="-120%" width="120%" height="340%"><feGaussianBlur stdDeviation={`0 ${tag.blur.toFixed(3)}`} /></filter>
         </defs>
       </svg>
-      <Tile t={t} />
+      {/* A filter, even at zero blur, clips the soft shadow to the filter region: only while it moves. */}
+      <Tile t={t} blurred={blur.x > 0.03 || blur.y > 0.03} />
       <div style={{ position: 'absolute', left: 0, width: W, top: NAME_TOP, display: 'flex', justifyContent: 'center' }}>
         <div data-box="text" data-name={SLOTS.name} data-size={NAME_SIZE} style={{ display: 'flex', fontFamily: kit.font.display, fontSize: NAME_SIZE, fontWeight: 700, letterSpacing: '-0.012em', lineHeight: 1, color: '#F3F5F8' }}>
           {letters.map((ch, j) => (
