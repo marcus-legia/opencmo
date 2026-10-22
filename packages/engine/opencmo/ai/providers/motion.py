@@ -32,6 +32,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from opencmo.ai.catalog import AiModel, SpecError, get_model, narration
 from opencmo.ai.providers.base import Poll, ProviderAdapter, ProviderError, Result
@@ -120,6 +121,9 @@ ASSET_EDGES = (2048, 1536, 1024, 768)
 ASSET_SOURCE_MAX_BYTES = 30 * 1024 * 1024
 ASSET_NOT_FOUND = "An image in this animation is not in your library. Pick it again."
 ASSET_UNREADABLE = "An image in this animation could not be read. Pick another one."
+ASSET_TOO_LARGE = "An image in this animation is larger than 30 MB. Pick a smaller one."
+#: Previews: how long one signed-URL download may take.
+ASSET_DOWNLOAD_TIMEOUT = 20.0
 
 
 def _own_media(ref: Any, user_id: str) -> bool:
@@ -133,22 +137,45 @@ def _own_media(ref: Any, user_id: str) -> bool:
     )
 
 
-def _png_info(data: bytes) -> tuple[int, int, bool]:
-    """Width, height and whether a PNG we wrote ourselves can be transparent (IHDR colour type, tRNS)."""
+def _png_header(data: bytes) -> tuple[int, int, int, bool]:
+    """Width, height, IHDR colour type, and whether a tRNS chunk comes before the image data."""
     if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
         raise ValueError("not a PNG")
-    width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
-    color = data[25]
-    return width, height, color in (4, 6) or b"tRNS" in data
+    width, height, color = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big"), data[25]
+    i, trns = 8, False
+    while i + 8 <= len(data):
+        length, kind = int.from_bytes(data[i:i + 4], "big"), data[i + 4:i + 8]
+        if kind in (b"IDAT", b"IEND"):
+            break
+        trns = trns or kind == b"tRNS"
+        i += 12 + length
+    return width, height, color, trns
+
+
+def _alpha_used(png: Path, timeout: int = 60) -> bool:
+    """True when any pixel of an RGBA or grey+alpha PNG is not fully opaque (a screenshot saved as
+    RGBA usually is). Streams the alpha plane out of ffmpeg: at most 2048² bytes, never frames in Python."""
+    proc = subprocess.run(
+        ["ffmpeg", "-v", "error", "-protocol_whitelist", "file", "-f", "png_pipe", "-i", str(png),
+         "-vf", "alphaextract", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+        capture_output=True, timeout=timeout, check=False,
+    )
+    if proc.returncode != 0:
+        raise FFmpegError(proc.stderr.decode(errors="replace")[-500:])
+    return bool(proc.stdout) and min(proc.stdout) < 255
 
 
 def _encode_asset(raw: Path, workdir: Path, stem: str) -> dict[str, Any]:
-    """`{src, width, height}`: PNG when the image can be transparent (logos keep their alpha), JPEG
-    otherwise, the longest edge at most 2048 px and the file under the 2 MB the renderer takes."""
+    """`{src, width, height}`: PNG when the image really is transparent (logos keep their alpha),
+    JPEG otherwise, upright, the longest edge at most 2048 px and the file under the 2 MB the renderer takes."""
+    alpha: bool | None = None
     for edge in ASSET_EDGES:
         png = reencode_image(raw, workdir / f"{stem}-{edge}.png", edge)
         data = png.read_bytes()
-        width, height, alpha = _png_info(data)
+        width, height, color, trns = _png_header(data)
+        if alpha is None:
+            # Decided once, on the largest size: scaling never makes an opaque image transparent.
+            alpha = trns or (color in (4, 6) and _alpha_used(png))
         kind = "png"
         if not alpha:
             # Our own PNG now, still read through image2pipe like any image.
@@ -164,7 +191,12 @@ def motion_assets(store: Any, task: Any, scene: dict[str, Any], workdir: Path) -
 
     SQL checked each `ref` against the caller when the generation was created; this checks it again
     against the task's OWNER, so an edited generation row cannot show another user's image.
+    A storage outage raises `TransientError` (the task is retried); only a refused or missing
+    object is the user's to fix.
     """
+    from opencmo.backends.retry import PermanentError
+    from opencmo.backends.supabase.models import ObjectTooLargeError
+
     items = scene.get("assets") or []
     if not isinstance(items, list) or len(items) > MAX_ASSETS:
         raise SpecError(ASSET_NOT_FOUND)
@@ -179,14 +211,75 @@ def motion_assets(store: Any, task: Any, scene: dict[str, Any], workdir: Path) -
         raw = workdir / f"asset-{index}"
         try:
             store.download_object("media", ref, raw, max_bytes=ASSET_SOURCE_MAX_BYTES)
-        except Exception as exc:
+        except PermanentError as exc:
             raise SpecError(ASSET_NOT_FOUND) from exc
+        except ObjectTooLargeError as exc:
+            raise SpecError(ASSET_TOO_LARGE) from exc
         try:
             encoded = _encode_asset(raw, workdir, f"asset-{index}")
         except (FFmpegError, ValueError, OSError) as exc:
             raise SpecError(ASSET_UNREADABLE) from exc
         out.append({"name": name, **encoded})
     return out
+
+
+def _asset_origin() -> str | None:
+    """The one origin preview images may come from (`OPENCMO_MOTION_ASSET_ORIGIN`: the Supabase project)."""
+    parts = urlsplit(os.environ.get("OPENCMO_MOTION_ASSET_ORIGIN", "").strip())
+    return f"{parts.scheme}://{parts.netloc}".lower() if parts.scheme in ("http", "https") and parts.netloc else None
+
+
+def _download_preview_asset(name: str, url: str, allowed: str | None, dest: Path) -> None:
+    import httpx
+
+    parts = urlsplit(url)
+    # Exact origin, scheme included: the local stack's http://127.0.0.1:54321 matches only itself.
+    if allowed is None or f"{parts.scheme}://{parts.netloc}".lower() != allowed:
+        where = allowed or "no image origin is set on this server"
+        raise SpecError(f'Image "{name}" must come from the user\'s library ({where}); other origins are refused.')
+    unreachable = f'Image "{name}" could not be downloaded: pick it again.'
+    written = 0
+    try:
+        # No redirects: a redirect could leave the allowed origin.
+        with httpx.stream("GET", url, follow_redirects=False, timeout=ASSET_DOWNLOAD_TIMEOUT) as resp:
+            if resp.status_code != 200:
+                raise SpecError(f'Image "{name}" could not be downloaded (HTTP {resp.status_code}): pick it again.')
+            with dest.open("wb") as fh:
+                for chunk in resp.iter_bytes(1024 * 1024):
+                    written += len(chunk)
+                    if written > ASSET_SOURCE_MAX_BYTES:
+                        raise SpecError(f'Image "{name}" is larger than 30 MB: pick a smaller one.')
+                    fh.write(chunk)
+    except httpx.HTTPError as exc:
+        raise SpecError(unreachable) from exc
+
+
+def preview_assets(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    """The preview job with every image URL replaced by the data URI a final render would get: the same
+    download cap and the same encoder as `motion_assets`, so a preview shows what the render will.
+
+    Raises `SpecError` with a sentence naming the image; the caller turns it into a `job` error.
+    """
+    assets = job.get("assets")
+    if not isinstance(assets, list) or not assets:
+        return job
+    allowed = _asset_origin()
+    prepared = []
+    for index, asset in enumerate(assets):
+        if not isinstance(asset, dict) or not isinstance(asset.get("src"), str) or asset["src"].startswith("data:"):
+            prepared.append(asset)
+            continue
+        name = str(asset.get("name"))
+        raw = workdir / f"preview-asset-{index}"
+        _download_preview_asset(name, asset["src"], allowed, raw)
+        try:
+            encoded = _encode_asset(raw, workdir, f"preview-asset-{index}")
+        except (FFmpegError, ValueError, OSError, SpecError) as exc:
+            raise SpecError(f'Image "{name}" could not be read: pick another one.') from exc
+        finally:
+            raw.unlink(missing_ok=True)
+        prepared.append({"name": asset.get("name"), **encoded})
+    return {**job, "assets": prepared}
 
 
 def _fit_words(words: list[dict[str, Any]], duration: float) -> list[dict[str, Any]]:
@@ -322,8 +415,12 @@ def preview_local(job: dict[str, Any], workdir: Path) -> dict[str, Any]:
     """`clip-motion preview` → PreviewResult plus `images`: one process (and one Chromium) per preview.
 
     `PreviewSession` is the warm path used by the Modal endpoint; the web app's local path spawns
-    the CLI itself.
+    the CLI itself, after `python -m opencmo.ai.preview_assets` prepared its images.
     """
+    try:
+        job = preview_assets(job, workdir)
+    except SpecError as exc:
+        return {"ok": False, "phase": "job", "message": str(exc)}
     job_file = workdir / "job.json"
     job_file.write_text(json.dumps(job), encoding="utf-8")
     outdir = workdir / "stills"
@@ -374,6 +471,11 @@ class PreviewSession:
             self._kill()
 
     def preview(self, job: dict[str, Any], workdir: Path) -> dict[str, Any]:
+        try:
+            # Before the lock: downloads and encodes never hold up another preview's render.
+            job = preview_assets(job, workdir)
+        except SpecError as exc:
+            return {"ok": False, "phase": "job", "message": str(exc)}
         outdir = workdir / "stills"
         outdir.mkdir(exist_ok=True)
         with self._lock:

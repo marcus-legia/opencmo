@@ -23,7 +23,7 @@ const LIMIT = { mean: 1.5, tile: 10 };
 function pixels(file: string): { data: Buffer; width: number; height: number } {
 	const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file], { encoding: 'utf8' });
 	const [width, height] = probe.stdout.trim().split(',').map(Number) as [number, number];
-	const raw = spawnSync('ffmpeg', ['-v', 'error', '-f', 'png_pipe', '-i', file, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 64 * 1024 * 1024 });
+	const raw = spawnSync('ffmpeg', ['-v', 'error', '-f', file.endsWith('.png') ? 'png_pipe' : 'jpeg_pipe', '-i', file, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 64 * 1024 * 1024 });
 	return { data: raw.stdout, width, height };
 }
 
@@ -109,6 +109,17 @@ describe('kit.Image', () => {
 		expect(g).toBeGreaterThan(80);
 		expect(b).toBeLessThan(60);
 		expect(at(5, 5)[0]).toBeLessThan(60);
+	});
+
+	it('a preview draws the image from a bundle file, not from inputProps', { timeout: 120_000 }, async () => {
+		const scene = "const { Stage, Image } = kit;\nreturn function Scene() { return <Stage><Image name={kit.images[0]} x={660} y={340} w={600} h={400} at={0} dur={1} /></Stage>; };";
+		const result = await previewJob({ ...job(scene), stills: [1.5] }, mkdtempSync(join(tmpdir(), 'clip-motion-image-')));
+		if (!result.ok) throw new Error(result.message);
+		const { data, width } = pixels(result.stills[0]!.file);
+		// Half-size still: the centre of the box is the PNG's orange.
+		const at = (270 * width + 480) * 3;
+		expect(data[at]).toBeGreaterThan(200);
+		expect(data[at + 2]).toBeLessThan(60);
 	});
 
 	it('names the available images when the scene asks for another', { timeout: 120_000 }, async () => {

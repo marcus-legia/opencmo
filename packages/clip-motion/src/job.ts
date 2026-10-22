@@ -20,6 +20,8 @@ export const MAX_ASSET_BYTES = 2_000_000;
 export const MAX_ASSET_EDGE = 4096;
 /** Preview stills the model may ask for by time (`stills`). */
 export const MAX_PREVIEW_STILLS = 12;
+/** An asset `src` after `stageAssets`: a file of the bundle's public dir that `kit.Image` loads with `staticFile`. */
+export const STAGED_ASSET = 'bundle:';
 export const CLIP_SECONDS = { min: 3, max: 30 } as const;
 const BEAT_SECONDS = { min: 0.5, max: 30 } as const;
 
@@ -30,12 +32,12 @@ export const BeatSchema = z.object({
 }).strict();
 
 /**
- * Final renders carry data URIs (the worker inlines them); previews may carry `https` URLs (plain `http` only on
- * loopback, for the local Supabase) that `inlineAssets` fetches in Node, so the offline Chromium never does.
+ * Data URIs only, from the engine's one encoder (`motion_assets` for renders, `preview_assets` for previews): the same
+ * pixels in both, and nothing in Node or Chromium fetches an image.
  */
 export const AssetSchema = z.object({
 	name: z.string().regex(ASSET_NAME, 'Use lowercase letters, digits and dashes, starting with a letter (at most 32).'),
-	src: z.string().max(Math.ceil((MAX_ASSET_BYTES * 4) / 3) + 64).regex(/^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/\S+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/\S*)$/, 'An asset is a PNG, JPEG or WebP data URI, or an https URL.'),
+	src: z.string().max(Math.ceil((MAX_ASSET_BYTES * 4) / 3) + 64).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/, 'An asset is a PNG, JPEG or WebP data URI.'),
 	width: z.number().int().min(1).max(MAX_ASSET_EDGE).optional(),
 	height: z.number().int().min(1).max(MAX_ASSET_EDGE).optional(),
 }).strict();

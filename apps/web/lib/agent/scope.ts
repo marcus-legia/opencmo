@@ -199,14 +199,17 @@ export const blankEdit = (context: ClipContext, document: ClipDocument): boolean
 export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
   const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
   const env = { workspace };
-  /** A finished image in the clip's library (an upload, an AI image, a saved frame) → its `media` object, under RLS. */
-  const lookupImage = async (path: string): Promise<string | null> => {
+  /** Finished images in the clip's library (uploads, AI images, saved frames) → their `media` objects, under RLS. */
+  const lookupImage = async (paths: readonly string[]): Promise<(string | null)[]> => {
     const snapshot = await workspace.read();
     const assets = ((snapshot.manifest as { assets?: unknown[] } | null)?.assets ?? []) as { path?: string; type?: string; state?: string; cloud?: { mediaId?: string } }[];
-    const record = assets.find((item) => item.path === path && item.type === "IMAGE" && !item.state && item.cloud?.mediaId);
-    if (!record?.cloud?.mediaId) return null;
-    const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: record.cloud.mediaId }).catch(() => null)) as { startImage?: string } | null;
-    return resolved?.startImage ?? null;
+    const ids = paths.map((path) => assets.find((item) => item.path === path && item.type === "IMAGE" && !item.state && item.cloud?.mediaId)?.cloud?.mediaId ?? null);
+    const resolve = async (id: string | null): Promise<string | null> => {
+      if (!id) return null;
+      const resolved = (await resolveMediaRefs(supabase, context.clip.job_id, { startImage: id }).catch(() => null)) as { startImage?: string } | null;
+      return resolved?.startImage ?? null;
+    };
+    return Promise.all(ids.map(resolve));
   };
   const start = await workspace.read();
   const blank = blankEdit(context, start.document);

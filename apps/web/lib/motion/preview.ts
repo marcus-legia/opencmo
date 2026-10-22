@@ -2,7 +2,9 @@
  * Explainer previews (docs/explainer-build.md, Track B): a few stills and a layout report for a
  * `MotionJob`, so the Assistant can look at its scene and fix it before anything is paid for.
  *
- * - `OPENCMO_MOTION=local`: spawn the `clip-motion` CLI on this machine in a temp folder.
+ * - `OPENCMO_MOTION=local`: spawn the `clip-motion` CLI on this machine in a temp folder. Images (signed URLs)
+ *   are first downloaded and encoded by the engine (`python -m opencmo.ai.preview_assets`), the same encoder a
+ *   final render uses, so the preview shows what the render will.
  * - Otherwise: POST to the Modal endpoint `motion_preview` (`MOTION_PREVIEW_URL`) with
  *   `MOTION_PREVIEW_TOKEN`; the scene code runs there, never inside this server. Not the worker
  *   token: the container that runs model-written code must not hold a token that submits tasks.
@@ -33,6 +35,11 @@ function cliPath(): string {
   return process.env.OPENCMO_CLIP_MOTION ?? path.resolve(process.cwd(), "..", "..", "packages", "clip-motion", "src", "cli.ts");
 }
 
+function enginePython(): string {
+  // Next runs from apps/web; `scripts/dev.mjs` sets OPENCMO_ENGINE_PYTHON to the engine's venv.
+  return process.env.OPENCMO_ENGINE_PYTHON ?? path.resolve(process.cwd(), "..", "..", "packages", "engine", ".venv312", "bin", "python");
+}
+
 function lastLine(text: string): string {
   return text.trim().split("\n").at(-1)?.trim() ?? "";
 }
@@ -60,9 +67,9 @@ function cliEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function run(args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+function run(args: string[], timeoutMs: number, command = process.execPath): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], env: cliEnv() });
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], env: cliEnv() });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -87,10 +94,25 @@ function run(args: string[], timeoutMs: number): Promise<{ code: number | null; 
 async function previewLocal(job: MotionJob, timeoutMs: number): Promise<MotionPreview> {
   const dir = await mkdtemp(path.join(tmpdir(), "opencmo-motion-preview-"));
   try {
-    const jobFile = path.join(dir, "job.json");
+    const started = Date.now();
+    let jobFile = path.join(dir, "job.json");
     const outdir = path.join(dir, "stills");
     await writeFile(jobFile, JSON.stringify(job));
-    const { code, stdout, stderr, timedOut } = await run([cliPath(), "preview", jobFile, outdir], timeoutMs);
+    if (job.assets?.some((asset) => !asset.src.startsWith("data:"))) {
+      const prepared = path.join(dir, "job.prepared.json");
+      const assets = await run(["-m", "opencmo.ai.preview_assets", jobFile, prepared], timeoutMs, enginePython());
+      if (assets.timedOut) throw new Error(TIMEOUT);
+      if (assets.code === 3) {
+        const refused = parseResult(assets.stdout);
+        if (refused && !refused.ok) return refused;
+      }
+      if (assets.code !== 0) {
+        console.error("[motion] preview_assets failed", assets.code, assets.stderr.slice(-1_500));
+        throw new Error(FAILED);
+      }
+      jobFile = prepared;
+    }
+    const { code, stdout, stderr, timedOut } = await run([cliPath(), "preview", jobFile, outdir], Math.max(1, timeoutMs - (Date.now() - started)));
     if (timedOut) throw new Error(TIMEOUT);
     const result = parseResult(stdout);
     if (!result) {

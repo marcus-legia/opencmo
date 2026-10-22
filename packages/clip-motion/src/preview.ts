@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 
 import { openBrowser, renderStill, selectComposition, type HeadlessBrowser } from '@remotion/renderer';
 
-import { ASSET_ORIGIN, inlineAssets } from './assets-inline.ts';
 import { MotionCodeFailure } from './errors.ts';
+import { checkAssets, stageAssets } from './job-assets.ts';
 import { FPS, frameSize, type MotionJob, type PreviewResult } from './job.ts';
 import { buildTimeline, pairedProbes, previewFrames } from './kit/timing.ts';
 import { beatIssues, jumpIssues, layoutIssues, type LaidBox } from './layout.ts';
@@ -67,14 +67,14 @@ export function openPreviewBrowser(): Promise<HeadlessBrowser> {
 	return openBrowser('chrome', { browserExecutable: browserExecutable(), chromiumOptions: CHROMIUM, logLevel: 'error' });
 }
 
-export type PreviewOptions = { log?: Log; scale?: number; browser?: HeadlessBrowser; assetOrigin?: string; fetch?: typeof fetch };
+export type PreviewOptions = { log?: Log; scale?: number; browser?: HeadlessBrowser };
 
 export async function previewJob(input: MotionJob, outdir: string, options: PreviewOptions = {}): Promise<PreviewResult> {
 	const started = Date.now();
 	let job: MotionJob;
 	try {
-		// Before Chromium: a bad image is a job error the model can fix, and the page never fetches.
-		job = await inlineAssets(input, { origin: options.assetOrigin ?? ASSET_ORIGIN, fetch: options.fetch });
+		// Before Chromium: a bad image is a job error the model can fix.
+		job = checkAssets(input);
 	} catch (error) {
 		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
 		throw error;
@@ -86,18 +86,21 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 	// Each layout sample and the frame after it: the pair measures one-frame jumps.
 	const probeList = pairedProbes(timeline);
 	let own: HeadlessBrowser | null = null;
+	// Images as bundle files, written once for every still and probe of this preview.
+	const staged = stageAssets(job, await getBundle(options.log));
 	try {
 		const { compiled } = prepare(job);
 		// One browser for the stills and the layout samples (serve passes its own).
 		const browser = options.browser ?? (own = await openPreviewBrowser());
-		stills = await renderStills(job, compiled, previewFrames(timeline, job.stills), resolve(outdir), { ...options, browser });
+		stills = await renderStills(staged.job, compiled, previewFrames(timeline, job.stills), resolve(outdir), { ...options, browser });
 		// Layout-only samples at quarter size, kept out of the stills the Assistant looks at.
-		probes = await renderStills(job, compiled, probeList.map((probe) => probe.frame), join(resolve(outdir), 'probes'), { ...options, browser, scale: 0.25 });
+		probes = await renderStills(staged.job, compiled, probeList.map((probe) => probe.frame), join(resolve(outdir), 'probes'), { ...options, browser, scale: 0.25 });
 	} catch (error) {
 		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
 		throw error;
 	} finally {
 		if (own) await own.close({ silent: true }).catch(() => undefined);
+		staged.dispose();
 	}
 	const issues = [...stills, ...probes]
 		.sort((a, b) => a.frame - b.frame)

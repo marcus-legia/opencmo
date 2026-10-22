@@ -1,7 +1,7 @@
 import React from 'react';
-import { Img } from 'remotion';
+import { Img, staticFile } from 'remotion';
 
-import type { MotionAsset } from '../job.ts';
+import { STAGED_ASSET, type MotionAsset } from '../job.ts';
 import { kitError, MarkTag, useArea, useLife, type AreaProp, type LifeProps } from './context.tsx';
 import { ease } from './motion.ts';
 
@@ -19,8 +19,8 @@ export type ImageProps = LifeProps & {
 };
 
 /**
- * `kit.Image` for this job's assets. The `<img>` is kit code, so it may load a data URI; scene code cannot (no
- * `R.Img`, no `staticFile`), and every asset was inlined in Node before Chromium opened (`assets-inline.ts`).
+ * `kit.Image` for this job's assets. The `<img>` is kit code, so it may load a bundle file or a data URI; scene code
+ * cannot (no `R.Img`, no `staticFile`). Node wrote each asset into the bundle before Chromium opened (`job-assets.ts`).
  */
 export function makeImage(assets: readonly MotionAsset[]) {
 	const byName = new Map(assets.map((asset) => [asset.name, asset]));
@@ -30,7 +30,8 @@ export function makeImage(assets: readonly MotionAsset[]) {
 		if (!asset) {
 			throw kitError(`unknown image "${String(props.name)}": ${names.length ? `this job has ${names.map((name) => `"${name}"`).join(', ')}` : 'this job has no images (add them with assets)'}.`);
 		}
-		if (!asset.src.startsWith('data:')) throw kitError(`image "${asset.name}" was not prepared for the render.`);
+		const src = asset.src.startsWith(STAGED_ASSET) ? staticFile(asset.src.slice(STAGED_ASSET.length)) : asset.src.startsWith('data:') ? asset.src : null;
+		if (!src) throw kitError(`image "${asset.name}" was not prepared for the render.`);
 		const fromArea = useArea(props.area, 'hero');
 		const life = useLife(props, ease.hero, 18);
 		const target = props.x !== undefined && props.y !== undefined && props.w !== undefined && props.h !== undefined ? { x: props.x, y: props.y, w: props.w, h: props.h } : fromArea;
@@ -55,7 +56,7 @@ export function makeImage(assets: readonly MotionAsset[]) {
 						...props.style,
 					}}
 				>
-					<Img src={asset.src} style={{ width: '100%', height: '100%', objectFit: props.fit ?? 'cover', display: 'block' }} />
+					<Img src={src} style={{ width: '100%', height: '100%', objectFit: props.fit ?? 'cover', display: 'block' }} />
 				</div>
 			</>
 		);

@@ -14,8 +14,8 @@
  * agent, never retried · 1 anything else.
  *
  * Env: OPENCMO_MOTION_SCALE (0.25–1, dev only), OPENCMO_MOTION_CHROME (browser path),
- * OPENCMO_MOTION_CONCURRENCY (render concurrency, default 2), OPENCMO_MOTION_ASSET_ORIGIN (the only origin image
- * assets may be fetched from: the Supabase project URL; final renders arrive inlined and need none).
+ * OPENCMO_MOTION_CONCURRENCY (render concurrency, default 2). Image assets arrive as data URIs: the CLI fetches
+ * nothing (the engine's `preview_assets` / `motion_assets` download and encode them).
  */
 
 import { readFileSync } from 'node:fs';
@@ -23,16 +23,18 @@ import { createInterface } from 'node:readline';
 
 import type { HeadlessBrowser } from '@remotion/renderer';
 
-import { ASSET_ORIGIN, inlineAssets } from './assets-inline.ts';
+import { checkAssets } from './job-assets.ts';
 import { parseJob, prepare } from './prepare.ts';
 import { openPreviewBrowser, previewJob } from './preview.ts';
-import { getBundle, isTargetClosed, MotionCodeFailure, renderJob } from './render.ts';
+import { afterSceneError, getBundle, isTargetClosed, MotionCodeFailure, renderJob } from './render.ts';
 
 // After a scene error, closing the browser can leave Remotion's "Target closed" rejection unhandled; it must not
-// crash the process before the scene's message reaches stdout. Anything else still crashes as before.
+// crash the process before the scene's message reaches stdout. Without a scene error, "Target closed" means
+// Chromium died: fail at once so the worker does not wait for its timeout.
 process.on('unhandledRejection', (error) => {
-	if (isTargetClosed(error)) return;
-	throw error;
+	if (isTargetClosed(error) && afterSceneError()) return;
+	process.stderr.write(`Unhandled rejection: ${String((error as Error)?.stack ?? error)}\n`);
+	process.exit(1);
 });
 
 // stdout carries exactly one JSON line; Remotion prints browser console lines to stdout, so
@@ -126,7 +128,7 @@ try {
 			process.exit(4);
 		}
 	} else {
-		const result = await renderJob(prepare(await inlineAssets(parsed.job, { origin: ASSET_ORIGIN })), out, { audio, log });
+		const result = await renderJob(prepare(checkAssets(parsed.job)), out, { audio, log });
 		emit(result);
 	}
 } catch (error) {

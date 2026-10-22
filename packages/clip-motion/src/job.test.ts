@@ -62,7 +62,7 @@ describe('job contract', () => {
 	});
 
 	it('refuses two assets named "logo"', () => {
-		expect(parseJob({ ...explainer, assets: [{ name: 'logo', src: PNG }, { name: 'logo', src: 'https://x.supabase.co/a.png' }] })).toEqual({ ok: false, message: expect.stringContaining('Two images are named "logo"') });
+		expect(parseJob({ ...explainer, assets: [{ name: 'logo', src: PNG }, { name: 'logo', src: PNG }] })).toEqual({ ok: false, message: expect.stringContaining('Two images are named "logo"') });
 	});
 
 	it('refuses an asset name "Logo"', () => {

@@ -147,6 +147,8 @@ const children = [
       // already set, so empty strings win over the file.
       MODAL_SUBMIT_URL: "",
       OPENCMO_WORKER_TOKEN: "",
+      // Local previews encode the scene's images with the engine (`opencmo.ai.preview_assets`).
+      OPENCMO_ENGINE_PYTHON: venv,
       ...motionEnv,
     },
   }),

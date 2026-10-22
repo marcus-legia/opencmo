@@ -17,6 +17,8 @@ from opencmo.ai.providers import adapter_for, motion
 from opencmo.ai.providers.base import ProviderError, Result
 from opencmo.ai.providers.fake import FakeProvider
 from opencmo.ai.providers.motion import MotionLocalProvider, MotionModalProvider, motion_job
+from opencmo.backends.retry import PermanentError, TransientError
+from opencmo.backends.supabase.models import ObjectTooLargeError
 
 BEATS = [
     {"say": "A noisy bar, and a song you half know.", "label": "Noisy bar"},
@@ -440,7 +442,7 @@ class _Library:
         assert bucket == "media"
         self.asked.append(path)
         if path not in self.files:
-            raise FileNotFoundError(path)
+            raise PermanentError("Request rejected", status=404)
         dest.write_bytes(self.files[path].read_bytes())
         return dest
 
@@ -517,6 +519,127 @@ def test_motion_assets_refuse_a_file_that_is_not_an_image(tmp_path: Path) -> Non
         motion.motion_assets(library, SimpleNamespace(user_id=USER), {"assets": [{"name": "x", "ref": f"{USER}/x.png"}]}, tmp_path)
 
 
+class _FailingLibrary:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def download_object(self, bucket: str, path: str, dest: Path, *, max_bytes: int | None = None) -> Path:
+        raise self.error
+
+
+def test_motion_assets_leave_a_storage_outage_to_the_retry(tmp_path: Path) -> None:
+    scene = {"assets": [{"name": "logo", "ref": f"{USER}/logo.png"}]}
+    with pytest.raises(TransientError):
+        motion.motion_assets(_FailingLibrary(TransientError("storage 503")), SimpleNamespace(user_id=USER), scene, tmp_path)
+    with pytest.raises(SpecError, match="larger than 30 MB"):
+        motion.motion_assets(_FailingLibrary(ObjectTooLargeError("too big")), SimpleNamespace(user_id=USER), scene, tmp_path)
+
+
+def test_motion_assets_turn_an_opaque_rgba_screenshot_into_a_full_size_jpeg(tmp_path: Path) -> None:
+    shot = tmp_path / "shot.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=2880x1800,format=rgba", "-frames:v", "1", str(shot)],
+        check=True,
+    )
+    assert shot.read_bytes()[25] == 6, "the source is RGBA with every pixel opaque"
+    [asset] = motion.motion_assets(_Library({f"{USER}/shot.png": shot}), SimpleNamespace(user_id=USER), {"assets": [{"name": "shot", "ref": f"{USER}/shot.png"}]}, tmp_path)
+    assert asset["src"].startswith("data:image/jpeg;base64,")
+    assert (asset["width"], asset["height"]) == (2048, 1280)
+
+
+def _with_orientation(jpeg: bytes, orientation: int) -> bytes:
+    """`jpeg` with an EXIF APP1 segment (big-endian TIFF, one IFD entry) right after SOI."""
+    tiff = b"MM\x00\x2a\x00\x00\x00\x08" + b"\x00\x01" + b"\x01\x12\x00\x03\x00\x00\x00\x01" + orientation.to_bytes(2, "big") + b"\x00\x00" + b"\x00\x00\x00\x00"
+    payload = b"Exif\x00\x00" + tiff
+    return jpeg[:2] + b"\xff\xe1" + (len(payload) + 2).to_bytes(2, "big") + payload + jpeg[2:]
+
+
+def test_motion_assets_turn_a_phone_photo_upright_from_its_exif(tmp_path: Path) -> None:
+    from opencmo.media.ffmpeg import jpeg_orientation
+
+    stored = _image(tmp_path, "stored.jpg", "testsrc2", "400x300")
+    photo = tmp_path / "photo.jpg"
+    photo.write_bytes(_with_orientation(stored.read_bytes(), 6))
+    assert jpeg_orientation(photo.read_bytes()) == 6
+    [asset] = motion.motion_assets(_Library({f"{USER}/photo.jpg": photo}), SimpleNamespace(user_id=USER), {"assets": [{"name": "photo", "ref": f"{USER}/photo.jpg"}]}, tmp_path)
+    assert (asset["width"], asset["height"]) == (300, 400), "Orientation 6: stored landscape, shown portrait"
+    assert jpeg_orientation(stored.read_bytes()) == 1
+
+
+class _Server:
+    """A local HTTP server: `routes` maps a path to (status, headers, body)."""
+
+    def __init__(self, routes: dict[str, tuple[int, dict[str, str], bytes]]) -> None:
+        import http.server
+        import threading
+
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                outer.asked.append(self.path)
+                status, headers, body = routes.get(self.path.split("?")[0], (404, {}, b""))
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        self.asked: list[str] = []
+        self.httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        self.origin = f"http://127.0.0.1:{self.httpd.server_port}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self.httpd.shutdown()
+
+
+def _preview_job(src: str) -> dict:
+    return {**motion_job({**SPEC, "code": CODE}), "assets": [{"name": "shot", "src": src}]}
+
+
+def test_preview_assets_use_the_render_encoder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    shot = _image(tmp_path, "shot.png", "testsrc2", "3000x1500")
+    server = _Server({
+        "/shot.png": (200, {}, shot.read_bytes()),
+        "/hop": (302, {"Location": "https://evil.example/x.png"}, b""),
+        "/denied": (403, {}, b""),
+        "/html": (200, {}, b"<html><script>x</script></html>"),
+    })
+    monkeypatch.setenv("OPENCMO_MOTION_ASSET_ORIGIN", f"{server.origin}/")
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    try:
+        job = motion.preview_assets(_preview_job(f"{server.origin}/shot.png?token=x"), tmp_path)
+        [asset] = job["assets"]
+        assert asset["src"].startswith("data:image/jpeg;base64,") and (asset["width"], asset["height"]) == (2048, 1024)
+        for path, message in (("/hop", "HTTP 302"), ("/denied", "HTTP 403"), ("/html", 'Image "shot" could not be read')):
+            with pytest.raises(SpecError, match=message):
+                motion.preview_assets(_preview_job(f"{server.origin}{path}"), tmp_path)
+        assert "/x.png" not in server.asked, "a redirect is never followed"
+        asked = len(server.asked)
+        with pytest.raises(SpecError, match="other origins are refused"):
+            motion.preview_assets(_preview_job("https://evil.example/shot.png"), tmp_path)
+        monkeypatch.delenv("OPENCMO_MOTION_ASSET_ORIGIN")
+        with pytest.raises(SpecError, match="no image origin"):
+            motion.preview_assets(_preview_job(f"{server.origin}/shot.png"), tmp_path)
+        assert len(server.asked) == asked, "nothing is fetched from a refused origin"
+    finally:
+        server.close()
+    inline = _preview_job("data:image/png;base64,AAAA")
+    assert motion.preview_assets(inline, tmp_path) == inline
+
+
+def test_preview_returns_an_image_error_to_the_agent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OPENCMO_MOTION_ASSET_ORIGIN", raising=False)
+    monkeypatch.setattr(motion.subprocess, "run", lambda *a, **k: pytest.fail("the CLI must not run"))
+    result = motion.preview_local(_preview_job("https://evil.example/shot.png"), tmp_path)
+    assert result["ok"] is False and result["phase"] == "job" and "no image origin" in result["message"]
+
+
 def test_the_job_carries_the_inlined_assets() -> None:
     assets = [{"name": "logo", "src": "data:image/png;base64,AAAA", "width": 1, "height": 1}]
     assert motion_job({**SPEC, "code": CODE, "motionAssets": assets})["assets"] == assets
@@ -563,12 +686,22 @@ def test_a_clip_spec_takes_timed_beats_and_no_voice() -> None:
     long = {**CLIP_SPEC, "duration": 30, "scene": {**CLIP_SPEC["scene"], "beats": [{"say": "a", "seconds": 16}, {"say": "b", "seconds": 15}]}}
     with pytest.raises(SpecError, match="longer than 30 seconds"):
         validate_spec(clip_model(), long)
+    with pytest.raises(SpecError, match="last longer than its paid length"):
+        validate_spec(clip_model(), {**CLIP_SPEC, "duration": 4})
     with pytest.raises(SpecError, match="motion clip is not valid"):
         validate_spec(clip_model(), {**CLIP_SPEC, "scene": {**CLIP_SPEC["scene"], "beats": [{"say": "No time."}]}})
     with pytest.raises(SpecError, match="motion clip is not valid"):
         validate_spec(clip_model(), {**CLIP_SPEC, "scene": {**CLIP_SPEC["scene"], "template": "explainer"}})
     with pytest.raises(SpecError, match="explainer script is not valid"):
         validate_spec(model(), {**CLIP_SPEC, "voice": "Aria", "duration": 15})
+
+
+def test_a_motion_scene_measures_its_size_without_its_images() -> None:
+    images = [{"name": f"shot-{i}", "ref": f"{USER}/" + "x" * 460} for i in range(6)]
+    beats = [{"say": "word " * 47 + "end", "label": "Label"} for _ in range(12)]
+    scene = {**SPEC["scene"], "beats": beats}
+    assert len(json.dumps(scene)) < catalog.SCENE_MAX_BYTES < len(json.dumps({**scene, "assets": images}))
+    validate_spec(model(), {**SPEC, "duration": 90, "scene": {**scene, "assets": images}})
 
 
 class _NoVoice:

@@ -66,16 +66,65 @@ def run(
     return proc
 
 
+#: EXIF orientation (TIFF tag 0x0112) → the filter that turns the stored pixels upright.
+_ORIENTATION_FILTERS = {
+    2: "hflip", 3: "hflip,vflip", 4: "vflip",
+    5: "transpose=0", 6: "transpose=1", 7: "transpose=3", 8: "transpose=2",
+}
+
+
+def jpeg_orientation(head: bytes) -> int:
+    """The EXIF orientation of a JPEG (1-8) from its first bytes; 1 (as stored) when absent or unreadable."""
+    if head[:2] != b"\xff\xd8":
+        return 1
+    i = 2
+    while i + 4 <= len(head) and head[i] == 0xFF:
+        marker = head[i + 1]
+        if marker == 0xFF:
+            i += 1
+            continue
+        if marker in (0xD9, 0xDA):
+            return 1
+        length = int.from_bytes(head[i + 2:i + 4], "big")
+        segment = head[i + 4:i + 2 + length]
+        if marker == 0xE1 and segment[:6] == b"Exif\x00\x00":
+            return _tiff_orientation(segment[6:])
+        i += 2 + length
+    return 1
+
+
+def _tiff_orientation(tiff: bytes) -> int:
+    order = {b"II": "little", b"MM": "big"}.get(tiff[:2])
+    if order is None or len(tiff) < 8:
+        return 1
+    ifd = int.from_bytes(tiff[4:8], order)
+    if ifd + 2 > len(tiff):
+        return 1
+    for k in range(int.from_bytes(tiff[ifd:ifd + 2], order)):
+        entry = tiff[ifd + 2 + 12 * k:ifd + 14 + 12 * k]
+        if len(entry) < 12:
+            return 1
+        if int.from_bytes(entry[:2], order) == 0x0112:
+            value = int.from_bytes(entry[8:10], order)
+            return value if value in _ORIENTATION_FILTERS else 1
+    return 1
+
+
 def reencode_image(raw: Path, out: Path, edge: int, *, timeout: int = 120, extra: list[str] | None = None) -> Path:
-    """An untrusted image file → `out` (format from its extension), longest edge ≤ `edge`.
+    """An untrusted image file → `out` (format from its extension), longest edge ≤ `edge`, upright.
 
     The bytes go through stdin with image2pipe: ffmpeg decodes exactly them and can open no other
-    file or URL (an "image" that is really an HLS playlist once read files on the worker).
+    file or URL (an "image" that is really an HLS playlist once read files on the worker). EXIF
+    orientation is applied here, not left to the ffmpeg build: browsers honour it, so a phone photo
+    must come out the way the user saw it.
     """
+    with raw.open("rb") as fh:
+        rotate = _ORIENTATION_FILTERS.get(jpeg_orientation(fh.read(256 * 1024)))
+    scale = f"scale='min({edge},iw)':'min({edge},ih)':force_original_aspect_ratio=decrease"
     run([
-        "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-f", "image2pipe", "-i", "pipe:0",
+        "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-noautorotate", "-f", "image2pipe", "-i", "pipe:0",
         "-frames:v", "1",
-        "-vf", f"scale='min({edge},iw)':'min({edge},ih)':force_original_aspect_ratio=decrease",
+        "-vf", f"{rotate},{scale}" if rotate else scale,
         *(extra or []),
         str(out),
     ], timeout=timeout, stdin_path=raw)
