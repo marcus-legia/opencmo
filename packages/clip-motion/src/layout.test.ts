@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beatIssues, layoutIssues, type LaidBox } from './layout.ts';
+import { beatIssues, jumpIssues, layoutIssues, type LaidBox } from './layout.ts';
 
 const frame = { width: 1920, height: 1080, seconds: 4 };
 const visual: LaidBox = { kind: 'mark', name: 'DotField', x: 200, y: 200, w: 1500, h: 600 };
@@ -31,6 +31,16 @@ describe('layoutIssues', () => {
 	});
 });
 
+describe('layoutIssues for a silent clip', () => {
+	it('lets marks cross the edges and the field stay empty, but not text', () => {
+		const phone: LaidBox = { kind: 'mark', name: 'Phone', x: -60, y: 200, w: 300, h: 640 };
+		expect(layoutIssues([phone], frame, { clip: true })).toEqual([]);
+		const low: LaidBox = { kind: 'text', name: 'Low', x: 800, y: 900, w: 300, h: 60, size: 52 };
+		expect(layoutIssues([phone, low], frame, { clip: true })).toEqual(['Text "Low" leaves the safe area on the bottom (the caption zone) at 4.0 s.']);
+		expect(layoutIssues([phone], frame).length).toBeGreaterThan(0);
+	});
+});
+
 describe('beatIssues', () => {
 	const icon: LaidBox = { kind: 'mark', name: 'Icon virus', x: 800, y: 400, w: 200, h: 200 };
 	const label: LaidBox = { kind: 'text', name: 'A harmless piece', x: 800, y: 90, w: 320, h: 60, size: 52 };
@@ -50,3 +60,26 @@ describe('beatIssues', () => {
 		expect(beatIssues([{ beat: 1, boxes: [lottie] }, { beat: 1, boxes: [lottie] }])).toEqual([]);
 	});
 });
+
+describe('jumpIssues', () => {
+	const size = { width: 1920, height: 1080 };
+	const icon: LaidBox = { kind: 'mark', name: 'Icon rocket', x: 400, y: 400, w: 200, h: 200 };
+
+	it('reports a box that moves 300 px in one frame on a 1080 frame', () => {
+		expect(jumpIssues([{ seconds: 2.5, a: [icon], b: [{ ...icon, x: 700 }] }], size)).toEqual(['"Icon rocket" jumps 300 px in one frame at 2.5 s: ease the move or cut on purpose.']);
+	});
+
+	it('ignores a box that appears or disappears', () => {
+		expect(jumpIssues([{ seconds: 1, a: [icon], b: [] }, { seconds: 2, a: [], b: [icon] }], size)).toEqual([]);
+	});
+
+	it('ignores a 20 px move', () => {
+		expect(jumpIssues([{ seconds: 1, a: [icon], b: [{ ...icon, x: 420 }] }], size)).toEqual([]);
+	});
+
+	it('does not pair two boxes of the same name', () => {
+		const twin = { ...icon, x: 1400 };
+		expect(jumpIssues([{ seconds: 1, a: [icon, twin], b: [{ ...icon, x: 900 }, twin] }], size)).toEqual([]);
+	});
+});
+

@@ -17,7 +17,28 @@ function tokens(text: string): string[] {
 	return text.split(/\s+/).filter(Boolean);
 }
 
-export function buildTimeline(job: Pick<MotionJob, 'beats' | 'duration' | 'words'>): Timeline {
+/**
+ * A silent clip: each beat lasts its own `seconds`, back to back from frame 0; what is left after the last beat is
+ * a hold on the end state. Its storyboard words are spread evenly over the beat, so `kit.cue` still lands inside it.
+ */
+function clipTimeline(job: Pick<MotionJob, 'beats' | 'duration'>): Timeline {
+	const frames = job.duration * FPS;
+	let from = 0;
+	let seconds = 0;
+	const beats = job.beats.map((beat) => {
+		// Rounded from the running total, not per beat: each start stays within half a frame of the authored seconds.
+		seconds += beat.seconds ?? 0;
+		const to = Math.max(from + 1, Math.min(frames, Math.round(seconds * FPS)));
+		const list = tokens(beat.say);
+		const span = { from, to, frames: to - from, words: list.map((text, k) => ({ text, key: wordKey(text), frame: from + Math.floor(((to - from) * k) / Math.max(1, list.length)) })) };
+		from = to;
+		return span;
+	});
+	return { estimated: false, frames, beats };
+}
+
+export function buildTimeline(job: Pick<MotionJob, 'beats' | 'duration' | 'words'> & { kind?: MotionJob['kind'] }): Timeline {
+	if (job.kind === 'clip') return clipTimeline(job);
 	const frames = job.duration * FPS;
 	const last = frames - 1;
 	const perBeat = job.beats.map((beat) => tokens(beat.say));
@@ -83,3 +104,34 @@ export function probeFrames(timeline: Timeline): { beat: number; frame: number }
 		return early === mid ? [{ beat: i, frame: mid }] : [{ beat: i, frame: early }, { beat: i, frame: mid }];
 	});
 }
+
+/**
+ * Preview stills at the times the model chose (seconds), as frames: clamped to the last frame, negatives dropped,
+ * duplicates removed, sorted. Without times, the default `stillFrames`.
+ */
+export function previewFrames(timeline: Timeline, times?: readonly number[]): number[] {
+	const last = timeline.frames - 1;
+	const frames = (times ?? []).filter((t) => Number.isFinite(t) && t >= 0).map((t) => Math.min(last, Math.round(t * FPS)));
+	return frames.length ? [...new Set(frames)].sort((a, b) => a - b) : stillFrames(timeline);
+}
+
+/**
+ * Most frames rendered for the jump check per preview. Each costs about half a second, and a 16-beat preview with
+ * 12 stills already takes ~30 s of the 55 s the preview endpoint allows.
+ */
+export const MAX_JUMP_PAIRS = 12;
+
+/**
+ * The layout samples (`probeFrames`) plus the frame right after each, so a move of one frame can be measured. Past
+ * `MAX_JUMP_PAIRS` samples, only an evenly spread subset gets its partner frame.
+ */
+export function pairedProbes(timeline: Timeline): { beat: number; frame: number }[] {
+	const probes = probeFrames(timeline);
+	const pick = probes.length <= MAX_JUMP_PAIRS ? probes.map((_, i) => i) : Array.from({ length: MAX_JUMP_PAIRS }, (_, k) => Math.round((k * (probes.length - 1)) / (MAX_JUMP_PAIRS - 1)));
+	const paired = new Set(pick);
+	const seen = new Set<number>();
+	return probes
+		.flatMap((probe, i) => [probe, ...(paired.has(i) && probe.frame + 1 < timeline.frames ? [{ beat: probe.beat, frame: probe.frame + 1 }] : [])])
+		.filter((probe) => !seen.has(probe.frame) && seen.add(probe.frame));
+}
+

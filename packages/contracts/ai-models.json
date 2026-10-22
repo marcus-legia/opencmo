@@ -1,5 +1,5 @@
 {
-  "$comment": "Catalog of media generation models (AI Studio spec §7.2). ONE source for the route (zod), SQL (ai_models, seeded in migrations — check:api compares the two) and the worker. `limits.maxReferences`: how many reference images the model takes (0 = none; the prompt box does not attach the selected image). `price.unit`: generation = per generation; second = per second (rounded up); kchars = per 1,000 prompt characters (rounded up); explainer = `credits` per started 10 s plus `voiceKchars` per started 1,000 characters of narration (the beats' `say`, trimmed, joined with one space). Models with `provider: fake` run only with OPENCMO_AI_FAKE=1 outside production. `providerModel`: the provider's model id — read by the worker; env `OPENCMO_AI_MODEL_<ID>` (e.g. OPENCMO_AI_MODEL_GEMINI_VIDEO) overrides it, so a real id can be pinned without editing the catalog. Gemini prices are PROVISIONAL (COSTS.md §6c). `limits.scene`: 3D Studio and explainers — the spec also has `scene` (SceneContentSchema in packages/clip-three/src/spec.ts, or the explainer script); `prompt` is only a summary for people. `elevenlabs-voice`: narration with per-word timings (captions for voiceovers); voice name → voice_id in the Python adapter; price PROVISIONAL (COSTS.md §6e). `motion-explainer` (docs/explainer-build.md): scene {template: \"explainer\", code_ref, title, beats, accent?} plus `voice` (a premade ElevenLabs voice) and `prompt` = \"Explainer: <title>\"; price PROVISIONAL until measured on Modal.",
+  "$comment": "Catalog of media generation models (AI Studio spec §7.2). ONE source for the route (zod), SQL (ai_models, seeded in migrations — check:api compares the two) and the worker. `limits.maxReferences`: how many reference images the model takes (0 = none; the prompt box does not attach the selected image). `price.unit`: generation = per generation; second = per second (rounded up); kchars = per 1,000 prompt characters (rounded up); explainer = `credits` per started 10 s plus `voiceKchars` per started 1,000 characters of narration (the beats' `say`, trimmed, joined with one space). Models with `provider: fake` run only with OPENCMO_AI_FAKE=1 outside production. `providerModel`: the provider's model id — read by the worker; env `OPENCMO_AI_MODEL_<ID>` (e.g. OPENCMO_AI_MODEL_GEMINI_VIDEO) overrides it, so a real id can be pinned without editing the catalog. Gemini prices are PROVISIONAL (COSTS.md §6c). `limits.scene`: 3D Studio and explainers — the spec also has `scene` (SceneContentSchema in packages/clip-three/src/spec.ts, or the explainer script); `prompt` is only a summary for people. `elevenlabs-voice`: narration with per-word timings (captions for voiceovers); voice name → voice_id in the Python adapter; price PROVISIONAL (COSTS.md §6e). `motion-explainer` (docs/explainer-build.md): scene {template: \"explainer\", code_ref, title, beats, accent?} plus `voice` (a premade ElevenLabs voice) and `prompt` = \"Explainer: <title>\"; price PROVISIONAL until measured on Modal. `motion-clip` (docs/plans/editor/2026-10-22-motion-quality-plan.md): the same renderer with no voice; scene {template: \"clip\", code_ref, title, beats with `seconds` (1-8 beats, 30 s at most), accent?, theme?, personality?, assets?}; `duration` = the beats' seconds rounded up (3-30); price = `credits` per started 10 s (no `voiceKchars`).",
   "version": 1,
   "models": [
     {
@@ -224,6 +224,56 @@
           "Brian",
           "Jessica"
         ]
+      }
+    },
+    {
+      "id": "motion-clip",
+      "kind": "video",
+      "provider": "opencmo-motion",
+      "name": "Motion clip",
+      "description": "A short silent animation (3-30 s): an intro, a logo reveal or a product moment.",
+      "price": {
+        "unit": "explainer",
+        "credits": 1
+      },
+      "limits": {
+        "maxPromptChars": 80,
+        "aspectRatios": [
+          "16:9",
+          "9:16",
+          "1:1"
+        ],
+        "durations": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30
+        ],
+        "scene": true
       }
     },
     {

@@ -15,12 +15,18 @@ import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
+import { makeDevices } from './devices.tsx';
+import { makeImage } from './image.tsx';
+import { FAMILY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
 import { buildTimeline, cueFrame, type Timeline } from './timing.ts';
 
 export function makeKit(job: MotionJob, size: { width: number; height: number }, timeline: Timeline = buildTimeline(job)) {
-	const palette = makePalette(job.accent);
+	// The job's theme too: on paper, kit.color.text must be the dark ink the components use.
+	const palette = makePalette(job.accent, job.theme);
+	const Image = makeImage(job.assets ?? []);
+	const { Phone, Browser } = makeDevices(Image);
 	const beatAt = (i: number) => {
 		const span = timeline.beats[i];
 		if (!Number.isInteger(i) || !span) throw kitError(`kit.beat(${i}): this job has ${timeline.beats.length} beats (0–${timeline.beats.length - 1}).`);
@@ -66,6 +72,14 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		icons: ICON_NAMES,
 		Lottie,
 		lotties: LOTTIE_NAMES,
+		// The user's own images (job.assets), by name
+		Image,
+		images: Object.freeze((job.assets ?? []).map((asset) => asset.name)),
+		// Device frames for product moments
+		Phone,
+		Browser,
+		// CSS font families, for text a scene sets itself (display: brand moments and product titles)
+		font: Object.freeze({ ...FAMILY }),
 		Shape,
 		shapes: SHAPE_KINDS,
 		Path,

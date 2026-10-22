@@ -69,6 +69,13 @@ async function main() {
 const tools = await registry.tools(ctx);
 const names = tools.map((tool) => tool.name);
 assert.equal(new Set(names).size, names.length, "tool names are unique");
+// Motion templates need no clip (B5).
+for (const name of ["list_motion_templates", "get_motion_template"]) {
+  const tool = tools.find((item) => item.name === name);
+  assert.ok(tool, `${name} is offered`);
+  assert.ok(!("clip_id" in (describeTool(tool).inputSchema.properties ?? {})), `${name} needs no clip`);
+}
+assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_template")!, { id: "nope" }, ctx)).content), /use one of analytics-glow/);
 for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "wait_for_media", "plan_video"]) {
   assert.ok(names.includes(name), `${name} is offered`);
 }
@@ -195,6 +202,41 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
 
   assert.equal((await post(pings(1), "rate_limited")).status, 429);
   assert.equal((await post(pings(1), "something else")).status, 503, "an unknown answer fails closed");
+}
+
+// ------------------------------------------------------------ explainers: the direction comes first (motion quality A3)
+
+{
+  const fake = process.env.OPENCMO_AI_FAKE;
+  process.env.OPENCMO_AI_FAKE = "1";
+  const preview = (await registry.tools(ctx)).find((tool) => tool.name === "preview_explainer");
+  assert.ok(preview, "preview_explainer is offered when explainers are available");
+  const schema = describeTool(preview).inputSchema as { properties: Record<string, { description?: string }>; required: string[] };
+  assert.ok(schema.required.includes("direction"), "an MCP client must send a direction");
+  const keys = Object.keys(schema.properties);
+  assert.ok(keys.indexOf("direction") < keys.indexOf("code"), "direction is listed before code");
+  assert.match(schema.properties.direction!.description ?? "", /from → to/);
+  assert.match(describeTool(preview).description!, /up to 6 rounds/);
+  if (fake === undefined) delete process.env.OPENCMO_AI_FAKE;
+  else process.env.OPENCMO_AI_FAKE = fake;
+}
+
+// ------------------------------------------------------------ the kit with silent clips only (no narration voice)
+
+{
+  const saved = { motion: process.env.OPENCMO_MOTION, eleven: process.env.ELEVENLABS_API_KEY, voice: process.env.OPENCMO_VOICE_ENABLED, fakeVoice: process.env.OPENCMO_MOTION_FAKE_VOICE, fake: process.env.OPENCMO_AI_FAKE };
+  process.env.OPENCMO_MOTION = "modal";
+  for (const key of ["ELEVENLABS_API_KEY", "OPENCMO_VOICE_ENABLED", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_AI_FAKE"]) delete process.env[key];
+  const kit = (await registry.tools(ctx)).find((tool) => tool.name === "get_explainer_kit")!;
+  const result = (await callTool(kit, {}, ctx)) as unknown as { isError?: boolean; structuredContent: { available: boolean; narrated: boolean; silent_clip: unknown } };
+  assert.equal(result.isError ?? false, false, "silent clips alone are not an error");
+  assert.equal(result.structuredContent.available, true);
+  assert.equal(result.structuredContent.narrated, false);
+  assert.equal(typeof result.structuredContent.silent_clip, "object", "the silent clip section says how to make one");
+  for (const [key, value] of Object.entries({ OPENCMO_MOTION: saved.motion, ELEVENLABS_API_KEY: saved.eleven, OPENCMO_VOICE_ENABLED: saved.voice, OPENCMO_MOTION_FAKE_VOICE: saved.fakeVoice, OPENCMO_AI_FAKE: saved.fake })) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 }
 
 // ------------------------------------------------------------ prompts and resources

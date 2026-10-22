@@ -7,13 +7,14 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./job": "./src/job.ts"
+    "./job": "./src/job.ts",
+    "./templates": "./templates/index.ts"
   },
   "bin": {
     "clip-motion": "./src/cli.ts"
   },
   "scripts": {
-    "check": "tsc --noEmit && vitest run"
+    "check": "node scripts/build-templates.mjs --check && tsc --noEmit && vitest run"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.535",
