@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { MAX_TOKENS } from "../limits";
 import type { ToolSpec } from "../tools";
-import { IMAGE_OMITTED, type Delta, type Format, type Provider, type Step, type StepRequest, type StoredMessage, type ToolCall, type ToolResult } from "./types";
+import { IMAGE_OMITTED, StepAborted, streamedTokens, type Delta, type Format, type Provider, type Step, type StepRequest, type StoredMessage, type ToolCall, type ToolResult } from "./types";
 
 type Block = Anthropic.Beta.Messages.BetaContentBlockParam;
 
@@ -331,6 +331,8 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
       const editing = contextEditing();
       // The CMO and project scopes have few tools; only the editor's large set is worth searching.
       const search = toolSearchOn() && specs.length > ALWAYS_LOADED.size;
+      // Characters streamed so far: the output estimate if Stop cuts the stream short.
+      let streamed = 0;
       for (;;) {
         const stream = client.beta.messages.stream({
           model,
@@ -350,8 +352,13 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
             if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
               onDelta({ type: "tool_start", id: event.content_block.id, name: event.content_block.name });
             } else if (event.type === "content_block_delta") {
-              if (event.delta.type === "text_delta") onDelta({ type: "text", text: event.delta.text });
-              else if (event.delta.type === "thinking_delta") onDelta({ type: "thinking", text: event.delta.thinking });
+              if (event.delta.type === "text_delta") {
+                streamed += event.delta.text.length;
+                onDelta({ type: "text", text: event.delta.text });
+              } else if (event.delta.type === "thinking_delta") {
+                streamed += event.delta.thinking.length;
+                onDelta({ type: "thinking", text: event.delta.thinking });
+              } else if (event.delta.type === "input_json_delta") streamed += event.delta.partial_json.length;
             }
           }
           const message = await stream.finalMessage();
@@ -376,6 +383,19 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
             model: message.model,
           };
         } catch (err) {
+          if (signal?.aborted) {
+            // Input and cache tokens arrive with the stream's start; output only at its end.
+            const usage = stream.currentMessage?.usage;
+            throw new StepAborted(
+              {
+                input: usage?.input_tokens ?? 0,
+                output: streamedTokens(streamed, usage?.output_tokens ?? 0),
+                cacheRead: usage?.cache_read_input_tokens ?? 0,
+                cacheWrite: usage?.cache_creation_input_tokens ?? 0,
+              },
+              stream.currentMessage?.model ?? model,
+            );
+          }
           // Eager input streaming: JSON tool input hỏng làm stream ném lúc khối
           // đóng. Chỉ trường hợp đó được gửi lại (tối đa 2 lần); lỗi API thì không.
           if (useStrict && isStrictLimit(err)) {

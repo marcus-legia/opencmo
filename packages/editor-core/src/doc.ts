@@ -100,6 +100,14 @@ export const isMaster = (node: ClipNode): boolean =>
 export const isMasterSound = (node: ClipNode): boolean =>
   isMaster(node) || (node.kind === 'audio' && (node as { src?: unknown }).src === MASTER_SRC);
 
+/** The sequence that holds the master's cuts (`captions.ts`). */
+export const isCutSequence = (node: ClipNode): boolean =>
+  node.kind === 'sequence' && !!(node as { marks?: Record<string, unknown> }).marks?.['text-cut'];
+
+/** Layers timed by the transcript: they move only through a cut, never on their own. */
+export const followsTranscript = (node: ClipNode): boolean =>
+  isMasterSound(node) || node.kind === 'captions' || isCutSequence(node);
+
 // ------------------------------------------------------------------ timeline (E2-a)
 
 const isScene = (node: { kind?: unknown }): boolean => node.kind === 'scene';

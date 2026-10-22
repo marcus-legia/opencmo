@@ -46,7 +46,7 @@ import {
 import { canSwitchFrom } from "./model";
 import { TAINT_GATED_TOOLS, TAINT_MESSAGE, TAINTING_TOOLS } from "./cmo-tools";
 import type { Ledger } from "./ledger";
-import type { Image, Provider, StoredMessage, ToolCall, ToolResult } from "./providers/types";
+import { StepAborted, type Image, type Provider, type StoredMessage, type ToolCall, type ToolResult } from "./providers/types";
 import type { Scope } from "./scope";
 import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
 
@@ -311,6 +311,17 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         );
       } catch (err) {
         if (watch.signal.aborted) {
+          // Stop closed the turn already; the call it cut short is still billed, like any other.
+          if (err instanceof StepAborted) {
+            await ledger("agent_record_usage", {
+              p_turn_id: turn.id,
+              p_model: err.model,
+              p_input: err.usage.input,
+              p_output: err.usage.output,
+              p_cache_read: err.usage.cacheRead,
+              p_cache_write: err.usage.cacheWrite,
+            }).catch((recordError: unknown) => console.error("[agent] recording a stopped call failed", turn.id, recordError));
+          }
           emit("done", { status: "stopped", credits: null, error: null });
           return;
         }

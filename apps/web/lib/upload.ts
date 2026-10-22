@@ -1,14 +1,16 @@
 /**
  * Nguồn job dạng "file người dùng tự upload".
  *
- * File này CỐ Ý không import gì — cả component client lẫn server action đều
- * dùng chung nó. Đặt các hằng số này ở `storage.ts` thì không được: file đó
- * import Supabase server client, kéo theo `next/headers`, và bundle client sẽ vỡ.
+ * Client components and server actions both use this file, so it imports nothing but plain data
+ * (the shared contract below). These constants cannot live in `storage.ts`: that file imports the
+ * Supabase server client, which pulls in `next/headers` and breaks the client bundle.
  *
  * Ý chính: nguồn upload đi vào ĐÚNG cột `source_url` có sẵn, dưới dạng
  * `storage://<đường-dẫn trong bucket sources>`. Không thêm cột, không đổi payload
  * gửi sang Modal, không đụng `submit`/`sweep`. Xem UPLOAD.md quyết định 3.
  */
+
+import limits from "../../../packages/contracts/upload-limits.json";
 
 export const SOURCE_PREFIX = "storage://";
 
@@ -23,11 +25,10 @@ export const SOURCE_PREFIX = "storage://";
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
 /**
- * The longest video the editor holds, in seconds. The worker refuses longer ones with the same
- * number (`MAX_EDIT_SECONDS` in packages/engine/opencmo/worker/process_job.py); the Upload panel
- * refuses them when the file is picked, before any byte is sent or credit held.
+ * The longest video the editor holds, in seconds: one number with the worker, which refuses longer
+ * ones. The Upload panel refuses them when the file is picked, before any byte is sent or credit held.
  */
-export const MAX_EDIT_SECONDS = 900;
+export const MAX_EDIT_SECONDS: number = limits.max_edit_seconds;
 
 export const TOO_LONG = `Videos up to ${MAX_EDIT_SECONDS / 60} minutes can be edited. Trim it and upload it again.`;
 

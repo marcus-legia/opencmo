@@ -19,7 +19,7 @@ import { CAMERAS, composePrompt, STYLES } from "@/lib/generate/brief";
 import { availableModels, specHash } from "@/lib/generate/models";
 import { ApiError } from "@/lib/api/errors";
 
-import type { PreparedGeneration } from "./generate-tool";
+import { voiceModelFor, type PreparedGeneration } from "./generate-tool";
 import type { Piece } from "./screen-pieces";
 import { sanitize, type ToolSpec } from "./tools";
 import type { Storyboard } from "./video-team";
@@ -218,7 +218,11 @@ export async function prepareCreateVideo(
   const video = pickVideoModel(aspect, request.model);
   if (typeof video === "string") return video;
   const durations = [...(video.limits.durations ?? [5])].sort((a, b) => a - b);
-  const voiceModel = availableModels().find((model) => model.kind === "voice" && (!request.voice || model.limits.voices?.includes(request.voice)));
+  // A voice the user named and no model speaks is refused before the director spends anything:
+  // dropped silently, the video would have captions and no voice.
+  const named = request.voice ? voiceModelFor(request.voice) : null;
+  if (typeof named === "string") return named;
+  const voiceModel = named ?? availableModels().find((model) => model.kind === "voice");
   const musicModel =
     availableModels().find((model) => model.kind === "audio" && /music/.test(model.id)) ?? availableModels().find((model) => model.kind === "audio");
 

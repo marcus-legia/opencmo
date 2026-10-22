@@ -16,6 +16,7 @@ State of a run lives in `job_context`, uploads and their cleanup in `job_uploads
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
@@ -60,9 +61,23 @@ __all__ = ["RENDERS_BUCKET", "process"]
 # env var: raise it with the plan.
 MAX_UPLOAD_BYTES = int(os.environ.get("OPENCMO_MAX_FULL_BYTES") or 2 * 1024**3)
 
-# The editor holds a project this long at most. The web Upload panel refuses longer files at pick
-# time with the same number (`MAX_EDIT_SECONDS` in apps/web/lib/upload.ts).
-MAX_EDIT_SECONDS = float(os.environ.get("OPENCMO_MAX_EDIT_SECONDS") or 900)
+# Dev: packages/engine/opencmo/worker → packages/contracts. Modal: modal_app.py copies it to /root/contracts.
+_UPLOAD_LIMITS = (
+    Path(__file__).resolve().parents[3] / "contracts" / "upload-limits.json",
+    Path("/root/contracts/upload-limits.json"),
+)
+
+
+def _max_edit_seconds() -> float:
+    path = next((candidate for candidate in _UPLOAD_LIMITS if candidate.exists()), None)
+    if path is None:
+        raise FileNotFoundError("packages/contracts/upload-limits.json not found")
+    return float(json.loads(path.read_text(encoding="utf-8"))["max_edit_seconds"])
+
+
+# The editor holds a project this long at most: one number with the web Upload panel, which
+# refuses longer files at pick time (packages/contracts/upload-limits.json).
+MAX_EDIT_SECONDS = _max_edit_seconds()
 
 # A few seconds are enough for a playable thumbnail on the project card.
 PREVIEW_SECONDS = 15.0
@@ -139,12 +154,17 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
         )
     # ffprobe over HTTP reads the header only, not the whole file.
     url = store.sign_object_url(SOURCES_BUCKET, source_object, SIGNED_URL_SECONDS)
-    duration = _editable_length(probe_file(url, user_url=True).duration)
+    header = probe_file(url, user_url=True).duration
+    # A browser recording (MediaRecorder WebM) has no length in its header: the remuxed master
+    # gives it, and the upload is billed once that is known.
+    known = math.isfinite(header) and header > 0
+    duration = _editable_length(header) if known else 0.0
     title = Path(source_object).name
     run.check_lease()
 
     # Billed on source minutes: the user pays for the length of the video they bring.
-    store.settle(job.id, duration, attempt_id=job.attempt_id)
+    if known:
+        store.settle(job.id, duration, attempt_id=job.attempt_id)
 
     run.set_stage("download")
     source = work / f"source{Path(source_object).suffix or '.mp4'}"
@@ -161,9 +181,13 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     master = work / "master.mp4"
     make_editor_master(source, master)
     master_info = probe_file(str(master))
-    # The header can lie or be missing: the remuxed master is the real length, and it was billed.
-    if _editable_length(master_info.duration) > duration + LENGTH_TOLERANCE_SECONDS:
+    # The header can lie: the remuxed master is the real length, and the header's was billed.
+    length = _editable_length(master_info.duration)
+    if known and length > duration + LENGTH_TOLERANCE_SECONDS:
         raise UserMessageError(LENGTH_MISMATCH)
+    if not known:
+        duration = length
+        store.settle(job.id, duration, attempt_id=job.attempt_id)
     master_object = run.uploads.put(
         RENDERS_BUCKET, f"{job.user_id}/{clip_id}/master/{job.attempt_id}.mp4", master, content_type="video/mp4"
     )

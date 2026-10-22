@@ -23,7 +23,7 @@ insert into public.credit_ledger(user_id, delta, reason) values ('e1500000-0000-
 -- The race itself needs two connections; pin that both functions take the locks that serialise it.
 select ok(pg_get_functiondef('public.agent_stop(uuid)'::regprocedure) ~* 'agent_sessions where id = p_session_id for update',
   'agent_stop locks the session like resume and begin_turn');
-select ok(pg_get_functiondef('public.agent_resume_turn(uuid)'::regprocedure) ~* 'and status in \(''awaiting_browser'', ''awaiting_approval'', ''awaiting_input'', ''awaiting_continue''\)\s+returning',
+select ok(pg_get_functiondef('public.agent_resume_turn(uuid,text,text[])'::regprocedure) ~* 'and status in \(''awaiting_browser'', ''awaiting_approval'', ''awaiting_input'', ''awaiting_continue''\)\s+returning',
   'agent_resume_turn only updates a turn that is still waiting');
 
 set local role authenticated;

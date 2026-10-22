@@ -7,6 +7,7 @@
  */
 
 import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
+import type { ClipDocument } from "@opencmo/clip-doc";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
@@ -190,12 +191,15 @@ export async function clipScope(
   });
 }
 
+/** A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by. */
+export const blankEdit = (context: ClipContext, document: ClipDocument): boolean =>
+  context.clip.kind === "blank" && !speechSources(document).length;
+
 export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
   const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
   const env = { workspace };
-  // A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by.
   const start = await workspace.read();
-  const blank = context.clip.kind === "blank" && !speechSources(start.document).length;
+  const blank = blankEdit(context, start.document);
   return {
     kind: "clip",
     tools: clipToolSpecs({ blank }),

@@ -173,15 +173,15 @@ export function TranscriptPanel({
   const anyRemoved = selected.some((entry) => removed(entry.word));
   // Words without an id cannot be named to an op.
   const ids = () => selected.flatMap((entry) => (entry.word.id === undefined ? [] : [entry.word.id]));
-  // `emphasize_words` takes 400 ids per op; one batch of ops is still one undo step.
+  // One op for the whole selection: split ops would each refuse a part that is all cut words.
   const emphasis = (remove: boolean) => {
     const all = ids();
-    return Array.from({ length: Math.ceil(all.length / 400) }, (_, index) => ({ op: "emphasize_words", quotes: [], word_ids: all.slice(index * 400, index * 400 + 400), ...(remove ? { remove: true } : {}) }));
+    return all.length ? [{ op: "emphasize_words", quotes: [], word_ids: all, ...(remove ? { remove: true } : {}) }] : [];
   };
   const cutWords = () => ({ op: "remove_words", word_ids: ids(), ...(tightness === "words" ? {} : { tightness }) });
 
   const act = (ops: unknown[], clear = false) => {
-    if (busy) return;
+    if (busy || !ops.length) return;
     if (clear) {
       setAnchor(null);
       setFocus(null);

@@ -31,6 +31,8 @@ import {
   findLotties,
   findSilences,
   guardProps,
+  isCutSequence,
+  isMasterSound,
   isRemoved,
   loadCaptions,
   quoteRange,
@@ -41,6 +43,7 @@ import {
   cutPoints,
   walk,
   type CheckReport,
+  type Entity,
   type Op,
   type Transcript,
 } from "@opencmo/editor-core";
@@ -722,7 +725,9 @@ async function readTools(name: string, input: unknown, env: ToolEnv): Promise<To
   const of = source && speechCount(document) > 1 ? ` of ${source.name}` : "";
 
   if (name === "find_silences") {
-    const options = silencesInput.parse(input ?? {});
+    const parsed = silencesInput.safeParse(input ?? {});
+    if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: parsed.error.issues[0]?.message }), summary: "Could not find pauses" };
+    const options = parsed.data;
     const silences = findSilences(model, { minGap: options.min_gap, keep: options.keep });
     return {
       ok: true,
@@ -788,23 +793,38 @@ const READS = new Set(["get_project_state", "get_document", "get_transcript", "s
 /** Op timeline/inspector chạm vào thời gian của video chính thì phá mốc cắt và phụ đề. */
 const TIMING_PROPS = ["start", "end", "sourceIn", "sourceOut", "playbackRate", "src"];
 
+/**
+ * Ids whose timing is the clip's own video: its segments and sound, the cut sequence that holds
+ * them, and every group or sequence around them (moving one of those moves the master too).
+ */
 function masterIds(document: ClipDocument): Set<string> {
   const ids = new Set<string>();
-  walk(document, ({ entity, tag }) => {
-    if (tag === "video" && entity.src === MASTER_SRC && entity.id) ids.add(entity.id);
+  const parents = new Map<Entity, Entity>();
+  const masters: Entity[] = [];
+  walk(document, ({ entity, parent }) => {
+    if (parent) parents.set(entity, parent);
+    if (isMasterSound(entity as never) || isCutSequence(entity as never)) masters.push(entity);
   });
+  for (const master of masters) {
+    for (let at: Entity | undefined = master; at && at.kind !== "scene" && at.kind !== undefined; at = parents.get(at)) {
+      if (typeof at.id === "string") ids.add(at.id);
+    }
+  }
   return ids;
 }
 
 /** Luật riêng của agent trên op mà người dùng được làm bằng tay. */
-function guard(op: Record<string, unknown>, document: ClipDocument): string | null {
+export function guard(op: Record<string, unknown>, document: ClipDocument): string | null {
   const masters = masterIds(document);
   const touches = (ids: unknown) => (Array.isArray(ids) ? ids : [ids]).some((id) => typeof id === "string" && masters.has(id));
   const recut = "Cut the clip's own video from the transcript (remove_words or remove_ranges) instead of changing its timing.";
   switch (op.op) {
     case "move_elements":
     case "duplicate_elements":
+    case "group_elements":
       return touches(op.element_ids) ? recut : null;
+    case "move_layer":
+      return touches(op.element_id) || touches(op.parent_id) ? recut : null;
     case "trim_element":
       return touches(op.element_id) ? recut : null;
     case "split_elements":

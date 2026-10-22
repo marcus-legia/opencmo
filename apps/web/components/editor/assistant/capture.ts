@@ -196,7 +196,8 @@ export async function capture(document: ClipDocument, media: Host, input: Captur
   for (const time of picked) {
     const canvas = new OffscreenCanvas(Math.round(probe.scene.width * scale), Math.round(probe.scene.height * scale));
     const ctx = canvas.getContext("2d")!;
-    const frame = renderer.exportFrame(Math.max(0, time));
+    // Never past the last frame of the export: a time at the very end would draw an empty frame.
+    const frame = Math.min(renderer.range.start + Math.max(0, renderer.range.frames - 1), renderer.exportFrame(Math.max(0, time)));
     seek(frame);
     await drawSettled(() => renderer.render(ctx as never, frame), tracking);
     // Đo lớp bằng bộ đo chữ của chính canvas này (hộp chữ đúng như lúc vẽ), rồi mới kẻ lưới đè lên.

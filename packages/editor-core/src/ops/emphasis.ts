@@ -29,7 +29,7 @@ export const emphasizeWordsInput = z
 		/** Exact words from the transcript: one to three words each, the ones to colour. */
 		quotes: z.array(z.string().trim().min(1).max(60)).max(40),
 		/** Words by id instead of quotes (the editor's transcript selection): exact even when the words repeat. */
-		word_ids: z.array(z.string().min(1).max(64)).max(400).optional(),
+		word_ids: z.array(z.string().min(1).max(64)).max(2000).optional(),
 		/** Clear the layer's emphasis first (a style rerun). With no quotes: remove all emphasis. */
 		clear: z.boolean().optional(),
 		/** Take these words OUT of the emphasis instead of adding them. */
@@ -47,12 +47,16 @@ function captionsLayer(document: ClipDocument, elementId: string | undefined): E
 	return (nodes(document).find((node) => node.kind === 'captions' && (node as { source?: string }).source === source.elementId) as unknown as Entity | undefined) ?? null;
 }
 
-/** Merges overlapping ranges, in order. */
-function merged(ranges: Range[]): Range[] {
+/**
+ * Merges ranges that overlap or touch, in order. Two ranges touch when no word of the transcript
+ * (`starts`) starts between them: a phrase emphasized in two goes stays one phrase.
+ */
+function merged(ranges: Range[], starts: number[]): Range[] {
 	const out: Range[] = [];
 	for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
 		const last = out.at(-1);
-		if (last && range.start <= last.end + 0.002) last.end = Math.max(last.end, range.end);
+		const touching = last && !starts.some((start) => start > last.end + 0.002 && start < range.start - 0.002);
+		if (last && (range.start <= last.end + 0.002 || touching)) last.end = Math.max(last.end, range.end);
 		else out.push({ ...range });
 	}
 	return out;
@@ -83,7 +87,7 @@ function without(before: Range[], taken: Range[], starts: number[]): Range[] {
 		}
 		close();
 	}
-	return merged(out);
+	return merged(out, starts);
 }
 
 export const emphasizeWords = {
@@ -99,9 +103,10 @@ export const emphasizeWords = {
 		const model = await loadCaptions(document, ctx, input.element_id);
 		if (!model) throw new OpFailure('This clip has no transcript to find those words in.');
 		// The clip's words in source order, cut ones included: a cut word ends a selected phrase.
-		const inWindow = model.transcript
-			.flatMap((segment) => segment.words)
-			.filter((word) => word.end > model.window.start && word.start < model.window.end);
+		const all = model.transcript.flatMap((segment) => segment.words);
+		const inWindow = all.filter((word) => word.end > model.window.start && word.start < model.window.end);
+		// Every word start of the source, the window's and the rest: emphasis outside the window is kept.
+		const starts = all.map((word) => sourceStart(word));
 		const cut = (word: (typeof inWindow)[number]) => isRemoved(word, model.removed);
 		// The words on screen, in source seconds.
 		const words = inWindow.filter((word) => !cut(word));
@@ -113,9 +118,10 @@ export const emphasizeWords = {
 			if (starts.length) found.push({ start: round(Math.min(...starts)), end: round(Math.max(...starts)) });
 		}
 		// Selected words: one range per run of neighbours on screen, so a selection over a cut stays
-		// two phrases (restoring the cut words later does not emphasize them).
+		// two phrases (restoring the cut words later does not emphasize them). The transcript panel
+		// lists the whole source, so a selection may run past a trimmed edge: those words are skipped.
 		const picked = new Set(input.word_ids ?? []);
-		const known = new Set(inWindow.map((word) => word.id));
+		const known = new Set(all.map((word) => word.id));
 		const unknown = [...picked].filter((id) => !known.has(id)).length;
 		if (unknown && unknown < picked.size) throw new OpFailure(`${unknown} of the selected words are not in this clip. Select words from its transcript.`);
 		const ranges = (keep: (word: (typeof inWindow)[number]) => boolean): Range[] => {
@@ -139,7 +145,7 @@ export const emphasizeWords = {
 		const layer = captionsLayer(next, input.element_id);
 		if (!layer) throw new OpFailure('This clip has no captions to emphasize.');
 		const before = input.clear ? [] : ((layer.emphasis as Range[] | undefined) ?? []);
-		const after = input.remove ? without(before, found, inWindow.map((word) => sourceStart(word))) : merged([...before, ...found]);
+		const after = input.remove ? without(before, found, starts) : merged([...before, ...found], starts);
 		if (after.length > MAX_EMPHASIS) throw new OpFailure(`A captions layer holds at most ${MAX_EMPHASIS} emphasized phrases.`);
 		if (after.length) layer.emphasis = after;
 		else delete layer.emphasis;

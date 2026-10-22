@@ -2,7 +2,7 @@
 name: senior-dev-listicle
 kind: style
 description: Talking head with on-screen proof, one accent colour and listicle chapters. For a founder or developer counting through tools, tips or repos ("5 things…", "3 mistakes…").
-requires: [caption.emphasis, title.hook, speaker.punchIn, proof.card, transition.whip]
+requires: [caption.emphasis, title.hook, speaker.punchIn, proof.card, proof.capture, transition.whip]
 preset:
   captions: { preset: spotlight, maxWords: 2, reveal: fade, emphasis: { fontFamily: Fraunces, fontStyle: italic, color: accent } }
   hookTitle: { accentLine: 2, accentBox: true, accentFontFamily: Fraunces, accentFontStyle: italic, seconds: 3 }

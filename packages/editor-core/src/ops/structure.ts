@@ -14,8 +14,9 @@
  *   cha của sequence, như nhân bản.
  * - Nhóm/bọc: chỉ các node chung cha với node đầu tiên; vật chứa mới đứng ở chỗ
  *   node đầu tiên, các node giữ thứ tự. Group và sequence không có không gian
- *   riêng nên không gì dời. Sequence mới dàn lại chỗ chồng: clip sớm hơn giữ
- *   nguyên, clip sau nhường (cắt đầu, hay bị bỏ nếu nằm gọn trong clip trước).
+ *   riêng nên không gì dời. A new sequence settles overlaps: the earlier clip keeps
+ *   its place, a later one is trimmed at the head, and one covered whole stays beside
+ *   the sequence. The clip's own video and captions never go in a sequence.
  *   Scene có chỗ và cỡ riêng: bao hộp của các node (làm tròn ra ngoài), và các
  *   node dời đúng bằng góc của scene — trên canvas không gì nhúc nhích.
  * - Bỏ nhóm: con ra cha của vật chứa, đứng ở chỗ vật chứa, giữ thứ tự; transform
@@ -28,7 +29,7 @@ import { z } from 'zod';
 import { FRAME_RATE as FPS, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 import { createRenderer, multiply, type LayoutBox, type Mat } from '@opencmo/clip-render';
 
-import { byId, clone, walk, type Entity } from '../doc';
+import { byId, clone, followsTranscript, walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
 import { checked } from './project';
 import {
@@ -186,6 +187,10 @@ export const groupElements = {
     if (!first) throw new OpFailure('Select the layers to put together first.');
     const { list } = placeOf(next, first);
     const members = list.filter((entity) => chosen.includes(entity));
+    if (input.into === 'sequence' && members.some(holdsTranscriptTimed)) {
+      // A sequence re-times its children; the clip's own video and captions move only through a cut.
+      throw new OpFailure("The clip's own video and captions cannot go in a sequence. Cut them from the transcript instead.");
+    }
     const prefix = input.into === 'group' ? 'Group' : input.into === 'sequence' ? 'Sequence' : 'Scene';
     const wrapper: Entity = { kind: input.into, name: nextName(next, prefix) };
 
@@ -224,7 +229,8 @@ export const groupElements = {
     wrapper.children = members;
 
     if (input.into === 'sequence') {
-      // Clip sớm hơn giữ nguyên; clip sau nhường phần bị chồng.
+      // The earlier clip keeps its place; a later one gives up the overlap. One the earlier clip
+      // covers whole has nothing left to play in the sequence, so it stays beside it, untouched.
       const times = timesOf(next, ctx);
       const timeOf = (entity: Entity) => times.get(entity as unknown as ClipNode);
       const order = [...members].sort((a, b) => (timeOf(a)?.start ?? 0) - (timeOf(b)?.start ?? 0));
@@ -235,6 +241,7 @@ export const groupElements = {
         if (!t) continue;
         if (t.end <= reach) {
           (wrapper.children as Entity[]).splice((wrapper.children as Entity[]).indexOf(entity), 1);
+          list.splice(list.indexOf(wrapper) + 1, 0, entity);
           continue;
         }
         if (t.start < reach) trimIn(entity, t, reach);
@@ -245,6 +252,15 @@ export const groupElements = {
     return checked(next, `Those layers cannot be put in a ${input.into}`);
   },
 };
+
+/** A node that is, or holds, a layer timed by the transcript. */
+function holdsTranscriptTimed(entity: Entity): boolean {
+  let found = false;
+  walk({ version: 1, stage: { children: [entity] } } as unknown as ClipDocument, (item) => {
+    if (followsTranscript(item.entity as unknown as ClipNode)) found = true;
+  });
+  return found;
+}
 
 // ------------------------------------------------------------------ bỏ nhóm
 

@@ -151,6 +151,7 @@ async function main(): Promise<void> {
     const { runTool } = await import("./tools");
     const { memoryWorkspace } = await import("./workspace");
     const { slashDirective } = await import("./slash");
+    const { clipToolSpecs } = await import("./scope");
     const { readGuide } = await import("./guides");
     const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, ROUGHCUT_TRANSCRIPT } = await import("./eval/fixture");
     assert.ok(PARALLEL_SAFE.has("find_retakes"));
@@ -165,7 +166,11 @@ async function main(): Promise<void> {
     assert.match(retakes[0]!.text, /answer every question/);
     assert.match(retakes[1]!.text, /every day for a month/);
     assert.ok(retakes.every((take) => take.drop_word_ids.length > 0));
-    assert.match(slashDirective("/roughcut"), /read_guide "roughcut".*ask before cutting/);
+    const speaker = clipToolSpecs().map((spec) => spec.name);
+    assert.match(slashDirective("/roughcut", speaker), /read_guide "roughcut".*ask before cutting/);
+    // A blank edit has no speech to cut: /roughcut is answered, not attempted with tools it lacks.
+    const blankTools = clipToolSpecs({ blank: true }).map((spec) => spec.name);
+    assert.match(slashDirective("/roughcut", blankTools), /not available here/);
     assert.match(readGuide("roughcut"), /keep the LAST take/);
   }
 

@@ -108,7 +108,7 @@ export async function runCmoTask(task: CmoEvalTask, provider: Provider): Promise
     },
   };
   // As `startTurn` (session.ts): documents and state ride along with the first message.
-  const opening = `${slashDirective(task.prompt)}${(await scope.context?.()) ?? ""}${await scope.state()}`;
+  const opening = `${slashDirective(task.prompt, scope.tools.map((tool) => tool.name))}${(await scope.context?.()) ?? ""}${await scope.state()}`;
   recording.messages.push({ role: "user", content: provider.userTurn(task.prompt, opening) as unknown[] });
   await runTurn({ supabase: client, ledger, provider, scope, turn: { id: "turn-1", session_id: "session-1", number: 1, prompt: task.prompt }, emit: () => undefined });
   return recording;

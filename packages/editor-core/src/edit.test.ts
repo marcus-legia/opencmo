@@ -339,3 +339,54 @@ describe('a cut keeps the timeline in sync', async () => {
     expect(after.map((segment) => segment.scale)).toEqual([undefined, 1.2, 1.2]);
   });
 });
+
+describe('ripple edits move clips inside rows and groups', () => {
+  const row = (clips: Array<[string, number, number]>) => ({
+    kind: 'sequence',
+    id: 'row',
+    children: clips.map(([id, start, end]) => ({ kind: 'rect', id, start, end })),
+  });
+  const spans = (node: Record<string, unknown>) =>
+    (node.children as Record<string, unknown>[]).map((child) => [child.id, child.start, child.end]);
+
+  it('make_room shifts the clips of a row, never the row itself', async () => {
+    const out = await run(doc([row([['r1', 10, 12], ['r2', 12, 14]])]), [{ op: 'make_room', at: 5, seconds: 2 }]);
+    expect(kids(out)[0]).not.toHaveProperty('start');
+    expect(spans(kids(out)[0]!)).toEqual([['r1', 12, 14], ['r2', 14, 16]]);
+  });
+
+  it('make_room reaches the later clips of a row that began before the gap', async () => {
+    const out = await run(doc([row([['r1', 2, 4], ['r2', 6, 8]])]), [{ op: 'make_room', at: 5, seconds: 2 }]);
+    expect(spans(kids(out)[0]!)).toEqual([['r1', 2, 4], ['r2', 8, 10]]);
+  });
+
+  it('ripple_delete closes the gap for clips in a row', async () => {
+    const out = await run(
+      doc([{ kind: 'text', id: 't', text: 'T', start: 2, end: 5 }, row([['r1', 6, 8]])]),
+      [{ op: 'ripple_delete', element_id: 't' }],
+    );
+    expect(spans(kids(out)[0]!)).toEqual([['r1', 3, 5]]);
+  });
+
+  it('ripple_delete removes a row left without clips; other lanes stay', async () => {
+    const out = await run(doc([row([['r1', 6, 8]]), { kind: 'text', id: 't', text: 'T', start: 9, end: 10 }]), [
+      { op: 'ripple_delete', element_id: 'r1' },
+    ]);
+    expect(kids(out).map((k) => [k.id, k.start, k.end])).toEqual([['t', 9, 10]]);
+  });
+});
+
+describe('a group that spans its children', () => {
+  const grouped = () => doc([{ kind: 'group', id: 'g', children: [{ kind: 'rect', id: 'x', start: 10, end: 12 }] }]);
+
+  it('moves by the asked amount, not by its first child’s start', async () => {
+    const out = await run(grouped(), [{ op: 'move_elements', element_ids: ['g'], by: 1 }]);
+    const group = kids(out)[0]!;
+    expect(group.start).toBe(1);
+    expect((group.children as Record<string, unknown>[])[0]).toMatchObject({ start: 10, end: 12 });
+  });
+
+  it('refuses a trim, which would shift every child', async () => {
+    await expect(run(grouped(), [{ op: 'trim_element', element_id: 'g', edge: 'in', at: 11 }])).rejects.toThrow(/inside the group/);
+  });
+});

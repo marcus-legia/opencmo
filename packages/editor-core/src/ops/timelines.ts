@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import type { ClipDocument, SceneNode } from '@opencmo/clip-doc';
 
-import { clone, timelineLabel, timelinesOf, type Entity } from '../doc';
+import { clone, stamp, timelineLabel, timelinesOf, walk, type Entity } from '../doc';
 import { OpFailure } from './context';
 import { copyOf } from './timeline';
 
@@ -59,9 +59,34 @@ export const createTimeline = {
     const next = clone(document);
     activate(next, node);
     (next.stage.children as unknown as Entity[]).push(node);
+    if (input.from) relink(next, source as unknown as Entity, node);
     return next;
   },
 };
+
+/**
+ * A copy gets new ids, so captions in it would still name the original's video (`source`):
+ * stamp the copy now and point each one at the copy of its video.
+ */
+function relink(document: ClipDocument, original: Entity, copy: Entity): void {
+  const oldIds = new Map<Entity, string>();
+  const pair = (from: unknown, to: unknown) => {
+    if (Array.isArray(from)) from.forEach((item, index) => pair(item, (to as unknown[])[index]));
+    else if (from && typeof from === 'object' && to && typeof to === 'object') {
+      const id = (from as Entity).id;
+      if (typeof id === 'string') oldIds.set(to as Entity, id);
+      for (const key of Object.keys(from)) pair((from as Entity)[key], (to as Entity)[key]);
+    }
+  };
+  pair(original, copy);
+  stamp(document);
+  const renamed = new Map([...oldIds].map(([entity, id]) => [id, entity.id as string]));
+  walk({ version: 1, stage: { children: [copy] } } as unknown as ClipDocument, ({ entity }) => {
+    if (entity.kind === 'captions' && typeof entity.source === 'string' && renamed.has(entity.source)) {
+      entity.source = renamed.get(entity.source);
+    }
+  });
+}
 
 type SetActiveTimeline = { timeline_id: string };
 
