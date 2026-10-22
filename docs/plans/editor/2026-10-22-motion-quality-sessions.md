@@ -51,7 +51,7 @@ test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`;
 **Order:** A0 → A1 (push at once) → A4 → A2 → A3 → A5 → A6.
 
 - [ ] A0 Baseline frames
-- [ ] A1 Shared contracts
+- [x] A1 Shared contracts
 - [ ] A4 `kit.Image` and safe inlining
 - [ ] A2 Preview at chosen times, jump check
 - [ ] A3 `direction`, `times`, review checklist (tools, guides, MCP limit)

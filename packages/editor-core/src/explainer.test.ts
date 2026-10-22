@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { validate, type ClipDocument } from '@opencmo/clip-doc';
 
 import { priceOf, specSchema, type AiModel } from './generate';
-import { EXPLAINER_SCENE_BYTES, sceneBytes } from './explainer';
+import { ClipSceneSchema, clipSeconds, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, sceneBytes } from './explainer';
 import { AGENT_OP_INPUTS, applyOps, describeOp, estimateDuration, explainerSeconds, type OpContext } from './ops';
 
 const ctx = { master: null, media: { duration: () => null }, readTranscript: async () => [], saveTranscript: async () => 'x' } as unknown as OpContext;
@@ -255,5 +255,31 @@ describe('explainer scene: theme and personality', () => {
 		expect(specSchema(model).safeParse(withScene({ personality: 'calm' })).success).toBe(false);
 		// A storyboard's `visual` is for the user and the model, never in the spec.
 		expect(specSchema(model).safeParse(withScene({ beats: beats.map((beat) => ({ ...beat, visual: 'a phone' })) })).success).toBe(false);
+	});
+});
+
+describe('motion clips and image assets (shared contract)', () => {
+	const clipScene = (count: number) => ({ template: 'clip', code_ref: CODE_REF, title: 'Logo', beats: Array.from({ length: count }, () => ({ say: 'The mark lands.', seconds: 1 })) });
+
+	it('clipSeconds rounds 3.2 s up to 4 and clamps 40 s to 30', () => {
+		expect(clipSeconds([{ say: 'a', seconds: 1.2 }, { say: 'b', seconds: 2 }])).toBe(4);
+		expect(clipSeconds([{ say: 'a', seconds: 20 }, { say: 'b', seconds: 20 }])).toBe(30);
+		expect(clipSeconds([{ say: 'a', seconds: 1 }])).toBe(3);
+		expect(clipSeconds([{ say: 'a', seconds: 0.1 + 0.2 }, { say: 'b', seconds: 2.7 }])).toBe(3);
+	});
+
+	it('ClipSceneSchema refuses 9 beats', () => {
+		expect(ClipSceneSchema.safeParse(clipScene(8)).success).toBe(true);
+		expect(ClipSceneSchema.safeParse(clipScene(9)).success).toBe(false);
+		expect(ClipSceneSchema.safeParse({ ...clipScene(1), beats: [{ say: 'No time.' }] }).success).toBe(false);
+	});
+
+	it('ExplainerSceneSchema accepts assets with a media path', () => {
+		const scene = { template: 'explainer', code_ref: CODE_REF, title: 'How Shazam hears a song', beats };
+		const ref = '6a1f3c1e-0000-4000-8000-000000000001/uploads/screen.png';
+		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'screen', ref }] }).success).toBe(true);
+		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'Screen', ref }] }).success).toBe(false);
+		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'a', ref }, { name: 'a', ref }] }).success).toBe(false);
+		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: Array.from({ length: 7 }, (_, i) => ({ name: `s${i}`, ref })) }).success).toBe(false);
 	});
 });
