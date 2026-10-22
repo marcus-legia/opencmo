@@ -44,8 +44,13 @@ The editor is locked in as the spearhead: build it until it can make every marke
   approves it, on their own account. Never add automatic liking, following, commenting,
   multiple accounts or fake engagement. Sales has no post button.
 - **Video must be the user's own.** Upload is the only way in. There is no link import and no
-  clipping tool (removed 2026-10-20: payment providers forbid clipping tools and content
-  downloaders); do not bring either back.
+  clipping tool that pulls from outside video (removed 2026-10-20: payment providers forbid
+  clipping tools and content downloaders); do not bring either back.
+- **Clips are cut from finished edits** (owner, 2026-10-22). A clip is a short video cut from a
+  video already edited or generated in the OpenCMO editor, then scheduled by Post. The source is
+  always a finished edit in the user's project, never a link, a raw third-party video or another
+  creator's content. Market it as "cut short clips from your finished video", not as a clipping
+  tool.
 - **AI images/video only with moderation.** Prompts go through `lib/generate/moderation.ts`
   before credits are held; generated images and video frames go through
   `opencmo/ai/moderation.py` before upload. No identifiable real people, no other brands'
