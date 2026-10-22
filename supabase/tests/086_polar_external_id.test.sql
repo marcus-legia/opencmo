@@ -109,23 +109,44 @@ select is(
   null, 'mua bằng email mới vẫn khớp đúng tài khoản'
 );
 
--- ============================================== chốt chống cướp giữ nguyên
+-- ========================================== a second customer for a linked account
 --
--- external_id không được phép vượt qua khoá liên kết: một khách hàng Polar khác
--- trỏ vào tài khoản đã gắn customer khác thì phải bị chặn.
+-- The external id is set by our own checkout link, so an order carrying it belongs to that account even when
+-- the account is already linked to another Polar customer (an earlier purchase under another email). It used
+-- to answer 200 "skipped": Polar never retried and the payment was lost. The first link stays as it is.
 select is(
-  pg_temp.paid('hijack', 'cus-other', jsonb_build_object(
+  pg_temp.paid('second-customer', 'cus-other', jsonb_build_object(
     'customer', jsonb_build_object(
       'id', 'cus-other',
       'email', 'nobody@test.local',
       'external_id', 'e6000000-0000-4000-8000-000000000001'
     )))->>'skipped',
-  'account already linked', 'external_id không vượt qua được khoá liên kết'
+  null, 'an order with our external id is credited despite another linked customer'
 );
 
 select is(
   (select credit_balance from profiles where id = 'e6000000-0000-4000-8000-000000000001'),
-  public.signup_credits() + 150, 'tài khoản đã liên kết không bị cộng thêm bởi customer lạ'
+  public.signup_credits() + 300, 'the second order is credited to the account'
+);
+
+select is(
+  (select polar_customer_id from profiles where id = 'e6000000-0000-4000-8000-000000000001'),
+  'cus-ext-1', 'the first customer link is kept'
+);
+
+select is(
+  (select count(*)::int from polar_webhook_receipts where event_id = 'second-customer'),
+  1, 'the event has a receipt'
+);
+
+-- Matched only by email, a second customer proves nothing about the account: still skipped.
+select is(
+  pg_temp.paid('email-only', 'cus-email-only', jsonb_build_object(
+    'customer', jsonb_build_object(
+      'id', 'cus-email-only',
+      'email', 'ext-fallback@test.local'
+    )))->>'skipped',
+  'account already linked', 'a second customer matched by email is skipped'
 );
 
 -- =============================================================== quyền hàm
