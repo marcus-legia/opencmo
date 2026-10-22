@@ -2,7 +2,7 @@
 
 Plan: [`2026-10-22-motion-quality-plan.md`](2026-10-22-motion-quality-plan.md) — read it first, all of it.
 Research: [`docs/research/editor/2026-10-22-motion-quality-opus-claude-design.md`](../../research/editor/2026-10-22-motion-quality-opus-claude-design.md).
-Branch: **`plan/editor/2026-10-22-motion-quality`** · PR: draft, shared by both sessions.
+Branch: **`plan/editor/2026-10-22-motion-quality`** · PR: [#104](https://github.com/marcus-legia/opencmo/pull/104) (draft), shared by both sessions.
 
 - **Session A — Spec, loop, real images:** tasks A0–A6. Lands the shared contracts first (A1).
 - **Session B — Templates and silent clips:** tasks B1–B6. Starts on code that needs only A1, and picks up the tool
