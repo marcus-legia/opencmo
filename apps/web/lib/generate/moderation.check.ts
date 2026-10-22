@@ -142,8 +142,8 @@ async function compatChecks(): Promise<void> {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const saved = { key: process.env.GROQ_API_KEY, url: process.env.OPENAI_COMPAT_BASE_URL };
-  process.env.GROQ_API_KEY = "q-test";
+  const saved = { key: process.env.OPENAI_COMPAT_API_KEY, url: process.env.OPENAI_COMPAT_BASE_URL };
+  process.env.OPENAI_COMPAT_API_KEY = "q-test";
   process.env.OPENAI_COMPAT_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
   const verdict = (json: string) => ({ status: 200, body: { model: "m", choices: [{ message: { content: json }, finish_reason: "stop" }] } });
   const run = async (claude: Reply): Promise<[number, number]> => {
@@ -173,7 +173,7 @@ async function compatChecks(): Promise<void> {
     replies = [{ status: 400, body: { error: { message: "messages: bad request" } } }];
     assert.deepEqual(await run(claudeAllows), [503, 0], "our request was wrong: nobody else is asked");
   } finally {
-    for (const [name, value] of [["GROQ_API_KEY", saved.key], ["OPENAI_COMPAT_BASE_URL", saved.url]] as const) {
+    for (const [name, value] of [["OPENAI_COMPAT_API_KEY", saved.key], ["OPENAI_COMPAT_BASE_URL", saved.url]] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }

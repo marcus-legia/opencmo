@@ -61,6 +61,16 @@ const twoKeys = { ...groq, OPENAI_COMPAT_API_KEY: "sk-other" } as unknown as Nod
 assert.equal(resolveAgent("planner", twoKeys).apiKey, "q-shared", "the compat key is not sent to Groq");
 const elsewhere = { ...twoKeys, OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1" } as unknown as NodeJS.ProcessEnv;
 assert.equal(resolveAgent("planner", elsewhere).apiKey, "sk-other", "nor the Groq key to another endpoint");
+// A shared key goes only to its own endpoint: no key rather than another vendor's.
+const groqOnlyElsewhere = { ...groq, OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1" } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("planner", groqOnlyElsewhere, "openai").apiKey, "", "the Groq key never goes to the compat endpoint");
+assert.ok(!agentCandidates("planner", groqOnlyElsewhere).some((agent) => agent.provider === "openai"), "no key for that endpoint: not a candidate");
+const ownUrl = { ...groq, CMO_AGENT_SALES_PROVIDER: "openai", CMO_AGENT_SALES_BASE_URL: "https://openrouter.ai/api/v1" } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("sales", ownUrl).apiKey, "", "the Groq key never goes to an agent's own endpoint");
+const ownUrlOnCompat = { ...ownUrl, OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1/", OPENAI_COMPAT_API_KEY: "sk-other" } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("sales", ownUrlOnCompat).apiKey, "sk-other", "an own endpoint that is the compat endpoint gets the compat key");
+const ownGroqUrl = { ...twoKeys, OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1", CMO_AGENT_SALES_PROVIDER: "openai", CMO_AGENT_SALES_BASE_URL: `${GROQ_BASE_URL}/` } as unknown as NodeJS.ProcessEnv;
+assert.equal(resolveAgent("sales", ownGroqUrl).apiKey, "q-shared", "an own endpoint on Groq gets the Groq key");
 
 // The order: CMO_LLM_PROVIDERS first, the rest after; candidates only with a key, the configured one first.
 assert.deepEqual(providerOrder({} as NodeJS.ProcessEnv), ["openai", "anthropic", "gemini"]);

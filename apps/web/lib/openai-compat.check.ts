@@ -94,7 +94,7 @@ async function main() {
 
     // A CMO agent on Groq: the check tier's model, the shared key, zod as the gate.
     for (const name of Object.keys(process.env)) if (/^(CMO_|ANTHROPIC_|GEMINI_|GOOGLE_API|GROQ_|OPENAI_COMPAT_)/.test(name)) delete process.env[name];
-    process.env.GROQ_API_KEY = "q-env";
+    process.env.OPENAI_COMPAT_API_KEY = "q-env";
     process.env.OPENAI_COMPAT_BASE_URL = baseUrl;
     clearHealth();
     seen.length = 0;

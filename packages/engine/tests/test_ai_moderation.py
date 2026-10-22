@@ -435,6 +435,19 @@ def test_another_endpoint_gets_the_compat_key_and_needs_its_own_vision_model(mon
     assert seen["compat"][0]["headers"]["Authorization"] == "Bearer sk-other"
 
 
+def test_the_groq_key_never_goes_to_another_endpoint(monkeypatch, image):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "https://openrouter.example/api/v1")
+    monkeypatch.setenv("OPENCMO_MODERATION_VISION_MODEL", "vendor/vision")
+    assert moderation._compat_key() == ""
+    assert not moderation._compat_ready()
+    seen = _compat(monkeypatch, [(200, ALLOW)])
+    with pytest.raises(ProviderError):
+        moderation.check_images([image])
+    assert seen["compat"] == []
+
+
 def test_a_fenced_json_verdict_is_read(monkeypatch, image):
     monkeypatch.setenv("GROQ_API_KEY", "q")
     _compat(monkeypatch, [(200, "```json\n" + ALLOW + "\n```")])

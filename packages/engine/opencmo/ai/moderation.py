@@ -148,10 +148,10 @@ def _compat_base_url() -> str:
 
 
 def _compat_key() -> str:
-    """The key for `_compat_base_url()`: Groq's own key first on Groq, the compat key first
-    elsewhere, so a key is not sent to another vendor's endpoint when both are set."""
+    """The key for `_compat_base_url()`: Groq's own key first on Groq, only the compat key
+    elsewhere, so the Groq key is never sent to another vendor's endpoint."""
     groq, compat = os.environ.get("GROQ_API_KEY") or "", os.environ.get("OPENAI_COMPAT_API_KEY") or ""
-    return (groq or compat) if _compat_base_url() == GROQ_BASE_URL else (compat or groq)
+    return (groq or compat) if _compat_base_url() == GROQ_BASE_URL else compat
 
 
 def _compat_ready() -> bool:
