@@ -103,11 +103,16 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
       setJobs((current) => current ?? []);
     }
   }, []);
+  // The panel stays mounted behind the Media tab: it reads its list the first time it is shown.
+  const shown = useRef(false);
   useEffect(() => {
+    if (hidden || shown.current) return;
+    shown.current = true;
     void load();
-  }, [load]);
+  }, [hidden, load]);
   const running = (jobs ?? []).some((job) => !TERMINAL.has(job.status));
-  useLive("jobs", userId && `user_id=eq.${userId}`, () => void load(), Boolean(userId), running, "editor-uploads");
+  // Hidden, only an upload in flight keeps it listening, and it never polls.
+  useLive("jobs", userId && `user_id=eq.${userId}`, () => void load(), Boolean(userId) && (!hidden || running || busy), running && !hidden, "editor-uploads");
 
   function pickFile(next: File | null) {
     if (busy) return;

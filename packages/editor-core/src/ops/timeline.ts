@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { FRAME_RATE as FPS, type ClipDocument, type ClipNode, type SceneNode } from '@opencmo/clip-doc';
 import { resolveTimes, type TimeNode } from '@opencmo/clip-render';
 
-import { byId, clone, copyOf, walk, type Entity } from '../doc';
+import { byId, clone, copyOf, followsTranscript, walk, type Entity } from '../doc';
 import { OpFailure, type OpContext } from './context';
 
 const CONTAINERS = new Set(['scene', 'group', 'sequence']);
@@ -75,24 +75,74 @@ function editTime(entity: Entity, name: 'start' | 'end' | 'sourceIn' | 'sourceOu
 /** Có trường thời gian riêng không (sequence thì không: nó luôn bao các con). */
 const timed = (entity: Entity): boolean => entity.kind !== 'sequence' && entity.kind !== 'scene';
 
+/** A group that spans its children has no edges of its own: writing one would shift every child. */
+function assertTrimmable(entity: Entity, t: TimeNode): void {
+  if (!timed(entity)) throw new OpFailure('Trim the clips inside a sequence instead.');
+  if (t.fits) throw new OpFailure('Trim the clips inside the group instead.');
+}
+
 export function trimIn(entity: Entity, t: TimeNode, frame: number): void {
+  assertTrimmable(entity, t);
   if (framesOf(entity.end) === undefined) editTime(entity, 'end', t.end - parentOrigin(t));
   editTime(entity, 'start', frame - parentOrigin(t));
   editTime(entity, 'sourceIn', Math.round((frame - t.origin) * t.rate));
 }
 
 export function trimOut(entity: Entity, t: TimeNode, frame: number): void {
+  assertTrimmable(entity, t);
   if (framesOf(entity.sourceOut) !== undefined) editTime(entity, 'sourceOut', Math.round((frame - t.origin) * t.rate));
   editTime(entity, 'end', frame - parentOrigin(t));
 }
 
-function moveTo(entity: Entity, t: TimeNode, frame: number): void {
-  const start = frame - parentOrigin(t);
-  const delta = start - (framesOf(entity.start) ?? 0);
+/**
+ * Moves a node so it starts at `frame`. The shift is measured from the resolved start, not from
+ * `entity.start`: a group that spans its children starts where its first child does.
+ */
+export function moveTo(entity: Entity, t: TimeNode, frame: number): void {
+  const delta = frame - t.start;
   if (delta === 0) return;
   const end = framesOf(entity.end);
   if (end !== undefined) editTime(entity, 'end', end + delta);
-  editTime(entity, 'start', start);
+  editTime(entity, 'start', (framesOf(entity.start) ?? 0) + delta);
+}
+
+/**
+ * The clips that carry time inside a node: a sequence and a group that spans its children have none
+ * of their own, so an edit lands on what they hold.
+ */
+export function clipsIn(entity: Entity, times: Map<ClipNode, TimeNode>): Entity[] {
+  const t = times.get(entity as unknown as ClipNode);
+  if (followsTranscript(entity as unknown as ClipNode)) return [entity];
+  const spans = entity.kind === 'sequence' || (entity.kind === 'group' && t?.fits);
+  if (!spans) return [entity];
+  return ((entity.children as Entity[] | undefined) ?? []).flatMap((child) => clipsIn(child, times));
+}
+
+/**
+ * The clips a ripple at `from` shifts: every clip in `list` that starts at or after it, found
+ * inside rows and spanning groups. Transcript-timed layers come back whole, for the caller to refuse.
+ */
+export function rippleFollowers(list: Entity[], times: Map<ClipNode, TimeNode>, from: number): Entity[] {
+  return list
+    .flatMap((entity) => clipsIn(entity, times))
+    .filter((entity) => {
+      const t = times.get(entity as unknown as ClipNode);
+      return t !== undefined && t.start >= from;
+    });
+}
+
+/** A sequence left with no children is not a clip any more (it would render as an empty default span). */
+export function dropIfEmpty(document: ClipDocument, place: { parent: Entity; list: Entity[] }): void {
+  if (place.list.length !== 0 || place.parent.kind !== 'sequence') return;
+  const outer = placeOf(document, place.parent);
+  outer.list.splice(outer.list.indexOf(place.parent), 1);
+}
+
+/** Takes a node out of its place, and the sequence it leaves empty with it. */
+export function detach(document: ClipDocument, entity: Entity): void {
+  const from = placeOf(document, entity);
+  from.list.splice(from.list.indexOf(entity), 1);
+  dropIfEmpty(document, from);
 }
 
 export { copyOf };
@@ -244,6 +294,7 @@ export const trimElement = {
     const entity = nodeById(next, input.element_id);
     if (!timed(entity)) throw new OpFailure('Trim the clips inside a sequence instead.');
     const t = timeOf(timesOf(next, ctx), entity);
+    assertTrimmable(entity, t);
     // Mép chỉ bị chặn bởi mép kia của chính nó và phần nguồn còn lại — hàng
     // bên cạnh không phải ràng buộc.
     let min = input.edge === 'in' ? 0 : t.start + 1;
@@ -277,13 +328,18 @@ export const splitElements = {
     const next = clone(document);
     const frame = Math.round(input.at * FPS);
     const scene = activeScene(next) as unknown as Entity;
-    const targets = input.element_ids?.length
-      ? input.element_ids.map((id) => nodeById(next, id))
+    const picked = Boolean(input.element_ids?.length);
+    const targets = picked
+      ? [...new Set(input.element_ids!.map((id) => nodeById(next, id)))]
       : ((scene.children as Entity[] | undefined) ?? []);
+    if (picked && targets.some((entity) => followsTranscript(entity as unknown as ClipNode))) {
+      throw new OpFailure("The clip's own video and captions are cut from the transcript, not split.");
+    }
     const times = timesOf(next, ctx);
-    // Sequence không phải một clip: vết cắt rơi vào con mà mốc đang nằm trong.
-    const units = targets
-      .flatMap((entity) => (entity.kind === 'sequence' ? ((entity.children as Entity[]) ?? []) : [entity]))
+    // A sequence or spanning group is not one clip: the cut lands in the clip under the playhead.
+    // With nothing picked, the transcript-timed layers are left alone.
+    const units = [...new Set(targets.flatMap((entity) => clipsIn(entity, times)))]
+      .filter((entity) => !followsTranscript(entity as unknown as ClipNode))
       .filter((entity) => {
         const t = times.get(entity as unknown as ClipNode);
         return t && timed(entity) && t.start < frame && frame < t.end;
@@ -306,6 +362,7 @@ export const splitElements = {
     for (const { entity, copy, parent, list } of pairs) {
       if (CONTAINERS.has(parent.kind as string) && parent.kind !== 'scene') continue;
       const at = list.indexOf(entity);
+      if (at < 0) continue;
       list.splice(list.indexOf(copy), 1);
       list.splice(at, 1, { kind: 'sequence', name: nextName(next, 'Sequence'), children: [entity, copy] });
     }
@@ -347,11 +404,7 @@ export const moveLayer = {
     if (from.list === children && !anchor && children[children.length - 1] === entity) return document;
     from.list.splice(from.list.indexOf(entity), 1);
     children.splice(anchor ? children.indexOf(anchor) : children.length, 0, entity);
-    if (from.list.length === 0 && from.parent.kind === 'sequence') {
-      // Sequence rỗng không còn là gì: gỡ nó khỏi cha của nó.
-      const outer = placeOf(next, from.parent);
-      outer.list.splice(outer.list.indexOf(from.parent), 1);
-    }
+    dropIfEmpty(next, from);
     settle(next, ctx, [entity]);
     return next;
   },

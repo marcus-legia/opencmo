@@ -15,7 +15,7 @@ export { fold, searchSpoken, type SpokenHit } from './search';
 export * from './ops';
 export { belowText, isRow, LANE_NAME, laneOf, type Lane } from './tracks';
 export * from './brand';
-export { MASTER_SRC, stamp, byId, walk, activeView, timelineLabel, timelinesOf, type Entity } from './doc';
+export { MASTER_SRC, stamp, byId, walk, activeView, timelineLabel, timelinesOf, isCutSequence, isMasterSound, type Entity } from './doc';
 export { checkDocument, type CheckIssue, type CheckMedia, type CheckReport } from './check';
 export { findSilences, type Silence } from './silences';
 export { BUILTIN_LOTTIES, findLotties, LOTTIE_PACK, type LottieEntry } from './visuals/lottie';

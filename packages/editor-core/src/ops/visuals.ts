@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import { ANIMATION_TYPES, type ClipDocument } from '@opencmo/clip-doc';
+import { ANIMATION_TYPES, type ClipDocument, type ClipNode } from '@opencmo/clip-doc';
 import { createRenderer, FPS, type LayoutBox } from '@opencmo/clip-render';
 
 import { byId, clone, sceneOf, type Entity } from '../doc';
@@ -29,6 +29,7 @@ import { buildList, listInput, listItem, type ListInput } from '../visuals/list'
 import { OpFailure, type OpContext } from './context';
 import { loadCaptions } from './captions';
 import { checked } from './project';
+import { parentOrigin, timesOf } from './timeline';
 
 const timing = {
 	start: z.number().finite().min(0).optional(),
@@ -347,6 +348,17 @@ export const add3d = { ...visualOp('add_3d', threeInput, (input) => `Add a 3D sc
 /** Prop của group visual mà người dùng chỉnh bằng tay — sinh lại không được xoá. */
 const KEPT_ON_UPDATE = ['name', 'x', 'y', 'offsetX', 'offsetY', 'rotation', 'scale', 'scaleX', 'scaleY', 'opacity', 'blendMode', 'hidden', 'tracks'] as const;
 
+/** A start at 0 is written as absent (`editTime`), so a visual moved back to 0 has none. */
+const startOf = (entity: Entity): number => (typeof entity.start === 'number' ? entity.start : 0);
+
+/** The visual's own end, or where it resolves to end when it has none written. */
+function endOf(document: ClipDocument, entity: Entity, ctx?: OpContext): number {
+	if (typeof entity.end === 'number') return entity.end;
+	const t = timesOf(document, ctx ?? {}).get(entity as unknown as ClipNode);
+	if (!t) throw new OpFailure('That visual is not in the active scene.');
+	return Math.round(((t.end - parentOrigin(t)) / FPS) * 1e4) / 1e4;
+}
+
 type UpdateVisual = { id: string; changes: Record<string, unknown>; start?: number; end?: number };
 
 export const updateVisual = {
@@ -373,7 +385,7 @@ export const updateVisual = {
 		const parsed = builder.schema.safeParse(spec);
 		if (!parsed.success) throw new OpFailure(parsed.error.issues[0]?.message ?? 'Those changes are not valid for this visual.');
 		const frame = frameOf(document);
-		const when = clamp({ start: input.start ?? (found.entity.start as number), end: input.end ?? (found.entity.end as number) }, frame.duration);
+		const when = clamp({ start: input.start ?? startOf(found.entity), end: input.end ?? endOf(document, found.entity, ctx) }, frame.duration);
 		const next = clone(document);
 		const target = byId(next, input.id)!;
 		const quote = typeof merged.quote === 'string' ? { quote: merged.quote } : {};

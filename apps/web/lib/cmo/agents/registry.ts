@@ -12,7 +12,9 @@ import "server-only";
  *   CMO_AGENT_<ID>_MODEL    = a model id of that provider
  *   CMO_AGENT_<ID>_API_KEY  = the agent's own key; defaults to the provider's shared key
  *                             (ANTHROPIC_API_KEY / GEMINI_API_KEY / OPENAI_COMPAT_API_KEY or GROQ_API_KEY)
- *   CMO_AGENT_<ID>_BASE_URL = openai only: the agent's own endpoint
+ *   CMO_AGENT_<ID>_BASE_URL = openai only: the agent's own endpoint; a shared key goes only to its own
+ *                             endpoint (GROQ_API_KEY to Groq, OPENAI_COMPAT_API_KEY to OPENAI_COMPAT_BASE_URL),
+ *                             so any other endpoint needs CMO_AGENT_<ID>_API_KEY
  *
  * `openai` is any OpenAI-compatible chat API (Groq, OpenRouter, Together, DeepSeek, Ollama…):
  * OPENAI_COMPAT_BASE_URL (Groq when unset), OPENAI_COMPAT_MODEL and OPENAI_COMPAT_CHECK_MODEL for
@@ -67,14 +69,22 @@ function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"], env: Node
   return tier === "check" ? "claude-haiku-5-5" : "claude-sonnet-5-5";
 }
 
+const trimUrl = (url: string): string => url.trim().replace(/\/+$/, "");
+const compatBaseUrl = (env: NodeJS.ProcessEnv): string => trimUrl(env.OPENAI_COMPAT_BASE_URL?.trim() || GROQ_BASE_URL);
+
+/**
+ * The shared key for one OpenAI-compatible endpoint, or "" when no shared key belongs to it: a vendor's
+ * secret never goes to another vendor's endpoint (the worker's moderation pairs them the same way).
+ */
+function compatKeyFor(url: string, env: NodeJS.ProcessEnv): string {
+  const onCompat = url === compatBaseUrl(env);
+  if (url === GROQ_BASE_URL) return env.GROQ_API_KEY || (onCompat ? env.OPENAI_COMPAT_API_KEY : "") || "";
+  return (onCompat ? env.OPENAI_COMPAT_API_KEY : "") || "";
+}
+
 const sharedKey = (provider: ProviderKind, env: NodeJS.ProcessEnv): string => {
   if (provider === "gemini") return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || "";
-  if (provider === "openai") {
-    // Groq's own key first on Groq, the compat key first elsewhere: a key never goes to another
-    // vendor's endpoint when both are set (the worker's moderation pairs them the same way).
-    const onGroq = !env.OPENAI_COMPAT_BASE_URL?.trim() || env.OPENAI_COMPAT_BASE_URL.trim().replace(/\/+$/, "") === GROQ_BASE_URL;
-    return (onGroq ? env.GROQ_API_KEY || env.OPENAI_COMPAT_API_KEY : env.OPENAI_COMPAT_API_KEY || env.GROQ_API_KEY) || "";
-  }
+  if (provider === "openai") return compatKeyFor(compatBaseUrl(env), env);
   return env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
 };
 
@@ -94,8 +104,7 @@ export function providerOrder(env: NodeJS.ProcessEnv = process.env): ProviderKin
 /** `openai`'s endpoint for one agent, without a trailing slash; empty for the other providers. */
 function baseUrl(provider: ProviderKind, prefix: string, env: NodeJS.ProcessEnv, own: boolean): string {
   if (provider !== "openai") return "";
-  const url = (own ? env[`${prefix}BASE_URL`]?.trim() : "") || env.OPENAI_COMPAT_BASE_URL?.trim() || GROQ_BASE_URL;
-  return url.replace(/\/+$/, "");
+  return (own && env[`${prefix}BASE_URL`]?.trim() && trimUrl(env[`${prefix}BASE_URL`]!)) || compatBaseUrl(env);
 }
 
 /** `ownKey`: the agent runs on a key of its own, not the provider's shared key. */
@@ -120,9 +129,11 @@ export function resolveAgent(id: AgentId, env: NodeJS.ProcessEnv = process.env, 
   // Nothing named: the first provider of the order with a shared key (Claude when there is none).
   const provider: ProviderKind = wanted ?? providerOrder(env).find((kind) => sharedKey(kind, env)) ?? "anthropic";
   const model = env[`${prefix}MODEL`]?.trim() || defaultModel(provider, spec.tier, env);
-  const apiKey = env[`${prefix}API_KEY`]?.trim() || sharedKey(provider, env);
+  const url = baseUrl(provider, prefix, env, true);
+  // The shared key of the endpoint the request really goes to, not of OPENAI_COMPAT_BASE_URL.
+  const apiKey = env[`${prefix}API_KEY`]?.trim() || (provider === "openai" ? compatKeyFor(url, env) : sharedKey(provider, env));
   const source = wanted || env[`${prefix}MODEL`] || env[`${prefix}API_KEY`] ? "env" : "default";
-  return { ...spec, provider, model, apiKey, baseUrl: baseUrl(provider, prefix, env, true), ownKey: Boolean(env[`${prefix}API_KEY`]?.trim()), source };
+  return { ...spec, provider, model, apiKey, baseUrl: url, ownKey: Boolean(env[`${prefix}API_KEY`]?.trim()), source };
 }
 
 /**

@@ -1,0 +1,4 @@
+{
+  "$comment": "The longest video the editor holds. Read by the web Upload panel (apps/web/lib/upload.ts) and the worker (opencmo/worker/process_job.py).",
+  "max_edit_seconds": 900
+}

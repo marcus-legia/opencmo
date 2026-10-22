@@ -6378,6 +6378,29 @@ $$;
 
 
 --
+-- Name: remove_video_pack_leftovers(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_video_pack_leftovers() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rows int;
+begin
+  perform public.refund_job(j.id, 'Refund: video packs were removed')
+  from public.jobs j
+  where j.status in ('queued', 'running')
+    and not exists (select 1 from public.projects p where p.job_id = j.id);
+  delete from public.jobs j
+  where not exists (select 1 from public.projects p where p.job_id = j.id);
+  get diagnostics v_rows = row_count;
+  return v_rows;
+end;
+$$;
+
+
+--
 -- Name: rename_blank_edit(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
