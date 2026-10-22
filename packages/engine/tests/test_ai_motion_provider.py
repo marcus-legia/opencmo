@@ -422,3 +422,114 @@ def test_preview_session_kills_a_slow_preview_and_starts_fresh(serve, tmp_path: 
 def test_preview_session_refuses_files_outside_the_preview_folder(serve, tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="preview failed"):
         serve().preview(_job("escape"), _workdir(tmp_path, "a"))
+
+
+# --- Images in scenes (kit.Image): the worker inlines the user's own library images ---
+
+USER = "11111111-1111-4111-8111-111111111111"
+
+
+class _Library:
+    """The `media` bucket of one user: `download_object` copies a local file, records what was asked."""
+
+    def __init__(self, files: dict[str, Path]) -> None:
+        self.files = files
+        self.asked: list[str] = []
+
+    def download_object(self, bucket: str, path: str, dest: Path, *, max_bytes: int | None = None) -> Path:
+        assert bucket == "media"
+        self.asked.append(path)
+        if path not in self.files:
+            raise FileNotFoundError(path)
+        dest.write_bytes(self.files[path].read_bytes())
+        return dest
+
+
+def _image(tmp_path: Path, name: str, source: str, size: str) -> Path:
+    out = tmp_path / name
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"{source}=s={size}", "-frames:v", "1", str(out)],
+        check=True,
+    )
+    return out
+
+
+def _decoded(asset: dict) -> bytes:
+    import base64
+
+    return base64.b64decode(asset["src"].split(",", 1)[1])
+
+
+def test_motion_assets_refuse_another_users_path(tmp_path: Path) -> None:
+    task = SimpleNamespace(user_id=USER)
+    library = _Library({})
+    for ref in ("22222222-2222-4222-8222-222222222222/logo.png", f"{USER}/../other/logo.png", f"{USER}\\..\\x.png", 42):
+        with pytest.raises(SpecError, match="not in your library"):
+            motion.motion_assets(library, task, {"assets": [{"name": "logo", "ref": ref}]}, tmp_path)
+    assert library.asked == [], "nothing is downloaded for a path the task's owner does not own"
+    for assets in (
+        [{"name": f"a{i}", "ref": f"{USER}/a.png"} for i in range(7)],
+        [{"name": "Logo", "ref": f"{USER}/a.png"}],
+        [{"name": "a", "ref": f"{USER}/a.png"}, {"name": "a", "ref": f"{USER}/b.png"}],
+    ):
+        with pytest.raises(SpecError, match="not in your library"):
+            motion.motion_assets(library, task, {"assets": assets}, tmp_path)
+    with pytest.raises(SpecError, match="not in your library"):
+        motion.motion_assets(library, task, {"assets": [{"name": "gone", "ref": f"{USER}/gone.png"}]}, tmp_path)
+
+
+def test_motion_assets_keep_transparency_as_png(tmp_path: Path) -> None:
+    logo = tmp_path / "logo.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red@0.5:s=300x200,format=rgba", "-frames:v", "1", str(logo)],
+        check=True,
+    )
+    library = _Library({f"{USER}/brand/logo.png": logo})
+    [asset] = motion.motion_assets(library, SimpleNamespace(user_id=USER), {"assets": [{"name": "logo", "ref": f"{USER}/brand/logo.png"}]}, tmp_path)
+    assert asset["name"] == "logo" and asset["src"].startswith("data:image/png;base64,")
+    assert (asset["width"], asset["height"]) == (300, 200)
+    data = _decoded(asset)
+    assert data[25] == 6, "colour type 6: RGBA, the logo keeps its alpha"
+
+
+def test_motion_assets_without_alpha_become_jpeg_under_2048_px(tmp_path: Path) -> None:
+    shot = _image(tmp_path, "shot.png", "testsrc2", "3000x1500")
+    webp = _image(tmp_path, "small.jpg", "testsrc2", "640x360")
+    library = _Library({f"{USER}/uploads/shot.png": shot, f"{USER}/uploads/small.jpg": webp})
+    assets = motion.motion_assets(
+        library,
+        SimpleNamespace(user_id=USER),
+        {"assets": [{"name": "shot", "ref": f"{USER}/uploads/shot.png"}, {"name": "small", "ref": f"{USER}/uploads/small.jpg"}]},
+        tmp_path,
+    )
+    assert [a["name"] for a in assets] == ["shot", "small"]
+    assert all(a["src"].startswith("data:image/jpeg;base64,") for a in assets)
+    assert (assets[0]["width"], assets[0]["height"]) == (2048, 1024)
+    assert (assets[1]["width"], assets[1]["height"]) == (640, 360)
+    assert all(len(_decoded(a)) <= motion.ASSET_MAX_BYTES and _decoded(a)[:3] == b"\xff\xd8\xff" for a in assets)
+
+
+def test_motion_assets_refuse_a_file_that_is_not_an_image(tmp_path: Path) -> None:
+    playlist = tmp_path / "x.png"
+    playlist.write_text("#EXTM3U\n#EXTINF:1,\nfile:///etc/passwd\n")
+    library = _Library({f"{USER}/x.png": playlist})
+    with pytest.raises(SpecError, match="could not be read"):
+        motion.motion_assets(library, SimpleNamespace(user_id=USER), {"assets": [{"name": "x", "ref": f"{USER}/x.png"}]}, tmp_path)
+
+
+def test_the_job_carries_the_inlined_assets() -> None:
+    assets = [{"name": "logo", "src": "data:image/png;base64,AAAA", "width": 1, "height": 1}]
+    assert motion_job({**SPEC, "code": CODE, "motionAssets": assets})["assets"] == assets
+    assert "assets" not in motion_job({**SPEC, "code": CODE})
+
+
+def test_the_worker_inlines_scene_images_before_the_render(tmp_path: Path) -> None:
+    from opencmo.worker import generate_task
+
+    shot = _image(tmp_path, "shot.png", "testsrc2", "320x180")
+    library = _Library({f"{USER}/uploads/shot.png": shot})
+    spec = {**SPEC, "code": CODE, "scene": {**SPEC["scene"], "assets": [{"name": "shot", "ref": f"{USER}/uploads/shot.png"}]}}
+    prepared = generate_task._prepare_inputs(library, SimpleNamespace(user_id=USER), model(), spec, tmp_path)
+    assert [a["name"] for a in prepared["motionAssets"]] == ["shot"]
+    assert motion_job(prepared)["assets"][0]["src"].startswith("data:image/jpeg;base64,")
+    assert "motionAssets" not in generate_task._prepare_inputs(library, SimpleNamespace(user_id=USER), model(), {**SPEC, "code": CODE}, tmp_path)

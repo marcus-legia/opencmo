@@ -15,6 +15,7 @@ import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
 import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
+import { makeImage } from './image.tsx';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
 import { buildTimeline, cueFrame, type Timeline } from './timing.ts';
@@ -66,6 +67,9 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		icons: ICON_NAMES,
 		Lottie,
 		lotties: LOTTIE_NAMES,
+		// The user's own images (job.assets), by name
+		Image: makeImage(job.assets ?? []),
+		images: Object.freeze((job.assets ?? []).map((asset) => asset.name)),
 		Shape,
 		shapes: SHAPE_KINDS,
 		Path,

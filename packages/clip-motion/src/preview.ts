@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 
 import { openBrowser, renderStill, selectComposition, type HeadlessBrowser } from '@remotion/renderer';
 
+import { ASSET_ORIGIN, inlineAssets } from './assets-inline.ts';
 import { MotionCodeFailure } from './errors.ts';
 import { FPS, frameSize, type MotionJob, type PreviewResult } from './job.ts';
 import { buildTimeline, probeFrames, stillFrames } from './kit/timing.ts';
@@ -66,8 +67,18 @@ export function openPreviewBrowser(): Promise<HeadlessBrowser> {
 	return openBrowser('chrome', { browserExecutable: browserExecutable(), chromiumOptions: CHROMIUM, logLevel: 'error' });
 }
 
-export async function previewJob(job: MotionJob, outdir: string, options: { log?: Log; scale?: number; browser?: HeadlessBrowser } = {}): Promise<PreviewResult> {
+export type PreviewOptions = { log?: Log; scale?: number; browser?: HeadlessBrowser; assetOrigin?: string; fetch?: typeof fetch };
+
+export async function previewJob(input: MotionJob, outdir: string, options: PreviewOptions = {}): Promise<PreviewResult> {
 	const started = Date.now();
+	let job: MotionJob;
+	try {
+		// Before Chromium: a bad image is a job error the model can fix, and the page never fetches.
+		job = await inlineAssets(input, { origin: options.assetOrigin ?? ASSET_ORIGIN, fetch: options.fetch });
+	} catch (error) {
+		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
+		throw error;
+	}
 	const timeline = buildTimeline(job);
 	const { width, height } = frameSize(job.format);
 	let stills: Still[];

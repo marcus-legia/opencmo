@@ -30,12 +30,12 @@ export const BeatSchema = z.object({
 }).strict();
 
 /**
- * Final renders carry data URIs (the worker inlines them); previews may carry `https` URLs that
- * `inlineAssets` fetches in Node, so the offline Chromium never does.
+ * Final renders carry data URIs (the worker inlines them); previews may carry `https` URLs (plain `http` only on
+ * loopback, for the local Supabase) that `inlineAssets` fetches in Node, so the offline Chromium never does.
  */
 export const AssetSchema = z.object({
 	name: z.string().regex(ASSET_NAME, 'Use lowercase letters, digits and dashes, starting with a letter (at most 32).'),
-	src: z.string().max(Math.ceil((MAX_ASSET_BYTES * 4) / 3) + 64).regex(/^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/\S+)$/, 'An asset is a PNG, JPEG or WebP data URI, or an https URL.'),
+	src: z.string().max(Math.ceil((MAX_ASSET_BYTES * 4) / 3) + 64).regex(/^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/\S+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/\S*)$/, 'An asset is a PNG, JPEG or WebP data URI, or an https URL.'),
 	width: z.number().int().min(1).max(MAX_ASSET_EDGE).optional(),
 	height: z.number().int().min(1).max(MAX_ASSET_EDGE).optional(),
 }).strict();

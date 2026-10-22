@@ -14,7 +14,8 @@
  * agent, never retried · 1 anything else.
  *
  * Env: OPENCMO_MOTION_SCALE (0.25–1, dev only), OPENCMO_MOTION_CHROME (browser path),
- * OPENCMO_MOTION_CONCURRENCY (render concurrency, default 2).
+ * OPENCMO_MOTION_CONCURRENCY (render concurrency, default 2), OPENCMO_MOTION_ASSET_ORIGIN (the only origin image
+ * assets may be fetched from: the Supabase project URL; final renders arrive inlined and need none).
  */
 
 import { readFileSync } from 'node:fs';
@@ -22,6 +23,7 @@ import { createInterface } from 'node:readline';
 
 import type { HeadlessBrowser } from '@remotion/renderer';
 
+import { ASSET_ORIGIN, inlineAssets } from './assets-inline.ts';
 import { parseJob, prepare } from './prepare.ts';
 import { openPreviewBrowser, previewJob } from './preview.ts';
 import { getBundle, MotionCodeFailure, renderJob } from './render.ts';
@@ -117,7 +119,7 @@ try {
 			process.exit(4);
 		}
 	} else {
-		const result = await renderJob(prepare(parsed.job), out, { audio, log });
+		const result = await renderJob(prepare(await inlineAssets(parsed.job, { origin: ASSET_ORIGIN })), out, { audio, log });
 		emit(result);
 	}
 } catch (error) {

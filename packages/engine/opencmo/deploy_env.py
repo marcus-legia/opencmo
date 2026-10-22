@@ -41,6 +41,7 @@ PLAIN_KEYS = frozenset(
         "MOTION_PREVIEW_URL",
         "OPENCMO_ENV",
         "OPENCMO_MOTION",
+        "OPENCMO_MOTION_ASSET_ORIGIN",
         "OPENCMO_VOICE_ENABLED",
         "OPENAI_COMPAT_BASE_URL",
         "OPENCMO_MODERATION_VISION_MODEL",
@@ -67,7 +68,16 @@ SHARED = (
     Shared("CMO cron secret", ((VERCEL, "CRON_SECRET"), (WORKER, "CRON_SECRET"))),
     Shared("cleanup cron secret", ((VERCEL, "CRON_CLEANUP_SECRET"), (WORKER, "CRON_CLEANUP_SECRET"))),
     Shared("MCP URL", ((VERCEL, "OPENCMO_MCP_URL"), (MCP, "OPENCMO_MCP_URL"))),
-    Shared("Supabase URL", ((VERCEL, "NEXT_PUBLIC_SUPABASE_URL"), (WORKER, "SUPABASE_URL"), (MCP, "NEXT_PUBLIC_SUPABASE_URL"))),
+    # The motion container fetches preview images only from this origin (signed URLs of the media bucket).
+    Shared(
+        "Supabase URL",
+        (
+            (VERCEL, "NEXT_PUBLIC_SUPABASE_URL"),
+            (WORKER, "SUPABASE_URL"),
+            (MCP, "NEXT_PUBLIC_SUPABASE_URL"),
+            (MOTION, "OPENCMO_MOTION_ASSET_ORIGIN"),
+        ),
+    ),
     Shared("Supabase anon key", ((VERCEL, "NEXT_PUBLIC_SUPABASE_ANON_KEY"), (MCP, "NEXT_PUBLIC_SUPABASE_ANON_KEY"))),
     Shared("Supabase service role key", ((VERCEL, "SUPABASE_SERVICE_ROLE_KEY"), (WORKER, "SUPABASE_SERVICE_ROLE_KEY"), (MCP, "SUPABASE_SERVICE_ROLE_KEY"))),
     Shared("Supabase JWT secret", ((VERCEL, "SUPABASE_JWT_SECRET"), (MCP, "SUPABASE_JWT_SECRET"))),

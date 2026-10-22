@@ -66,6 +66,22 @@ def run(
     return proc
 
 
+def reencode_image(raw: Path, out: Path, edge: int, *, timeout: int = 120, extra: list[str] | None = None) -> Path:
+    """An untrusted image file → `out` (format from its extension), longest edge ≤ `edge`.
+
+    The bytes go through stdin with image2pipe: ffmpeg decodes exactly them and can open no other
+    file or URL (an "image" that is really an HLS playlist once read files on the worker).
+    """
+    run([
+        "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-f", "image2pipe", "-i", "pipe:0",
+        "-frames:v", "1",
+        "-vf", f"scale='min({edge},iw)':'min({edge},ih)':force_original_aspect_ratio=decrease",
+        *(extra or []),
+        str(out),
+    ], timeout=timeout, stdin_path=raw)
+    return out
+
+
 def try_run(args: list[str], *, timeout: int = 60) -> bool:
     """Chạy thử, trả về True/False thay vì raise. Dùng cho việc dò khả năng."""
     try:

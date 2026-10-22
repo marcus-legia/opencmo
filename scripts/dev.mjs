@@ -30,7 +30,7 @@ const ENGINE_KEYS = new Set([
   "GEMINI_API_KEY", "OPENCMO_MODERATION_GEMINI_MODEL",
   // Explainers: where clip-motion renders, and the free silent voice for runs without a fal key.
   "OPENCMO_MOTION", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_MOTION_SCALE", "OPENCMO_MOTION_CHROME",
-  "OPENCMO_MOTION_CONCURRENCY",
+  "OPENCMO_MOTION_CONCURRENCY", "OPENCMO_MOTION_ASSET_ORIGIN",
 ]);
 /** `OPENCMO_AI_MODEL_<ID>` đổi providerModel — web và worker phải thấy cùng giá trị. */
 const ENGINE_PREFIXES = ["OPENCMO_AI_MODEL_"];
@@ -120,6 +120,8 @@ const motionEnv = {
   OPENCMO_MOTION: engineEnv.OPENCMO_MOTION ?? process.env.OPENCMO_MOTION ?? "local",
   OPENCMO_MOTION_FAKE_VOICE:
     engineEnv.OPENCMO_MOTION_FAKE_VOICE ?? process.env.OPENCMO_MOTION_FAKE_VOICE ?? (engineEnv.FAL_KEY || process.env.FAL_KEY ? "0" : "1"),
+  // Previews fetch the user's images (kit.Image) from signed URLs of the local Supabase, and only from it.
+  OPENCMO_MOTION_ASSET_ORIGIN: engineEnv.OPENCMO_MOTION_ASSET_ORIGIN ?? process.env.OPENCMO_MOTION_ASSET_ORIGIN ?? supabase.API_URL,
 };
 
 // 127.0.0.1 chứ không phải localhost: trên máy có IPv6, `localhost` giải ra ::1

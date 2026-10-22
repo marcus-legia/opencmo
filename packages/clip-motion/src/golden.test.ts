@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { parseJob, prepare } from './prepare.ts';
-import { renderStills } from './preview.ts';
+import { previewJob, renderStills } from './preview.ts';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 const FIXTURES: Record<string, number[]> = { showcase: [100, 330, 520, 860], vaccine: [75, 244, 569, 725] };
@@ -76,5 +76,44 @@ describe.each(Object.entries(FIXTURES))('%s golden stills', (name, frames) => {
 			const diff = compare(reference, still.file);
 			expect({ frame: still.frame, ...diff, ok: diff.mean <= LIMIT.mean && diff.tile <= LIMIT.tile }).toMatchObject({ frame: still.frame, ok: true });
 		}
+	});
+});
+
+describe('kit.Image', () => {
+	// A 1×1 orange PNG, stretched over a 600×400 box.
+	const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP4v4IBAAQAAYGaqzA6AAAAAElFTkSuQmCC';
+	const job = (code: string) => {
+		const parsed = parseJob({
+			title: 'Image',
+			code,
+			beats: [{ say: 'The shot.', seconds: 3 }],
+			kind: 'clip',
+			format: '16:9',
+			duration: 3,
+			assets: [{ name: 'shot', src: PNG }],
+		});
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+
+	it('draws the image and reports its box as a mark', { timeout: 120_000 }, async () => {
+		const scene = "const { Stage, Image } = kit;\nreturn function Scene() { return <Stage><Image name={kit.images[0]} x={660} y={340} w={600} h={400} at={0} dur={1} /></Stage>; };";
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-image-'));
+		const [still] = await renderStills(job(scene), prepare(job(scene)).compiled, [45], dir, { scale: 0.25, format: 'png' });
+		expect(still!.boxes).toContainEqual({ kind: 'mark', name: 'Image shot', x: 660, y: 340, w: 600, h: 400 });
+		const { data, width } = pixels(still!.file);
+		const at = (x: number, y: number) => [...data.subarray((y * width + x) * 3, (y * width + x) * 3 + 3)];
+		// Centre of the box at quarter size: the PNG's orange; a corner of the frame: the field.
+		const [r, g, b] = at(240, 135);
+		expect(r).toBeGreaterThan(200);
+		expect(g).toBeGreaterThan(80);
+		expect(b).toBeLessThan(60);
+		expect(at(5, 5)[0]).toBeLessThan(60);
+	});
+
+	it('names the available images when the scene asks for another', { timeout: 120_000 }, async () => {
+		const scene = "const { Stage, Image } = kit;\nreturn function Scene() { return <Stage><Image name=\"nope\" x={0} y={0} w={10} h={10} /></Stage>; };";
+		const result = await previewJob(job(scene), mkdtempSync(join(tmpdir(), 'clip-motion-image-')));
+		expect(result).toEqual({ ok: false, phase: 'render', message: expect.stringContaining('kit: unknown image "nope": this job has "shot"') });
 	});
 });

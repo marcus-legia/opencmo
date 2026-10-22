@@ -21,9 +21,11 @@ same refusal and would charge for the voice again.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import re
 import select
 import subprocess
 import threading
@@ -31,9 +33,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from opencmo.ai.catalog import AiModel, get_model, narration
+from opencmo.ai.catalog import AiModel, SpecError, get_model, narration
 from opencmo.ai.providers.base import Poll, ProviderAdapter, ProviderError, Result
-from opencmo.media.ffmpeg import USER_INPUT, run
+from opencmo.media.ffmpeg import USER_INPUT, FFmpegError, reencode_image, run
 
 log = logging.getLogger(__name__)
 
@@ -88,9 +90,91 @@ def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) 
     for key in ("accent", "theme", "personality"):
         if scene.get(key):
             job[key] = scene[key]
+    if spec.get("motionAssets"):
+        # Inlined by the worker (`motion_assets`) before the render: the CLI never fetches them.
+        job["assets"] = spec["motionAssets"]
     if words:
         job["words"] = words
     return job
+
+
+#: Same rules as `ASSET_NAME`, `MAX_ASSETS` and `MAX_ASSET_BYTES` in packages/clip-motion/src/job.ts.
+ASSET_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
+MAX_ASSETS = 6
+ASSET_MAX_BYTES = 2_000_000
+#: A 1080p frame never needs more; smaller edges are tried when the file is still too big.
+ASSET_EDGES = (2048, 1536, 1024, 768)
+#: What a library image may weigh before it is re-encoded (same as generation inputs).
+ASSET_SOURCE_MAX_BYTES = 30 * 1024 * 1024
+ASSET_NOT_FOUND = "An image in this animation is not in your library. Pick it again."
+ASSET_UNREADABLE = "An image in this animation could not be read. Pick another one."
+
+
+def _own_media(ref: Any, user_id: str) -> bool:
+    """Same rule as `public.ai_media_ref_ok`, against the task's owner instead of the caller."""
+    return (
+        isinstance(ref, str)
+        and len(ref) <= 500
+        and ref.startswith(f"{user_id}/")
+        and ".." not in ref
+        and "\\" not in ref
+    )
+
+
+def _png_info(data: bytes) -> tuple[int, int, bool]:
+    """Width, height and whether a PNG we wrote ourselves can be transparent (IHDR colour type, tRNS)."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        raise ValueError("not a PNG")
+    width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    color = data[25]
+    return width, height, color in (4, 6) or b"tRNS" in data
+
+
+def _encode_asset(raw: Path, workdir: Path, stem: str) -> dict[str, Any]:
+    """`{src, width, height}`: PNG when the image can be transparent (logos keep their alpha), JPEG
+    otherwise, the longest edge at most 2048 px and the file under the 2 MB the renderer takes."""
+    for edge in ASSET_EDGES:
+        png = reencode_image(raw, workdir / f"{stem}-{edge}.png", edge)
+        data = png.read_bytes()
+        width, height, alpha = _png_info(data)
+        kind = "png"
+        if not alpha:
+            # Our own PNG now, still read through image2pipe like any image.
+            data = reencode_image(png, workdir / f"{stem}-{edge}.jpg", edge, extra=["-q:v", "3"]).read_bytes()
+            kind = "jpeg"
+        if len(data) <= ASSET_MAX_BYTES:
+            return {"src": f"data:image/{kind};base64,{base64.b64encode(data).decode()}", "width": width, "height": height}
+    raise SpecError(ASSET_UNREADABLE)
+
+
+def motion_assets(store: Any, task: Any, scene: dict[str, Any], workdir: Path) -> list[dict[str, Any]]:
+    """The scene's images as the job's `assets`: `[{name, src: data URI, width, height}]`.
+
+    SQL checked each `ref` against the caller when the generation was created; this checks it again
+    against the task's OWNER, so an edited generation row cannot show another user's image.
+    """
+    items = scene.get("assets") or []
+    if not isinstance(items, list) or len(items) > MAX_ASSETS:
+        raise SpecError(ASSET_NOT_FOUND)
+    out: list[dict[str, Any]] = []
+    names: set[str] = set()
+    for index, item in enumerate(items):
+        name = item.get("name") if isinstance(item, dict) else None
+        ref = item.get("ref") if isinstance(item, dict) else None
+        if not isinstance(name, str) or not ASSET_NAME.fullmatch(name) or name in names or not _own_media(ref, task.user_id):
+            raise SpecError(ASSET_NOT_FOUND)
+        names.add(name)
+        raw = workdir / f"asset-{index}"
+        try:
+            store.download_object("media", ref, raw, max_bytes=ASSET_SOURCE_MAX_BYTES)
+        except Exception as exc:
+            raise SpecError(ASSET_NOT_FOUND) from exc
+        try:
+            encoded = _encode_asset(raw, workdir, f"asset-{index}")
+        except (FFmpegError, ValueError, OSError) as exc:
+            raise SpecError(ASSET_UNREADABLE) from exc
+        out.append({"name": name, **encoded})
+    return out
 
 
 def _fit_words(words: list[dict[str, Any]], duration: float) -> list[dict[str, Any]]:
