@@ -14,6 +14,10 @@ log = logging.getLogger(__name__)
 
 UPLOAD_UNAVAILABLE = "This upload is not available. Upload the video again."
 
+# A full encode of an 8K source peaks near 4 GB on 4 threads, the whole worker; capped, near 1.2 GB.
+MAX_ENCODE_SIDE = 3840
+ENCODE_THREADS = 4
+
 
 class UploadUnavailableError(ValueError):
     pass
@@ -43,13 +47,22 @@ def make_editor_master(source: Path, out: Path) -> None:
     Stream copy first: no encode, I/O not CPU, and no frame enters Python. MP4 refuses some codecs
     an allowed container carries (PCM audio in MOV/MKV, Vorbis in WebM), so a failed copy retries
     with AAC audio, then with a full encode, instead of failing an upload no retry can fix.
+    The full encode fits inside `MAX_ENCODE_SIDE` (never upscaled) on capped threads: decoding and
+    encoding at the source's size is what breaks the per-job RAM budget, copying is not.
     `source` is the user's file: read through the demuxer allowlist.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
+    fit = (
+        f"scale=w='min(iw,{MAX_ENCODE_SIDE})':h='min(ih,{MAX_ENCODE_SIDE})'"
+        ":force_original_aspect_ratio=decrease:force_divisible_by=2"
+    )
     attempts = (
         ["-c", "copy"],
         ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"],
-        ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"],
+        [
+            "-vf", fit, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-threads", str(ENCODE_THREADS), "-c:a", "aac", "-b:a", "192k",
+        ],
     )
     for index, codecs in enumerate(attempts):
         try:
