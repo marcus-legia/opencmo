@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from opencmo.ai.moderation import GROQ_BASE_URL
+
 VERCEL = "vercel"
 WORKER = "opencmo"
 VOICE = "opencmo-voice"
@@ -38,6 +40,8 @@ PLAIN_KEYS = frozenset(
         "OPENCMO_ENV",
         "OPENCMO_MOTION",
         "OPENCMO_VOICE_ENABLED",
+        "OPENAI_COMPAT_BASE_URL",
+        "OPENCMO_MODERATION_VISION_MODEL",
     }
 )
 
@@ -68,6 +72,9 @@ SHARED = (
     Shared("Anthropic key", ((VERCEL, "ANTHROPIC_API_KEY"), (WORKER, "ANTHROPIC_API_KEY"), (MCP, "ANTHROPIC_API_KEY")), optional=True),
     Shared("Groq key", ((VERCEL, "GROQ_API_KEY"), (WORKER, "GROQ_API_KEY"), (MCP, "GROQ_API_KEY")), optional=True),
     Shared("fal key", ((VERCEL, "FAL_KEY"), (FAL, "FAL_KEY"), (MCP, "FAL_KEY")), optional=True),
+    # The web enables AI images/video only when the worker can check the frames with these.
+    Shared("OpenAI-compatible endpoint", ((VERCEL, "OPENAI_COMPAT_BASE_URL"), (WORKER, "OPENAI_COMPAT_BASE_URL"), (MCP, "OPENAI_COMPAT_BASE_URL")), optional=True),
+    Shared("moderation vision model", ((VERCEL, "OPENCMO_MODERATION_VISION_MODEL"), (WORKER, "OPENCMO_MODERATION_VISION_MODEL"), (MCP, "OPENCMO_MODERATION_VISION_MODEL")), optional=True),
     Shared("ElevenLabs key", ((VERCEL, "ELEVENLABS_API_KEY"), (VOICE, "ELEVENLABS_API_KEY"))),
 )
 
@@ -123,6 +130,16 @@ ENDPOINT_LABELS = (
     (MCP, "OPENCMO_MCP_URL", "--opencmo-mcp."),
     (VERCEL, "OPENCMO_MCP_URL", "--opencmo-mcp."),
 )
+
+
+def _worker_checks_frames(get) -> bool:
+    """The worker's own rule (`ready()` in opencmo/ai/moderation.py): Claude or Gemini, or an
+    OpenAI-compatible endpoint with its own key and a vision model (Groq has a default one)."""
+    if any(get(WORKER, key) is not None for key in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY")):
+        return True
+    on_groq = (get(WORKER, "OPENAI_COMPAT_BASE_URL") or GROQ_BASE_URL).rstrip("/") == GROQ_BASE_URL
+    keyed = get(WORKER, "OPENAI_COMPAT_API_KEY") is not None or (on_groq and get(WORKER, "GROQ_API_KEY") is not None)
+    return keyed and (on_groq or bool(get(WORKER, "OPENCMO_MODERATION_VISION_MODEL")))
 
 
 def keys_to_read(place: str) -> list[str]:
@@ -201,6 +218,12 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
         # "" is a Vercel Sensitive value the CLI cannot read: set, just hidden.
         if place in seen and all(get(place, key) is None for key in MODERATION_KEYS):
             problems.append(f"{place}: no moderation key ({' / '.join(MODERATION_KEYS)}): AI media cannot be checked")
+
+    if WORKER in seen and any(get(WORKER, key) is not None for key in MODERATION_KEYS) and not _worker_checks_frames(get):
+        problems.append(
+            f"{WORKER}: moderation cannot check images: the OpenAI-compatible endpoint is not Groq "
+            "(set OPENCMO_MODERATION_VISION_MODEL, and OPENAI_COMPAT_API_KEY for it), and there is no Claude or Gemini key"
+        )
 
     for place, forbidden in FORBIDDEN:
         if place in seen:

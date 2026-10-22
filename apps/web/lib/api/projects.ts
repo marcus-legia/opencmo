@@ -69,18 +69,20 @@ const JOB_COLUMNS =
 const CLIP_COLUMNS =
   "id, idx, hook, start_seconds, end_seconds, score, reason, storage_path, preview_path";
 
-export async function jobRowOrThrow(
+/** `extra`: more columns of the same row, read in the same query. */
+export async function jobRowOrThrow<Row extends JobRow = JobRow>(
   supabase: SupabaseClient,
   jobId: string,
-): Promise<JobRow> {
+  extra = "",
+): Promise<Row> {
   const { data, error } = await supabase
     .from("jobs")
-    .select(JOB_COLUMNS)
+    .select(extra ? `${JOB_COLUMNS}, ${extra}` : JOB_COLUMNS)
     .eq("id", jobId)
     .maybeSingle();
   if (error) throw new ApiError(503, "Could not load this project. Please try again.");
   if (!data) throw notFound(PROJECT_NOT_FOUND);
-  return data as unknown as JobRow;
+  return data as unknown as Row;
 }
 
 /** Tên file người dùng thấy khi tải clip về. */
@@ -101,9 +103,14 @@ export async function projectDetail(
   supabase: SupabaseClient,
   jobId: string,
 ): Promise<Project> {
-  const job = await jobRowOrThrow(supabase, jobId);
+  // An upload's transcript sits beside its master (`process_job.py`); `artifacts` holds older ones.
+  const job = await jobRowOrThrow<JobRow & { masters: Record<string, { transcript?: string | null }> | null }>(
+    supabase,
+    jobId,
+    "masters:media_manifest->masters",
+  );
 
-  const [clipsResult, transcriptResult, mastersResult] = await Promise.all([
+  const [clipsResult, transcriptResult] = await Promise.all([
     supabase
       .from("clips")
       .select(`${CLIP_COLUMNS}, settings_hash`)
@@ -111,11 +118,9 @@ export async function projectDetail(
       .eq("kind", "full")
       .order("idx"),
     supabase.from("artifacts").select("kind").eq("job_id", jobId).eq("kind", "transcript").limit(1),
-    // An upload's transcript sits beside its master (`process_job.py`); `artifacts` holds older ones.
-    supabase.from("jobs").select("media_manifest").eq("id", jobId).maybeSingle(),
   ]);
 
-  if (clipsResult.error || transcriptResult.error || mastersResult.error) {
+  if (clipsResult.error || transcriptResult.error) {
     throw new ApiError(503, "Could not refresh your clips. Please try again.");
   }
   const clipRows = (clipsResult.data ?? []) as unknown as (ClipRow & { settings_hash: string | null })[];
@@ -193,7 +198,7 @@ export async function projectDetail(
     }),
   );
 
-  const masters = ((mastersResult.data as { media_manifest: { masters?: Record<string, { transcript?: string | null }> } | null } | null)?.media_manifest?.masters) ?? {};
+  const masters = job.masters ?? {};
   const transcribed = Object.values(masters).some((master) => Boolean(master?.transcript)) || (transcriptResult.data ?? []).length > 0;
   return projectShape(job, clips, transcribed);
 }

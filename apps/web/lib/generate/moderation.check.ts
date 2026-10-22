@@ -14,7 +14,7 @@ import { ApiError as GeminiError } from "@google/genai";
 import { ApiError } from "@/lib/api/errors";
 import { clearHealth, markDown } from "@/lib/llm-health";
 
-import { AUDIO_POLICY, moderateText, POLICY, specText } from "./moderation";
+import { AUDIO_POLICY, moderateText, moderationReady, POLICY, specText } from "./moderation";
 
 type Reply = { stop_reason: string; parsed_output: unknown } | Error;
 
@@ -186,7 +186,19 @@ async function compatChecks(): Promise<void> {
 const PROVIDER_ENV = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_BASE_URL", "CMO_LLM_PROVIDER", "CMO_LLM_PROVIDERS"];
 for (const name of [...PROVIDER_ENV, ...Object.keys(process.env).filter((key) => key.startsWith("CMO_AGENT_MODERATION_"))]) delete process.env[name];
 
+/** AI media is enabled only when the worker can also check the frames: the same keys and vision model. */
+function readinessChecks(): void {
+  const env = (vars: Record<string, string>) => vars as unknown as NodeJS.ProcessEnv;
+  assert.equal(moderationReady(env({ GROQ_API_KEY: "q" })), true, "Groq has a default vision model");
+  const elsewhere = { OPENAI_COMPAT_API_KEY: "sk", OPENAI_COMPAT_BASE_URL: "https://openrouter.ai/api/v1" };
+  assert.equal(moderationReady(env(elsewhere)), false, "another endpoint without a vision model cannot check frames");
+  assert.equal(moderationReady(env({ ...elsewhere, OPENCMO_MODERATION_VISION_MODEL: "vendor/vision" })), true);
+  assert.equal(moderationReady(env({ ...elsewhere, ANTHROPIC_API_KEY: "a" })), true, "Claude checks frames on its own");
+  assert.equal(moderationReady(env({})), false);
+}
+
 async function main(): Promise<void> {
+  readinessChecks();
   await standbyChecks();
   await compatChecks();
   assert.equal(await status("a laptop on a desk at night", { stop_reason: "end_turn", parsed_output: { allowed: true, category: "none" } }), 200);
