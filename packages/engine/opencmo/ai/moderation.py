@@ -220,8 +220,9 @@ def check_prompt(model: AiModel, spec: dict) -> None:
     """The spec's text against the web's prompt policy, before a provider or renderer sees it.
 
     Raises a non-retryable `ProviderError(PROMPT_BLOCKED)`: the task fails and the trigger refunds.
-    Our own renderers are checked too: their output is not (`SKIP_PROVIDERS`), so their text is
-    the only thing standing between a direct RPC call and what is drawn.
+    Our own renderers are checked too, though their output is not (`SKIP_PROVIDERS`). Scene code
+    (`code`) and the library images a scene shows are not checked here: they draw what the user could
+    already put on the timeline as a text layer or an image, where nothing is moderated either.
     """
     text = "\n".join(prompt_text(spec))[:PROMPT_MAX_CHARS].strip()
     if not text:

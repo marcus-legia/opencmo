@@ -35,6 +35,8 @@ const NEXT: Record<string, string> = {
   failed: "Failed; its credits were refunded. Tell the user the reason; try again only with a changed request.",
   cancelled: "Cancelled; its credits were refunded.",
 };
+// Cancelled after the worker sent the paid request: the credits stay spent (`credits` > 0).
+const CANCELLED_SPENT = "Cancelled after it was sent; its credits were spent.";
 
 registerGroup({
   tools: [
@@ -75,7 +77,7 @@ registerGroup({
           created_at: view.created_at,
           finished_at: view.finished_at,
           media,
-          next: NEXT[view.status] ?? "Call get_generation again in a moment.",
+          next: view.status === "cancelled" && view.credits ? CANCELLED_SPENT : (NEXT[view.status] ?? "Call get_generation again in a moment."),
         };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
       },

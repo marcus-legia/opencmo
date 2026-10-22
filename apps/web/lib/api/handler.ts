@@ -159,16 +159,7 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
         user = { id: data.user.id, email: data.user.email ?? undefined };
       }
 
-      if (options.rateLimit) {
-        const { bucket, limit, windowSeconds } = options.rateLimit;
-        const { data, error } = await supabase.rpc("rate_limit_hit", {
-          p_bucket: bucket,
-          p_limit: limit,
-          p_window_seconds: windowSeconds,
-        });
-        if (error) throw apiErrorFromPostgrest(error);
-        if (data === false) return errorResponse(429, TOO_MANY);
-      }
+      if (options.rateLimit) await hitRateLimit(supabase, options.rateLimit);
 
       let body: unknown = undefined;
       if (options.body) {
@@ -210,6 +201,17 @@ export function withApi<Schema extends z.ZodType | undefined = undefined>(
 ) {
   return async (request: NextRequest, routeContext: RouteContext): Promise<NextResponse> =>
     handleApi(options, handler, request, await createServerClient(), routeContext);
+}
+
+/** One `rate_limit_hit()` call; throws 429 when the bucket is full. For limits a handler counts mid-way. */
+export async function hitRateLimit(supabase: SupabaseClient, { bucket, limit, windowSeconds }: RateLimit): Promise<void> {
+  const { data, error } = await supabase.rpc("rate_limit_hit", {
+    p_bucket: bucket,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+  if (error) throw apiErrorFromPostgrest(error);
+  if (data === false) throw new ApiError(429, TOO_MANY);
 }
 
 /**

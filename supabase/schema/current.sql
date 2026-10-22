@@ -4102,6 +4102,12 @@ begin
     return jsonb_build_object('generation', to_jsonb(v_generation), 'reused', true);
   end if;
 
+  -- New generations only (reuse returned above): each one runs a paid prompt check on the worker, and a
+  -- blocked prompt is refunded in full, so the web's `generations` limit alone left a free loop open.
+  if not public.rate_limit_hit('generation_create', 120, 3600) then
+    raise exception 'Too many generations started. Wait a while and try again.' using errcode = 'P0001';
+  end if;
+
   if (select count(*) from public.generations
       where user_id = v_user and status in ('queued', 'running')) >= public.generation_active_limit() then
     raise exception 'Too many generations are running. Wait for one to finish.' using errcode = 'P0001';
@@ -4515,32 +4521,30 @@ declare
   v_user uuid := auth.uid();
   v_rows int;
   v_bytes bigint;
+  v_size bigint;
 begin
   if v_user is null then
     return new;
   end if;
   -- Serialised per user and table, so parallel calls cannot all pass the same check.
   perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':write-budget:' || tg_table_name, 0));
+  -- Statements, not a CASE expression: plpgsql resolves every `new.<field>` in an expression on each table.
   if tg_table_name = 'editor_transcripts' then
-    select count(*), coalesce(sum(octet_length(t.body)), 0) into v_rows, v_bytes
-    from public.jobs j join public.clips c on c.job_id = j.id join public.editor_transcripts t on t.clip_id = c.id
-    where j.user_id = v_user and t.created_at > now() - interval '1 hour';
-    v_bytes := v_bytes + octet_length(new.body);
+    v_size := octet_length(new.body);
   elsif tg_table_name = 'editor_revisions' then
-    select count(*), coalesce(sum(pg_column_size(r.document)), 0) into v_rows, v_bytes
-    from public.jobs j join public.clips c on c.job_id = j.id join public.editor_revisions r on r.clip_id = c.id
-    where j.user_id = v_user and r.created_at > now() - interval '1 hour';
-    v_bytes := v_bytes + pg_column_size(new.document);
+    v_size := pg_column_size(new.document);
   else
-    select count(*), coalesce(sum(pg_column_size(m.body)), 0) into v_rows, v_bytes
-    from public.marketing_documents m
-    where m.user_id = v_user and m.created_at > now() - interval '1 hour';
-    v_bytes := v_bytes + pg_column_size(new.body);
+    v_size := pg_column_size(new.body);
   end if;
-  if v_rows >= public.write_budget_rows(tg_table_name) or v_bytes > public.write_budget_bytes() then
+  delete from public.write_budget_ledger
+  where user_id = v_user and table_name = tg_table_name and created_at <= now() - interval '1 hour';
+  select count(*), coalesce(sum(bytes), 0) into v_rows, v_bytes
+  from public.write_budget_ledger where user_id = v_user and table_name = tg_table_name;
+  if v_rows >= public.write_budget_rows(tg_table_name) or v_bytes + v_size > public.write_budget_bytes() then
     raise exception 'You have saved a lot of changes in the last hour. Wait a few minutes and try again.'
       using errcode = 'P0001';
   end if;
+  insert into public.write_budget_ledger (user_id, table_name, bytes) values (v_user, tg_table_name, v_size);
   return new;
 end;
 $$;
@@ -5204,6 +5208,31 @@ $$;
 
 
 --
+-- Name: mark_generation_sent(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_generation_sent(p_task_id uuid, p_attempt_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rows int;
+begin
+  -- Locks the task first, as the cancel path does, so a cancel either lands before (false: the worker
+  -- stops without paying) or after (the credits stay spent).
+  perform 1 from public.tasks
+  where id = p_task_id and kind = 'generate' and status = 'running' and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then return false; end if;
+  update public.generations set sent_at = coalesce(sent_at, now())
+  where task_id = p_task_id and status = 'running';
+  get diagnostics v_rows = row_count;
+  return v_rows = 1;
+end;
+$$;
+
+
+--
 -- Name: mcp_admit(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5623,6 +5652,9 @@ begin
    -- the external id our checkout link set, the payment is the account's: credit it, keep the first link.
    if v_external_user is null then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
    raise warning 'polar: order % for user % comes from customer %, account is linked to %', v_id, v_user, v_customer, v_link;
+   -- Map the second customer too: its later events (a refund, a cancelled subscription) may carry no
+   -- external id, and the email path would skip them as "account already linked".
+   insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user) on conflict (customer_id) do nothing;
   else
    update public.profiles set polar_customer_id=v_customer where id=v_user;
    insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user);
@@ -6013,6 +6045,8 @@ begin
       or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
       -- POST /api/v1/generations: each request can run a paid moderation call.
       or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
+      -- `create_generation` itself: a direct PostgREST call skips the route's bucket.
+      or (p_bucket = 'generation_create' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
@@ -7719,9 +7753,11 @@ begin
     update public.generations set status = 'running' where id = v_generation.id;
   elsif new.status = 'queued' then
     update public.generations set status = 'queued' where id = v_generation.id;
-  elsif new.status = 'cancelled' and old.status = 'running' then
-    -- The worker had already sent the paid request to the provider: cancelling stops the
-    -- result, not the bill. A full refund here made start-then-cancel a free provider loop.
+  elsif new.status = 'cancelled' and v_generation.sent_at is not null then
+    -- The worker sent the paid request (`mark_generation_sent`, right before the provider call):
+    -- cancelling stops the result, not the bill. Until then nothing was paid, so a cancel while the
+    -- worker downloads or checks inputs is refunded below, and so is one after a reclaim that never
+    -- reached the provider; a reclaimed task that had reached it keeps its credits even when queued.
     update public.generations
     set status = 'cancelled',
         credits_final = greatest(public.credit_held('generation', v_generation.id), 0),
@@ -8199,6 +8235,7 @@ CREATE TABLE public.generations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
     after_id uuid,
+    sent_at timestamp with time zone,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
     CONSTRAINT generations_kind_check CHECK ((kind = ANY (ARRAY['image'::text, 'video'::text, 'voice'::text, 'audio'::text]))),
@@ -8545,6 +8582,18 @@ CREATE TABLE public.worker_operations (
     job_id uuid NOT NULL,
     kind text NOT NULL,
     result jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: write_budget_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.write_budget_ledger (
+    user_id uuid NOT NULL,
+    table_name text NOT NULL,
+    bytes bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -8962,14 +9011,6 @@ ALTER TABLE ONLY public.page_captures
 
 ALTER TABLE ONLY public.polar_customers
     ADD CONSTRAINT polar_customers_pkey PRIMARY KEY (customer_id);
-
-
---
--- Name: polar_customers polar_customers_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.polar_customers
-    ADD CONSTRAINT polar_customers_user_id_key UNIQUE (user_id);
 
 
 --
@@ -9424,6 +9465,13 @@ CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (
 
 
 --
+-- Name: polar_customers_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX polar_customers_user_idx ON public.polar_customers USING btree (user_id);
+
+
+--
 -- Name: polar_subscriptions_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9512,6 +9560,13 @@ CREATE INDEX tasks_user_created_idx ON public.tasks USING btree (user_id, create
 --
 
 CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations USING btree (user_id, status, expires_at);
+
+
+--
+-- Name: write_budget_ledger_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX write_budget_ledger_user_idx ON public.write_budget_ledger USING btree (user_id, table_name, created_at);
 
 
 --
@@ -10233,6 +10288,14 @@ ALTER TABLE ONLY public.worker_operations
 
 
 --
+-- Name: write_budget_ledger write_budget_ledger_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.write_budget_ledger
+    ADD CONSTRAINT write_budget_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: agent_messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10586,6 +10649,12 @@ ALTER TABLE public.worker_draft_initializations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: write_budget_ledger; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets đọc B-roll của chính mình; Type: POLICY; Schema: public; Owner: -

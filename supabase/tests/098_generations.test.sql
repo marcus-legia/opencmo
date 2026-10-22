@@ -191,6 +191,8 @@ select is(public.credit_balance('e9800000-0000-4000-8000-00000000000a'), 5, 'khÃ
 reset role;
 create temporary table claimed3 as select * from public.claim_next_task(array['generate'], 300);
 grant select on claimed3 to authenticated;
+-- The worker marks the paid request as sent right before calling the provider.
+select ok(public.mark_generation_sent((select id from claimed3), (select attempt_id from claimed3)), 'worker marks the request sent');
 set local role authenticated;
 select is(
   (select public.cancel_generation((select (payload->>'generation_id')::uuid from claimed3))->>'status'),

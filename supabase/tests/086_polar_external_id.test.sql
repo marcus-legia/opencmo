@@ -139,6 +139,25 @@ select is(
   1, 'the event has a receipt'
 );
 
+select is(
+  (select user_id from polar_customers where customer_id = 'cus-other'),
+  'e6000000-0000-4000-8000-000000000001'::uuid, 'the second customer is mapped to the account'
+);
+
+-- Its later refund carries no external id and an email of another account: it still reaches this one.
+select is(
+  public.process_polar_event('second-customer-refund', 'order.refunded', '2026-09-21 11:00Z',
+    jsonb_build_object('id', 'order-second-customer', 'customer_id', 'cus-other',
+      'customer', jsonb_build_object('id', 'cus-other', 'email', 'ext-fallback@test.local'),
+      'refunded_amount', 1500, 'refunded_tax_amount', 0),
+    null, null, null)->>'skipped',
+  null, 'a later event of the second customer is not skipped'
+);
+select is(
+  (select refunded_amount from polar_purchases where order_id = 'order-second-customer'),
+  1500::bigint, 'the refund is recorded on the second order'
+);
+
 -- Matched only by email, a second customer proves nothing about the account: still skipped.
 select is(
   pg_temp.paid('email-only', 'cus-email-only', jsonb_build_object(

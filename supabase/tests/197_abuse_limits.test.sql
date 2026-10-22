@@ -55,9 +55,15 @@ select throws_ok($$ select public.save_marketing_document('product', '{"n": 301}
 
 -- ================================================================ write budget: bytes
 set local request.jwt.claims = '{"sub":"e1970000-0000-4000-8000-00000000000b"}';
+-- The server's 268 rows above left user b's budget untouched: the next big write fits.
+select lives_ok(
+  format($$ select public.put_editor_transcript('e1972000-0000-4000-8000-00000000000b', '[{"text":"%s","words":[]}]') $$, repeat('c', 500000)),
+  'the server''s rows on the same clip do not use the user''s budget');
 reset role;
--- Now counted: the same rows written by user b while signed in.
-update public.editor_transcripts set created_at = now() where clip_id = 'e1972000-0000-4000-8000-00000000000b';
+-- Now counted: the same amount written by user b while signed in (the ledger keeps the user's own writes).
+delete from public.write_budget_ledger where user_id = 'e1970000-0000-4000-8000-00000000000b';
+insert into public.write_budget_ledger (user_id, table_name, bytes)
+select 'e1970000-0000-4000-8000-00000000000b', 'editor_transcripts', 500000 from generate_series(1, 268);
 set local role authenticated;
 select lives_ok(
   $$ select public.put_editor_transcript('e1972000-0000-4000-8000-00000000000b', '[{"text":"small","words":[]}]') $$,

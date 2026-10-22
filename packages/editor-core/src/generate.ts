@@ -13,7 +13,7 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
-import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
+import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, sceneBytes, type ExplainerScene } from './explainer';
 
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
@@ -196,6 +196,11 @@ export function specSchema(model: AiModel) {
 	}
 }
 
+/** SQL `btrim(text)`: spaces only, not tabs or newlines. `String.trim` strips both and priced a voice 1× under SQL. */
+const sqlTrim = (text: string): string => text.replace(/^ +| +$/g, '');
+/** SQL `length(text)` counts code points; `String.length` counts UTF-16 units (an emoji is 2). */
+const sqlLength = (text: string): number => [...text].length;
+
 /**
  * Giá credit đặt trước cho một spec — cùng công thức với `ai_price()` trong
  * SQL. Worker có thể chốt thấp hơn (chi phí thật), không bao giờ cao hơn.
@@ -208,7 +213,7 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 			case 'second':
 				return model.price.credits * Math.ceil(spec.duration ?? 1);
 			case 'kchars':
-				return model.price.credits * Math.max(1, Math.ceil(spec.prompt.trim().length / 1000));
+				return model.price.credits * Math.max(1, Math.ceil(sqlLength(sqlTrim(spec.prompt)) / 1000));
 			case 'explainer':
 				// Integer credits per started 10 s: 0.1 per second rounds differently in JS, SQL and Python.
 				return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);
@@ -217,8 +222,8 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 	const factor = (spec.resolution && model.price.resolution?.[spec.resolution]) || 1;
 	const scene = spec.scene as Partial<ExplainerScene> | undefined;
 	const voice = model.price.voiceKchars && Array.isArray(scene?.beats)
-		// Code points, as SQL `length()` and Python `len()` count them.
-		? model.price.voiceKchars * Math.max(1, Math.ceil([...narrationOf(scene.beats)].length / 1000))
+		// Each line trimmed and joined as SQL's `string_agg(btrim(say), ' ')`, not as `narrationOf`.
+		? model.price.voiceKchars * Math.max(1, Math.ceil(sqlLength(scene.beats.map((beat) => sqlTrim(beat.say)).join(' ')) / 1000))
 		: 0;
 	return Math.ceil(base * factor) + voice;
 }
