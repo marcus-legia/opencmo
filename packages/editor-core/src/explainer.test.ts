@@ -148,6 +148,14 @@ describe('explainer timing and price', () => {
 		expect(specSchema(model).safeParse({ ...spec('16:9', 20), scene }).success).toBe(false);
 	});
 
+	it('does not count the images against the script cap', () => {
+		const assets = Array.from({ length: 6 }, (_, i) => ({ name: `shot-${i}`, ref: `11111111-1111-4111-8111-111111111111/${'x'.repeat(400)}.png` }));
+		const scene = { ...spec('16:9', 20).scene, beats: Array.from({ length: 12 }, () => ({ say: 'x'.repeat(240) })) };
+		expect(sceneBytes(scene)).toBeLessThanOrEqual(EXPLAINER_SCENE_BYTES);
+		expect(sceneBytes({ ...scene, assets })).toBeGreaterThan(EXPLAINER_SCENE_BYTES);
+		expect(specSchema(model).safeParse({ ...spec('16:9', 20), scene: { ...scene, assets } }).success).toBe(true);
+	});
+
 	it('price: credits per started 10 s plus the voice per started 1,000 characters', () => {
 		// 20 s = 2 started 10 s blocks, narration < 1,000 characters = 5.
 		expect(priceOf(model, spec('16:9', 20) as never)).toBe(7);

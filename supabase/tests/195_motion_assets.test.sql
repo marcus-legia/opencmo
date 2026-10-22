@@ -1,11 +1,11 @@
--- Motion quality A5 (20261223090000): a motion scene's `assets` are at most 6 `{name, ref}`, each the
+-- Motion quality A5 (20261223100000): a motion scene's `assets` are at most 6 `{name, ref}`, each the
 -- caller's own `media` object; anything else is refused before credits are held.
 create extension if not exists pgtap with schema extensions;
 
 begin;
 set search_path to public, extensions;
 
-select plan(12);
+select plan(14);
 
 insert into auth.users (id, email) values
   ('e1950000-0000-4000-8000-00000000000a', 'motion-assets@test.local'),
@@ -17,7 +17,8 @@ insert into public.credit_ledger(user_id, delta, reason) values
 insert into storage.objects (bucket_id, name, owner) values
   ('media', 'e1950000-0000-4000-8000-00000000000a/uploads/screen.png', 'e1950000-0000-4000-8000-00000000000a'),
   ('media', 'e1950000-0000-4000-8000-00000000000a/brand/logo.png', 'e1950000-0000-4000-8000-00000000000a'),
-  ('media', 'e1950000-0000-4000-8000-00000000000b/uploads/theirs.png', 'e1950000-0000-4000-8000-00000000000b');
+  ('media', 'e1950000-0000-4000-8000-00000000000b/uploads/theirs.png', 'e1950000-0000-4000-8000-00000000000b'),
+  ('media', 'e1950000-0000-4000-8000-00000000000a/uploads/' || repeat('s', 400) || '.png', 'e1950000-0000-4000-8000-00000000000a');
 
 create temp table t_spec (name text primary key, spec jsonb) on commit drop;
 grant all on t_spec to authenticated;
@@ -45,6 +46,15 @@ create function pg_temp.create_with(p_spec jsonb) returns jsonb language sql as 
 $$;
 create function pg_temp.asset(p_name text, p_ref text) returns jsonb language sql as $$
   select jsonb_build_object('name', p_name, 'ref', p_ref)
+$$;
+
+create function pg_temp.long_script() returns jsonb language sql as $$
+  select jsonb_set(jsonb_set((select spec from t_spec where name = 'ok'), '{duration}', '90'), '{scene,beats}',
+    (select jsonb_agg(jsonb_build_object('say', repeat('word ', 47) || 'end')) from generate_series(1, 14)))
+$$;
+create function pg_temp.long_assets() returns jsonb language sql as $$
+  select jsonb_agg(pg_temp.asset('shot-' || i, 'e1950000-0000-4000-8000-00000000000a/uploads/' || repeat('s', 400) || '.png'))
+  from generate_series(1, 6) i
 $$;
 
 select lives_ok($$ select pg_temp.create_with((select spec from t_spec where name = 'ok')) $$,
@@ -79,6 +89,11 @@ select throws_ok($$ select pg_temp.create_with(pg_temp.with_assets(jsonb_build_a
   '22023', 'An image in this animation is not in your library. Pick it again.', 'an extra key (a URL) is refused');
 select throws_ok($$ select pg_temp.create_with(pg_temp.with_assets('{"screen":"x"}')) $$,
   '22023', 'An image in this animation is not in your library. Pick it again.', 'assets that are not a list');
+-- A script just under the 4000-byte cap: 6 long image refs on top of it do not count against it.
+select ok(octet_length((jsonb_set(pg_temp.long_script(), '{scene,assets}', pg_temp.long_assets())->'scene')::text) > 4000
+  and octet_length((pg_temp.long_script()->'scene')::text) <= 4000, 'the fixture: script under the cap, script + images over it');
+select lives_ok($$ select pg_temp.create_with(jsonb_set(pg_temp.long_script(), '{scene,assets}', pg_temp.long_assets())) $$,
+  'images never count toward the script cap');
 select throws_ok($$ select public.ai_motion_assets_ok('[]') $$,
   '42501', null, 'users cannot call the helper directly');
 

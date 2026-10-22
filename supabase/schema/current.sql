@@ -1264,7 +1264,7 @@ begin
       or jsonb_typeof(p_spec->'scene'->'template') is distinct from 'string') then
     raise exception 'Describe the 3D scene first.' using errcode = '22023';
   end if;
-  if v_scene and octet_length((p_spec->'scene')::text) > 4000 then
+  if v_scene and octet_length((case when v_explainer then (p_spec->'scene') - 'assets' else p_spec->'scene' end)::text) > 4000 then
     raise exception 'This 3D scene has too much data.' using errcode = '22023';
   end if;
   -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
@@ -1332,8 +1332,11 @@ begin
       end if;
       v_seconds := v_seconds + (v_beat->>'seconds')::numeric;
     end loop;
-    if v_seconds > 30 or v_seconds > (p_spec->>'duration')::numeric then
+    if v_seconds > 30 then
       raise exception 'This motion clip is longer than 30 seconds. Shorten its beats.' using errcode = '22023';
+    end if;
+    if v_seconds > (p_spec->>'duration')::numeric then
+      raise exception 'This motion clip''s beats last longer than its paid length. Shorten its beats or make it longer.' using errcode = '22023';
     end if;
   end if;
   -- Images the scene shows (kit.Image): at most 6, each the caller's own library object

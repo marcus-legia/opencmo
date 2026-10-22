@@ -64,7 +64,7 @@ select throws_ok($$ select pg_temp.create_with('motion-clip', pg_temp.spec_with(
   '22023', 'This motion clip is longer than 30 seconds. Shorten its beats.', 'beats adding up to 31 s');
 select throws_ok($$ select pg_temp.create_with('motion-clip', pg_temp.spec_with('{scene,beats}', jsonb_build_array(
     jsonb_build_object('say', 'One.', 'seconds', 4), jsonb_build_object('say', 'Two.', 'seconds', 3)))) $$,
-  '22023', 'This motion clip is longer than 30 seconds. Shorten its beats.', 'beats longer than the paid duration');
+  '22023', 'This motion clip''s beats last longer than its paid length. Shorten its beats or make it longer.', 'beats longer than the paid duration');
 select throws_ok($$ select pg_temp.create_with('motion-clip', pg_temp.spec_with('{scene,beats}', (select jsonb_agg(
     jsonb_build_object('say', 'Beat.', 'seconds', 0.5)) from generate_series(1, 9)))) $$,
   '22023', 'This motion clip is not valid. Write it again.', '9 beats');

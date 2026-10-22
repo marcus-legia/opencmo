@@ -83,6 +83,8 @@ export type ExplainerScene = z.infer<typeof ExplainerSceneSchema>;
 /** Same range as `CLIP_SECONDS` in `packages/clip-motion/src/job.ts`. */
 export const CLIP_MIN_SECONDS = 3;
 export const CLIP_MAX_SECONDS = 30;
+/** Same count as `CLIP_BEATS_MAX` in packages/engine/opencmo/ai/catalog.py and the SQL check. */
+export const CLIP_MAX_BEATS = 8;
 
 /** A clip beat: `say` is the storyboard line (never voiced), `seconds` how long the beat lasts. */
 export const ClipBeatSchema = z
@@ -100,7 +102,7 @@ export const ClipSceneSchema = z
 		template: z.literal('clip'),
 		code_ref: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid scene code reference.'),
 		title: z.string().trim().min(1).max(60),
-		beats: z.array(ClipBeatSchema).min(1).max(8),
+		beats: z.array(ClipBeatSchema).min(1).max(CLIP_MAX_BEATS),
 		accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 		theme: z.enum(EXPLAINER_THEMES).optional(),
 		personality: z.enum(EXPLAINER_PERSONALITIES).optional(),

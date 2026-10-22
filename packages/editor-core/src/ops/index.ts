@@ -77,6 +77,7 @@ export {
 } from './voiceover';
 export {
 	addExplainer,
+	CLIP_MAX_BEATS,
 	CLIP_MAX_SECONDS,
 	CLIP_MIN_SECONDS,
 	ClipBeatSchema,

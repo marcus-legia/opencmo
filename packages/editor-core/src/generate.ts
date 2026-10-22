@@ -13,7 +13,7 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
-import { ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
+import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
 
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
@@ -118,13 +118,15 @@ export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.
 /** A silent motion clip (`motion-clip`): the same renderer, no voice in the catalog row. */
 export const isMotionClip = (model: Pick<AiModel, 'provider' | 'limits'>): boolean => isExplainer(model) && !model.limits.voices?.length;
 
-// Measured like SQL: a script that passes here must not fail there with the 3D wording.
-const explainerScene = ExplainerSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+// Measured like SQL: a script that passes here must not fail there with the 3D wording. Images are capped on their own
+// (6 refs), so they never count against the script.
+const scriptBytes = ({ assets: _assets, ...scene }: { assets?: unknown }) => sceneBytes(scene);
+const explainerScene = ExplainerSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
 	message: 'The script is too long for one explainer. Use fewer or shorter beats.',
 });
-const clipScene = ClipSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+const clipScene = ClipSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
 	message: 'The storyboard is too long for one motion clip. Use fewer or shorter beats.',
-}).refine((scene) => scene.beats.reduce((sum, beat) => sum + beat.seconds, 0) <= 30 + 1e-9, {
+}).refine((scene) => scene.beats.reduce((sum, beat) => sum + beat.seconds, 0) <= CLIP_MAX_SECONDS + 1e-9, {
 	message: 'This motion clip is longer than 30 seconds. Shorten its beats.',
 	path: ['beats'],
 });

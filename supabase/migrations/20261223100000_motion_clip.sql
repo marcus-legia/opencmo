@@ -1,10 +1,33 @@
--- Motion quality B1 (docs/plans/editor/2026-10-22-motion-quality-plan.md): `motion-clip`, a silent 3-30 s
--- motion piece (intros, logo reveals, product moments) rendered by the same clip-motion runtime as explainers,
--- with no voice. Its scene is {template: "clip", code_ref, title, beats with `seconds`, accent?, theme?,
--- personality?, assets?}. `ai_check_spec` keeps every explainer rule and A5's image check
--- (20261223090000_motion_assets.sql); `ai_price` treats a missing `voiceKchars` as 0.
+-- Motion quality A5 + B1 (docs/plans/editor/2026-10-22-motion-quality-plan.md).
+-- A5: a motion scene may show the user's own images through kit.Image. `scene.assets` is a list of at most 6
+-- `{name, ref}`, each `ref` an object of the caller's in the `media` bucket (same rule as a generation's start
+-- image). The rule lives in its own function so later redefinitions of `ai_check_spec` keep it with one call.
+-- The images do not count toward the 4000-byte scene cap: they have their own, so they never crowd out the script.
+-- B1: `motion-clip`, a silent 3-30 s motion piece (intros, logo reveals, product moments) rendered by the same
+-- clip-motion runtime as explainers, with no voice. Its scene is {template: "clip", code_ref, title, beats with
+-- `seconds`, accent?, theme?, personality?, assets?}. `ai_price` treats a missing `voiceKchars` as 0.
 
 begin;
+
+create or replace function public.ai_motion_assets_ok(p_assets jsonb)
+returns boolean
+language sql
+stable
+set search_path to 'public'
+as $$
+  select jsonb_typeof(p_assets) = 'array'
+     and jsonb_array_length(p_assets) <= 6
+     and not exists (
+       select 1 from jsonb_array_elements(p_assets) a
+       where jsonb_typeof(a) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(a) k where k not in ('name', 'ref'))
+          or jsonb_typeof(a->'name') is distinct from 'string'
+          or a->>'name' !~ '^[a-z][a-z0-9-]{0,31}$'
+          or not public.ai_media_ref_ok(a->'ref'))
+     and (select count(distinct a->>'name') from jsonb_array_elements(p_assets) a) = jsonb_array_length(p_assets);
+$$;
+
+revoke execute on function public.ai_motion_assets_ok(jsonb) from public, anon, authenticated;
 
 -- Same row as packages/contracts/ai-models.json (check:pricing compares them).
 insert into public.ai_models (id, kind, provider, name, price, limits) values
@@ -126,7 +149,7 @@ begin
       or jsonb_typeof(p_spec->'scene'->'template') is distinct from 'string') then
     raise exception 'Describe the 3D scene first.' using errcode = '22023';
   end if;
-  if v_scene and octet_length((p_spec->'scene')::text) > 4000 then
+  if v_scene and octet_length((case when v_explainer then (p_spec->'scene') - 'assets' else p_spec->'scene' end)::text) > 4000 then
     raise exception 'This 3D scene has too much data.' using errcode = '22023';
   end if;
   -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
@@ -194,8 +217,11 @@ begin
       end if;
       v_seconds := v_seconds + (v_beat->>'seconds')::numeric;
     end loop;
-    if v_seconds > 30 or v_seconds > (p_spec->>'duration')::numeric then
+    if v_seconds > 30 then
       raise exception 'This motion clip is longer than 30 seconds. Shorten its beats.' using errcode = '22023';
+    end if;
+    if v_seconds > (p_spec->>'duration')::numeric then
+      raise exception 'This motion clip''s beats last longer than its paid length. Shorten its beats or make it longer.' using errcode = '22023';
     end if;
   end if;
   -- Images the scene shows (kit.Image): at most 6, each the caller's own library object
