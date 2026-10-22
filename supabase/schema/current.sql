@@ -5952,7 +5952,11 @@ begin
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
       or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
+      -- 30 until motion quality A3 (PR #104) raised MCP previews to 60: both, so either PR can merge first.
+      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
+      -- POST /api/v1/generations: each request can run a paid moderation call.
+      or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 

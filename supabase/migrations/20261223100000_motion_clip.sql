@@ -8,6 +8,8 @@
 -- `seconds`, accent?, theme?, personality?, assets?}. `ai_price` treats a missing `voiceKchars` as 0.
 -- A3: MCP previews go from 30 to 60 an hour (`PREVIEW_LIMIT` in packages/mcp-server/src/groups/studio.ts); the
 -- `mcp_preview` cap in `rate_limit_hit` must match it or every MCP preview is refused as an invalid limit.
+-- Same body as in 20261224090000_abuse_limits.sql (security fixes), so the order the two PRs merge in does
+-- not matter: both accept 30 and 60, and the `generations` bucket.
 
 begin;
 
@@ -321,7 +323,11 @@ begin
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
       or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
+      -- 30 until motion quality A3 (PR #104) raised MCP previews to 60: both, so either PR can merge first.
+      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
+      -- POST /api/v1/generations: each request can run a paid moderation call.
+      or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
