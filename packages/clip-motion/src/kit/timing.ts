@@ -83,3 +83,22 @@ export function probeFrames(timeline: Timeline): { beat: number; frame: number }
 		return early === mid ? [{ beat: i, frame: mid }] : [{ beat: i, frame: early }, { beat: i, frame: mid }];
 	});
 }
+
+/**
+ * Preview stills at the times the model chose (seconds), as frames: clamped to the last frame, negatives dropped,
+ * duplicates removed, sorted. Without times, the default `stillFrames`.
+ */
+export function previewFrames(timeline: Timeline, times?: readonly number[]): number[] {
+	const last = timeline.frames - 1;
+	const frames = (times ?? []).filter((t) => Number.isFinite(t) && t >= 0).map((t) => Math.min(last, Math.round(t * FPS)));
+	return frames.length ? [...new Set(frames)].sort((a, b) => a - b) : stillFrames(timeline);
+}
+
+/** The layout samples (`probeFrames`) plus the frame right after each, so a move of one frame can be measured. */
+export function pairedProbes(timeline: Timeline): { beat: number; frame: number }[] {
+	const seen = new Set<number>();
+	return probeFrames(timeline)
+		.flatMap((probe) => [probe, ...(probe.frame + 1 < timeline.frames ? [{ beat: probe.beat, frame: probe.frame + 1 }] : [])])
+		.filter((probe) => !seen.has(probe.frame) && seen.add(probe.frame));
+}
+

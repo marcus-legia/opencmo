@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTimeline, cueFrame, stillFrames } from './timing.ts';
+import { buildTimeline, cueFrame, pairedProbes, previewFrames, probeFrames, stillFrames } from './timing.ts';
 
 const beats = [{ say: 'A noisy bar.' }, { say: 'The phone hears peaks.' }, { say: 'It finds the song.' }];
 
@@ -52,4 +52,28 @@ describe('timing', () => {
 		expect(frames).toHaveLength(4);
 		expect(frames.at(-1)).toBe(299);
 	});
+
+	it('previewFrames maps 1.5 s to frame 45', () => {
+		expect(previewFrames(buildTimeline({ beats, duration: 10 }), [1.5])).toEqual([45]);
+	});
+
+	it('previewFrames clamps 999 s to the last frame, drops negatives, dedupes and sorts', () => {
+		expect(previewFrames(buildTimeline({ beats, duration: 10 }), [999, 2, -1, 2, 0.5, Number.NaN])).toEqual([15, 60, 299]);
+	});
+
+	it('previewFrames without times equals stillFrames', () => {
+		const timeline = buildTimeline({ beats, duration: 10 });
+		expect(previewFrames(timeline)).toEqual(stillFrames(timeline));
+		expect(previewFrames(timeline, [])).toEqual(stillFrames(timeline));
+		expect(previewFrames(timeline, [-3])).toEqual(stillFrames(timeline));
+	});
+
+	it('pairedProbes adds the frame after every layout sample', () => {
+		const timeline = buildTimeline({ beats, duration: 10 });
+		const probes = probeFrames(timeline);
+		const paired = pairedProbes(timeline);
+		expect(paired).toHaveLength(probes.length * 2);
+		for (const probe of probes) expect(paired).toContainEqual({ beat: probe.beat, frame: probe.frame + 1 });
+	});
 });
+

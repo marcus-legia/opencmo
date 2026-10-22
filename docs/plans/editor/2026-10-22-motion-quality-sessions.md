@@ -53,7 +53,7 @@ test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`;
 - [x] A0 Baseline frames
 - [x] A1 Shared contracts
 - [x] A4 `kit.Image` and safe inlining
-- [ ] A2 Preview at chosen times, jump check
+- [x] A2 Preview at chosen times, jump check
 - [ ] A3 `direction`, `times`, review checklist (tools, guides, MCP limit)
 - [ ] A5 Assets through tools, SQL and render
 - [ ] A6 After frames, RAM measured
