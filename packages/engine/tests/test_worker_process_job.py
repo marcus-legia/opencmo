@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -167,13 +169,34 @@ def test_the_upload_url_is_probed_through_the_demuxer_allowlist(media):
 
 
 @pytest.mark.parametrize("header", [0.0, float("nan")])
-def test_a_video_without_a_readable_length_fails_before_charging(media, header):
-    media["header"] = header
+def test_a_browser_recording_without_a_header_length_is_billed_on_its_master(media, header):
+    media["header"], media["master"] = header, 42.0
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert not [call for call in store.calls if call[0] == "fail"]
+    (settled,) = [call for call in store.calls if call[0] == "settle"]
+    assert settled[1][1] == 42.0
+    names = [call[0] for call in store.calls]
+    assert names.index("download") < names.index("settle") < names.index("publish")
+
+
+def test_a_video_whose_master_has_no_length_either_fails_before_charging(media):
+    media["header"], media["master"] = 0.0, 0.0
     store = FakeStore()
     process_job.process(store, _job())
     (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
     assert failure == process_job.LENGTH_UNKNOWN
-    assert not [call for call in store.calls if call[0] in ("settle", "download")]
+    assert not [call for call in store.calls if call[0] in ("settle", "publish")]
+
+
+def test_a_headerless_recording_over_the_cap_fails_before_charging(media, monkeypatch):
+    monkeypatch.setattr(process_job, "MAX_EDIT_SECONDS", 120.0)
+    media["header"], media["master"] = float("nan"), 600.0
+    store = FakeStore()
+    process_job.process(store, _job())
+    (failure,) = [call[1] for call in store.calls if call[0] == "fail"]
+    assert "Videos up to 2 minutes" in failure
+    assert not [call for call in store.calls if call[0] in ("settle", "publish")]
 
 
 def test_a_master_longer_than_its_header_fails_and_publishes_nothing(media):
@@ -237,3 +260,9 @@ def test_cleanup_keeps_files_if_publication_readback_is_unavailable():
     store.list_clips = lambda _: (_ for _ in ()).throw(ConnectionError("offline"))
     job_uploads.cleanup(store, {"clips": ["maybe-published.mp4"]}, "job-1")
     assert store.removed == []
+
+
+def test_the_edit_length_cap_is_the_contract_the_web_reads():
+    contract = Path(process_job.__file__).resolve().parents[3] / "contracts" / "upload-limits.json"
+    assert process_job.MAX_EDIT_SECONDS == json.loads(contract.read_text(encoding="utf-8"))["max_edit_seconds"]
+    assert "upload-limits.json" in (Path(__file__).resolve().parents[1] / "modal_app.py").read_text(encoding="utf-8")

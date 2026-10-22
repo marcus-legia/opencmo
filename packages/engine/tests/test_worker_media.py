@@ -96,14 +96,27 @@ def test_make_editor_master_copies_the_whole_video_at_source_size(tmp_path: Path
         ("camera.avi", ["-c:a", "adpcm_ima_wav"], ["-c:v", "mpeg4"]),
         ("recording.webm", ["-c:a", "libvorbis"], ["-c:v", "libvpx", "-b:v", "500k"]),
         ("capture.mkv", ["-c:a", "aac"], ["-c:v", "huffyuv"]),
+        ("webcam.mov", ["-c:a", "aac"], ["-c:v", "mjpeg", "-pix_fmt", "yuvj420p"]),
+        ("graded.mp4", ["-c:a", "aac"], ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv422p"]),
     ],
 )
-def test_make_editor_master_encodes_what_mp4_cannot_hold(tmp_path: Path, name, audio, video):
+def test_make_editor_master_encodes_what_a_browser_cannot_play(tmp_path: Path, name, audio, video):
     source = _video(tmp_path / name, audio=audio, video=video)
     out = tmp_path / "master.mp4"
     media.make_editor_master(source, out)
     info = probe_file(str(out))
     assert info.has_audio and info.duration == pytest.approx(4.0, abs=0.3)
+    # Copied into MP4, MPEG-4 Part 2, VP8, MJPEG or 4:2:2 H.264 leave the editor's preview black.
+    assert (info.video_codec, info.pix_fmt) == ("h264", "yuv420p")
+
+
+def test_browser_ready_video_is_copied_not_encoded(tmp_path: Path, monkeypatch):
+    source = _video(tmp_path / "phone.mov", audio=["-c:a", "aac"])
+    calls: list[list[str]] = []
+    real = media.run
+    monkeypatch.setattr(media, "run", lambda args, **kw: (calls.append(args), real(args, **kw))[1])
+    media.make_editor_master(source, tmp_path / "master.mp4")
+    assert len(calls) == 1 and "copy" in calls[0]
 
 
 def test_a_full_encode_fits_inside_the_cap_and_keeps_the_aspect(tmp_path: Path, monkeypatch):
