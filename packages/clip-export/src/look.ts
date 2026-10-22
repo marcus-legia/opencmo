@@ -151,14 +151,15 @@ async function drawFrames(job: LookJob, document: ClipDocument, pick: (length: n
   const renderer = createRenderer(document, host as MediaHost, { scene: job.scene, scale });
   // `range` counts timeline frames at FPS; the scene's own rate only sets the export's frame grid.
   const length = renderer.range.frames / FPS;
-  const lastFrame = 1 / ((scene as { fps?: number }).fps ?? FPS);
+  // Clamped in timeline frames: `exportFrame` rounds on the 30 fps grid whatever the scene's rate.
+  const last = renderer.range.start + Math.max(0, renderer.range.frames - 1);
   const seconds = pick(length);
   const width = Math.round(scene.width * scale);
   const height = Math.round(scene.height * scale);
   const drawn: { time: number; canvas: Canvas; layers: ReturnType<typeof visibleAt> }[] = [];
   try {
     for (const time of seconds) {
-      const frame = renderer.exportFrame(Math.min(Math.max(0, time), Math.max(0, length - lastFrame)));
+      const frame = Math.min(last, renderer.exportFrame(Math.max(0, time)));
       frames.beginFrame();
       current.clear();
       const needs = renderer.needs(frame);

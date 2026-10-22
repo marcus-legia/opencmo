@@ -129,4 +129,36 @@ describe('emphasize_words', () => {
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: ['compound interest'] }], memory())).rejects.toThrow(/not in this clip's transcript/);
 		await expect(applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [] }], memory())).rejects.toThrow(/quotes to emphasize/);
 	});
+
+	const wordIds = () => normalize(TRANSCRIPT).flatMap((segment) => segment.words.map((word) => word.id!));
+	const trimmed = () => {
+		const document = structuredClone(SOURCE);
+		for (const node of (document.stage.children[0] as unknown as { children: Record<string, unknown>[] }).children) node.sourceIn = 3;
+		return document;
+	};
+
+	it('a selection that runs past a trimmed edge emphasizes the words still on screen', async () => {
+		const ctx = memory();
+		const { document } = await applyOps(trimmed(), [{ op: 'emphasize_words', quotes: [], word_ids: wordIds().slice(0, 6) }], ctx);
+		expect(emphasized(document, ctx)).toEqual(['this', 'one', 'is', 'free']);
+	});
+
+	it('a phrase emphasized in two goes stays one phrase', async () => {
+		const ids = wordIds();
+		const { document } = await applyOps(SOURCE, [
+			{ op: 'emphasize_words', quotes: [], word_ids: ids.slice(2, 4) },
+			{ op: 'emphasize_words', quotes: [], word_ids: ids.slice(4, 6) },
+		], memory());
+		expect(captions(document).emphasis).toHaveLength(1);
+	});
+
+	it('un-emphasizing one word keeps the part of another phrase outside a trimmed window', async () => {
+		const ctx = memory();
+		const ids = wordIds();
+		const first = await applyOps(SOURCE, [{ op: 'emphasize_words', quotes: [], word_ids: ids.slice(0, 3) }], ctx);
+		const document = structuredClone(first.document);
+		for (const node of (document.stage.children[0] as unknown as { children: Record<string, unknown>[] }).children) node.sourceIn = 3;
+		const { document: after } = await applyOps(document, [{ op: 'emphasize_words', quotes: [], word_ids: [ids[5]!], remove: true }], ctx);
+		expect(captions(after).emphasis).toEqual(captions(first.document).emphasis);
+	});
 });

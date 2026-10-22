@@ -83,7 +83,7 @@ describe('group_elements', () => {
     expect(names(kids(out))).toEqual([{ 'Group 2': ['A', 'C'] }, { 'Group 1': ['X'] }, 'B']);
   });
 
-  it('sequence: clip sớm giữ nguyên, clip sau nhường; clip nằm gọn trong clip trước bị bỏ', async () => {
+  it('sequence: the earlier clip keeps its place, a later one yields; a covered one stays beside it', async () => {
     const out = await run(
       doc([
         { kind: 'rect', id: 'a', name: 'A', end: 4 },
@@ -98,6 +98,15 @@ describe('group_elements', () => {
       ['A', 0, 4, 0],
       ['B', 4, 6, 2],
     ]);
+    expect(kids(out)[1]).toMatchObject({ id: 'c', start: 1, end: 3 });
+  });
+
+  it("sequence: refuses the clip's own video and captions", async () => {
+    const master = { kind: 'video', id: 'm', src: 'assets/master.mp4', end: 60 };
+    const broll = { kind: 'rect', id: 'b', start: 10, end: 12 };
+    await expect(run(doc([master, broll]), [{ op: 'group_elements', element_ids: ['m', 'b'], into: 'sequence', frame: 0 }])).rejects.toThrow(/own video/);
+    const cut = { kind: 'sequence', id: 'cut', marks: { 'text-cut': { transcript: 't', window: [0, 60], removed: [] } }, children: [master] };
+    await expect(run(doc([cut, broll]), [{ op: 'group_elements', element_ids: ['cut', 'b'], into: 'sequence', frame: 0 }])).rejects.toThrow(/own video/);
   });
 
   it('scene: bao hộp các node (làm tròn ra ngoài), node dời theo góc — kể cả keyframe', async () => {
@@ -220,6 +229,18 @@ describe('nhiều timeline (E2-a)', () => {
     expect(copy!.children![0]!.name).toBe('Card');
     expect(copy!.children![0]!.id).not.toBe('r1');
     expect(copy!.x as number).toBeGreaterThan(1080);
+  });
+
+  it('create_timeline from: captions in the copy name the copy of their video', async () => {
+    const base = doc([
+      { kind: 'video', id: 'v2', src: 'b.mp4', end: 5 },
+      { kind: 'captions', id: 'cap', src: 'b.json', source: 'v2' },
+    ]);
+    const out = await run(base, [{ op: 'create_timeline', from: 'sc' }]);
+    const [video, captions] = scenes(out)[1]!.children!;
+    expect(video!.id).not.toBe('v2');
+    expect(captions!.source).toBe(video!.id);
+    expect(scenes(out)[0]!.children![1]!.source).toBe('v2');
   });
 
   it('op thường chỉ sửa timeline đang mở', async () => {

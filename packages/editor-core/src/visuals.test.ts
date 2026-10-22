@@ -67,6 +67,15 @@ describe('op visual', () => {
 		await expect(applyOps(document, [{ op: 'update_visual', id: 'sc', changes: {} }] as never, ctx)).rejects.toThrow(/not a visual/);
 	});
 
+	it('update_visual works on a visual that starts at 0 (written without a start)', async () => {
+		const first = await applyOps(base, [{ op: 'add_diagram', start: 1, end: 4, nodes: [{ label: 'One' }, { label: 'Two' }] }] as never, ctx);
+		const id = lastChild(first.document).id as string;
+		const moved = await applyOps(first.document, [{ op: 'move_elements', element_ids: [id], by: -1 }] as never, ctx);
+		expect(lastChild(moved.document).start).toBeUndefined();
+		const { document } = await applyOps(moved.document, [{ op: 'update_visual', id, changes: { nodes: [{ label: 'A' }, { label: 'B' }] } }] as never, ctx);
+		expect(lastChild(document)).toMatchObject({ id, end: 3 });
+	});
+
 	it('stagger: trễ so le, chạy lại không chồng animation', async () => {
 		const first = await applyOps(base, [{ op: 'add_diagram', start: 0, end: 5, build: false, nodes: [{ label: 'A' }, { label: 'B' }, { label: 'C' }] }] as never, ctx);
 		const ids = lastChild(first.document).children!.filter((child) => child.kind === 'text').map((child) => child.id as string);
