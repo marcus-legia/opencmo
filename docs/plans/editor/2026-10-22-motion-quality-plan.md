@@ -337,4 +337,8 @@ No code. Records what "before" looks like, so A6 and B7 compare against somethin
 
 - `npm run typecheck && npm run build`; `npm run check:clip-motion`; `npm run test:editor-core`; `cd apps/web && npm run check:contracts`; `npm run check:mcp-server`; `npm run db:reset && npm run db:test`; engine `pytest -q` and `ruff check .`.
 - Frames in `docs/plans/editor/2026-10-22-motion-quality-frames/{baseline,after-a,after-b}/`, looked at, side by side, in the PR.
-- Deploy notes for the owner (do not deploy from a session): `supabase db push` before Vercel picks up code that sends `assets` or `motion-clip`; add `OPENCMO_MOTION_ASSET_ORIGIN` to `opencmo-motion`; `modal deploy modal_app.py`; `modal run check_deploy_env.py` → `Deploy env OK.`
+- Deploy notes for the owner (do not deploy from a session). The order matters; Vercel deploys on merge, so do 1-3 before merging:
+  1. `supabase db push`: the merged `20261223100000_motion_clip.sql` (images and `motion-clip`).
+  2. Add `OPENCMO_MOTION_ASSET_ORIGIN` (equal to the worker's `SUPABASE_URL`) to the `opencmo-motion` secret; `modal deploy modal_app.py`. The running MotionPreview parses jobs strictly: until it is redeployed, every preview the new web sends (with `times`, `kind` or `assets`) fails with an unrecognized key.
+  3. `modal run check_deploy_env.py` → `Deploy env OK.`
+  4. Then let Vercel deploy the web app.

@@ -21,9 +21,9 @@ Branch: **`plan/editor/2026-10-22-motion-quality`** · PR: [#104](https://github
    everywhere, including comments you touch; comments explain why. Licences: copy only from
    `opus-pro/opusclip-video-tools/remakes/**` (MIT, notice in `THIRD_PARTY_NOTICES.md`); learn-only from its
    `plugins/**` and from the Claude Design prompt.
-6. **Migrations in order.** A's `20261223090000_motion_assets.sql` lands before B writes
-   `20261223100000_motion_clip.sql`; B's redefinition of the spec check keeps A's asset check. Whoever commits a
-   migration regenerates `supabase/schema/current.sql` on top of the other's.
+6. **Migrations in order.** A's asset check and B's clip rules ship as one migration,
+   `20261223100000_motion_clip.sql` (merged before either was applied, so `ai_check_spec` is redefined once).
+   Whoever commits a migration regenerates `supabase/schema/current.sql`.
 7. **Heavy suites one at a time** on one machine (`npm run build`, `db:reset`/`db:test`, renders, e2e).
 8. **Do not deploy.** The plan's last section lists what the owner deploys, in order.
 9. **Verify by looking.** A6 and B6 end with full-size frames in the frames folder, looked at, and posted in the PR.
@@ -42,10 +42,10 @@ Tool fields, final shape (A3 and A5 add theirs, B3 adds `silent` and beat `secon
 
 ## Session A — Spec, loop, real images
 
-**Owns:** `packages/clip-motion/src/{job.ts,errors.ts,preview.ts,layout.ts,assets-inline.ts,render.ts,cli.ts}`, `apps/web/.env.example`, `packages/engine/.env.example`,
+**Owns:** `packages/clip-motion/src/{job.ts,errors.ts,preview.ts,layout.ts,job-assets.ts,render.ts,cli.ts}`, `apps/web/.env.example`, `packages/engine/.env.example`,
 `packages/clip-motion/src/kit/{timing.ts,image.tsx}`, their tests; `packages/editor-core/src/explainer.ts` and its
 test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`; `packages/mcp-server/src/groups/{studio.ts,guides.ts}`;
-`packages/engine/opencmo/deploy_env.py` and its test; `supabase/migrations/20261223090000_*`, `supabase/tests/195_*`;
+`packages/engine/opencmo/deploy_env.py` and its test; `supabase/migrations/20261223100000_*` (shared with B), `supabase/tests/195_*`;
 `docs/plans/editor/2026-10-22-motion-quality-frames/{baseline,after-a}/`.
 
 **Order:** A0 → A1 (push at once) → A4 → A2 → A3 → A5 → A6.
