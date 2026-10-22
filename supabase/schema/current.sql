@@ -1304,6 +1304,12 @@ begin
       end if;
     end loop;
   end if;
+  -- Images the scene shows (kit.Image): at most 6, each the caller's own library object
+  -- (motion quality A5). The worker checks them again against the task's owner.
+  if v_explainer and p_spec->'scene' ? 'assets'
+      and not public.ai_motion_assets_ok(p_spec->'scene'->'assets') then
+    raise exception 'An image in this animation is not in your library. Pick it again.' using errcode = '22023';
+  end if;
   if v_scene and p_spec->'scene'->>'template' = 'code' and (
       jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
       or not exists (select 1 from public.scene_codes c
@@ -1358,6 +1364,27 @@ CREATE FUNCTION public.ai_media_ref_ok(p_ref jsonb) RETURNS boolean
      and (p_ref #>> '{}') !~ '\.\.'
      and exists (select 1 from storage.objects o where o.bucket_id = 'media' and o.name = p_ref #>> '{}');
 $$;
+
+
+--
+-- Name: ai_motion_assets_ok(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ai_motion_assets_ok(p_assets jsonb) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $_$
+  select jsonb_typeof(p_assets) = 'array'
+     and jsonb_array_length(p_assets) <= 6
+     and not exists (
+       select 1 from jsonb_array_elements(p_assets) a
+       where jsonb_typeof(a) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(a) k where k not in ('name', 'ref'))
+          or jsonb_typeof(a->'name') is distinct from 'string'
+          or a->>'name' !~ '^[a-z][a-z0-9-]{0,31}$'
+          or not public.ai_media_ref_ok(a->'ref'))
+     and (select count(distinct a->>'name') from jsonb_array_elements(p_assets) a) = jsonb_array_length(p_assets);
+$_$;
 
 
 --
