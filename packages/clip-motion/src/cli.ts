@@ -26,7 +26,14 @@ import type { HeadlessBrowser } from '@remotion/renderer';
 import { ASSET_ORIGIN, inlineAssets } from './assets-inline.ts';
 import { parseJob, prepare } from './prepare.ts';
 import { openPreviewBrowser, previewJob } from './preview.ts';
-import { getBundle, MotionCodeFailure, renderJob } from './render.ts';
+import { getBundle, isTargetClosed, MotionCodeFailure, renderJob } from './render.ts';
+
+// After a scene error, closing the browser can leave Remotion's "Target closed" rejection unhandled; it must not
+// crash the process before the scene's message reaches stdout. Anything else still crashes as before.
+process.on('unhandledRejection', (error) => {
+	if (isTargetClosed(error)) return;
+	throw error;
+});
 
 // stdout carries exactly one JSON line; Remotion prints browser console lines to stdout, so
 // everything else goes to stderr.

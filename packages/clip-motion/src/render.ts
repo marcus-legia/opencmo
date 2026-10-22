@@ -134,6 +134,15 @@ export function envConcurrency(): number {
 	return Number.isInteger(value) && value > 0 ? Math.min(value, 8) : 2;
 }
 
+/**
+ * Closing a browser whose page already died (a scene that threw while rendering) makes Remotion reject a pending
+ * CDP call with "Target closed" outside any promise we hold (https://www.remotion.dev/docs/target-closed). Harmless:
+ * the preview already has its answer.
+ */
+export function isTargetClosed(error: unknown): boolean {
+	return /Target closed/.test(String((error as Error)?.message ?? error));
+}
+
 export function sceneFailure(error: unknown): MotionCodeFailure | null {
 	const message = String((error as Error)?.message ?? error);
 	const at = message.indexOf(SCENE_ERROR_MARKER);
