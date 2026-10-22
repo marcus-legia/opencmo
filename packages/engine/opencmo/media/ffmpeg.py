@@ -110,20 +110,70 @@ def _tiff_orientation(tiff: bytes) -> int:
     return 1
 
 
+#: Decoded, a 40 MP image is at most 320 MB (16-bit RGBA): well inside a job's 2 GB. A 30 MB PNG can
+#: otherwise hold a 16k × 16k canvas, and ffmpeg (ffprobe too) decodes all of it before scaling.
+MAX_IMAGE_PIXELS = 40_000_000
+#: How far into the file the header walk reads: past EXIF and ICC segments to a JPEG's frame header.
+IMAGE_HEAD_BYTES = 1024 * 1024
+
+
+def image_size(head: bytes) -> tuple[int, int] | None:
+    """Width and height of a PNG, JPEG or WebP from its header, or None when it says neither.
+
+    Same reading as `imageSize` in packages/clip-motion/src/job-assets.ts.
+    """
+    if head[:8] == b"\x89PNG\r\n\x1a\n" and head[12:16] == b"IHDR" and len(head) >= 24:
+        return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP" and len(head) >= 30:
+        chunk = head[12:16]
+        if chunk == b"VP8X":
+            return 1 + int.from_bytes(head[24:27], "little"), 1 + int.from_bytes(head[27:30], "little")
+        if chunk == b"VP8L":
+            bits = int.from_bytes(head[21:25], "little")
+            return 1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF)
+        if chunk == b"VP8 ":
+            return int.from_bytes(head[26:28], "little") & 0x3FFF, int.from_bytes(head[28:30], "little") & 0x3FFF
+        return None
+    if head[:3] != b"\xff\xd8\xff":
+        return None
+    i = 2
+    while i + 9 < len(head):
+        if head[i] != 0xFF:
+            return None
+        marker = head[i + 1]
+        if marker == 0xFF:
+            i += 1
+            continue
+        # Start of frame (any coding), not DHT / JPG / DAC, which share the range.
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return int.from_bytes(head[i + 7:i + 9], "big"), int.from_bytes(head[i + 5:i + 7], "big")
+        if marker in (0xD9, 0xDA):
+            return None
+        i += 2 + int.from_bytes(head[i + 2:i + 4], "big")
+    return None
+
+
 def reencode_image(raw: Path, out: Path, edge: int, *, timeout: int = 120, extra: list[str] | None = None) -> Path:
     """An untrusted image file → `out` (format from its extension), longest edge ≤ `edge`, upright.
 
     The bytes go through stdin with image2pipe: ffmpeg decodes exactly them and can open no other
     file or URL (an "image" that is really an HLS playlist once read files on the worker). EXIF
     orientation is applied here, not left to the ffmpeg build: browsers honour it, so a phone photo
-    must come out the way the user saw it.
+    must come out the way the user saw it. The size is read from the header first: only PNG, JPEG
+    and WebP of at most `MAX_IMAGE_PIXELS` reach the decoder.
     """
     with raw.open("rb") as fh:
-        rotate = _ORIENTATION_FILTERS.get(jpeg_orientation(fh.read(256 * 1024)))
+        head = fh.read(IMAGE_HEAD_BYTES)
+    size = image_size(head)
+    if size is None or size[0] < 1 or size[1] < 1:
+        raise FFmpegError("Image refused: not a PNG, JPEG or WebP with a readable size")
+    if size[0] * size[1] > MAX_IMAGE_PIXELS:
+        raise FFmpegError(f"Image refused: {size[0]}x{size[1]} is over {MAX_IMAGE_PIXELS // 1_000_000} MP")
+    rotate = _ORIENTATION_FILTERS.get(jpeg_orientation(head))
     scale = f"scale='min({edge},iw)':'min({edge},ih)':force_original_aspect_ratio=decrease"
     run([
-        "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-noautorotate", "-f", "image2pipe", "-i", "pipe:0",
-        "-frames:v", "1",
+        "ffmpeg", "-v", "error", "-y", "-threads", "1", "-protocol_whitelist", "pipe", "-noautorotate",
+        "-f", "image2pipe", "-i", "pipe:0", "-frames:v", "1",
         "-vf", f"{rotate},{scale}" if rotate else scale,
         *(extra or []),
         str(out),

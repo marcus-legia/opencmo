@@ -33,7 +33,7 @@ from opencmo.ai.providers.motion import motion_assets
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Task
 from opencmo.editing.models import canonical_json
-from opencmo.media.ffmpeg import USER_INPUT, reencode_image, run
+from opencmo.media.ffmpeg import USER_INPUT, FFmpegError, reencode_image, run
 from opencmo.worker.task_run import task_workspace
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,7 @@ def _file_name(prompt: str, extension: str) -> str:
 #: Ảnh đầu vào tối đa trước khi thu nhỏ; ảnh gửi provider có cạnh dài ≤ 1100 px (như Palmier).
 INPUT_MAX_BYTES = 30 * 1024 * 1024
 INPUT_EDGE = 1100
+INPUT_UNREADABLE = "That image could not be used. Pick a PNG, JPEG or WebP of at most 40 megapixels."
 #: A shot that continues another downloads the parent's file: a short generated video.
 PARENT_MAX_BYTES = 200 * 1024 * 1024
 SHOT_BEFORE = "The shot before this one is not ready. Your credits were refunded."
@@ -153,7 +154,10 @@ def _prepare_inputs(
             store.download_object("media", ref, raw, max_bytes=INPUT_MAX_BYTES)
         except Exception as exc:
             raise SpecError(MEDIA_NOT_FOUND) from exc
-        out = reencode_image(raw, workdir / f"input-{index}.jpg", INPUT_EDGE)
+        try:
+            out = reencode_image(raw, workdir / f"input-{index}.jpg", INPUT_EDGE)
+        except FFmpegError as exc:
+            raise SpecError(INPUT_UNREADABLE) from exc
         check_input(model, out)
         return str(out)
 

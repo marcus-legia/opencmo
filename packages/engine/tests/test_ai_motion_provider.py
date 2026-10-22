@@ -566,6 +566,33 @@ def test_motion_assets_turn_a_phone_photo_upright_from_its_exif(tmp_path: Path) 
     assert jpeg_orientation(stored.read_bytes()) == 1
 
 
+@pytest.mark.parametrize("name", ["shot.png", "shot.jpg", "shot.webp"])
+def test_image_size_reads_the_header_of_each_library_format(tmp_path: Path, name: str) -> None:
+    from opencmo.media.ffmpeg import image_size
+
+    assert image_size(_image(tmp_path, name, "testsrc2", "640x360").read_bytes()) == (640, 360)
+
+
+def test_motion_assets_refuse_a_huge_canvas_before_decoding_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opencmo.media import ffmpeg
+
+    # A small file whose header claims 16000 x 16000: decoded, it would take about 1 GB.
+    bomb = tmp_path / "bomb.png"
+    bomb.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + (16000).to_bytes(4, "big") * 2 + b"\x08\x06\x00\x00\x00" + b"\x00" * 64)
+    decoded: list[list[str]] = []
+    monkeypatch.setattr(ffmpeg, "run", lambda args, **_: decoded.append(args))
+    with pytest.raises(SpecError, match="40 megapixels"):
+        motion.motion_assets(_Library({f"{USER}/bomb.png": bomb}), SimpleNamespace(user_id=USER), {"assets": [{"name": "bomb", "ref": f"{USER}/bomb.png"}]}, tmp_path)
+    assert decoded == [], "ffmpeg never saw the file"
+
+
+def test_motion_assets_refuse_bytes_that_are_not_an_image(tmp_path: Path) -> None:
+    playlist = tmp_path / "shot.png"
+    playlist.write_bytes(b"#EXTM3U\n#EXTINF:1,\nfile:///etc/passwd\n")
+    with pytest.raises(SpecError, match="could not be read"):
+        motion.motion_assets(_Library({f"{USER}/shot.png": playlist}), SimpleNamespace(user_id=USER), {"assets": [{"name": "shot", "ref": f"{USER}/shot.png"}]}, tmp_path)
+
+
 class _Server:
     """A local HTTP server: `routes` maps a path to (status, headers, body)."""
 
