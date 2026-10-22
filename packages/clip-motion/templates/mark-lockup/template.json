@@ -13,8 +13,8 @@
     { "name": "accent", "kind": "color", "note": "The drawn mark's colour (unused with a logo).", "default": "#FF6A55" }
   ],
   "beats": [
-    { "say": "The mark settles into its tile.", "seconds": 1.1 },
-    { "say": "The tile rises; the name and tagline rise in.", "label": "Name and tagline", "seconds": 2.5 }
+    { "say": "The mark settles into its tile.", "visual": "An app tile with the logo settles from small, tilted and blurred to sharp in the centre.", "seconds": 1.1 },
+    { "say": "The tile rises; the name and tagline rise in.", "label": "Name and tagline", "visual": "The tile rises and shrinks; the name rises letter by letter under it, then the tagline.", "seconds": 2.5 }
   ],
   "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/pf-mark-lockup", "license": "MIT" }
 }

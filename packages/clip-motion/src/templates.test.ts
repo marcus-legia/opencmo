@@ -60,7 +60,7 @@ describe('motion templates', () => {
 			kind: template.kind,
 			title: template.title,
 			code: template.code,
-			beats: template.beats,
+			beats: template.beats.map(({ visual: _visual, ...beat }) => beat),
 			format: template.format,
 			duration: template.seconds,
 			assets: imageNames(template.code).map((name) => ({ name, src: PNG })),

@@ -55,10 +55,12 @@ export const TEMPLATE_DATA = [
 		"beats": [
 			{
 				"say": "The card rises and the columns grow.",
+				"visual": "A white card rises; seven columns grow from dots to their values as the total counts up.",
 				"seconds": 1.5
 			},
 			{
 				"say": "The best day glows and the result lands.",
+				"visual": "The highlighted column warms to the accent and glows; the result sentence lands.",
 				"seconds": 1.5
 			}
 		],
@@ -112,11 +114,13 @@ export const TEMPLATE_DATA = [
 		"beats": [
 			{
 				"say": "The mark settles into its tile.",
+				"visual": "An app tile with the logo settles from small, tilted and blurred to sharp in the centre.",
 				"seconds": 1.1
 			},
 			{
 				"say": "The tile rises; the name and tagline rise in.",
 				"label": "Name and tagline",
+				"visual": "The tile rises and shrinks; the name rises letter by letter under it, then the tagline.",
 				"seconds": 2.5
 			}
 		],
@@ -152,18 +156,22 @@ export const TEMPLATE_DATA = [
 		"beats": [
 			{
 				"say": "Three phones open from a stack.",
+				"visual": "Three phones open from a stack: the side phones fan out from behind the hero.",
 				"seconds": 1
 			},
 			{
 				"say": "The carousel slides to the second screen.",
+				"visual": "The carousel slides one slot left; the second screen takes the centre.",
 				"seconds": 1.3
 			},
 			{
 				"say": "Then to the third.",
+				"visual": "It slides again; the third screen takes the centre.",
 				"seconds": 1.1
 			},
 			{
 				"say": "The hero settles in the centre.",
+				"visual": "The hero phone settles in the centre with a soft shadow.",
 				"seconds": 1.4
 			}
 		],

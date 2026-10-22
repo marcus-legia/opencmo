@@ -17,7 +17,8 @@ export type MotionTemplate = {
 	format: '16:9' | '9:16' | '1:1';
 	seconds: number;
 	slots: MotionTemplateSlot[];
-	beats: { say: string; label?: string; seconds?: number }[];
+	/** Each beat's `visual` makes them valid preview_explainer beats as they are. */
+	beats: { say: string; label?: string; visual: string; seconds?: number }[];
 	/** The SPEC.md text: a valid `direction` for the tools. */
 	direction: string;
 	/** Scene body for (React, R, kit); slots are read from `const SLOTS = {...}` at the top. */

@@ -221,6 +221,24 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   else process.env.OPENCMO_AI_FAKE = fake;
 }
 
+// ------------------------------------------------------------ the kit with silent clips only (no narration voice)
+
+{
+  const saved = { motion: process.env.OPENCMO_MOTION, eleven: process.env.ELEVENLABS_API_KEY, voice: process.env.OPENCMO_VOICE_ENABLED, fakeVoice: process.env.OPENCMO_MOTION_FAKE_VOICE, fake: process.env.OPENCMO_AI_FAKE };
+  process.env.OPENCMO_MOTION = "modal";
+  for (const key of ["ELEVENLABS_API_KEY", "OPENCMO_VOICE_ENABLED", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_AI_FAKE"]) delete process.env[key];
+  const kit = (await registry.tools(ctx)).find((tool) => tool.name === "get_explainer_kit")!;
+  const result = (await callTool(kit, {}, ctx)) as unknown as { isError?: boolean; structuredContent: { available: boolean; narrated: boolean; silent_clip: unknown } };
+  assert.equal(result.isError ?? false, false, "silent clips alone are not an error");
+  assert.equal(result.structuredContent.available, true);
+  assert.equal(result.structuredContent.narrated, false);
+  assert.equal(typeof result.structuredContent.silent_clip, "object", "the silent clip section says how to make one");
+  for (const [key, value] of Object.entries({ OPENCMO_MOTION: saved.motion, ELEVENLABS_API_KEY: saved.eleven, OPENCMO_VOICE_ENABLED: saved.voice, OPENCMO_MOTION_FAKE_VOICE: saved.fakeVoice, OPENCMO_AI_FAKE: saved.fake })) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
 // ------------------------------------------------------------ prompts and resources
 
 {

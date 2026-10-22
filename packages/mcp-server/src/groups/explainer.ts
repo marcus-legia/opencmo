@@ -32,7 +32,9 @@ const NO_CLIP = new Proxy({} as AgentWorkspace, {
 });
 
 const kitOutput = z.object({
+  /** Either motion model is on: narrated explainers (`narrated`) or silent clips (`silent_clip`). */
   available: z.boolean(),
+  narrated: z.boolean(),
   voices: z.array(z.string()),
   themes: z.array(z.string()),
   personalities: z.array(z.string()),
@@ -60,7 +62,8 @@ registerGroup({
         const clip = availableModels().find((item) => item.id === MOTION_CLIP_MODEL);
         const price = model?.price;
         const result = {
-          available: Boolean(model),
+          available: Boolean(model || clip),
+          narrated: Boolean(model),
           voices: model?.limits.voices ?? [],
           themes: [...EXPLAINER_THEMES],
           personalities: [...EXPLAINER_PERSONALITIES],
@@ -75,7 +78,7 @@ registerGroup({
           },
           price: price
             ? `${price.credits} credit${price.credits === 1 ? "" : "s"} per started 10 s, plus ${price.voiceKchars ?? 0} per started 1,000 characters of narration. add_explainer quotes the exact price first.`
-            : "Explainers are not available on this server.",
+            : "Narrated explainers are not available on this server.",
           silent_clip: clip
             ? {
                 what: "silent: true on preview_explainer / add_explainer: a 3-30 s animation with no voice (an intro, a logo reveal, a product moment). list_motion_templates has finished ones to start from.",
@@ -87,7 +90,7 @@ registerGroup({
           lotties: LOTTIE_PACK.map((entry) => entry.name),
           read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "find_icons and find_lotties for every noun of the narration"],
         };
-        if (!model) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
+        if (!model && !clip) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
       },
     },

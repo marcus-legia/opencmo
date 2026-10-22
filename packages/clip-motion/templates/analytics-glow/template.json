@@ -15,8 +15,8 @@
     { "name": "accent", "kind": "color", "note": "The glow colour; warm tones read best on white.", "default": "#FF7A3D" }
   ],
   "beats": [
-    { "say": "The card rises and the columns grow.", "seconds": 1.5 },
-    { "say": "The best day glows and the result lands.", "seconds": 1.5 }
+    { "say": "The card rises and the columns grow.", "visual": "A white card rises; seven columns grow from dots to their values as the total counts up.", "seconds": 1.5 },
+    { "say": "The best day glows and the result lands.", "visual": "The highlighted column warms to the accent and glows; the result sentence lands.", "seconds": 1.5 }
   ],
   "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/template-analytics-glow", "license": "MIT" }
 }

@@ -14,6 +14,7 @@ import { randomInt } from "node:crypto";
 
 import { z } from "zod";
 import {
+  CLIP_MAX_BEATS,
   CLIP_MAX_SECONDS,
   clipSeconds,
   EXPLAINER_FORMATS,
@@ -23,6 +24,8 @@ import {
   EXPLAINER_THEMES,
   ExplainerBeatSchema,
   explainerSeconds,
+  MOTION_ASSET_NAME,
+  MOTION_MAX_ASSETS,
   narrationOf,
   type ExplainerBeat,
   type ExplainerFormat,
@@ -31,6 +34,7 @@ import {
   type Op,
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
+import { MAX_PREVIEW_STILLS } from "@opencmo/clip-motion/job";
 import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
 import { ApiError } from "@/lib/api/errors";
@@ -63,8 +67,6 @@ export type StoryboardBeat = ExplainerBeat & { visual: string; seconds?: number 
 
 /** Previews per explainer: the render → look → fix loop that made the Opus remakes good took about 5. */
 export const PREVIEW_ROUNDS = 6;
-/** Same cap as `MAX_PREVIEW_STILLS` in `packages/clip-motion/src/job.ts`. */
-export const PREVIEW_TIMES = 12;
 
 /**
  * What the motion direction must say. Code written from a spec with numbers lands where it was planned; code
@@ -97,29 +99,28 @@ const direction = z
   .max(3000, "too long: at most 3000 characters.")
   .describe(DIRECTION_HELP);
 
-/** Same rule as `ASSET_NAME` in `packages/clip-motion/src/job.ts`. */
-const ASSET_NAME = /^[a-z][a-z0-9-]{0,31}$/;
-
 const assetsField = z
   .array(
     z.object({
-      name: z.string().regex(ASSET_NAME, "lowercase letters, digits and dashes, starting with a letter (at most 32)").describe('The name scene code uses: <kit.Image name="screen" …/>.'),
+      name: z.string().regex(MOTION_ASSET_NAME, "lowercase letters, digits and dashes, starting with a letter (at most 32)").describe('The name scene code uses: <kit.Image name="screen" …/>.'),
       image: z.string().min(1).max(500).describe("Library path of an image saved to the cloud (list_library: an upload, a finished AI image, or a frame from save_frame)."),
     }),
   )
-  .max(6)
+  .max(MOTION_MAX_ASSETS)
   .refine((list) => new Set(list.map((item) => item.name)).size === list.length, "give each image a different name")
   .optional()
-  .describe("The user's own images the scene shows with kit.Image (product screenshots, a logo), at most 6. Prefer real screens over drawn mock-ups.");
+  .describe(`The user's own images the scene shows with kit.Image (product screenshots, a logo), at most ${MOTION_MAX_ASSETS}. Prefer real screens over drawn mock-ups.`);
 
 /** Signed preview URLs for `{name, ref}`, or a sentence for the model (`apps/web/lib/motion/assets.ts`). */
 export type SignAssets = (refs: { name: string; ref: string }[]) => Promise<{ name: string; src: string }[] | string>;
 
 /** Each `{name, image}` → `{name, ref}`, or the message naming the first image that is not usable. */
 async function assetRefs(assets: { name: string; image: string }[] | undefined, lookupImage: LookupImage | undefined): Promise<{ name: string; ref: string }[] | string> {
+  if (!assets?.length) return [];
+  const found = lookupImage ? await lookupImage(assets.map((asset) => asset.image)) : assets.map(() => null);
   const refs: { name: string; ref: string }[] = [];
-  for (const [index, asset] of (assets ?? []).entries()) {
-    const ref = lookupImage ? await lookupImage(asset.image) : null;
+  for (const [index, asset] of assets.entries()) {
+    const ref = found[index];
     if (!ref) return `assets.${index}.image: "${asset.image}" is not an image saved to the cloud yet. Use an uploaded image, a finished AI image or save_frame, and wait until it is ready.`;
     refs.push({ name: asset.name, ref });
   }
@@ -152,7 +153,7 @@ function silentRules(value: { silent?: boolean; beats: { seconds?: number }[]; v
     return;
   }
   if (value.voice !== undefined) ctx.addIssue({ code: "custom", path: ["voice"], message: "a silent clip has no narration." });
-  if (value.beats.length > 8) ctx.addIssue({ code: "custom", path: ["beats"], message: "a silent clip has 1 to 8 beats." });
+  if (value.beats.length > CLIP_MAX_BEATS) ctx.addIssue({ code: "custom", path: ["beats"], message: `a silent clip has 1 to ${CLIP_MAX_BEATS} beats.` });
   let total = 0;
   value.beats.forEach((item, i) => {
     if (item.seconds === undefined) ctx.addIssue({ code: "custom", path: ["beats", i, "seconds"], message: "every beat of a silent clip says how many seconds it lasts (0.5-30)." });
@@ -166,9 +167,9 @@ export const previewExplainerInput = z
     ...sceneFields,
     times: z
       .array(z.number().finite().min(0))
-      .max(PREVIEW_TIMES)
+      .max(MAX_PREVIEW_STILLS)
       .optional()
-      .describe(`Seconds to render stills at (at most ${PREVIEW_TIMES}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
+      .describe(`Seconds to render stills at (at most ${MAX_PREVIEW_STILLS}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
   })
   .superRefine(silentRules);
 
@@ -256,7 +257,8 @@ export function runMotionTemplateTool(name: string, input: unknown): ToolOutcome
     ok: true,
     content: JSON.stringify({
       ...template,
-      how: "Copy code and change only the values in SLOTS (an image slot takes an asset name you also pass in assets, from the user's library). Send direction and beats as they are, adjusting only the words. Preview with the template's format, then add it.",
+      silent: template.kind === "clip",
+      how: `Copy code and change only the values in SLOTS (an image slot takes an asset name you also pass in assets, from the user's library). Send direction and beats as they are, adjusting only the words, with format "${template.format}"${template.kind === "clip" ? " and silent: true (a silent clip, timed by each beat's seconds)" : ""}. Preview it, then add it.`,
     }),
     summary: `Template: ${template.title}`,
   };

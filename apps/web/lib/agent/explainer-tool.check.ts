@@ -108,7 +108,7 @@ async function main() {
   // A5: images from the user's library. An unknown path is refused before any preview; a known one reaches the
   // preview as a signed URL and the spec as the library object only.
   const OBJECT = "11111111-1111-4111-8111-111111111111/j/screen.png";
-  const lookupImage = async (path: string) => (path === "Uploads/screen.png" ? OBJECT : null);
+  const lookupImage = async (paths: readonly string[]) => paths.map((path) => (path === "Uploads/screen.png" ? OBJECT : null));
   const signAssets = async (refs: { name: string; ref: string }[]) => refs.map((ref) => ({ name: ref.name, src: `https://project.supabase.co/storage/v1/object/sign/media/${ref.ref}?token=t` }));
   const withImage = { ...input, assets: [{ name: "screen", image: "Uploads/screen.png" }] };
   const unknown = await runPreviewExplainer({ ...input, assets: [{ name: "screen", image: "Uploads/nope.png" }] }, {
@@ -184,6 +184,14 @@ async function main() {
   assert.match(lockup.code, /const SLOTS = \{/);
   assert.equal(lockup.format, "16:9");
   assert.ok(lockup.direction.length >= 120);
+  // Every template's beats and direction go to preview_explainer as they are, with the silent flag the tool returns.
+  for (const { id } of (JSON.parse(listed.content) as { templates: { id: string }[] }).templates) {
+    const template = JSON.parse(runMotionTemplateTool("get_motion_template", { id }).content) as { title: string; code: string; direction: string; beats: unknown[]; format: string; silent: boolean; how: string };
+    assert.equal(template.silent, true, id);
+    assert.match(template.how, /silent: true/, id);
+    const parsed = previewExplainerInput.safeParse({ title: template.title, code: template.code, direction: template.direction, beats: template.beats, format: template.format, silent: template.silent });
+    assert.ok(parsed.success, `${id}: ${parsed.error?.issues[0]?.path.join(".")} ${parsed.error?.issues[0]?.message}`);
+  }
 
   // The editor captions explainers that have no captions layer yet, and only those.
   const explainer = (id: string) => ({
