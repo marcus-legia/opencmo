@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTimeline, cueFrame, pairedProbes, previewFrames, probeFrames, stillFrames } from './timing.ts';
+import { buildTimeline, cueFrame, MAX_JUMP_PAIRS, pairedProbes, previewFrames, probeFrames, stillFrames } from './timing.ts';
 
 const beats = [{ say: 'A noisy bar.' }, { say: 'The phone hears peaks.' }, { say: 'It finds the song.' }];
 
@@ -74,6 +74,16 @@ describe('timing', () => {
 		const paired = pairedProbes(timeline);
 		expect(paired).toHaveLength(probes.length * 2);
 		for (const probe of probes) expect(paired).toContainEqual({ beat: probe.beat, frame: probe.frame + 1 });
+	});
+
+	it('pairedProbes adds at most 12 partner frames on a long explainer, spread over its beats', () => {
+		const long = buildTimeline({ beats: Array.from({ length: 16 }, () => ({ say: 'six words in every one of these' })), duration: 90 });
+		const probes = probeFrames(long);
+		const paired = pairedProbes(long);
+		expect(paired.length - probes.length).toBe(MAX_JUMP_PAIRS);
+		const partners = paired.filter((probe) => !probes.some((sample) => sample.frame === probe.frame));
+		expect(partners[0]!.beat).toBe(0);
+		expect(partners.at(-1)!.beat).toBe(15);
 	});
 });
 

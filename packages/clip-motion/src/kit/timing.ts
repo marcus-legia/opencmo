@@ -94,11 +94,23 @@ export function previewFrames(timeline: Timeline, times?: readonly number[]): nu
 	return frames.length ? [...new Set(frames)].sort((a, b) => a - b) : stillFrames(timeline);
 }
 
-/** The layout samples (`probeFrames`) plus the frame right after each, so a move of one frame can be measured. */
+/**
+ * Most frames rendered for the jump check per preview. Each costs about half a second, and a 16-beat preview with
+ * 12 stills already takes ~30 s of the 55 s the preview endpoint allows.
+ */
+export const MAX_JUMP_PAIRS = 12;
+
+/**
+ * The layout samples (`probeFrames`) plus the frame right after each, so a move of one frame can be measured. Past
+ * `MAX_JUMP_PAIRS` samples, only an evenly spread subset gets its partner frame.
+ */
 export function pairedProbes(timeline: Timeline): { beat: number; frame: number }[] {
+	const probes = probeFrames(timeline);
+	const pick = probes.length <= MAX_JUMP_PAIRS ? probes.map((_, i) => i) : Array.from({ length: MAX_JUMP_PAIRS }, (_, k) => Math.round((k * (probes.length - 1)) / (MAX_JUMP_PAIRS - 1)));
+	const paired = new Set(pick);
 	const seen = new Set<number>();
-	return probeFrames(timeline)
-		.flatMap((probe) => [probe, ...(probe.frame + 1 < timeline.frames ? [{ beat: probe.beat, frame: probe.frame + 1 }] : [])])
+	return probes
+		.flatMap((probe, i) => [probe, ...(paired.has(i) && probe.frame + 1 < timeline.frames ? [{ beat: probe.beat, frame: probe.frame + 1 }] : [])])
 		.filter((probe) => !seen.has(probe.frame) && seen.add(probe.frame));
 }
 
