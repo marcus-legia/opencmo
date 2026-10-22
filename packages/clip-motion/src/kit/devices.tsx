@@ -55,7 +55,8 @@ function useShadow(): string {
 function Screen({ box, radius, image, statusBar = 0, children, Image }: { box: Box; radius: number; image?: string; statusBar?: number; children?: React.ReactNode; Image: (props: ImageProps) => React.ReactNode }) {
 	return (
 		<div style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: radius, overflow: 'hidden', background: statusBar ? '#FFFFFF' : undefined }}>
-			{image !== undefined ? <Image name={image} x={0} y={statusBar} w={box.w} h={box.h - statusBar} /> : null}
+			{/* dur 0: the screen shows at once; the device's own entrance fades and scales it. */}
+			{image !== undefined ? <Image name={image} x={0} y={statusBar} w={box.w} h={box.h - statusBar} dur={0} /> : null}
 			{children}
 		</div>
 	);

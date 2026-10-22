@@ -24,8 +24,11 @@ function tokens(text: string): string[] {
 function clipTimeline(job: Pick<MotionJob, 'beats' | 'duration'>): Timeline {
 	const frames = job.duration * FPS;
 	let from = 0;
+	let seconds = 0;
 	const beats = job.beats.map((beat) => {
-		const to = Math.max(from + 1, Math.min(frames, from + Math.round((beat.seconds ?? 0) * FPS)));
+		// Rounded from the running total, not per beat: each start stays within half a frame of the authored seconds.
+		seconds += beat.seconds ?? 0;
+		const to = Math.max(from + 1, Math.min(frames, Math.round(seconds * FPS)));
 		const list = tokens(beat.say);
 		const span = { from, to, frames: to - from, words: list.map((text, k) => ({ text, key: wordKey(text), frame: from + Math.floor(((to - from) * k) / Math.max(1, list.length)) })) };
 		from = to;

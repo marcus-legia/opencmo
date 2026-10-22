@@ -94,4 +94,17 @@ describe('timing', () => {
 		expect(cueFrame(timeline.beats[1]!, 'rises')).toBeGreaterThan(45);
 		expect(cueFrame(timeline.beats[1]!, 'rises')).toBeLessThan(105);
 	});
+
+	it.each([
+		{ seconds: [1.35, 1.35, 2.3], duration: 5 },
+		{ seconds: Array.from({ length: 8 }, () => 0.517), duration: 5 },
+	])('clip beats $seconds start within half a frame of their authored seconds', ({ seconds, duration }) => {
+		const timeline = buildTimeline({ kind: 'clip', beats: seconds.map((value) => ({ say: 'A move.', seconds: value })), duration });
+		let elapsed = 0;
+		timeline.beats.forEach((beat, i) => {
+			expect(Math.abs(beat.from - elapsed * 30)).toBeLessThanOrEqual(0.5);
+			elapsed += seconds[i]!;
+		});
+		expect(timeline.beats.at(-1)!.to).toBe(Math.round(elapsed * 30));
+	});
 });
