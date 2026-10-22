@@ -57,7 +57,7 @@ export const PRICED = new Set([
 const RENAME: Record<string, string> = { request_export: "export_clip" };
 
 /** Free previews cost us a render each: per user per hour (A9, `rate_limit_hit` bucket `mcp_preview`). */
-export const PREVIEW_LIMIT = 30;
+export const PREVIEW_LIMIT = 60;
 
 /** Writes that only remove or replace (MCP `destructiveHint`); every write is still a checkpoint. */
 const DESTRUCTIVE = /^(delete_|remove_|ripple_delete|restore_all|ungroup_|merge_lines|split_|trim_|slip_|replace_)/;

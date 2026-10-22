@@ -56,9 +56,47 @@ const beat = z.object({
 /** A storyboard beat: the spec's `{ say, label? }` plus the picture, which stays out of the spec. */
 export type StoryboardBeat = ExplainerBeat & { visual: string };
 
+/** Previews per explainer: the render → look → fix loop that made the Opus remakes good took about 5. */
+export const PREVIEW_ROUNDS = 6;
+/** Same cap as `MAX_PREVIEW_STILLS` in `packages/clip-motion/src/job.ts`. */
+export const PREVIEW_TIMES = 12;
+
+/**
+ * What the motion direction must say. Code written from a spec with numbers lands where it was planned; code
+ * written from a vague brief leaves leftovers (docs/research/editor/2026-10-22-motion-quality-opus-claude-design.md).
+ */
+export const DIRECTION_HELP =
+  "The motion spec you code from, with numbers, written before the code. Per beat: the one visual centre; every move as what, from → to (px of the frame or % of its width/height), start and end in seconds, and the curve (ease-out for entrances, ease-in-out for moves, a spring for pops); the reveal order; what stays alive between moves. No slide layouts, no rows of parallel cards. End with the bar: resting text crisp and readable, nothing clipped or overlapping, nothing jumping. 120-3000 characters.";
+
+/** Returned with every clean preview: the model answers it line by line before the next round or add_explainer. */
+export const REVIEW_CHECKLIST = [
+  "Answer each line about the stills you just saw, in order:",
+  "1. Subject: does every still show what its beat says (\"shows X; the beat says Y\")?",
+  "2. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
+  "3. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
+  "4. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
+  "5. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
+  "6. Finish: margins even, colours from the palette, the last frame a clean end state?",
+  "Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing.",
+].join("\n");
+
+const direction = z
+  .string({
+    error: (issue) =>
+      issue.input === undefined
+        ? `missing. Before the code, write the motion direction: ${DIRECTION_HELP}`
+        : "the direction is text: the motion spec with numbers.",
+  })
+  .trim()
+  .min(120, "too short: give every beat its moves with positions, seconds and curves (at least 120 characters).")
+  .max(3000, "too long: at most 3000 characters.")
+  .describe(DIRECTION_HELP);
+
 const sceneFields = {
   title: z.string().trim().min(1).max(60).describe('Short name of the explainer (price card, layer name), e.g. "How Shazam hears a song".'),
   beats: z.array(beat).min(3).max(16).describe("The script, one entry per beat of about 4 s, in order."),
+  // Before `code` on purpose: models fill fields in order, so the spec is written before the code.
+  direction,
   code: z.string().min(1).max(EXPLAINER_CODE_CHARS).describe('The body of (React, R, kit) => { …; return function Scene() { … } } with JSX, no imports (read_guide "explainer").'),
   format: z.enum(FORMATS).describe("The video's shape: clip_context.frame on a clip; on a blank New edit what the user asked for (9:16 by default)."),
   theme: z.enum(EXPLAINER_THEMES).optional().describe("blueprint (navy, glowing: tech, data, software, money) or paper (light, flat colours: science, health, people, how-to). Default blueprint."),
@@ -68,7 +106,14 @@ const sceneFields = {
     .describe("The motion of the whole video: premium (calm, smooth), corporate (crisp, clear), playful (bouncy), energetic (fast, punchy). Default premium."),
 };
 
-export const previewExplainerInput = z.object(sceneFields);
+export const previewExplainerInput = z.object({
+  ...sceneFields,
+  times: z
+    .array(z.number().finite().min(0))
+    .max(PREVIEW_TIMES)
+    .optional()
+    .describe(`Seconds to render stills at (at most ${PREVIEW_TIMES}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
+});
 
 export const addExplainerInput = z.object({
   ...sceneFields,
@@ -88,6 +133,8 @@ export type MotionJob = {
   accent?: string;
   theme?: ExplainerTheme;
   personality?: ExplainerPersonality;
+  /** Preview only: seconds to render stills at. */
+  stills?: number[];
 };
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
@@ -114,7 +161,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        'Render stills of an explainer you wrote (beat midpoints, just after each beat starts, and the last frame) and look at them, with a layout report: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion. Errors come back with the phase (job/compile/guard/render) and the message. Then write one line per still, "shows X; the beat says Y", and fix every beat where they differ. Fix and preview again, up to 3 rounds, until there are no errors, no issues and every still shows its beat; then add it with add_explainer. Free. read_guide "explainer" first.',
+        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps in one frame. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -149,6 +196,8 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
     seed: 0,
     ...(accent ? { accent } : {}),
     ...lookOf(input),
+    // Clamping and de-duplication happen in clip-motion (`previewFrames`), next to the timeline.
+    ...(input.times?.length ? { stills: input.times } : {}),
   };
 }
 
@@ -186,6 +235,8 @@ export async function runPreviewExplainer(input: unknown, env: { preview: Previe
       ...(result.estimated ? { timing: "estimated from the script; the real voice sets the final timing" } : {}),
       storyboard: parsed.data.beats.map((item, index) => `beat ${index + 1}: ${item.visual}`),
       check: SUBJECT_CHECK,
+      review: REVIEW_CHECKLIST,
+      rounds: `Up to ${PREVIEW_ROUNDS} previews: stop early when a round finds nothing to fix.`,
     }),
     summary: count ? `Previewed the explainer: ${count} layout ${count === 1 ? "issue" : "issues"}` : "Previewed the explainer",
     images,

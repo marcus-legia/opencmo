@@ -11,7 +11,20 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 
 import { uncaptionedExplainers } from "../../components/editor/generate/useExplainers";
 import { VACCINE_EXPLAINER } from "./providers/fake-explainers";
-import { explainerCard, prepareExplainer, previewJob, runPreviewExplainer, SUBJECT_CHECK, type MotionJob } from "./explainer-tool";
+import { z } from "zod";
+
+import {
+  explainerCard,
+  explainerToolSpecs,
+  prepareExplainer,
+  PREVIEW_ROUNDS,
+  previewExplainerInput,
+  previewJob,
+  REVIEW_CHECKLIST,
+  runPreviewExplainer,
+  SUBJECT_CHECK,
+  type MotionJob,
+} from "./explainer-tool";
 
 async function main() {
   process.env.OPENCMO_AI_FAKE = "1";
@@ -60,6 +73,36 @@ async function main() {
   const card = explainerCard(prepared, "clip");
   assert.match(card.changes[0]!, / · paper, playful · voice Aria · /);
   assert.match(card.changes[1]!, /· Picture: a syringe icon slides in from the left/);
+
+  // A3: a numeric direction first, previews at chosen times, the review checklist with every clean preview.
+  const noDirection = await runPreviewExplainer({ ...input, direction: undefined }, { preview: async () => assert.fail("must not render") });
+  assert.equal(noDirection.ok, false);
+  assert.match(noDirection.content, /direction: missing\. Before the code, write the motion direction/, "an old client gets one message naming direction and what to write");
+  const short = await runPreviewExplainer({ ...input, direction: "x".repeat(119) }, { preview: async () => assert.fail("must not render") });
+  assert.equal(short.ok, false);
+  assert.match(short.content, /direction: too short/);
+  let timed: MotionJob | null = null;
+  const reviewed = await runPreviewExplainer({ ...input, times: [2, 2, 99] }, {
+    preview: async (sent) => {
+      timed = sent;
+      return { ok: true, stills: [{ t: 2, file: "a.jpg" }], issues: [], estimated: true, images: ["AAAA"] };
+    },
+  });
+  assert.deepEqual(timed!.stills, [2, 2, 99], "times reach clip-motion as stills; it clamps and dedupes");
+  assert.ok(!("stills" in previewJob(input)), "no times: the default stills");
+  const review = JSON.parse(reviewed.content) as { review?: string; rounds?: string };
+  assert.equal(review.review, REVIEW_CHECKLIST);
+  assert.equal(PREVIEW_ROUNDS, 6);
+  assert.match(review.rounds ?? "", /Up to 6 previews/);
+  assert.match(REVIEW_CHECKLIST, /Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing\.$/);
+  const tooMany = await runPreviewExplainer({ ...input, times: Array.from({ length: 13 }, (_, i) => i) }, { preview: async () => assert.fail("must not render") });
+  assert.match(tooMany.content, /times/);
+  const keys = Object.keys((z.toJSONSchema(previewExplainerInput, { io: "input" }) as { properties: Record<string, unknown> }).properties);
+  assert.ok(keys.indexOf("direction") >= 0 && keys.indexOf("direction") < keys.indexOf("code"), "direction is written before code");
+  const toolSchema = explainerToolSpecs().find((spec) => spec.name === "preview_explainer")!.schema as { properties: Record<string, unknown>; required: string[] };
+  assert.ok(toolSchema.required.includes("direction"));
+  assert.ok(Object.keys(toolSchema.properties).indexOf("direction") < Object.keys(toolSchema.properties).indexOf("code"));
+  assert.match(explainerToolSpecs().find((spec) => spec.name === "preview_explainer")!.description, /up to 6 rounds/);
 
   // The editor captions explainers that have no captions layer yet, and only those.
   const explainer = (id: string) => ({

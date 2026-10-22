@@ -197,6 +197,23 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal((await post(pings(1), "something else")).status, 503, "an unknown answer fails closed");
 }
 
+// ------------------------------------------------------------ explainers: the direction comes first (motion quality A3)
+
+{
+  const fake = process.env.OPENCMO_AI_FAKE;
+  process.env.OPENCMO_AI_FAKE = "1";
+  const preview = (await registry.tools(ctx)).find((tool) => tool.name === "preview_explainer");
+  assert.ok(preview, "preview_explainer is offered when explainers are available");
+  const schema = describeTool(preview).inputSchema as { properties: Record<string, { description?: string }>; required: string[] };
+  assert.ok(schema.required.includes("direction"), "an MCP client must send a direction");
+  const keys = Object.keys(schema.properties);
+  assert.ok(keys.indexOf("direction") < keys.indexOf("code"), "direction is listed before code");
+  assert.match(schema.properties.direction!.description ?? "", /from → to/);
+  assert.match(describeTool(preview).description!, /up to 6 rounds/);
+  if (fake === undefined) delete process.env.OPENCMO_AI_FAKE;
+  else process.env.OPENCMO_AI_FAKE = fake;
+}
+
 // ------------------------------------------------------------ prompts and resources
 
 {
