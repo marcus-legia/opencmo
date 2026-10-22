@@ -29,10 +29,11 @@ from opencmo.ai.catalog import (
 )
 from opencmo.ai.moderation import check_input, check_input_video, check_output, check_prompt
 from opencmo.ai.providers import ProviderError, adapter_for
+from opencmo.ai.providers.motion import motion_assets
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Task
 from opencmo.editing.models import canonical_json
-from opencmo.media.ffmpeg import USER_INPUT, run
+from opencmo.media.ffmpeg import USER_INPUT, FFmpegError, reencode_image, run
 from opencmo.worker.task_run import task_workspace
 
 log = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ def _file_name(prompt: str, extension: str) -> str:
 #: Ảnh đầu vào tối đa trước khi thu nhỏ; ảnh gửi provider có cạnh dài ≤ 1100 px (như Palmier).
 INPUT_MAX_BYTES = 30 * 1024 * 1024
 INPUT_EDGE = 1100
+INPUT_UNREADABLE = "That image could not be used. Pick a PNG, JPEG or WebP of at most 40 megapixels."
 #: A shot that continues another downloads the parent's file: a short generated video.
 PARENT_MAX_BYTES = 200 * 1024 * 1024
 SHOT_BEFORE = "The shot before this one is not ready. Your credits were refunded."
@@ -152,15 +154,10 @@ def _prepare_inputs(
             store.download_object("media", ref, raw, max_bytes=INPUT_MAX_BYTES)
         except Exception as exc:
             raise SpecError(MEDIA_NOT_FOUND) from exc
-        out = workdir / f"input-{index}.jpg"
-        run([
-            # Ảnh của người dùng đi qua stdin bằng image2pipe: ffmpeg chỉ giải mã đúng bytes đó, không
-            # mở được file hay URL nào khác (một "ảnh" là playlist HLS từng đọc được file trên worker).
-            "ffmpeg", "-v", "error", "-y", "-protocol_whitelist", "pipe", "-f", "image2pipe", "-i", "pipe:0",
-            "-frames:v", "1",
-            "-vf", f"scale='min({INPUT_EDGE},iw)':'min({INPUT_EDGE},ih)':force_original_aspect_ratio=decrease",
-            str(out),
-        ], timeout=120, stdin_path=raw)
+        try:
+            out = reencode_image(raw, workdir / f"input-{index}.jpg", INPUT_EDGE)
+        except FFmpegError as exc:
+            raise SpecError(INPUT_UNREADABLE) from exc
         check_input(model, out)
         return str(out)
 
@@ -178,6 +175,10 @@ def _prepare_inputs(
         prepared["references"] = refs
     if isinstance(spec.get("sourceVideo"), str):
         prepared["sourceVideo"] = _source_clip(store, task, model, spec, workdir)
+    scene = spec.get("scene")
+    if model.provider == "opencmo-motion" and isinstance(scene, dict) and scene.get("assets"):
+        # The scene's images, inlined here so the render never fetches (and checked against the task owner).
+        prepared["motionAssets"] = motion_assets(store, task, scene, workdir)
     if "after" in spec:
         # Providers know nothing of chains: they get the parent's last frame as the first frame.
         prepared.pop("after")
@@ -251,7 +252,7 @@ def process(store: Any, task: Task) -> None:
             raise SpecError("Invalid generation request.")
         adapter = adapter_for(model)
         scene = spec.get("scene") if isinstance(spec.get("scene"), dict) else None
-        if scene and scene.get("template") in ("code", "explainer"):
+        if scene and scene.get("template") in ("code", "explainer", "clip"):
             # Code scenes and explainers: the spec (and its hash) carries only code_ref. The code
             # is loaded for the task's OWNER, so guessing a hash cannot render someone else's code.
             code = store.get_scene_code(task.user_id, scene["code_ref"])

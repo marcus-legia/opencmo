@@ -1,0 +1,22 @@
+{
+  "id": "analytics-glow",
+  "title": "Analytics card",
+  "description": "A white analytics card rises, seven soft columns grow from dots while the total counts up, then the best column glows and the result lands. 3 s, silent, 16:9.",
+  "kind": "clip",
+  "format": "16:9",
+  "seconds": 3,
+  "slots": [
+    { "name": "title", "kind": "text", "note": "What is measured, 2-3 words.", "default": "Weekly signups" },
+    { "name": "period", "kind": "text", "note": "The period, a few words.", "default": "Last 7 days" },
+    { "name": "labels", "kind": "text", "note": "Seven short column labels, comma separated.", "default": "Mon,Tue,Wed,Thu,Fri,Sat,Sun" },
+    { "name": "values", "kind": "text", "note": "Seven real numbers, comma separated, in the same order; the total and the sentence are computed from them.", "default": "210,264,238,286,361,230,220" },
+    { "name": "highlight", "kind": "text", "note": "Which column glows, 1-7.", "default": "5" },
+    { "name": "delta", "kind": "text", "note": "The change shown in the badge, e.g. 12.4%.", "default": "12.4%" },
+    { "name": "accent", "kind": "color", "note": "The glow colour; warm tones read best on white.", "default": "#FF7A3D" }
+  ],
+  "beats": [
+    { "say": "The card rises and the columns grow.", "visual": "A white card rises; seven columns grow from dots to their values as the total counts up.", "seconds": 1.5 },
+    { "say": "The best day glows and the result lands.", "visual": "The highlighted column warms to the accent and glows; the result sentence lands.", "seconds": 1.5 }
+  ],
+  "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/template-analytics-glow", "license": "MIT" }
+}

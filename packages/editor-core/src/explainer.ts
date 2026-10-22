@@ -7,6 +7,8 @@
 import { z } from 'zod';
 
 export const EXPLAINER_MODEL = 'motion-explainer';
+/** A silent 3–30 s motion piece (intros, product moments, logo reveals): same runtime, no voice. */
+export const MOTION_CLIP_MODEL = 'motion-clip';
 
 /** Same frames as `FORMATS` in `packages/clip-motion/src/job.ts`. */
 export const EXPLAINER_FORMATS = { '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080] } as const;
@@ -45,6 +47,24 @@ export type ExplainerTheme = (typeof EXPLAINER_THEMES)[number];
 export const EXPLAINER_PERSONALITIES = ['premium', 'corporate', 'playful', 'energetic'] as const;
 export type ExplainerPersonality = (typeof EXPLAINER_PERSONALITIES)[number];
 
+/** Same rules as `ASSET_NAME` / `MAX_ASSETS` in `packages/clip-motion/src/job.ts`. */
+export const MOTION_ASSET_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+export const MOTION_MAX_ASSETS = 6;
+
+/** An image a scene shows by `name`: `ref` is the user's own library object; SQL and the worker check the owner. */
+export const MotionAssetRefSchema = z
+	.object({
+		name: z.string().regex(MOTION_ASSET_NAME, 'Use lowercase letters, digits and dashes, starting with a letter (at most 32).'),
+		ref: z.string().min(1).max(500),
+	})
+	.strict();
+export type MotionAssetRef = z.infer<typeof MotionAssetRefSchema>;
+
+const assetRefs = z
+	.array(MotionAssetRefSchema)
+	.max(MOTION_MAX_ASSETS)
+	.refine((list) => new Set(list.map((asset) => asset.name)).size === list.length, 'Give each image a different name.');
+
 /** The `scene` of a `motion-explainer` spec. The code itself lives in `scene_codes`, by hash. */
 export const ExplainerSceneSchema = z
 	.object({
@@ -55,9 +75,48 @@ export const ExplainerSceneSchema = z
 		accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 		theme: z.enum(EXPLAINER_THEMES).optional(),
 		personality: z.enum(EXPLAINER_PERSONALITIES).optional(),
+		assets: assetRefs.optional(),
 	})
 	.strict();
 export type ExplainerScene = z.infer<typeof ExplainerSceneSchema>;
+
+/** Same range as `CLIP_SECONDS` in `packages/clip-motion/src/job.ts`. */
+export const CLIP_MIN_SECONDS = 3;
+export const CLIP_MAX_SECONDS = 30;
+/** Same count as `CLIP_BEATS_MAX` in packages/engine/opencmo/ai/catalog.py and the SQL check. */
+export const CLIP_MAX_BEATS = 8;
+
+/** A clip beat: `say` is the storyboard line (never voiced), `seconds` how long the beat lasts. */
+export const ClipBeatSchema = z
+	.object({
+		say: z.string().trim().min(1).max(240),
+		label: z.string().trim().max(40).optional(),
+		seconds: z.number().min(0.5).max(30),
+	})
+	.strict();
+export type ClipBeat = z.infer<typeof ClipBeatSchema>;
+
+/** The `scene` of a `motion-clip` spec. */
+export const ClipSceneSchema = z
+	.object({
+		template: z.literal('clip'),
+		code_ref: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid scene code reference.'),
+		title: z.string().trim().min(1).max(60),
+		beats: z.array(ClipBeatSchema).min(1).max(CLIP_MAX_BEATS),
+		accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+		theme: z.enum(EXPLAINER_THEMES).optional(),
+		personality: z.enum(EXPLAINER_PERSONALITIES).optional(),
+		assets: assetRefs.optional(),
+	})
+	.strict();
+export type ClipScene = z.infer<typeof ClipSceneSchema>;
+
+/** Seconds of a clip: its beats, rounded up to the whole second, inside 3–30 s. */
+export const clipSeconds = (beats: readonly ClipBeat[]): number => {
+	const total = beats.reduce((sum, beat) => sum + beat.seconds, 0);
+	// Float sums like 0.1 + 0.2 must not round 3.0000000004 up to 4.
+	return Math.min(CLIP_MAX_SECONDS, Math.max(CLIP_MIN_SECONDS, Math.ceil(total - 1e-9)));
+};
 
 /** The narration the voice reads: every beat's words, in order. */
 export const narrationOf = (beats: readonly ExplainerBeat[]): string => beats.map((beat) => beat.say.trim()).join(' ');

@@ -329,6 +329,16 @@ Show the storyboard in your reply — for each beat: say, label and visual — p
 - Each beat transforms the picture: a virus splits, an antibody locks on, a coin pile grows. No slideshow of separate pictures.
 - Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
 
+Silent motion clips (silent: true): 3-30 s with no voice, for an intro, a logo reveal or a product moment (a new feature on a phone, a number that grew). Every beat gives its seconds (0.5-30, at most 8 beats, 30 s in all); say is the storyboard line, never read aloud. Use them when the picture is the message; when the idea needs explaining, make a narrated explainer.
+Motion templates: list_motion_templates shows finished silent clips (a brand reveal, a phone carousel of app screens, an analytics card). When one fits the moment, get_motion_template, change only its SLOTS (texts, colours, image names you also pass as assets) and keep its motion, direction and beats: they were reviewed frame by frame.
+
+After the go, before any code, write the direction (the tools' direction field, 120-3000 characters): the motion spec you will code from, with numbers.
+- Per beat: the one visual centre (where the eye goes), then every move: what, from → to in pixels or % of the frame, start and end in seconds of the beat, and the curve (ease-out for entrances, ease-in-out for moves, a spring for pops).
+- The reveal order, and what stays alive between moves (the ambient layer, a slow camera push).
+- No slide layouts: no rows of parallel cards, no title-plus-bullets screens. One subject transforms.
+- End with the bar: resting text crisp and readable, nothing clipped or overlapping, nothing jumping.
+Example line: "Beat 2: the virus (420 px) pops at the centre at 0.1 s, splits at 1.8 s into 3 grey fragments that drift 140 px outward over 0.6 s, ease-out."
+
 ## 3. The code
 The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Headline, Icon, … } = kit;
 - R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
@@ -384,17 +394,20 @@ return function Scene() {
 };
 
 ## 4. Preview, look, fix — required
-preview_explainer { title, beats (with visual), code, format, theme, personality } returns stills (beat midpoints, 6 frames after every beat start, and the last frame) and a layout report.
+preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
+- times: up to 12 seconds you choose, around every main move of your direction (its start, middle and landing). Without times: beat midpoints and the last frame. The layout report also samples 6 frames after every beat start and each beat's midpoint.
 - Subject check: write one line per still — "shows X; the beat says Y". Where X is not what Y names, fix that beat (the icon, its time, or its place) before anything else.
-- An error (phase compile/guard/render + message) → fix the code.
+- An error (phase job/compile/guard/render + message) → fix the code.
 - "overlaps" → use Headline for the headline row, or move one text to another area or time.
 - "outside the safe area" → place it with kit.area. "text under 36 px" → fewer words, bigger primitive.
 - "more than 85% empty" or "beat N shows no icon, shape or Lottie" → the beat needs its subject.
 - "nothing moves during beat N" → give it a primary, a secondary and an ambient motion.
-Fix and preview again — at most 3 rounds.
+- "jumps N px in one frame" → ease the move (kit.enter / a Group key with dur) or make it a deliberate cut.
+- Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that, and preview again.
+Up to 6 rounds; stop when a round finds nothing to fix. A clean layout report is the floor, not the bar.
 
 ## 5. Add it
-add_explainer { title, beats (with visual), code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat with its picture, the look, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer "Captions · <title>" follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat with its picture, the look, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer "Captions · <title>" follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 

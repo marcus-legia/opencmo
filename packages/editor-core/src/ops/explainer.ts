@@ -19,11 +19,15 @@ import { OpFailure, type OpContext } from './context';
 import { checked, setFrame } from './project';
 import { voiceTranscript } from './voiceover';
 import {
+	CLIP_MAX_SECONDS,
+	CLIP_MIN_SECONDS,
+	ClipSceneSchema,
 	EXPLAINER_FORMATS,
 	EXPLAINER_MAX_SECONDS,
 	EXPLAINER_MIN_SECONDS,
 	EXPLAINER_MODEL,
 	ExplainerSceneSchema,
+	MOTION_CLIP_MODEL,
 	type ExplainerFormat,
 } from '../explainer';
 
@@ -33,8 +37,11 @@ const FORMAT_KEYS = Object.keys(EXPLAINER_FORMATS) as [ExplainerFormat, ...Expla
 
 const seed = z.number().int().min(0).max(2_147_483_647);
 
-/** The generation spec the tool priced; the op writes exactly this, so the editor finds the paid generation. */
-const specInput = z
+/**
+ * The generation spec the tool priced; the op writes exactly this, so the editor finds the paid generation. A
+ * narrated explainer has a voice; a silent motion clip (`motion-clip`) has none and is 3-30 s.
+ */
+const narratedSpec = z
 	.object({
 		prompt: z.string().trim().min(1).max(200),
 		aspectRatio: z.enum(FORMAT_KEYS),
@@ -44,13 +51,23 @@ const specInput = z
 		scene: ExplainerSceneSchema,
 	})
 	.strict();
+const silentSpec = z
+	.object({
+		prompt: z.string().trim().min(1).max(200),
+		aspectRatio: z.enum(FORMAT_KEYS),
+		duration: z.number().int().min(CLIP_MIN_SECONDS).max(CLIP_MAX_SECONDS),
+		seed: seed.optional(),
+		scene: ClipSceneSchema,
+	})
+	.strict();
+const specInput = z.union([narratedSpec, silentSpec]);
 
 export const explainerInput = z
 	.object({
 		op: z.literal('add_explainer'),
 		title: z.string().trim().min(1).max(60),
 		format: z.enum(FORMAT_KEYS),
-		duration: z.number().int().min(EXPLAINER_MIN_SECONDS).max(EXPLAINER_MAX_SECONDS),
+		duration: z.number().int().min(CLIP_MIN_SECONDS).max(EXPLAINER_MAX_SECONDS),
 		/** Clip seconds. Default: the playhead, or 0 on a blank clip. */
 		start: z.number().finite().min(0).optional(),
 		spec: specInput,
@@ -62,6 +79,8 @@ export const explainerInput = z
 export type ExplainerInput = z.infer<typeof explainerInput>;
 
 export const explainerLayerName = (title: string): string => `Explainer: ${title.trim()}`.slice(0, 80);
+export const motionClipLayerName = (title: string): string => `Motion clip: ${title.trim()}`.slice(0, 80);
+const silent = (input: ExplainerInput): boolean => !('voice' in input.spec);
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
 
@@ -72,7 +91,7 @@ export const addExplainer = {
 	name: 'add_explainer',
 	agent: false,
 	input: explainerInput,
-	describe: (input: ExplainerInput) => `Add the explainer "${input.title}" (${input.duration}s, ${input.format})`,
+	describe: (input: ExplainerInput) => `Add the ${silent(input) ? 'motion clip' : 'explainer'} "${input.title}" (${input.duration}s, ${input.format})`,
 	async apply(document: ClipDocument, input: ExplainerInput, ctx: OpContext) {
 		const blank = isBlank(document);
 		const [formatWidth, formatHeight] = EXPLAINER_FORMATS[input.format];
@@ -96,10 +115,11 @@ export const addExplainer = {
 		const src: AssetDeclaration = {
 			generate: 'video',
 			prompt: input.spec.prompt,
-			model: EXPLAINER_MODEL,
+			// No voice, no captions to follow: `sync_explainer` and the editor caption only EXPLAINER_MODEL layers.
+			model: 'voice' in input.spec ? EXPLAINER_MODEL : MOTION_CLIP_MODEL,
 			aspectRatio: input.spec.aspectRatio,
 			duration: input.spec.duration,
-			voice: input.spec.voice,
+			...('voice' in input.spec ? { voice: input.spec.voice } : {}),
 			scene: input.spec.scene as Record<string, unknown>,
 			...(input.spec.seed === undefined ? {} : { seed: input.spec.seed }),
 		};
@@ -108,7 +128,7 @@ export const addExplainer = {
 		const at = children.findIndex((child) => child.kind === 'captions' || child.kind === 'text');
 		children.splice(at < 0 ? children.length : at, 0, {
 			kind: 'rect',
-			name: explainerLayerName(input.title),
+			name: silent(input) ? motionClipLayerName(input.title) : explainerLayerName(input.title),
 			keepAspectRatio: true,
 			x: Math.round((root.width - width) / 2),
 			y: Math.round((root.height - height) / 2),

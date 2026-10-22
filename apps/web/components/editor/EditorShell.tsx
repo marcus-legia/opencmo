@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, MOTION_CLIP_MODEL, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -1709,8 +1709,8 @@ function aiMenuItems({
   const found: Record<string, unknown> = entity;
   const items: MenuItem[] = [];
   const declarations = ownDeclarations(found);
-  // Rendered from code (3D Studio, explainers): a new seed would pay for the same picture again.
-  if (declarations.length && declarations.every((declaration) => declaration.model !== STUDIO_MODEL && declaration.model !== EXPLAINER_MODEL)) {
+  // Rendered from code (3D Studio, explainers, motion clips): a new seed would pay for the same picture again.
+  if (declarations.length && declarations.every((declaration) => !RENDERED_FROM_CODE.has(String(declaration.model)))) {
     // Giá theo catalog máy chủ (G5); model đã tắt thì không mời sinh lại.
     // Shots continuing this one are made again from its new last frame: same price, counted here.
     const following = continuationsOf(document, String(found.id), 0).map((link) => link.declaration);
@@ -1863,11 +1863,15 @@ function imagePathOf(entity: Record<string, unknown>, manifest: Manifest): strin
 const TRANSITION_PROMPT =
   "One continuous camera move that starts exactly on the first picture and ends exactly on the second picture. Smooth, natural motion, no cuts, no new people or objects, no text.";
 
+/** Models whose layers are rendered from code: no paid Regenerate, a rendering label instead of "Generating…". */
+const RENDERED_FROM_CODE: ReadonlySet<string> = new Set([STUDIO_MODEL, EXPLAINER_MODEL, MOTION_CLIP_MODEL]);
+
 /** Nhãn chờ của phần tử AI: cảnh 3D render trên GPU, còn lại là sinh. */
 function aiLabel(entity: Record<string, unknown>): string {
   const models = ownDeclarations(entity).map((declaration) => declaration.model);
   if (models.includes(STUDIO_MODEL)) return "Rendering 3D…";
-  return models.includes(EXPLAINER_MODEL) ? "Rendering explainer…" : "Generating…";
+  if (models.includes(EXPLAINER_MODEL)) return "Rendering explainer…";
+  return models.includes(MOTION_CLIP_MODEL) ? "Rendering animation…" : "Generating…";
 }
 
 function download(blob: Blob, name: string): void {

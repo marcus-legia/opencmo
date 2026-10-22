@@ -18,6 +18,8 @@ type Personality = "premium" | "corporate" | "playful" | "energetic";
 export type FakeExplainer = {
   title: string;
   beats: { say: string; label?: string; visual: string }[];
+  /** The motion spec with numbers the code was written from (`DIRECTION_HELP`). */
+  direction: string;
   code: string;
   format: Format;
   theme?: Theme;
@@ -38,6 +40,14 @@ const SHOWCASE_VISUALS = [
 export const SHOWCASE_EXPLAINER: FakeExplainer = {
   title: showcase.title,
   beats: showcase.beats.map((beat, index) => ({ ...beat, visual: SHOWCASE_VISUALS[index] ?? "the spectrogram stays on screen" })),
+  direction: [
+    "Visual centre: one spectrogram grid, 1500x600 px centred at 50%/52%, from beat 2 to the end; the camera pushes in 1.0 → 1.15 over beats 3-6, ease-in-out.",
+    "Beat 1: the waveform draws left → right across 80% of the width in 1.2 s, ease-out, then calms (amplitude 100% → 30% over 0.8 s).",
+    "Beat 2: grid cells fill column by column, 3 frames apart. Beat 3: the brightest 24 cells pop to dots (spring), the rest dim to 20% over 0.5 s.",
+    "Beats 4-6: links draw 0.4 s each, ease-out; the mono code types at 20 chars/s; axes draw in 0.6 s, the scatter stagger 2 frames.",
+    "Beat 7: matches slide onto one line over 1 s, ease-in-out. Beat 8: the check pops at 50%/45% and holds 1.5 s.",
+    "Bar: resting text crisp, nothing clipped or overlapping, no jumps.",
+  ].join(" "),
   code: showcase.code,
   format: showcase.format as Format,
 };
@@ -77,6 +87,15 @@ export const VACCINE_EXPLAINER: FakeExplainer = {
       visual: "a check mark lands in the centre; a confetti Lottie plays",
     },
   ],
+  direction: [
+    "One stage, the headline row at the top; the subject sits on the mid line (56% of the height) every beat.",
+    "Beat 1: the syringe (380 px) enters at 27% of the width at 0.1 of the beat, ease-out 0.6 s; an arrow draws to 73% over 0.5 s; the shield-check pops on \"immune\".",
+    "Beat 2: the virus (420 px) pops at the centre, then splits at 45% of the beat with a 320 px burst into 3 grey fragments, staggered 4 frames.",
+    "Beat 3: the cell (320 px, 19% of the width) enters, an arrow draws to the first fragment over 0.5 s; the dna icon and its ring appear on \"antibodies\" at 82%.",
+    "Beat 4: the virus slides 25% → 17% of the width over 0.4 s, is knocked back at 55% of the beat by the 420 px shield with a burst, and settles in 0.5 s.",
+    "Beat 5: the steps board reveals three lines on \"show\", \"build\", \"remember\". Beat 6: the check pops at the centre, confetti plays once.",
+    "Bar: resting text crisp, nothing clipped or overlapping, no jumps.",
+  ].join(" "),
   code: vaccine.code,
   format: vaccine.format as Format,
   theme: vaccine.theme as Theme,
