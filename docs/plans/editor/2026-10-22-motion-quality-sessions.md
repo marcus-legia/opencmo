@@ -56,7 +56,7 @@ test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`;
 - [x] A2 Preview at chosen times, jump check
 - [x] A3 `direction`, `times`, review checklist (tools, guides, MCP limit)
 - [x] A5 Assets through tools, SQL and render
-- [ ] A6 After frames, RAM measured
+- [x] A6 After frames, RAM measured
 
 ## Session B — Templates and silent clips
 
