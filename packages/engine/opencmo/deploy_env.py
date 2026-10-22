@@ -15,7 +15,9 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from opencmo.ai.moderation import GROQ_BASE_URL
+# Spelled out, not imported from opencmo.ai.moderation: check_deploy_env.py ships only this module
+# to Modal (tests/test_check_deploy_env.py keeps the two equal).
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 VERCEL = "vercel"
 WORKER = "opencmo"

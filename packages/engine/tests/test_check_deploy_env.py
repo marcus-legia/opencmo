@@ -170,3 +170,9 @@ def test_the_look_token_must_match_and_its_url_name_the_look_endpoint():
     problems, _ = env.check(seen)
     assert any(problem.startswith("look token differs") for problem in problems)
     assert any("OPENCMO_LOOK_URL points at the wrong endpoint" in problem for problem in problems)
+
+
+def test_the_groq_url_is_the_moderation_one():
+    from opencmo.ai import moderation
+
+    assert env.GROQ_BASE_URL == moderation.GROQ_BASE_URL
