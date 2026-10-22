@@ -533,3 +533,39 @@ def test_the_worker_inlines_scene_images_before_the_render(tmp_path: Path) -> No
     assert [a["name"] for a in prepared["motionAssets"]] == ["shot"]
     assert motion_job(prepared)["assets"][0]["src"].startswith("data:image/jpeg;base64,")
     assert "motionAssets" not in generate_task._prepare_inputs(library, SimpleNamespace(user_id=USER), model(), {**SPEC, "code": CODE}, tmp_path)
+
+
+# --- Silent motion clips (motion quality B1/B2) ---
+
+CLIP_SPEC = {
+    "prompt": "Motion clip: Logo reveal",
+    "aspectRatio": "16:9",
+    "duration": 5,
+    "scene": {
+        "template": "clip",
+        "code_ref": "c" * 64,
+        "title": "Logo reveal",
+        "beats": [{"say": "The mark lands.", "seconds": 2}, {"say": "The name rises.", "label": "OpenCMO", "seconds": 3}],
+    },
+}
+
+
+def clip_model():
+    return get_model("motion-clip")
+
+
+def test_a_clip_spec_takes_timed_beats_and_no_voice() -> None:
+    validate_spec(clip_model(), CLIP_SPEC)
+    assert catalog.price_of(clip_model(), CLIP_SPEC) == 1
+    assert catalog.price_of(clip_model(), {**CLIP_SPEC, "duration": 25}) == 3
+    with pytest.raises(SpecError, match="settings the model does not take"):
+        validate_spec(clip_model(), {**CLIP_SPEC, "voice": "Aria"})
+    long = {**CLIP_SPEC, "duration": 30, "scene": {**CLIP_SPEC["scene"], "beats": [{"say": "a", "seconds": 16}, {"say": "b", "seconds": 15}]}}
+    with pytest.raises(SpecError, match="longer than 30 seconds"):
+        validate_spec(clip_model(), long)
+    with pytest.raises(SpecError, match="motion clip is not valid"):
+        validate_spec(clip_model(), {**CLIP_SPEC, "scene": {**CLIP_SPEC["scene"], "beats": [{"say": "No time."}]}})
+    with pytest.raises(SpecError, match="motion clip is not valid"):
+        validate_spec(clip_model(), {**CLIP_SPEC, "scene": {**CLIP_SPEC["scene"], "template": "explainer"}})
+    with pytest.raises(SpecError, match="explainer script is not valid"):
+        validate_spec(model(), {**CLIP_SPEC, "voice": "Aria", "duration": 15})

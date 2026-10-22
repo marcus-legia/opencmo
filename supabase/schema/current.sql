@@ -1170,7 +1170,11 @@ declare
   -- A narrated video (explainer) takes a voice, like a voiceover.
   v_voiced boolean := p_model.kind = 'voice' or (p_model.kind = 'video' and p_model.limits ? 'voices');
   v_explainer boolean := p_model.provider = 'opencmo-motion';
+  -- The scene template a motion model renders: narrated explainers take voices, silent clips do not.
+  v_template text := case when p_model.provider = 'opencmo-motion'
+    then case when p_model.limits ? 'voices' then 'explainer' else 'clip' end end;
   v_beat jsonb;
+  v_seconds numeric := 0;
 begin
   if v_scene then
     v_allowed := v_allowed || array['scene'];
@@ -1265,10 +1269,13 @@ begin
   end if;
   -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
   -- script is checked here because the price and the voice are computed from it.
-  if v_scene and v_explainer <> (p_spec->'scene'->>'template' = 'explainer') then
-    if v_explainer then
-      raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  if v_scene and v_explainer and p_spec->'scene'->>'template' is distinct from v_template then
+    if v_template = 'clip' then
+      raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
     end if;
+    raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  end if;
+  if v_scene and not v_explainer and p_spec->'scene'->>'template' in ('explainer', 'clip') then
     raise exception 'Describe the 3D scene first.' using errcode = '22023';
   end if;
   if v_explainer and (
@@ -1281,7 +1288,9 @@ begin
       jsonb_typeof(p_spec->'scene'->'title') is distinct from 'string'
       or length(btrim(p_spec->'scene'->>'title')) not between 1 and 60
       or jsonb_typeof(p_spec->'scene'->'beats') is distinct from 'array'
-      or jsonb_array_length(p_spec->'scene'->'beats') not between 3 and 16
+      -- Explainers: 3-16 narrated beats; silent clips (motion quality B1): 1-8 timed beats.
+      or jsonb_array_length(p_spec->'scene'->'beats') not between
+         case v_template when 'clip' then 1 else 3 end and case v_template when 'clip' then 8 else 16 end
       or (p_spec->'scene' ? 'accent' and (jsonb_typeof(p_spec->'scene'->'accent') is distinct from 'string'
           or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))
       -- v2: the look and the motion personality, the same names as `THEMES` and
@@ -1290,9 +1299,12 @@ begin
           or p_spec->'scene'->>'theme' not in ('blueprint', 'paper')))
       or (p_spec->'scene' ? 'personality' and (jsonb_typeof(p_spec->'scene'->'personality') is distinct from 'string'
           or p_spec->'scene'->>'personality' not in ('premium', 'corporate', 'playful', 'energetic')))) then
+    if v_template = 'clip' then
+      raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
+    end if;
     raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
   end if;
-  if v_explainer then
+  if v_template = 'explainer' then
     for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
       if jsonb_typeof(v_beat) is distinct from 'object'
           or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label'))
@@ -1303,6 +1315,26 @@ begin
         raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
       end if;
     end loop;
+  end if;
+  -- A silent clip: every beat says how long it lasts (0.5-30 s), and they add up to at most 30 s and
+  -- to no more than the paid duration.
+  if v_template = 'clip' then
+    for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
+      if jsonb_typeof(v_beat) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label', 'seconds'))
+          or jsonb_typeof(v_beat->'say') is distinct from 'string'
+          or length(btrim(v_beat->>'say')) not between 1 and 240
+          or (v_beat ? 'label' and (jsonb_typeof(v_beat->'label') is distinct from 'string'
+              or length(btrim(v_beat->>'label')) > 40))
+          or jsonb_typeof(v_beat->'seconds') is distinct from 'number'
+          or (v_beat->>'seconds')::numeric not between 0.5 and 30 then
+        raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
+      end if;
+      v_seconds := v_seconds + (v_beat->>'seconds')::numeric;
+    end loop;
+    if v_seconds > 30 or v_seconds > (p_spec->>'duration')::numeric then
+      raise exception 'This motion clip is longer than 30 seconds. Shorten its beats.' using errcode = '22023';
+    end if;
   end if;
   -- Images the scene shows (kit.Image): at most 6, each the caller's own library object
   -- (motion quality A5). The worker checks them again against the task's owner.
@@ -1401,9 +1433,10 @@ CREATE FUNCTION public.ai_price(p_model public.ai_models, p_spec jsonb) RETURNS 
       when 'second' then (p_model.price->>'credits')::numeric * ceil(coalesce((p_spec->>'duration')::numeric, 1))
       when 'kchars' then (p_model.price->>'credits')::numeric
         * greatest(1, ceil(length(btrim(p_spec->>'prompt')) / 1000.0))
-      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters.
+      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters
+      -- (none for a silent motion clip, whose row has no `voiceKchars`).
       when 'explainer' then (p_model.price->>'credits')::numeric * ceil((p_spec->>'duration')::numeric / 10)
-        + (p_model.price->>'voiceKchars')::numeric * greatest(1, ceil(coalesce((
+        + coalesce((p_model.price->>'voiceKchars')::numeric, 0) * greatest(1, ceil(coalesce((
             select length(string_agg(btrim(b->>'say'), ' ' order by i))
             from jsonb_array_elements(p_spec->'scene'->'beats') with ordinality as t(b, i)), 0) / 1000.0))
     end)

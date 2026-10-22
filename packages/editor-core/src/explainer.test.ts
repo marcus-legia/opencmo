@@ -283,3 +283,32 @@ describe('motion clips and image assets (shared contract)', () => {
 		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: Array.from({ length: 7 }, (_, i) => ({ name: `s${i}`, ref })) }).success).toBe(false);
 	});
 });
+
+describe('motion-clip spec (B1)', () => {
+	const clipModel = {
+		id: 'motion-clip',
+		kind: 'video',
+		provider: 'opencmo-motion',
+		name: 'Motion clip',
+		description: '',
+		price: { unit: 'explainer', credits: 1 },
+		limits: { maxPromptChars: 80, scene: true, aspectRatios: ['16:9', '9:16', '1:1'], durations: Array.from({ length: 28 }, (_, i) => i + 3) },
+	} as AiModel;
+	const clipSpec = {
+		prompt: 'Motion clip: Logo reveal',
+		aspectRatio: '16:9',
+		duration: 5,
+		scene: { template: 'clip', code_ref: CODE_REF, title: 'Logo reveal', beats: [{ say: 'The mark lands.', seconds: 2 }, { say: 'The name rises.', seconds: 3 }] },
+	};
+
+	it('takes a clip scene, no voice, and costs a credit per started 10 s', () => {
+		expect(specSchema(clipModel).safeParse(clipSpec).success).toBe(true);
+		expect(specSchema(clipModel).safeParse({ ...clipSpec, voice: 'Aria' }).success).toBe(false);
+		expect(specSchema(clipModel).safeParse({ ...clipSpec, scene: { ...clipSpec.scene, template: 'explainer' } }).success).toBe(false);
+		const long = { ...clipSpec, duration: 30, scene: { ...clipSpec.scene, beats: [{ say: 'a', seconds: 16 }, { say: 'b', seconds: 15 }] } };
+		expect(specSchema(clipModel).safeParse(long).error?.issues[0]?.message).toBe('This motion clip is longer than 30 seconds. Shorten its beats.');
+		expect(priceOf(clipModel, clipSpec as never)).toBe(1);
+		expect(priceOf(clipModel, { ...clipSpec, duration: 25 } as never)).toBe(3);
+	});
+});
+

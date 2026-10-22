@@ -107,6 +107,11 @@ CODE_NOT_FOUND = "This 3D scene code was not found. Preview it again."
 #: Same rule for an explainer (`template: "explainer"`), worded for it.
 EXPLAINER_CODE_NOT_FOUND = "This explainer code was not found. Preview it again."
 EXPLAINER_INVALID = "This explainer script is not valid. Write it again."
+#: Silent motion clips (`motion-clip`, template "clip"): same words as `ai_check_spec`.
+CLIP_INVALID = "This motion clip is not valid. Write it again."
+CLIP_TOO_LONG = "This motion clip is longer than 30 seconds. Shorten its beats."
+#: `ClipBeatSchema` / `CLIP_SECONDS` in packages/editor-core/src/explainer.ts.
+CLIP_BEATS_MAX, CLIP_MAX_SECONDS, BEAT_MIN_SECONDS = 8, 30, 0.5
 
 #: Size cap of `scene` (JSON) for scene models — same number as `ai_check_spec`.
 SCENE_MAX_BYTES = 4000
@@ -147,24 +152,68 @@ def _check_explainer(scene: dict[str, Any]) -> None:
         raise SpecError(EXPLAINER_INVALID)
 
 
+def _check_clip(scene: dict[str, Any], duration: Any) -> None:
+    """A silent clip: 1-8 beats, each with its own seconds, adding up to at most 30 s and the paid duration."""
+    if not _code_ref_ok(scene):
+        raise SpecError(EXPLAINER_CODE_NOT_FOUND)
+    title, beats = scene.get("title"), scene.get("beats")
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= TITLE_MAX:
+        raise SpecError(CLIP_INVALID)
+    if not isinstance(beats, list) or not 1 <= len(beats) <= CLIP_BEATS_MAX:
+        raise SpecError(CLIP_INVALID)
+    total = 0.0
+    for beat in beats:
+        if not isinstance(beat, dict) or set(beat) - {"say", "label", "seconds"}:
+            raise SpecError(CLIP_INVALID)
+        say, label, seconds = beat.get("say"), beat.get("label"), beat.get("seconds")
+        if not isinstance(say, str) or not 1 <= len(say.strip()) <= SAY_MAX:
+            raise SpecError(CLIP_INVALID)
+        if label is not None and (not isinstance(label, str) or len(label.strip()) > LABEL_MAX):
+            raise SpecError(CLIP_INVALID)
+        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not BEAT_MIN_SECONDS <= seconds <= CLIP_MAX_SECONDS:
+            raise SpecError(CLIP_INVALID)
+        total += float(seconds)
+    if total > CLIP_MAX_SECONDS + 1e-9 or (isinstance(duration, int) and total > duration + 1e-9):
+        raise SpecError(CLIP_TOO_LONG)
+    accent = scene.get("accent")
+    if accent is not None and not (isinstance(accent, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", accent)):
+        raise SpecError(CLIP_INVALID)
+    if "theme" in scene and scene["theme"] not in THEMES:
+        raise SpecError(CLIP_INVALID)
+    if "personality" in scene and scene["personality"] not in PERSONALITIES:
+        raise SpecError(CLIP_INVALID)
+
+
+def motion_template(model: AiModel) -> str | None:
+    """The scene template a motion model renders: narrated explainers take voices, silent clips do not."""
+    if model.provider != "opencmo-motion":
+        return None
+    return "explainer" if model.limits.get("voices") else "clip"
+
+
 def narration(scene: dict[str, Any]) -> str:
     """What the voice reads: the beats' `say`, trimmed, joined with one space (same as `ai_price`)."""
     return " ".join(str(beat["say"]).strip() for beat in scene.get("beats") or [])
 
 
-def _check_scene(model: AiModel, scene: Any) -> None:
+def _check_scene(model: AiModel, scene: Any, duration: Any = None) -> None:
     """Shape only: the full rules are zod on the route (layer 1) and the renderer itself
     (`clip-three` / `clip-motion` re-parse; exit code 3 = invalid spec)."""
     if not isinstance(scene, dict) or not isinstance(scene.get("template"), str):
         raise SpecError("Describe the 3D scene first.")
     if len(json.dumps(scene, separators=(",", ":"), ensure_ascii=False).encode()) > SCENE_MAX_BYTES:
         raise SpecError("This 3D scene has too much data.")
-    # The explainer model takes only explainer scenes, and only it takes them: each renderer
-    # knows one shape, and the price of an explainer depends on its script.
-    if (model.provider == "opencmo-motion") != (scene["template"] == "explainer"):
-        raise SpecError(EXPLAINER_INVALID if model.provider == "opencmo-motion" else "Describe the 3D scene first.")
+    # Each motion model takes only its own template (explainer or clip), and only they take them: each
+    # renderer knows one shape, and the price of an explainer depends on its script.
+    template = motion_template(model)
+    if template is None and scene["template"] in ("explainer", "clip"):
+        raise SpecError("Describe the 3D scene first.")
+    if template is not None and scene["template"] != template:
+        raise SpecError(EXPLAINER_INVALID if template == "explainer" else CLIP_INVALID)
     if scene["template"] == "explainer":
         _check_explainer(scene)
+    if scene["template"] == "clip":
+        _check_clip(scene, duration)
     # Code scenes (code-scenes spec): the code lives in scene_codes; the scene carries only its sha256.
     if scene["template"] == "code" and not _code_ref_ok(scene):
         raise SpecError(CODE_NOT_FOUND)
@@ -265,7 +314,7 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
         if not all(media_ref_ok(ref) for ref in refs):
             raise SpecError(MEDIA_NOT_FOUND)
     if model.limits.get("scene"):
-        _check_scene(model, spec.get("scene"))
+        _check_scene(model, spec.get("scene"), spec.get("duration"))
     if (model.kind == "voice" or "voice" in allowed) and spec.get("voice") not in model.limits.get("voices", []):
         raise SpecError("Choose one of the listed voices.")
     if model.kind == "audio":
@@ -287,7 +336,9 @@ def price_of(model: AiModel, spec: dict[str, Any]) -> int:
     elif unit == "explainer":
         # Render per started 10 s, plus the voice per started 1,000 characters of narration.
         chars = len(narration(spec.get("scene") or {}))
-        base = credits * math.ceil(int(spec["duration"]) / 10) + int(model.price["voiceKchars"]) * max(1, math.ceil(chars / 1000))
+        # A silent clip has no `voiceKchars`: it pays for the render only.
+        voice = int(model.price.get("voiceKchars") or 0)
+        base = credits * math.ceil(int(spec["duration"]) / 10) + voice * max(1, math.ceil(chars / 1000))
     else:
         raise SpecError("This model is not available.")
     factor = (model.price.get("resolution") or {}).get(spec.get("resolution") or "", 1)
