@@ -70,7 +70,7 @@ test; `apps/web/lib/motion/**`; `apps/web/lib/agent/{motion-guide.ts,scope.ts}`;
 **Order:** B4 (after A4 is pushed; until then build the frames with `children` only) → B5 → B2 → B1 (after A5 is
 pushed) → B3 (after A3 and A5) → B6.
 
-- [ ] B4 Display face, phone and browser frames
+- [x] B4 Display face, phone and browser frames
 - [ ] B5 Template library (3 ports) + `list_motion_templates` / `get_motion_template`
 - [ ] B2 Clip timing and the silent worker path
 - [ ] B1 `motion-clip` in the catalog and SQL

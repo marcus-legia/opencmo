@@ -117,3 +117,61 @@ describe('kit.Image', () => {
 		expect(result).toEqual({ ok: false, phase: 'render', message: expect.stringContaining('kit: unknown image "nope": this job has "shot"') });
 	});
 });
+
+describe('kit device frames and the display face', () => {
+	const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP4v4IBAAQAAYGaqzA6AAAAAElFTkSuQmCC';
+	const stillOf = async (code: string, format: '16:9' | '9:16' = '16:9') => {
+		const parsed = parseJob({ kind: 'clip', title: 'Devices', code, beats: [{ say: 'A product moment.', seconds: 3 }], format, duration: 3, assets: [{ name: 'screen', src: PNG }] });
+		if (!parsed.ok) throw new Error(parsed.message);
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-devices-'));
+		const [still] = await renderStills(parsed.job, prepare(parsed.job).compiled, [60], dir, { scale: 0.25, format: 'png' });
+		return still!.boxes!;
+	};
+	const box = (boxes: { name: string; x: number; y: number; w: number; h: number }[], name: string) => {
+		const found = boxes.find((item) => item.name === name);
+		if (!found) throw new Error(`no box "${name}" in ${boxes.map((item) => item.name).join(', ')}`);
+		return found;
+	};
+
+	it('a phone holds the image inside its bezel, on a 9:19.5 screen', { timeout: 120_000 }, async () => {
+		const boxes = await stillOf("const { Stage, Phone } = kit;\nreturn function Scene() { return <Stage><Phone image=\"screen\" x={540} y={960} w={600} at={0} dur={1} /></Stage>; };", '9:16');
+		const phone = box(boxes, 'Phone');
+		const screen = box(boxes, 'Image screen');
+		expect(phone.w).toBeCloseTo(600, 0);
+		expect(screen.x).toBeGreaterThan(phone.x);
+		expect(screen.y).toBeGreaterThan(phone.y);
+		expect(screen.x + screen.w).toBeLessThan(phone.x + phone.w);
+		expect(screen.y + screen.h).toBeLessThan(phone.y + phone.h);
+		expect(screen.h / screen.w).toBeCloseTo(19.5 / 9, 2);
+		expect(phone.x + phone.w / 2).toBeCloseTo(540, 0);
+		expect(phone.y + phone.h / 2).toBeCloseTo(960, 0);
+	});
+
+	it('a browser at w 960 has a 40 px bar over a 16:10 page at 1080', { timeout: 120_000 }, async () => {
+		const boxes = await stillOf("const { Stage, Browser } = kit;\nreturn function Scene() { return <Stage><Browser image=\"screen\" x={960} y={540} w={960} at={0} dur={1} /></Stage>; };");
+		const browser = box(boxes, 'Browser');
+		const page = box(boxes, 'Image screen');
+		expect(page.w).toBeCloseTo(960, 0);
+		expect(page.h).toBeCloseTo(600, 0);
+		expect(browser.h - page.h).toBeCloseTo(40, 0);
+		expect(page.y - browser.y).toBeCloseTo(40, 0);
+	});
+
+	it('kit.font.display is Plus Jakarta Sans, loaded before frame 0', { timeout: 120_000 }, async () => {
+		// Two fallbacks that differ a lot: the widths match only if the display face itself drew both.
+		const tag = (name: string, fallback: string) =>
+			`<div data-box="text" data-name="${name}" data-size="96" style={{ position: 'absolute', left: 200, top: ${name === 'serif' ? 300 : 600}, fontSize: 96, fontFamily: kit.font.display.replace('system-ui, sans-serif', '${fallback}') }}>Ship the week</div>`;
+		const boxes = await stillOf(`const { Stage } = kit;\nreturn function Scene() { return <Stage>${tag('serif', 'serif')}${tag('mono', 'monospace')}</Stage>; };`);
+		expect(box(boxes, 'serif').w).toBeCloseTo(box(boxes, 'mono').w, 0);
+		expect(box(boxes, 'serif').w).toBeGreaterThan(400);
+	});
+});
+
+describe('kit.color', () => {
+	it('follows the job theme', async () => {
+		const { makeKit } = await import('./kit/index.ts');
+		const job = (theme: 'paper' | 'blueprint') => ({ title: 'T', code: 'x', beats: [{ say: 'a' }, { say: 'b' }, { say: 'c' }], format: '16:9' as const, duration: 15, seed: 0, theme });
+		expect(makeKit(job('paper'), { width: 1920, height: 1080 }).color.text).toBe('#1D2733');
+		expect(makeKit(job('blueprint'), { width: 1920, height: 1080 }).color.text).toBe('#EAF0FA');
+	});
+});
