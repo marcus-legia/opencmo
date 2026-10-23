@@ -53,25 +53,6 @@ async function main() {
   assert.deepEqual(ok.issues, ["Text under 36 px: How Shazam hears a song"], "the job reached the CLI");
   assert.equal(previewDirs(), before, "the temp folder is removed");
 
-  // Images: the engine encodes signed URLs into data URIs before the CLI runs, like a final render.
-  const engine = (name: string, body: string) => {
-    const file = path.join(scripts, `${name}.sh`);
-    writeFileSync(file, `#!/bin/sh\n[ "$1 $2" = "-m opencmo.ai.preview_assets" ] || exit 2\n${body}\n`, { mode: 0o755 });
-    return file;
-  };
-  const withImage: MotionJob = { ...job, assets: [{ name: "shot", src: "https://project.supabase.co/sign/shot.png" }] };
-  process.env.OPENCMO_ENGINE_PYTHON = engine("encode", `sed 's#https://project.supabase.co/sign/shot.png#data:image/png;base64,AAAA#' "$3" > "$4"`);
-  process.env.OPENCMO_CLIP_MOTION = fakeCli("assets", `
-    const job = JSON.parse(readFileSync(jobFile, "utf8"));
-    console.log(JSON.stringify({ ok: true, stills: [], issues: [job.assets[0].src], estimated: true }));
-  `);
-  assert.deepEqual((await previewMotion(withImage) as { issues: string[] }).issues, ["data:image/png;base64,AAAA"], "the CLI gets the encoded image");
-  process.env.OPENCMO_ENGINE_PYTHON = engine("refuse", `echo '{"ok": false, "phase": "job", "message": "Image \\"shot\\" is larger than 30 MB: pick a smaller one."}'; exit 3`);
-  assert.deepEqual(await previewMotion(withImage), { ok: false, phase: "job", message: 'Image "shot" is larger than 30 MB: pick a smaller one.' }, "an image refusal goes back to the Assistant");
-  process.env.OPENCMO_ENGINE_PYTHON = engine("crash", `echo boom >&2; exit 1`);
-  await assert.rejects(previewMotion(withImage), /The explainer preview failed\./, "an engine crash throws in English");
-  assert.equal(previewDirs(), before, "the temp folder is removed after image steps too");
-
   process.env.OPENCMO_CLIP_MOTION = fakeCli("code", `
     console.log(JSON.stringify({ ok: false, phase: "guard", message: "fetch is not allowed (line 2)" }));
     process.stderr.write("fetch is not allowed (line 2)\\n");

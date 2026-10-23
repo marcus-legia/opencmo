@@ -176,17 +176,3 @@ def test_the_groq_url_is_the_moderation_one():
     from opencmo.ai import moderation
 
     assert env.GROQ_BASE_URL == moderation.GROQ_BASE_URL
-
-
-def test_motion_asset_origin_must_equal_the_worker_supabase_url():
-    # Previews fetch the user's images from signed URLs of this project, and only from it.
-    seen = _healthy()
-    assert seen[MOTION]["OPENCMO_MOTION_ASSET_ORIGIN"] == seen[WORKER]["SUPABASE_URL"]
-    seen[MOTION]["OPENCMO_MOTION_ASSET_ORIGIN"] = "https://other.supabase.co"
-    problems, _ = env.check(seen)
-    assert any(problem.startswith("Supabase URL differs") and "opencmo-motion:OPENCMO_MOTION_ASSET_ORIGIN=https://other.supabase.co" in problem for problem in problems)
-    seen[MOTION]["OPENCMO_MOTION_ASSET_ORIGIN"] = None
-    problems, _ = env.check(seen)
-    assert "Supabase URL: opencmo-motion:OPENCMO_MOTION_ASSET_ORIGIN is not set" in problems
-    assert env.fingerprint("OPENCMO_MOTION_ASSET_ORIGIN", "https://x.supabase.co") == "https://x.supabase.co"
-

@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   {
     process.env.FAL_KEY = "test";
     const locate = async () => ({ start: 3, end: 6 });
-    const lookup = async (paths: readonly string[]) => paths.map((path) => (path === "AI/still.png" ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/j/still.png" : null));
+    const lookup = async (path: string) => (path === "AI/still.png" ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/j/still.png" : null);
     const ok = await prepareGeneration(
       { kind: "video", ...brief, model: "fal-seedance", resolution: "720p", start_image: "AI/still.png" },
       locate,

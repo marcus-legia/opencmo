@@ -16,7 +16,6 @@ live next to the files.
 | Motion design skill by LottieFiles (adapted) | `apps/web/lib/agent/motion-guide.ts` (incl. `EXPLAINER_MOTION`), `apps/web/lib/agent/guides.ts` (guide `explainer`, motion section), `packages/editor-core/src/motion/intro.ts` | MIT (`apps/web/lib/agent/LICENSE-motion-design.md`) |
 | Rough-cut editing rules from video-use, cut-video, claude-code-video-editing-skill and takecut (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`), `apps/web/lib/agent/retakes.ts` | MIT (`apps/web/lib/agent/LICENSE-roughcut.md`) |
 | Talking-head editing order from palmier-skills `ugc-editing` (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-roughcut.md`) |
-| Motion templates ported from opus-pro/opusclip-video-tools `remakes/opus-5.5` (`pf-mark-lockup`, `pf-phone-carousel`, `template-analytics-glow`), Copyright (c) 2026 OpusClip; code only, no media | `packages/clip-motion/templates/` | MIT (`packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
 
 Explainer videos are rendered with Remotion (`remotion`, `@remotion/bundler`, `@remotion/renderer`,
 `@remotion/lottie`, installed from npm in `packages/clip-motion`), which is distributed under the

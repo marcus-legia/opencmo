@@ -158,8 +158,8 @@ const NOUN: Record<GenerationKind, string> = { image: "image", video: "video", v
  * Chọn model + kiểm brief + ghép prompt + chuẩn hoá spec + tính giá. Chuỗi =
  * lỗi đọc được cho model. `locate` tìm câu trích trong transcript clip.
  */
-/** Library paths of finished images → their `media` objects, in order (null = not usable). One read for the batch. */
-export type LookupImage = (paths: readonly string[]) => Promise<(string | null)[]>;
+/** Đường dẫn thư viện của một ảnh AI đã xong → tên object media (null = không dùng được). */
+export type LookupImage = (path: string) => Promise<string | null>;
 
 /** The clip the media goes on: its frame, and whether the user's own video (with its sound) plays under it. */
 export type GenerationTarget = { aspect?: string; speaker?: boolean };
@@ -238,7 +238,7 @@ export async function prepareGeneration(
     const path = request[field];
     if (!path) continue;
     if (request.kind !== "video" || !model.limits[cap]) return `${field}: ${model.name} cannot ${cap === "firstFrame" ? "start" : "end"} on an image.`;
-    const [object] = lookupImage ? await lookupImage([path]) : [null];
+    const object = lookupImage ? await lookupImage(path) : null;
     if (!object) return `${field}: "${path}" is not an image saved to the cloud yet. Use a finished AI image, an uploaded image, or save_frame, and wait until it is ready.`;
     raw[key] = object;
     frames[field === "start_image" ? "start_frame" : "end_frame"] = path;
@@ -251,10 +251,13 @@ export async function prepareGeneration(
     const cap = model.limits.maxReferences ?? 0;
     if (!cap) return `references: ${model.name} does not take reference images.`;
     if (request.references.length > cap) return `references: ${model.name} takes up to ${cap} reference images.`;
-    const objects = lookupImage ? await lookupImage(request.references) : request.references.map(() => null);
-    const missing = request.references.find((_, i) => !objects[i]);
-    if (missing !== undefined) return `references: "${missing}" is not an image saved to the cloud yet. Use a finished AI image or an uploaded image, and wait until it is ready.`;
-    raw.references = objects as string[];
+    const objects: string[] = [];
+    for (const path of request.references) {
+      const object = lookupImage ? await lookupImage(path) : null;
+      if (!object) return `references: "${path}" is not an image saved to the cloud yet. Use a finished AI image or an uploaded image, and wait until it is ready.`;
+      objects.push(object);
+    }
+    raw.references = objects;
     refs = request.references;
   }
 

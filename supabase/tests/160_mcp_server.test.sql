@@ -14,9 +14,9 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1580000-0000-4000-8000-00000000000a"}';
 
 select is(
-  (select bool_and(public.rate_limit_hit('mcp_preview', 60, 3600)) from generate_series(1, 60)),
-  true, 'mcp_preview: 60 previews an hour pass');
-select is(public.rate_limit_hit('mcp_preview', 60, 3600), false, 'mcp_preview: the 61st is refused');
+  (select bool_and(public.rate_limit_hit('mcp_preview', 30, 3600)) from generate_series(1, 30)),
+  true, 'mcp_preview: 30 previews an hour pass');
+select is(public.rate_limit_hit('mcp_preview', 30, 3600), false, 'mcp_preview: the 31st is refused');
 select throws_ok($$ select public.rate_limit_hit('mcp_preview', 1000, 3600) $$, '22023', 'Invalid rate limit.', 'mcp_preview: the caller cannot raise its own cap');
 select is(public.rate_limit_hit('mcp', 600, 3600), true, 'the existing mcp bucket still works');
 

@@ -15,7 +15,6 @@ import { renderMedia, selectComposition, type ChromiumOptions } from '@remotion/
 
 import { assetsHash, publicDir } from './assets.ts';
 import { MotionCodeFailure, SCENE_ERROR_MARKER } from './errors.ts';
-import { stageAssets } from './job-assets.ts';
 import { FPS, type MotionJob } from './job.ts';
 
 export { MotionCodeFailure };
@@ -135,27 +134,10 @@ export function envConcurrency(): number {
 	return Number.isInteger(value) && value > 0 ? Math.min(value, 8) : 2;
 }
 
-/**
- * Closing a browser whose page already died (a scene that threw while rendering) makes Remotion reject a pending
- * CDP call with "Target closed" outside any promise we hold (https://www.remotion.dev/docs/target-closed). Harmless:
- * the preview already has its answer.
- */
-export function isTargetClosed(error: unknown): boolean {
-	return /Target closed/.test(String((error as Error)?.message ?? error));
-}
-
-let sceneErrorSeen = false;
-
-/** True once a scene error was caught: only then is a stray "Target closed" from closing the page expected. */
-export function afterSceneError(): boolean {
-	return sceneErrorSeen;
-}
-
 export function sceneFailure(error: unknown): MotionCodeFailure | null {
 	const message = String((error as Error)?.message ?? error);
 	const at = message.indexOf(SCENE_ERROR_MARKER);
 	if (at === -1) return null;
-	sceneErrorSeen = true;
 	const rest = message.slice(at + SCENE_ERROR_MARKER.length).trim();
 	return new MotionCodeFailure(rest.split('\n')[0] ?? rest, 'render');
 }
@@ -165,17 +147,7 @@ export type Prepared = { job: MotionJob; compiled: string | null };
 export async function renderJob(prepared: Prepared, out: string, options: RenderOptions = {}): Promise<RenderResult> {
 	const log = options.log;
 	const serveUrl = await getBundle(log);
-	const staged = stageAssets(prepared.job, serveUrl);
-	try {
-		return await renderStaged(staged.job, prepared.compiled, serveUrl, out, options);
-	} finally {
-		staged.dispose();
-	}
-}
-
-async function renderStaged(job: MotionJob, compiled: string | null, serveUrl: string, out: string, options: RenderOptions): Promise<RenderResult> {
-	const log = options.log;
-	const inputProps = { job, compiled, probe: false };
+	const inputProps = { job: prepared.job, compiled: prepared.compiled, probe: false };
 	const executable = browserExecutable();
 	const composition = await selectComposition({ serveUrl, id: COMPOSITION, inputProps, browserExecutable: executable, chromiumOptions: CHROMIUM, logLevel: 'error' });
 	const video = options.audio ? join(cacheDir(), `video-${process.pid}-${Date.now()}.mp4`) : out;

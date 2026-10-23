@@ -8,7 +8,6 @@ Mới nhất ở trên. Mỗi lượt thêm một dòng và kiểm danh sách n�
 
 | Ngày | Chủ đề | Báo cáo | Nguồn chính |
 |---|---|---|---|
-| 2026-10-22 | Vì sao animation của Opus và Claude Design đẹp hơn explainer của mình | [2026-10-22-motion-quality-opus-claude-design.md](2026-10-22-motion-quality-opus-claude-design.md) — spec có số, vòng tự xem lại, ảnh thật, template từ remakes MIT | opus-pro/opusclip-video-tools (`remakes/opus-5.5`, `motion-ui`), claude-video-export, prompt Claude Design (cộng đồng) |
 | 2026-10-18 | Reframe theo người đang nói, tự chia đôi khung podcast 2 người | [2026-10-18-active-speaker-reframe.md](2026-10-18-active-speaker-reframe.md) — diarize của Scribe + `jawOpen` để cắt theo lượt nói, luật split của clip-forge, chỉ số `speaker_coverage` | Vizard Speaker Identification (15/07), Joyspace; clip-forge, ClippyMe, LR-ASD, ClipsAI, FluxClip, AutoFlip |
 | 2026-10-17 | Chữ động theo ký tự/từ/dòng, lower third | [2026-10-17-text-animator-lower-thirds.md](2026-10-17-text-animator-lower-thirds.md) — text animator kiểu range selector, sửa tách grapheme, visual `add_title` gắn vào câu nói | OpusClip Animated Lower Thirds (28/09), Descript captions (17/09); Skottie, anime.js, motion-canvas, HyperFrames registry, iart-ai lower-thirds/kinetic-typography, AIEV |
 | 2026-10-16 | Reel tham khảo | (seed) xem reel tham khảo, dẫn tới `docs/style-skills-build.md` | Instagram reel "5 Plugins To Code Like A Senior Dev" |
@@ -19,8 +18,6 @@ Mỗi lượt thêm các repo đã đọc code vào đây và ưu tiên repo ch�
 
 | Repo | Licence | Đọc ngày | File đã đọc | Báo cáo |
 |---|---|---|---|---|
-| opus-pro/opusclip-video-tools | MIT (`remakes/`), không licence (`plugins/`) | 2026-10-22 | `remakes/opus-5.5/{README.md,pf-brand-dots/project/*,pf-phone-carousel/project/TASK.md}`, `plugins/opus-video-studio/{skills/motion-ui/SKILL.md,docs/*.md}` | 2026-10-22-motion-quality-opus-claude-design.md |
-| dawoodtrumboo/claude-video-export | MIT | 2026-10-22 | `README.md`, `starter/animations.jsx` | 2026-10-22-motion-quality-opus-claude-design.md |
 | [google/skia](https://github.com/google/skia) (Skottie) | BSD-3-Clause | 2026-10-17 | `modules/skottie/src/text/RangeSelector.cpp`, `TextAnimator.cpp`, `TextAdapter.cpp` | [2026-10-17](2026-10-17-text-animator-lower-thirds.md) |
 | [juliangarnier/anime](https://github.com/juliangarnier/anime) | MIT | 2026-10-17 | `src/utils/stagger.js`, `src/text/split.js` | [2026-10-17](2026-10-17-text-animator-lower-thirds.md) |
 | [motion-canvas/motion-canvas](https://github.com/motion-canvas/motion-canvas) | MIT | 2026-10-17 | `packages/2d/src/lib/components/Txt.ts`, `TxtLeaf.ts` | [2026-10-17](2026-10-17-text-animator-lower-thirds.md) |

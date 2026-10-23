@@ -1,11 +1,8 @@
-/**
- * The scene code failed (compile, guard or runtime), or an image it shows could not be used (job): the agent's
- * fault, never retried (exit 4).
- */
+/** The scene code failed (compile, guard or runtime): the agent's fault, never retried (exit 4). */
 export class MotionCodeFailure extends Error {
-	readonly phase: 'job' | 'compile' | 'guard' | 'render';
+	readonly phase: 'compile' | 'guard' | 'render';
 
-	constructor(message: string, phase: 'job' | 'compile' | 'guard' | 'render') {
+	constructor(message: string, phase: 'compile' | 'guard' | 'render') {
 		super(message);
 		this.name = 'MotionCodeFailure';
 		this.phase = phase;

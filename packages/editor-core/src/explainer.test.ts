@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { validate, type ClipDocument } from '@opencmo/clip-doc';
 
 import { priceOf, specSchema, type AiModel } from './generate';
-import { ClipSceneSchema, clipSeconds, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, sceneBytes } from './explainer';
+import { EXPLAINER_SCENE_BYTES, sceneBytes } from './explainer';
 import { AGENT_OP_INPUTS, applyOps, describeOp, estimateDuration, explainerSeconds, type OpContext } from './ops';
 
 const ctx = { master: null, media: { duration: () => null }, readTranscript: async () => [], saveTranscript: async () => 'x' } as unknown as OpContext;
@@ -148,14 +148,6 @@ describe('explainer timing and price', () => {
 		expect(specSchema(model).safeParse({ ...spec('16:9', 20), scene }).success).toBe(false);
 	});
 
-	it('does not count the images against the script cap', () => {
-		const assets = Array.from({ length: 6 }, (_, i) => ({ name: `shot-${i}`, ref: `11111111-1111-4111-8111-111111111111/${'x'.repeat(400)}.png` }));
-		const scene = { ...spec('16:9', 20).scene, beats: Array.from({ length: 12 }, () => ({ say: 'x'.repeat(240) })) };
-		expect(sceneBytes(scene)).toBeLessThanOrEqual(EXPLAINER_SCENE_BYTES);
-		expect(sceneBytes({ ...scene, assets })).toBeGreaterThan(EXPLAINER_SCENE_BYTES);
-		expect(specSchema(model).safeParse({ ...spec('16:9', 20), scene: { ...scene, assets } }).success).toBe(true);
-	});
-
 	it('price: credits per started 10 s plus the voice per started 1,000 characters', () => {
 		// 20 s = 2 started 10 s blocks, narration < 1,000 characters = 5.
 		expect(priceOf(model, spec('16:9', 20) as never)).toBe(7);
@@ -265,95 +257,3 @@ describe('explainer scene: theme and personality', () => {
 		expect(specSchema(model).safeParse(withScene({ beats: beats.map((beat) => ({ ...beat, visual: 'a phone' })) })).success).toBe(false);
 	});
 });
-
-describe('motion clips and image assets (shared contract)', () => {
-	const clipScene = (count: number) => ({ template: 'clip', code_ref: CODE_REF, title: 'Logo', beats: Array.from({ length: count }, () => ({ say: 'The mark lands.', seconds: 1 })) });
-
-	it('clipSeconds rounds 3.2 s up to 4 and clamps 40 s to 30', () => {
-		expect(clipSeconds([{ say: 'a', seconds: 1.2 }, { say: 'b', seconds: 2 }])).toBe(4);
-		expect(clipSeconds([{ say: 'a', seconds: 20 }, { say: 'b', seconds: 20 }])).toBe(30);
-		expect(clipSeconds([{ say: 'a', seconds: 1 }])).toBe(3);
-		expect(clipSeconds([{ say: 'a', seconds: 0.1 + 0.2 }, { say: 'b', seconds: 2.7 }])).toBe(3);
-	});
-
-	it('ClipSceneSchema refuses 9 beats', () => {
-		expect(ClipSceneSchema.safeParse(clipScene(8)).success).toBe(true);
-		expect(ClipSceneSchema.safeParse(clipScene(9)).success).toBe(false);
-		expect(ClipSceneSchema.safeParse({ ...clipScene(1), beats: [{ say: 'No time.' }] }).success).toBe(false);
-	});
-
-	it('ExplainerSceneSchema accepts assets with a media path', () => {
-		const scene = { template: 'explainer', code_ref: CODE_REF, title: 'How Shazam hears a song', beats };
-		const ref = '6a1f3c1e-0000-4000-8000-000000000001/uploads/screen.png';
-		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'screen', ref }] }).success).toBe(true);
-		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'Screen', ref }] }).success).toBe(false);
-		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: [{ name: 'a', ref }, { name: 'a', ref }] }).success).toBe(false);
-		expect(ExplainerSceneSchema.safeParse({ ...scene, assets: Array.from({ length: 7 }, (_, i) => ({ name: `s${i}`, ref })) }).success).toBe(false);
-	});
-});
-
-describe('motion-clip spec (B1)', () => {
-	const clipModel = {
-		id: 'motion-clip',
-		kind: 'video',
-		provider: 'opencmo-motion',
-		name: 'Motion clip',
-		description: '',
-		price: { unit: 'explainer', credits: 1 },
-		limits: { maxPromptChars: 80, scene: true, aspectRatios: ['16:9', '9:16', '1:1'], durations: Array.from({ length: 28 }, (_, i) => i + 3) },
-	} as AiModel;
-	const clipSpec = {
-		prompt: 'Motion clip: Logo reveal',
-		aspectRatio: '16:9',
-		duration: 5,
-		scene: { template: 'clip', code_ref: CODE_REF, title: 'Logo reveal', beats: [{ say: 'The mark lands.', seconds: 2 }, { say: 'The name rises.', seconds: 3 }] },
-	};
-
-	it('takes a clip scene, no voice, and costs a credit per started 10 s', () => {
-		expect(specSchema(clipModel).safeParse(clipSpec).success).toBe(true);
-		expect(specSchema(clipModel).safeParse({ ...clipSpec, voice: 'Aria' }).success).toBe(false);
-		expect(specSchema(clipModel).safeParse({ ...clipSpec, scene: { ...clipSpec.scene, template: 'explainer' } }).success).toBe(false);
-		const long = { ...clipSpec, duration: 30, scene: { ...clipSpec.scene, beats: [{ say: 'a', seconds: 16 }, { say: 'b', seconds: 15 }] } };
-		expect(specSchema(clipModel).safeParse(long).error?.issues[0]?.message).toBe('This motion clip is longer than 30 seconds. Shorten its beats.');
-		expect(priceOf(clipModel, clipSpec as never)).toBe(1);
-		expect(priceOf(clipModel, { ...clipSpec, duration: 25 } as never)).toBe(3);
-	});
-});
-
-describe('add_explainer with a silent motion clip (B3)', () => {
-	const clipOp = {
-		op: 'add_explainer',
-		title: 'Logo reveal',
-		format: '16:9',
-		duration: 5,
-		spec: {
-			prompt: 'Motion clip: Logo reveal',
-			aspectRatio: '16:9',
-			duration: 5,
-			seed: 3,
-			scene: { template: 'clip', code_ref: CODE_REF, title: 'Logo reveal', beats: [{ say: 'The mark lands.', seconds: 2 }, { say: 'The name rises.', seconds: 3 }] },
-		},
-	};
-
-	it('places one video layer of model motion-clip, with no voice and no captions layer', async () => {
-		const { document } = await applyOps(blank, [clipOp], ctx);
-		expect(() => validate(document)).not.toThrow();
-		const scene = sceneNode(document);
-		expect(scene).toMatchObject({ width: 1920, height: 1080, workarea: [0, 5] });
-		expect(scene.children).toHaveLength(1);
-		const layer = scene.children![0]!;
-		expect(layer).toMatchObject({ kind: 'rect', name: 'Motion clip: Logo reveal', end: 5 });
-		expect(layer.paints![0]!.src).toMatchObject({ generate: 'video', model: 'motion-clip', duration: 5, scene: { template: 'clip' } });
-		expect('voice' in layer.paints![0]!.src).toBe(false);
-		expect(describeOp(clipOp as never)).toBe('Add the motion clip "Logo reveal" (5s, 16:9)');
-		// No narration, so nothing to caption.
-		const { document: same } = await applyOps(document, [{ op: 'sync_explainer', element_id: layer.id as string, words: [{ text: 'x', start: 0, end: 1 }] }], ctx).catch(() => ({ document }));
-		expect(JSON.stringify(same)).not.toContain('"captions"');
-	});
-
-	it('refuses a clip spec with a voice and an explainer scene without one', async () => {
-		await expect(applyOps(blank, [{ ...clipOp, spec: { ...clipOp.spec, voice: 'Aria' } }], ctx)).rejects.toThrow();
-		await expect(applyOps(blank, [{ ...op('16:9'), spec: { ...spec('16:9', 20), voice: undefined } }], ctx)).rejects.toThrow();
-	});
-});
-
