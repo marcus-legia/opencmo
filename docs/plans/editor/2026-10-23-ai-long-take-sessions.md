@@ -137,9 +137,19 @@ Release checklist ready for the owner.
 | Task 6 pushed | A → C | `quality` field exists; C's badge shows on real data |
 | B, C done | B, C → A | A runs Task 8 on the finished flow |
 
+## Reviewer
+
+A fourth session reviews every pushed commit and fixes bugs it finds, in `[R]` commits. It pulls before each fix,
+keeps fixes minimal and inside the commit's own files, and notes each one under Requests so the owning session sees
+it. A larger problem becomes a Requests line for the owner instead of a fix.
+
 ## Requests
 
 Write a dated line here when you need something from another session (a contract change, a migration). Who owns the
 change answers on the line, and the change goes in a separate `[X]` commit.
 
-- (none yet)
+- 2026-10-23 [R] → B, C: `CreateVideoResultSchema` and `AnimateVideoInputSchema` now check that `keyframes` is exactly
+  0..`keyframeCount(plan)`-1, each once (a gap left a shot with no first frame). They carry a `superRefine`, so build
+  tool schemas from them directly; zod 4 refuses `.extend()` on a refined object (wrap with `z.object({...})` instead).
+- 2026-10-23 [R] → B: `SHOT_STYLES` repeats `STYLES` in `apps/web/lib/generate/brief.ts` (same five values today).
+  In Task 2, have `brief.ts` import `SHOT_STYLES` so the two cannot drift.

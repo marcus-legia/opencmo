@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { KEYFRAMES_MAX, keyframeCount, keyframeIndexes, LongTakePlanSchema, type LongTakeShot } from './long-take';
+import { AnimateVideoInputSchema, KEYFRAMES_MAX, keyframeCount, keyframeIndexes, LongTakePlanSchema, type LongTakeShot } from './long-take';
 
 const shot = (continues: boolean): LongTakeShot => ({ seconds: 6, words: 'some words', keyframe: 'a desk at dawn', motion: 'slow push-in', continues });
 const plan = (...flags: boolean[]) => ({ shots: flags.map(shot) });
@@ -51,5 +51,23 @@ describe('LongTakePlanSchema', () => {
 		const base = { title: 'T', script: 'some words', style: 'cinematic', music: 'calm piano' };
 		expect(LongTakePlanSchema.safeParse({ ...base, shots: [shot(true)] }).success).toBe(true);
 		expect(LongTakePlanSchema.safeParse({ ...base, shots: Array.from({ length: 19 }, () => shot(true)) }).success).toBe(false);
+	});
+});
+
+describe('keyframes handed to stage 2', () => {
+	const full = { title: 'T', script: 'some words', style: 'cinematic' as const, music: 'calm piano', shots: [shot(true), shot(false)] };
+	const ref = (index: number) => ({ generation_id: '11111111-2222-4333-8444-555555555555', index });
+	const parse = (indexes: number[]) => AnimateVideoInputSchema.safeParse({ plan: full, aspect: '9:16', keyframes: indexes.map(ref) }).success;
+
+	it('accepts exactly the plan keyframes, in any order', () => {
+		expect(parse([0, 1])).toBe(true);
+		expect(parse([1, 0])).toBe(true);
+	});
+
+	it('refuses a gap, a duplicate or an extra keyframe', () => {
+		expect(parse([0])).toBe(false);
+		expect(parse([0, 0])).toBe(false);
+		expect(parse([0, 2])).toBe(false);
+		expect(parse([0, 1, 2])).toBe(false);
 	});
 });

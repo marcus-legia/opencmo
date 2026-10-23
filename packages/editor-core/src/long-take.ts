@@ -57,13 +57,25 @@ export function keyframeCount(plan: Pick<LongTakePlan, 'shots'>): number {
 
 const keyframeRef = z.object({ generation_id: z.string().uuid(), index: z.number().int().min(0).max(KEYFRAMES_MAX - 1) });
 
+/**
+ * Stage 2 pays for shots between these keyframes, so the list must be exactly the plan's: one per
+ * index 0..keyframeCount-1, no gap, no duplicate. A gap would leave a shot with no first frame.
+ */
+function checkKeyframes(value: { plan: Pick<LongTakePlan, 'shots'>; keyframes: { index: number }[] }, ctx: z.RefinementCtx): void {
+	const want = keyframeCount(value.plan);
+	const seen = new Set(value.keyframes.map((keyframe) => keyframe.index));
+	if (value.keyframes.length !== want || seen.size !== want || [...seen].some((index) => index >= want)) {
+		ctx.addIssue({ code: 'custom', path: ['keyframes'], message: `This plan needs keyframes 0 to ${want - 1}, each once.` });
+	}
+}
+
 /** What stage 1 (`create_video`) hands to stage 2. */
 export const CreateVideoResultSchema = z.object({
 	plan: LongTakePlanSchema,
 	aspect: z.enum(VIDEO_ASPECTS),
 	seconds: z.number().min(1).max(180),
 	keyframes: z.array(keyframeRef).min(1).max(KEYFRAMES_MAX),
-});
+}).superRefine(checkKeyframes);
 export type CreateVideoResult = z.infer<typeof CreateVideoResultSchema>;
 
 /** Stage 2 (`animate_video`): the shots between the finished keyframes. */
@@ -72,7 +84,7 @@ export const AnimateVideoInputSchema = z.object({
 	aspect: z.enum(VIDEO_ASPECTS),
 	keyframes: z.array(keyframeRef).min(1).max(KEYFRAMES_MAX),
 	voice: z.string().trim().max(40).optional(),
-});
+}).superRefine(checkKeyframes);
 export type AnimateVideoInput = z.infer<typeof AnimateVideoInputSchema>;
 
 /** Redo one keyframe of a placed scene, with an optional new description. */
