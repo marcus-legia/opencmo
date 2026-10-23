@@ -376,6 +376,17 @@ export function useGenerations({
           assets: current.assets.map((record) => (record.generation?.key === key ? { ...record, state: "error", error: message } : record)) as LibraryRecord[],
         }));
       try {
+        // A piece the server started (a long take's keyframe) that failed or was cancelled stays
+        // failed: the POST below would not reuse a dead generation, so it would start and charge a
+        // new one no card approved.
+        const startedId = partial.generation?.id;
+        if (startedId) {
+          const started = await api<GenerationView>(`generations/${encodeURIComponent(startedId)}`).catch(() => null);
+          if (started && (started.status === "failed" || started.status === "cancelled")) {
+            await fail(started.error ?? (started.status === "cancelled" ? "Generation was cancelled." : "Generation failed. Your credits were refunded."));
+            return;
+          }
+        }
         const spec = await serverSpec(resolved.spec, () => libraryRef.current.latest(), () => !recordFor(libraryRef.current.latest(), key));
         const requestId = crypto.randomUUID();
         const post = () =>
