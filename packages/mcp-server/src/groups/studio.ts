@@ -46,6 +46,8 @@ export const PRICED = new Set([
   "add_voiceover",
   "replace_background",
   "create_video",
+  "animate_video",
+  "redo_keyframe",
   "edit_video",
   "add_explainer",
   "plan_video",
@@ -83,8 +85,16 @@ function mcpShape(spec: ToolSpec): { schema: Record<string, unknown>; descriptio
   const notes: string[] = [];
   let schema = withClip(spec.schema);
   if (spec.name === "create_video") {
-    schema = withClip(spec.schema, { plan: { ...jsonOf(directorSchema), description: "Your finished plan: title, script, style, music and shots." } }, ["plan"]);
-    notes.push(`You are the director: send the whole plan in "plan". The server reviews it (lengths, words per second, chained shots) and tells you what to fix before pricing it. The director's rules:\n${DIRECTOR}`);
+    schema = withClip(
+      spec.schema,
+      { plan: { ...jsonOf(directorSchema), description: "Your finished plan: title, script, style, music, and shots with words, keyframe, motion and continues." } },
+      ["plan"],
+    );
+    notes.push(
+      `You are the director: send the whole plan in "plan". The server reviews it (lengths, the beats rejoining to the script, names and numbers kept in one beat, repeated keyframes) and tells you what to fix before pricing it. The price is the keyframes only; confirming makes them, and the result holds what animate_video needs. The director's rules:\n${DIRECTOR}`,
+    );
+  } else if (spec.name === "animate_video") {
+    notes.push("Pass the plan, aspect and keyframes exactly as create_video's result returned them, once wait_for_media says the keyframes are done. The price is the exact video price; confirm only after the user agrees.");
   } else if (spec.name === "plan_video") {
     schema = withClip(spec.schema, { spec: { ...jsonOf(introSpecSchema), description: "Your finished intro plan." } }, ["spec"]);
     notes.push('You plan the intro: send the full IntroSpec in "spec" (read_guide "motion" first). The code Reviewer checks it and tells you what to fix; then the user approves the storyboard. No credits.');
@@ -175,7 +185,8 @@ const input = z.looseObject({ clip_id: clipId });
  * these two would run OpenCMO's own director or motion team, which no agent credits pay for here.
  */
 const REQUIRED: Record<string, z.ZodType> = {
-  create_video: input.extend({ plan: directorSchema }),
+  // Checked by create_video itself, so a plan in an older format gets one message naming the fields.
+  create_video: input.extend({ plan: z.custom<unknown>((value) => value !== undefined && value !== null, "Send your finished plan: title, script, style, music and shots.") }),
   plan_video: input.extend({ spec: introSpecSchema }),
 };
 

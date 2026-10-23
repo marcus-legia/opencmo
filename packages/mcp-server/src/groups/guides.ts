@@ -51,7 +51,7 @@ const PROMPTS: Record<string, { guide: GuideName; steps: string }> = {
   video: {
     guide: "video",
     steps:
-      "Use a blank New edit. Write the director plan yourself (title, script, style, music, shots) and send it as create_video's plan; fix what the server sends back. Show the storyboard and price, confirm only after the user agrees, then wait_for_media.",
+      "Use a blank New edit. Write the director plan yourself (title, script, style, music, and shots with words, keyframe, motion and continues) and send it as create_video's plan; fix what the server sends back. Show the storyboard and the keyframe price, and confirm only after the user agrees. Then wait_for_media, show the user the keyframes (get_generation) and price animate_video with the plan, aspect and keyframes from create_video's result. Offer redo_keyframe for a keyframe they do not like. Confirm the video only after the user agrees to its price, then wait_for_media again.",
   },
   roughcut: {
     guide: "roughcut",

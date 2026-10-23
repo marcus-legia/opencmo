@@ -194,10 +194,10 @@ Each feature is what a user sees, how it works, and what proves it done.
 - [x] Skip in fake mode; log cost per call. A worker test runs on a sample image with garbled letters.
 
 ### Task 7: MCP and guides (F12)
-- [ ] MCP `create_video` plan format gains `keyframe` and `motion`. A plan without them gets one clear message
+- [x] MCP `create_video` plan format gains `keyframe` and `motion`. A plan without them gets one clear message
       naming the fields.
 - [ ] Add `animate_video` and `redo_keyframe` to `packages/mcp-server/src/groups/studio.ts`.
-- [ ] Guides: `read_guide "video"` in `apps/web/lib/agent/guides.ts` and `packages/mcp-server/src/groups/guides.ts`
+- [x] Guides: `read_guide "video"` in `apps/web/lib/agent/guides.ts` and `packages/mcp-server/src/groups/guides.ts`
       describe the two cards, Redo, and when to cut instead of continue.
 - [ ] `npm run check:mcp-server && npm run test:mcp-server`.
 
