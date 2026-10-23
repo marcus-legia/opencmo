@@ -49,7 +49,13 @@ export function withKeyframes(manifest: unknown, runs: KeyframeRuns): Manifest {
 
 /** What stage 1 hands to `animate_video`: the plan and each keyframe's generation, by index. */
 export function longTakeResult(longTake: Omit<CreateVideoResult, "keyframes">, ids: string[]): CreateVideoResult {
-  return { plan: longTake.plan, aspect: longTake.aspect, seconds: longTake.seconds, keyframes: ids.map((generation_id, index) => ({ generation_id, index })) };
+  return {
+    plan: longTake.plan,
+    aspect: longTake.aspect,
+    seconds: longTake.seconds,
+    ...(longTake.model ? { model: longTake.model } : {}),
+    keyframes: ids.map((generation_id, index) => ({ generation_id, index })),
+  };
 }
 
 /**

@@ -94,7 +94,7 @@ function mcpShape(spec: ToolSpec): { schema: Record<string, unknown>; descriptio
       `You are the director: send the whole plan in "plan". The server reviews it (lengths, the beats rejoining to the script, names and numbers kept in one beat, repeated keyframes) and tells you what to fix before pricing it. The price is the keyframes only; confirming makes them, and the result holds what animate_video needs. The director's rules:\n${DIRECTOR}`,
     );
   } else if (spec.name === "animate_video") {
-    notes.push("Pass the plan, aspect and keyframes exactly as create_video's result returned them, once wait_for_media says the keyframes are done. The price is the exact video price; confirm only after the user agrees.");
+    notes.push("Pass the plan, aspect, model and keyframes exactly as create_video's result returned them, once wait_for_media says the keyframes are done. The price is the exact video price; confirm only after the user agrees.");
   } else if (spec.name === "plan_video") {
     schema = withClip(spec.schema, { spec: { ...jsonOf(introSpecSchema), description: "Your finished intro plan." } }, ["spec"]);
     notes.push('You plan the intro: send the full IntroSpec in "spec" (read_guide "motion" first). The code Reviewer checks it and tells you what to fix; then the user approves the storyboard. No credits.');

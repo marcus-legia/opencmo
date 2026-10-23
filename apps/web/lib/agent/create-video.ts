@@ -153,7 +153,7 @@ function splitsInside(before: string, after: string): string | null {
 }
 
 /** Problems a reviewer sends back once; empty means the plan can be built. */
-export function review(plan: DirectorPlan, seconds: number, durations: number[]): string[] {
+export function review(plan: DirectorPlan, seconds: number, durations: number[], joins = true): string[] {
   const issues: string[] = [];
   const maxShot = Math.max(...durations);
   const total = plan.shots.reduce((sum, shot) => sum + shot.seconds, 0);
@@ -185,7 +185,8 @@ export function review(plan: DirectorPlan, seconds: number, durations: number[])
     const paid = durations.find((value) => value >= shot.seconds - 1e-6);
     if (!last && paid !== undefined && paid - shot.seconds > 1) {
       issues.push(`Shot ${index + 1} is ${shot.seconds}s but is paid as ${paid}s; use one of ${durations.join(", ")}s.`);
-    } else if (!last && shot.continues && paid !== undefined && paid - shot.seconds > 1e-6) {
+    } else if (joins && !last && shot.continues && paid !== undefined && paid - shot.seconds > 1e-6) {
+      // (Without a model that joins two frames every beat becomes a cut, so no seam to protect.)
       // It ends ON the next keyframe at its last generated frame: shown shorter, the seam jumps.
       issues.push(`Shot ${index + 1} flows into the next, so it must be exactly one of ${durations.join(", ")}s.`);
     }
@@ -268,7 +269,7 @@ export function createVideoToolSpec(): ToolSpec | null {
   return {
     name: "create_video",
     description:
-      'Make a whole AI video from a prompt on this edit (usually a blank New edit), in two approvals. This tool is step 1: a director writes the voice-over script and splits it into beats with a keyframe (first frame) and a motion each; the user approves the storyboard and the keyframe price, and the keyframes are made into the library. Then wait for them (wait_for_media) and call animate_video with the plan, aspect and keyframes this tool returns: step 2 shows the keyframes and the exact video price, then makes the shots between the keyframes, the voice-over, captions and a music bed. Use it when the user asks for a video from scratch (/video), on a blank edit; read_guide "video". Do not use it to add B-roll to a speaker clip.',
+      'Make a whole AI video from a prompt on this edit (usually a blank New edit), in two approvals. This tool is step 1: a director writes the voice-over script and splits it into beats with a keyframe (first frame) and a motion each; the user approves the storyboard and the keyframe price, and the keyframes are made into the library. Then wait for them (wait_for_media) and call animate_video with the plan, aspect, model and keyframes this tool returns: step 2 shows the keyframes and the exact video price, then makes the shots between the keyframes, the voice-over, captions and a music bed. Use it when the user asks for a video from scratch (/video), on a blank edit; read_guide "video". Do not use it to add B-roll to a speaker clip.',
     schema: sanitize(z.toJSONSchema(createVideoToolInput, { io: "input" })).schema as Record<string, unknown>,
     strict: true,
     approval: true,
@@ -325,7 +326,7 @@ export async function prepareCreateVideo(
   try {
     if (given) {
       // The caller wrote the plan: the reviewer's notes go back to it instead of to our director.
-      const issues = review(given, seconds, durations);
+      const issues = review(given, seconds, durations, joins);
       if (issues.length) return `Fix the plan and send it again: ${issues.join(" ")}`;
       plan = given;
     } else if (fakeAllowed()) {
@@ -347,7 +348,7 @@ export async function prepareCreateVideo(
           prompt: issues.length ? `${facts}\n<previous>${JSON.stringify(draft)}</previous>\n<reviewer>${issues.join("\n")}</reviewer>\nFix every reviewer note.` : facts,
           schema: directorSchema,
         });
-        issues = review(draft, seconds, durations);
+        issues = review(draft, seconds, durations, joins);
         if (!issues.length) break;
       }
       if (!draft || issues.length) return `The plan still had problems after one revision: ${issues.slice(0, 3).join(" ")}`;
@@ -410,7 +411,7 @@ export async function prepareCreateVideo(
       op: { op: "set_frame", ...frame } as never,
       credits: keyframeCredits,
       library: { folder: `Generated/${libraryName(plan.title)}/keyframes`, names: keyframeDescriptions(plan).map((text, index) => `${String(index + 1).padStart(2, "0")} ${libraryName(text)}`) },
-      longTake: { plan, aspect, seconds, ...(voiceName ? { voice: voiceName } : {}) },
+      longTake: { plan, aspect, seconds, model: video.id, ...(voiceName ? { voice: voiceName } : {}) },
       lines: [
         `Create a ${seconds}s ${aspect} video, step 1 of 2: ${count} keyframes · ${credits(keyframeCredits)}`,
         `Then about ${credits(videoCredits)} for the video${wait}: ${timed.length === 1 ? "1 shot" : `${timed.length} shots`}${voiceName ? `, voice-over (${voiceName})` : ""}${later.some((piece) => piece.label === "The music") ? ", music" : ""}`,

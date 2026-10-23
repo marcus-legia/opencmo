@@ -588,7 +588,7 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         ...(pieces > variants ? { pieces } : {}),
         ...(prepared.longTake ? { result: longTakeResult(prepared.longTake, ids), ...(prepared.longTake.voice ? { voice: prepared.longTake.voice } : {}) } : {}),
         note: prepared.longTake
-          ? `${pieces} keyframes started; they appear in the library under ${prepared.library?.folder ?? "Generated"}. Next: wait_for_media until they are done, then call animate_video with result.plan, result.aspect and result.keyframes (and voice, when given). It shows the user the keyframes and the exact price of the video before anything else is charged.`
+          ? `${pieces} keyframes started; they appear in the library under ${prepared.library?.folder ?? "Generated"}. Next: wait_for_media until they are done, then call animate_video with result.plan, result.aspect, result.model and result.keyframes (and voice, when given). It shows the user the keyframes and the exact price of the video before anything else is charged.`
           : variants > 1
             ? `${variants} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
             : pieces > 1

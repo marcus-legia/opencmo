@@ -111,7 +111,7 @@ export function animateVideoToolSpec(): ToolSpec | null {
   return {
     name: "animate_video",
     description:
-      "Second step of a whole AI video (/video): make the shots between the keyframes create_video made, with the voice-over and music, and place them as one scene. Call it once the keyframes are done (wait_for_media), with create_video's plan, aspect and keyframe ids. The user sees a contact sheet of the keyframes with the exact video price and approves it; they can redo one keyframe on the sheet, and then you get its new generation id: wait_for_media, then call animate_video again with that keyframe replaced. A keyframe that failed or was deleted is refused: redo it first. read_guide \"video\".",
+      "Second step of a whole AI video (/video): make the shots between the keyframes create_video made, with the voice-over and music, and place them as one scene. Call it once the keyframes are done (wait_for_media), with create_video's plan, aspect, model and keyframe ids. The user sees a contact sheet of the keyframes with the exact video price and approves it; they can redo one keyframe on the sheet, and then you get its new generation id: wait_for_media, then call animate_video again with that keyframe replaced. A keyframe that failed or was deleted is refused: redo it first. read_guide \"video\".",
     schema: sanitize(z.toJSONSchema(AnimateVideoInputSchema, { io: "input" })).schema as Record<string, unknown>,
     strict: true,
     approval: true,
@@ -132,8 +132,9 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
   if (JSON.stringify(env.document).includes(`"${MASTER_SRC}"`)) {
     return "/video makes a whole new video. Start a New edit for it; on this clip, use /broll or /image for AI shots.";
   }
-  // Stage 1 priced the video with this same pick, timing and prompts.
-  const picked = pickShotModel(aspect);
+  // Stage 1 priced the video with this same pick, timing and prompts: the model it chose comes back
+  // in the input (a user-named one included), else today's default for the frame.
+  const picked = pickShotModel(aspect, parsed.data.model);
   if (typeof picked === "string") return picked;
   const { model: video, joins } = picked;
 
@@ -159,7 +160,8 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
       if (beat.seconds > durations.at(-1)! + 1e-6) return `Shot ${index + 1} is ${beat.seconds}s; a shot is at most ${durations.at(-1)}s. Split it.`;
       const end = joins ? edges[index]!.end : null;
       // It ends on the keyframe the next shot starts on: showing less of it would jump at the seam.
-      if (end !== null && Math.abs(duration - length) > 1e-6) {
+      // The last shot ends on the closing keyframe, which no shot starts from, so it may stop short.
+      if (end !== null && index < plan.shots.length - 1 && Math.abs(duration - length) > 1e-6) {
         return `Shot ${index + 1} is ${length}s but ends on keyframe ${end + 1}, so it must be exactly one of ${durations.join(", ")}s.`;
       }
       const first = keyframes[edges[index]!.start]!;
@@ -278,7 +280,7 @@ export async function redoSheetKeyframe(env: RedoEnv, prepared: PreparedAnimate,
         keyframe_index: index,
         generation_id: generation.id,
         credits: generation.credits_reserved,
-        next: `The user redid keyframe ${index + 1} instead of approving the video. Call wait_for_media, then animate_video again with the same plan, aspect and keyframes, keyframe index ${index} now generation ${generation.id}. Nothing else was paid for.`,
+        next: `The user redid keyframe ${index + 1} instead of approving the video. Call wait_for_media, then animate_video again with the same plan, aspect, model and keyframes, keyframe index ${index} now generation ${generation.id}. Nothing else was paid for.`,
       }),
       summary: `Redoing keyframe ${index + 1} (${credits(generation.credits_reserved)})`,
     };
@@ -317,7 +319,10 @@ export type PreparedRedo = {
 
 /** A keyframe prompt opens with its description (`composePrompt`); a new description keeps the look the rest of it sets. */
 export function redescribe(prompt: string, description: string): string {
-  const rest = prompt.replace(/^[^.]*\.\s*/, "");
+  // The first sentence ends at a period followed by a space and a capital letter, so "9 a.m." or
+  // "3.5-inch" inside the old description does not leave half of it in the new prompt.
+  const end = /\.\s+(?=[A-Z])/.exec(prompt);
+  const rest = end ? prompt.slice(end.index + end[0].length) : "";
   const opening = description.trim().replace(/[.\s]+$/, "");
   return `${opening.charAt(0).toUpperCase()}${opening.slice(1)}.${rest ? ` ${rest}` : ""}`;
 }

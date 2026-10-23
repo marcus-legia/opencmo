@@ -15,7 +15,7 @@ import { priceOf } from "@opencmo/editor-core/generate";
 import { normalizeSpec } from "@/lib/generate/create";
 import { availableModel } from "@/lib/generate/models";
 
-import { shotPrompts } from "./create-video";
+import { review, shotPrompts } from "./create-video";
 import { prepareAnimateVideo, prepareRedoKeyframe, redescribe, type KeyframeFile } from "./long-take";
 
 const blank = () =>
@@ -118,6 +118,24 @@ async function main() {
   assert.equal(keyframesOf(applied.document, scene.id)![1]!.source.prompt, redo.op.keyframe.prompt);
 
   assert.equal(redescribe("Old subject, warm light. Cinematic look. No text.", "a new subject."), "A new subject. Cinematic look. No text.");
+  assert.equal(redescribe("A desk at 9 a.m. in a lobby. Cinematic look.", "a guest smiling"), "A guest smiling. Cinematic look.", "a period inside the old description");
+  assert.equal(redescribe("A 3.5-inch phone on a desk. Cinematic look.", "a coffee cup"), "A coffee cup. Cinematic look.");
+
+  // 6. A continuous last shot ends on the closing keyframe, which no shot starts from: it may stop short.
+  const closing = { ...plan, shots: [plan.shots[0]!, { ...plan.shots[1]!, continues: false }, { ...plan.shots[2]!, seconds: 2, continues: true }] };
+  const closingKeyframes = [0, 1, 2, 3].map((index) => ({ generation_id: id(index), index }));
+  const closed = await prepareAnimateVideo({ plan: closing, aspect: "16:9", keyframes: closingKeyframes }, env({ ...all, [id(3)]: file(3) }));
+  assert.ok(typeof closed !== "string", `a short continuous last shot is fine: ${String(closed)}`);
+
+  // Without a model that joins two frames every beat is a cut: no exact-length rule for a seam that never joins.
+  assert.ok(review(trimmed as never, 12, [3, 5], true).some((issue) => /flows into the next/.test(issue)));
+  assert.ok(!review(trimmed as never, 12, [3, 5], false).some((issue) => /flows into the next/.test(issue)));
+
+  // 7. Stage 2 makes the shots on the model stage 1 priced (named by the user or picked), not today's default.
+  const named = await prepareAnimateVideo({ plan, aspect: "16:9", keyframes, model: "fake-video" }, env());
+  assert.ok(typeof named !== "string");
+  assert.equal(named.prepared.model.id, "fake-video");
+  assert.match(String(await prepareAnimateVideo({ plan, aspect: "16:9", keyframes, model: "no-such-model" }, env())), /cannot make 16:9 video shots/);
   console.log("long-take: ok");
 }
 

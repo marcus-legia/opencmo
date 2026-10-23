@@ -75,6 +75,8 @@ export const CreateVideoResultSchema = z.object({
 	aspect: z.enum(VIDEO_ASPECTS),
 	seconds: z.number().min(1).max(180),
 	keyframes: z.array(keyframeRef).min(1).max(KEYFRAMES_MAX),
+	/** The shot model stage 1 timed and priced the plan with, so stage 2 makes the shots on that model. */
+	model: z.string().min(1).max(100).optional(),
 }).superRefine(checkKeyframes);
 export type CreateVideoResult = z.infer<typeof CreateVideoResultSchema>;
 
@@ -84,6 +86,8 @@ export const AnimateVideoInputSchema = z.object({
 	aspect: z.enum(VIDEO_ASPECTS),
 	keyframes: z.array(keyframeRef).min(1).max(KEYFRAMES_MAX),
 	voice: z.string().trim().max(40).optional(),
+	/** `CreateVideoResult.model`, passed back as it came. */
+	model: z.string().min(1).max(100).optional(),
 }).superRefine(checkKeyframes);
 export type AnimateVideoInput = z.infer<typeof AnimateVideoInputSchema>;
 
