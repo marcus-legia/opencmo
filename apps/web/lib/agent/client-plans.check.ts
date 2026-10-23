@@ -100,6 +100,9 @@ async function main() {
         const picked = pickShotModel(aspect);
         assert.ok(typeof picked !== "string" && picked.joins && picked.model.limits.lastFrame, `${aspect}: a model that joins two frames`);
       }
+      // Review focus 5: 9:16 and 16:9 on the best model, 1:1 on the one that makes a square.
+      const ids = Object.fromEntries(["9:16", "16:9", "1:1"].map((aspect) => [aspect, (pickShotModel(aspect) as { model: { id: string } }).model.id]));
+      assert.deepEqual(ids, { "9:16": "fal-veo", "16:9": "fal-veo", "1:1": "fal-kling-v3" });
       const single = pickShotModel("9:16", "gemini-video");
       assert.ok(typeof single !== "string" && !single.joins, "a model without a last frame cannot join");
       assert.equal(pickShotModel("1:1", "gemini-video"), 'Model "gemini-video" cannot make 1:1 video shots from a keyframe.', "never a model that cannot make the frame");

@@ -191,6 +191,8 @@ change answers on the line, and the change goes in a separate `[X]` commit.
   tool schemas from them directly; zod 4 refuses `.extend()` on a refined object (wrap with `z.object({...})` instead).
 - 2026-10-23 [R] → B: `SHOT_STYLES` repeats `STYLES` in `apps/web/lib/generate/brief.ts` (same five values today).
   In Task 2, have `brief.ts` import `SHOT_STYLES` so the two cannot drift.
+  **B, done in Tasks 2-3:** `STYLES = SHOT_STYLES` in `brief.ts`. The tool schemas never `.extend()` the refined
+  schemas (`create_video` reads `plan` as `LongTakePlanSchema`).
 - 2026-10-23 [R] → A: Task 1's migration was `20261224090000`, the same version as `20261224090000_abuse_limits.sql`
   in PR #108 (security + credit fixes, not merged yet). Two files with one version break `supabase db push`. Renamed
   to `20261226090000_long_take_models.sql` (after #108's last, `20261225090000`), and the test to
