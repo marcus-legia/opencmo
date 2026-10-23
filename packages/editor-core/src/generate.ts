@@ -197,7 +197,14 @@ export function specSchema(model: AiModel) {
 }
 
 /** SQL `btrim(text)`: spaces only, not tabs or newlines. `String.trim` strips both and priced a voice 1× under SQL. */
-const sqlTrim = (text: string): string => text.replace(/^ +| +$/g, '');
+// An index scan, not `/ +$/`: that regex backtracks quadratically on a long run of inner spaces.
+const sqlTrim = (text: string): string => {
+	let start = 0;
+	let end = text.length;
+	while (start < end && text[start] === ' ') start++;
+	while (end > start && text[end - 1] === ' ') end--;
+	return text.slice(start, end);
+};
 /** SQL `length(text)` counts code points; `String.length` counts UTF-16 units (an emoji is 2). */
 const sqlLength = (text: string): number => [...text].length;
 

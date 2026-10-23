@@ -26,6 +26,11 @@ describe('price matches SQL ai_price', () => {
 		expect(priceOf(voice, { prompt: 'a'.repeat(995) + '\n'.repeat(10), voice: 'Test A' })).toBe(unit * 2);
 		expect(priceOf(voice, { prompt: '  ' + 'a'.repeat(1000) + '   ', voice: 'Test A' })).toBe(unit);
 	});
+	it('stays linear on a long run of inner spaces', () => {
+		const started = performance.now();
+		priceOf(voice, { prompt: 'a' + ' '.repeat(200_000) + 'b', voice: 'Test A' });
+		expect(performance.now() - started).toBeLessThan(200);
+	});
 	it('counts code points, as length(): an emoji is one character', () => {
 		expect(priceOf(voice, { prompt: '😀'.repeat(1000), voice: 'Test A' })).toBe(unit);
 	});
