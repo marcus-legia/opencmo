@@ -3,7 +3,8 @@
 -- the editor badges a severe keyframe ("This keyframe has garbled text. Redo it?").
 -- - `generations.quality` (null = not checked), readable by its owner under the existing select policy.
 -- - `complete_generation` takes it as `p_quality`. The new parameter has a default, so a worker that does not
---   send it keeps working; deploy this before the worker that sends it.
+--   send it keeps working; deploy this before the worker that sends it, and before the web: the web reads
+--   `generations.quality` on every generation read (GENERATION_COLUMNS), so it fails without the column.
 -- It never fails a generation and never moves credits.
 
 begin;

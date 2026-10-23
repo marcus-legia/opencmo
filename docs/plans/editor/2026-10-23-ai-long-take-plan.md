@@ -222,7 +222,8 @@ Each feature is what a user sees, how it works, and what proves it done.
 - [ ] Tick F1–F13 in §2 and the roadmap row (E6.1/E6.2) in `2026-10-19-editor-spearhead-roadmap.md`.
 
 ### Release
-- [ ] `supabase db push --dry-run` lists only this plan's migrations, then `supabase db push`.
+- [ ] `supabase db push --dry-run` lists only this plan's migrations, then `supabase db push`. This comes first: the web
+      reads `generations.quality` on every generation read, so a web deploy before the migration breaks all generation.
 - [ ] Deploy the worker (Modal) before merging the web, because the worker must know the new catalog rows.
 - [ ] Merge; Vercel deploys the web.
 - [ ] One real `/video` on production; check its frames.

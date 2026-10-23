@@ -34,7 +34,7 @@ import type { SupabaseClient } from "@/lib/api/handler";
 import { createGeneration, normalizeSpec } from "@/lib/generate/create";
 import { availableModel, availableModels, specHash } from "@/lib/generate/models";
 
-import { GENERATION_ACTIVE_LIMIT, libraryName, pickShotModel, SEPARATE_SHOTS, shotPrompts, timeShots } from "./create-video";
+import { credits, GENERATION_ACTIVE_LIMIT, libraryName, minutes, pickMusicModel, pickShotModel, SEPARATE_SHOTS, shotPrompts, timeShots } from "./create-video";
 import { runGeneration, voiceModelFor, type PreparedGeneration } from "./generate-tool";
 import type { Piece } from "./screen-pieces";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
@@ -54,8 +54,6 @@ export type PreparedAnimate = PreparedGeneration & {
   keyframes: { index: number; generationId: string; model: string; spec: GenerationSpec }[];
 };
 
-const credits = (value: number) => `${value} ${value === 1 ? "credit" : "credits"}`;
-const minutes = (seconds: number) => `about ${Math.max(1, Math.round(seconds / 60))} min`;
 const firstIssue = (error: z.ZodError) => `${error.issues[0]?.path.join(".") ?? ""}: ${error.issues[0]?.message ?? "Invalid input."}`;
 
 /** A seed fixed by what a piece is made from: the same request gives the same spec, so it is never paid twice. */
@@ -204,7 +202,7 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
     extra.push({ model: voiceModel, spec });
     pieces.push({ label: "The voice-over script", spec, kind: "voice" });
   }
-  const musicModel = availableModels().find((model) => model.kind === "audio" && /music/.test(model.id)) ?? availableModels().find((model) => model.kind === "audio");
+  const musicModel = pickMusicModel();
   let music: CreateVideo["music"];
   if (musicModel) {
     const duration = Math.min(musicModel.limits.maxSeconds ?? seconds, Math.max(musicModel.limits.minSeconds ?? 1, Math.ceil(seconds)));

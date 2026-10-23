@@ -30,11 +30,12 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 import { fakeAllowed, LlmError, llmReady, structured, type LlmUsage } from "@/lib/cmo/jobs/llm";
 import { normalizeSpec } from "@/lib/generate/create";
 import { composeKeyframePrompt, composeShotPrompt } from "@/lib/generate/brief";
-import { availableModels } from "@/lib/generate/models";
+import { availableModel, availableModels } from "@/lib/generate/models";
 import { ApiError } from "@/lib/api/errors";
 
 import { voiceModelFor, type PreparedGeneration } from "./generate-tool";
 import type { Piece } from "./screen-pieces";
+import { musicModel } from "./slash";
 import { sanitize, type ToolSpec } from "./tools";
 import type { Storyboard } from "./video-team";
 
@@ -247,8 +248,15 @@ export function shotPrompts(plan: DirectorPlan, model: AiModel, aspect: string, 
   }));
 }
 
-const credits = (value: number) => `${value} ${value === 1 ? "credit" : "credits"}`;
-const minutes = (value: number) => (value < 90 ? `about ${Math.max(1, Math.round(value / 30) / 2)} min`.replace(".5 min", "½ min") : `about ${Math.round(value / 60)} min`);
+/** The music bed both stages price and make (`musicModel` in slash.ts decides which). */
+export function pickMusicModel(): AiModel | undefined {
+  const id = musicModel();
+  return id ? availableModel(id) : undefined;
+}
+
+export const credits = (value: number) => `${value} ${value === 1 ? "credit" : "credits"}`;
+/** A wait in half minutes under 90 s, whole minutes above: both cards say it the same way. */
+export const minutes = (value: number) => (value < 90 ? `about ${Math.max(1, Math.round(value / 30) / 2)} min`.replace(".5 min", "½ min") : `about ${Math.round(value / 60)} min`);
 
 /**
  * The input `prepareCreateVideo` reads: the tool's input plus, from an outside client (MCP), a
@@ -319,8 +327,8 @@ export async function prepareCreateVideo(
   const named = request.voice ? voiceModelFor(request.voice) : null;
   if (typeof named === "string") return named;
   const voiceModel = named ?? availableModels().find((model) => model.kind === "voice");
-  const musicModel =
-    availableModels().find((model) => model.kind === "audio" && /music/.test(model.id)) ?? availableModels().find((model) => model.kind === "audio");
+  // The same pick as stage 2 (`animate_video`), so card 1's estimate prices the music card 2 makes.
+  const musicModel = pickMusicModel();
 
   let plan: DirectorPlan;
   try {
