@@ -184,14 +184,14 @@ Each feature is what a user sees, how it works, and what proves it done.
       shot 1.
 
 ### Task 6: Garbled-text check on keyframes (F9)
-- [ ] `opencmo/ai/moderation.py`: one vision call per finished keyframe, using the existing checker chain. It asks
+- [x] `opencmo/ai/moderation.py`: one vision call per finished keyframe, using the existing checker chain. It asks
       whether the image has text meant to be read, and if so how garbled it is (none / minor / severe). Our own
       prompt.
-- [ ] Store the result on the generation (e.g. a `quality` json column: migration + pgTAP + schema dump), readable
+- [x] Store the result on the generation (e.g. a `quality` json column: migration + pgTAP + schema dump), readable
       under RLS by the owner.
 - [ ] Card 2 badges a severe keyframe ("This keyframe has garbled text. Redo it?"). It never fails the generation
       and never refunds.
-- [ ] Skip in fake mode; log cost per call. A worker test runs on a sample image with garbled letters.
+- [x] Skip in fake mode; log cost per call. A worker test runs on a sample image with garbled letters.
 
 ### Task 7: MCP and guides (F12)
 - [ ] MCP `create_video` plan format gains `keyframe` and `motion`. A plan without them gets one clear message

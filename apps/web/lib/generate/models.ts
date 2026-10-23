@@ -131,10 +131,12 @@ export type GenerationRow = {
   error: string | null;
   created_at: string;
   finished_at: string | null;
+  /** Long take F9: how garbled an image's text is; null = not checked (videos, fake mode, no checker answered). */
+  quality: { text: "none" | "minor" | "severe" } | null;
 };
 
 export const GENERATION_COLUMNS =
-  "id, job_id, clip_id, kind, model, spec, status, credits_reserved, credits_final, media_asset_id, error, created_at, finished_at";
+  "id, job_id, clip_id, kind, model, spec, status, credits_reserved, credits_final, media_asset_id, error, created_at, finished_at, quality";
 
 /** Hình dạng trả về trình duyệt. Credit hiện là số THẬT: chốt nếu đã chốt, không thì phần đang giữ. */
 export function generationView(row: GenerationRow) {
@@ -151,5 +153,6 @@ export function generationView(row: GenerationRow) {
     error: row.error,
     created_at: row.created_at,
     finished_at: row.finished_at,
+    quality: row.quality ?? null,
   };
 }

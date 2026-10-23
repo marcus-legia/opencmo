@@ -3368,10 +3368,10 @@ $$;
 
 
 --
--- Name: complete_generation(uuid, uuid, text, text, numeric, integer, integer, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
+-- Name: complete_generation(uuid, uuid, text, text, numeric, integer, integer, integer, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.complete_generation(p_task_id uuid, p_attempt_id uuid, p_object_name text, p_name text, p_duration numeric, p_width integer, p_height integer, p_credits integer, p_words jsonb DEFAULT NULL::jsonb) RETURNS boolean
+CREATE FUNCTION public.complete_generation(p_task_id uuid, p_attempt_id uuid, p_object_name text, p_name text, p_duration numeric, p_width integer, p_height integer, p_credits integer, p_words jsonb DEFAULT NULL::jsonb, p_quality jsonb DEFAULT NULL::jsonb) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $_$
@@ -3381,6 +3381,7 @@ declare
   v_asset public.media_assets;
   v_final int;
   v_words jsonb;
+  v_quality jsonb;
 begin
   select * into v_task from public.tasks
   where id = p_task_id and kind = 'generate' and attempt_id is not distinct from p_attempt_id
@@ -3392,8 +3393,8 @@ begin
     return v_generation.status = 'done';
   end if;
   if v_task.status <> 'running' then return false; end if;
-  -- Đường dẫn do worker tự đặt; kiểm lại để một lỗi ở worker không gắn file của
-  -- project khác vào generation này.
+  -- The worker names the object itself; checked again so a worker bug cannot attach another
+  -- project's file to this generation.
   if p_object_name is null
      or p_object_name !~ ('^' || v_task.user_id || '/' || v_task.job_id || '/gen-[0-9a-f-]{36}\.[a-z0-9]{2,5}$') then
     raise exception 'invalid generated object name';
@@ -3421,6 +3422,12 @@ begin
     v_words := p_words;
   end if;
 
+  -- Long take F9: the garbled-text hint on a finished image. A hint, never a verdict: a bad shape is
+  -- dropped and the generation still completes.
+  if v_generation.kind = 'image' and public.generation_quality_ok(p_quality) then
+    v_quality := p_quality;
+  end if;
+
   insert into public.media_assets (user_id, job_id, storage_path, name, duration, width, height, status, words)
   values (v_task.user_id, v_task.job_id, 'media/' || p_object_name, left(coalesce(nullif(btrim(p_name), ''), 'Generated'), 200),
           p_duration, p_width, p_height, 'ready', v_words)
@@ -3428,7 +3435,8 @@ begin
 
   v_final := least(v_generation.credits_reserved, greatest(coalesce(p_credits, v_generation.credits_reserved), 0));
   update public.generations
-  set status = 'done', credits_final = v_final, media_asset_id = v_asset.id, error = null, finished_at = now()
+  set status = 'done', credits_final = v_final, media_asset_id = v_asset.id, error = null, finished_at = now(),
+      quality = v_quality
   where id = v_generation.id;
   if v_generation.credits_reserved - v_final > 0 then
     perform public.credit_settle(v_task.user_id, 'generation', v_generation.id, v_final, 'Generate refund', v_task.job_id);
@@ -4848,6 +4856,21 @@ CREATE FUNCTION public.generation_active_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
     AS $$ select 24 $$;
+
+
+--
+-- Name: generation_quality_ok(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.generation_quality_ok(p_quality jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select p_quality is not null
+     and jsonb_typeof(p_quality) = 'object'
+     and (select count(*) from jsonb_object_keys(p_quality)) = 1
+     and p_quality->>'text' in ('none', 'minor', 'severe');
+$$;
 
 
 --
@@ -8095,9 +8118,11 @@ CREATE TABLE public.generations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
     after_id uuid,
+    quality jsonb,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
     CONSTRAINT generations_kind_check CHECK ((kind = ANY (ARRAY['image'::text, 'video'::text, 'voice'::text, 'audio'::text]))),
+    CONSTRAINT generations_quality_check CHECK (((quality IS NULL) OR public.generation_quality_ok(quality))),
     CONSTRAINT generations_spec_hash_check CHECK ((spec_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT generations_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );

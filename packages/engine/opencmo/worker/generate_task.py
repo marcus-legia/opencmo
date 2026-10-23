@@ -27,7 +27,7 @@ from opencmo.ai.catalog import (
     validate_spec,
     with_row,
 )
-from opencmo.ai.moderation import check_input, check_input_video, check_output
+from opencmo.ai.moderation import check_input, check_input_video, check_output, text_quality
 from opencmo.ai.providers import ProviderError, adapter_for
 from opencmo.ai.providers.motion import motion_assets
 from opencmo.backends.retry import TransientError
@@ -276,6 +276,8 @@ def process(store: Any, task: Task) -> None:
                 return
             # Kiểm thứ model vẽ ra TRƯỚC khi lên bucket: bị chặn thì không có file nào để lộ.
             check_output(model, spec, result.path)
+            # Long take F9: a garbled-text hint for the editor's badge. Never fails the generation.
+            quality = text_quality(model, spec, result.path)
             duration, width, height = _probe(result.path)
             # One object per attempt: a retried task (worker killed after the upload, Modal retry)
             # must not collide with the previous attempt's file and fail a paid generation.
@@ -289,6 +291,7 @@ def process(store: Any, task: Task) -> None:
                 credits=adapter.cost(model, spec, result),
                 # Narrated media only: a voiceover, or an explainer's voice (its captions).
                 words=result.words if model.kind == "voice" or model.provider == "opencmo-motion" else None,
+                quality=quality,
             )
             if not won:
                 # Bị huỷ hoặc mất lease trong lúc sinh: không hàng nào tham chiếu

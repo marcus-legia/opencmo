@@ -905,3 +905,14 @@ def test_kiem_duyet_bo_qua_explainer_cua_minh():
     from opencmo.ai.moderation import needs_check
 
     assert not needs_check(get_model("motion-explainer")), "our own renderer: the script was checked on the web"
+
+
+@pytest.mark.parametrize(("prompt", "quality"), [("a shop sign [[garbled-text]]", {"text": "severe"}), ("a shop sign", None)])
+def test_an_images_text_hint_goes_to_complete_generation(monkeypatch, prompt, quality):
+    """Long take, Task 6: the badge's hint rides on the completion, and never fails the generation."""
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    spec = {"prompt": prompt, "aspectRatio": "9:16"}
+    store = FakeStore(_generation(spec=spec, spec_hash=generate_task.spec_hash("fake-image", spec)))
+    generate_task.process(store, _task())
+    assert store.failed == []
+    assert store.completed["quality"] == quality

@@ -71,6 +71,7 @@ class GenerationsMixin(_Http):
         height: int | None,
         credits: int,
         words: list[dict[str, Any]] | None = None,
+        quality: dict[str, Any] | None = None,
     ) -> bool:
         """False = task không còn thuộc attempt này (bị huỷ, bị reclaim) — người
         gọi phải xoá file vừa tải lên, vì không hàng nào tham chiếu nó."""
@@ -86,6 +87,9 @@ class GenerationsMixin(_Http):
                 "p_height": height,
                 "p_credits": credits,
                 "p_words": words,
+                # Sent only when there is one: a database without the long-take migration still
+                # completes every generation.
+                **({"p_quality": quality} if quality is not None else {}),
             },
             idempotent=True,
         )

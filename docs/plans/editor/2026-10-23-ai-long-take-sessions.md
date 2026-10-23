@@ -85,7 +85,9 @@ Release checklist ready for the owner.
       (2026-10-23: code pushed as `fal-veo` / `fal-kling-v3`. Still open: one real call each, which needs `FAL_KEY`;
       fal.ai is unreachable from the cloud session. Durations, input names and `typicalSeconds` are PROVISIONAL.
       See "Task 1 status" below.)
-- [ ] Task 6: garbled-text check on keyframes, `quality` column (migration + pgTAP), worker test
+- [x] Task 6: garbled-text check on keyframes, `quality` column (migration + pgTAP), worker test
+      (2026-10-23: every finished AI image is checked, not only keyframes, because the worker cannot tell a keyframe
+      without a new spec field, and one vision call costs far less than the 1-credit image. See "Task 6 status".)
 - [ ] Task 8: acceptance video, `after/` frames, numbers in the PR
 - [ ] Release checklist written in the PR for the owner (`db push --dry-run` output, worker before web)
 
@@ -108,6 +110,19 @@ Rows B and C can code against now:
   3. `typicalSeconds` (120 / 180 for now).
   4. The input names: Veo `first_frame_url` / `last_frame_url`, Kling `start_image_url` / `end_image_url`.
 - If one is wrong: fix the JSON row and this migration together, while PR #111 is open. Never edit them after merge.
+
+### Task 6 status (Session A, 2026-10-23), for C's badge
+
+- `GET /api/v1/generations/:id` (and the list) now return `quality: { text: "none" | "minor" | "severe" } | null`
+  (`apps/web/lib/generate/models.ts`). `null` means not checked: videos, fake mode, or no checker answered.
+- Badge only on `severe`. It never fails a generation and never refunds.
+- Local test data: a fake image whose prompt contains `[[garbled-text]]` comes back `severe`.
+- Migration `20261226100000_long_take_quality.sql`: `generations.quality`, and `complete_generation(…, p_quality)`.
+  The worker sends `p_quality` only when it has one, so it still completes generations on a database without this
+  migration. Release: `db push` before the worker, as planned.
+- MCP `get_generation` does not show `quality` yet (Task 7 can add it if MCP needs it).
+- PR #108 edits the same worker files (`generate_task.py`, `moderation.py`, `backends/supabase/generations.py`)
+  but not `complete_generation`. Whichever PR merges second needs a small merge there.
 
 ## Session B: director, stage 1, MCP
 
