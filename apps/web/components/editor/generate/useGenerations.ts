@@ -70,6 +70,14 @@ export function declarationsOf(document: ClipDocument): Declaration[] {
   return out;
 }
 
+/** The keyframe images a video declaration starts or ends on, when they are declarations of their own. */
+function keyframesOf(declaration: Declaration): Declaration[] {
+  if (declaration.generate !== "video") return [];
+  return [declaration.startFrame, declaration.endFrame].filter(
+    (frame): frame is Declaration => !!frame && typeof frame === "object" && (frame as Declaration).generate === "image" && typeof (frame as Declaration).prompt === "string",
+  );
+}
+
 export type PendingGeneration = { key: string; label: string };
 
 /**
@@ -321,13 +329,19 @@ export function useGenerations({
   }, [projectId, clipId, wake]);
 
   useEffect(() => {
-    for (const declaration of declarationsOf(document)) {
+    const has = (declaration: Declaration) =>
+      libraryRef.current.latest().assets.some((record) => !isPartial(record) && generationMatches(declaration, record as never));
+    // A long-take shot still to make starts on keyframes the server already made (/video): fetch
+    // them too (the server hands back the paid generation), so the shot can name their files. Only
+    // while the shot waits: a keyframe deleted later is never made again without a card.
+    const wanted = declarationsOf(document).flatMap((declaration) => (has(declaration) ? [declaration] : [...keyframesOf(declaration), declaration]));
+    for (const declaration of wanted) {
       const resolved = resolve(declaration);
       const key = JSON.stringify(resolved);
       if (running.current.has(key)) continue;
       const manifest = libraryRef.current.latest();
       // Đã có asset khớp (kể cả record cũ khớp theo trường), hay đã hỏng: không chạy.
-      if (manifest.assets.some((record) => !isPartial(record) && generationMatches(declaration, record as never))) continue;
+      if (has(declaration)) continue;
       const existing = recordFor(manifest, key);
       if (existing && isPartial(existing) && existing.state === "error") continue;
       running.current.add(key);
