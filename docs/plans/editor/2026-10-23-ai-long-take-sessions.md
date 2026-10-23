@@ -82,9 +82,32 @@ Release checklist ready for the owner.
 - [ ] Task 0: baseline (30 s and 60 s `/video` with today's code; frames, credits and time in `before/`)
 - [ ] Task 1: Veo 3.1 first-last-frame and Kling 3.0 Pro rows, `providerInputs`, `fal.py` mapping, prices,
       migration + pgTAP, schema dump
+      (2026-10-23: code pushed as `fal-veo` / `fal-kling-v3`. Still open: one real call each, which needs `FAL_KEY`;
+      fal.ai is unreachable from the cloud session. Durations, input names and `typicalSeconds` are PROVISIONAL.
+      See "Task 1 status" below.)
 - [ ] Task 6: garbled-text check on keyframes, `quality` column (migration + pgTAP), worker test
 - [ ] Task 8: acceptance video, `after/` frames, numbers in the PR
 - [ ] Release checklist written in the PR for the owner (`db push --dry-run` output, worker before web)
+
+### Task 1 status (Session A, 2026-10-23)
+
+Rows B and C can code against now:
+
+| id | Name (user copy) | Aspects | Durations (s) | Credits/s | Frames |
+|---|---|---|---|---|---|
+| `fal-veo` | Cinematic | 9:16, 16:9 | 4, 6, 8 | 4 (720p and 1080p) | start + end |
+| `fal-kling-v3` | Cinematic square | 16:9, 9:16, 1:1 | 3–15 | 3 | start + end |
+
+- Both are `silent`: the worker always sends `generate_audio: false`, so a spec never carries `audio`.
+- `fal-veo` sends a start-only (cut) shot to Veo's image-to-video endpoint and a start + end shot to its
+  first-last-frame endpoint (`providerModels.frames`). Kling takes both on one endpoint.
+- To confirm with the first real call (owner or a session with `FAL_KEY` and access to fal.ai):
+  1. Veo first-last-frame accepts 4 s and 6 s, not only 8 s (Gemini's own Veo API needs 8 s for a last frame).
+  2. Kling 3.0 Pro durations are 3–15 and its image endpoint ignores `aspect_ratio` (the frame follows the
+     start image).
+  3. `typicalSeconds` (120 / 180 for now).
+  4. The input names: Veo `first_frame_url` / `last_frame_url`, Kling `start_image_url` / `end_image_url`.
+- If one is wrong: fix the JSON row and this migration together, while PR #111 is open. Never edit them after merge.
 
 ## Session B: director, stage 1, MCP
 

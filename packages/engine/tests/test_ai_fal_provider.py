@@ -278,3 +278,47 @@ def test_provider_output_is_read_as_untrusted_media(tmp_path):
     out.mkdir()
     with pytest.raises((FFmpegError, ProviderError, subprocess.CalledProcessError)):
         _normalize(playlist, "audio/mpeg", out)
+
+
+def test_long_take_rows_name_their_frame_fields_from_the_catalog(tmp_path):
+    """Long take, Task 1: two labs, two ways to name the frames, no `if` on the model id."""
+    image = str(_png(tmp_path / "a.png"))
+    both = {"prompt": "a fox", "aspectRatio": "9:16", "duration": 8, "startImage": image, "endImage": image}
+
+    veo = get_model("fal-veo")
+    assert endpoint_for(veo, both) == "fal-ai/veo3.1/first-last-frame-to-video"
+    payload = build_payload(veo, both)
+    assert payload["first_frame_url"].startswith("data:image/png;base64,") and payload["last_frame_url"].startswith("data:")
+    assert "image_url" not in payload and "end_image_url" not in payload
+    assert payload["duration"] == "8s"
+    # A cut shot has only its own keyframe: the image endpoint, with fal's usual name.
+    start_only = {key: value for key, value in both.items() if key != "endImage"}
+    assert endpoint_for(veo, start_only) == "fal-ai/veo3.1/image-to-video"
+    payload = build_payload(veo, start_only)
+    assert "image_url" in payload and "first_frame_url" not in payload
+
+    kling = get_model("fal-kling-v3")
+    spec = {**both, "aspectRatio": "1:1", "duration": 10}
+    assert endpoint_for(kling, spec) == "fal-ai/kling-video/v3/pro/image-to-video"
+    payload = build_payload(kling, spec)
+    assert "start_image_url" in payload and "end_image_url" in payload and "image_url" not in payload
+    assert payload["duration"] == "10"
+    # One endpoint takes both frames, so a start-only shot keeps the row's name too.
+    assert "start_image_url" in build_payload(kling, {**start_only, "aspectRatio": "1:1", "duration": 5})
+
+
+@pytest.mark.parametrize("model_id", ["fal-veo", "fal-kling-v3"])
+def test_long_take_rows_never_pay_for_model_audio(model_id):
+    payload = build_payload(get_model(model_id), {"prompt": "x", "aspectRatio": "9:16", "duration": 6})
+    assert payload["generate_audio"] is False
+
+
+def test_long_take_rows_take_an_end_frame_and_are_priced_per_second():
+    veo, kling = get_model("fal-veo"), get_model("fal-kling-v3")
+    validate_spec(veo, {"prompt": "x", "aspectRatio": "9:16", "duration": 6, "resolution": "1080p", "startImage": f"{UID}/a.png", "endImage": f"{UID}/b.png"})
+    validate_spec(kling, {"prompt": "x", "aspectRatio": "1:1", "duration": 5, "startImage": f"{UID}/a.png", "endImage": f"{UID}/b.png"})
+    with pytest.raises(SpecError, match="aspect ratio"):
+        validate_spec(veo, {"prompt": "x", "aspectRatio": "1:1", "duration": 6})
+    assert [price_of(veo, {"prompt": "x", "aspectRatio": "9:16", "duration": s}) for s in (4, 6, 8)] == [16, 24, 32]
+    assert price_of(veo, {"prompt": "x", "aspectRatio": "9:16", "duration": 8, "resolution": "1080p"}) == 32, "same price at 1080p"
+    assert [price_of(kling, {"prompt": "x", "aspectRatio": "1:1", "duration": s}) for s in (5, 10)] == [15, 30]

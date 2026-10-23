@@ -62,13 +62,30 @@ def data_url(path: Path) -> str:
 
 
 def endpoint_for(model: AiModel, spec: dict[str, Any]) -> str:
-    """Ảnh→video khi có frame đầu; ảnh có tham chiếu thì endpoint `edit`; còn lại là chính."""
+    """Image to video with a first frame (`frames` when there is a last frame too); an image with
+    references goes to `edit`; everything else to the main endpoint."""
     extra = model.provider_models or {}
+    if model.kind == "video" and spec.get("startImage") and spec.get("endImage") and extra.get("frames"):
+        return extra["frames"]
     if model.kind == "video" and spec.get("startImage") and extra.get("image"):
         return extra["image"]
     if model.kind == "image" and spec.get("references") and extra.get("edit"):
         return extra["edit"]
     return model.remote_id()
+
+
+def frame_fields(model: AiModel, spec: dict[str, Any]) -> tuple[str, str]:
+    """Names of the start and end frame fields on the endpoint this spec goes to.
+
+    Each lab names them differently (`first_frame_url`, `start_image_url`, `image_url`…), so the
+    catalog row says (`limits.providerInputs`), not an `if` on the model id. Those names belong to
+    the endpoint that takes the last frame: with a separate `frames` endpoint, a start-only spec
+    goes to `image`, which keeps fal's usual names.
+    """
+    names = model.limits.get("providerInputs")
+    if isinstance(names, dict) and (spec.get("endImage") or not (model.provider_models or {}).get("frames")):
+        return str(names["start"]), str(names["end"])
+    return "image_url", "end_image_url"
 
 
 def speech_payload(model: AiModel, spec: dict[str, Any]) -> dict[str, Any]:
@@ -127,12 +144,16 @@ def build_payload(model: AiModel, spec: dict[str, Any], video_url: Callable[[Pat
         payload["seed"] = spec["seed"]
     if "audio" in spec:
         payload["generate_audio"] = bool(spec["audio"])
+    if model.limits.get("silent"):
+        # The voice-over and music are ours: model audio would double the price for a track we drop.
+        payload["generate_audio"] = False
     if model.kind == "image":
         payload["num_images"] = 1
+    start, end = frame_fields(model, spec)
     if spec.get("startImage"):
-        payload["image_url"] = data_url(Path(spec["startImage"]))
+        payload[start] = data_url(Path(spec["startImage"]))
     if spec.get("endImage"):
-        payload["end_image_url"] = data_url(Path(spec["endImage"]))
+        payload[end] = data_url(Path(spec["endImage"]))
     if spec.get("references"):
         payload["image_urls"] = [data_url(Path(ref)) for ref in spec["references"]]
     return payload

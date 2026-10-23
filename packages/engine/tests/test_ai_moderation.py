@@ -452,3 +452,16 @@ def test_a_fenced_json_verdict_is_read(monkeypatch, image):
     monkeypatch.setenv("GROQ_API_KEY", "q")
     _compat(monkeypatch, [(200, "```json\n" + ALLOW + "\n```")])
     moderation.check_images([image])
+
+
+@pytest.mark.parametrize("model_id", ["fal-veo", "fal-kling-v3"])
+def test_long_take_shots_are_checked_frame_by_frame_before_upload(monkeypatch, image, model_id):
+    """Long take, Task 1: the new rows are `video` on `fal`, so their frames go through the checkers."""
+    nsfw = _nsfw(monkeypatch)
+    claude = _claude(monkeypatch)
+    monkeypatch.setattr(moderation, "_frames", lambda _path, _workdir: [image])
+    model = get_model(model_id)
+    assert moderation.needs_check(model)
+    moderation.check_output(model, {"prompt": "a desk at dawn"}, image)
+    assert nsfw["url"] == moderation.NSFW_ENDPOINT
+    assert claude["system"] == moderation.POLICY

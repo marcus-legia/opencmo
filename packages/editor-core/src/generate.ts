@@ -52,6 +52,13 @@ export type AiModel = {
 		/** Video có tiếng bật/tắt được (`audio`). */
 		audio?: boolean;
 		/**
+		 * The provider's names for the start and end frame on the endpoint that takes the last frame
+		 * (long take). Worker only.
+		 */
+		providerInputs?: { start: string; end: string };
+		/** The model can make sound, but the worker always turns it off: the voice-over and music are ours. */
+		silent?: boolean;
+		/**
 		 * Sửa video có sẵn (G2, video-to-video): spec BẮT BUỘC mang `sourceVideo` + `sourceStart`;
 		 * `duration` là số giây cắt từ nguồn. Không hiện trong danh sách sinh thường.
 		 */

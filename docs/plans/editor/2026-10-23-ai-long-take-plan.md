@@ -105,18 +105,18 @@ Each feature is what a user sees, how it works, and what proves it done.
         `start_image_url` / `end_image_url`);
       - aspects, durations, resolutions, the audio switch and price.
 - [ ] One real call each at 9:16 and 1080p (or the highest resolution offered). Record wall time as `typicalSeconds`.
-- [ ] Add two catalog rows to `packages/contracts/ai-models.json` (names describe quality, not the model:
+- [x] Add two catalog rows to `packages/contracts/ai-models.json` (names describe quality, not the model:
       "Cinematic", "Cinematic square"), with `firstFrame`, `lastFrame`, `durations`, `aspectRatios`, `resolutions`,
       `typicalSeconds` and audio off.
-- [ ] Map input names per row in the catalog (`providerInputs`), not as an `if` on the model id. Update
+- [x] Map input names per row in the catalog (`providerInputs`), not as an `if` on the model id. Update
       `fal.py` to read it, and add worker tests for both input styles.
-- [ ] Price: credits per second from the fal price at the margin of today's video rows. Update `check:pricing`
+- [x] Price: credits per second from the fal price at the margin of today's video rows. Update `check:pricing`
       expectations.
-- [ ] Migration `supabase/migrations/<ts>_long_take_models.sql` inserts the rows. pgTAP
+- [x] Migration `supabase/migrations/<ts>_long_take_models.sql` inserts the rows. pgTAP
       `supabase/tests/<n>_long_take_models.test.sql` checks `ai_price` for 4, 6 and 8 s (Veo) and 5 and 10 s (Kling),
       and that `ai_check_spec` accepts `endImage`.
-- [ ] `scripts/dump-schema.sh`; `npm run db:reset && npm run db:test`.
-- [ ] Moderation: both rows are `kind: video` on `fal`, so `check_output` covers them. Add one worker test that
+- [x] `scripts/dump-schema.sh`; `npm run db:reset && npm run db:test`.
+- [x] Moderation: both rows are `kind: video` on `fal`, so `check_output` covers them. Add one worker test that
       proves it.
 
 ### Task 2: Director v2 and prompt rules (F1, F2, F10)
