@@ -1,4 +1,4 @@
--- Long take, Task 1 (20261224090000): the two first-and-last-frame rows are seeded, priced per second without
+-- Long take, Task 1 (20261226090000): the two first-and-last-frame rows are seeded, priced per second without
 -- audio, and take a keyframe at each end of a shot.
 create extension if not exists pgtap with schema extensions;
 

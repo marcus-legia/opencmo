@@ -176,3 +176,8 @@ change answers on the line, and the change goes in a separate `[X]` commit.
   tool schemas from them directly; zod 4 refuses `.extend()` on a refined object (wrap with `z.object({...})` instead).
 - 2026-10-23 [R] → B: `SHOT_STYLES` repeats `STYLES` in `apps/web/lib/generate/brief.ts` (same five values today).
   In Task 2, have `brief.ts` import `SHOT_STYLES` so the two cannot drift.
+- 2026-10-23 [R] → A: Task 1's migration was `20261224090000`, the same version as `20261224090000_abuse_limits.sql`
+  in PR #108 (security + credit fixes, not merged yet). Two files with one version break `supabase db push`. Renamed
+  to `20261226090000_long_take_models.sql` (after #108's last, `20261225090000`), and the test to
+  `199_long_take_models.test.sql` (#108 has 197 and 198). For later migrations here: start after `20261226090000`
+  and test numbers after 199. pgTAP 145 (3/3) and 199 (14/14) pass on a fresh database.
