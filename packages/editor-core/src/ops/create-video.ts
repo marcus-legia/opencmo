@@ -57,6 +57,8 @@ export const createVideoInput = z.object({
 				/** Long take: the keyframe the shot starts on, and the one it ends on (none = a cut after it). */
 				start_frame: keyframeSource.optional(),
 				end_frame: keyframeSource.optional(),
+				/** Models with their own sound: off, the voice-over and music are ours. */
+				audio: z.boolean().optional(),
 			}),
 		)
 		.min(1)
@@ -129,6 +131,7 @@ export const createVideo = {
 					...(shot.after ? { after: shot.after } : {}),
 					...(shot.start_frame ? { start_frame: shot.start_frame } : {}),
 					...(shot.end_frame ? { end_frame: shot.end_frame } : {}),
+					...(shot.audio !== undefined ? { audio: shot.audio } : {}),
 					start: shot.start,
 					length: shot.length,
 					muted: true,

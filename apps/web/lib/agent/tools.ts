@@ -571,7 +571,7 @@ export function readGroup<T extends { name: string }>(calls: T[], index: number)
   return group;
 }
 
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video", "redo_keyframe"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };

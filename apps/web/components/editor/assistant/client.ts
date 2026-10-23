@@ -23,7 +23,9 @@ export type Storyboard = {
   /** Last row's text; null hides it (a full video has no exit beat). */
   closing?: string | null;
 };
-export type ApprovalCard = { changes: string[]; credits?: number; storyboard?: Storyboard };
+/** `animate_video`'s keyframes, with what a Redo of each costs. */
+export type ContactSheet = { tiles: { index: number; words: string; url: string | null; garbled: boolean; credits: number }[] };
+export type ApprovalCard = { changes: string[]; credits?: number; storyboard?: Storyboard; sheet?: ContactSheet };
 export type QuestionCard = { question: string; options: string[]; multi: boolean };
 export type ToolRequest = { id: string; name: string; input: unknown; card?: ApprovalCard | QuestionCard };
 
@@ -87,6 +89,8 @@ export type BrowserResult = {
   data?: unknown;
   error?: string;
   approved?: boolean;
+  /** Redo one keyframe on a contact sheet instead of approving it. */
+  redo?: { index: number };
   answer?: { choices?: string[]; text?: string; skipped?: boolean };
 };
 export type Attachments = { playhead?: number; selection?: string[]; frame?: string; voice?: string };

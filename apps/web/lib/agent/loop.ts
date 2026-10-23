@@ -79,6 +79,8 @@ export type Answer = {
   data?: unknown;
   error?: string;
   approved?: boolean;
+  /** Redo of one keyframe on `animate_video`'s contact sheet, in place of approving it. */
+  redo?: { index: number };
   answer?: { choices?: string[]; text?: string; skipped?: boolean };
 };
 
@@ -650,7 +652,7 @@ export async function resumeTurn(env: TurnEnv, answers: Answer[]): Promise<void>
 
       if (row?.result?.approval !== undefined) {
         // Thẻ duyệt: không có câu trả lời thì coi như Cancel — không bao giờ tự ghi.
-        const decided = await scope.decide(call, row.input, answer?.approved === true);
+        const decided = await scope.decide(call, row.input, answer?.approved === true, answer?.redo);
         wrote ||= decided.wrote;
         await rpcOrThrow(supabase, "agent_complete_tool", {
           p_turn_id: turn.id,

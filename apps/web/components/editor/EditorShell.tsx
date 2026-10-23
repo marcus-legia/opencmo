@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, MOTION_CLIP_MODEL, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, keyframesOf, MOTION_CLIP_MODEL, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
@@ -373,6 +373,8 @@ function Workspace({
   };
   // Assistant đang sửa clip: khoá mềm canvas (CNV-09) — sửa tay giữa chừng sẽ va với bài của nó.
   const [assistantBusy, setAssistantBusy] = useState(false);
+  // A request the editor writes into the Assistant's box for the user to finish and send.
+  const [assistantPrefill, setAssistantPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const opContext = useCallback(
     (): OpContext => ({
@@ -1124,6 +1126,10 @@ function Workspace({
       setGenerateOpen(true);
     },
     extend: (plan) => void extendVideo(plan),
+    redoKeyframe: (text) => {
+      setAssistantPrefill({ text, nonce: Date.now() });
+      if (!layout.visible.agent) layout.toggle("agent");
+    },
     editVideo: (edit) => {
       setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "video", edit }));
       setGenerateOpen(true);
@@ -1341,6 +1347,7 @@ function Workspace({
             notify={setNotice}
             onTouched={flashLayers}
             speech={hasSpeech}
+            prefill={assistantPrefill}
             runTool={async (request) => {
               const input = (request.input ?? {}) as Record<string, unknown>;
               if (request.name === "media_waveform") {
@@ -1683,6 +1690,7 @@ function aiMenuItems({
   enhance,
   animate,
   extend,
+  redoKeyframe,
   editVideo,
   upscale,
 }: {
@@ -1697,17 +1705,34 @@ function aiMenuItems({
   enhance: (id: string, resolution: string) => void;
   animate: (path: string) => void;
   extend: (plan: ExtendPlan) => void;
+  /** Opens the Assistant with a `redo_keyframe` request for the user to finish. */
+  redoKeyframe: (text: string) => void;
   editVideo: (edit: EditSource) => void;
   upscale: (source: EditSource, model: AiModel, resolution: string) => void;
 }): MenuItem[] {
   if (selection.length !== 1) return [];
   let entity: Record<string, unknown> | null = null;
-  walk(document, ({ entity: item }) => {
-    if (item.id === selection[0]) entity = item;
+  let parent: Record<string, unknown> | null = null;
+  walk(document, ({ entity: item, parent: holder }) => {
+    if (item.id !== selection[0]) return;
+    entity = item;
+    parent = holder;
   });
   if (!entity) return [];
   const found: Record<string, unknown> = entity;
   const items: MenuItem[] = [];
+  // A long-take shot: its keyframes are redone through the Assistant, which prices the shots on them.
+  const scene = parent as Record<string, unknown> | null;
+  const keyframes = scene?.kind === "sequence" ? keyframesOf(document, String(scene.id)) : null;
+  keyframes?.forEach((keyframe, index) => {
+    if (!keyframe.shots.some((shot) => shot.id === found.id)) return;
+    items.push({
+      label: `Redo keyframe ${index + 1}…`,
+      onSelect: () =>
+        redoKeyframe(`Redo keyframe ${index + 1} of the scene "${String(scene!.name ?? "Sequence")}" (redo_keyframe, scene_id ${String(scene!.id)}, index ${index}). New look: `),
+      testid: `ai-redo-keyframe-${index}`,
+    });
+  });
   const declarations = ownDeclarations(found);
   // Rendered from code (3D Studio, explainers, motion clips): a new seed would pay for the same picture again.
   if (declarations.length && declarations.every((declaration) => !RENDERED_FROM_CODE.has(String(declaration.model)))) {

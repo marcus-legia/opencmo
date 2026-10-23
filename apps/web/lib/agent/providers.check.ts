@@ -172,7 +172,7 @@ for (const tool of searched.slice(1)) assert.equal(Boolean(tool.defer_loading), 
 const loaded = searched.filter((tool) => !tool.defer_loading).length;
 assert.ok(loaded < searched.length / 2 + 5, `most tools wait for a search (${loaded} of ${searched.length} loaded)`);
 // Every always-loaded name is a real tool of the clip scope (or a priced one configured elsewhere).
-const priced = new Set(["create_video", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill", "preview_explainer", "add_explainer"]);
+const priced = new Set(["create_video", "animate_video", "redo_keyframe", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill", "preview_explainer", "add_explainer"]);
 for (const name of ALWAYS_LOADED) assert.ok(names.includes(name) || priced.has(name), `${name} is a tool`);
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.

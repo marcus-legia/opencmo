@@ -13,14 +13,14 @@ import { moderateText, specText } from "@/lib/generate/moderation";
 export type Piece = { label: string; spec: GenerationSpec; kind?: string };
 
 /** null when every piece passes; otherwise the tool result for the model and a short summary. */
-export async function screenPieces(pieces: Piece[]): Promise<{ content: string; summary: string } | null> {
+export async function screenPieces(pieces: Piece[], tool = "create_video"): Promise<{ content: string; summary: string } | null> {
   const results = await Promise.allSettled(pieces.map((piece) => moderateText(specText(piece.spec).join("\n"), { kind: piece.kind })));
   const blocked = pieces.filter((_piece, index) => {
     const result = results[index]!;
     return result.status === "rejected" && result.reason instanceof ApiError && result.reason.status === 422;
   });
   if (blocked.length) {
-    const message = `Against the content policy: ${blocked.map((piece) => piece.label).join("; ")}. Rewrite ${blocked.length === 1 ? "it" : "them"} without that content and call create_video again.`;
+    const message = `Against the content policy: ${blocked.map((piece) => piece.label).join("; ")}. Rewrite ${blocked.length === 1 ? "it" : "them"} without that content and call ${tool} again.`;
     return { content: JSON.stringify({ INVALID_INPUT: message }), summary: `${blocked.length} ${blocked.length === 1 ? "piece" : "pieces"} blocked` };
   }
   const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
