@@ -435,7 +435,7 @@ export async function prepareCreateVideo(
 }
 
 /** A library folder or file name from free text: no slashes, short, no trailing dots. */
-function libraryName(text: string): string {
+export function libraryName(text: string): string {
   const clean = text.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
   const cut = clean.length <= 40 ? clean : clean.slice(0, clean.lastIndexOf(" ", 40) > 10 ? clean.lastIndexOf(" ", 40) : 40);
   return cut.replace(/[.\s]+$/, "") || "Video";

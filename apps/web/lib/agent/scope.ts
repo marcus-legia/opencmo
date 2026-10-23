@@ -494,7 +494,23 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           };
         }
         const { outcome, generationId } = await runRedoKeyframe(
-          { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env), ...(host.alive ? { alive: host.alive } : {}) },
+          {
+            supabase,
+            jobId: context.clip.job_id,
+            clipId,
+            applyOp: (op) => applyOpTool(op, env),
+            ...(host.alive ? { alive: host.alive } : {}),
+            addToLibrary: (redo, id) =>
+              saveKeyframes(
+                {
+                  read: () => ensureProject(supabase, context, clipId),
+                  write: async (version, document, manifest) => {
+                    await saveDocument(supabase, clipId, version, document, { manifest });
+                  },
+                },
+                { model: redo.image.model, specs: [redo.image.spec], folder: redo.library.folder, names: [redo.library.name], ids: [id] },
+              ),
+          },
           input as PreparedRedo,
         );
         return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };

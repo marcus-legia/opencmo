@@ -21,6 +21,7 @@ import {
   keyframesOf,
   keyframeSource,
   MASTER_SRC,
+  byId,
   RedoKeyframeInputSchema,
   type CreateVideo,
   type KeyframeSource,
@@ -30,10 +31,10 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 
 import { ApiError } from "@/lib/api/errors";
 import type { SupabaseClient } from "@/lib/api/handler";
-import { composePrompt, type STYLES } from "@/lib/generate/brief";
 import { createGeneration, normalizeSpec } from "@/lib/generate/create";
 import { availableModel, availableModels, specHash } from "@/lib/generate/models";
 
+import { libraryName, pickShotModel, SEPARATE_SHOTS, shotPrompts, timeShots } from "./create-video";
 import { runGeneration, voiceModelFor, type PreparedGeneration } from "./generate-tool";
 import type { Piece } from "./screen-pieces";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
@@ -62,26 +63,12 @@ function seedOf(...parts: string[]): number {
   return createHash("sha256").update(parts.join("\n")).digest().readUInt32BE(0) & 0x7fffffff;
 }
 
-const shotModels = (aspect: string) =>
-  availableModels().filter(
-    (model) => model.kind === "video" && model.limits.firstFrame && !model.limits.scene && !model.limits.sourceVideo && (model.limits.aspectRatios ?? []).includes(aspect),
-  );
-
-/**
- * The model that makes the shots: the first in catalog order that joins two keyframes at this
- * frame, else the first that starts on one (each shot then cuts to the next).
- */
-export function shotModel(aspect: string): AiModel | string {
-  const models = shotModels(aspect);
-  return models.find((model) => model.limits.lastFrame) ?? models[0] ?? `No video model can start a ${aspect} shot on a keyframe.`;
-}
-
 /** Keyframes of this project by generation id: done, an image, and its file still in storage. */
 export function keyframeReader(supabase: SupabaseClient, jobId: string): ReadKeyframes {
   return async (ids) => {
     const found = new Map<string, KeyframeFile>();
     if (!ids.length) return found;
-    const { data: rows } = await supabase.from("generations").select("*").in("id", ids).eq("job_id", jobId);
+    const { data: rows } = await supabase.from("generations").select("id, kind, model, status, spec, media_asset_id, quality").in("id", ids).eq("job_id", jobId);
     const done = ((rows ?? []) as { id: string; kind: string; model: string; status: string; spec: GenerationSpec | null; media_asset_id: string | null; quality?: { text?: string } | null }[])
       .filter((row) => row.kind === "image" && row.status === "done" && row.media_asset_id && typeof row.spec?.seed === "number");
     const { data: assets } = done.length
@@ -145,8 +132,10 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
   if (JSON.stringify(env.document).includes(`"${MASTER_SRC}"`)) {
     return "/video makes a whole new video. Start a New edit for it; on this clip, use /broll or /image for AI shots.";
   }
-  const video = shotModel(aspect);
-  if (typeof video === "string") return video;
+  // Stage 1 priced the video with this same pick, timing and prompts.
+  const picked = pickShotModel(aspect);
+  if (typeof picked === "string") return picked;
+  const { model: video, joins } = picked;
 
   const refs = [...parsed.data.keyframes].sort((a, b) => a.index - b.index);
   const files = await env.readKeyframes(refs.map((ref) => ref.generation_id));
@@ -159,16 +148,15 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
   }
 
   const durations = [...(video.limits.durations ?? [5])].sort((a, b) => a - b);
-  const joins = Boolean(video.limits.lastFrame);
   const edges = keyframeIndexes(plan);
+  const timed = timeShots(plan, durations);
+  const prompts = shotPrompts(plan, video, aspect, joins);
   const shots: CreateVideo["shots"] = [];
   const specs: GenerationSpec[] = [];
-  let at = 0;
   try {
     for (const [index, beat] of plan.shots.entries()) {
-      const length = Math.round(beat.seconds * 10) / 10;
-      const duration = durations.find((value) => value >= length - 1e-6);
-      if (duration === undefined) return `Shot ${index + 1} is ${length}s; a shot is at most ${durations.at(-1)}s. Split it.`;
+      const { start, length, duration } = timed[index]!;
+      if (beat.seconds > durations.at(-1)! + 1e-6) return `Shot ${index + 1} is ${beat.seconds}s; a shot is at most ${durations.at(-1)}s. Split it.`;
       const end = joins ? edges[index]!.end : null;
       // It ends on the keyframe the next shot starts on: showing less of it would jump at the seam.
       if (end !== null && Math.abs(duration - length) > 1e-6) {
@@ -177,15 +165,11 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
       const first = keyframes[edges[index]!.start]!;
       const last = end === null ? undefined : keyframes[end]!;
       const seed = seedOf(video.id, first.generationId, last?.generationId ?? "cut", String(duration));
-      const prompt = composePrompt(
-        { idea: beat.words, subject: beat.keyframe, action: beat.motion, style: plan.style as (typeof STYLES)[number] },
-        "video",
-        { maxChars: video.limits.maxPromptChars ?? 2000, aspectRatio: aspect, duration },
-      );
+      const { prompt } = prompts[index]!;
       const audio = video.limits.audio ? { audio: false } : {};
       specs.push(normalizeSpec(video, { prompt, aspectRatio: aspect, duration, seed, startImage: first.path, ...(last ? { endImage: last.path } : {}), ...audio }));
       shots.push({
-        start: at,
+        start,
         length,
         model: video.id,
         prompt,
@@ -196,12 +180,11 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
         ...(last ? { end_frame: last.source } : {}),
         ...audio,
       });
-      at = Math.round((at + length) * 10) / 10;
     }
   } catch (err) {
     return err instanceof ApiError ? err.message : "Invalid shot.";
   }
-  const seconds = at;
+  const seconds = Math.round((timed.at(-1)!.start + timed.at(-1)!.length) * 10) / 10;
   if (seconds < 3) return "A video is at least 3 seconds long. Make the shots longer.";
   const problem = checkShots({ seconds, shots });
   if (problem) return problem;
@@ -245,7 +228,7 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
       lines: [
         `Animate a ${seconds}s ${aspect} video: ${shots.length === 1 ? "1 shot" : `${shots.length} shots`} on ${keyframes.length} keyframes${voice ? `, voice-over (${voice.voice})` : ""}${music ? ", music" : ""} · ${credits(total)}${video.limits.typicalSeconds ? `, ready in ${minutes(video.limits.typicalSeconds + 60)}` : ""}`,
         `Shots on ${video.name} · ${credits(shotCredits)}`,
-        ...(joins ? [] : ["This frame uses separate shots: each starts on its keyframe and cuts to the next."]),
+        ...(joins ? [] : [SEPARATE_SHOTS]),
         ...(garbled.length ? [`Keyframe ${garbled.join(", ")} may have garbled text. Redo it before you approve.`] : []),
       ],
       keyframes: keyframes.map((keyframe, index) => ({ index, generationId: keyframe.generationId, model: keyframe.source.model, spec: keyframeSpec(keyframe.source) })),
@@ -328,6 +311,8 @@ export type PreparedRedo = {
   shots: { elementId: string; label: string; model: AiModel; declaration: Record<string, unknown>; start: boolean; end: boolean }[];
   credits: number;
   lines: string[];
+  /** Where the new keyframe is listed in the library, next to the scene's first keyframes. */
+  library: { folder: string; name: string };
 };
 
 /** A keyframe prompt opens with its description (`composePrompt`); a new description keeps the look the rest of it sets. */
@@ -370,7 +355,9 @@ export function prepareRedoKeyframe(input: unknown, document: ClipDocument): Pre
     shotCredits += priceOf(model, pricedSpec(found.declaration));
   }
   const total = priceOf(imageModel, image) + shotCredits;
+  const title = libraryName(String(byId(document, sceneId)?.entity.name ?? "Video"));
   return {
+    library: { folder: `Generated/${title}/keyframes`, name: `${String(index + 1).padStart(2, "0")} ${libraryName(parsed.data.keyframe ?? "Keyframe")} (redo)` },
     op: { op: "redo_keyframe", sequence_id: sceneId, index, keyframe },
     image: { model: imageModel, spec: image },
     shots,
@@ -412,6 +399,8 @@ const pricedSpec = (declaration: Record<string, unknown>): GenerationSpec => ({
 
 type RunRedoEnv = RedoEnv & {
   applyOp: Parameters<typeof runGeneration>[0]["applyOp"];
+  /** Lists the new keyframe in the library as a pending record the editor finishes (`saveKeyframes`). */
+  addToLibrary: (prepared: PreparedRedo, generationId: string) => Promise<void>;
   alive?: () => Promise<boolean>;
   /** Tests replace the clock and the wait. */
   sleep?: (ms: number) => Promise<void>;
@@ -434,6 +423,9 @@ export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): 
   } catch (err) {
     return fail(err instanceof ApiError && err.status < 500 ? err.message : "The new keyframe could not be started.");
   }
+  // Best effort: the shots name the keyframe by its declaration and work without the record; it
+  // only puts the file in the scene's folder before a shot asks for it.
+  await env.addToLibrary(prepared, keyframeId).catch((err) => console.error("[agent] redo keyframe: library record failed", keyframeId, err));
   const sleep = env.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const started = Date.now();
   for (;;) {

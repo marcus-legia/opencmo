@@ -154,7 +154,8 @@ Rows B and C can code against now:
 
 - [ ] Task 4: `animate_video` (refuses missing keyframes, builds start/end specs, voice and music), contact sheet
       with Redo per tile and the exact price, the op places one `sequence`, no double payment
-- [ ] Task 5: `redo_keyframe` (new keyframe plus at most 2 shots, old files kept, undo), context menu, tests
+      (all in; open only for the local-stack run of the no-double-payment check, see the plan's Task 4)
+- [x] Task 5: `redo_keyframe` (new keyframe plus at most 2 shots, old files kept, undo), context menu, tests
 
 ## Shared files
 
@@ -207,3 +208,17 @@ change answers on the line, and the change goes in a separate `[X]` commit.
   (`useGenerations` now resumes server-started pending records), so a shot can name a keyframe by its library path
   or, server-side, by generation id through `resolveMediaRefs`. B finishes Task 7 (MCP checks for the two new tools)
   once `animate_video` and `redo_keyframe` are in `clipToolSpecs()`.
+- 2026-10-23 [C] → B (Task 7, answers the line above): `animate_video` and `redo_keyframe` are in `clipToolSpecs()` (`lib/agent/long-take.ts`,
+  wired in `scope.ts`); their inputs are `AnimateVideoInputSchema` and `RedoKeyframeInputSchema` as they stand, and
+  over MCP they go through `scope.plan` / `scope.decide` like `create_video`. The contact sheet's Redo is a decision
+  `{ approved: false, redo: { index } }` (Assistant only); over MCP a keyframe is redone before stage 2 by asking
+  again, which is yours to describe in the guide.
+- 2026-10-23 [C] → B: stage 2 calls your `pickShotModel`, `timeShots` and `shotPrompts`, so both cards price the same
+  shots; keep them exported. `libraryName` is now exported too (the redone keyframe goes in the scene's
+  `Generated/<title>/keyframes/` folder through `saveKeyframes`). `screenPieces` takes the tool to name in its
+  message (`create_video` by default). `redo_keyframe` swaps the first sentence of a keyframe prompt for the new
+  description, so `composeKeyframePrompt` must keep opening with the beat's `keyframe` sentence.
+- 2026-10-23 [C] → B, A: a placed shot names each keyframe by the image's own declaration (`{ generate: "image",
+  prompt, model, aspectRatio, resolution?, seed }` = the generation's stored spec), not a library path, and the
+  scene is the `sequence` named after the video (`keyframesOf` in editor-core reads its keyframes back). Voice and
+  music stay outside it (see the plan's Task 4).

@@ -15,6 +15,7 @@ import { priceOf } from "@opencmo/editor-core/generate";
 import { normalizeSpec } from "@/lib/generate/create";
 import { availableModel } from "@/lib/generate/models";
 
+import { shotPrompts } from "./create-video";
 import { prepareAnimateVideo, prepareRedoKeyframe, redescribe, type KeyframeFile } from "./long-take";
 
 const blank = () =>
@@ -62,6 +63,8 @@ async function main() {
   assert.deepEqual(op.shots.map((shot) => [shot.start_frame?.seed, shot.end_frame?.seed]), [[10, 11], [11, 12], [12, undefined]]);
   // The declaration a shot names is the keyframe's own spec: the editor's request hashes to the paid generation.
   assert.deepEqual(normalizeSpec(availableModel("fake-image")!, { prompt: source(1).prompt, aspectRatio: "16:9", seed: 11 }), { prompt: source(1).prompt, aspectRatio: "16:9", seed: 11 });
+  // Stage 1 priced and moderated these exact prompts.
+  assert.deepEqual(specs.map((spec) => spec.prompt), shotPrompts(plan as never, made.prepared.model, "16:9", true).map((shot) => shot.prompt));
   assert.equal(made.sheet.tiles.length, 3);
   assert.deepEqual(made.sheet.tiles.map((tile) => [tile.words, tile.garbled]), [[plan.shots[0]!.words, false], [plan.shots[1]!.words, false], [plan.shots[2]!.words, true]]);
   assert.ok(made.sheet.tiles.every((tile) => tile.credits > 0 && tile.url?.startsWith("https://signed/")));

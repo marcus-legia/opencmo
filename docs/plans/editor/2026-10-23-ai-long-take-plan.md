@@ -159,28 +159,39 @@ Each feature is what a user sees, how it works, and what proves it done.
 - [x] Checks: price lines and generation count for a 30 s and a 60 s fake plan; moderation of every keyframe.
 
 ### Task 4: Stage 2, contact sheet, card 2 and shots (F5, F6, F7, F11)
-- [ ] New tool `animate_video` (approval), input: the plan and keyframe ids. Refuse with "Keyframe n is missing.
+- [x] New tool `animate_video` (approval), input: the plan and keyframe ids. Refuse with "Keyframe n is missing.
       Redo it first." when a keyframe is not `done` or its file is gone (test).
-- [ ] Shot specs: `startImage` = keyframe i, `endImage` = keyframe i+1 for continuous shots, `startImage` only for cut
+- [x] Shot specs: `startImage` = keyframe i, `endImage` = keyframe i+1 for continuous shots, `startImage` only for cut
       shots. The voice-over and music bed are added as today.
-- [ ] Card 2 (editor `assistant/` card component):
+- [x] Card 2 (editor `assistant/` card component):
       - keyframe tiles in order, with the beat's words;
       - a Redo button per tile (1 credit, one small approval inside the card, new seed);
       - the exact video price, recomputed after a Redo.
-- [ ] `create_video` op: shots accept `startImage` / `endImage`. Every shot, plus voice and music, goes inside one
+
+      A Redo is approved on the tile at its own price and makes only that keyframe; card 2 is left unapproved and the
+      Assistant asks again with the new keyframe, so the new tile and price are what the user approves.
+- [x] `create_video` op: shots accept `startImage` / `endImage`. Every shot, plus voice and music, goes inside one
       `sequence` named after the video. Captions and on-screen text stay editor layers.
-- [ ] `editor-core` tests: the op places a `sequence` with N shots at the right times; move and trim act on the
+
+      C, changed: the sequence holds the shots only. A sequence plays its clips one after another on one row, and the
+      voice and music span every shot, so they keep their own rows (as captions and text do). Moving the scene moves
+      its shots; the voice-over stays where it is.
+- [x] `editor-core` tests: the op places a `sequence` with N shots at the right times; move and trim act on the
       block; a document round-trips through `validate()`.
 - [ ] No double payment: approving card 2 twice, or retrying the request, reuses the generations (check against a
       local stack, and a pgTAP case if a new SQL path is touched).
 
+      C: no SQL path is new; the reuse is `create_generation`'s by spec hash. Shot seeds come from the keyframes
+      they join, so the same request gives the same specs (`lib/agent/long-take.check.ts`). Still to do: the
+      local-stack run (C's container has no Docker daemon).
+
 ### Task 5: Redo one keyframe after placing (F8)
-- [ ] New tool `redo_keyframe` (approval): input the scene, the keyframe number and an optional new description.
-- [ ] Find the shots whose stored spec uses that keyframe as `startImage` or `endImage` (at most 2). Re-declare them
+- [x] New tool `redo_keyframe` (approval): input the scene, the keyframe number and an optional new description.
+- [x] Find the shots whose stored spec uses that keyframe as `startImage` or `endImage` (at most 2). Re-declare them
       with the new keyframe. The card shows one image plus those shots.
-- [ ] Old keyframe and old shots stay in the library. Undo restores the previous declarations.
-- [ ] Editor: "Redo keyframe…" in the shot's context menu opens the Assistant with the tool prefilled.
-- [ ] Test: in a 6-shot scene, redoing keyframe 3 changes exactly shots 2 and 3; redoing keyframe 0 changes only
+- [x] Old keyframe and old shots stay in the library. Undo restores the previous declarations.
+- [x] Editor: "Redo keyframe…" in the shot's context menu opens the Assistant with the tool prefilled.
+- [x] Test: in a 6-shot scene, redoing keyframe 3 changes exactly shots 2 and 3; redoing keyframe 0 changes only
       shot 1.
 
 ### Task 6: Garbled-text check on keyframes (F9)
