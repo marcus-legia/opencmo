@@ -261,6 +261,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The key of a pending record the server started (it carries the generation id), else null. */
+const serverStarted = (record: LibraryRecord): string | null =>
+  isPartial(record) && record.state === "pending" && record.generation?.id ? record.generation.key : null;
+
 const recordFor = (manifest: Manifest, key: string) => manifest.assets.find((record) => record.generation?.key === key);
 
 export function useGenerations({
@@ -288,6 +292,8 @@ export function useGenerations({
   credits.current = onCredits;
   const libraryRef = useRef(library);
   libraryRef.current = library;
+  // The server lists such pieces in the manifest only: without this the effect would not run for them.
+  const started = library.manifest.assets.map(serverStarted).filter(Boolean).join("\n");
   // Người đang chờ một thay đổi của `generations`: Realtime (hoặc quay lại tab) đánh thức hết.
   const waiters = useRef(new Set<() => void>());
   const wake = useCallback(() => {
@@ -324,6 +330,21 @@ export function useGenerations({
       if (manifest.assets.some((record) => !isPartial(record) && generationMatches(declaration, record as never))) continue;
       const existing = recordFor(manifest, key);
       if (existing && isPartial(existing) && existing.state === "error") continue;
+      running.current.add(key);
+      void run(resolved, key).finally(() => running.current.delete(key));
+    }
+    // Pieces the server started and listed in the library without placing them (a long take's
+    // keyframes): finished the same way, since the POST with their spec gets that generation back.
+    for (const record of libraryRef.current.latest().assets) {
+      const key = serverStarted(record);
+      if (!key || running.current.has(key)) continue;
+      let resolved: Resolved;
+      try {
+        resolved = JSON.parse(key) as Resolved;
+      } catch {
+        continue;
+      }
+      if (!resolved || typeof resolved.type !== "string" || !resolved.spec) continue;
       running.current.add(key);
       void run(resolved, key).finally(() => running.current.delete(key));
     }
@@ -457,7 +478,7 @@ export function useGenerations({
         credits.current?.();
       }
     }
-  }, [document, clipId, projectId, notify, attempt]);
+  }, [document, clipId, projectId, notify, attempt, started]);
 
   const retry = useCallback(async (entity: Record<string, unknown>) => {
     const keys = new Set(ownDeclarations(entity).map((declaration) => JSON.stringify(resolve(declaration))));

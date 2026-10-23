@@ -138,8 +138,8 @@ Rows B and C can code against now:
 **Order:** B0 (push at once) → Task 2 → Task 3 → Task 7 (after C pushes its tools).
 
 - [x] B0: shared contracts in `long-take.ts` with unit tests for `keyframeIndexes` (all continuous, all cuts, mixed)
-- [ ] Task 2: director v2, review rules, prompt rules, model pick with honest fallback, fake plan, eval passes
-- [ ] Task 3: `create_video` prices and creates keyframes only; card 1 lines; library folder; `CreateVideoResult`
+- [x] Task 2: director v2, review rules, prompt rules, model pick with honest fallback, fake plan, eval passes
+- [x] Task 3: `create_video` prices and creates keyframes only; card 1 lines; library folder; `CreateVideoResult`
 - [ ] Task 7: MCP plan format, `animate_video` and `redo_keyframe` in the studio group, guides, `mcp-server` checks
 
 ## Session C: editor, stage 2, redo

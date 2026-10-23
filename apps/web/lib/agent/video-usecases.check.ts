@@ -33,8 +33,9 @@ async function main(): Promise<void> {
   const { SYSTEM_PROMPT } = await import("./prompt");
   const { readGuide } = await import("./guides");
   const { memoryWorkspace } = await import("./workspace");
-  const { applyOpTool, runCheck } = await import("./tools");
+  const { applyOpTool } = await import("./tools");
   const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, TRANSCRIPT } = await import("./eval/fixture");
+  const { longTakeResult, withKeyframes } = await import("./keyframe-library");
 
   /** A blank "New edit" (where /video runs): an empty 9:16 scene. */
   const blank = (): ClipDocument => {
@@ -52,7 +53,10 @@ async function main(): Promise<void> {
     return { planned, card: { ...generateCard(planned.prepared, "clip"), storyboard: planned.storyboard } } as const;
   }
 
-  /** Approve: the op `runGeneration` applies after holding the credits, on the same document. */
+  /**
+   * Approve card 1: the op `runGeneration` applies after holding the keyframe credits, then the
+   * pending keyframe records it lists in the library, on the same document.
+   */
   async function approve(planned: Awaited<ReturnType<typeof prepareCreateVideo>>, document = blank()) {
     assert.ok(typeof planned !== "string");
     const workspace = memoryWorkspace(
@@ -60,43 +64,71 @@ async function main(): Promise<void> {
       { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": TRANSCRIPT }, master: FIXTURE_MASTER },
     );
     const outcome = await applyOpTool(planned.prepared.op, { workspace });
-    assert.ok(outcome.ok, `the approved video could not be placed: ${outcome.content}`);
+    assert.ok(outcome.ok, `the approved keyframes could not be set up: ${outcome.content}`);
     const after = (await workspace.read()).document;
-    return { document: after, check: await runCheck(workspace) };
+    const { prepared } = planned;
+    const specs = [prepared.spec, ...(prepared.extra ?? []).map((item) => item.spec)];
+    const ids = specs.map((_spec, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
+    const manifest = withKeyframes(fixtureManifest(), { model: prepared.model, specs, folder: prepared.library!.folder, names: prepared.library!.names, ids, now: "2026-10-23T00:00:00.000Z" });
+    return { document: after, manifest, result: longTakeResult(prepared.longTake!, ids) };
   }
 
-  // 1. "/video a 20-second video introducing a note-taking app" on a New edit.
+  // 1. "/video a 20-second video introducing a note-taking app" on a New edit: card 1 prices the
+  // keyframes only and says what the video will cost after them.
   {
     const asked = await ask({ prompt: "a 20-second video introducing a note-taking app for students", seconds: 20 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    const [summary, shots, ...rest] = asked.card.changes;
-    assert.match(summary!, /^Create a 20s 9:16 video: 4 AI shots, voice-over \(Test A\), music · \d+ credits, ready in about /, summary);
-    assert.match(shots!, /^Shots on .+ · 20 credits$/, shots);
+    const [summary, then, flow, ...rest] = asked.card.changes;
+    assert.equal(summary, "Create a 20s 9:16 video, step 1 of 2: 5 keyframes · 5 credits");
+    assert.match(then!, /^Then about \d+ credits for the video \(ready in about .+\): 4 shots, voice-over \(Test A\), music$/, then);
+    assert.equal(flow, "Shots flow from one keyframe into the next, with 1 cut where the story changes place");
+    assert.ok(!asked.card.changes.some((line) => /Test video|Test image/.test(line)), "the card names no model");
     assert.ok(rest.some((line) => line.startsWith("Script: ")), "the card shows the script the voice will read");
-    assert.equal(asked.card.credits, asked.planned.prepared.credits);
+    assert.equal(asked.card.credits, 5, "approving holds only the keyframes");
     assert.equal(asked.card.storyboard.seconds, 20);
     assert.deepEqual(asked.card.storyboard.beats.map((beat) => [beat.at, beat.dur]), [[0, 5], [5, 5], [10, 5], [15, 5]]);
-    assert.ok(asked.card.storyboard.beats.every((beat) => beat.motion && beat.motion !== "—"), "every shot has its part of the voice-over");
-    // Every piece starts at once on Approve: shots 2-4, the voice and the music ride on the first.
-    assert.equal(asked.planned.prepared.extra?.length, 5);
+    assert.ok(asked.card.storyboard.beats.every((beat) => beat.motion && beat.motion !== "—"), "every beat has its part of the voice-over");
+    assert.match(asked.card.storyboard.beats[2]!.label, /^✂ cut · /, "the beat after a hard cut is marked");
+    // Keyframes 2-5 ride on the first; nothing of the video itself starts yet.
+    assert.equal(asked.planned.prepared.extra?.length, 4);
+    assert.ok([asked.planned.prepared.model, ...(asked.planned.prepared.extra ?? []).map((item) => item.model)].every((model) => model.kind === "image"));
+    // Every keyframe, shot, the script and the music are moderated now, each named on its own.
+    const labels = videoPieces(asked.planned).map((piece) => piece.label);
+    assert.equal(labels.length, 5 + 4 + 2);
+    assert.match(labels[2]!, /^Keyframe 3 \(/);
+    assert.match(labels[5]!, /^Shot 1 \(/);
 
-    const { document, check } = await approve(asked.planned);
+    const { document, manifest, result } = await approve(asked.planned);
     const scene = sceneOf(document);
     assert.deepEqual([scene.width, scene.height], [1080, 1920]);
-    assert.deepEqual(scene.workarea, [0, 20], "the video is as long as asked");
-    assert.equal(count(document, /"generate":"video"/g), 4, "four AI shots on the timeline");
-    assert.equal(count(document, /"generate":"voice"/g), 1, "one voice-over");
-    assert.ok(count(document, /"kind":"captions"/g) >= 1, "captions follow the voice");
-    assert.ok(count(document, /"generate":"audio"/g) >= 1, "a music bed");
-    assert.ok(JSON.stringify(document).includes("Meet your new front desk"), "the director's on-screen text is placed");
-    assert.equal(check.ok, true, JSON.stringify(check.issues));
+    assert.equal(count(document, /"generate":"video"/g), 0, "no shot is placed before the second approval");
+    const keyframes = manifest.assets.filter((record) => record.path.startsWith("Generated/Fake video/keyframes/"));
+    assert.deepEqual(keyframes.map((record) => record.path.split("/").pop()!.slice(0, 3)).sort(), ["01 ", "02 ", "03 ", "04 ", "05 "]);
+    assert.ok(keyframes.every((record) => (record as { state?: string }).state === "pending" && record.generation?.id), "pending, with their generation");
+    assert.deepEqual(result.keyframes.map((item) => item.index), [0, 1, 2, 3, 4]);
+    assert.equal(result.plan.shots.length, 4);
+    // Listing them twice (a retried save) adds nothing.
+    const again = withKeyframes(manifest, { model: asked.planned.prepared.model, specs: [asked.planned.prepared.spec], folder: "x", names: ["y"], ids: ["z"], now: "" });
+    assert.equal(again.assets.length, manifest.assets.length);
   }
 
-  // 2. No length given: 30 s.
+  // 2. No length given: 30 s, six beats, the last ending on a closing keyframe.
   {
     const asked = await ask({ prompt: "a video about our booking app" });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.match(asked.card.changes[0]!, /^Create a 30s 9:16 video: 6 AI shots/);
+    assert.equal(asked.card.changes[0], "Create a 30s 9:16 video, step 1 of 2: 7 keyframes · 7 credits");
+    assert.equal(1 + (asked.planned.prepared.extra?.length ?? 0), 7, "one generation per keyframe");
+  }
+  // A minute: twelve beats, thirteen keyframes, and the video priced on card 1 from the shot model.
+  {
+    const asked = await ask({ prompt: "a one-minute tour of our booking app", seconds: 60 });
+    assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
+    assert.equal(asked.card.changes[0], "Create a 60s 9:16 video, step 1 of 2: 13 keyframes · 13 credits");
+    // fake-video is 1 credit a second and makes 5 s shots; the fake voice and music add their own.
+    const shots = asked.planned.later.filter((piece) => piece.kind === "video").length;
+    assert.equal(shots, 12);
+    assert.match(asked.card.changes[1]!, /^Then about (\d+) credits for the video/);
+    assert.ok(Number(/about (\d+) credits/.exec(asked.card.changes[1]!)![1]) >= 60, "at least the 60 shot seconds");
   }
 
   // 3. Square and landscape: the frame follows.
@@ -104,29 +136,25 @@ async function main(): Promise<void> {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10, aspect });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
     assert.match(asked.card.changes[0]!, new RegExp(`^Create a 10s ${aspect} video`));
+    assert.equal(asked.planned.prepared.spec.aspectRatio, aspect, "keyframes in the video's frame");
     const { document } = await approve(asked.planned);
     assert.deepEqual([sceneOf(document).width, sceneOf(document).height], size);
   }
 
-  // 4. The longest video: within the shot limit and still covering 90 s.
+  // 4. The longest video: within the shot limit, with one keyframe more at most.
   {
     const asked = await ask({ prompt: "a long product tour", seconds: 90 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
     assert.equal(asked.card.storyboard.seconds, 90);
-    const { document, check } = await approve(asked.planned);
-    assert.deepEqual(sceneOf(document).workarea, [0, 90]);
-    assert.equal(check.ok, true, JSON.stringify(check.issues));
+    assert.ok(1 + (asked.planned.prepared.extra?.length ?? 0) <= 19);
   }
 
-  // 5. "/video a 5-second outro" (scenario 14): one shot, not a schema error.
+  // 5. "/video a 5-second outro" (scenario 14): one shot, two keyframes, not a schema error.
   {
     const asked = await ask({ prompt: "a 5-second outro: a laptop on a desk at golden hour", seconds: 5 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.match(asked.card.changes[0]!, /^Create a 5s 9:16 video: 1 AI shot, voice-over \(Test A\), music/);
-    const { document, check } = await approve(asked.planned);
-    assert.deepEqual(sceneOf(document).workarea, [0, 5]);
-    assert.equal(count(document, /"generate":"video"/g), 1);
-    assert.equal(check.ok, true, JSON.stringify(check.issues));
+    assert.match(asked.card.changes[0]!, /^Create a 5s 9:16 video, step 1 of 2: 2 keyframes/);
+    assert.match(asked.card.changes[1]!, /: 1 shot, voice-over \(Test A\), music$/);
   }
   // Below what a model can make, the Assistant is told the range.
   {
@@ -146,15 +174,15 @@ async function main(): Promise<void> {
   {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10, aspect: "1:1", model: "gemini-video" });
     assert.ok("error" in asked);
-    assert.equal(asked.error, 'Model "gemini-video" cannot make 1:1 video shots.');
+    assert.equal(asked.error, 'Model "gemini-video" cannot make 1:1 video shots from a keyframe.');
   }
 
-  // 8. Content policy: the block names the piece to rewrite (the voice-over here), before any card.
+  // 8. Content policy: the block names the piece to rewrite, before any card.
   {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
     assert.equal(await screenPieces(videoPieces(asked.planned)), null, "a clean plan passes");
-    const voice = asked.planned.prepared.extra!.find((item) => item.model.kind === "voice")!;
+    const voice = asked.planned.later.find((piece) => piece.kind === "voice")!;
     voice.spec = { ...voice.spec, prompt: `${String(voice.spec.prompt)} [[flag]]` };
     const blocked = await screenPieces(videoPieces(asked.planned));
     assert.ok(blocked);
@@ -162,14 +190,19 @@ async function main(): Promise<void> {
       JSON.parse(blocked.content).INVALID_INPUT,
       "Against the content policy: The voice-over script. Rewrite it without that content and call create_video again.",
     );
+    voice.spec = { ...voice.spec, prompt: String(voice.spec.prompt).replace(" [[flag]]", "") };
+    const second = asked.planned.prepared.extra![0]!;
+    second.spec = { ...second.spec, prompt: `${String(second.spec.prompt)} [[flag]]` };
+    const keyframe = await screenPieces(videoPieces(asked.planned));
+    assert.match(JSON.parse(keyframe!.content).INVALID_INPUT, /^Against the content policy: Keyframe 2 \(/);
   }
 
-  // 9. A voice the user asked for is the one on the card and in the video.
+  // 9. A voice the user asked for is the one on the card and handed to stage 2.
   {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10, voice: "Test B" });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.match(asked.card.changes[0]!, /voice-over \(Test B\)/);
-    assert.equal((asked.planned.prepared.op as unknown as { voice?: { voice: string } }).voice?.voice, "Test B");
+    assert.match(asked.card.changes[1]!, /voice-over \(Test B\)/);
+    assert.equal(asked.planned.prepared.longTake?.voice, "Test B");
   }
 
   // 9b. A voice no model speaks is refused before any planning: dropped silently, the video had no voice.

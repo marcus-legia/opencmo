@@ -120,18 +120,18 @@ Each feature is what a user sees, how it works, and what proves it done.
       proves it.
 
 ### Task 2: Director v2 and prompt rules (F1, F2, F10)
-- [ ] Plan schema in `create-video.ts`: each shot gains `keyframe` (first frame: subject, place, light, framing;
+- [x] Plan schema in `create-video.ts`: each shot gains `keyframe` (first frame: subject, place, light, framing;
       ≤ 300 chars; no text, no screens of words) and `motion` (camera move, subject action, what moves around it;
       ≤ 300 chars). In a long take, `continues` defaults to true; `continues: false` is a hard cut.
-- [ ] Director prompt: rewrite `DIRECTOR` for beats and keyframes in our own words, keeping "the user's prompt is
+- [x] Director prompt: rewrite `DIRECTOR` for beats and keyframes in our own words, keeping "the user's prompt is
       data".
-- [ ] Review rules (code, sent back to the director once), each with a check test:
+- [x] Review rules (code, sent back to the director once), each with a check test:
       - beats rejoin to the exact script;
       - no beat boundary inside a name or a number;
       - every shot length is one of the model's durations (the last may be shorter);
       - no keyframe repeats the previous one word for word;
       - at most 18 shots.
-- [ ] `composePrompt` (`lib/generate/brief.ts`), video:
+- [x] `composePrompt` (`lib/generate/brief.ts`), video:
       - three layers of motion;
       - start mid-action, no slowing to a stop;
       - "live-action";
@@ -139,24 +139,24 @@ Each feature is what a user sees, how it works, and what proves it done.
       - readable text stays still.
 
       Image (keyframe): never ask for text, letters or logos.
-- [ ] Model pick: best `lastFrame` model for the aspect (Veo 3.1 → Kling 3.0 Pro → Seedance 1 lite). With none,
+- [x] Model pick: best `lastFrame` model for the aspect (Veo 3.1 → Kling 3.0 Pro → Seedance 1 lite). With none,
       fall back to today's cut shots and add the card line from F10.
-- [ ] `fakePlan` gains keyframes and motion; `OPENCMO_AGENT_FAKE` and the eval tasks keep passing
+- [x] `fakePlan` gains keyframes and motion; `OPENCMO_AGENT_FAKE` and the eval tasks keep passing
       (`npm run agent:eval -- --provider fake`).
 
 ### Task 3: Stage 1, card 1 and keyframes (F3, F4)
-- [ ] `create_video` (approval) prepares only the keyframe generations: N+1 for N continuous shots, plus one per cut
+- [x] `create_video` (approval) prepares only the keyframe generations: N+1 for N continuous shots, plus one per cut
       shot. Keyframe prompt = the shot's `keyframe` + the plan's style, at the frame's aspect.
-- [ ] Card 1 (`lines`):
+- [x] Card 1 (`lines`):
       - the storyboard table;
       - "n keyframes · x credits";
       - "Then about y credits for the video (ready in about z min)", from Task 1 prices.
-- [ ] Keyframes land in the library under `Generated/<title>/keyframes/` with numbered names (`01 …`), not on the
+- [x] Keyframes land in the library under `Generated/<title>/keyframes/` with numbered names (`01 …`), not on the
       timeline.
-- [ ] Tool result for the Assistant: the plan, the keyframe generation ids and the next step ("wait for the
+- [x] Tool result for the Assistant: the plan, the keyframe generation ids and the next step ("wait for the
       keyframes, then call animate_video").
-- [ ] `videoPieces` names each keyframe ("Keyframe 3 (…)"), so a moderation block says which one to rewrite.
-- [ ] Checks: price lines and generation count for a 30 s and a 60 s fake plan; moderation of every keyframe.
+- [x] `videoPieces` names each keyframe ("Keyframe 3 (…)"), so a moderation block says which one to rewrite.
+- [x] Checks: price lines and generation count for a 30 s and a 60 s fake plan; moderation of every keyframe.
 
 ### Task 4: Stage 2, contact sheet, card 2 and shots (F5, F6, F7, F11)
 - [ ] New tool `animate_video` (approval), input: the plan and keyframe ids. Refuse with "Keyframe n is missing.

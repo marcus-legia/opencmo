@@ -427,7 +427,7 @@ A new AI voice on the clip. It costs credits (the user approves the price) and a
 
 Nothing is spoken, so there are no quotes to anchor to: every piece of media is placed by time.
 
-When the user describes a whole video ("a 20-second video about…", /video), call create_video (read_guide "video"): one card for every shot, the voice-over and the music. The steps below are for building it piece by piece, when the user asks for single shots or wants to pick stills first.
+When the user describes a whole video ("a 20-second video about…", /video), call create_video (read_guide "video"): keyframes first, then the shots between them, each with its own card. The steps below are for building it piece by piece, when the user asks for single shots or wants to pick stills first.
 
 1. Plan the video first with update_plan, one beat per line in seconds: "[0-3s] hook: a laptop glowing in a dark hotel room", "[3-7s] the dashboard fills with bookings". Keep each shot 2-5 seconds.
 2. work_area in <clip_context> is how long the video plays. When the plan is longer, set_workarea {start: 0, end: <plan length>} BEFORE adding media, or the shots past the end will not play.
@@ -447,16 +447,19 @@ The Video agent team builds intros: do not assemble them with add_text and keyfr
 4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
 5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no lottie").`,
 
-  video: `# A whole AI video (create_video, /video)
+  video: `# A whole AI video (create_video → animate_video, /video)
 
-create_video makes a new video from a prompt: a director writes the voice-over and the shot list, the user approves one storyboard card, then every shot, the voice and the music are generated at once.
+A /video is made in two approvals, so the user sees every picture before the expensive part:
+- Card 1 (create_video): a director writes the voice-over, splits it into beats and gives each a keyframe (its first frame) and a motion. The card shows the storyboard, the keyframe price and about what the video will cost after. Approving makes only the keyframes (stills), into the library under Generated/<title>/keyframes.
+- Card 2 (animate_video): the keyframes in order with their words, a Redo on each, and the exact video price. Approving makes every shot at once (each moves from its keyframe to the next), the voice-over, captions and a music bed, placed as one block on the timeline.
 
 1. Use it on a blank "New edit" only. On a clip of the user's own footage, add AI shots with B-roll (read_guide "broll") or generate_media instead: create_video would reframe and cover their video, and it refuses to run there.
 2. Pass the user's words as prompt. Pass seconds, aspect, voice or model only when the user asked for them. Shots come out at the model's shot lengths, so the video can end up a second shorter or longer than asked; say so if it matters.
-3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again.
-4. After approval the shots fill in as they finish (about one shot's wait). Call wait_for_media (again if it says some are still generating), then capture a frame in the middle of a few shots: each fills the frame, the on-screen text is readable, the captions follow the voice.
-5. To fix one shot, regenerate it (right-click → Regenerate) instead of making the whole video again.
-6. A shot marked "continues" on the card starts from the last frame of the shot before it (no cut), so it fills in after that shot. If the shot before fails or is cancelled, the continuing shot fails too and its credits come back. Regenerating a shot also makes the shots that continue it again, from its new last frame; the Regenerate menu item names them and its price counts them.`,
+3. If card 1 is cancelled, ask what to change (story, length, tone) and call create_video again. Nothing was charged.
+4. After card 1 is approved, call wait_for_media (again if some are still generating), then animate_video with the plan, aspect and keyframes from create_video's result (and its voice, when it returned one). Never call animate_video before the keyframes are done: it refuses a missing keyframe.
+5. A keyframe the user does not like: Redo it on card 2 (1 credit, new picture) instead of making the whole video again. Once the video is placed, redo_keyframe makes a new keyframe and remakes only the at most 2 shots that start or end on it; the old files stay in the library.
+6. Continue or cut: a beat that continues flows into the next keyframe with no cut (same place, or a camera move that gets there); a cut starts the next beat on a fresh keyframe. Cut where the story changes place or idea; continue inside one place. When no model can end on a frame for this aspect, card 1 says every beat is a separate shot.
+7. After card 2 is approved the shots fill in as they finish. Call wait_for_media, then capture a frame in the middle of a few shots and at a few seams: each fills the frame, the shots join without a jump, the on-screen text is readable, the captions follow the voice.`,
 
   edit: `# Edit your own video with words (edit_video, /edit)
 

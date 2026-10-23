@@ -10,6 +10,8 @@ import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quot
 import type { ClipDocument } from "@opencmo/clip-doc";
 
 import type { ClipContext } from "@/lib/api/clips";
+import { saveDocument } from "@/lib/editor/document";
+import { ensureProject } from "@/lib/editor/project";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
@@ -49,6 +51,7 @@ import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepa
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import { saveKeyframes } from "./keyframe-library";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
 import { screenPieces } from "./screen-pieces";
@@ -478,6 +481,16 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           clipId,
           applyOp: (op) => applyOpTool(op, env),
           ...(host.alive ? { alive: host.alive } : {}),
+          addToLibrary: (done, ids) =>
+            saveKeyframes(
+              {
+                read: () => ensureProject(supabase, context, clipId),
+                write: async (version, document, manifest) => {
+                  await saveDocument(supabase, clipId, version, document, { manifest });
+                },
+              },
+              { model: done.model, specs: [done.spec, ...(done.extra ?? []).map((item) => item.spec)], folder: done.library!.folder, names: done.library!.names, ids },
+            ),
         },
         prepared as Parameters<typeof runGeneration>[1],
       );

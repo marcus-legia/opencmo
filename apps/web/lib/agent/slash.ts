@@ -42,7 +42,7 @@ export function musicModel(models: readonly AiModel[] = availableModels()): stri
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: "video", label: "Create a video", hint: "A full AI video from a prompt", directive: "call create_video", requires: ["create_video"] },
+  { name: "video", label: "Create a video", hint: "A full AI video: keyframes first, then the shots between them", directive: "call create_video", requires: ["create_video"] },
   { name: "image", label: "Create an image", hint: "An AI image on the clip", directive: 'call generate_media with kind "image"', requires: ["generate_media"] },
   { name: "animate", label: "Animate an image", hint: "Turn the selected image into a short video", directive: 'call generate_media with kind "video" and start_image = the selected AI or uploaded image (list_library if needed)', requires: ["generate_media"] },
   { name: "background", label: "Replace the background", hint: "Keep yourself, change the room behind you", directive: "call replace_background", requires: ["replace_background"] },
