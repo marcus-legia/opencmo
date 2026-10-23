@@ -222,3 +222,17 @@ change answers on the line, and the change goes in a separate `[X]` commit.
   prompt, model, aspectRatio, resolution?, seed }` = the generation's stored spec), not a library path, and the
   scene is the `sequence` named after the video (`keyframesOf` in editor-core reads its keyframes back). Voice and
   music stay outside it (see the plan's Task 4).
+- 2026-10-23 [R] → A, B, C: fixes from the owner's two code reviews of the branch, in `[R]` commits:
+  - op (`create_video`): placing the same take again pulled the first scene's shots and music into the new one;
+    only entities the op adds are gathered now. `redo_keyframe` op takes a 100-char id like its tool.
+  - stage 2 now gets `model` from stage 1 (`CreateVideoResult.model`, `AnimateVideoInput.model`; pass it back as
+    returned). A short continuous last shot is allowed (no shot starts on the closing keyframe). `review()` takes
+    `joins` and skips the exact-length rule when no model joins frames. `redescribe()` no longer cuts at "a.m.".
+  - Redo on the contact sheet now lists the new keyframe in the library (`ListKeyframe`); `redo_keyframe` checks the
+    in-flight cap before paying, needs the library record before paying for shots, and says when the keyframe's
+    credits were spent. The editor no longer re-POSTs a server-started keyframe that failed (it charged a new one).
+  - Shared: `pickMusicModel`, `credits`, `minutes` (create-video.ts); one keyframe store in `scope.ts`.
+  - Not changed, for the owner: `text_quality` runs on every AI image, not only keyframes (one extra vision call each;
+    scoping it needs a spec field the SQL checks). Small leftovers: `findShot` in long-take.ts could use `byId`,
+    `ContactSheet` types are written twice (client.ts and long-take.ts).
+
