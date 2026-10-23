@@ -1,212 +1,247 @@
 # AI long take: keyframes first, then the shots between them, as an editable scene
 
-> **For agentic workers:** steps use checkbox (`- [ ]`) syntax. Two sessions can build it in parallel; the split is
-> at the end. Build nothing before Task 0 is done.
+> **For agentic workers:** the feature list (§2) says *what* ships; the todo list (§5) says *how*, task by task, with
+> checkbox (`- [ ]`) steps. Two sessions can build it in parallel (§6). Build nothing before Task 0 is done.
 
-**Goal:** `/video` makes a long AI video (up to 90 s) that looks like one continuous film instead of a row of
-unrelated text-to-video shots. It lands in the editor as a scene the user can keep editing: trim it, move it, redo a
-single keyframe, or insert it into a video of their own later.
+## 1. Goal and decisions
 
-**Owner decision (2026-10-23):** copy how the leading AI video agents build long videos, on our own provider (fal),
-then adjust it to OpenCMO. Competitor research behind this plan lives in `opencmo-internal`
-(`docs/specs/2026-10-19-hoc-agent-opus*.md`); it stays there while this repository is public. This plan describes
-only our own design.
+**Goal:** `/video` makes a long AI video (up to 90 s) that looks like one continuous film, not a row of unrelated
+text-to-video shots. It lands in the editor as one scene the user keeps editing: trim it, move it, redo a single
+keyframe, change the words on screen, swap the music.
 
-**Architecture:** keep `create_video` (`apps/web/lib/agent/create-video.ts`, op in
-`packages/editor-core/src/ops/create-video.ts`) and change what sits between the storyboard and the shots:
+**Owner decisions (2026-10-23):**
+- **Copy how the leading AI video agents build long videos**, on our own provider (fal), then adjust it to OpenCMO.
+  The competitor research behind this plan lives in `opencmo-internal`
+  (`docs/specs/2026-10-19-hoc-agent-opus*.md`) and stays there while this repository is public. This plan describes
+  only our own design.
+- **Quality first, not price.** The default video model is the best-looking first-and-last-frame model on fal.
+  Cheaper models are only a fallback when the best one cannot make the frame.
 
-```
-brief ──► director: script, beats, one keyframe description per beat     (no cost)
-      ──► card 1: storyboard + keyframe price                             approve
-      ──► keyframe images, one per beat boundary                          cheap (image model)
-      ──► card 2: contact sheet of keyframes + video price                approve, or redo a keyframe first
-      ──► shot i = video from keyframe i to keyframe i+1 (first + last frame)
-          + voice-over + music, all at once                               the paid part
-      ──► one `sequence` named after the video, on the timeline
-```
+**Model choice (to confirm in Task 1 with one real call each):**
 
-Text never goes into a generated image: titles and captions stay editor text layers, so they never come out garbled.
+| Role | Model on fal | Why | Price on fal (2026-10-23) |
+|---|---|---|---|
+| Default shots | **Veo 3.1, first-last-frame** (`fal-ai/veo3.1/first-last-frame-to-video`) | Best motion and detail; 4/6/8 s shots; up to 1080p | $0.20/s without audio |
+| 1:1 frame and fallback | **Kling 3.0 Pro** (start + end image) | Today's Veo row has no 1:1; strong motion | ~$0.112/s without audio |
+| Last resort | `fal-seedance` (Seedance 1 lite, already in the catalog) | Works today; lower quality | already priced |
+| Keyframes | **nano-banana** (default) or **seedream** (already in the catalog) | Best prompt-following stills; 1 credit each | already priced |
 
-**What already exists (checked on `main` 2026-10-23):**
+Audio from the video model is always off: the voice-over and the music bed are ours, so we never pay for model
+audio. At today's margin (Kling 2.1 is ~4× its fal price, 1 credit = $0.20 from the $80 → 400-credit plan), Veo 3.1
+would be about **4 credits per second**, so a 60 s video costs about **240 shot credits + ~20 for keyframes, voice
+and music**. Task 1 sets the exact numbers and `check:pricing` guards them.
+
+## 2. Feature list
+
+Each feature is what a user sees, how it works, and what proves it done.
+
+| # | Feature | What the user sees | How it works | Done when |
+|---|---|---|---|---|
+| F1 | **Director v2: beats with keyframes** | `/video "…"` gives a storyboard where every row has the words, the picture and the motion | The director writes the script, splits it into beats and writes one keyframe description and one motion line per beat. Code reviews the plan once and sends it back with the fixes | A 60 s brief gives 6–15 beats that rejoin to the exact script, with no beat inside a name or a number |
+| F2 | **Prompt rules for shots and keyframes** | Shots move like film: no frozen frames, no melting text | Our own rules in `composePrompt`: three layers of motion (camera, subject, surroundings); start mid-action; "live-action" not "photorealistic"; empty areas stay empty; no text in keyframes | Task 0 vs Task 8 frames: fewer frozen shots and no garbled text |
+| F3 | **Card 1: storyboard and keyframe price** | One card: the table of beats, "n keyframes · x credits", "then about y credits for the video" | `create_video` (approval) prices only the keyframes | The card shows the right numbers; approving holds only keyframe credits |
+| F4 | **Keyframes** | Numbered stills appear in the library (`Generated/<title>/keyframes/`) | N+1 images for N continuous shots, one per cut shot, same aspect and style; each moderated | All keyframes done within ~1 min for 12 beats |
+| F5 | **Card 2: contact sheet** | The keyframes in order with their words, a **Redo** per keyframe, and the exact video price | `animate_video` (approval) is prepared from the plan and keyframe ids; Redo makes a new keyframe with a new seed for 1 credit | Redo changes only that tile; the price updates if needed |
+| F6 | **Shots between keyframes** | After approval, the shots, voice and music appear on the timeline as they finish | Shot i = video from keyframe i to keyframe i+1 (first + last frame); a cut shot uses its start keyframe only; all at once | A 60 s video's shot boundaries show no jump (Task 8 frames) |
+| F7 | **One editable scene** | The whole video is one block on the timeline, named after the video; captions and titles are editable text | The `create_video` op places every shot inside one `sequence`; text stays editor layers, never inside AI images | Move, trim and delete act on the block; the text can be edited |
+| F8 | **Redo a keyframe after placing** | Right-click a shot → "Redo keyframe…", with an optional new description | `redo_keyframe` (approval): one new image plus the at most 2 shots that start or end on it; old files stay in the library | Redo keyframe 3 of 6 changes exactly shots 2 and 3; undo restores them |
+| F9 | **Garbled-text check** | A keyframe with broken text gets a badge "This keyframe has garbled text. Redo it?" | One vision call per keyframe (none / minor / severe); never fails the generation | A keyframe with fake letters is badged in the test set |
+| F10 | **Best model by default, honest fallback** | Card 1 names the quality tier, never the model; a fallback adds one line ("This frame uses separate shots…") | Model pick order: Veo 3.1 → Kling 3.0 Pro → Seedance 1 lite, filtered by aspect and `lastFrame` | 9:16 and 16:9 use Veo, 1:1 uses Kling, with no model name on the card |
+| F11 | **No double payment** | Double-clicking Approve or a retried request costs once | Same request id or spec hash reuses the generation (existing SQL) | pgTAP / check proves one hold for two approvals |
+| F12 | **Same flow over MCP** | Claude (MCP) writes the plan, sees both prices, confirms twice | `create_video`, `animate_video` and `redo_keyframe` in the studio group, each with price → confirm | `mcp-server` checks pass; a plan without keyframes gets one clear message |
+| F13 | **Acceptance video** | A real 60 s OpenCMO marketing video made with F1–F11 | Made in the editor, exported, published | Frames checked by eye, numbers recorded, used as landing material |
+
+**Not in this plan:**
+- Inserting the scene into the user's own talking video (cut-in). `make_room` refuses to move the clip's own video
+  today (`packages/editor-core/src/ops/edit.ts`); it is the next plan.
+- Picking the last frame among candidates, style from reference images, a style library, a world bible, merging
+  adjacent shots into one long generation, audio-first videos.
+- An auto-continue timer on any paid step.
+
+## 3. What already exists (checked on `main` `764a934`)
+
 - The fal adapter sends a start and an end frame (`packages/engine/opencmo/ai/providers/fal.py:132-135`).
-- The catalog marks models that take them (`limits.firstFrame`, `limits.lastFrame`); today only `fal-seedance`
-  (Seedance 1 lite) has both.
+- The catalog marks frame support (`limits.firstFrame`, `limits.lastFrame`). Only `fal-seedance` and `fake-video`
+  have both. `gemini-video` (Veo 3.1 fast, 9:16 and 16:9, 4/6/8 s) has a first frame only.
 - `resolveMediaRefs` (`apps/web/lib/generate/create.ts`) turns a finished generation's id into its file, so a shot
   can name its keyframes by generation id.
-- The Director → review → storyboard card → parallel generations → one op flow, chained shots (`after`), the voice
-  and the music bed, and MCP access through `packages/mcp-server/src/groups/studio.ts`.
+- `create_video` (`apps/web/lib/agent/create-video.ts`):
+  - director → review → storyboard card → parallel generations → one op (`packages/editor-core/src/ops/create-video.ts`);
+  - chained shots (`after`, `MAX_CHAIN = 3`), voice-over and music bed;
+  - MCP through `packages/mcp-server/src/groups/studio.ts`.
+- `generation_active_limit()` = 24 per user. Stage 1 (≤ 19 keyframes) and stage 2 (≤ 18 shots + voice + music)
+  never overlap, so it holds.
 
-**Tech stack:** TypeScript (Next.js, editor-core, zod 4, vitest, `tsx` checks), Python worker (pytest), Supabase SQL
-+ pgTAP for the catalog rows.
+## 4. Global constraints
 
-## Global constraints
-
-- Product rules hold: every keyframe and every shot goes through `lib/generate/moderation.ts` before credits are held
-  and `opencmo/ai/moderation.py` before upload. No identifiable real people, no other brands' logos, premade voices
-  only, no model names in user-facing copy.
+- Product rules:
+  - every keyframe and every shot goes through `lib/generate/moderation.ts` before credits are held, and
+    `opencmo/ai/moderation.py` before upload;
+  - no identifiable real people, no other brands' logos;
+  - premade voices only;
+  - no model names in user-facing copy.
 - Learn, never copy: no code, prompt or schema from AGPL or unlicensed competitor repos. Write our own prompts.
-- Two approvals, never one: keyframes are cheap, video is not. Card 2 shows the exact video price. There is no auto
-  timer on a paid step.
-- One user may have 24 generations in flight (`generation_active_limit()`). Stage 1 (≤ 19 keyframes) and stage 2
-  (≤ 18 shots + voice + music) never overlap, so the limit holds.
-- Every new catalog row is a migration with a pgTAP test; regenerate `supabase/schema/current.sql`.
+- Two approvals: keyframes, then video. No auto timer on a paid step. Card 2 shows the exact video price.
+- Every new catalog row is a migration with a pgTAP test; regenerate `supabase/schema/current.sql`; never edit a
+  merged migration.
 - Peak RAM per job < 2 GB. Generation jobs stream provider files to storage; nothing new loads frames in Python.
 - Everything in English, including errors, tool descriptions and card text.
 
-## Review focus
+## 5. Todo list
 
-1. **Card 2 is approved after a keyframe was deleted from the library** → stage 2 refuses with "Keyframe n is
-   missing. Redo it first." before any credit is held. Test in Task 4.
-2. **A keyframe is redone after the shots were placed** → only the shots that start or end on it (at most 2) are
-   regenerated and priced; the others keep their files. Test in Task 5.
-3. **The same card is approved twice** (double click, retried request) → no second payment: the same request id or
-   spec hash reuses the generation. Test in Task 4.
-4. **A model without a last frame is the only one available** → `/video` falls back to today's cut shots and says so
-   on card 1. Test in Task 2.
+### Task 0: Baseline before any change
+- [ ] Make a 30 s and a 60 s `/video` with today's code, same brief for both ("OpenCMO, an AI CMO for solo founders,
+      9:16").
+- [ ] Export both. Extract three frames per video and one at every shot boundary from the full-size export
+      (`ffmpeg -ss <t> -i <export>.mp4 -frames:v 1`).
+- [ ] Record credits, wall time, number of shots, frozen shots, garbled text and every visible jump at a boundary.
+- [ ] Save numbers and frames under `docs/plans/editor/2026-10-23-ai-long-take-frames/before/`.
 
----
+### Task 1: Premium first-and-last-frame models (F10)
+- [ ] Read the fal pages of Veo 3.1 first-last-frame and Kling 3.0 Pro (start + end image). Record:
+      - the exact endpoint ids;
+      - input names (`first_frame_url` / `last_frame_url` vs `image_url` / `end_image_url` vs
+        `start_image_url` / `end_image_url`);
+      - aspects, durations, resolutions, the audio switch and price.
+- [ ] One real call each at 9:16 and 1080p (or the highest resolution offered). Record wall time as `typicalSeconds`.
+- [ ] Add two catalog rows to `packages/contracts/ai-models.json` (names describe quality, not the model:
+      "Cinematic", "Cinematic square"), with `firstFrame`, `lastFrame`, `durations`, `aspectRatios`, `resolutions`,
+      `typicalSeconds` and audio off.
+- [ ] Map input names per row in the catalog (`providerInputs`), not as an `if` on the model id. Update
+      `fal.py` to read it, and add worker tests for both input styles.
+- [ ] Price: credits per second from the fal price at the margin of today's video rows. Update `check:pricing`
+      expectations.
+- [ ] Migration `supabase/migrations/<ts>_long_take_models.sql` inserts the rows. pgTAP
+      `supabase/tests/<n>_long_take_models.test.sql` checks `ai_price` for 4, 6 and 8 s (Veo) and 5 and 10 s (Kling),
+      and that `ai_check_spec` accepts `endImage`.
+- [ ] `scripts/dump-schema.sh`; `npm run db:reset && npm run db:test`.
+- [ ] Moderation: both rows are `kind: video` on `fal`, so `check_output` covers them. Add one worker test that
+      proves it.
 
-## Task 0: Baseline before any change
-
-- [ ] Make a 30 s and a 60 s `/video` on production (or locally with real keys) with today's code. Same brief for
-      both: "OpenCMO, an AI CMO for solo founders, 9:16".
-- [ ] Record: credits, wall time, number of shots, and three frames per video from the full-size export
-      (`ffmpeg -ss <t> -i <export>.mp4 -frames:v 1`). Note every visible cut that breaks continuity.
-- [ ] Save the numbers and frames under `docs/plans/editor/2026-10-23-ai-long-take-frames/before/`.
-
-## Task 1: Models that take a first and a last frame (catalog + SQL)
-
-Files: `packages/contracts/ai-models.json`, new migration `supabase/migrations/2026MMDD_long_take_models.sql`,
-`supabase/tests/<n>_long_take_models.test.sql`, `apps/web/lib/pricing*` (`check:pricing`).
-
-- [ ] Check on fal which video endpoints take both frames at our aspects (9:16, 16:9, 1:1) and lengths. Candidates
-      found 2026-10-23: Veo 3.1 `fal-ai/veo3.1/first-last-frame-to-video` (4/6/8 s, $0.20/s without audio), a newer
-      Seedance with `image_url` + `end_image_url`, Kling 3.0 Pro with `start_image_url` + `end_image_url` (~$0.112/s).
-      Read each model's fal page; record the exact endpoint id, input names, durations and price.
-- [ ] Add up to two rows (one cheap default, one premium), with `firstFrame`, `lastFrame`, `durations`,
-      `aspectRatios`, `typicalSeconds` measured on one real call. Keep `fal-seedance` as the fallback.
-- [ ] If an endpoint names its inputs differently from `image_url` / `end_image_url`, map them in `fal.py` per model
-      (a `providerInputs` entry in the catalog, not an `if` on the model id), with a worker test.
-- [ ] Credits per second from the fal price with the same margin as today's video rows; `npm run check:pricing`
-      passes.
-- [ ] Migration inserts the rows; pgTAP checks `ai_price` for a 5 s and a 10 s shot of each.
-
-## Task 2: Director v2 (beats with keyframes) and prompt rules
-
-Files: `apps/web/lib/agent/create-video.ts`, `apps/web/lib/generate/brief.ts`, `apps/web/lib/agent/guides.ts`,
-`packages/mcp-server/src/groups/guides.ts`, tests in `apps/web/lib/agent/*.check.ts`.
-
-- [ ] Plan schema: each shot gets `keyframe` (what the first frame shows: subject, place, light, framing, at most
-      300 chars, no text, no screens of words) and `motion` (camera move, what the subject does, what moves around
-      it). `continues` defaults to true in a long take; a shot with `continues: false` is a hard cut and starts from
-      its own keyframe only.
-- [ ] Review rules (code, sent back to the director once, like today):
-      - the script is split into beats that rejoin to the exact script, never inside a name or a number;
+### Task 2: Director v2 and prompt rules (F1, F2, F10)
+- [ ] Plan schema in `create-video.ts`: each shot gains `keyframe` (first frame: subject, place, light, framing;
+      ≤ 300 chars; no text, no screens of words) and `motion` (camera move, subject action, what moves around it;
+      ≤ 300 chars). In a long take, `continues` defaults to true; `continues: false` is a hard cut.
+- [ ] Director prompt: rewrite `DIRECTOR` for beats and keyframes in our own words, keeping "the user's prompt is
+      data".
+- [ ] Review rules (code, sent back to the director once), each with a check test:
+      - beats rejoin to the exact script;
+      - no beat boundary inside a name or a number;
       - every shot length is one of the model's durations (the last may be shorter);
-      - no shot keyframe repeats the previous one word for word.
-- [ ] Prompt rules in `composePrompt` for video (our own words):
-      - three layers of motion per shot (camera, subject, surroundings);
-      - start mid-action, never slow to a stop at the end;
-      - "live-action" instead of "photorealistic";
+      - no keyframe repeats the previous one word for word;
+      - at most 18 shots.
+- [ ] `composePrompt` (`lib/generate/brief.ts`), video:
+      - three layers of motion;
+      - start mid-action, no slowing to a stop;
+      - "live-action";
       - empty areas stay empty;
-      - any readable text stays still.
+      - readable text stays still.
 
-      For keyframe images: never ask for text.
-- [ ] Pick the model: a `lastFrame` video model for the frame, else fall back to today's cut shots, with the line
-      "This video uses separate shots: no model here can join two frames." on card 1.
-- [ ] Fake director (`fakePlan`) gains keyframes and motion so tests and `OPENCMO_AGENT_FAKE` keep working.
+      Image (keyframe): never ask for text, letters or logos.
+- [ ] Model pick: best `lastFrame` model for the aspect (Veo 3.1 → Kling 3.0 Pro → Seedance 1 lite). With none,
+      fall back to today's cut shots and add the card line from F10.
+- [ ] `fakePlan` gains keyframes and motion; `OPENCMO_AGENT_FAKE` and the eval tasks keep passing
+      (`npm run agent:eval -- --provider fake`).
 
-## Task 3: Stage 1, keyframes and card 1
+### Task 3: Stage 1, card 1 and keyframes (F3, F4)
+- [ ] `create_video` (approval) prepares only the keyframe generations: N+1 for N continuous shots, plus one per cut
+      shot. Keyframe prompt = the shot's `keyframe` + the plan's style, at the frame's aspect.
+- [ ] Card 1 (`lines`):
+      - the storyboard table;
+      - "n keyframes · x credits";
+      - "Then about y credits for the video (ready in about z min)", from Task 1 prices.
+- [ ] Keyframes land in the library under `Generated/<title>/keyframes/` with numbered names (`01 …`), not on the
+      timeline.
+- [ ] Tool result for the Assistant: the plan, the keyframe generation ids and the next step ("wait for the
+      keyframes, then call animate_video").
+- [ ] `videoPieces` names each keyframe ("Keyframe 3 (…)"), so a moderation block says which one to rewrite.
+- [ ] Checks: price lines and generation count for a 30 s and a 60 s fake plan; moderation of every keyframe.
 
-Files: `apps/web/lib/agent/create-video.ts`, `apps/web/lib/agent/screen-pieces.ts`,
-`apps/web/components/editor/assistant/*` (card), `apps/web/lib/agent/tools.ts`.
+### Task 4: Stage 2, contact sheet, card 2 and shots (F5, F6, F7, F11)
+- [ ] New tool `animate_video` (approval), input: the plan and keyframe ids. Refuse with "Keyframe n is missing.
+      Redo it first." when a keyframe is not `done` or its file is gone (test).
+- [ ] Shot specs: `startImage` = keyframe i, `endImage` = keyframe i+1 for continuous shots, `startImage` only for cut
+      shots. The voice-over and music bed are added as today.
+- [ ] Card 2 (editor `assistant/` card component):
+      - keyframe tiles in order, with the beat's words;
+      - a Redo button per tile (1 credit, one small approval inside the card, new seed);
+      - the exact video price, recomputed after a Redo.
+- [ ] `create_video` op: shots accept `startImage` / `endImage`. Every shot, plus voice and music, goes inside one
+      `sequence` named after the video. Captions and on-screen text stay editor layers.
+- [ ] `editor-core` tests: the op places a `sequence` with N shots at the right times; move and trim act on the
+      block; a document round-trips through `validate()`.
+- [ ] No double payment: approving card 2 twice, or retrying the request, reuses the generations (check against a
+      local stack, and a pgTAP case if a new SQL path is touched).
+- [ ] `mcp-server`: `animate_video` with price → confirm.
 
-- [ ] `create_video` (approval) now prices and creates only the keyframes: N+1 images for N continuous shots (one
-      per boundary), one per cut shot. Same image model and aspect as the frame; the keyframe prompt is the shot's
-      `keyframe` plus the plan's style.
-- [ ] Keyframes land in the library under `Generated/<title>/keyframes/` (numbered), not on the timeline.
-- [ ] The tool's result tells the Assistant the next step: wait for the keyframes, then call `animate_video`. The
-      result holds the plan and the keyframe generation ids.
-- [ ] Card 1 lines: storyboard table (as today), "n keyframes · x credits", and "Then about y credits for the video"
-      (estimate from Task 1 prices).
+### Task 5: Redo one keyframe after placing (F8)
+- [ ] New tool `redo_keyframe` (approval): input the scene, the keyframe number and an optional new description.
+- [ ] Find the shots whose stored spec uses that keyframe as `startImage` or `endImage` (at most 2). Re-declare them
+      with the new keyframe. The card shows one image plus those shots.
+- [ ] Old keyframe and old shots stay in the library. Undo restores the previous declarations.
+- [ ] Editor: "Redo keyframe…" in the shot's context menu opens the Assistant with the tool prefilled.
+- [ ] Test: in a 6-shot scene, redoing keyframe 3 changes exactly shots 2 and 3; redoing keyframe 0 changes only
+      shot 1.
 
-## Task 4: Stage 2, the contact sheet, card 2 and the shots
+### Task 6: Garbled-text check on keyframes (F9)
+- [ ] `opencmo/ai/moderation.py`: one vision call per finished keyframe, using the existing checker chain. It asks
+      whether the image has text meant to be read, and if so how garbled it is (none / minor / severe). Our own
+      prompt.
+- [ ] Store the result on the generation (e.g. a `quality` json column: migration + pgTAP + schema dump), readable
+      under RLS by the owner.
+- [ ] Card 2 badges a severe keyframe ("This keyframe has garbled text. Redo it?"). It never fails the generation
+      and never refunds.
+- [ ] Skip in fake mode; log cost per call. A worker test runs on a sample image with garbled letters.
 
-Files: `apps/web/lib/agent/create-video.ts` (new `animate_video` tool), `packages/editor-core/src/ops/create-video.ts`,
-editor card component, `packages/mcp-server/src/groups/studio.ts`.
+### Task 7: MCP and guides (F12)
+- [ ] MCP `create_video` plan format gains `keyframe` and `motion`. A plan without them gets one clear message
+      naming the fields.
+- [ ] Add `animate_video` and `redo_keyframe` to `packages/mcp-server/src/groups/studio.ts`.
+- [ ] Guides: `read_guide "video"` in `apps/web/lib/agent/guides.ts` and `packages/mcp-server/src/groups/guides.ts`
+      describe the two cards, Redo, and when to cut instead of continue.
+- [ ] `npm run check:mcp-server && npm run test:mcp-server`.
 
-- [ ] `animate_video` (approval) takes the plan and the keyframe ids. It refuses if any keyframe is not `done` or its
-      file is gone (Review focus 1). Shot i spec: `startImage` = keyframe i, `endImage` = keyframe i+1 for a
-      continuous shot. It also creates the voice-over and the music bed, as today.
-- [ ] Card 2 is a contact sheet: the keyframes in order with the beat's words under each, a "Redo" button per
-      keyframe (a new seed, ~1 credit, no second approval of the whole card), and the exact video price.
-- [ ] The `create_video` op accepts `startImage` / `endImage` in shot declarations and places all shots inside one
-      `sequence` named after the video, so the scene moves and trims as one block. Captions and on-screen text stay
-      outside the generated images.
-- [ ] Double approval and retries reuse generations by request id and spec hash (Review focus 3).
+### Task 8: Acceptance video (F13, verify by looking)
+- [ ] Make a 60 s 9:16 OpenCMO video with `/video` in the editor with the new flow; export at the plan's highest
+      resolution.
+- [ ] Extract frames at every shot boundary and three per video from the full-size export into `after/`; compare with
+      Task 0 by eye.
+- [ ] Record: credits, wall time, keyframes redone, frozen shots, garbled text.
+- [ ] Publish it, and keep it as landing material (no invented examples).
+- [ ] Tick F1–F13 in §2 and the roadmap row (E6.1/E6.2) in `2026-10-19-editor-spearhead-roadmap.md`.
 
-## Task 5: Redo one keyframe after the scene is placed
+### Release
+- [ ] `supabase db push --dry-run` lists only this plan's migrations, then `supabase db push`.
+- [ ] Deploy the worker (Modal) before merging the web, because the worker must know the new catalog rows.
+- [ ] Merge; Vercel deploys the web.
+- [ ] One real `/video` on production; check its frames.
 
-Files: new agent tool `redo_keyframe` (approval), `packages/editor-core/src/ops/*` (re-declare shots),
-editor context menu on a shot.
-
-- [ ] Input: the scene and the keyframe number, plus an optional new description. The new keyframe is a new
-      generation. The shots whose spec names the old keyframe as start or end (at most 2) are re-declared with it.
-- [ ] Price on the card: one image plus those shots only. The old shots stay in the library (an edit branches, never
-      overwrites), so undo brings them back.
-- [ ] Test: a 6-shot scene, redo keyframe 3 → exactly shots 2 and 3 change (Review focus 2).
-
-## Task 6: Catch garbled text in keyframes
-
-Files: `packages/engine/opencmo/ai/moderation.py` (reuse its frame sampling), worker generate task, card 2.
-
-- [ ] After a keyframe image is made, one vision call asks whether the image contains text that was meant to be
-      read, and whether it is garbled (none / minor / severe).
-- [ ] A severe result never fails the generation. It marks the keyframe on the contact sheet ("This keyframe has
-      garbled text. Redo it?"), because a redo is cheap.
-- [ ] Cost per call is logged; skip it in fake mode.
-
-## Task 7: MCP and guides
-
-- [ ] MCP `create_video` plan format gains `keyframe` and `motion`; add `animate_video` and `redo_keyframe` to the
-      studio group with the same two-step price → confirm flow.
-- [ ] Guides (`read_guide "video"`) describe the two cards and when to redo a keyframe.
-- [ ] `mcp-server` checks: a plan without `keyframe` gets one clear message naming the field.
-
-## Task 8: The acceptance video (verify by looking)
-
-- [ ] Make a 60 s 9:16 OpenCMO video with `/video` in the editor, end to end, with the new flow; export it.
-- [ ] Save frames from the full-size export at every shot boundary next to Task 0's frames under `after/`;
-      check by eye that boundaries do not jump.
-- [ ] Record: credits, wall time, how many keyframes were redone. Publish it as real landing material.
-
----
-
-## Session split
+## 6. Session split
 
 | Session | Tasks | Touches |
 |---|---|---|
-| A (worker + catalog) | 0, 1, 6 | `ai-models.json`, migration + pgTAP, `fal.py`, `moderation.py` |
+| A (worker + catalog) | 0, 1, 6 | `ai-models.json`, migrations + pgTAP, `fal.py`, `moderation.py` |
 | B (agent + editor) | 2, 3, 4, 5, 7 | `create-video.ts`, `brief.ts`, editor-core op, cards, MCP |
-| Both | 8 | — |
+| Both | 8, Release | — |
 
-Task 1's catalog rows land first: Session B codes against `limits.lastFrame` and can use `fake-video` (which has both
-frames) until then.
+Task 1's catalog rows land first. Session B codes against `limits.lastFrame` and uses `fake-video` (which has both
+frames) until they land.
 
-## Not in this plan
+## 7. Review focus
 
-- Inserting the scene in the middle of the user's own talking video (cut-in): `make_room` refuses to move the
-  clip's own video today (`packages/editor-core/src/ops/edit.ts`). Next plan, once this ships.
-- Picking the last frame among several candidates, style from reference images, a style library, a world bible for
-  long stories, merging adjacent shots into one long generation, audio-first videos.
-- An auto-continue timer on any step.
+1. **Card 2 is approved after a keyframe was deleted** → refused before any credit is held (Task 4).
+2. **A keyframe is redone after placement** → only the at most 2 shots touching it are regenerated and priced (Task 5).
+3. **The same card is approved twice** → one payment (Task 4).
+4. **Only a model without a last frame is available** → today's cut shots plus the F10 line (Task 2).
+5. **1:1 frame** → Kling 3.0 Pro, never a model that cannot make it (Task 2).
 
-## How to verify (end of plan)
+## 8. How to verify (end of plan)
 
 ```bash
 npm run typecheck && npm run build
 npm run test:editor-core
-cd apps/web && npm run check:contracts && npm run check:pricing
+npm run check:mcp-server && npm run test:mcp-server
+cd apps/web && npm run check:contracts && npm run check:pricing && npm run agent:eval -- --provider fake
 npm run db:reset && npm run db:test
 cd packages/engine && .venv312/bin/python -m pytest -q && .venv312/bin/python -m ruff check .
 ```
