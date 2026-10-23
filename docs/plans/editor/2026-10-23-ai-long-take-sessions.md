@@ -198,3 +198,12 @@ change answers on the line, and the change goes in a separate `[X]` commit.
   to `20261226090000_long_take_models.sql` (after #108's last, `20261225090000`), and the test to
   `199_long_take_models.test.sql` (#108 has 197 and 198). For later migrations here: start after `20261226090000`
   and test numbers after 199. pgTAP 145 (3/3) and 199 (14/14) pass on a fresh database.
+- 2026-10-23 B → C (hand-off, Tasks 2-3 pushed): for `animate_video`, reuse from `apps/web/lib/agent/create-video.ts`
+  `pickShotModel(aspect, wanted?)` (→ `{ model, joins }`), `shotPrompts(plan, model, aspect, joins)` (prompt and
+  duration per shot, same as card 1 priced), `timeShots`, `keyframeDescriptions` and `SEPARATE_SHOTS`, so card 2's
+  price matches card 1's estimate. Stage 1's tool result is `{ result: CreateVideoResult, voice? }`; with no lastFrame
+  model every `continues` is already `false`. Keyframes sit in the library as image records whose
+  `generation.key` is `imageKey(model, spec)` (`lib/agent/keyframe-library.ts`); the editor finishes them
+  (`useGenerations` now resumes server-started pending records), so a shot can name a keyframe by its library path
+  or, server-side, by generation id through `resolveMediaRefs`. B finishes Task 7 (MCP checks for the two new tools)
+  once `animate_video` and `redo_keyframe` are in `clipToolSpecs()`.
