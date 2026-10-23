@@ -16,7 +16,7 @@ import { normalizeSpec } from "@/lib/generate/create";
 import { availableModel } from "@/lib/generate/models";
 
 import { review, shotPrompts } from "./create-video";
-import { prepareAnimateVideo, prepareRedoKeyframe, redescribe, type KeyframeFile } from "./long-take";
+import { prepareAnimateVideo, prepareRedoKeyframe, redescribe, runRedoKeyframe, type KeyframeFile } from "./long-take";
 
 const blank = () =>
   ({ version: 1, stage: { children: [{ kind: "scene", id: "sc", name: "Edit", width: 1920, height: 1080, active: true, children: [] }] } }) as unknown as ClipDocument;
@@ -116,6 +116,23 @@ async function main() {
   assert.match(String(prepareRedoKeyframe({ scene_id: "sc", index: 0 }, placed.document)), /not a long-take scene/);
   const applied = await applyOps(placed.document, [redo.op as never], ctx);
   assert.equal(keyframesOf(applied.document, scene.id)![1]!.source.prompt, redo.op.keyframe.prompt);
+
+  // With the in-flight cap reached, redo_keyframe refuses before the keyframe is paid for.
+  let created = 0;
+  const busy = {
+    from: () => ({ select: () => ({ in: async () => ({ count: 23 }) }) }),
+    rpc: async () => {
+      created += 1;
+      return { data: null, error: null };
+    },
+  };
+  const capped = await runRedoKeyframe(
+    { supabase: busy as never, jobId: id(7), clipId: id(8), applyOp: async () => ({ ok: true, content: "{}", summary: "" }), addToLibrary: async () => {} },
+    redo,
+  );
+  assert.equal(capped.outcome.ok, false);
+  assert.match(capped.outcome.summary, /needs 3 generations at once and 23 are still running/);
+  assert.equal(created, 0, "nothing was created or held");
 
   assert.equal(redescribe("Old subject, warm light. Cinematic look. No text.", "a new subject."), "A new subject. Cinematic look. No text.");
   assert.equal(redescribe("A desk at 9 a.m. in a lobby. Cinematic look.", "a guest smiling"), "A guest smiling. Cinematic look.", "a period inside the old description");

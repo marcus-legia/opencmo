@@ -34,7 +34,7 @@ import type { SupabaseClient } from "@/lib/api/handler";
 import { createGeneration, normalizeSpec } from "@/lib/generate/create";
 import { availableModel, availableModels, specHash } from "@/lib/generate/models";
 
-import { libraryName, pickShotModel, SEPARATE_SHOTS, shotPrompts, timeShots } from "./create-video";
+import { GENERATION_ACTIVE_LIMIT, libraryName, pickShotModel, SEPARATE_SHOTS, shotPrompts, timeShots } from "./create-video";
 import { runGeneration, voiceModelFor, type PreparedGeneration } from "./generate-tool";
 import type { Piece } from "./screen-pieces";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
@@ -253,12 +253,15 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
 
 type RedoEnv = { supabase: SupabaseClient; jobId: string; clipId: string };
 
+/** Lists a new keyframe in the library as a pending record the editor finishes (`saveKeyframes`). */
+export type ListKeyframe = (entry: { model: AiModel; spec: GenerationSpec; folder: string; name: string }, generationId: string) => Promise<void>;
+
 /**
  * Redo on a contact-sheet tile, approved in the card at its own price: one new image of that
  * keyframe with a new seed. The sheet itself is not approved; the Assistant asks again with the
  * new keyframe, so the user sees the new tile and price before any shot is paid for.
  */
-export async function redoSheetKeyframe(env: RedoEnv, prepared: PreparedAnimate, index: number): Promise<ToolOutcome> {
+export async function redoSheetKeyframe(env: RedoEnv & { addToLibrary: ListKeyframe }, prepared: PreparedAnimate, index: number): Promise<ToolOutcome> {
   const keyframe = prepared.keyframes.find((item) => item.index === index);
   const model = keyframe ? availableModel(keyframe.model) : undefined;
   if (!keyframe || !model) {
@@ -266,13 +269,18 @@ export async function redoSheetKeyframe(env: RedoEnv, prepared: PreparedAnimate,
     return { ok: false, content: JSON.stringify({ error: message }), summary: message };
   }
   try {
-    const { generation } = await createGeneration(env.supabase, {
-      jobId: env.jobId,
-      clipId: env.clipId,
-      model: model.id,
-      spec: { ...keyframe.spec, seed: randomInt(0, 2_147_483_647) },
-      requestId: randomUUID(),
-    });
+    const spec = { ...keyframe.spec, seed: randomInt(0, 2_147_483_647) };
+    const { generation } = await createGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() });
+    // The shots name this keyframe by its declaration and the editor finds its file through the
+    // library record: without it, the shots stage 2 places could never be made in the editor.
+    const title = libraryName(String((prepared.op as unknown as { title?: string }).title ?? "Video"));
+    try {
+      await env.addToLibrary({ model, spec, folder: `Generated/${title}/keyframes`, name: `${String(index + 1).padStart(2, "0")} Keyframe (redo)` }, generation.id);
+    } catch (err) {
+      console.error("[agent] redo keyframe: library record failed", generation.id, err);
+      const message = `The new keyframe ${index + 1} was started (${credits(generation.credits_reserved)}) but could not be added to the library. Reload the editor and try Redo again before approving the video.`;
+      return { ok: false, content: JSON.stringify({ error: message, generation_id: generation.id }), summary: message };
+    }
     return {
       ok: true,
       content: JSON.stringify({
@@ -405,7 +413,7 @@ const pricedSpec = (declaration: Record<string, unknown>): GenerationSpec => ({
 type RunRedoEnv = RedoEnv & {
   applyOp: Parameters<typeof runGeneration>[0]["applyOp"];
   /** Lists the new keyframe in the library as a pending record the editor finishes (`saveKeyframes`). */
-  addToLibrary: (prepared: PreparedRedo, generationId: string) => Promise<void>;
+  addToLibrary: ListKeyframe;
   alive?: () => Promise<boolean>;
   /** Tests replace the clock and the wait. */
   sleep?: (ms: number) => Promise<void>;
@@ -421,16 +429,32 @@ const KEYFRAME_POLL_MS = 2_000;
  */
 export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): Promise<{ outcome: ToolOutcome; generationId?: string }> {
   const fail = (message: string) => ({ outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } });
+  // Room for the keyframe and its shots, checked before anything is paid: a refusal after the image
+  // would leave the user paying for a keyframe that never reaches the scene.
+  const { count: running } = await env.supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
+  const needed = 1 + prepared.shots.length;
+  if ((running ?? 0) + needed > GENERATION_ACTIVE_LIMIT) {
+    return fail(`Redoing this keyframe needs ${needed} generations at once and ${running} are still running. Wait for them to finish, then try again.`);
+  }
   let keyframeId: string;
+  let keyframeCredits: number;
   try {
     const { generation } = await createGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: prepared.image.model.id, spec: prepared.image.spec, requestId: randomUUID() });
     keyframeId = generation.id;
+    keyframeCredits = generation.credits_reserved;
   } catch (err) {
     return fail(err instanceof ApiError && err.status < 500 ? err.message : "The new keyframe could not be started.");
   }
-  // Best effort: the shots name the keyframe by its declaration and work without the record; it
-  // only puts the file in the scene's folder before a shot asks for it.
-  await env.addToLibrary(prepared, keyframeId).catch((err) => console.error("[agent] redo keyframe: library record failed", keyframeId, err));
+  // From here the keyframe is paid for: every refusal says so.
+  const spent = (message: string) => fail(`${message} The new keyframe (${credits(keyframeCredits)}) stays in your library; the scene is unchanged.`);
+  // The shots name the keyframe by its declaration and the editor finds its file through this
+  // record, so without it the redone shots could never be made: stop before paying for them.
+  try {
+    await env.addToLibrary({ model: prepared.image.model, spec: prepared.image.spec, folder: prepared.library.folder, name: prepared.library.name }, keyframeId);
+  } catch (err) {
+    console.error("[agent] redo keyframe: library record failed", keyframeId, err);
+    return spent("The new keyframe could not be added to the library. Reload the editor and try again.");
+  }
   const sleep = env.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const started = Date.now();
   for (;;) {
@@ -439,8 +463,8 @@ export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): 
     if (data && data.status !== "queued" && data.status !== "running") {
       return fail(`The new keyframe failed: ${data.error ?? "generation failed"}. Its credit comes back; the scene is unchanged.`);
     }
-    if (Date.now() - started > KEYFRAME_WAIT_MS) return fail("The new keyframe is taking longer than expected. Nothing else was started; try again in a minute.");
-    if (env.alive && !(await env.alive())) return fail("The user stopped the assistant. The new keyframe was made; no shot was started.");
+    if (Date.now() - started > KEYFRAME_WAIT_MS) return spent("The new keyframe is taking longer than expected; no shot was started. Try again in a minute.");
+    if (env.alive && !(await env.alive())) return spent("The user stopped the assistant; no shot was started.");
     await sleep(KEYFRAME_POLL_MS);
   }
   // Generation ids: `checkGeneration` turns each into its file, under RLS.
@@ -457,7 +481,7 @@ export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): 
     const { declaration } = shot;
     const start = shot.start ? keyframeId : await fileOf(declaration.startFrame);
     const end = shot.end ? keyframeId : declaration.endFrame ? await fileOf(declaration.endFrame) : undefined;
-    if (!start || end === null) return fail("A keyframe next to this one is no longer in the library. Redo that keyframe first.");
+    if (!start || end === null) return spent("A keyframe next to this one is no longer in the library. Redo that keyframe first.");
     runs.push({ model: shot.model, spec: { ...pricedSpec(declaration), seed: Number(declaration.seed), startImage: start, ...(end ? { endImage: end } : {}) } });
   }
   return runGeneration(

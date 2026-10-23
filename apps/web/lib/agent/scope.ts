@@ -60,6 +60,7 @@ import {
   redoKeyframeToolSpec,
   redoSheetKeyframe,
   runRedoKeyframe,
+  type ListKeyframe,
   type ContactSheet,
   type PreparedAnimate,
   type PreparedRedo,
@@ -481,8 +482,17 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                     })
                   : runTool(call.name, call.input, env),
     async decide(call, input, approved, redo) {
+      // Where a long take's keyframes are listed: the project as it is now, saved with its manifest.
+      const keyframeStore = {
+        read: () => ensureProject(supabase, context, clipId),
+        write: async (version: number, document: ClipDocument, manifest: unknown) => {
+          await saveDocument(supabase, clipId, version, document, { manifest });
+        },
+      };
+      const listKeyframe: ListKeyframe = (entry, id) =>
+        saveKeyframes(keyframeStore, { model: entry.model, specs: [entry.spec], folder: entry.folder, names: [entry.name], ids: [id] });
       if (call.name === "animate_video" && !approved && redo) {
-        const outcome = await redoSheetKeyframe({ supabase, jobId: context.clip.job_id, clipId }, input as PreparedAnimate, redo.index);
+        const outcome = await redoSheetKeyframe({ supabase, jobId: context.clip.job_id, clipId, addToLibrary: listKeyframe }, input as PreparedAnimate, redo.index);
         return { outcome, extra: {}, wrote: false };
       }
       if (call.name === "redo_keyframe") {
@@ -500,16 +510,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
             clipId,
             applyOp: (op) => applyOpTool(op, env),
             ...(host.alive ? { alive: host.alive } : {}),
-            addToLibrary: (redo, id) =>
-              saveKeyframes(
-                {
-                  read: () => ensureProject(supabase, context, clipId),
-                  write: async (version, document, manifest) => {
-                    await saveDocument(supabase, clipId, version, document, { manifest });
-                  },
-                },
-                { model: redo.image.model, specs: [redo.image.spec], folder: redo.library.folder, names: [redo.library.name], ids: [id] },
-              ),
+            addToLibrary: listKeyframe,
           },
           input as PreparedRedo,
         );
@@ -567,15 +568,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           applyOp: (op) => applyOpTool(op, env),
           ...(host.alive ? { alive: host.alive } : {}),
           addToLibrary: (done, ids) =>
-            saveKeyframes(
-              {
-                read: () => ensureProject(supabase, context, clipId),
-                write: async (version, document, manifest) => {
-                  await saveDocument(supabase, clipId, version, document, { manifest });
-                },
-              },
-              { model: done.model, specs: [done.spec, ...(done.extra ?? []).map((item) => item.spec)], folder: done.library!.folder, names: done.library!.names, ids },
-            ),
+            saveKeyframes(keyframeStore, { model: done.model, specs: [done.spec, ...(done.extra ?? []).map((item) => item.spec)], folder: done.library!.folder, names: done.library!.names, ids }),
         },
         prepared as Parameters<typeof runGeneration>[1],
       );
