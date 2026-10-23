@@ -1,7 +1,8 @@
 # AI long take: keyframes first, then the shots between them, as an editable scene
 
 > **For agentic workers:** the feature list (§2) says *what* ships; the todo list (§5) says *how*, task by task, with
-> checkbox (`- [ ]`) steps. Two sessions can build it in parallel (§6). Build nothing before Task 0 is done.
+> checkbox (`- [ ]`) steps. Three sessions build it in parallel: see
+> [`2026-10-23-ai-long-take-sessions.md`](2026-10-23-ai-long-take-sessions.md) (§6). Build nothing before Task 0 is done.
 
 ## 1. Goal and decisions
 
@@ -172,7 +173,6 @@ Each feature is what a user sees, how it works, and what proves it done.
       block; a document round-trips through `validate()`.
 - [ ] No double payment: approving card 2 twice, or retrying the request, reuses the generations (check against a
       local stack, and a pgTAP case if a new SQL path is touched).
-- [ ] `mcp-server`: `animate_video` with price → confirm.
 
 ### Task 5: Redo one keyframe after placing (F8)
 - [ ] New tool `redo_keyframe` (approval): input the scene, the keyframe number and an optional new description.
@@ -218,14 +218,15 @@ Each feature is what a user sees, how it works, and what proves it done.
 
 ## 6. Session split
 
+Full split, owned paths, shared contracts and hand-offs: [`2026-10-23-ai-long-take-sessions.md`](2026-10-23-ai-long-take-sessions.md).
+
 | Session | Tasks | Touches |
 |---|---|---|
-| A (worker + catalog) | 0, 1, 6 | `ai-models.json`, migrations + pgTAP, `fal.py`, `moderation.py` |
-| B (agent + editor) | 2, 3, 4, 5, 7 | `create-video.ts`, `brief.ts`, editor-core op, cards, MCP |
-| Both | 8, Release | — |
+| A: models, worker, SQL | 0, 1, 6, then 8 + Release | `ai-models.json`, `fal.py`, `moderation.py`, migrations + pgTAP |
+| B: director, stage 1, MCP | B0 (shared contracts), 2, 3, 7 | `long-take.ts` (editor-core), `create-video.ts`, `brief.ts`, guides, MCP |
+| C: editor, stage 2, redo | 4, 5 | `lib/agent/long-take.ts`, the `create_video` op, contact-sheet card, context menu |
 
-Task 1's catalog rows land first. Session B codes against `limits.lastFrame` and uses `fake-video` (which has both
-frames) until they land.
+B0 lands first (contracts), then B and C work in parallel against `fake-video` until A's Task 1 rows land.
 
 ## 7. Review focus
 
