@@ -30,3 +30,4 @@ export * from './style';
 export { applyStyleInput, describeStyle, runStyle, type ApplyStyle, type CaptureState, type StyleContext, type StyleDeps, type StyleReceipt } from './style/apply';
 export { buildIntro, INTRO_ELEMENTS, INTRO_MOTIONS, introSpecSchema, MAX_MOVING, PERSONALITIES, PERSONALITY, READ_SECONDS, reviewIntro, type IntroSpec, type Personality } from './motion/intro';
 export { addProofInput, CAPTURE_SRC_PREFIX, type AddProof, type ProofCapture, type ProofContext } from './proof';
+export { AnimateVideoInputSchema, CreateVideoResultSchema, KEYFRAMES_MAX, keyframeCount, keyframeIndexes, LongTakePlanSchema, LongTakeShotSchema, RedoKeyframeInputSchema, SHOT_STYLES, type AnimateVideoInput, type CreateVideoResult, type LongTakePlan, type LongTakeShot, type RedoKeyframeInput } from './long-take';
