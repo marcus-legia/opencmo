@@ -132,6 +132,16 @@ describe('create_video', () => {
 			expect(() => validate(document)).not.toThrow();
 		});
 
+		it('placing the same take again leaves the first scene and its music alone', async () => {
+			const once = (await applyOps(blank, [longTake], ctx)).document;
+			const twice = (await applyOps(once, [longTake], ctx)).document;
+			const scene = twice.stage.children[0] as unknown as Node;
+			const sequences = scene.children!.filter((node) => node.kind === 'sequence' && node.name === 'Hotelly in one take');
+			expect(sequences.map((node) => node.children!.length)).toEqual([3, 3]);
+			const music = flat(scene.children!).filter((node) => node.kind === 'audio' && node.src?.generate === 'audio');
+			expect(music.every((node) => Number(node.end) <= 12 + 1e-6)).toBe(true);
+		});
+
 		it('moves the whole block, and trims and deletes its shots', async () => {
 			const { document } = await applyOps(blank, [longTake], ctx);
 			const sequence = sequenceOf(document);

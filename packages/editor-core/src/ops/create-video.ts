@@ -116,6 +116,9 @@ export const createVideo = {
 		const frame = VIDEO_FRAMES[input.aspect];
 		let next = await setFrame.apply(document, { op: 'set_frame', ...frame } as never, ctx);
 		next = await setWorkarea.apply(next, { op: 'set_workarea', start: 0, end: input.seconds } as never);
+		// Seeds are fixed by the keyframes, so the same take placed again has the same shots and music:
+		// only entities this op adds are gathered and trimmed, never those of a scene already placed.
+		const existing = entityIds(next);
 		for (const shot of input.shots) {
 			next = await addGenerated.apply(
 				next,
@@ -139,7 +142,7 @@ export const createVideo = {
 				ctx,
 			);
 		}
-		next = gatherShots(next, input);
+		next = gatherShots(next, input, existing);
 		for (const shot of input.shots) {
 			if (!shot.text) continue;
 			next = await addText.apply(next, { op: 'add_text', text: shot.text, start: shot.start, end: shot.start + shot.length, y: 0.2, bold: true } as never);
@@ -166,7 +169,7 @@ export const createVideo = {
 			const copies: Entity[] = [];
 			walk(next, ({ entity }) => {
 				const src = entity.src as { generate?: string; seed?: number } | undefined;
-				if (entity.kind === 'audio' && src?.generate === 'audio' && src.seed === music.seed) copies.push(entity);
+				if (entity.kind === 'audio' && src?.generate === 'audio' && src.seed === music.seed && !existing.has(String(entity.id))) copies.push(entity);
 			});
 			copies.sort((a, b) => Number(a.start ?? 0) - Number(b.start ?? 0));
 			copies.forEach((copy, index) => {
@@ -183,10 +186,19 @@ export const createVideo = {
 	},
 };
 
+function entityIds(document: ClipDocument): Set<string> {
+	const ids = new Set<string>();
+	walk(document, ({ entity }) => {
+		if (typeof entity.id === 'string') ids.add(entity.id);
+	});
+	return ids;
+}
+
 /** Takes the shots out of the rows `add_generated` put them in and holds them in one named sequence. */
-function gatherShots(document: ClipDocument, input: CreateVideo): ClipDocument {
+function gatherShots(document: ClipDocument, input: CreateVideo, existing: Set<string>): ClipDocument {
 	const shots: Entity[] = [];
 	walk(document, ({ entity }) => {
+		if (existing.has(String(entity.id))) return;
 		const paint = ((entity.paints as Entity[] | undefined) ?? [])[0];
 		const src = paint?.src as Entity | undefined;
 		if (src?.generate === 'video' && input.shots.some((shot) => shot.seed === src.seed && shot.prompt === src.prompt)) shots.push(entity);
@@ -252,7 +264,8 @@ export const redoKeyframe = {
 	agent: false,
 	input: z.object({
 		op: z.literal('redo_keyframe'),
-		sequence_id: z.string().min(1).max(64),
+		// Same bound as the tool's scene_id (RedoKeyframeInputSchema): a valid call never fails here after money moved.
+		sequence_id: z.string().min(1).max(100),
 		index: z.number().int().min(0).max(KEYFRAMES_LIMIT - 1),
 		keyframe: keyframeSource,
 	}),
