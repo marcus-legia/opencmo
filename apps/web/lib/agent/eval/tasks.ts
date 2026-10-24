@@ -677,6 +677,21 @@ export const TASKS: EvalTask[] = [
       return { pass: order && ref && paced && labels && pictured && shape && placed && clean, notes };
     },
   },
+  // O2 (docs/plans/editor/2026-10-24-opus-animation-plan.md): the model measures its main move instead of guessing.
+  {
+    id: "explain-measured",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. Go ahead and make it, no need to show the script. Check your main move on a contact sheet, and make sure the subject never leaves the frame.",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const previews = (outcome.calls ?? []).filter((call) => call.name === "preview_explainer").map((call) => call.input as { sheet?: { count?: number }; code?: string });
+      const sheet = check(notes, previews.some((input) => (input.sheet?.count ?? 0) >= 2), "no preview asked for a contact sheet");
+      const { code } = storyboardOf(outcome);
+      const promised = check(notes, /\baudit\s*\.\s*(inside|clear)\s*\(/.test(code), "the scene declares no kit.audit check");
+      const added = check(notes, outcome.tools.includes("add_explainer"), `tools: ${outcome.tools.join(", ")}`);
+      return { pass: sheet && promised && added, notes };
+    },
+  },
   // Explainer v2 (docs/explainer-v2-build.md): the subject is on screen, mapped noun by noun before any code.
   {
     id: "explain-vaccine",

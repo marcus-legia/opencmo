@@ -4,8 +4,9 @@
  */
 
 import { SAFE } from './kit/areas.ts';
+import type { AuditCheck } from './kit/audit.ts';
 
-export type LaidBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number };
+export type LaidBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number; soft?: boolean };
 
 const MIN_TEXT_AT_1080 = 36;
 const EMPTY_LIMIT = 0.85;
@@ -52,6 +53,11 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 			box.y + box.h > safe.bottom ? 'bottom (the caption zone)' : null,
 		].filter(Boolean);
 		if (sides.length) issues.push(`${box.kind === 'text' ? 'Text' : 'Mark'} ${quote(box.name)} leaves the safe area on the ${sides.join(' and ')} ${at}.`);
+	}
+
+	// Opus's remakes hold every resting state free of filters: a blur left on after the landing is soft text.
+	for (const box of texts.filter((item) => item.soft && options.moving && !options.moving.has(`text:${item.name}`))) {
+		issues.push(`Text ${quote(box.name)} is still blurred at rest ${at}: clear its blur (or Streak/MotionBlur) once it lands.`);
 	}
 
 	const minimum = MIN_TEXT_AT_1080 * (Math.min(width, height) / 1080);
@@ -113,6 +119,9 @@ export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[],
 	return issues;
 }
 
+/** A size change faster than this per frame (both sides) reads as a lurch, not a zoom. */
+const ZOOM_RATE = 1.25;
+
 /** A move of more than this share of the frame's short side between two frames (1/30 s) reads as a jump. */
 const JUMP_SHARE = 0.12;
 
@@ -137,6 +146,11 @@ export function jumpIssues(pairs: { seconds: number; a: LaidBox[]; b: LaidBox[] 
 			if (!b) continue;
 			const moved = Math.hypot(b.x + b.w / 2 - (a.x + a.w / 2), b.y + b.h / 2 - (a.y + a.h / 2));
 			if (moved > limit) issues.push(`${quote(a.name)} jumps ${Math.round(moved)} px in one frame at ${pair.seconds.toFixed(1)} s: ease the move or cut on purpose.`);
+			// A zoom that grows or shrinks both sides by over a quarter in one frame reads as a lurch (Opus's "dive too violent").
+			const grow = Math.min(b.w / Math.max(1, a.w), b.h / Math.max(1, a.h));
+			const shrink = Math.min(a.w / Math.max(1, b.w), a.h / Math.max(1, b.h));
+			const rate = Math.max(grow, shrink);
+			if (Math.min(a.w, a.h, b.w, b.h) > 20 && rate > ZOOM_RATE) issues.push(`${quote(a.name)} ${grow >= shrink ? 'grows' : 'shrinks'} ${rate.toFixed(2)}× in one frame at ${pair.seconds.toFixed(1)} s: lengthen or ease the zoom.`);
 		}
 	}
 	return issues;
@@ -154,4 +168,58 @@ export function movingBoxes(a: LaidBox[], b: LaidBox[]): Set<string> {
 		if (!other || Math.hypot(other.x + other.w / 2 - (box.x + box.w / 2), other.y + other.h / 2 - (box.y + box.h / 2)) > 1) moving.add(key(box));
 	}
 	return moving;
+}
+
+/** A box carries the name a check gives, exactly or after its component's prefix ("Mark ball" for "ball"). */
+const named = (box: LaidBox, name: string) => box.name === name || box.name.endsWith(` ${name}`);
+
+/** Gap in px between two boxes: negative when they overlap (by the smaller of the two overlaps). */
+function gap(a: LaidBox, b: LaidBox): number {
+	const dx = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w));
+	const dy = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
+	return Math.max(dx, dy);
+}
+
+/**
+ * The scene's own checks (kit.audit) over every measured frame: one line per failing check, with the worst frame
+ * and how many measured frames fail. A check whose boxes are never on screen together passes.
+ */
+export function auditIssues(checks: AuditCheck[], frames: { seconds: number; boxes: LaidBox[] | null }[]): string[] {
+	const issues: string[] = [];
+	for (const check of checks) {
+		let worst: { seconds: number; value: number } | null = null;
+		let failing = 0;
+		for (const frame of frames) {
+			if (!frame.boxes) continue;
+			if (check.kind === 'clear') {
+				const as = frame.boxes.filter((box) => named(box, check.a));
+				const bs = frame.boxes.filter((box) => named(box, check.b));
+				for (const a of as) {
+					for (const b of bs) {
+						const value = gap(a, b);
+						if (value < check.px) {
+							failing++;
+							if (!worst || value < worst.value) worst = { seconds: frame.seconds, value };
+						}
+					}
+				}
+			} else {
+				for (const box of frame.boxes.filter((item) => named(item, check.name))) {
+					const out = Math.max(check.box.x - box.x, check.box.y - box.y, box.x + box.w - (check.box.x + check.box.w), box.y + box.h - (check.box.y + check.box.h));
+					if (out > 2) {
+						failing++;
+						if (!worst || out > worst.value) worst = { seconds: frame.seconds, value: out };
+					}
+				}
+			}
+		}
+		if (!worst) continue;
+		const when = `at ${worst.seconds.toFixed(1)} s (${failing} measured ${failing === 1 ? 'frame' : 'frames'})`;
+		issues.push(
+			check.kind === 'clear'
+				? `Check clear(${quote(check.a)}, ${quote(check.b)}, ${check.px} px) fails ${when}: ${worst.value < 0 ? `they overlap by ${Math.round(-worst.value)} px` : `only ${Math.round(worst.value)} px apart`}.`
+				: `Check inside(${quote(check.name)}, ${check.label}) fails ${when}: ${Math.round(worst.value)} px outside.`,
+		);
+	}
+	return issues;
 }

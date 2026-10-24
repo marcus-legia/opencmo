@@ -312,6 +312,7 @@ The core — what scenes are built from
   - Something is always alive: a slow push (scale 1 → 1.04 over the video), a drifting field, a breathing glow (±15%).
 - Kinetic type by purpose (decide what must be read first): introduce an idea → stagger its letters or phrases into place and settle the group; change one word in a sentence → keep the rest still and roll the new word through a mask on the same baseline; pick one of several → move the phrases through one focus area, the chosen one sharp and bigger; turn an idea into a product action → move the same text into the input or document it becomes; emphasise and resolve → relay a few keywords, then assemble the full phrase and hold it readable. Entrances decelerate, exits accelerate; they need not mirror each other.
 - Compute geometry once: paths as small functions of one or two numbers; per frame only interpolate those numbers. The code limit is 32,000 characters.
+- State your numeric promises above the Scene: kit.audit.clear('title', 'ship', 24) (two named boxes stay 24 px apart whenever both show), kit.audit.inside('title', 'full'). The preview checks them on every frame it measures and names the worst one.
 The library — only when it is the clearest picture
 - <Image name x y w h fit? radius?> (the user's own images passed as assets), <Phone>/<Browser> frames around them, for product moments.
 - <Icon name x y size color?> (Lucide, find_icons) for a small standard symbol: a check, a clock, a lock. Never as the subject of a beat.
@@ -325,12 +326,14 @@ ${EXPLAINER_EXAMPLE}
 ## 4. Preview, look, fix — required
 preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
 - times: up to 12 seconds you choose, around every main move (its start, middle and landing). Without times: beat midpoints and the last frame.
+- sheet { from, to, count ≤ 9 }: one contact sheet across your most important move, in reading order — judge the curve (acceleration, overshoot, settle), not single moments. zoom { t, x, y, w, h }: a full-resolution crop to check resting text and hairlines are crisp.
 - Subject check: one line per still — "shows X; the beat says Y". Fix any beat where they differ first.
 - An error (phase job/compile/guard/render + message) → fix the code.
 - "overlaps" → move one text to another place or time. "outside the safe area" → keep resting text inside kit.area('full') (moving text may cross it). "text under 36 px" → fewer words, bigger type.
 - "more than 85% empty" or "beat N shows nothing drawn" → draw the subject bigger, in a Mark, or set the claim as big type.
 - "nothing moves during beat N" → a move, a reaction, or something alive (push, drift, glow).
-- "jumps N px in one frame" → ease the move (kit.travel, a curve) and give it a Streak, or make it a deliberate cut.
+- "jumps N px in one frame" → ease the move (kit.travel, a curve) and give it a Streak, or make it a deliberate cut. "grows N× in one frame" → a longer or softer zoom (kit.curves.impulse). "still blurred at rest" → the blur must reach 0 when the move ends.
+- "Check clear(…)/inside(…) fails" → your own promise broke: move, shrink or retime that piece until it holds.
 - Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that (one variable: a curve, an overshoot, a blur amount, a camera amplitude), preview again.
 Up to 6 rounds; stop when a round finds nothing. A clean layout report is the floor, not the bar.
 

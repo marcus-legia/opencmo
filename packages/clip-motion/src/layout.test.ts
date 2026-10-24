@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beatIssues, jumpIssues, layoutIssues, movingBoxes, type LaidBox } from './layout.ts';
+import { auditIssues, beatIssues, jumpIssues, layoutIssues, movingBoxes, type LaidBox } from './layout.ts';
 
 const frame = { width: 1920, height: 1080, seconds: 4 };
 const visual: LaidBox = { kind: 'mark', name: 'DotField', x: 200, y: 200, w: 1500, h: 600 };
@@ -103,5 +103,27 @@ describe('moving boxes and big type', () => {
 		const small: LaidBox = { ...big, name: 'caption', size: 48 };
 		expect(beatIssues([{ beat: 0, boxes: [big] }], { width: 1080, height: 1920 })).toEqual([]);
 		expect(beatIssues([{ beat: 0, boxes: [small] }], { width: 1080, height: 1920 })[0]).toMatch(/^Beat 1 shows nothing drawn/);
+	});
+});
+
+describe('audit over time', () => {
+	const box = (name: string, x: number, y: number, w = 100, h = 100, extra: Partial<LaidBox> = {}): LaidBox => ({ kind: 'mark', name, x, y, w, h, ...extra });
+	it('reports a declared clearance that fails, with the worst frame', () => {
+		const frames = [
+			{ seconds: 1, boxes: [box('title', 0, 0), box('orbit', 150, 0)] },
+			{ seconds: 2, boxes: [box('title', 0, 0), box('orbit', 106, 0)] },
+			{ seconds: 3, boxes: [box('title', 0, 0), box('orbit', 80, 0)] },
+		];
+		expect(auditIssues([{ kind: 'clear', a: 'title', b: 'orbit', px: 24 }], frames)).toEqual(['Check clear("title", "orbit", 24 px) fails at 3.0 s (2 measured frames): they overlap by 20 px.']);
+		expect(auditIssues([{ kind: 'inside', name: 'orbit', box: { x: 0, y: 0, w: 260, h: 200 }, label: 'full' }], frames)).toEqual([]);
+		expect(auditIssues([{ kind: 'inside', name: 'orbit', box: { x: 0, y: 0, w: 220, h: 200 }, label: 'full' }], [{ seconds: 1, boxes: [box('orbit', 150, 0)] }])).toEqual(['Check inside("orbit", full) fails at 1.0 s (1 measured frame): 30 px outside.']);
+	});
+	it('flags a zoom that lurches, and blurred text at rest', () => {
+		const lurch = jumpIssues([{ seconds: 2, a: [box('hero', 500, 300, 200, 200)], b: [box('hero', 450, 250, 300, 300)] }], { width: 1920, height: 1080 });
+		expect(lurch).toEqual(['"hero" grows 1.50× in one frame at 2.0 s: lengthen or ease the zoom.']);
+		const soft: LaidBox = { kind: 'text', name: 'Launch', x: 200, y: 200, w: 400, h: 100, size: 80, soft: true };
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }, { moving: new Set() }).join(' ')).toMatch(/still blurred at rest/);
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }, { moving: new Set(['text:Launch']) }).join(' ')).not.toMatch(/blurred/);
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }).join(' ')).not.toMatch(/blurred/);
 	});
 });

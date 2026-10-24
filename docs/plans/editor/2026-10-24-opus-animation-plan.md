@@ -88,24 +88,29 @@ BUILD-LOGs (MIT; port the maths with notice, rename to our style).
 - [x] Look: re-render the six style examples and both fixtures, contact sheet in
   `docs/plans/editor/2026-10-24-opus-animation-frames/o1/`.
 
-### O2. Review loop that measures (`packages/clip-motion/src/preview.ts`, `layout.ts`, tool `preview_explainer`), one PR
+### O2. Review loop that measures (`packages/clip-motion/src/preview.ts`, `layout.ts`, tool `preview_explainer`), one PR — built 2026-10-24
+
+Built notes: within the 55 s preview budget the audit runs on the frames a preview already measures (stills, their
+neighbours, the paired layout samples and the contact sheet), not every 2nd frame; the guide says so. Sheet and zoom come
+back as extra entries of `stills` (`kind: "sheet" | "zoom"`), so the web, local and Modal paths needed no change. A
+declared name matches the box name exactly or after its component prefix (`Mark ship`). Eval task `explain-measured`.
 
 Learned from the remakes' BUILD-LOGs (contact sheets, segment checks, zoom crops, luma, `spatial-audit.json`) and
 video-perception (sample by change, not uniformly).
 
-- [ ] `preview_explainer` takes `sheet: { from, to, count ≤ 12 }` → one contact-sheet image of `count` frames across a
+- [x] `preview_explainer` takes `sheet: { from, to, count ≤ 12 }` → one contact-sheet image of `count` frames across a
   window, labelled with frame numbers, so the model sees motion, not three stills. Counts against the existing 60
   previews/hour.
-- [ ] `zoom: { time, box }` → a full-resolution crop to check that resting text is crisp.
-- [ ] **Audit over time** in the layout probe (every 2nd frame of each shot at quarter size, measured only):
+- [x] `zoom: { time, box }` → a full-resolution crop to check that resting text is crisp.
+- [x] **Audit over time** in the layout probe (every 2nd frame of each shot at quarter size, measured only):
   overlap area between tagged boxes per frame (report the worst frame and px²), smallest clearance to the safe area,
   **jumps** (a tagged box moving more than 12 % of the short side in one frame, or scale changing more than 1.4× in 3
   frames: the "teleport" and "dive too violent" cases), and **resting crispness** (a tagged box with a blur filter or a
   non-identity transform after its last keyframe).
-- [ ] **Scene-declared checks**: `kit.audit.clear(nameA, nameB, { px })`, `kit.audit.inside(name, area)` let the code
+- [x] **Scene-declared checks**: `kit.audit.clear(nameA, nameB, { px })`, `kit.audit.inside(name, area)` let the code
   state its own numeric promises (the `spatial-audit.json` idea); the report lists pass/fail per check.
-- [ ] Review checklist (`REVIEW_CHECKLIST`): read the audit first, fix one layer, replay that shot and its neighbours.
-- [ ] Eval (`apps/web/lib/agent/eval/tasks.ts`): a fake case whose first preview has an overlap and a jump; the fake
+- [x] Review checklist (`REVIEW_CHECKLIST`): read the audit first, fix one layer, replay that shot and its neighbours.
+- [x] Eval (`apps/web/lib/agent/eval/tasks.ts`): a fake case whose first preview has an overlap and a jump; the fake
   provider fixes it after reading the audit. Checks: `explainer-tool.check.ts`, MCP `server.check.ts`.
 
 ### O3. Multi-scene product videos, learned from Opus's `agent-opus` video, one PR

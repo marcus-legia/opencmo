@@ -6,10 +6,10 @@ import { buildScene, sceneError } from '../code/run.ts';
 import { DEFAULT_PERSONALITY, DEFAULT_THEME, type MotionJob } from '../job.ts';
 import { MotionContext, PaletteContext, ThemeContext } from '../kit/context.tsx';
 import { MOTION } from '../kit/personality.ts';
-import { makeKit } from '../kit/index.ts';
+import { kitAudit, makeKit } from '../kit/index.ts';
 import { makePalette } from '../kit/theme.ts';
 import { FAMILY } from './fonts.ts';
-import { LAYOUT_LOG } from './layout-log.ts';
+import { AUDIT_LOG, LAYOUT_LOG } from './layout-log.ts';
 
 export type ExplainerProps = {
 	job: MotionJob;
@@ -73,7 +73,7 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 						<div style={{ fontFamily: FAMILY.title, fontSize: 96, color: palette.text }}>{job.title}</div>
 					</AbsoluteFill>
 				)}
-				{probe ? <LayoutProbe /> : null}
+				{probe ? <LayoutProbe checks={() => kitAudit(kit)} /> : null}
 			</AbsoluteFill>
 			</MotionContext.Provider>
 			</ThemeContext.Provider>
@@ -81,7 +81,7 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 	);
 }
 
-export type ProbedBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number };
+export type ProbedBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number; soft?: boolean };
 
 /**
  * The part of a tagged box the viewer can see: clipped by every ancestor that hides overflow (a masked row, a phone
@@ -107,7 +107,18 @@ function visiblePart(element: HTMLElement, rect: DOMRect, root: HTMLElement | nu
 }
 
 /** Preview only: once fonts are in, log every visible tagged box (after camera transforms) for layout.ts. */
-function LayoutProbe() {
+/** A blur on the element or an ancestor (a CSS blur or an SVG filter): resting text should carry none. */
+function blurred(element: HTMLElement, root: HTMLElement | null): boolean {
+	for (let node: HTMLElement | null = element; node && node !== root; node = node.parentElement) {
+		const filter = getComputedStyle(node).filter;
+		if (filter.includes('url(')) return true;
+		const match = /blur\(([\d.]+)px\)/.exec(filter);
+		if (match && Number(match[1]) > 0.3) return true;
+	}
+	return false;
+}
+
+function LayoutProbe({ checks }: { checks: () => unknown[] }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [handle] = useState(() => delayRender('Measuring layout'));
 	useEffect(() => {
@@ -131,14 +142,17 @@ function LayoutProbe() {
 				const size = Number(element.dataset.size);
 				const area = element.offsetWidth * element.offsetHeight;
 				const scale = area ? Math.sqrt((full.width * full.height) / area) : 1;
-				boxes.push({ kind, name: element.dataset.name ?? '', x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height, ...(kind === 'text' && size ? { size: size * scale } : {}) });
+				boxes.push({ kind, name: element.dataset.name ?? '', x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height, ...(kind === 'text' && size ? { size: size * scale } : {}), ...(kind === 'text' && blurred(element, root ?? null) ? { soft: true } : {}) });
 			}
 			console.log(`${LAYOUT_LOG}${JSON.stringify(boxes)}`);
+			const declared = checks();
+			if (declared.length) console.log(`${AUDIT_LOG}${JSON.stringify(declared)}`);
 			continueRender(handle);
 		});
 		return () => {
 			done = true;
 		};
+	// `checks` is read once, when fonts are in: the scene body (and its kit.audit calls) ran before that.
 	}, [handle]);
 	return <div ref={ref} style={{ display: 'none' }} />;
 }

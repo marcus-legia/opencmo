@@ -34,7 +34,7 @@ import {
   type Op,
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
-import { MAX_PREVIEW_STILLS } from "@opencmo/clip-motion/job";
+import { MAX_PREVIEW_STILLS, MAX_SHEET_FRAMES } from "@opencmo/clip-motion/job";
 import { MOTION_STYLES, motionStyle } from "@opencmo/clip-motion/styles";
 import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
@@ -78,7 +78,7 @@ export const DIRECTION_HELP =
 
 /** Returned with every clean preview: the model answers it line by line before the next round or add_explainer. */
 export const REVIEW_CHECKLIST = [
-  "Answer each line about the stills you just saw, in order:",
+  "Answer each line about the stills you just saw, in order (read the issues first: every check you declared with kit.audit and every jump, lurch or blur at rest is listed there with its time):",
   "1. Subject: does every still show what its beat says (\"shows X; the beat says Y\")?",
   "2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?",
   "3. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
@@ -173,6 +173,15 @@ export const previewExplainerInput = z
       .max(MAX_PREVIEW_STILLS)
       .optional()
       .describe(`Seconds to render stills at (at most ${MAX_PREVIEW_STILLS}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
+    sheet: z
+      .object({ from: z.number().finite().min(0), to: z.number().finite().min(0), count: z.number().int().min(2).max(MAX_SHEET_FRAMES) })
+      .refine((value) => value.to > value.from, "to must be after from")
+      .optional()
+      .describe(`One contact-sheet image of count frames (2-${MAX_SHEET_FRAMES}) spread from \`from\` to \`to\` seconds, in reading order: use it on your most important move to see its whole curve, not three moments.`),
+    zoom: z
+      .object({ t: z.number().finite().min(0), x: z.number().finite().min(0), y: z.number().finite().min(0), w: z.number().finite().min(16), h: z.number().finite().min(16) })
+      .optional()
+      .describe("A full-resolution crop of one frame (px of the composition): check that resting text and fine lines are crisp."),
   })
   .superRefine(silentRules);
 
@@ -198,6 +207,10 @@ export type MotionJob = {
   personality?: ExplainerPersonality;
   /** Preview only: seconds to render stills at. */
   stills?: number[];
+  /** Preview only: one contact sheet across a window. */
+  sheet?: { from: number; to: number; count: number };
+  /** Preview only: a full-resolution crop of one frame. */
+  zoom?: { t: number; x: number; y: number; w: number; h: number };
   /** A silent motion clip: beats timed by their own seconds. */
   kind?: "clip";
   /** Images for kit.Image: signed URLs in a preview. */
@@ -206,7 +219,7 @@ export type MotionJob = {
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
 export type MotionPreview =
-  | { ok: true; stills: { t: number; file: string }[]; issues: string[]; estimated: boolean; images?: string[] }
+  | { ok: true; stills: { t: number; file: string; kind?: "sheet" | "zoom"; times?: number[]; columns?: number }[]; issues: string[]; estimated: boolean; images?: string[] }
   | { ok: false; phase: "job" | "compile" | "guard" | "render"; message: string };
 
 export type PreviewMotion = (job: MotionJob) => Promise<MotionPreview>;
@@ -311,7 +324,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps in one frame. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
+        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -351,6 +364,8 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
     ...lookOf(input),
     // Clamping and de-duplication happen in clip-motion (`previewFrames`), next to the timeline.
     ...(input.times?.length ? { stills: input.times } : {}),
+    ...(input.sheet ? { sheet: input.sheet } : {}),
+    ...(input.zoom ? { zoom: input.zoom } : {}),
   };
 }
 
@@ -392,8 +407,8 @@ export async function runPreviewExplainer(
     content: JSON.stringify({
       ok: true,
       duration: job.duration,
-      stills: result.stills.map((still) => still.t),
-      images: "one image per still, in order",
+      stills: result.stills.map((still) => (still.kind === "sheet" ? `contact sheet of ${still.times?.join(", ")} s, ${still.columns} per row` : still.kind === "zoom" ? `zoom at ${still.t} s (full resolution)` : still.t)),
+      images: "one image per entry of stills, in order",
       issues: result.issues,
       ...(result.estimated ? { timing: "estimated from the script; the real voice sets the final timing" } : {}),
       storyboard: parsed.data.beats.map((item, index) => `beat ${index + 1}: ${item.visual}`),

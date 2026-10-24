@@ -22,6 +22,8 @@ export const MAX_ASSET_EDGE = 4096;
 export const MAX_PREVIEW_STILLS = 12;
 /** An asset `src` after `stageAssets`: a file of the bundle's public dir that `kit.Image` loads with `staticFile`. */
 export const STAGED_ASSET = 'bundle:';
+/** Frames in one preview contact sheet (`sheet`). */
+export const MAX_SHEET_FRAMES = 9;
 export const CLIP_SECONDS = { min: 3, max: 30 } as const;
 const BEAT_SECONDS = { min: 0.5, max: 30 } as const;
 
@@ -66,6 +68,10 @@ export const MotionJobSchema = z.object({
 	theme: z.enum(THEMES).optional(), // absent = blueprint
 	personality: z.enum(PERSONALITIES).optional(), // absent = premium, with v1 motion (no ambient layer by default)
 	stills: z.array(z.number().finite().min(0)).max(MAX_PREVIEW_STILLS).optional(), // preview only: seconds to show
+	// preview only: one contact sheet of `count` frames spread from `from` to `to` seconds (motion across a window)
+	sheet: z.object({ from: z.number().finite().min(0), to: z.number().finite().min(0), count: z.number().int().min(2).max(MAX_SHEET_FRAMES) }).strict().refine((sheet) => sheet.to > sheet.from, 'sheet.to must be after sheet.from.').optional(),
+	// preview only: a full-resolution crop of one frame (px of the composition), to check that resting text is crisp
+	zoom: z.object({ t: z.number().finite().min(0), x: z.number().finite().min(0), y: z.number().finite().min(0), w: z.number().finite().min(16), h: z.number().finite().min(16) }).strict().optional(),
 	assets: z.array(AssetSchema).max(MAX_ASSETS).optional(),
 }).strict().superRefine((job, ctx) => {
 	const names = new Set<string>();
@@ -94,8 +100,11 @@ export type MotionJob = z.infer<typeof MotionJobSchema>;
 export type MotionAsset = z.infer<typeof AssetSchema>;
 export type MotionFormat = MotionJob['format'];
 
+/** A preview image: a still at `t`, the contact sheet (`times` in reading order, `columns` per row) or the zoom crop. */
+export type PreviewStill = { t: number; file: string; kind?: 'sheet' | 'zoom'; times?: number[]; columns?: number };
+
 export type PreviewResult =
-	| { ok: true; stills: { t: number; file: string }[]; issues: string[]; estimated: boolean }
+	| { ok: true; stills: PreviewStill[]; issues: string[]; estimated: boolean }
 	| { ok: false; phase: 'job' | 'compile' | 'guard' | 'render'; message: string };
 
 /** Narration pace used for estimates; ElevenLabs voices land close to it. */

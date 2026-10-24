@@ -73,8 +73,18 @@ type Block = { type: string; text?: string; tool_use_id?: string; is_error?: boo
 const text = (value: string) => ({ type: "text", text: value, citations: null });
 
 /** The tool input of an explainer: the storyboard (with `visual` per beat), its code and its look. */
-const explainerInput = (explainer: FakeExplainer) => ({ ...explainer });
+const explainerInput = (explainer: FakeExplainer, ask = "") => {
+  // Asked to measure the main move: one contact sheet across it, and a declared promise the preview checks.
+  if (!/contact sheet/i.test(ask)) return { ...explainer };
+  const mark = /<Mark\b[^>]*?\bname=["'{`]+([^"'`}]+)/.exec(explainer.code)?.[1] ?? "subject";
+  return { ...explainer, code: `kit.audit.inside(${JSON.stringify(mark)}, "full");\n${explainer.code}`, sheet: { from: 1, to: 4, count: 6 } };
+};
 /** The words that asked for an explainer: the latest `/explain` command of the conversation. */
+/** add_explainer takes the previewed scene, not the preview's look requests (sheet, zoom, times). */
+const addInput = <T extends object>(input: T) => {
+  const { sheet: _sheet, ...rest } = input as T & { sheet?: unknown };
+  return rest;
+};
 const explainAsk = (history: StoredMessage[]): string =>
   [...history].reverse().map(userText).find((words) => /<command name="\/explain">/.test(words)) ?? "";
 const EXPLAINER_SCRIPT = "Explainer script";
@@ -168,7 +178,7 @@ function script(history: StoredMessage[]): unknown[] {
       const checked = explainer.beats.map((beat, index) => `Still ${index + 1}: shows ${beat.visual}; the beat says “${beat.say}”`).join("\n");
       return [
         text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}.\n${checked}\nEvery still shows what its beat says. Here is the price.`),
-        use("add_explainer", { ...explainerInput(explainer), voice: explainerVoice() }),
+        use("add_explainer", { ...addInput(explainerInput(explainer, explainAsk(history))), voice: explainerVoice() }),
       ];
     }
     // /roughcut after "go": the reads came back together; cut the earlier takes and the fillers in one
@@ -425,7 +435,7 @@ function script(history: StoredMessage[]): unknown[] {
   if (/<command name="\/explain">/.test(ask)) {
     const explainer = explainerFor(ask);
     if (/\bgo ahead\b|\bjust (do|make) it\b|no need to (show|ask)/.test(ask)) {
-      return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer))];
+      return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer, ask))];
     }
     const look = [explainer.theme, explainer.personality].filter(Boolean).join(", ");
     const beats = explainer.beats.map((beat, index) => `${index + 1}. ${beat.say}${beat.label ? ` [${beat.label}]` : ""}\n   Picture: ${beat.visual}`).join("\n");
@@ -441,7 +451,7 @@ function script(history: StoredMessage[]): unknown[] {
     (message) => message.role === "assistant" && (message.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(EXPLAINER_SCRIPT)),
   );
   if (proposed && /^\s*(go|yes|ok|make it)\b/.test(ask)) {
-    return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainerFor(explainAsk(history))))];
+    return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainerFor(explainAsk(history)), explainAsk(history)))];
   }
   if (/<command name="\/image">/.test(ask)) {
     return [

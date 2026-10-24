@@ -91,6 +91,9 @@ async function main() {
   });
   assert.deepEqual(timed!.stills, [2, 2, 99], "times reach clip-motion as stills; it clamps and dedupes");
   assert.ok(!("stills" in previewJob(input)), "no times: the default stills");
+  const looked = previewJob({ ...input, sheet: { from: 1, to: 2, count: 6 }, zoom: { t: 2, x: 0, y: 0, w: 400, h: 200 } });
+  assert.deepEqual([looked.sheet, looked.zoom], [{ from: 1, to: 2, count: 6 }, { t: 2, x: 0, y: 0, w: 400, h: 200 }], "the sheet and the zoom reach the job");
+  assert.ok(!previewExplainerInput.safeParse({ ...input, sheet: { from: 2, to: 1, count: 4 } }).success, "a sheet runs forward");
   const review = JSON.parse(reviewed.content) as { review?: string; rounds?: string };
   assert.equal(review.review, REVIEW_CHECKLIST);
   assert.equal(PREVIEW_ROUNDS, 6);

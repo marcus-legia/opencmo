@@ -18,6 +18,7 @@ import { makeImage } from './image.tsx';
 import { Mark } from './mark.tsx';
 import { curves, drawOn, noise, poseBlur, retime, shots, smear, snap, speedBlur, travel, tween } from './curves.ts';
 import { oklab } from './color.ts';
+import { auditChecks, makeAudit, type AuditCheck } from './audit.ts';
 import { Streak } from './streak.tsx';
 import { Fill, Goo, GradientField, Grain, LightSweep, MotionBlur, ShaderField, Vignette } from './fx.tsx';
 import { makeShot, useShot } from './shot.tsx';
@@ -38,7 +39,9 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		return span;
 	};
 	const Shot = makeShot(beatAt, timeline.beats.length);
-	return Object.freeze({
+	const owner = {};
+	const audit = makeAudit(owner, (name) => area(name, size.width, size.height));
+	const kit = Object.freeze({
 		// Core: free-form scenes are built from these (read_guide "explainer", "Core")
 		Mark,
 		Text,
@@ -59,6 +62,7 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		shots,
 		poseBlur,
 		oklab,
+		audit,
 		fx: Object.freeze({ GradientField, ShaderField, Grain, Vignette, LightSweep, Fill, MotionBlur, Goo }),
 		font: Object.freeze({ ...FAMILY, ...Object.fromEntries(Object.keys(LIBRARY).map((name) => [name, fontFamily(name)])) }),
 		fonts: Object.freeze(Object.fromEntries(Object.entries(LIBRARY).map(([name, { weights }]) => [name, weights]))),
@@ -134,6 +138,16 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		// Colour
 		color: Object.freeze({ ...palette }),
 	});
+	owners.set(kit, owner);
+	return kit;
+}
+
+const owners = new WeakMap<object, object>();
+
+/** The checks a scene declared with kit.audit (read by the layout probe). */
+export function kitAudit(kit: object): AuditCheck[] {
+	const owner = owners.get(kit);
+	return owner ? auditChecks(owner) : [];
 }
 
 export type Kit = ReturnType<typeof makeKit>;
