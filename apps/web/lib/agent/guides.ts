@@ -90,7 +90,15 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 - find_silences lists pauses between words with a suggested cut that leaves a natural 0.2s gap. Remove pauses longer than about 0.6s in talking-head clips; keep pauses that are dramatic (after a question, before a punchline).
 - media_waveform finds silences the transcript cannot see (breaths, room noise, music). For music with a steady beat it also returns bpm and beats (source seconds): cut and time visuals on beats; the timeline snaps to them too.
 - Do not cut more than about a fifth of the clip without asking.
-- After cutting, the clip is shorter: re-read get_project_state before placing anything in time.`,
+- After cutting, the clip is shorter: re-read get_project_state before placing anything in time.
+
+## Beats and camera moves (learned from a pro producer's rules)
+- A new visual beat every 4-6 s of speech: a cut with punch_in, a title, B-roll, a visual or a camera move. Longer than that on one unchanged shot and attention drops; shorter everywhere reads as noise.
+- Return to the full-frame speaker between visuals: the face is what holds trust.
+- On the line that matters, punch in hard enough to read as intent (close ≥ 1.3× when the source has the resolution; 1.15 is a subtle default).
+- add_camera_move: impact_shake on the number or the hardest claim, white_flash on a reveal (one of the two per 20 s at most; the op refuses more), whip into the next point, push_in across a build-up (it holds until the next cut), handheld on a calm stretch, beat_pulse on a music beat. Quote the exact words; never stack moves on every sentence.
+- An aside can go monochrome for one sentence (apply_color saturation -1 on that range).
+- Every label, sticker or move must pass a deletion test: if taking it out loses nothing, take it out.`,
 
   hooks: `# Hooks and titles
 

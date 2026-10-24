@@ -137,18 +137,32 @@ as one piece. Learn its method and give it to the editor; a ready template is a 
 Learned from AI Producer `aip-composition/references/motion-recipes.md` and `aip/SKILL.md` (MIT; we rewrite them as
 document keyframes so preview and export draw the same thing).
 
-- [ ] Op `add_camera_move { kind, quote | start, duration?, params? }` with kinds `impact_shake` (0.2–0.45 s, amplitude
+- [x] Op `add_camera_move { kind, quote | start, duration?, params? }` with kinds `impact_shake` (0.2–0.45 s, amplitude
   2–40 px), `white_flash` (≤ 0.35 s), `whip` (0.25–0.4 s, ±160 px), `push_in` (amount 0.02–0.4), `handheld`
   (1–12 px, ramps in/out over 0.4 s), `beat_pulse` (0.2–0.3 s, 1–15 %). Each is a pure function of `(t, d, params,
   seed)` baked into keyframes on the speaker piece (`x`, `y`, `scale`, `rotation`) or a white rect (`flash`); seeded
   noise, never `Math.random`. Rerunning on the same words replaces the move.
-- [ ] Rules enforced in the op (not only the guide): at most one shake or flash per 20 s of clip; never on a piece hidden
+- [x] Rules enforced in the op (not only the guide): at most one shake or flash per 20 s of clip; never on a piece hidden
   by a layout panel; the zoom keeps the frame covered (reuse the `punch_in` margin rule).
-- [ ] Guide `pacing` (new) or `hooks`: a new visual beat every 4–6 s of speech; punch-ins ≥ 1.3× on emphasis; a
+- [x] Guide `pacing` (new) or `hooks`: a new visual beat every 4–6 s of speech; punch-ins ≥ 1.3× on emphasis; a
   monochrome close-up for one sentence on an aside (existing colour ops); return to the full-frame speaker between
   visuals; labels pass a deletion test.
-- [ ] Tests: op golden (keyframes for each kind), the 20 s rule, cover rule; export a real founder clip with a shake on
+- [x] Tests: op golden (keyframes for each kind), the 20 s rule, cover rule; export a real founder clip with a shake on
   the number and a push-in on the build-up; look at frames.
+
+**Built (2026-10-24).** `packages/editor-core/src/ops/camera.ts`: `add_camera_move` (quote or start, duration and
+strength clamped to each kind's range, whip direction, seed) and `remove_camera_moves`. The moves live in the scene mark
+`camera-moves` (clip seconds, plus fingerprints of the tracks they baked: cuts copy tracks without ids). `applyOps`
+runs `syncCameraMoves` after every batch, next to `syncVoiceovers`, so cuts, `punch_in` and reframes re-bake the
+keyframes (`scale`, `offsetX`, `offsetY`, `rotation` on each master piece, in source seconds; a push-in holds until
+the next cut, where the jump back reads as the cut). A flash is a white rect with an opacity track under the captions.
+The cover rule is exact: every frame corner, seen from the box centre in the box's turned axes, must fit inside the
+scaled box, and the zoom grows just enough when it does not. Pieces with hand-made keyframes on those properties are
+left alone (the op refuses them). The guide `pacing` has a "Beats and camera moves" section; the Assistant gets both
+ops (MCP lists them through the op registry). Tests: `camera.test.ts` (each recipe, baking, the 20 s rule, cover
+check against the renderer's transform, replace on rerun, cuts, layouts, removal). A real export (16:9 master in
+9:16 with a shake, push-in, handheld, whip and flash) rendered and checked frame by frame: no black edges.
+Not done: a `speaker.cameraMove` capability for style skills (no style preset asks for it yet).
 
 ### O5. Style-frame gate (`/explain` flow), one PR
 

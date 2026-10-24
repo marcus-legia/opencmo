@@ -597,6 +597,22 @@ export const BrandMarkSchema = z
   })
   .strict();
 
+/** Camera moves on the talking head (`add_camera_move`, learned from AI Producer's motion recipes). */
+export const CAMERA_MOVE_KINDS = ['impact_shake', 'white_flash', 'whip', 'push_in', 'handheld', 'beat_pulse'] as const;
+export const CameraMoveSchema = z
+  .object({
+    kind: z.enum(CAMERA_MOVE_KINDS),
+    /** Clip seconds. */
+    start: time,
+    duration: z.number().positive().max(30),
+    /** 0–1 across the kind's range (amplitude, amount, opacity). */
+    strength: z.number().min(0).max(1),
+    direction: z.enum(['left', 'right']).optional(),
+    seed: z.number().int().min(0).max(1_000_000),
+  })
+  .strict();
+export type CameraMove = z.infer<typeof CameraMoveSchema>;
+
 export const MarksSchema = z
   .object({
     reframe: ReframeMarkSchema.optional(),
@@ -612,6 +628,16 @@ export const MarksSchema = z
     /** Ảnh logo do `apply_brand` đặt. */
     'brand-logo': z.literal(true).optional(),
     markers: z.array(MarkerSchema).optional(),
+    /**
+     * The moves `add_camera_move` placed, and fingerprints of the tracks they baked onto the speaker (cuts copy
+     * tracks without ids, so the fingerprint is how a rebuild finds its own). Rebuilt after every op.
+     */
+    'camera-moves': z
+      .object({ moves: z.array(CameraMoveSchema).max(64), baked: z.array(z.string().regex(/^[0-9a-f]{8}$/)).max(4096) })
+      .strict()
+      .optional(),
+    /** The white rect a `white_flash` move draws. */
+    'camera-flash': z.literal(true).optional(),
     /** Visual sinh từ op: `input` là của op đó, op tự kiểm. */
     visual: z.object({ op: z.string().min(1), input: z.unknown() }).strict().optional(),
     /** The style skill whose `apply_style` placed this visual: a rerun replaces only these. */

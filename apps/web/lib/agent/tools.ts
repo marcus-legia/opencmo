@@ -416,6 +416,10 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Add the opening hook: one or two short lines (≤ 40 characters each) in the upper third, clear of the face and captions — line 1 the topic, line 2 the promise on an accent box (accent_line picks the boxed line; accent_font_style italic for a serif accent). Without start/end/quote it shows from 0 to 3 s; it stays up 1.5–8 s. Use the speaker's strongest phrase. One hook per clip.",
   punch_in:
     "Alternate the speaker's zoom at every cut (scales = [wide, close], default [1, 1.15]) so jump cuts read as deliberate; shots shorter than min_shot (default 1.2 s) keep the zoom before them. The zoom stays centred on the face. Running it again replaces the earlier punch-ins.",
+  add_camera_move:
+    "Move the camera on the talking head, baked into keyframes so preview and export match: impact_shake (0.2-0.45 s, on a number or a hard claim), white_flash (up to 0.35 s, on a hard beat or a reveal), whip (0.25-0.4 s throw left/right, into the next point), push_in (0.5-6 s slow zoom on a build-up; holds until the next cut), handheld (1-30 s gentle drift on a calm stretch), beat_pulse (0.2-0.3 s zoom bump on a beat). quote = exact words from <clip_context> (it lands where they start) or start in clip seconds; strength 0-1. The frame always stays covered. At most one shake or flash per 20 s; not where a layout panel shrinks the speaker. The same kind on the same words replaces the earlier move. read_guide \"pacing\".",
+  remove_camera_moves:
+    "Remove the camera move playing at clip second `at`, or every camera move when `at` is omitted.",
   add_list:
     "Show a numbered list (2–7 items: label, optional short meta like \"12.4k\", blur: true hides a label the speaker is teasing) in the visual panel of a split layout or the upper region. reveal_quotes, one per item in order, light each row when the speaker reaches it (exact words from <clip_context>). Pass quote or start/end for when the list appears.",
   add_proof:
