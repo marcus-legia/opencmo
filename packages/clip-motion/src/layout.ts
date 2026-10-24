@@ -75,8 +75,8 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 
 /** Marks that are not a picture of the subject on their own. */
 const FRAMES_ONLY = new Set(['Board', 'Box']);
-/** Marks that move inside their box (canvas fields, Lottie), so an unchanged box does not mean a still beat. */
-const MOVES_INSIDE = /^(DotField|Spectrogram|Waveform|Lottie\b|Shape blob)/;
+/** Marks that move inside their box (canvas fields, Lottie, a Mark the scene animates), so an unchanged box does not mean a still beat. */
+const MOVES_INSIDE = /^(DotField|Spectrogram|Waveform|Lottie\b|Shape blob|Mark\b)/;
 
 function signature(boxes: LaidBox[]): string {
 	return boxes
@@ -98,7 +98,7 @@ export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[])
 	const issues: string[] = [];
 	for (const [beat, list] of [...byBeat.entries()].sort((a, b) => a[0] - b[0])) {
 		const pictures = list.flat().filter((box) => box.kind === 'mark' && !FRAMES_ONLY.has(box.name));
-		if (!pictures.length) issues.push(`Beat ${beat + 1} shows no icon, shape or Lottie: draw what its narration names.`);
+		if (!pictures.length) issues.push(`Beat ${beat + 1} shows nothing drawn: draw what its narration names (a Mark you draw, a shape, an icon).`);
 		else if (list.length > 1 && signature(list[0]!) === signature(list[list.length - 1]!) && !pictures.some((box) => MOVES_INSIDE.test(box.name))) {
 			issues.push(`Nothing moves during beat ${beat + 1}: add a change (a swap, a move, a reaction) or an ambient layer.`);
 		}

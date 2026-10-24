@@ -184,6 +184,32 @@ describe('kit device frames and the display face', () => {
 	});
 });
 
+describe('kit.Mark', () => {
+	const job = (code: string) => {
+		const parsed = parseJob({ title: 'Mark', code, beats: [{ say: 'The disc.', seconds: 3 }], kind: 'clip', format: '16:9', duration: 3 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+	const scene = (at: number) =>
+		`const { Stage, Mark } = kit;\nreturn function Scene() { return <Stage><Mark name="disc" x={400} y={200} w={500} h={300} at={${at}}><svg width="100%" height="100%"><ellipse cx="250" cy="150" rx="240" ry="140" fill="#f5b700" /></svg></Mark></Stage>; };`;
+
+	it('draws its children and reports its box as a mark with the given name', { timeout: 120_000 }, async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-mark-'));
+		const [still] = await renderStills(job(scene(0)), prepare(job(scene(0))).compiled, [45], dir, { scale: 0.25, format: 'png' });
+		expect(still!.boxes).toContainEqual({ kind: 'mark', name: 'Mark disc', x: 400, y: 200, w: 500, h: 300 });
+		const { data, width } = pixels(still!.file);
+		// Centre of the box at quarter size: the ellipse's yellow.
+		const [r] = [...data.subarray((87 * width + 162) * 3, (87 * width + 162) * 3 + 3)];
+		expect(r).toBeGreaterThan(200);
+	});
+
+	it('renders nothing before at', { timeout: 120_000 }, async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-mark-'));
+		const [still] = await renderStills(job(scene(60)), prepare(job(scene(60))).compiled, [30], dir, { scale: 0.25, format: 'png' });
+		expect((still!.boxes ?? []).some((box) => box.name === 'Mark disc')).toBe(false);
+	});
+});
+
 describe('kit.color', () => {
 	it('follows the job theme', async () => {
 		const { makeKit } = await import('./kit/index.ts');

@@ -51,13 +51,18 @@ describe('beatIssues', () => {
 
 	it('reports a beat with text only (a board is not a picture)', () => {
 		const board: LaidBox = { kind: 'mark', name: 'Board', x: 100, y: 300, w: 800, h: 300 };
-		expect(beatIssues([{ beat: 2, boxes: [label, board] }])).toEqual(['Beat 3 shows no icon, shape or Lottie: draw what its narration names.']);
+		expect(beatIssues([{ beat: 2, boxes: [label, board] }])).toEqual(['Beat 3 shows nothing drawn: draw what its narration names (a Mark you draw, a shape, an icon).']);
 	});
 
 	it('reports a beat where nothing moves, but not a Lottie or a dot field', () => {
 		expect(beatIssues([{ beat: 1, boxes: [label, icon] }, { beat: 1, boxes: [label, icon] }])).toEqual(['Nothing moves during beat 2: add a change (a swap, a move, a reaction) or an ambient layer.']);
 		const lottie: LaidBox = { kind: 'mark', name: 'Lottie walk', x: 800, y: 400, w: 300, h: 300 };
 		expect(beatIssues([{ beat: 1, boxes: [lottie] }, { beat: 1, boxes: [lottie] }])).toEqual([]);
+	});
+
+	it('counts a Mark as a picture that moves inside its box', () => {
+		const mark: LaidBox = { kind: 'mark', name: 'Mark disc', x: 0, y: 0, w: 100, h: 100 };
+		expect(beatIssues([{ beat: 0, boxes: [mark] }, { beat: 0, boxes: [mark] }])).toEqual([]);
 	});
 });
 

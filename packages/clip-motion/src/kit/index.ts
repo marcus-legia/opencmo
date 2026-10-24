@@ -17,6 +17,7 @@ import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
 import { makeDevices } from './devices.tsx';
 import { makeImage } from './image.tsx';
+import { Mark } from './mark.tsx';
 import { FAMILY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
@@ -78,6 +79,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		// Device frames for product moments
 		Phone,
 		Browser,
+		// Free-form drawing: what the scene draws itself, tagged for the layout report
+		Mark,
 		// CSS font families, for text a scene sets itself (display: brand moments and product titles)
 		font: Object.freeze({ ...FAMILY }),
 		Shape,
