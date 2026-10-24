@@ -29,7 +29,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { planStudio3d, planVoiceover, quoteRange, readCaptionState, speechSources, summarizeProject, type Transcript } from "@opencmo/editor-core";
+import { planVoiceover, quoteRange, readCaptionState, speechSources, summarizeProject, type Transcript } from "@opencmo/editor-core";
 
 import { promptVersion } from "@/lib/cmo/jobs/edit-taxonomy";
 import type { CaseResult, EvalReport } from "@/lib/eval/compare";
@@ -51,7 +51,7 @@ import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { explainerCard, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "../explainer-tool";
 import { previewMotion } from "@/lib/motion/preview";
-import { generateCard, generateToolSpec, prepareGeneration, prepareScene, prepareVoiceover, sceneToolSpec, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
+import { generateCard, generateToolSpec, prepareGeneration, prepareVoiceover, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, VERIFY_GATE, applyOpTool, checkErrorKeys, failingCheck, isWriteTool, runCheck, runTool } from "../tools";
 import { memoryWorkspace } from "../workspace";
 import { WAIT_TOOL_SPEC, waitReport } from "../wait-tool";
@@ -65,7 +65,7 @@ import {
   fixtureDocument,
   fixtureManifest,
 } from "./fixture";
-import { nodeCapture, nodeGrab, nodeInspectColor, nodePreview3d, nodeWaveform, type NodeMedia } from "./node-tools";
+import { nodeCapture, nodeGrab, nodeInspectColor, nodeWaveform, type NodeMedia } from "./node-tools";
 import { runCmoTasks } from "./cmo-run";
 import { CMO_TASKS } from "./cmo-tasks";
 import { TASKS, type EvalTask } from "./tasks";
@@ -167,7 +167,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   process.env.OPENCMO_AI_FAKE ??= "1";
   // Same profile as the app: an edit with no video that has a transcript has no cut-by-words tools.
   const blank = !speechSources((await workspace.read()).document).length;
-  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
   const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt, toolSpecs.map((spec) => spec.name))}${about}${await state()}`) }];
   const generations: PreparedGeneration[] = [];
 
@@ -228,9 +228,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
           continue;
         }
         const answer =
-          call.name === "preview_3d"
-            ? await nodePreview3d(input as Parameters<typeof nodePreview3d>[0])
-            : call.name === "capture"
+          call.name === "capture"
             ? await nodeCapture(snapshot.document, media(), input)
             : call.name === "inspect_color"
             ? await nodeInspectColor(snapshot.document, media(), input as { time?: number })
@@ -291,7 +289,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.content });
         continue;
       }
-      if (call.name === "generate_media" || call.name === "add_3d_scene" || call.name === "add_voiceover" || call.name === "replace_background" || call.name === "create_video" || call.name === "edit_video") {
+      if (call.name === "generate_media" || call.name === "add_voiceover" || call.name === "replace_background" || call.name === "create_video" || call.name === "edit_video") {
         const prepared =
           call.name === "create_video"
             ? await (async () => {
@@ -313,20 +311,10 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
                 const snapshot = workspace.snapshot();
                 return quoteRange(snapshot.document, await workspace.opContext(snapshot.document, snapshot.manifest), quote, { min: 1.5, max: 5 });
               })
-            : call.name === "add_voiceover"
-              ? await prepareVoiceover(call.input, async (input) => {
-                  const snapshot = workspace.snapshot();
-                  return planVoiceover(snapshot.document, input, await workspace.opContext(snapshot.document, snapshot.manifest));
-                })
-              : await prepareScene(
-                  call.input,
-                  async (input) => {
-                    const snapshot = workspace.snapshot();
-                    return planStudio3d(snapshot.document, input, await workspace.opContext(snapshot.document, snapshot.manifest));
-                  },
-                  // Eval không có DB: code_ref = sha256 như save_scene_code.
-                  async (code) => createHash("sha256").update(code, "utf8").digest("hex"),
-                );
+            : await prepareVoiceover(call.input, async (input) => {
+                const snapshot = workspace.snapshot();
+                return planVoiceover(snapshot.document, input, await workspace.opContext(snapshot.document, snapshot.manifest));
+              });
         if (typeof prepared === "string") {
           results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }) });
           continue;

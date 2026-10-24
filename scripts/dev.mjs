@@ -103,14 +103,10 @@ if (!existsSync(venv)) {
   die("Chưa có packages/engine/.venv312 — xem phần \"Chạy engine\" trong CLAUDE.md.");
 }
 
-// Trang sandbox preview cảnh 3D (spec code-scenes) và font/Lottie chép từ
-// packages/clip-media là file sinh ra, không nằm trong git. `next dev` gọi thẳng
-// nên hook `predev` của apps/web không chạy.
+// The fonts copied from packages/clip-media are generated files, not in git. `next dev` is called
+// directly, so the `predev` hook of apps/web does not run.
 if (run("npm", ["run", "media:sync"], { stdio: "inherit" }).status !== 0) {
-  die("Không chép được font/Lottie (npm run media:sync trong apps/web).");
-}
-if (run("npm", ["run", "sandbox:3d"], { stdio: "inherit" }).status !== 0) {
-  die("Không dựng được trang sandbox 3D (npm run sandbox:3d trong apps/web).");
+  die("Could not copy the fonts (npm run media:sync in apps/web).");
 }
 
 // Explainers render with the local clip-motion CLI, and without a fal key the voice is a silent

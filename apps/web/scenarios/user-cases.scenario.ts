@@ -66,7 +66,7 @@ test("3. explainer: /animate the main points", async () => {
   await fresh();
   const result = await ask(page, "/animate illustrate my main points with simple diagrams and icons so it is easy to follow");
   report("animate", result, { export: await exportClip(page, "animate") });
-  expect.soft(usedAny(result, ["add_diagram", "add_icon", "add_chart", "add_graph", "add_lottie", "add_3d_scene"]), "drew visuals").toBe(true);
+  expect.soft(usedAny(result, ["add_diagram", "add_icon", "add_chart", "add_graph", "add_explainer"]), "drew visuals").toBe(true);
 });
 
 test("4. fake set: /background on the whole clip", async () => {

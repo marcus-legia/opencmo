@@ -939,10 +939,8 @@ function activityOf(event: AssistantEvent, previous: Activity | undefined): Acti
 }
 
 const TOOL_LABELS: Record<string, string> = {
-  preview_3d: "Rendering a 3D preview",
   preview_explainer: "Rendering explainer stills",
   add_explainer: "Preparing the explainer",
-  add_3d_scene: "Preparing the 3D scene",
   capture_frames: "Looking at frames",
   check: "Checking the edit",
   read_guide: "Reading the guide",

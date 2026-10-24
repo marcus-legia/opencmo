@@ -1,5 +1,5 @@
--- Code Scenes (20261010090000): code cảnh lưu theo sha256, chỉ chủ đọc được,
--- và spec `template: "code"` chỉ nhận code_ref của chính người gọi.
+-- Code Scenes (20261010090000): scene code is stored by sha256 and only its owner reads it.
+-- The 3D model that rendered it is gone (20261227090000); explainers check code_ref in 154.
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -31,26 +31,6 @@ select throws_ok($$ select public.save_scene_code(repeat('x', 32001)) $$, '22023
 select throws_ok($$ insert into public.scene_codes (user_id, hash, code)
   values ('e1080000-0000-4000-8000-00000000000a', repeat('c', 64), 'x') $$,
   '42501', null, 'không ghi thẳng vào bảng');
-
-select is(
-  (select (public.create_generation('e1081000-0000-4000-8000-00000000000a', null, 'studio-3d',
-    jsonb_build_object('prompt', 'Staircase', 'aspectRatio', '1:1', 'duration', 6, 'scene',
-      jsonb_build_object('template', 'code', 'code_ref', encode(sha256(convert_to('return (t) => {};', 'UTF8')), 'hex'))),
-    repeat('d', 64), gen_random_uuid())->'generation'->>'credits_reserved')::int),
-  1, 'cảnh code với code_ref của mình: tạo được, giữ 1 credit'
-);
-select throws_ok(
-  $$ select public.create_generation('e1081000-0000-4000-8000-00000000000a', null, 'studio-3d',
-       jsonb_build_object('prompt', 'x', 'aspectRatio', '1:1', 'duration', 6, 'scene',
-         jsonb_build_object('template', 'code', 'code_ref', repeat('e', 64))),
-       repeat('e', 64), gen_random_uuid()) $$,
-  '22023', 'This 3D scene code was not found. Preview it again.', 'code_ref không tồn tại bị chặn'
-);
-select throws_ok(
-  $$ select public.create_generation('e1081000-0000-4000-8000-00000000000a', null, 'studio-3d',
-       '{"prompt":"x","aspectRatio":"1:1","duration":6,"scene":{"template":"code"}}', repeat('f', 64), gen_random_uuid()) $$,
-  '22023', 'This 3D scene code was not found. Preview it again.', 'thiếu code_ref bị chặn'
-);
 
 -- Người B: không đọc được code của A, không render được bằng hash của A.
 set local request.jwt.claims = '{"sub":"e1080000-0000-4000-8000-00000000000b"}';

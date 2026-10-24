@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 
-import { findLotties, introSpecSchema, LOTTIE_PACK, readBrand, reviewIntro, type IntroSpec } from "@opencmo/editor-core";
+import { introSpecSchema, readBrand, reviewIntro, type IntroSpec } from "@opencmo/editor-core";
 import type { ClipDocument } from "@opencmo/clip-doc";
 
 import { fakeAllowed, LlmError, llmReady, structured, type LlmUsage } from "@/lib/cmo/jobs/llm";
@@ -119,11 +119,10 @@ export async function prepareVideo(
             prompt: `<brief>${request.brief ?? "(none)"}</brief>\n${context.clipContext}`,
             schema: writerSchema,
           });
-      const lotties = [...new Set([...findLotties(`${request.brief ?? ""} ${words.title}`, 6), ...LOTTIE_PACK.slice(0, 6)].map((entry) => entry.name))].join(", ");
       const facts = [
         `<words>${JSON.stringify(words)}</words>`,
         `<brief>${request.brief ?? "(none)"}</brief>`,
-        `<project>${JSON.stringify({ brand_colors: brand?.colors ?? null, brand_logo: hasLogo, seconds_requested: request.seconds ?? null, lotties })}</project>`,
+        `<project>${JSON.stringify({ brand_colors: brand?.colors ?? null, brand_logo: hasLogo, seconds_requested: request.seconds ?? null })}</project>`,
       ].join("\n");
       let issues: string[] = [];
       let draft: IntroSpec | null = null;
@@ -152,7 +151,7 @@ export async function prepareVideo(
   const issues = reviewIntro(spec, { hasLogo });
   if (issues.length) return issues.join(" ");
 
-  const labels = new Map(spec.elements.map((element) => [element.key, element.text ? `${element.kind}: “${element.text}”` : element.lottie ? `${element.kind}: ${element.lottie}` : element.kind]));
+  const labels = new Map(spec.elements.map((element) => [element.key, element.text ? `${element.kind}: “${element.text}”` : element.kind]));
   const storyboard: Storyboard = {
     seconds: spec.seconds,
     personality: spec.personality,

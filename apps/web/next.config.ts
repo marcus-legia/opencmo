@@ -7,15 +7,12 @@ import blogRedirects from "./content/blog/redirects.json";
  * Header bảo mật.
  *
  * CSP viết theo đúng những thứ app này thật sự nạp; không có `unsafe-eval`,
- * không có wildcard host. Ba chỗ bắt buộc phải nới, kèm lý do:
+ * không có wildcard host. Hai chỗ bắt buộc phải nới, kèm lý do:
  *
  *   - `script-src 'unsafe-inline'`: Next nhúng dữ liệu hydration bằng thẻ
  *     `<script>` inline. Nonce cho từng request thì phải bỏ hẳn render tĩnh.
  *   - `style-src 'unsafe-inline'`: canvas editor đặt vị trí chữ bằng `style`
  *     trên từng phần tử — đó là cách người dùng kéo chữ trên khung hình.
- *   - `script-src 'wasm-unsafe-eval'`: CanvasKit (Skottie, vẽ Lottie ở preview)
- *     là WebAssembly; thiếu nó trình duyệt từ chối biên dịch wasm. Chỉ mở wasm,
- *     không mở `eval`.
  *
  * `'unsafe-eval'` CHỈ thêm khi `next dev`: Fast Refresh của React chạy module
  * bằng `eval`, không có nó thì mỗi lần sửa file là một lỗi CSP và hot reload
@@ -65,7 +62,7 @@ function securityHeaders(): { key: string; value: string }[] {
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${YOUTUBE_SCRIPT}${
+    `script-src 'self' 'unsafe-inline' ${YOUTUBE_SCRIPT}${
       process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
     }`,
     "style-src 'self' 'unsafe-inline'",
@@ -78,8 +75,7 @@ function securityHeaders(): { key: string; value: string }[] {
     // Font phục vụ ở `/fonts/` (chép từ `packages/clip-media` lúc build) — cùng origin, không cần host ngoài.
     "font-src 'self'",
     "worker-src 'self' blob:",
-    // 'self': iframe sandbox preview cảnh 3D (/sandbox/three.html) của editor.
-    `frame-src 'self' ${YOUTUBE_FRAME}`,
+    `frame-src ${YOUTUBE_FRAME}`,
   ].join("; ");
 
   return [
@@ -100,31 +96,6 @@ function securityHeaders(): { key: string; value: string }[] {
   ];
 }
 
-/**
- * Trang sandbox preview cảnh 3D (spec code-scenes): chạy code three.js do
- * agent viết. `sandbox allow-scripts` cho nó origin mờ — không cookie, không
- * storage, không gọi được API của app; `connect-src 'none'` chặn mạng hẳn.
- * `unsafe-eval` CHỈ ở đây (code của cảnh là chương trình); trang chính vẫn cấm.
- * Script inline vì runtime nằm trong trang (origin mờ không nạp file cùng host).
- */
-function sandboxHeaders(): { key: string; value: string }[] {
-  const csp = [
-    "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval'",
-    "worker-src blob:",
-    "img-src data: blob:",
-    "connect-src 'none'",
-    "base-uri 'none'",
-    "form-action 'none'",
-    "frame-ancestors 'self'",
-    "sandbox allow-scripts",
-  ].join("; ");
-  return [
-    { key: "Content-Security-Policy", value: csp },
-    { key: "Cache-Control", value: "public, max-age=3600" },
-  ];
-}
-
 const e2eBuild = process.env.OPENCMO_E2E_BUILD === "1";
 const config: NextConfig = {
   // Test và dev có thể cùng mở trên máy: không ghi đè manifest của nhau.
@@ -138,18 +109,9 @@ const config: NextConfig = {
    * server, shell editor vẽ preview bằng chúng trong trình duyệt — Next phải
    * transpile.
    */
-  transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons", "@opencmo/clip-three"],
-  /**
-   * CanvasKit là bản Emscripten có nhánh Node (`require("fs")`) không bao giờ
-   * chạy trong trình duyệt; bundle phía client bỏ hai module đó.
-   */
-  webpack(config, { isServer }) {
-    if (!isServer) config.resolve.fallback = { ...config.resolve.fallback, fs: false, path: false };
-    return config;
-  },
+  transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons"],
   async headers() {
-    // Luật sau ghi đè luật trước cho cùng header: trang sandbox có CSP riêng.
-    return [{ source: "/:path*", headers: securityHeaders() }, { source: "/sandbox/three.html", headers: sandboxHeaders() }];
+    return [{ source: "/:path*", headers: securityHeaders() }];
   },
   /**
    * Slug bài viết là bất biến; đổi slug thì slug cũ phải vào

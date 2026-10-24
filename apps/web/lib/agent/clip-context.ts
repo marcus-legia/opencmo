@@ -46,7 +46,7 @@ export async function clipContextBlock(
     // No speaker and no script (a blank "New edit", or AI-only video): media is placed by time,
     // so the agent needs the work area and the guide that explains it.
     ...(model || speech.length ? {} : noScript(document)),
-    // Hình khung: agent từng mặc định 9:16 cho 3D toàn khung trên clip 16:9 (02/10).
+    // The frame shape: without it the agent once asked for 9:16 media on a 16:9 clip (02/10).
     ...(() => {
       const frame = frameRatio(document);
       return frame ? { frame } : {};

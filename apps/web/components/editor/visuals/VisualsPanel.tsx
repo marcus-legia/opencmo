@@ -2,7 +2,7 @@
 
 /**
  * Bảng Visuals (spec visuals V3): chèn visual giải thích mà không cần agent —
- * mũi tên/khoanh/gạch chân, diagram, biểu đồ, đồ thị, cảnh 3D. Mỗi nút là MỘT
+ * mũi tên/khoanh/gạch chân, diagram, biểu đồ, đồ thị. Mỗi nút là MỘT
  * op của editor-core (cùng op agent gọi), đặt ở playhead, dài 4 giây.
  *
  * Chọn sẵn một visual trên canvas thì bảng mở ở chế độ sửa: đổi nhãn/số/công
@@ -14,11 +14,7 @@
 import { useEffect, useState } from "react";
 
 import { findIcons, iconPath, type IconMatch } from "@opencmo/clip-icons";
-import { EMOJI_PACK, findLotties, LOTTIE_PACK, STUDIO_MODEL, TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from "@opencmo/editor-core";
-import { PRODUCTS, THEMES, TEMPLATES } from "@opencmo/clip-three";
-import { aiModel, priceOf } from "@opencmo/editor-core/generate";
-
-import { liveModel } from "../generate/GeneratePanel";
+import { TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from "@opencmo/editor-core";
 
 const MOTIONS = ["draw", "pop", "spin", "orbit", "bounce", "float", "pulse", "shake", "fly"] as const;
 
@@ -37,11 +33,10 @@ function IconTile({ name, onPick }: { name: string; onPick: () => void }) {
   );
 }
 
-type Kind = "icon" | "animation" | "pointer" | "diagram" | "chart" | "graph" | "title" | "hook" | "list" | "3d" | "studio";
+type Kind = "icon" | "pointer" | "diagram" | "chart" | "graph" | "title" | "hook" | "list";
 
 const KINDS: { kind: Kind; label: string }[] = [
   { kind: "icon", label: "Icon" },
-  { kind: "animation", label: "Animation" },
   { kind: "pointer", label: "Pointer" },
   { kind: "diagram", label: "Diagram" },
   { kind: "chart", label: "Chart" },
@@ -49,32 +44,7 @@ const KINDS: { kind: Kind; label: string }[] = [
   { kind: "title", label: "Title" },
   { kind: "hook", label: "Hook" },
   { kind: "list", label: "List" },
-  { kind: "3d", label: "3D" },
-  { kind: "studio", label: "3D Studio" },
 ];
-
-/** Template người dùng tự điền được. `code` (cảnh agent tự viết) không có ở đây: nó cần Assistant. */
-type PickableTemplate = Exclude<(typeof TEMPLATES)[number], "code">;
-const STUDIO_LABELS: Record<PickableTemplate, string> = { bars: "Bars", number: "Big number", rise: "Growth line", product: "Object" };
-const PICKABLE = Object.keys(STUDIO_LABELS) as PickableTemplate[];
-
-/** Model 3D Studio có bật trên máy chủ này không (cùng nguồn với ô Generate). */
-let studioEnabled: Promise<boolean> | null = null;
-function useStudioEnabled(): boolean {
-  const [enabled, setEnabled] = useState(false);
-  useEffect(() => {
-    studioEnabled ??= fetch("/api/v1/generations/models")
-      .then((response) => (response.ok ? (response.json() as Promise<{ models: { id: string }[] }>) : { models: [] }))
-      .then((body) => body.models.some((model) => model.id === STUDIO_MODEL))
-      .catch(() => false);
-    let live = true;
-    void studioEnabled.then((value) => live && setEnabled(value));
-    return () => {
-      live = false;
-    };
-  }, []);
-  return enabled;
-}
 
 const POINTERS = [
   { shape: "arrow", label: "Arrow", from: [0.2, 0.25], to: [0.65, 0.4] },
@@ -96,11 +66,6 @@ const TITLE_SIDES = [
 ] as const;
 type TitleSide = (typeof TITLE_SIDES)[number]["side"];
 const CHARTS = ["stat", "bar", "line", "donut", "pie"] as const;
-const SHAPES3D = [
-  { id: "surface", label: "Wave surface" },
-  { id: "solids", label: "Shapes" },
-  { id: "cube", label: "Spinning cube" },
-] as const;
 
 /** Vùng đặt chuẩn hoá 0–1; "auto" để op tự chọn (1/3 trên của khung dọc). */
 const REGIONS = {
@@ -135,32 +100,6 @@ const lines = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 
-function threeObjects(preset: (typeof SHAPES3D)[number]["id"], expr: string) {
-  if (preset === "surface") {
-    return {
-      objects: [
-        { type: "axes", length: 3.5 },
-        { type: "surface", expr: expr || "sin(x) cos(y)", resolution: 26, color: "#236B8E", color2: "#FACC15", edges: "#0B1020", tracks: [{ property: "progress", keyframes: [{ time: 0, value: 0 }, { time: 1.2, value: 1 }] }] },
-      ],
-      camera: { phi: 62, theta: -40, distance: 13, orbit: 18 },
-    };
-  }
-  if (preset === "solids") {
-    return {
-      objects: [
-        { type: "cube", size: 1.8, position: [-1.8, 0, 0], color: "#58C4DD" },
-        { type: "sphere", radius: 1.1, position: [0.8, -1.2, 0], color: "#FC6255" },
-        { type: "torus", radius: 1, tube: 0.35, position: [1.4, 1.8, 0], rotation: [60, 0, 0], color: "#83C167" },
-      ],
-      camera: { phi: 60, theta: -60, distance: 12, orbit: 12 },
-    };
-  }
-  return {
-    objects: [{ type: "cube", size: 2.4, color: "#FACC15", edges: "#0B1020", tracks: [{ property: "rotateZ", keyframes: [{ time: 0, value: 0 }, { time: 4, value: 180 }] }, { property: "rotateX", keyframes: [{ time: 0, value: 0 }, { time: 4, value: 90 }] }] }],
-    camera: { phi: 65, theta: -45, distance: 11 },
-  };
-}
-
 export function VisualsPanel({
   busy,
   playhead,
@@ -178,27 +117,14 @@ export function VisualsPanel({
   const [iconQuery, setIconQuery] = useState("arrow");
   const [icons, setIcons] = useState<IconMatch[]>([]);
   const [motion, setMotion] = useState<(typeof MOTIONS)[number]>("pop");
-  const [flip, setFlip] = useState(false);
-  const [lottieGroup, setLottieGroup] = useState<"motion" | "emoji">("motion");
-  const [lottieQuery, setLottieQuery] = useState("");
   const [labels, setLabels] = useState("Hook\nValue\nCall to action");
   const [layout, setLayout] = useState<(typeof LAYOUTS)[number]>("column");
   const [chart, setChart] = useState<(typeof CHARTS)[number]>("stat");
   const [data, setData] = useState("Faster: 47");
   const [unit, setUnit] = useState("%");
   const [expr, setExpr] = useState("2^x");
-  const [surface, setSurface] = useState("sin(x) cos(y)");
   const [title, setTitle] = useState("");
   const [region, setRegion] = useState<RegionName>("auto");
-  const studio = useStudioEnabled();
-  const [template, setTemplate] = useState<PickableTemplate>("bars");
-  const [studioData, setStudioData] = useState("2023: 12\n2024: 19\n2025: 31");
-  const [studioValue, setStudioValue] = useState("2.4M");
-  const [prefix, setPrefix] = useState("");
-  const [suffix, setSuffix] = useState("");
-  const [studioLabel, setStudioLabel] = useState("");
-  const [object, setObject] = useState<(typeof PRODUCTS)[number]>("trophy");
-  const [theme, setTheme] = useState<(typeof THEMES)[number]>("midnight");
   const [titleKind, setTitleKind] = useState<TitleInput["kind"]>("lowerThird");
   const [titleSub, setTitleSub] = useState("");
   const [hookTop, setHookTop] = useState("");
@@ -297,43 +223,15 @@ export function VisualsPanel({
     return null;
   };
 
-  /** "2.4M", "12,500", "47" → số; K/M/B nhân lên. */
-  const number = (text: string): number | null => {
-    const match = /^\s*(-?[\d.,]+)\s*([kmb])?\s*$/i.exec(text);
-    if (!match) return null;
-    const value = Number(match[1]!.replace(/,/g, "")) * ({ k: 1e3, m: 1e6, b: 1e9 }[(match[2] ?? "").toLowerCase() as "k"] ?? 1);
-    return Number.isFinite(value) ? value : null;
-  };
-  const studioScene = (): Record<string, unknown> | null => {
-    const common = { template, theme, ...(title.trim() ? { title: title.trim().slice(0, 40) } : {}), ...(studioLabel.trim() ? { label: studioLabel.trim().slice(0, 40) } : {}) };
-    if (template === "bars") {
-      const bars = parseData(studioData).slice(0, 6);
-      if (bars.length < 2 || bars.some((bar) => bar.value < 0)) return null;
-      const top = Math.max(...bars.map((bar) => bar.value));
-      return { ...common, bars: bars.map((bar) => ({ ...bar, ...(bar.value === top ? { highlight: true } : {}) })), ...(prefix ? { prefix: prefix.slice(0, 3) } : {}), ...(suffix ? { suffix: suffix.slice(0, 4) } : {}) };
-    }
-    if (template === "number") {
-      const value = number(studioValue);
-      return value === null ? null : { ...common, value, ...(prefix ? { prefix: prefix.slice(0, 3) } : {}), ...(suffix ? { suffix: suffix.slice(0, 4) } : {}) };
-    }
-    if (template === "rise") {
-      const points = studioData.split(/[\s,;]+/).map(number).filter((value): value is number => value !== null).slice(0, 12);
-      return points.length < 3 ? null : { ...common, points, ...(prefix ? { prefix: prefix.slice(0, 3) } : {}), ...(suffix ? { suffix: suffix.slice(0, 4) } : {}) };
-    }
-    return { ...common, object };
-  };
-  const studioModel = liveModel(STUDIO_MODEL) ?? aiModel(STUDIO_MODEL);
-  const studioCredits = studioModel ? priceOf(studioModel, { prompt: "x" }) : 1;
-
   const add = (op: string, extra: Record<string, unknown>) => onRun([{ op, ...at(op === "add_title" ? 5.5 : op === "add_list" ? 6 : 4), ...extra }]);
-  const opFor: Record<Kind, string> = { icon: "add_icon", animation: "add_lottie", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", title: "add_title", hook: "add_hook_title", list: "add_list", "3d": "add_3d", studio: "add_3d_studio" };
+  const opFor: Record<Kind, string> = { icon: "add_icon", pointer: "add_shape", diagram: "add_diagram", chart: "add_chart", graph: "add_graph", title: "add_title", hook: "add_hook_title", list: "add_list" };
   const editing = selected && selected.op === opFor[kind] ? selected : null;
 
   return (
     <div className="ed2-gen" data-testid="visuals-panel" onPointerDown={(event) => event.stopPropagation()}>
-      {/* Nine kinds no longer fit one line of the panel: wrap instead of running under the canvas toolbar. */}
+      {/* The kinds do not fit one line of the panel: wrap instead of running under the canvas toolbar. */}
       <div className="ed2-row ed2-wrap">
-        {KINDS.filter((entry) => entry.kind !== "studio" || studio).map((entry) => (
+        {KINDS.map((entry) => (
           <button key={entry.kind} type="button" className="ed2-chip" aria-pressed={kind === entry.kind} data-testid={`visuals-kind-${entry.kind}`} onClick={() => setKind(entry.kind)}>
             {entry.label}
           </button>
@@ -363,70 +261,6 @@ export function VisualsPanel({
               />
             ))}
           </div>
-        </>
-      ) : null}
-
-      {kind === "animation" ? (
-        <>
-          <div className="ed2-row">
-            <button type="button" className="ed2-chip" aria-pressed={lottieGroup === "motion"} data-testid="visuals-lottie-group-motion" onClick={() => setLottieGroup("motion")}>
-              Motion
-            </button>
-            <button type="button" className="ed2-chip" aria-pressed={lottieGroup === "emoji"} data-testid="visuals-lottie-group-emoji" onClick={() => setLottieGroup("emoji")}>
-              Emoji
-            </button>
-          </div>
-          <input
-            className="ed2-select"
-            style={{ flex: "none" }}
-            aria-label="Search animations"
-            placeholder={lottieGroup === "emoji" ? "Search emoji: fire, laugh, idea, money…" : "Search: run, celebrate, idea, goal…"}
-            data-testid="visuals-lottie-search"
-            value={lottieQuery}
-            onChange={(event) => setLottieQuery(event.target.value)}
-            onKeyDown={(event) => event.stopPropagation()}
-          />
-          {lottieGroup === "motion" ? (
-            <div className="ed2-row ed2-wrap">
-              {(lottieQuery.trim() ? findLotties(lottieQuery, 40).filter((entry) => !entry.name.startsWith("emoji/")) : LOTTIE_PACK).map((entry) => (
-                <button
-                  key={entry.name}
-                  type="button"
-                  className="ed2-chip"
-                  disabled={busy}
-                  title={entry.tags.join(", ")}
-                  data-testid={`visuals-lottie-${entry.name}`}
-                  onClick={() => add("add_lottie", { animation: entry.name, ...(flip ? { flip: true } : {}) })}
-                >
-                  {entry.title}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="ed2-emoji-grid">
-              {(lottieQuery.trim() ? EMOJI_PACK.filter((entry) => findLotties(lottieQuery, 200).some((hit) => hit.name === entry.name)) : EMOJI_PACK).map((entry) => (
-                <button
-                  key={entry.name}
-                  type="button"
-                  className="ed2-emoji"
-                  disabled={busy}
-                  title={entry.title}
-                  aria-label={entry.title}
-                  data-testid={`visuals-emoji-${entry.name.slice(6)}`}
-                  onClick={() => add("add_lottie", { animation: entry.name })}
-                >
-                  {entry.emoji}
-                </button>
-              ))}
-            </div>
-          )}
-          <label className="ed2-check">
-            <input type="checkbox" checked={flip} data-testid="visuals-lottie-flip" onChange={(event) => setFlip(event.target.checked)} />
-            Mirror (face left)
-          </label>
-          <p className="ed2-muted">
-            Your own Lottie .json files go in Media — drag them onto the canvas. Animated emoji by Google Noto (CC BY 4.0).
-          </p>
         </>
       ) : null}
 
@@ -583,68 +417,6 @@ export function VisualsPanel({
         />
       ) : null}
 
-      {kind === "3d" ? (
-        <>
-          <input className="ed2-select" aria-label="Surface formula in x and y" placeholder="z = …  e.g. sin(x) cos(y)" value={surface} onChange={(event) => setSurface(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-          <div className="ed2-row ed2-wrap">
-            {SHAPES3D.map((preset) => (
-              <button key={preset.id} type="button" className="ed2-chip" disabled={busy} data-testid={`visuals-3d-${preset.id}`} onClick={() => add("add_3d", { ...threeObjects(preset.id, surface), ...titled })}>
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {kind === "studio" ? (
-        <>
-          <div className="ed2-row ed2-wrap">
-            {PICKABLE.map((value) => (
-              <button key={value} type="button" className="ed2-chip" aria-pressed={template === value} data-testid={`studio-template-${value}`} onClick={() => setTemplate(value)}>
-                {STUDIO_LABELS[value]}
-              </button>
-            ))}
-          </div>
-          {template === "bars" || template === "rise" ? (
-            <textarea
-              className="ed2-asst-input"
-              aria-label={template === "bars" ? "Bars, one 'label: value' per line" : "Values over time, separated by commas"}
-              placeholder={template === "bars" ? "Label: value, 2 to 6 lines" : "12, 18, 26, 41 (3 to 12 values)"}
-              data-testid="studio-data"
-              value={studioData}
-              onChange={(event) => setStudioData(event.target.value)}
-              onKeyDown={(event) => event.stopPropagation()}
-            />
-          ) : null}
-          {template === "number" ? (
-            <input className="ed2-select" style={{ flex: "none" }} aria-label="Number" placeholder="2.4M, 12,500, 47" data-testid="studio-value" value={studioValue} onChange={(event) => setStudioValue(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-          ) : null}
-          {template === "product" ? (
-            <div className="ed2-row ed2-wrap">
-              {PRODUCTS.map((value) => (
-                <button key={value} type="button" className="ed2-chip" aria-pressed={object === value} data-testid={`studio-object-${value}`} onClick={() => setObject(value)}>
-                  {value}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="ed2-row">
-              <input className="ed2-select" aria-label="Prefix" placeholder="Prefix ($)" value={prefix} maxLength={3} style={{ width: 80 }} onChange={(event) => setPrefix(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-              <input className="ed2-select" aria-label="Suffix" placeholder="Suffix (%)" value={suffix} maxLength={4} style={{ width: 80 }} onChange={(event) => setSuffix(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-            </div>
-          )}
-          <input className="ed2-select" style={{ flex: "none" }} aria-label="Label (optional)" placeholder="Label (optional)" maxLength={40} value={studioLabel} onChange={(event) => setStudioLabel(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-          <div className="ed2-row ed2-wrap" aria-label="Look">
-            {THEMES.map((value) => (
-              <button key={value} type="button" className="ed2-chip" aria-pressed={theme === value} data-testid={`studio-theme-${value}`} onClick={() => setTheme(value)}>
-                {value}
-              </button>
-            ))}
-          </div>
-          <p className="ed2-muted">Rendered in 3D on our GPUs. It appears on the clip in about half a minute.</p>
-        </>
-      ) : null}
-
       {kind !== "pointer" && kind !== "icon" && kind !== "title" && kind !== "hook" && kind !== "list" ? (
         <div className="ed2-row ed2-wrap" aria-label="Region">
           {(Object.keys(REGIONS) as RegionName[]).map((name) => (
@@ -652,25 +424,6 @@ export function VisualsPanel({
               {name}
             </button>
           ))}
-        </div>
-      ) : null}
-
-      {kind === "studio" ? (
-        <div className="ed2-row">
-          <input className="ed2-select ed2-grow" aria-label="Title (optional)" placeholder="Title (optional)" maxLength={40} value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.stopPropagation()} />
-          <button
-            type="button"
-            className="ed2-btn ed2-primary"
-            disabled={busy || !studioScene()}
-            data-testid="studio-render"
-            onClick={() => {
-              const scene = studioScene();
-              const start = Math.round(playhead() * 100) / 100;
-              if (scene) onRun([{ op: "add_3d_studio", start, end: Math.round((start + 6) * 100) / 100, ...scene, ...(REGIONS[region] ? { region: REGIONS[region] } : {}) }]);
-            }}
-          >
-            Render 3D · {studioCredits} {studioCredits === 1 ? "credit" : "credits"}
-          </button>
         </div>
       ) : null}
 

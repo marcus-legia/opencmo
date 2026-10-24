@@ -3,7 +3,7 @@
  *
  * `preview_explainer` renders stills of the scene code the model wrote (Remotion, through
  * `previewMotion`) and returns them as images plus a layout report, so the model looks at its own
- * work and fixes it — the `preview_3d` loop, but rendered on the server. Free.
+ * work and fixes it, rendered on the server. Free.
  *
  * `add_explainer` saves the previewed code (`scene_codes`, by hash), builds the `motion-explainer`
  * spec and shows a price card listing the beats; on Approve the generation starts and op
@@ -34,7 +34,8 @@ import {
   type Op,
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
-import { MAX_PREVIEW_STILLS } from "@opencmo/clip-motion/job";
+import { MAX_PREVIEW_STILLS, MAX_SHEET_FRAMES } from "@opencmo/clip-motion/job";
+import { MOTION_STYLES, motionStyle } from "@opencmo/clip-motion/styles";
 import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
 import { ApiError } from "@/lib/api/errors";
@@ -58,7 +59,7 @@ const beat = z.object({
     .trim()
     .min(1)
     .max(160)
-    .describe('What is drawn in this beat, naming the icons, Lotties or kit shapes, e.g. "a syringe enters left; a virus icon splits into 3 grey fragments".'),
+    .describe('What is drawn in this beat and how it changes, drawn in the scene code, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve".'),
   seconds: z.number().min(0.5).max(30).optional().describe("Silent clips only: how long this beat lasts, 0.5-30 s. A narrated explainer is timed by its voice."),
 });
 
@@ -77,13 +78,15 @@ export const DIRECTION_HELP =
 
 /** Returned with every clean preview: the model answers it line by line before the next round or add_explainer. */
 export const REVIEW_CHECKLIST = [
-  "Answer each line about the stills you just saw, in order:",
+  "Answer each line about the stills you just saw, in order (read the issues first: every check you declared with kit.audit and every jump, lurch or blur at rest is listed there with its time):",
   "1. Subject: does every still show what its beat says (\"shows X; the beat says Y\")?",
-  "2. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
-  "3. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
-  "4. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
-  "5. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
-  "6. Finish: margins even, colours from the palette, the last frame a clean end state?",
+  "2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?",
+  "3. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
+  "4. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
+  "5. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
+  "6. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
+  "7. Finish: margins even, colours from your direction's palette, type set with care (tracking, weight, line height), the last frame a clean end state?",
+  "8. The bar: would this pass in a launch video by a top design team? Name what they would do differently here (depth, a bolder type scale, a better curve, more life in the rest) and do it.",
   "Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing.",
 ].join("\n");
 
@@ -170,8 +173,27 @@ export const previewExplainerInput = z
       .max(MAX_PREVIEW_STILLS)
       .optional()
       .describe(`Seconds to render stills at (at most ${MAX_PREVIEW_STILLS}): pick them around every main move of your direction, e.g. its start, middle and landing. Default: beat midpoints and the last frame.`),
+    sheet: z
+      .object({ from: z.number().finite().min(0), to: z.number().finite().min(0), count: z.number().int().min(2).max(MAX_SHEET_FRAMES) })
+      .refine((value) => value.to > value.from, "to must be after from")
+      .optional()
+      .describe(`One contact-sheet image of count frames (2-${MAX_SHEET_FRAMES}) spread from \`from\` to \`to\` seconds, in reading order: use it on your most important move to see its whole curve, not three moments.`),
+    zoom: z
+      .object({ t: z.number().finite().min(0), x: z.number().finite().min(0), y: z.number().finite().min(0), w: z.number().finite().min(16), h: z.number().finite().min(16) })
+      .optional()
+      .describe("A full-resolution crop of one frame (px of the composition): check that resting text and fine lines are crisp."),
+    code: sceneFields.code.optional().describe('The body of (React, R, kit) => { …; return function Scene() { … } } with JSX, no imports (read_guide "explainer"). Leave it out when you send variants.'),
+    variants: z
+      .array(z.object({ label: z.string().trim().min(1).max(40).describe('The direction\'s name for the user, e.g. "Kinetic type".'), code: sceneFields.code }))
+      .min(2)
+      .max(3)
+      .optional()
+      .describe("Style directions to choose from before the whole video: 2-3 scene codes of the same hero shot, each rendered at times[0] (default: beat 1's middle), returned as ONE image side by side, left to right in this order. Counts as one preview."),
   })
-  .superRefine(silentRules);
+  .superRefine(silentRules)
+  .superRefine((value, ctx) => {
+    if (value.code === undefined && !value.variants) ctx.addIssue({ code: "custom", path: ["code"], message: "send the scene code, or variants to compare directions." });
+  });
 
 export const addExplainerInput = z
   .object({
@@ -195,6 +217,12 @@ export type MotionJob = {
   personality?: ExplainerPersonality;
   /** Preview only: seconds to render stills at. */
   stills?: number[];
+  /** Preview only: one contact sheet across a window. */
+  sheet?: { from: number; to: number; count: number };
+  /** Preview only: a full-resolution crop of one frame. */
+  zoom?: { t: number; x: number; y: number; w: number; h: number };
+  /** Preview only: 2-3 style directions, one hero still each, side by side. */
+  variants?: { label: string; code: string }[];
   /** A silent motion clip: beats timed by their own seconds. */
   kind?: "clip";
   /** Images for kit.Image: signed URLs in a preview. */
@@ -203,7 +231,7 @@ export type MotionJob = {
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
 export type MotionPreview =
-  | { ok: true; stills: { t: number; file: string }[]; issues: string[]; estimated: boolean; images?: string[] }
+  | { ok: true; stills: { t: number; file: string; kind?: "sheet" | "zoom" | "variants"; times?: number[]; columns?: number; labels?: string[] }[]; issues: string[]; estimated: boolean; images?: string[] }
   | { ok: false; phase: "job" | "compile" | "guard" | "render"; message: string };
 
 export type PreviewMotion = (job: MotionJob) => Promise<MotionPreview>;
@@ -220,11 +248,26 @@ const issueOf = (error: z.ZodError) => {
  * Motion templates (ported from Opus's MIT remakes, `packages/clip-motion/templates`): finished silent clips a model
  * starts from instead of a blank scene. Free, no clip needed; the MCP server registers the same two tools.
  */
-export const MOTION_TEMPLATE_TOOLS = new Set(["list_motion_templates", "get_motion_template"]);
+export const MOTION_TEMPLATE_TOOLS = new Set(["list_motion_styles", "get_motion_style", "list_motion_templates", "get_motion_template"]);
 
 export const getMotionTemplateInput = z.object({ id: z.string().min(1).max(60).describe("A template id from list_motion_templates.") });
+export const getMotionStyleInput = z.object({ id: z.string().min(1).max(60).describe("A style id from list_motion_styles.") });
 
 export const motionTemplateSpecs = (): ToolSpec[] => [
+  {
+    name: "list_motion_styles",
+    description:
+      "List the motion styles: named art directions (palette, background, type, motion vocabulary) each with a finished example shot. Pick the one that fits the topic before the storyboard, or derive your own from the user's brand. Free.",
+    schema: { type: "object", properties: {}, additionalProperties: false },
+    strict: false,
+  },
+  {
+    name: "get_motion_style",
+    description:
+      "Get one motion style: its guide (palette hex values, background recipe, fonts, motion with numbers, composition, do and don't) and the scene code of its example shot. Read the code to learn the techniques, then write your own scene in that direction. Free.",
+    schema: sanitize(z.toJSONSchema(getMotionStyleInput, { io: "input" })).schema as Record<string, unknown>,
+    strict: false,
+  },
   {
     name: "list_motion_templates",
     description:
@@ -242,6 +285,24 @@ export const motionTemplateSpecs = (): ToolSpec[] => [
 ];
 
 export function runMotionTemplateTool(name: string, input: unknown): ToolOutcome {
+  if (name === "list_motion_styles") {
+    const styles = MOTION_STYLES.map(({ id, title, line, bestFor, format, seconds }) => ({ id, title, line, bestFor, example: { format, seconds } }));
+    return { ok: true, content: JSON.stringify({ styles, next: "get_motion_style { id } for its guide and example code." }), summary: `${styles.length} motion styles` };
+  }
+  if (name === "get_motion_style") {
+    const parsed = getMotionStyleInput.safeParse(input);
+    if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: issueOf(parsed.error) }), summary: "Invalid style" };
+    const style = motionStyle(parsed.data.id);
+    if (!style) return { ok: false, content: JSON.stringify({ error: `Unknown style "${parsed.data.id}": use one of ${MOTION_STYLES.map((item) => item.id).join(", ")}.` }), summary: "Unknown style" };
+    return {
+      ok: true,
+      content: JSON.stringify({
+        ...style,
+        how: "Follow the guide's palette, background, fonts and motion numbers in YOUR scene; the example is a reference for techniques, not a template to fill. It previews as a silent clip with its beats if you want to see it first.",
+      }),
+      summary: `Style: ${style.title}`,
+    };
+  }
   if (name === "list_motion_templates") {
     const templates = MOTION_TEMPLATES.map(({ id, title, description, kind, format, seconds, slots }) => ({ id, title, description, kind, format, seconds, slots }));
     return { ok: true, content: JSON.stringify({ templates, next: "get_motion_template { id } for its code, direction and beats." }), summary: `${templates.length} motion templates` };
@@ -275,7 +336,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps in one frame. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
+        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. Before the whole video, variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -306,7 +367,7 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
   return {
     ...(input.silent ? { kind: "clip" as const } : {}),
     title: input.title,
-    code: input.code,
+    code: input.code ?? input.variants![0]!.code,
     beats,
     format: input.format,
     duration: input.silent ? clipSeconds(clipBeats(input.beats)) : explainerSeconds(beats),
@@ -315,6 +376,9 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
     ...lookOf(input),
     // Clamping and de-duplication happen in clip-motion (`previewFrames`), next to the timeline.
     ...(input.times?.length ? { stills: input.times } : {}),
+    ...(input.sheet ? { sheet: input.sheet } : {}),
+    ...(input.zoom ? { zoom: input.zoom } : {}),
+    ...(input.variants ? { variants: input.variants.map(({ label, code }) => ({ label, code })) } : {}),
   };
 }
 
@@ -351,13 +415,29 @@ export async function runPreviewExplainer(
   const images: Image[] = (result.images ?? []).map((data) => ({ data, mimeType: "image/jpeg" }));
   if (!images.length) return { ok: false, content: JSON.stringify({ error: "No stills came back." }), summary: "Explainer preview failed" };
   const count = result.issues.length;
+  if (parsed.data.variants) {
+    // Style directions: the user picks, so no review rounds yet.
+    const labels = parsed.data.variants.map((variant) => variant.label);
+    return {
+      ok: true,
+      content: JSON.stringify({
+        ok: true,
+        stills: result.stills.map((still) => `style directions at ${still.t} s, left to right: ${(still.labels ?? labels).join(", ")}`),
+        images: "one image: the directions side by side, left to right",
+        issues: result.issues,
+        next: `Show the user the image and ask which direction to take (ask_user with options ${labels.map((label) => `"${label}"`).join(", ")}). Then the storyboard and the whole scene in the chosen direction.`,
+      }),
+      summary: `Previewed ${labels.length} style directions`,
+      images,
+    };
+  }
   return {
     ok: true,
     content: JSON.stringify({
       ok: true,
       duration: job.duration,
-      stills: result.stills.map((still) => still.t),
-      images: "one image per still, in order",
+      stills: result.stills.map((still) => (still.kind === "variants" ? `style directions at ${still.t} s, left to right: ${still.labels?.join(", ")}` : still.kind === "sheet" ? `contact sheet of ${still.times?.join(", ")} s, ${still.columns} per row` : still.kind === "zoom" ? `zoom at ${still.t} s (full resolution)` : still.t)),
+      images: "one image per entry of stills, in order",
       issues: result.issues,
       ...(result.estimated ? { timing: "estimated from the script; the real voice sets the final timing" } : {}),
       storyboard: parsed.data.beats.map((item, index) => `beat ${index + 1}: ${item.visual}`),

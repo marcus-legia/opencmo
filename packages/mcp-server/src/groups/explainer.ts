@@ -1,13 +1,13 @@
 /**
  * Explainer kit (A5): what Claude needs to write a storyboard and scene code before it touches a
- * clip — voices, looks, formats, limits, price, the icon and Lottie search. `preview_explainer`
+ * clip — voices, looks, formats, limits, price, the icon search. `preview_explainer`
  * and `add_explainer` are studio tools (they take clip_id: the clip's brand accent and frame).
  */
 
 import { z } from "zod";
 
-import { EXPLAINER_CODE_CHARS, getMotionTemplateInput, runMotionTemplateTool } from "@/lib/agent/explainer-tool";
-import { iconsInput, lottiesInput, runTool } from "@/lib/agent/tools";
+import { EXPLAINER_CODE_CHARS, getMotionStyleInput, getMotionTemplateInput, runMotionTemplateTool } from "@/lib/agent/explainer-tool";
+import { iconsInput, runTool } from "@/lib/agent/tools";
 import type { AgentWorkspace } from "@/lib/agent/workspace";
 import { availableModels, loadCatalog } from "@/lib/generate/models";
 import {
@@ -17,14 +17,13 @@ import {
   EXPLAINER_MODEL,
   EXPLAINER_PERSONALITIES,
   EXPLAINER_THEMES,
-  LOTTIE_PACK,
   MOTION_CLIP_MODEL,
 } from "@opencmo/editor-core";
 
 import { errorResult, registerGroup } from "../registry";
 import { fromOutcome, PREVIEW_LIMIT } from "./studio";
 
-/** find_icons / find_lotties read no clip: a workspace that is never touched. */
+/** find_icons reads no clip: a workspace that is never touched. */
 const NO_CLIP = new Proxy({} as AgentWorkspace, {
   get() {
     throw new Error("This tool works without a clip.");
@@ -42,7 +41,6 @@ const kitOutput = z.object({
   limits: z.record(z.string(), z.unknown()),
   price: z.string(),
   silent_clip: z.union([z.string(), z.record(z.string(), z.string())]),
-  lotties: z.array(z.string()),
   read_first: z.array(z.string()),
 });
 
@@ -52,7 +50,7 @@ registerGroup({
       name: "get_explainer_kit",
       title: "Get the explainer kit",
       description:
-        "Everything for writing an explainer before you pick a clip: narration voices, themes, personalities, formats, limits, the price rule, the built-in Lottie names, and which guides to read (the scene-code API is the resource opencmo://kit/explainer). Free.",
+        "Everything for writing an explainer before you pick a clip: narration voices, themes, personalities, formats, limits, the price rule, and which guides to read (the scene-code API is the resource opencmo://kit/explainer). Free.",
       inputSchema: z.object({}),
       outputSchema: kitOutput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -87,12 +85,33 @@ registerGroup({
                 price: `${clip.price.credits} credit${clip.price.credits === 1 ? "" : "s"} per started 10 s, no voice.`,
               }
             : "Silent motion clips are not available on this server.",
-          lotties: LOTTIE_PACK.map((entry) => entry.name),
-          read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "find_icons and find_lotties for every noun of the narration"],
+          read_first: [
+            "list_motion_styles, then get_motion_style for the one that fits: art direction first (palette, background, fonts, motion), with an example shot's code to learn from",
+            'read_guide "explainer" (art direction, storyboard, shots, the kit core, the preview loop)',
+            "draw each beat's subject yourself in a Mark or set it as big type with Text; icons only for small standard symbols",
+          ],
         };
         if (!model && !clip) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
       },
+    },
+    {
+      name: "list_motion_styles",
+      title: "List motion styles",
+      description:
+        "Named art directions for explainers and motion clips (kinetic type, gradient flow, neon tech…): what each looks like and what it suits. Pick one before the storyboard, or derive your own from the user's brand. Free, no clip needed.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("list_motion_styles", input)),
+    },
+    {
+      name: "get_motion_style",
+      title: "Get a motion style",
+      description:
+        "One motion style: its guide (palette hex values, background, fonts, motion with numbers, composition, do and don't) and its example shot's scene code. Learn the techniques from the code, then write your own scene in that direction. Free, no clip needed.",
+      inputSchema: getMotionStyleInput,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("get_motion_style", input)),
     },
     {
       name: "list_motion_templates",
@@ -119,14 +138,6 @@ registerGroup({
       inputSchema: iconsInput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       run: async (input) => fromOutcome(await runTool("find_icons", input, { workspace: NO_CLIP })),
-    },
-    {
-      name: "find_lotties",
-      title: "Find animations",
-      description: "Search the built-in Lottie animations by meaning: moving stick people and motion effects (walk, run, cheer, rocket-launch, lightbulb-on, confetti…) and about 140 animated emoji (emoji/fire, emoji/thinking…). Returns names for <Lottie name> in explainer code and for add_lottie.",
-      inputSchema: lottiesInput,
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-      run: async (input) => fromOutcome(await runTool("find_lotties", input, { workspace: NO_CLIP })),
     },
   ],
 });

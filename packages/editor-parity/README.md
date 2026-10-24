@@ -9,7 +9,7 @@ DS là **oracle**: fork Diffusion Studio (đã xoá ở C3) vẽ từng mẫu ra
 phải do người duyệt bằng mắt, không có đáp án tự động.
 
 ```
-samples/           71 mẫu document JSON (<id>.json) + manifest.json — đã chốt cùng references/
+samples/           73 document JSON samples (<id>.json) + manifest.json, fixed together with references/ (cap-flare and cap-slam were drawn by OpenCMO and approved by eye)
 fixtures/          ảnh, video VP9, transcript dùng chung (nhỏ, có trong git)
 references/        PNG tham chiếu do DS vẽ — <id>/<giây>s.png, dấu . thành _
 thresholds.json    ngưỡng so ảnh (mặc định + ghi đè theo mẫu)
@@ -61,9 +61,6 @@ Hai cờ trong manifest:
 - `oracle: "opencmo"`: tính năng DS không có (node `path`, spec visuals). Ảnh
   tham chiếu do đích `node` của clip-render vẽ rồi được duyệt bằng mắt; mẫu này
   giữ preview (Chromium) và export (Node) vẽ giống nhau và bắt hồi quy.
-  `three-scene` (3D chiếu CPU) có ngưỡng tile 6: lưới 1.5 px trên mặt cong khử
-  răng cưa khác nhau giữa hai bản Skia (đã xem ảnh diff: chỉ nét lưới, hình học
-  trùng, mean 0.14).
 
 - `perTarget: true` (only `anim-units`): letters moving at sub-pixel positions rasterize further apart
   between Skia (Node) and Chromium (tile 20–44 on this sample) than a real regression lands from either

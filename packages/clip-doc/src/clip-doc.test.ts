@@ -16,8 +16,8 @@ describe('kho mẫu', () => {
     expect(validate(document)).toEqual(document);
   });
 
-  it('covers all 72 samples (67 from DS + 5 from OpenCMO)', () => {
-    expect(manifest.samples.length).toBe(72);
+  it('covers all 73 samples (67 from DS + 6 from OpenCMO)', () => {
+    expect(manifest.samples.length).toBe(73);
   });
 });
 
@@ -184,7 +184,6 @@ describe('schema của marks (R5)', () => {
     ok({ 'brand-logo': true }, 'group');
     ok({ markers: [{ id: 'm1', name: 'Fix this', time: 3, duration: 0, color: 'red', status: 'open' }] });
     ok({ visual: { op: 'add_chart', input: { anything: [1, 2] } } }, 'group');
-    ok({ studio3d: { quote: 'revenue doubled' } }, 'group');
   });
 
   it('từ chối mark sai thay vì để reader bỏ qua im lặng', () => {

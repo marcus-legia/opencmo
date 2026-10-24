@@ -262,8 +262,8 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const spentSoFar = spent ?? (await spentCredits(supabase, turn.id));
       let hold = status.hold_credits ?? 0;
       if (!(step === 0 && env.extended) && spentSoFar >= hold) {
-        // Lượt làm cảnh 3D (đã preview_3d) được tự nâng phần giữ một lần lên
-        // AGENT_3D_HOLD_CREDITS: vòng viết code + xem preview tốn hơn sửa thường.
+        // A turn that previewed an explainer gets its hold raised once to AGENT_3D_HOLD_CREDITS (the
+        // SQL name predates explainers): writing code and looking at previews costs more than edits.
         hold = await rpcOrThrow<number>(supabase, "agent_raise_hold_3d", { p_turn_id: turn.id }).catch(() => hold);
       }
       // Tự giữ thêm (mỗi lần AGENT_EXTEND_CREDITS) tới trần AGENT_AUTO_HOLD_CAP
@@ -538,20 +538,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
 function browserResult(call: ToolCall, input: unknown, answer: Answer | undefined): { ok: boolean; content: string; summary: string; images?: Image[] } {
   const images: Image[] = (answer?.images ?? []).map((data) => ({ data, mimeType: "image/jpeg" }));
   if (!answer || answer.error) {
-    const summary = call.name === "preview_3d" && answer?.error ? "3D preview failed" : "The editor could not do this";
-    return { ok: false, content: JSON.stringify({ error: answer?.error ?? "The editor did not answer." }), summary };
-  }
-  if (call.name === "preview_3d") {
-    // Ảnh cho model THẤY, báo cáo bố cục cho nó biết CHÍNH XÁC sửa gì (spec code-scenes).
-    const data = (answer.data ?? {}) as { layout?: { issues?: string[] }[] };
-    const issues = (data.layout ?? []).reduce((sum, frame) => sum + (frame.issues?.length ?? 0), 0);
-    if (!images.length) return { ok: false, content: JSON.stringify({ error: "No frames came back." }), summary: "3D preview failed" };
-    return {
-      ok: true,
-      content: JSON.stringify({ ok: true, ...data, images: "one image per time, in order" }),
-      summary: issues ? `Previewed the 3D scene: ${issues} layout ${issues === 1 ? "issue" : "issues"}` : "Previewed the 3D scene",
-      images,
-    };
+    return { ok: false, content: JSON.stringify({ error: answer?.error ?? "The editor did not answer." }), summary: "The editor could not do this" };
   }
   if (call.name === "media_waveform") {
     const data = answer.data as { silences?: unknown[] } | undefined;

@@ -1,0 +1,13 @@
+{
+  "id": "gradient-flow",
+  "title": "Gradient flow",
+  "line": "A slow-flowing mesh gradient, one huge number that rolls up, frosted glass capsules that fill like a chart, a single sheen of light.",
+  "bestFor": ["results and metrics", "growth and money", "SaaS and AI products", "a before/after in numbers", "pricing and plans"],
+  "format": "9:16",
+  "seconds": 5,
+  "beats": [
+    { "say": "Three point two times more views.", "visual": "On a flowing violet-orange gradient, 3.2× rolls up from 0.0× under a small caps label.", "seconds": 1.6 },
+    { "say": "Week after week.", "visual": "Three frosted glass capsules fill left to right, one after another, each with its value.", "seconds": 1.6 },
+    { "say": "And it keeps going.", "visual": "A sheen of light crosses the capsules; everything rests while the gradient keeps flowing.", "seconds": 1.8 }
+  ]
+}

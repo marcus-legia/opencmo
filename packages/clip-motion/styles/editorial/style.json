@@ -1,0 +1,13 @@
+{
+  "id": "editorial",
+  "title": "Editorial",
+  "line": "A magazine spread in motion: warm paper, huge serif display type that rises out of masked lines, hairline grids, one vermilion accent, hard cuts between spreads.",
+  "bestFor": ["founder stories and opinions", "lessons and how-tos", "a reframe or a manifesto", "quotes and principles", "anything that should feel considered, not techy"],
+  "format": "9:16",
+  "seconds": 5.5,
+  "beats": [
+    { "say": "One video.", "visual": "On warm paper, a vermilion rule draws across; ONE VIDEO. rises line by line out of masked baselines under a small folio.", "seconds": 1.8 },
+    { "say": "A week of posts.", "visual": "Hard cut to the next spread: a huge serif 7 and 'posts this week'; seven day blocks fill vermilion one after another.", "seconds": 2 },
+    { "say": "From the edit you already made.", "visual": "The spread rests; a one-line caption types in under the blocks; a slow push.", "seconds": 1.7 }
+  ]
+}

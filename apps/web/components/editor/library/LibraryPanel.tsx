@@ -18,7 +18,7 @@ import type { LibraryApi } from "./useLibrary";
 export const ASSET_DRAG = "application/x-opencmo-asset";
 const FOLDER_DRAG = "application/x-opencmo-folder";
 
-const TYPE_ICON: Record<string, string> = { VIDEO: "▶", IMAGE: "▣", AUDIO: "♪", TRANSCRIPT: "≡", LOTTIE: "✦", LUT: "◐" };
+const TYPE_ICON: Record<string, string> = { VIDEO: "▶", IMAGE: "▣", AUDIO: "♪", TRANSCRIPT: "≡", LUT: "◐" };
 
 function seconds(value: unknown): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "";

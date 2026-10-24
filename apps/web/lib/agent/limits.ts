@@ -13,9 +13,9 @@ export const AGENT_HOLD_CREDITS = 5;
 export const AGENT_EXTEND_CREDITS = 10;
 
 /**
- * Phần giữ của lượt làm cảnh 3D (đã gọi preview_3d) — phải TRÙNG
- * `agent_3d_hold_credits()` trong SQL. Đo 01/10: Gemini Pro tiêu hết 5 credit sau
- * ~3 lần preview; vòng lặp tự nâng lên mức này trước khi phải hỏi người dùng.
+ * The hold of a turn that previewed an explainer (`preview_explainer`; the name dates from the 3D
+ * scenes, removed 2026-10-24) — must EQUAL `agent_3d_hold_credits()` in SQL. Measured 01/10: Gemini Pro
+ * spent 5 credits in ~3 previews; the loop raises the hold to this before it asks the user.
  */
 export const AGENT_3D_HOLD_CREDITS = 20;
 
