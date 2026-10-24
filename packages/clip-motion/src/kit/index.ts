@@ -23,7 +23,7 @@ import { Streak } from './streak.tsx';
 import { Fill, GradientField, Grain, LightSweep, Vignette } from './fx.tsx';
 import { makeShot, useShot } from './shot.tsx';
 import { measure, Text } from './type.tsx';
-import { FAMILY } from '../remotion/fonts.ts';
+import { FAMILY, fontFamily, LIBRARY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
 import { buildTimeline, cueFrame, type Timeline } from './timing.ts';
@@ -56,7 +56,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		smear,
 		Streak,
 		fx: Object.freeze({ GradientField, Grain, Vignette, LightSweep, Fill }),
-		font: Object.freeze({ ...FAMILY }),
+		font: Object.freeze({ ...FAMILY, ...Object.fromEntries(Object.keys(LIBRARY).map((name) => [name, fontFamily(name)])) }),
+		fonts: Object.freeze(Object.fromEntries(Object.entries(LIBRARY).map(([name, { weights }]) => [name, weights]))),
 		// Library: ready-made pieces, used only when they are the clearest picture
 		// Layout
 		Stage,

@@ -211,6 +211,16 @@ describe('kit.Mark', () => {
 	});
 });
 
+describe('font library', () => {
+	it('matches the editor font catalog (files and weight ranges)', async () => {
+		const { LIBRARY } = await import('./remotion/fonts.ts');
+		const { FONTS } = await import('../../clip-render/src/fonts.ts');
+		expect(Object.fromEntries(Object.entries(LIBRARY).map(([name, font]) => [name, [font.file, ...font.weights]]))).toEqual(
+			Object.fromEntries(Object.entries(FONTS).map(([name, font]) => [name, [font.file, ...font.weights]])),
+		);
+	});
+});
+
 describe('kit core: Text, Shot, fx', () => {
 	const job = (code: string, beats = [{ say: 'One.', seconds: 1.5 }, { say: 'Two.', seconds: 1.5 }]) => {
 		const parsed = parseJob({ title: 'Core', code, beats, kind: 'clip', format: '16:9', duration: 3 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beatIssues, jumpIssues, layoutIssues, type LaidBox } from './layout.ts';
+import { beatIssues, jumpIssues, layoutIssues, movingBoxes, type LaidBox } from './layout.ts';
 
 const frame = { width: 1920, height: 1080, seconds: 4 };
 const visual: LaidBox = { kind: 'mark', name: 'DotField', x: 200, y: 200, w: 1500, h: 600 };
@@ -88,3 +88,20 @@ describe('jumpIssues', () => {
 	});
 });
 
+
+describe('moving boxes and big type', () => {
+	const word: LaidBox = { kind: 'text', name: 'SHIP', x: 1700, y: 400, w: 400, h: 180, size: 176 };
+	it('skips the safe-area rule for a box in mid-move, entering or leaving', () => {
+		expect(layoutIssues([visual, word], frame)).toEqual(['Text "SHIP" leaves the safe area on the right at 4.0 s.']);
+		expect(layoutIssues([visual, word], frame, { moving: movingBoxes([word], [{ ...word, x: 1600 }]) })).toEqual([]);
+		expect(movingBoxes([word], [])).toEqual(new Set(['text:SHIP']));
+		expect(movingBoxes([word], [word])).toEqual(new Set());
+	});
+
+	it('counts display type as the picture of a beat', () => {
+		const big: LaidBox = { kind: 'text', name: 'WORDS.', x: 100, y: 400, w: 600, h: 180, size: 176 };
+		const small: LaidBox = { ...big, name: 'caption', size: 48 };
+		expect(beatIssues([{ beat: 0, boxes: [big] }], { width: 1080, height: 1920 })).toEqual([]);
+		expect(beatIssues([{ beat: 0, boxes: [small] }], { width: 1080, height: 1920 })[0]).toMatch(/^Beat 1 shows nothing drawn/);
+	});
+});

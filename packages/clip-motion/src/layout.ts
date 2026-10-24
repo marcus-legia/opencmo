@@ -22,10 +22,11 @@ function quote(name: string): string {
 }
 
 /**
+ * `moving`: `kind:name` of boxes that move between this frame and the next; the safe-area rule skips them.
  * `clip`: a silent motion clip (logo reveal, carousel) is designed motion, not a narrated diagram: marks may cross
  * the frame's edges and the frame may be mostly field. Text keeps every rule.
  */
-export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }, options: { clip?: boolean } = {}): string[] {
+export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }, options: { clip?: boolean; moving?: ReadonlySet<string> } = {}): string[] {
 	const { width, height } = frame;
 	const at = `at ${frame.seconds.toFixed(1)} s`;
 	const issues: string[] = [];
@@ -42,7 +43,8 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 
 	const tolerance = 2;
 	const safe = { left: width * SAFE.left - tolerance, right: width * SAFE.right + tolerance, top: height * SAFE.top - tolerance, bottom: height * SAFE.bottom + tolerance };
-	for (const box of options.clip ? texts : boxes) {
+	// Something in mid-move may cross the margin on its way in or out; only where it rests counts.
+	for (const box of (options.clip ? texts : boxes).filter((item) => !options.moving?.has(`${item.kind}:${item.name}`))) {
 		const sides = [
 			box.x < safe.left ? 'left' : null,
 			box.x + box.w > safe.right ? 'right' : null,
@@ -73,6 +75,9 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 	return issues;
 }
 
+/** Text at least this share of the frame's short side (about 96 px at 1080) counts as a beat's picture. */
+const BIG_TYPE = 0.09;
+
 /** Marks that are not a picture of the subject on their own. */
 const FRAMES_ONLY = new Set(['Board', 'Box']);
 /** Marks that move inside their box (canvas fields, Lottie, a Mark the scene animates), so an unchanged box does not mean a still beat. */
@@ -89,7 +94,9 @@ function signature(boxes: LaidBox[]): string {
  * Per-beat issues from the layout samples of each beat (`probeFrames`): a beat with no picture (icon, shape,
  * Lottie, path, data mark…), and a beat where nothing moves between its two samples.
  */
-export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[]): string[] {
+export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[], frame?: { width: number; height: number }): string[] {
+	// Display type this big is the picture of a beat (a promise, a number), not a caption.
+	const bigType = frame ? BIG_TYPE * Math.min(frame.width, frame.height) : Infinity;
 	const byBeat = new Map<number, LaidBox[][]>();
 	for (const sample of samples) {
 		if (!sample.boxes) continue;
@@ -97,7 +104,7 @@ export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[])
 	}
 	const issues: string[] = [];
 	for (const [beat, list] of [...byBeat.entries()].sort((a, b) => a[0] - b[0])) {
-		const pictures = list.flat().filter((box) => box.kind === 'mark' && !FRAMES_ONLY.has(box.name));
+		const pictures = list.flat().filter((box) => (box.kind === 'mark' && !FRAMES_ONLY.has(box.name)) || (box.kind === 'text' && (box.size ?? 0) >= bigType));
 		if (!pictures.length) issues.push(`Beat ${beat + 1} shows nothing drawn: draw what its narration names (a Mark you draw, a shape, an icon).`);
 		else if (list.length > 1 && signature(list[0]!) === signature(list[list.length - 1]!) && !pictures.some((box) => MOVES_INSIDE.test(box.name))) {
 			issues.push(`Nothing moves during beat ${beat + 1}: add a change (a swap, a move, a reaction) or an ambient layer.`);
@@ -135,3 +142,16 @@ export function jumpIssues(pairs: { seconds: number; a: LaidBox[]; b: LaidBox[] 
 	return issues;
 }
 
+
+/** `kind:name` of the boxes whose centre moves more than 1 px between two consecutive frames, or that are only in `a`. */
+export function movingBoxes(a: LaidBox[], b: LaidBox[]): Set<string> {
+	const key = (box: LaidBox) => `${box.kind}:${box.name}`;
+	const next = new Map(b.map((box) => [key(box), box]));
+	const moving = new Set<string>();
+	for (const box of a) {
+		const other = next.get(key(box));
+		// Absent from the other frame: it is entering or leaving, which is motion too.
+		if (!other || Math.hypot(other.x + other.w / 2 - (box.x + box.w / 2), other.y + other.h / 2 - (box.y + box.h / 2)) > 1) moving.add(key(box));
+	}
+	return moving;
+}

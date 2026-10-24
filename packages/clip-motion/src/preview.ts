@@ -9,7 +9,7 @@ import { MotionCodeFailure } from './errors.ts';
 import { checkAssets, stageAssets } from './job-assets.ts';
 import { FPS, frameSize, type MotionJob, type PreviewResult } from './job.ts';
 import { buildTimeline, pairedProbes, previewFrames } from './kit/timing.ts';
-import { beatIssues, jumpIssues, layoutIssues, type LaidBox } from './layout.ts';
+import { beatIssues, jumpIssues, layoutIssues, movingBoxes, type LaidBox } from './layout.ts';
 import { prepare } from './prepare.ts';
 import { browserExecutable, CHROMIUM, getBundle, sceneFailure, type Log } from './render.ts';
 import { LAYOUT_LOG } from './remotion/layout-log.ts';
@@ -83,6 +83,7 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 	const { width, height } = frameSize(job.format);
 	let stills: Still[];
 	let probes: Still[];
+	let neighbours: Still[] = [];
 	// Each layout sample and the frame after it: the pair measures one-frame jumps.
 	const probeList = pairedProbes(timeline);
 	let own: HeadlessBrowser | null = null;
@@ -93,8 +94,13 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 		// One browser for the stills and the layout samples (serve passes its own).
 		const browser = options.browser ?? (own = await openPreviewBrowser());
 		stills = await renderStills(staged.job, compiled, previewFrames(timeline, job.stills), resolve(outdir), { ...options, browser });
-		// Layout-only samples at quarter size, kept out of the stills the Assistant looks at.
-		probes = await renderStills(staged.job, compiled, probeList.map((probe) => probe.frame), join(resolve(outdir), 'probes'), { ...options, browser, scale: 0.25 });
+		// Layout-only samples at quarter size, kept out of the stills the Assistant looks at; plus the frame after each
+		// still, so a still caught mid-move knows what is moving.
+		const probeFrames = probeList.map((probe) => probe.frame);
+		const after = [...new Set(stills.map((still) => still.frame + 1))].filter((frame) => frame < timeline.frames && !probeFrames.includes(frame));
+		const sampled = await renderStills(staged.job, compiled, [...probeFrames, ...after], join(resolve(outdir), 'probes'), { ...options, browser, scale: 0.25 });
+		probes = sampled.slice(0, probeFrames.length);
+		neighbours = sampled.slice(probeFrames.length);
 	} catch (error) {
 		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
 		throw error;
@@ -102,11 +108,17 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 		if (own) await own.close({ silent: true }).catch(() => undefined);
 		staged.dispose();
 	}
+	const byFrame = new Map([...probes, ...neighbours].map((probe) => [probe.frame, probe.boxes]));
 	const issues = [...stills, ...probes]
 		.sort((a, b) => a.frame - b.frame)
-		.flatMap((still) => (still.boxes ? layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }, { clip: job.kind === 'clip' }) : []));
-	issues.push(...beatIssues(probeList.map((probe, i) => ({ beat: probe.beat, boxes: probes[i]?.boxes ?? null }))));
-	const byFrame = new Map(probes.map((probe) => [probe.frame, probe.boxes]));
+		.flatMap((still) => {
+			if (!still.boxes) return [];
+			// Moving between this frame and the one after or before it (probes come in pairs).
+			const near = [byFrame.get(still.frame + 1), byFrame.get(still.frame - 1)].filter((boxes): boxes is LaidBox[] => Boolean(boxes));
+			const moving = new Set(near.flatMap((boxes) => [...movingBoxes(still.boxes!, boxes)]));
+			return layoutIssues(still.boxes, { width, height, seconds: still.frame / FPS }, { clip: job.kind === 'clip', moving });
+		});
+	issues.push(...beatIssues(probeList.map((probe, i) => ({ beat: probe.beat, boxes: probes[i]?.boxes ?? null })), { width, height }));
 	const pairs = probes.flatMap((probe) => {
 		const next = byFrame.get(probe.frame + 1);
 		return probe.boxes && next ? [{ seconds: probe.frame / FPS, a: probe.boxes, b: next }] : [];

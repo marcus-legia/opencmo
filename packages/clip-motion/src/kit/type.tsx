@@ -1,11 +1,14 @@
 import React from 'react';
 
-import { FAMILY } from '../remotion/fonts.ts';
+import { fontFamily, LIBRARY, ROLES } from '../remotion/fonts.ts';
 import { kitError, TextTag, useLife, usePalette, type LifeProps } from './context.tsx';
 import { ease } from './motion.ts';
 import type { Palette } from './theme.ts';
 
-export type FontName = keyof typeof FAMILY;
+export type FontName = keyof typeof ROLES | keyof typeof LIBRARY;
+
+const isFont = (name: unknown): name is FontName => typeof name === 'string' && (name in ROLES || name in LIBRARY);
+const FONT_NAMES = [...Object.keys(ROLES), ...Object.keys(LIBRARY)].join(', ');
 
 export type TextProps = LifeProps & {
 	text: string;
@@ -15,6 +18,7 @@ export type TextProps = LifeProps & {
 	/** Wrap width in px; without it the text stays on one line. */
 	w?: number;
 	size: number;
+	/** A role (title, text, mono, display) or any family of kit.fonts (Anton, Bebas Neue, DM Serif Display…). */
 	font?: FontName;
 	weight?: number;
 	/** A palette name, #rgb/#rrggbb/#rrggbbaa, rgb()/rgba() or hsl()/hsla(). */
@@ -47,7 +51,7 @@ export function Text(props: TextProps) {
 	const palette = usePalette();
 	if (typeof props.text !== 'string') throw kitError('Text needs text (a string).');
 	if (![props.x, props.y, props.size].every(Number.isFinite) || props.size <= 0) throw kitError(`Text "${props.text.slice(0, 30)}" needs x, y and size in pixels.`);
-	if (props.font !== undefined && !(props.font in FAMILY)) throw kitError(`Text font "${String(props.font)}": use ${Object.keys(FAMILY).join(', ')}.`);
+	if (props.font !== undefined && !isFont(props.font)) throw kitError(`Text font "${String(props.font)}": use ${FONT_NAMES}.`);
 	const life = useLife(props, ease.out, 0);
 	if (!life.visible) return null;
 	const align = props.align ?? 'left';
@@ -59,7 +63,7 @@ export function Text(props: TextProps) {
 		left,
 		top: props.y,
 		...(width !== undefined ? { width } : { whiteSpace: 'pre' }),
-		fontFamily: FAMILY[props.font ?? 'display'],
+		fontFamily: fontFamily(props.font ?? 'display'),
 		fontSize: props.size,
 		fontWeight: props.weight ?? 600,
 		fontStyle: props.italic ? 'italic' : 'normal',
@@ -88,11 +92,11 @@ let measureContext: CanvasRenderingContext2D | null = null;
 export function measure(text: string, options: { size: number; font?: FontName; weight?: number; tracking?: number }): number {
 	if (typeof text !== 'string' || !Number.isFinite(options?.size)) throw kitError('measure(text, { size, font?, weight?, tracking? }).');
 	const { size, font = 'display', weight = 600, tracking = 0 } = options;
-	if (!(font in FAMILY)) throw kitError(`measure font "${String(font)}": use ${Object.keys(FAMILY).join(', ')}.`);
+	if (!isFont(font)) throw kitError(`measure font "${String(font)}": use ${FONT_NAMES}.`);
 	const extra = tracking * size * Math.max(0, text.length - 1);
 	if (typeof document === 'undefined') return text.length * size * 0.56 + extra;
 	measureContext ??= document.createElement('canvas').getContext('2d');
 	if (!measureContext) return text.length * size * 0.56 + extra;
-	measureContext.font = `${weight} ${size}px ${FAMILY[font]}`;
+	measureContext.font = `${weight} ${size}px ${fontFamily(font)}`;
 	return measureContext.measureText(text).width + extra;
 }
