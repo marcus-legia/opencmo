@@ -408,6 +408,17 @@ describe('add_explainer placed in half the frame over the speaker', () => {
 		expect(names.at(-1)).toBe('captions');
 	});
 
+	it("the clip's own captions move to the seam for the split and back after", async () => {
+		const { document } = await applyOps(speaker, [silentOp('1:1', 'top')], ctx);
+		const captions = sceneNode(document).children!.find((child) => child.kind === 'captions') as Node & { tracks: { id: string; property: string; keyframes: { time: number; value: number }[] }[] };
+		const track = captions.tracks.find((item) => item.property === 'offsetY')!;
+		expect(track.id).toMatch(/^layout-caption-offsetY-/);
+		// classic sits centred (960); the seam is at 1079.04 (ratio 0.438) and the captions centre 5% above it.
+		expect(track.keyframes.map(({ time, value }) => [time, value])).toEqual([[6, 0], [6.3, 23.04], [13.7, 23.04], [14, 0]]);
+		const { document: full } = await applyOps(document, [{ op: 'set_layout', mode: 'full', start: 0, end: 30 }], ctx);
+		expect((sceneNode(full).children!.find((child) => child.kind === 'captions') as Node).tracks).toBeUndefined();
+	});
+
 	it('bottom: the animation below, the speaker on top; a 16:9 animation takes a shorter band', async () => {
 		const { document } = await applyOps(speaker, [silentOp('16:9', 'bottom')], ctx);
 		const scene = sceneNode(document) as Node & { marks: { layout: { ranges: { mode: string; ratio: number }[] } } };

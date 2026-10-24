@@ -33,7 +33,10 @@
 
 import { FRAME_RATE, LAYOUT_ANCHORS, LAYOUT_MODES, type ClipDocument, type ClipNode, type LayoutRange as StoredRange } from '@opencmo/clip-doc';
 
-import { clone, isMaster, nodes, sceneOf, type Entity } from './doc';
+import { placeCaption } from '@opencmo/clip-render';
+
+import { masterCaptions } from './captions';
+import { clone, drawId, isMaster, nodes, sceneOf, type Entity } from './doc';
 import { summarizeProject } from './summary';
 import { round } from './transcript';
 
@@ -370,6 +373,10 @@ function locateIn(root: Entity, target: Entity): Located | null {
  * (master về đúng chỗ cũ) và bỏ panel. Không đổi input.
  */
 export function rebuildLayout(input: ClipDocument): ClipDocument {
+  return seatCaptions(rebuildPanels(input));
+}
+
+function rebuildPanels(input: ClipDocument): ClipDocument {
   const document = clone(input);
   const scene = sceneOf(document) as unknown as Entity | undefined;
   if (!scene || !scene.width || !scene.height) return document;
@@ -584,3 +591,56 @@ export function speakerBandAt(document: ClipDocument, time: number): { y: number
   if (!range || range.mode === 'visual-only' || range.mode === 'pip' || range.mode === 'side-by-side' || range.mode === 'cell') return null;
   return range.mode === 'split-bottom' ? { y: 1 - range.ratio, height: range.ratio } : { y: 0, height: range.ratio };
 }
+
+// ------------------------------------------------------------------ captions at the seam
+
+/** The track `seatCaptions` writes on the master captions: its id starts with this. */
+const CAPTION_TRACK = 'layout-caption-offsetY';
+/** Caption centre above the seam, share of the frame height: inside the band the visual keeps clear. */
+const SEAM_LIFT = 0.05;
+
+/**
+ * The clip's own captions move to the seam between the visual and the speaker while the frame is split, and back
+ * after. Left where they were, they land on the speaker's face in the lower band (learned from AI Producer's framing
+ * rules: under a portrait seat the captions sit between the visual and the speaker, about y 920-1110 of 1920). With
+ * the visual on top the centre sits just above the seam, in the bottom part the visual leaves empty; with the visual
+ * at the bottom it sits at the foot of the speaker's band. The captions stay the editor's own layer and style; only
+ * an `offsetY` track is added, on the same 0.3 s moves as the layout.
+ */
+function seatCaptions(document: ClipDocument): ClipDocument {
+  const scene = sceneOf(document) as unknown as Entity | undefined;
+  const captions = masterCaptions(document) as unknown as Entity | null;
+  if (!scene || !captions || !scene.width || !scene.height) return document;
+  const tracks = ((captions.tracks as Entity[] | undefined) ?? []).filter((track) => !String(track.id ?? '').startsWith(CAPTION_TRACK));
+  // Unique across timelines: each has its own captions layer, named now if it has no id yet (the next stamp keeps it).
+  if (typeof captions.id !== 'string') captions.id = drawId();
+  const trackId = `${CAPTION_TRACK}-${captions.id}`;
+  // A hand-made offsetY track is the user's choice of position: leave it.
+  const own = tracks.some((track) => track.property === 'offsetY');
+  const W = scene.width as number;
+  const H = scene.height as number;
+  const ranges = own ? [] : readLayout(document).filter((range) => range.mode === 'split-top' || range.mode === 'split-bottom');
+  const duration = (scene.workarea as [number, number] | undefined)?.[1] ?? Infinity;
+  const base = Number(captions.offsetY ?? 0);
+  const box = placeCaption({ ...(captions as object), offsetY: 0 } as never, { width: W, height: H });
+  const centre = box.y + box.height / 2;
+  // Caption keyframes run on the captions' own clock: seconds of its source from `sourceIn`.
+  const local = (time: number) => round(time - Number(captions.start ?? 0) + Number(captions.sourceIn ?? 0));
+  const keys: { time: number; value: number }[] = [];
+  for (const range of ranges) {
+    const seam = range.mode === 'split-bottom' ? (1 - range.ratio) * H : range.ratio * H;
+    const value = round(seam - SEAM_LIFT * H - centre);
+    const T = Math.min(TRANSITION, (range.end - range.start) / 4);
+    if (range.start >= FRAME) keys.push({ time: local(range.start), value: base });
+    keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value });
+    if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value }, { time: local(range.end), value: base });
+    else keys.push({ time: local(range.end), value });
+  }
+  const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
+  // Stable ids: a layout op run again must leave the document unchanged.
+  if (unique.length) tracks.push({ id: trackId, property: 'offsetY', keyframes: unique.map((key, index) => ({ id: `${trackId}-${index}`, ...key })) });
+  if (tracks.length) captions.tracks = tracks;
+  else delete captions.tracks;
+  return document;
+}
+

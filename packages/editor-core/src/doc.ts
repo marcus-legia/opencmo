@@ -212,7 +212,7 @@ const ID_CHARS = 6;
 const ID_SPACE = 36 ** ID_CHARS;
 
 /** Một id base36 sáu ký tự, rút đều (bỏ phần dư của 2^32 để không lệch). */
-function drawId(): string {
+export function drawId(): string {
   const ceiling = ID_SPACE * Math.floor(2 ** 32 / ID_SPACE);
   const cell = new Uint32Array(1);
   for (;;) {

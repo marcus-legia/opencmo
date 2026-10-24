@@ -34,7 +34,7 @@ export { applyTable, bakeTable, colorFunction, colorTable, curveTable, gradeFram
 export { FPS, IDENTITY, multiply, type Mat, type Values } from './tree.ts';
 export { FONTS, type FontFamily } from './fonts.ts';
 export type { Transcript, TranscriptWord } from './captions.ts';
-export { captionPresetText, isEmphasized, sourceStart } from './captions.ts';
+export { captionPresetText, isEmphasized, placeCaption, sourceStart } from './captions.ts';
 export type { AudioClip } from './audio.ts';
 export { SEAM_FADE } from './audio.ts';
 
