@@ -2,6 +2,39 @@
 
 export const STYLE_DATA = [
 	{
+		"id": "editorial",
+		"title": "Editorial",
+		"line": "A magazine spread in motion: warm paper, huge serif display type that rises out of masked lines, hairline grids, one vermilion accent, hard cuts between spreads.",
+		"bestFor": [
+			"founder stories and opinions",
+			"lessons and how-tos",
+			"a reframe or a manifesto",
+			"quotes and principles",
+			"anything that should feel considered, not techy"
+		],
+		"format": "9:16",
+		"seconds": 5.5,
+		"beats": [
+			{
+				"say": "One video.",
+				"visual": "On warm paper, a vermilion rule draws across; ONE VIDEO. rises line by line out of masked baselines under a small folio.",
+				"seconds": 1.8
+			},
+			{
+				"say": "A week of posts.",
+				"visual": "Hard cut to the next spread: a huge serif 7 and 'posts this week'; seven day blocks fill vermilion one after another.",
+				"seconds": 2
+			},
+			{
+				"say": "From the edit you already made.",
+				"visual": "The spread rests; a one-line caption types in under the blocks; a slow push.",
+				"seconds": 1.7
+			}
+		],
+		"guide": "# Editorial\n\nA magazine spread in motion. Use it for founder stories, opinions, lessons and principles: anything that should feel\nconsidered and human rather than techy. Type does most of the work; one drawn element per spread at most.\n\n## Palette\n- Paper `#EFE9DD` → `#E6DECF`, ink `#1A1A1A`, muted `#6F675C`, one accent vermilion `#E4572E` (or the brand colour,\n  if it is saturated). Accent on one word or one element per spread, never more.\n\n## Background\n- Flat warm paper (`fx.Fill` gradient), heavy grain (0.06-0.08), a faint warm vignette (0.15-0.2). A hairline\n  6-column grid (ink at 6%) and a 2 px rule under the folio. Nothing glows, nothing is blurred.\n\n## Type\n- Display: `font=\"DM Serif Display\"` (or Playfair Display), weight 400, tracking -0.02 em, very large: 25-60% of the\n  frame width. Captions and asides: `font=\"Fraunces\"` italic 400, 40-48 px.\n- Folio: `font=\"Inter\"`, 500-600, UPPERCASE, tracking 0.16 em, 36 px: \"No. 01\" left, a section name right.\n\n## Motion (30 fps)\n- Lines rise out of their own baseline masks (`overflow: hidden` per line), 16 frames on `out`, staggered 5 frames.\n- Rules draw on (`kit.drawOn`, 20 frames, `smooth`). Small elements fill or type in; nothing bounces.\n- Between spreads: a hard cut (one Shot ends, the next starts). Within the video: a very slow push (1 → 1.035).\n\n## Composition\n- Left-aligned on an 8% margin, on the 6-column grid. Folio at 10%, display type from 17-35%, the drawn element\n  around 60%, a caption near 74%. Big contrast of scale: one giant word or number, everything else small.\n\n## Do / don't\n- Do: let one word or number be enormous; leave real white space; set captions in italic serif.\n- Don't: centre everything, use gradients or glow, animate letters one by one, use icons, add a second accent.",
+		"code": "// Editorial: a magazine spread in motion. Warm paper, serif display type rising out of masked lines, hairline grid,\n// one vermilion accent, hard cuts between spreads.\nconst { Text, Mark, Shot, fx } = kit;\nconst { useCurrentFrame } = R;\n\nconst PAPER = '#EFE9DD';\nconst PAPER2 = '#E6DECF';\nconst INK = '#1A1A1A';\nconst MUTED = '#6F675C';\nconst RED = '#E4572E';\nconst W = kit.width;\nconst H = kit.height;\nconst M = Math.round(W * 0.08);\nconst COL = (W - 2 * M) / 6;\nconst b = kit.beat;\n\n// A line of display type that rises out of its own baseline mask.\nfunction Rise({ text, y, size, at, font = 'DM Serif Display', color = INK, name }) {\n  const s = kit.useShot();\n  const u = kit.tween(s.frame, [at, at + 16], [0, 1], 'out');\n  const h = Math.round(size * 1.12);\n  return (\n    <div style={{ position: 'absolute', left: 0, top: y, width: W, height: h, overflow: 'hidden' }}>\n      <Text name={name ?? text} text={text} x={M} y={0} size={size} font={font} weight={400} tracking={-0.02} lineHeight={1.08} color={color} style={{ transform: `translateY(${(1 - u) * h}px)` }} />\n    </div>\n  );\n}\n\nfunction Folio({ left, right }) {\n  return (\n    <>\n      <Text text={left} x={M} y={H * 0.1} size={36} font=\"Inter\" weight={600} tracking={0.16} upper color={INK} />\n      <Text text={right} x={W - M} y={H * 0.1} size={36} font=\"Inter\" weight={500} tracking={0.16} upper color={MUTED} align=\"right\" />\n    </>\n  );\n}\n\nfunction Grid() {\n  return (\n    <svg width={W} height={H} style={{ position: 'absolute', inset: 0 }}>\n      {Array.from({ length: 7 }, (_, i) => <line key={i} x1={M + i * COL} y1={H * 0.08} x2={M + i * COL} y2={H * 0.82} stroke={INK} strokeOpacity={0.06} strokeWidth={1.5} />)}\n      <line x1={M} y1={H * 0.135} x2={W - M} y2={H * 0.135} stroke={INK} strokeWidth={2} />\n    </svg>\n  );\n}\n\nfunction SpreadOne() {\n  const s = kit.useShot();\n  const rule = kit.tween(s.frame, [2, 22], [0, 1], 'smooth');\n  return (\n    <>\n      <Folio left=\"No. 01\" right=\"The editor\" />\n      <svg width={W} height={20} style={{ position: 'absolute', left: 0, top: H * 0.3 }}>\n        <line x1={M} y1={10} x2={W - M} y2={10} stroke={RED} strokeWidth={10} {...kit.drawOn(rule)} />\n      </svg>\n      <Rise text=\"One\" y={H * 0.34} size={Math.round(W * 0.27)} at={8} />\n      <Rise text=\"video.\" y={H * 0.34 + W * 0.29} size={Math.round(W * 0.27)} at={13} color={RED} />\n    </>\n  );\n}\n\nfunction SpreadTwo() {\n  const s = kit.useShot();\n  const f = s.frame;\n  const caption = 'From the edit you already made.';\n  const typed = Math.round(kit.tween(f, [b(2).from - b(1).from + 2, b(2).from - b(1).from + 30], [0, caption.length], 'linear'));\n  const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];\n  const dayW = (W - 2 * M - 6 * 16) / 7;\n  return (\n    <>\n      <Folio left=\"No. 02\" right=\"A week\" />\n      <Rise name=\"seven\" text=\"7\" y={H * 0.17} size={Math.round(W * 0.52)} at={0} />\n      <Rise text=\"posts this week\" y={H * 0.17 + W * 0.59} size={Math.round(W * 0.09)} at={6} color={RED} />\n      <Mark name=\"week\" x={M} y={H * 0.6} w={W - 2 * M} h={dayW * 1.4 + 60}>\n        {DAYS.map((d, i) => {\n          const u = kit.tween(f, [12 + i * 4, 24 + i * 4], [0, 1], 'out');\n          return (\n            <div key={i} style={{ position: 'absolute', left: i * (dayW + 16), top: 0, width: dayW, height: dayW * 1.4, border: `2.5px solid ${INK}` }}>\n              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: `${u * 100}%`, background: RED }} />\n              <div style={{ position: 'absolute', left: 0, right: 0, top: dayW * 1.4 + 12, textAlign: 'center', fontFamily: kit.font.Inter, fontWeight: 600, fontSize: 30, color: MUTED }}>{d}</div>\n            </div>\n          );\n        })}\n      </Mark>\n      <Text name=\"caption\" text={caption.slice(0, Math.max(1, typed))} x={M} y={H * 0.74} size={44} font=\"Fraunces\" italic weight={400} color={INK} style={{ opacity: typed > 0 ? 1 : 0 }} />\n    </>\n  );\n}\n\nreturn function Scene() {\n  const f = useCurrentFrame();\n  const push = kit.tween(f, [0, kit.frames], [1, 1.035], 'linear');\n  return (\n    <>\n      <fx.Fill color={PAPER} to={PAPER2} />\n      <Grid />\n      <div style={{ position: 'absolute', inset: 0, transform: `scale(${push})`, transformOrigin: '50% 45%' }}>\n        <Shot beat={0}><SpreadOne /></Shot>\n        <Shot beat={1} through={2}><SpreadTwo /></Shot>\n      </div>\n      <fx.Vignette strength={0.18} color=\"#5A4A30\" />\n      <fx.Grain opacity={0.07} />\n    </>\n  );\n};\n"
+	},
+	{
 		"id": "gradient-flow",
 		"title": "Gradient flow",
 		"line": "A slow-flowing mesh gradient, one huge number that rolls up, frosted glass capsules that fill like a chart, a single sheen of light.",
