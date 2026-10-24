@@ -18,6 +18,10 @@ import { Camera, Stage } from './stage.tsx';
 import { makeDevices } from './devices.tsx';
 import { makeImage } from './image.tsx';
 import { Mark } from './mark.tsx';
+import { curves, drawOn, noise, speedBlur, tween } from './curves.ts';
+import { Fill, GradientField, Grain, LightSweep, Vignette } from './fx.tsx';
+import { makeShot, useShot } from './shot.tsx';
+import { Text } from './type.tsx';
 import { FAMILY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
@@ -33,7 +37,21 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		if (!Number.isInteger(i) || !span) throw kitError(`kit.beat(${i}): this job has ${timeline.beats.length} beats (0–${timeline.beats.length - 1}).`);
 		return span;
 	};
+	const Shot = makeShot(beatAt, timeline.beats.length);
 	return Object.freeze({
+		// Core: free-form scenes are built from these (read_guide "explainer", "Core")
+		Mark,
+		Text,
+		Shot,
+		useShot,
+		curves,
+		tween,
+		noise,
+		drawOn,
+		speedBlur,
+		fx: Object.freeze({ GradientField, Grain, Vignette, LightSweep, Fill }),
+		font: Object.freeze({ ...FAMILY }),
+		// Library: ready-made pieces, used only when they are the clearest picture
 		// Layout
 		Stage,
 		Camera,
@@ -79,10 +97,6 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		// Device frames for product moments
 		Phone,
 		Browser,
-		// Free-form drawing: what the scene draws itself, tagged for the layout report
-		Mark,
-		// CSS font families, for text a scene sets itself (display: brand moments and product titles)
-		font: Object.freeze({ ...FAMILY }),
 		Shape,
 		shapes: SHAPE_KINDS,
 		Path,

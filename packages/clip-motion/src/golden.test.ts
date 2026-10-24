@@ -211,6 +211,60 @@ describe('kit.Mark', () => {
 	});
 });
 
+describe('kit core: Text, Shot, fx', () => {
+	const job = (code: string, beats = [{ say: 'One.', seconds: 1.5 }, { say: 'Two.', seconds: 1.5 }]) => {
+		const parsed = parseJob({ title: 'Core', code, beats, kind: 'clip', format: '16:9', duration: 3 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+	const still = async (code: string, frame: number) => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-core-'));
+		const [one] = await renderStills(job(code), prepare(job(code)).compiled, [frame], dir, { scale: 0.25, format: 'png' });
+		return one!;
+	};
+
+	it('Text reports its box and size, in any colour and font', { timeout: 120_000 }, async () => {
+		const scene = "const { Text, fx } = kit;\nreturn function Scene() { return <><fx.Fill color=\"#101010\" /><Text text=\"Launch\" x={960} y={400} size={160} font=\"title\" weight={700} color=\"#ff5a36\" align=\"center\" tracking={-0.03} /></>; };";
+		const shot = await still(scene, 15);
+		const box = (shot.boxes ?? []).find((item) => item.kind === 'text' && item.name === 'Launch');
+		expect(box?.size).toBeCloseTo(160, 0);
+		expect(Math.abs(box!.x + box!.w / 2 - 960)).toBeLessThan(2);
+		const { data, width } = pixels(shot.file);
+		// Somewhere inside the word at quarter size is the orange; the corner is the fill.
+		const row = Math.round((box!.y + box!.h / 2) / 4);
+		const reds = Array.from({ length: Math.round(box!.w / 4) }, (_, i) => data[(row * width + Math.round(box!.x / 4) + i) * 3]!);
+		expect(Math.max(...reds)).toBeGreaterThan(200);
+		expect(data[0]).toBeLessThan(30);
+	});
+
+	it('Shot renders only inside its beat, with a frame counted from the beat', { timeout: 120_000 }, async () => {
+		const scene = "const { Shot, Text, useShot } = kit;\nfunction Second() { const s = useShot(); return <Text text={'local ' + s.frame} x={100} y={100} size={60} />; }\nreturn function Scene() { return <Shot beat={1}><Second /></Shot>; };";
+		expect((await still(scene, 10)).boxes ?? []).toEqual([]);
+		const inside = await still(scene, 55);
+		expect((inside.boxes ?? []).map((box) => box.name)).toEqual(['local 10']);
+	});
+
+	it('GradientField is a moving field, not a flat colour', { timeout: 120_000 }, async () => {
+		const scene = "const { fx } = kit;\nreturn function Scene() { return <fx.GradientField colors={['#0b1026', '#ff5a36', '#3b82f6', '#22c55e']} speed={3} />; };";
+		const { data } = pixels((await still(scene, 0)).file);
+		let spread = 0;
+		for (let c = 0; c < 3; c++) {
+			let lo = 255;
+			let hi = 0;
+			for (let i = c; i < data.length; i += 3) {
+				lo = Math.min(lo, data[i]!);
+				hi = Math.max(hi, data[i]!);
+			}
+			spread = Math.max(spread, hi - lo);
+		}
+		expect(spread).toBeGreaterThan(60);
+		const later = pixels((await still(scene, 50)).file).data;
+		let moved = 0;
+		for (let i = 0; i < data.length; i += 97) moved += Math.abs(data[i]! - later[i]!);
+		expect(moved / (data.length / 97)).toBeGreaterThan(2);
+	});
+});
+
 describe('guide example', () => {
 	it('previews with a clean layout report (no beat without a drawing, nothing still, no jumps)', { timeout: 240_000 }, async () => {
 		const parsed = parseJob({
