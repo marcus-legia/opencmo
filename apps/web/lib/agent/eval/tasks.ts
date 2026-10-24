@@ -117,7 +117,8 @@ function blankEdit(document: ClipDocument): void {
 
 /**
  * A whole video was asked for: create_video is the tool reached, with the length (and frame) the
- * user asked for, and its card says so. Without `--until-card` the video must also be on the timeline.
+ * user asked for, and its card says so. Without `--until-card` the keyframes must also be started,
+ * in the video's frame; the shots come after a second approval (animate_video), graded when reached.
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
@@ -130,14 +131,23 @@ function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }
   const seconds = check(notes, (input.seconds ?? 30) === want.seconds, `asked for ${want.seconds}s, create_video got seconds ${input.seconds ?? "(default 30)"}`);
   const aspect = !want.aspect || check(notes, input.aspect === want.aspect, `asked for ${want.aspect}, create_video got aspect ${input.aspect ?? "(the edit's frame)"}`);
   const card = (outcome.cards ?? []).find((item) => item.tool === "create_video");
-  const shown = check(notes, Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video`).test(card!.changes[0] ?? ""), `card: ${card?.changes[0] ?? "never reached a create_video card"}`);
-  if (outcome.untilCard) return { pass: seconds && aspect && shown, notes };
-  const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
-  const length = check(notes, workarea?.[1] === want.seconds, `work area ${JSON.stringify(workarea)}`);
-  const voice = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "voice"), "no voice-over");
-  const errors = outcome.report.issues.filter((issue) => issue.severity === "error");
-  const clean = check(notes, !errors.length, `check still has errors: ${errors.map((issue) => issue.code).join(", ")}`);
-  return { pass: seconds && aspect && shown && length && voice && clean, notes };
+  const shown = check(
+    notes,
+    Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video, step 1 of 2: \\d+ keyframes`).test(card!.changes[0] ?? ""),
+    `card: ${card?.changes[0] ?? "never reached a create_video card"}`,
+  );
+  const priceLater = check(notes, Boolean(card?.changes.some((line) => /^Then about \d+ credits for the video/.test(line))), "card 1 does not say what the video costs after the keyframes");
+  if (outcome.untilCard) return { pass: seconds && aspect && shown && priceLater, notes };
+  const gen = outcome.generations?.find((item) => item.longTake);
+  const keyframes = check(notes, Boolean(gen) && [gen!.model, ...(gen!.extra ?? []).map((item) => item.model)].every((model) => model.kind === "image"), "no keyframes were started");
+  const frame = check(notes, gen?.spec.aspectRatio === (want.aspect ?? "9:16"), `keyframes in ${String(gen?.spec.aspectRatio)}`);
+  return { pass: seconds && aspect && shown && priceLater && keyframes && frame && waiting(outcome, notes), notes };
+}
+
+/** After stage 1 the edit is still empty (the keyframes are in the library): only that may be reported. */
+function waiting(outcome: Outcome, notes: string[]): boolean {
+  const errors = outcome.report.issues.filter((issue) => issue.severity === "error" && !["no-visuals", "black-gap"].includes(issue.code));
+  return check(notes, !errors.length, `check has errors beyond the empty edit: ${errors.map((issue) => issue.code).join(", ")}`);
 }
 
 const hasAnimation = (entity: Entity, phase?: "in" | "out") =>
@@ -610,15 +620,15 @@ export const TASKS: EvalTask[] = [
     },
     grade(outcome) {
       const notes: string[] = [];
-      const gen = outcome.generations?.find((item) => (item.op as { op?: string }).op === "create_video");
+      const gen = outcome.generations?.find((item) => item.longTake);
       if (!check(notes, Boolean(gen), "no create_video from /video")) return { pass: false, notes };
-      const shots = all(outcome.document).filter((item) => ((item.entity.paints as { src?: { generate?: string } }[] | undefined) ?? []).some((paint) => paint.src?.generate === "video"));
-      const covered = check(notes, shots.length >= 2, `${shots.length} video shots placed`);
-      const parallel = check(notes, (gen!.extra?.length ?? 0) >= shots.length - 1, "not every shot, voice and music start together");
-      const voice = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "voice"), "no voice-over");
-      const workarea = (outcome.document.stage.children[0] as unknown as { workarea?: number[] }).workarea;
-      const length = check(notes, workarea?.[1] === 15, `work area ${JSON.stringify(workarea)}`);
-      return { pass: covered && parallel && voice && length && sane(outcome, notes), notes };
+      const shots = gen!.longTake!.plan.shots.length;
+      const covered = check(notes, shots >= 2, `${shots} beats planned`);
+      // Every keyframe starts at once: one per beat, plus the closing one when the last beat flows on.
+      const parallel = check(notes, 1 + (gen!.extra?.length ?? 0) >= shots, "not every keyframe starts together");
+      const length = check(notes, gen!.longTake!.seconds === 15, `planned ${gen!.longTake!.seconds}s`);
+      const placed = check(notes, !all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "video"), "shots were placed before the second approval");
+      return { pass: covered && parallel && length && placed && waiting(outcome, notes), notes };
     },
   },
   // What founders type for a whole video (PR 45 scenarios 13-14), graded on what they get back:
@@ -655,7 +665,7 @@ export const TASKS: EvalTask[] = [
     prompt: "/video make a video about what I'm saying here",
     grade(outcome) {
       const notes: string[] = [];
-      const placed = check(notes, !(outcome.generations ?? []).some((item) => (item.op as { op?: string }).op === "create_video"), "a /video was planned over the user's own footage");
+      const placed = check(notes, !(outcome.generations ?? []).some((item) => item.longTake), "a /video was planned over the user's own footage");
       const tries = (outcome.calls ?? []).filter((call) => call.name === "create_video").length;
       const noLoop = check(notes, tries <= 2, `create_video tried ${tries} times`);
       const told = check(notes, /new edit|\/broll|b-roll/i.test(outcome.reply ?? ""), `the user is not told what to do instead: ${(outcome.reply ?? "").slice(0, 200)}`);

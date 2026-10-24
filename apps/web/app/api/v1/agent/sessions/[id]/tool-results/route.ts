@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { KEYFRAMES_MAX } from "@opencmo/editor-core";
+
 import { withApi } from "@/lib/api/handler";
 import { continueTurn } from "@/lib/agent/session";
 
@@ -23,6 +25,8 @@ const body = z.object({
         error: z.string().max(300).optional(),
         /** Quyết định ở thẻ duyệt, gửi CÙNG kết quả tool tab của cùng bước. */
         approved: z.boolean().optional(),
+        /** Redo one keyframe on a contact sheet (`animate_video`), in place of approving it. */
+        redo: z.object({ index: z.number().int().min(0).max(KEYFRAMES_MAX - 1) }).optional(),
         /** Câu trả lời cho `ask_user`. */
         answer: z
           .object({

@@ -38,6 +38,7 @@ import type { RenderTask } from "@/lib/api/tasks";
 import type { ToolAnswer } from "./capture";
 import type { SlashMenuItem } from "@/lib/agent/slash";
 
+import { ContactSheet } from "./ContactSheet";
 import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
@@ -87,6 +88,7 @@ export function AssistantPanel({
   notify,
   onTouched,
   speech = false,
+  prefill = null,
 }: {
   client: AssistantClient;
   /** Chạy một tool phía tab (`capture`, `media_waveform`, `media_grab`). */
@@ -100,6 +102,8 @@ export function AssistantPanel({
   onTouched?: (ids: string[]) => void;
   /** The clip has a video whose words can be cut: offer the rough-cut starter. */
   speech?: boolean;
+  /** Text the editor puts in the box (a new `nonce` each time), e.g. "Redo keyframe…" from a shot's menu. */
+  prefill?: { text: string; nonce: number } | null;
 }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
@@ -128,6 +132,11 @@ export function AssistantPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!prefill) return;
+    setDraft(prefill.text);
+    input.current?.focus();
+  }, [prefill]);
   // Ô nhập giãn theo chữ tới ~8 dòng rồi mới cuộn; gửi xong thì co lại.
   useEffect(() => {
     const box = input.current;
@@ -345,10 +354,13 @@ export function AssistantPanel({
     });
   /** Tool tab của cùng bước (không có thẻ): chạy và gửi CÙNG câu trả lời của người. */
   const browserResults = (turn: TurnView) => runBrowserTools(turn.pending.filter((request) => !request.card));
-  const decide = (turn: TurnView, approved: boolean) =>
+  /** `redo`: one keyframe redone on a contact sheet; every card of the step is then left unapproved. */
+  const decide = (turn: TurnView, approved: boolean, redo?: { requestId: string; index: number }) =>
     proceed(turn, async (id, handler) => {
       const tools = await browserResults(turn);
-      const decisions = turn.pending.filter((request) => isApproval(request.card)).map((request) => ({ tool_use_id: request.id, approved }));
+      const decisions = turn.pending
+        .filter((request) => isApproval(request.card))
+        .map((request) => ({ tool_use_id: request.id, approved, ...(redo?.requestId === request.id ? { redo: { index: redo.index } } : {}) }));
       return client.results(id, [...tools, ...decisions], handler);
     });
   const answer = (turn: TurnView, request: ToolRequest, reply: BrowserResult["answer"]) =>
@@ -536,7 +548,7 @@ export function AssistantPanel({
             undoing={undoing}
             onUndo={() => void undo(turn)}
             onResume={() => void resume(turn)}
-            onDecide={(approved) => void decide(turn, approved)}
+            onDecide={(approved, redo) => void decide(turn, approved, redo)}
             onAnswer={(request, reply) => void answer(turn, request, reply)}
             onExtend={() => void extend(turn)}
             onStop={() => void stop()}
@@ -654,7 +666,7 @@ function Turn({
   undoing: number | null;
   onUndo: () => void;
   onResume: () => void;
-  onDecide: (approved: boolean) => void;
+  onDecide: (approved: boolean, redo?: { requestId: string; index: number }) => void;
   onAnswer: (request: ToolRequest, reply: BrowserResult["answer"]) => void;
   onExtend: () => void;
   onStop: () => void;
@@ -706,6 +718,10 @@ function Turn({
             {approvals.map((request) => (request.card as ApprovalCard).storyboard).map((storyboard, index) =>
               storyboard ? <StoryboardTable key={`storyboard-${index}`} storyboard={storyboard} /> : null,
             )}
+            {approvals.map((request) => {
+              const sheet = (request.card as ApprovalCard).sheet;
+              return sheet ? <ContactSheet key={`sheet-${request.id}`} sheet={sheet} onRedo={(index) => onDecide(false, { requestId: request.id, index })} /> : null;
+            })}
           </div>
           {approvals.length > 1 && approvals.some((request) => (request.card as ApprovalCard).credits) ? (
             <p className="ed2-asst-total" data-testid="assistant-approval-total">

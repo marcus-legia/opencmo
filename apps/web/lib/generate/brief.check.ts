@@ -10,7 +10,7 @@ import { generateCard, prepareGeneration } from "@/lib/agent/generate-tool";
 
 import type { SupabaseClient } from "@/lib/api/handler";
 
-import { briefMisuse, composePrompt, type Brief } from "./brief";
+import { briefMisuse, composeKeyframePrompt, composePrompt, composeShotPrompt, type Brief } from "./brief";
 import { resolveMediaRefs } from "./create";
 
 const brief: Brief = {
@@ -40,6 +40,36 @@ async function main(): Promise<void> {
     const short = composePrompt(brief, "video", { maxChars: 300 });
     assert.ok(short.length <= 300);
     assert.match(short, /No text/);
+  }
+
+  // Video moves like film: three layers of motion, mid-action, live-action words, empty areas kept.
+  {
+    const prompt = composePrompt(brief, "video", { maxChars: 2000, aspectRatio: "9:16", duration: 6 });
+    assert.match(prompt, /Three layers of motion at once: the camera moves, the subject acts, and the surroundings move/);
+    assert.match(prompt, /Start in the middle of the action/);
+    assert.match(prompt, /never slow to a stop or freeze/);
+    assert.match(prompt, /Empty areas of the frame stay empty/);
+    assert.match(prompt, /stays still and sharp/);
+    assert.match(composePrompt({ ...brief, style: "photo" }, "video", { maxChars: 2000 }), /Live-action footage/);
+    assert.doesNotMatch(composePrompt({ ...brief, style: "photo" }, "video", { maxChars: 2000 }), /Photorealistic photograph/);
+  }
+
+  // Long take: a keyframe never asks for text; a shot between keyframes is about motion and its end frame.
+  {
+    const keyframe = composeKeyframePrompt("a laptop on a hotel front desk, morning light, medium shot", "cinematic", { maxChars: 2000, aspectRatio: "9:16" });
+    assert.match(keyframe, /^A laptop on a hotel front desk, morning light, medium shot\./);
+    assert.match(keyframe, /No text, letters, numbers, captions, logos, watermarks or UI in the frame; no signs, screens or packaging with words\.$/);
+    assert.match(keyframe, /Vertical 9:16 composition/);
+    const shot = { motion: "the camera glides toward the desk, the screen lights up", keyframe: "a laptop on a hotel front desk" };
+    const joined = composeShotPrompt(shot, "cinematic", { maxChars: 2000, aspectRatio: "9:16", duration: 8, joins: true });
+    assert.match(joined, /^The camera glides toward the desk/);
+    assert.match(joined, /arrives exactly on the last frame/);
+    assert.match(joined, /Three layers of motion/);
+    assert.match(joined, /Cinematic live-action footage/);
+    assert.doesNotMatch(composeShotPrompt(shot, "cinematic", { maxChars: 2000, joins: false }), /last frame\./);
+    const capped = composeShotPrompt(shot, "cinematic", { maxChars: 200, joins: true });
+    assert.ok(capped.length <= 200);
+    assert.match(capped, /no new text appears/);
   }
 
   // Brief xin thứ model sinh làm hỏng → gợi ý visual vẽ sẵn.

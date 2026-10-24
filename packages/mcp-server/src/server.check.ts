@@ -111,6 +111,19 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   const missing = await callTool(planVideo, { clip_id: "11111111-1111-4111-8111-111111111111", recipe: "intro", brief: "calm" }, ctx);
   assert.equal(missing.isError, true, "plan_video without spec never reaches our motion team");
   assert.match(String((missing.content[0] as { text: string }).text), /^spec: /);
+  const fake = process.env.OPENCMO_AI_FAKE;
+  process.env.OPENCMO_AI_FAKE = "1";
+  const createVideo = (await registry.tools(ctx)).find((tool) => tool.name === "create_video");
+  assert.ok(createVideo, "create_video is offered when video models are available");
+  const noPlan = await callTool(createVideo, { clip_id: "11111111-1111-4111-8111-111111111111", prompt: "a video about our app" }, ctx);
+  assert.equal(noPlan.isError, true, "create_video without a plan never reaches our director");
+  assert.match(String((noPlan.content[0] as { text: string }).text), /^plan: Send your finished plan/);
+  const described = describeTool(createVideo);
+  assert.match(described.description!, /keyframes only/, "the price step says it is the keyframes");
+  const shot = (described.inputSchema.properties as { plan: { properties: { shots: { items: { properties: Record<string, unknown> } } } } }).plan.properties.shots.items.properties;
+  for (const field of ["words", "keyframe", "motion", "continues"]) assert.ok(field in shot, `the plan's shots take ${field}`);
+  if (fake === undefined) delete process.env.OPENCMO_AI_FAKE;
+  else process.env.OPENCMO_AI_FAKE = fake;
 }
 
 // ------------------------------------------------------------ price → confirm, enforced by the server

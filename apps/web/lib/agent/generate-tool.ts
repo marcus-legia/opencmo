@@ -20,6 +20,7 @@ import {
   studio3dToolInput,
   voiceoverToolInput,
   type Op,
+  type CreateVideoResult,
   type Studio3dInput,
   type VoiceoverInput,
 } from "@opencmo/editor-core";
@@ -32,6 +33,7 @@ import { checkGeneration, normalizeSpec, startGeneration, type PreparedCreate } 
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
+import { longTakeResult } from "./keyframe-library";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
@@ -147,6 +149,10 @@ export type PreparedGeneration = {
   extra?: { model: AiModel; spec: GenerationSpec }[];
   /** Card lines that replace the generic "Generate …" summary. */
   lines?: string[];
+  /** Pieces that land in the library (a long take's keyframes), named in run order, not on the timeline. */
+  library?: { folder: string; names: string[] };
+  /** A long take's stage 1: its result names each keyframe's generation for `animate_video`. */
+  longTake?: Omit<CreateVideoResult, "keyframes"> & { voice?: string };
 };
 
 /** Tìm mốc CLIP của câu trích; ném lỗi đọc được khi không có trong clip. */
@@ -478,6 +484,8 @@ type GenerateEnv = {
   applyOp: (op: Op) => Promise<ToolOutcome>;
   /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
   alive?: () => Promise<boolean>;
+  /** Lists `prepared.library` pieces in the library, by generation id in run order. */
+  addToLibrary?: (prepared: PreparedGeneration, ids: string[]) => Promise<void>;
 };
 
 const STOPPED: ToolOutcome = {
@@ -487,7 +495,7 @@ const STOPPED: ToolOutcome = {
 };
 
 /** Người dùng đã Approve: tạo lượt sinh rồi đặt khai báo lên clip. */
-export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string }> {
+export async function runGeneration(env: GenerateEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string; generationIds?: string[] }> {
   // Every variant is its own generation and credit hold; all of them start or none do.
   const started: { id: string; credits_reserved: number; reused: boolean }[] = [];
   // Only what this approval started: a reused generation belongs to an earlier placement (another
@@ -557,12 +565,19 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
     await cancelAll();
     return { outcome: applied };
   }
+  const ids = started.map((item) => item.id);
+  if (prepared.library && env.addToLibrary) {
+    // The generations run either way and the editor lists them when it resolves them: a failed
+    // library save loses only the folder, not paid work.
+    await env.addToLibrary(prepared, ids).catch((err: unknown) => console.error("[agent] keyframes not listed in the library", err));
+  }
   const credits = `${generation.credits_reserved} ${generation.credits_reserved === 1 ? "credit" : "credits"}`;
   // Variants are alternatives of one piece; `extra` are other pieces (a /video's shots, voice, music).
   const variants = 1 + (prepared.variants?.length ?? 0);
   const pieces = started.length;
   return {
     generationId: generation.id,
+    generationIds: ids,
     outcome: {
       ok: true,
       content: JSON.stringify({
@@ -571,8 +586,10 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         credits: generation.credits_reserved,
         ...(variants > 1 ? { variants } : {}),
         ...(pieces > variants ? { pieces } : {}),
-        note:
-          variants > 1
+        ...(prepared.longTake ? { result: longTakeResult(prepared.longTake, ids), ...(prepared.longTake.voice ? { voice: prepared.longTake.voice } : {}) } : {}),
+        note: prepared.longTake
+          ? `${pieces} keyframes started; they appear in the library under ${prepared.library?.folder ?? "Generated"}. Next: wait_for_media until they are done, then call animate_video with result.plan, result.aspect, result.model and result.keyframes (and voice, when given). It shows the user the keyframes and the exact price of the video before anything else is charged.`
+          : variants > 1
             ? `${variants} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
             : pieces > 1
               ? `${pieces} pieces started at once; each appears on the clip when it is ready. The user does not need to do anything.`

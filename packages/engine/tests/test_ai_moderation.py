@@ -3,6 +3,7 @@ failures never pass."""
 
 from __future__ import annotations
 
+import json
 import sys
 import types
 
@@ -452,6 +453,100 @@ def test_a_fenced_json_verdict_is_read(monkeypatch, image):
     monkeypatch.setenv("GROQ_API_KEY", "q")
     _compat(monkeypatch, [(200, "```json\n" + ALLOW + "\n```")])
     moderation.check_images([image])
+
+
+@pytest.mark.parametrize("model_id", ["fal-veo", "fal-kling-v3"])
+def test_long_take_shots_are_checked_frame_by_frame_before_upload(monkeypatch, image, model_id):
+    """Long take, Task 1: the new rows are `video` on `fal`, so their frames go through the checkers."""
+    nsfw = _nsfw(monkeypatch)
+    claude = _claude(monkeypatch)
+    monkeypatch.setattr(moderation, "_frames", lambda _path, _workdir: [image])
+    model = get_model(model_id)
+    assert moderation.needs_check(model)
+    moderation.check_output(model, {"prompt": "a desk at dawn"}, image)
+    assert nsfw["url"] == moderation.NSFW_ENDPOINT
+    assert claude["system"] == moderation.POLICY
+
+
+# --------------------------------------------------------------- garbled text (long take, Task 6)
+
+
+@pytest.fixture
+def garbled(tmp_path):
+    """A real PNG with gibberish shop-sign letters, the kind of keyframe the badge is for."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg missing")
+    path = tmp_path / "garbled.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=0x334455:s=540x960",
+         "-vf", "drawtext=text='OPNECMMO SLOO FUNDRES':fontcolor=white:fontsize=48:x=40:y=420",
+         "-frames:v", "1", str(path)],
+        check=True,
+    )
+    return path
+
+
+def _compat_text(monkeypatch, answer=None, status=200, raises=False):
+    seen: list[dict] = []
+
+    def post(url, **kwargs):
+        seen.append({"url": url, **kwargs})
+        if raises:
+            raise httpx.ConnectError("down")
+        body = {"choices": [{"message": {"content": json.dumps(answer)}}], "usage": {"total_tokens": 900}}
+        return httpx.Response(status, json=body, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(moderation.httpx, "post", post)
+    return seen
+
+
+def test_a_garbled_keyframe_gets_a_severe_hint(monkeypatch, garbled):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    seen = _compat_text(monkeypatch, {"text": "severe"})
+    assert moderation.text_quality(get_model("fal-nano-banana"), {"prompt": "a shop"}, garbled) == {"text": "severe"}
+    assert len(seen) == 1, "one vision call per image"
+    assert seen[0]["url"] == f"{moderation.GROQ_BASE_URL}/chat/completions"
+    sent = seen[0]["json"]["messages"]
+    assert sent[0]["content"].startswith(moderation.TEXT_POLICY)
+    assert sent[1]["content"][0]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_the_text_hint_tries_the_next_checker_then_gives_up_quietly(monkeypatch, garbled):
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    _compat_text(monkeypatch, raises=True)
+    asked = []
+
+    def claude(_path):
+        asked.append("claude")
+        return {"text": "minor"}
+
+    monkeypatch.setattr(moderation, "_ask_claude", claude)
+    assert moderation.text_quality(get_model("fal-nano-banana"), {"prompt": "x"}, garbled) == {"text": "minor"}
+    assert asked == ["claude"]
+
+    monkeypatch.setattr(moderation, "_ask_claude", lambda _path: {"text": "unreadable"})
+    assert moderation.text_quality(get_model("fal-nano-banana"), {"prompt": "x"}, garbled) is None, "no valid answer: no hint, no failure"
+
+
+def test_the_text_hint_never_sends_the_groq_key_elsewhere(monkeypatch, garbled):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "https://openrouter.example/api/v1")
+    monkeypatch.setenv("OPENCMO_MODERATION_VISION_MODEL", "some/vision")
+    monkeypatch.setattr(moderation.httpx, "post", lambda *_a, **_k: pytest.fail("the Groq key went to another vendor"))
+    assert moderation.text_quality(get_model("fal-nano-banana"), {"prompt": "x"}, garbled) is None
+
+
+def test_the_text_hint_is_for_images_and_fake_mode_marks_it(monkeypatch, garbled):
+    monkeypatch.setattr(moderation.httpx, "post", lambda *_a, **_k: pytest.fail("no call"))
+    assert moderation.text_quality(get_model("fal-veo"), {"prompt": "x"}, garbled) is None, "videos are not checked"
+    fake = get_model("fake-image")
+    assert moderation.text_quality(fake, {"prompt": f"a sign {moderation.FAKE_GARBLED}"}, garbled) == {"text": "severe"}
+    assert moderation.text_quality(fake, {"prompt": "a sign"}, garbled) is None
 
 
 # ---------------------------------------------------------------- the prompt, again on the worker

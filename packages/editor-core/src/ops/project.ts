@@ -295,6 +295,24 @@ const GENERATED_SIZE: Record<string, { width: number; height: number }> = {
 };
 const AUDIO_BOX = { width: 500, height: 150 };
 
+/**
+ * A keyframe as a long-take shot names it (/video): the image's own declaration, not a library path,
+ * so the shot follows the file the server made for it wherever the user files it, and the editor's
+ * re-request of the shot hashes to the generation the server already started.
+ */
+export const keyframeSource = z
+  .object({
+    generate: z.literal('image'),
+    prompt: z.string().trim().min(1).max(5000),
+    model: z.string().min(1).max(100),
+    aspectRatio: z.enum(Object.keys(GENERATED_SIZE) as [string, ...string[]]),
+    resolution: z.string().min(1).max(20).optional(),
+    seed: z.number().int().min(0).max(2_147_483_647),
+  })
+  .strict();
+export type KeyframeSource = z.infer<typeof keyframeSource>;
+const frameSource = z.union([z.string().min(1).max(500), keyframeSource]);
+
 type AddGenerated = {
   kind: 'image' | 'video' | 'voice' | 'audio';
   model: string;
@@ -307,8 +325,8 @@ type AddGenerated = {
   start?: number;
   resolution?: string;
   audio?: boolean;
-  start_frame?: string;
-  end_frame?: string;
+  start_frame?: string | KeyframeSource;
+  end_frame?: string | KeyframeSource;
   refs?: string[];
   length?: number;
   muted?: boolean;
@@ -359,9 +377,9 @@ export const addGenerated = {
     resolution: z.string().min(1).max(20).optional(),
     /** Video: tiếng do model sinh bật/tắt (model có `limits.audio`). */
     audio: z.boolean().optional(),
-    /** Đường dẫn thư viện của ảnh AI làm frame đầu / cuối của video. */
-    start_frame: z.string().min(1).max(500).optional(),
-    end_frame: z.string().min(1).max(500).optional(),
+    /** The first / last frame of the video: a library image, or a keyframe's declaration (/video). */
+    start_frame: frameSource.optional(),
+    end_frame: frameSource.optional(),
     /** Đường dẫn thư viện của ảnh tham chiếu. */
     refs: z.array(z.string().min(1).max(500)).min(1).max(8).optional(),
     /** Ảnh/video: số giây hiện trên clip (B-roll 1.5–4 s); video vẫn sinh và trả tiền đủ `duration`. */

@@ -310,7 +310,7 @@ function script(history: StoredMessage[]): unknown[] {
     const failed = results.some((block) => block.is_error);
     if (previous.includes("create_video")) {
       if (/"declined":\s*true/.test(raw0)) return [text("No problem, nothing was spent. What should I change: the story, the length or the tone?")];
-      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The video is on its way: the shots, the voice-over and the music fill in on the timeline as they finish.")];
+      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The keyframes are on their way to your library. Once they are ready I'll show them with the exact price of the video, before anything else is charged.")];
       const reason = /"(?:INVALID_INPUT|error)"\s*:\s*"([^"]+)"/.exec(raw0)?.[1];
       return [text(reason ? `I could not make that video: ${reason}` : "That did not work — nothing was changed.")];
     }

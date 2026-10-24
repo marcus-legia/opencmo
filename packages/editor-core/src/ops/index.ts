@@ -44,7 +44,7 @@ import { laneOf } from '../tracks';
 import { addIntro } from '../motion/intro';
 import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
-import { createVideo } from './create-video';
+import { createVideo, redoKeyframe } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
@@ -54,7 +54,8 @@ import { addProof } from '../proof';
 
 export { OpError, OpFailure, OpOutcome, type OpContext } from './context';
 export { COPY_GROUPS } from './inspector';
-export { checkShots, createVideoInput, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo } from './create-video';
+export { checkShots, createVideoInput, keyframesOf, MAX_CHAIN, MAX_SHOTS, VIDEO_ASPECTS, VIDEO_FRAMES, type CreateVideo, type PlacedKeyframe } from './create-video';
+export { keyframeSource, type KeyframeSource } from './project';
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
@@ -211,6 +212,7 @@ const REGISTRY = [
 	addList,
 	// Style skills, Track C.
 	addProof,
+	redoKeyframe,
 ] as const;
 
 type Definition = {

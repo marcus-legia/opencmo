@@ -6789,3 +6789,52 @@ html[data-theme] .ed2-zoom {
   color: var(--ds-text);
   cursor: pointer;
 }
+.ed2-asst-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ed2-asst-sheet-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--ds-text-11);
+}
+.ed2-asst-sheet-tile img,
+.ed2-asst-sheet-empty {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-control);
+  background: #000;
+}
+.ed2-asst-sheet-tile[data-garbled] img {
+  border-color: var(--ds-danger-fg);
+}
+.ed2-asst-sheet-empty {
+  display: grid;
+  place-items: center;
+  color: var(--ds-muted);
+}
+.ed2-asst-sheet-number {
+  color: var(--ds-muted);
+  font-weight: 500;
+}
+.ed2-asst-sheet-words {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.ed2-asst-approval .ed2-asst-sheet-badge {
+  color: var(--ds-danger-fg);
+}
+.ed2-asst-sheet-tile .ed2-row {
+  flex-wrap: wrap;
+  gap: 4px;
+}

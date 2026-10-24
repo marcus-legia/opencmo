@@ -1,5 +1,5 @@
 {
-  "$comment": "Catalog of media generation models (AI Studio spec §7.2). ONE source for the route (zod), SQL (ai_models, seeded in migrations — check:api compares the two) and the worker. `limits.maxReferences`: how many reference images the model takes (0 = none; the prompt box does not attach the selected image). `price.unit`: generation = per generation; second = per second (rounded up); kchars = per 1,000 prompt characters (rounded up); explainer = `credits` per started 10 s plus `voiceKchars` per started 1,000 characters of narration (the beats' `say`, trimmed, joined with one space). Models with `provider: fake` run only with OPENCMO_AI_FAKE=1 outside production. `providerModel`: the provider's model id — read by the worker; env `OPENCMO_AI_MODEL_<ID>` (e.g. OPENCMO_AI_MODEL_GEMINI_VIDEO) overrides it, so a real id can be pinned without editing the catalog. Gemini prices are PROVISIONAL (COSTS.md §6c). `limits.scene`: 3D Studio and explainers — the spec also has `scene` (SceneContentSchema in packages/clip-three/src/spec.ts, or the explainer script); `prompt` is only a summary for people. `elevenlabs-voice`: narration with per-word timings (captions for voiceovers); voice name → voice_id in the Python adapter; price PROVISIONAL (COSTS.md §6e). `motion-explainer` (docs/explainer-build.md): scene {template: \"explainer\", code_ref, title, beats, accent?} plus `voice` (a premade ElevenLabs voice) and `prompt` = \"Explainer: <title>\"; price PROVISIONAL until measured on Modal. `motion-clip` (docs/plans/editor/2026-10-22-motion-quality-plan.md): the same renderer with no voice; scene {template: \"clip\", code_ref, title, beats with `seconds` (1-8 beats, 30 s at most), accent?, theme?, personality?, assets?}; `duration` = the beats' seconds rounded up (3-30); price = `credits` per started 10 s (no `voiceKchars`).",
+  "$comment": "Catalog of media generation models (AI Studio spec §7.2). ONE source for the route (zod), SQL (ai_models, seeded in migrations — check:api compares the two) and the worker. `limits.maxReferences`: how many reference images the model takes (0 = none; the prompt box does not attach the selected image). `price.unit`: generation = per generation; second = per second (rounded up); kchars = per 1,000 prompt characters (rounded up); explainer = `credits` per started 10 s plus `voiceKchars` per started 1,000 characters of narration (the beats' `say`, trimmed, joined with one space). Models with `provider: fake` run only with OPENCMO_AI_FAKE=1 outside production. `providerModel`: the provider's model id — read by the worker; env `OPENCMO_AI_MODEL_<ID>` (e.g. OPENCMO_AI_MODEL_GEMINI_VIDEO) overrides it, so a real id can be pinned without editing the catalog. Gemini prices are PROVISIONAL (COSTS.md §6c). `limits.scene`: 3D Studio and explainers — the spec also has `scene` (SceneContentSchema in packages/clip-three/src/spec.ts, or the explainer script); `prompt` is only a summary for people. `elevenlabs-voice`: narration with per-word timings (captions for voiceovers); voice name → voice_id in the Python adapter; price PROVISIONAL (COSTS.md §6e). `motion-explainer` (docs/explainer-build.md): scene {template: \"explainer\", code_ref, title, beats, accent?} plus `voice` (a premade ElevenLabs voice) and `prompt` = \"Explainer: <title>\"; price PROVISIONAL until measured on Modal. `motion-clip` (docs/plans/editor/2026-10-22-motion-quality-plan.md): the same renderer with no voice; scene {template: \"clip\", code_ref, title, beats with `seconds` (1-8 beats, 30 s at most), accent?, theme?, personality?, assets?}; `duration` = the beats' seconds rounded up (3-30); price = `credits` per started 10 s (no `voiceKchars`). Long take (docs/plans/editor/2026-10-23-ai-long-take-plan.md): `providerModels.frames` is the endpoint a spec with both `startImage` and `endImage` goes to; `limits.providerInputs` {start, end} names the frame fields on the endpoint that takes the last frame (`frames` when the row has one, else `image`; missing = `image_url` / `end_image_url`). `limits.silent`: the model can make sound but the worker always turns it off (the voice-over and music are ours, so model audio is never paid for). `fal-veo` and `fal-kling-v3` durations, input names and typicalSeconds are PROVISIONAL until the first real call (plan Task 1).",
   "version": 1,
   "models": [
     {
@@ -602,6 +602,92 @@
           10
         ],
         "firstFrame": true,
+        "typicalSeconds": 180
+      }
+    },
+    {
+      "id": "fal-veo",
+      "kind": "video",
+      "provider": "fal",
+      "providerModel": "fal-ai/veo3.1",
+      "providerModels": {
+        "image": "fal-ai/veo3.1/image-to-video",
+        "frames": "fal-ai/veo3.1/first-last-frame-to-video"
+      },
+      "name": "Cinematic",
+      "description": "Our best-looking shots: film-like motion and detail. Can start and end on your own images.",
+      "price": {
+        "unit": "second",
+        "credits": 4
+      },
+      "limits": {
+        "maxPromptChars": 2000,
+        "aspectRatios": [
+          "9:16",
+          "16:9"
+        ],
+        "durations": [
+          4,
+          6,
+          8
+        ],
+        "resolutions": [
+          "720p",
+          "1080p"
+        ],
+        "firstFrame": true,
+        "lastFrame": true,
+        "providerInputs": {
+          "start": "first_frame_url",
+          "end": "last_frame_url"
+        },
+        "silent": true,
+        "typicalSeconds": 120
+      }
+    },
+    {
+      "id": "fal-kling-v3",
+      "kind": "video",
+      "provider": "fal",
+      "providerModel": "fal-ai/kling-video/v3/pro/text-to-video",
+      "providerModels": {
+        "image": "fal-ai/kling-video/v3/pro/image-to-video"
+      },
+      "name": "Cinematic square",
+      "description": "Film-like shots in any frame, square included. Can start and end on your own images.",
+      "price": {
+        "unit": "second",
+        "credits": 3
+      },
+      "limits": {
+        "maxPromptChars": 2500,
+        "aspectRatios": [
+          "16:9",
+          "9:16",
+          "1:1"
+        ],
+        "durations": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "firstFrame": true,
+        "lastFrame": true,
+        "providerInputs": {
+          "start": "start_image_url",
+          "end": "end_image_url"
+        },
+        "silent": true,
         "typicalSeconds": 180
       }
     },
