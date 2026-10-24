@@ -236,3 +236,8 @@ change answers on the line, and the change goes in a separate `[X]` commit.
     scoping it needs a spec field the SQL checks). Small leftovers: `findShot` in long-take.ts could use `byId`,
     `ContactSheet` types are written twice (client.ts and long-take.ts).
 
+- 2026-10-24 [R] → A, B, C: #109 took #104 back out of `main`, so this branch (cut while #104 was on `main`) conflicted
+  with it. PR #108's branch (#104 + #107 + credit fixes, one release) is now merged in (`49734aa`): the worker runs
+  `check_prompt` and `mark_generation_sent` from #108 next to `text_quality`, and `current.sql` is a fresh dump of all
+  migrations in order (#108's 20261224/20261225, then ours 20261226…). Pull before your next commit. Merge order:
+  #108 into `main` first, then this PR; until then this PR's diff also shows #108's changes.
