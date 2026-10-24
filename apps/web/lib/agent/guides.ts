@@ -122,7 +122,16 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 
   captions: `# Captions
 
-- Presets: classic (one word highlighted at a time, clean), spotlight (bold, colored active word), stark (white boxed), cascade, whisper, paper, guinea. For talking heads on TikTok/Reels, spotlight or classic read best.
+- Presets: classic (one word highlighted at a time, clean), spotlight (bold, colored active word), stark (white boxed), cascade, whisper, paper, guinea, flare (the phrase in a quiet sans, then its payoff word lands big in a serif italic on its own line; colors[0] = the payoff colour), slam (loud uppercase, the loudest word on a tilted slab; colors[0] = the slab). Pick by the video, one preset per video:
+  | the video is | preset | not when |
+  | a tutorial, dense or fast information, or visuals share the frame most of the time | whisper or classic (quiet) | the clip needs punch |
+  | a talking head that wants a payoff every sentence, with a brand accent | flare | delivery so fast the payoff lags the voice |
+  | short imperative lines, step-throughs, hype | spotlight or classic with highlight pop | reflective or dense narration |
+  | a vlog, a hot take, sticker energy | slam or guinea | formal or corporate register; visuals on screen most of the time |
+  | a story-time or confessional | paper or cascade | a corporate register |
+  | a dark speaker over bright B-roll | stark | flat mid-tone footage |
+- Emphasis words (emphasize_words) are the payoff: at most one per phrase. flare lands on the emphasized word, slam slabs it; without emphasis they take the phrase's last (flare) or longest (slam) word.
+- Loud presets (slam, guinea, spotlight with pop) compete with an animation for the same beat: when explainers, charts or B-roll cover most of the clip, pick a quiet one.
 - set_caption_style {preset, colors, color?, font?, weight?}: applies to EVERY caption layer of the clip (video and voiceover captions share one style). colors are up to 3 hex values; the preset decides what each color does (usually highlight). color = the main text color, font = one of the editor fonts, weight 100-900; null resets to the preset, leaving a field out keeps it.
 - Captions for OTHER media (B-roll, an uploaded talk, a song): uploads are transcribed automatically for free, and a video's transcript is a hidden captions layer linked to it: show it with set_props {hidden: false}. add_captions {element_id} covers the rest (free when the file is already transcribed, otherwise 1 credit/min; the user approves the price). translate_captions {element_id, language} adds a translated copy as a new layer (1 credit/min).
 - highlight: "block" (box behind the spoken word) or "pop" (the spoken word grows and turns yellow) with set_props on the captions element; censor: true masks swear words on screen (the transcript keeps them).

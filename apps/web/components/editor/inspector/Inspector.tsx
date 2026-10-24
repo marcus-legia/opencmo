@@ -719,6 +719,8 @@ const HIGHLIGHTS: [string, string][] = [
 /** Ô màu theo từng preset phụ đề, và màu preset tự dùng khi ô để trống. */
 const CAPTION_SLOTS: Record<string, { label: string; color: string }[]> = {
   spotlight: [{ label: "Highlight", color: "#24D5FF" }],
+  flare: [{ label: "Payoff", color: "#FFFFFF" }],
+  slam: [{ label: "Slab", color: "#FFD400" }],
   guinea: [
     { label: "Color 1", color: "#F55353" },
     { label: "Color 2", color: "#FEB139" },

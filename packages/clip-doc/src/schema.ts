@@ -217,7 +217,7 @@ export const CAPTION_REVEALS = ['fade'] as const;
 /** At most this many emphasized ranges per captions layer. */
 export const MAX_EMPHASIS = 500;
 
-export const CAPTION_PRESETS = ['classic', 'whisper', 'cascade', 'spotlight', 'paper', 'guinea', 'stark'] as const;
+export const CAPTION_PRESETS = ['classic', 'whisper', 'cascade', 'spotlight', 'paper', 'guinea', 'stark', 'flare', 'slam'] as const;
 
 const objectFit = z.enum(['cover', 'contain', 'fill']);
 /** Điểm neo khi media bị cắt (cover) hoặc thừa chỗ (contain): [x, y] 0…1, vắng = giữa (E5, học Palmier anchor). */

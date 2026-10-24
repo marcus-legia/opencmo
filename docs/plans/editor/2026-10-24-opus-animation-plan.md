@@ -186,12 +186,27 @@ then the whole scene and add_explainer).
 
 ### O6. Dynamic caption patterns (`packages/clip-render/src/captions.ts`, editor-core captions), one PR
 
-- [ ] Compare our caption presets with AI Producer's eight patterns (`blur-ladder`, `editorial-stack`, `inverted-stack`,
+- [x] Compare our caption presets with AI Producer's eight patterns (`blur-ladder`, `editorial-stack`, `inverted-stack`,
   `lead-in-flare`, `pace-adaptive`, `scribble-subtitle`, `solo-word-punch`, `tilt-slam`): which we already draw, which are
   missing. Build the missing ones that fit our renderer (the emphasis word in a serif, at most one per phrase).
-- [ ] Guide `captions`: a selection table by video type (tutorial, talking head, story-time, hype, dense) and the rule
+- [x] Guide `captions`: a selection table by video type (tutorial, talking head, story-time, hype, dense) and the rule
   "quiet pattern when visuals share the frame most of the time".
-- [ ] Golden per pattern on the parity fixtures.
+- [x] Golden per pattern on the parity fixtures.
+
+**Built (2026-10-24).** AI Producer publishes only the names, the selection table and the knobs of its eight patterns;
+the drawing runs on their service. Our presets already cover four of them: `pace-adaptive` ≈ `whisper`/`classic`,
+`inverted-stack` ≈ `stark` (difference blend), `solo-word-punch` ≈ `classic` with `highlight: 'pop'`,
+`editorial-stack` ≈ `paper`/`cascade`; `lead-in-flare`'s emphasis-word treatment existed only as `emphasisStyle`.
+Built two new presets in `clip-render/src/captions.ts`: **`flare`** (the phrase in a quiet Inter, then the payoff word,
+the emphasized one or the last, lands once spoken on its own line in Fraunces italic at 1.7×, in `colors[0]`) and
+**`slam`** (uppercase Archivo Black; the emphasized or longest word sits on a −4° accent slab, drawn by the block
+pass in `text.ts` with a tilt). Not built: `blur-ladder` (per-word blur needs a text-range blur the renderer lacks)
+and `scribble-subtitle` (hand-drawn marks need a path pass on caption words); both are noted for the caption roadmap.
+The caption picker, the inspector's colour slot, the brand kit and the style presets take the new names from
+`CAPTION_PRESETS`. Guide `captions` has the selection table by video type and the "quiet preset when visuals share
+the frame" rule. Tests: renderer unit tests (payoff placement, emphasis wins, slab range and tilt, never past the
+frame edge) and parity samples `cap-flare` / `cap-slam` with OpenCMO-drawn references, approved by eye; every
+existing parity frame stays byte-identical.
 
 ### O7. More MIT components as templates, one PR per two or three
 

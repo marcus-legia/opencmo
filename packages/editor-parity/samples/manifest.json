@@ -987,6 +987,42 @@
       "fixtures": [],
       "oracle": "opencmo",
       "perTarget": true
+    },
+    {
+      "id": "cap-flare",
+      "checklist": [
+        "CAP-10"
+      ],
+      "phase": "A3",
+      "text": true,
+      "times": [
+        0.5,
+        1.4,
+        2.5,
+        4.2
+      ],
+      "fixtures": [
+        "transcript.json"
+      ],
+      "oracle": "opencmo"
+    },
+    {
+      "id": "cap-slam",
+      "checklist": [
+        "CAP-10"
+      ],
+      "phase": "A3",
+      "text": true,
+      "times": [
+        0.5,
+        1.4,
+        2.5,
+        4.2
+      ],
+      "fixtures": [
+        "transcript.json"
+      ],
+      "oracle": "opencmo"
     }
   ]
 }

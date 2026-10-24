@@ -28,6 +28,10 @@ type Look = {
   paper?: boolean;
   /** Cả câu nằm trên dải đen. */
   stark?: boolean;
+  /** The accent word in a serif italic (flare). */
+  serif?: boolean;
+  /** The accent word on a tilted slab (slam). */
+  slab?: boolean;
 };
 
 const LOOKS: Record<CaptionStyle, Look> = {
@@ -38,6 +42,8 @@ const LOOKS: Record<CaptionStyle, Look> = {
   paper: { label: "Paper", family: "Inter", weight: 800, paper: true },
   guinea: { label: "Guinea", family: "Bangers", weight: 400, transform: "uppercase", spacing: ".04em" },
   stark: { label: "Stark", family: "Figtree", weight: 800, transform: "uppercase", stark: true },
+  flare: { label: "Flare", family: "Inter", weight: 600, serif: true },
+  slam: { label: "Slam", family: "Archivo Black", weight: 400, transform: "uppercase", slab: true },
 };
 
 export function captionStyleLabel(style: string): string {
@@ -89,10 +95,12 @@ export function CaptionStylePicker({
                 Grow{" "}
                 <span
                   style={{
-                    color: look.box || look.paper ? "#111111" : accent,
-                    background: look.box ? accent : "transparent",
+                    color: look.box || look.paper || look.slab ? "#111111" : accent,
+                    background: look.box || look.slab ? accent : "transparent",
                     padding: "0 3px",
                     borderRadius: 3,
+                    ...(look.serif ? { fontFamily: '"Fraunces", serif', fontStyle: "italic", fontSize: "1.3em" } : {}),
+                    ...(look.slab ? { display: "inline-block", transform: "rotate(-4deg)" } : {}),
                   }}
                 >
                   fast
