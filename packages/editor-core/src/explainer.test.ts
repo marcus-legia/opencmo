@@ -357,3 +357,72 @@ describe('add_explainer with a silent motion clip (B3)', () => {
 	});
 });
 
+
+describe('add_explainer placed in half the frame over the speaker', () => {
+	/** A 9:16 clip of the user's 16:9 talk, as the upload generator makes it. */
+	const speaker = validate({
+		version: 1,
+		stage: {
+			children: [
+				{
+					kind: 'scene',
+					id: 'sc',
+					width: 1080,
+					height: 1920,
+					workarea: [0, 30],
+					active: true,
+					marks: { reframe: { focus: 0.5, track: [[0, 0.7], [30, 0.7]], mode: 'fill' } },
+					children: [
+						{ kind: 'video', id: 'talk', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 },
+						{ kind: 'captions', id: 'cap', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 },
+					],
+				},
+			],
+		},
+	}) as ClipDocument;
+	const silentOp = (format: '1:1' | '16:9' | '9:16', place: string, start = 6) => ({
+		op: 'add_explainer',
+		title: 'How the funnel leaks',
+		format,
+		duration: 8,
+		start,
+		place,
+		spec: {
+			prompt: 'Motion clip: How the funnel leaks',
+			aspectRatio: format,
+			duration: 8,
+			scene: { template: 'clip', code_ref: CODE_REF, title: 'How the funnel leaks', beats: [{ say: 'Visitors pour in.', seconds: 4 }, { say: 'Most drop at signup.', seconds: 4 }] },
+		},
+	});
+
+	it('top: a square animation fills the upper 1080x1080 and the speaker gets the band below for its time', async () => {
+		const { document } = await applyOps(speaker, [silentOp('1:1', 'top')], ctx);
+		expect(() => validate(document)).not.toThrow();
+		const scene = sceneNode(document) as Node & { marks: { layout: { ranges: { start: number; end: number; mode: string; ratio: number }[] } } };
+		expect(scene.marks.layout.ranges).toEqual([expect.objectContaining({ start: 6, end: 14, mode: 'split-bottom', ratio: 0.438 })]);
+		const layer = JSON.stringify(document).includes('Motion clip: How the funnel leaks') && scene.children!.find((child) => child.name === 'Motion clip: How the funnel leaks')!;
+		expect(layer).toMatchObject({ x: 0, y: 0, width: 1080, height: 1080, start: 6, end: 14 });
+		// Over the speaker group and the layout panel, under the captions.
+		const names = scene.children!.map((child) => (child.marks as { layout?: string } | undefined)?.layout ?? child.name ?? child.kind);
+		expect(names.indexOf('Motion clip: How the funnel leaks')).toBeGreaterThan(names.indexOf('panel'));
+		expect(names.at(-1)).toBe('captions');
+	});
+
+	it('bottom: the animation below, the speaker on top; a 16:9 animation takes a shorter band', async () => {
+		const { document } = await applyOps(speaker, [silentOp('16:9', 'bottom')], ctx);
+		const scene = sceneNode(document) as Node & { marks: { layout: { ranges: { mode: string; ratio: number }[] } } };
+		expect(scene.marks.layout.ranges[0]).toMatchObject({ mode: 'split-top', ratio: 0.683 });
+		expect(scene.children!.find((child) => child.name === 'Motion clip: How the funnel leaks')).toMatchObject({ x: 0, y: 1312, width: 1080, height: 608 });
+	});
+
+	it('refuses a shape that cannot share the frame and names the ones that can', async () => {
+		await expect(applyOps(speaker, [silentOp('9:16', 'top')], ctx)).rejects.toThrow(/does not fit half of this 1080x1920 frame next to the speaker\. Use format 16:9 or 1:1\./);
+	});
+
+	it('without place, a split already there takes the animation into its visual band', async () => {
+		const { document: split } = await applyOps(speaker, [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 20, ratio: 0.5 }], ctx);
+		const { document } = await applyOps(split, [silentOp('1:1', undefined as never, 4)], ctx);
+		// The 960 px band: the square fits its height, centred across.
+		expect(sceneNode(document).children!.find((child) => child.name === 'Motion clip: How the funnel leaks')).toMatchObject({ y: 0, height: 960, width: 960, x: 60 });
+	});
+});

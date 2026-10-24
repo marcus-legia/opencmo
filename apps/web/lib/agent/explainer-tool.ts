@@ -201,6 +201,10 @@ export const addExplainerInput = z
     code: sceneFields.code.describe("The scene code exactly as last previewed with preview_explainer in this request."),
     voice: z.string().min(1).max(100).optional().describe("A premade narration voice from the list in this tool's description. Leave it out for a silent clip."),
     start: z.number().finite().min(0).optional().describe("Clip seconds where it starts. Default: the playhead, or 0 on a blank clip."),
+    place: z
+      .enum(["full", "top", "bottom"])
+      .optional()
+      .describe("On a clip with a speaker: top = the animation in the upper band and the speaker below it for the animation's time (bottom = the other way round); the split is sized to the animation's shape, so on a 9:16 clip use format 1:1 (or 16:9). Default: full frame, or the visual band of a split already there."),
   })
   .superRefine(silentRules);
 
@@ -517,6 +521,7 @@ export async function prepareExplainer(
     format: request.format,
     duration,
     ...(request.start === undefined ? {} : { start: request.start }),
+    ...(request.place === undefined ? {} : { place: request.place }),
     spec,
   } as unknown as Op;
   return {

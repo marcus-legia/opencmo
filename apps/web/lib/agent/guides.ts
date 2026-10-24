@@ -366,8 +366,16 @@ preview_explainer { title, beats (with visual), direction, code, format, theme, 
 - Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that (one variable: a curve, an overshoot, a blur amount, a camera amplitude), preview again.
 Up to 6 rounds; stop when a round finds nothing. A clean layout report is the floor, not the bar.
 
+## Over the user's own talking video (the speaker explains, the animation shows it)
+When the user asks for an animation over part of their video ("explain this in the top half"):
+- silent: true. The speaker's own voice is the narration: a second voice on top would talk over them. Each beat's seconds follow the sentence it illustrates (clip seconds from <clip_context>), and the beats' say lines quote what the speaker says there.
+- start = the clip second where that sentence begins; the whole clip lasts as long as the explanation (3-30 s).
+- place "top" (the animation above, the speaker below; "bottom" for the other way round). The split is sized to the animation's shape: on a 9:16 clip use format 1:1 (the top 1080x1080, the speaker in the 1080x840 band under it) or 16:9 (a shorter band). place "full" covers the speaker for that time instead.
+- Compose for the band: one subject centred, nothing important in the outer 6%, and the bottom 17% kept clear as the preview asks (inside the band it is breathing room above the seam to the speaker).
+- After it renders, capture a frame in the middle: the animation in its band, the face whole in the other, captions not crossing the seam.
+
 ## 5. Add it
-add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration (from the beats' seconds for a silent clip). The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice, start?, place? }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration (from the beats' seconds for a silent clip). The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 
