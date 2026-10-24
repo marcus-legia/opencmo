@@ -253,6 +253,10 @@ async function main(): Promise<void> {
     for (const text of ["<Mark", "Easing.bezier", "strokeDashoffset", "templates/phone-carousel/scene.jsx", '"beat N shows nothing drawn"']) {
       assert.ok(guide.includes(text), `the explainer guide names ${text}`);
     }
+    // The example is the scene golden.test.ts renders, not a copy that can drift.
+    const { EXPLAINER_EXAMPLE } = await import("@opencmo/clip-motion/guide-example");
+    assert.ok(guide.includes(EXPLAINER_EXAMPLE), "the guide's example is the rendered example scene");
+    assert.ok(!/<Icon name="syringe"/.test(guide), "the icon-only example is gone");
     for (const old of ["The subject's icon in every beat", "icons, built-in Lottie animations or kit shapes", "shows no icon, shape or Lottie"]) {
       assert.ok(!guide.includes(old), `the explainer guide no longer says "${old}"`);
     }

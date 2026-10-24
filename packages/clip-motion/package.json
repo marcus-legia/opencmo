@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./job": "./src/job.ts",
+    "./guide-example": "./src/guide-example.ts",
     "./templates": "./templates/index.ts"
   },
   "bin": {

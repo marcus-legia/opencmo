@@ -52,7 +52,7 @@ Plan tasks 2 (guide part), 3, 4 (wiring into the guide), 5 steps 1-2.
 - [x] B1 Plan Task 3: rewrite the `explainer` guide, `EXPLAINER_MOTION`, `visual` describe, `read_first`,
   `kit-explainer` resource description, with the checks in `agent-design.check.ts` and `server.check.ts`.
   Include Task 2's §4 bullet (`"beat N shows nothing drawn"`) and its two asserts.
-- [ ] B2 Plan Task 4 wiring: replace the guide's icon-only "Example:" block with `${EXPLAINER_EXAMPLE}` (after A1 is
+- [x] B2 Plan Task 4 wiring: replace the guide's icon-only "Example:" block with `${EXPLAINER_EXAMPLE}` (after A1 is
   pushed: `git pull --rebase`). Nothing to redo when A3 replaces the scene.
 - [ ] B3 Plan Task 5 steps 1-2: `drawable(visual, code)` in `eval/tasks.ts` and its fake case; fake eval green.
 - [ ] B4 Open the PR when A1-A3 and B1-B3 are ticked: Vietnamese title/description are not required here (not a
@@ -70,6 +70,10 @@ Plan tasks 2 (guide part), 3, 4 (wiring into the guide), 5 steps 1-2.
 | this file (ticks and Requests only) | both |
 
 ## Requests
+
+0. **B, FYI to A**: B2 added the subpath `"./guide-example": "./src/guide-example.ts"` to
+   `packages/clip-motion/package.json` (unowned in the table). The root entry re-exports `render.ts`, which would pull
+   Remotion into Next and the MCP bundle; `guides.ts` imports `@opencmo/clip-motion/guide-example` instead.
 
 1. **A → B, `apps/web/lib/agent/explainer-tool.ts` `REVIEW_CHECKLIST`**: add a line after 1 (Subject):
    `"2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?"`

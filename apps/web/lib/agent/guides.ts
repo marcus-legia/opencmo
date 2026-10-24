@@ -17,6 +17,7 @@ import {
   TRACK_PROPERTIES,
   TRANSITION_TYPES,
 } from "@opencmo/clip-doc";
+import { EXPLAINER_EXAMPLE, EXPLAINER_EXAMPLE_BEATS } from "@opencmo/clip-motion/guide-example";
 import { FONTS } from "@opencmo/editor-core";
 
 import { EXPLAINER_MOTION } from "./motion-guide";
@@ -385,23 +386,8 @@ Do and don't
 - Do: one continuous scene; transform what is on screen. The subject drawn in a Mark in every beat. One Headline row. A Board for lists.
 - Don't: decorative dots or icons that do not match the narration; two texts in the same place; text inside the Camera; captions in the scene (the clip gets them from the voice).
 
-Example:
-const { Stage, Headline, Icon, Board } = kit;
-const b = kit.beat;
-const full = kit.area('full');
-const mid = full.y + full.h * 0.55;
-return function Scene() {
-  return (
-    <Stage>
-      <Icon name="syringe" x={kit.area('left').cx} y={mid} size={220} at={kit.at(0, 0.3)} exitAt={b(2).from} />
-      <Shape kind="cell" x={kit.width / 2} y={mid} size={260} label="Immune cell" secondary at={kit.cue(1, 'cells')} exitAt={b(2).from} />
-      <Icon name="virus" x={kit.width / 2} y={mid} size={240} color="wrong" at={b(2).from} />
-      <Icon name="shield-check" x={kit.area('right').cx} y={mid} size={240} color="answer" at={kit.cue(2, 'protects')} />
-      <Headline y={full.y + full.h * 0.07} items={[{ text: 'Training, not fighting', at: kit.at(0, 0.5) }, { text: 'A harmless piece', at: b(1).from }, { text: 'Protected', at: b(2).from }]} />
-      <Board kind="steps" lines={['Show a piece', 'Build antibodies', 'Remember']} at={b(3).from} lineAt={[kit.cue(3, 'show'), kit.cue(3, 'build'), kit.cue(3, 'remember')]} exitAt={b(4).from} />
-    </Stage>
-  );
-};
+Example: every subject drawn in a Mark, no icons. Its beats' visuals: ${EXPLAINER_EXAMPLE_BEATS.map((beat, i) => `${i + 1}) ${beat.visual}`).join("; ")}.
+${EXPLAINER_EXAMPLE}
 
 ## 4. Preview, look, fix — required
 preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
