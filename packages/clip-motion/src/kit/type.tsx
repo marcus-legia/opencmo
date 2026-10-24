@@ -78,3 +78,21 @@ export function Text(props: TextProps) {
 		</TextTag>
 	);
 }
+
+let measureContext: CanvasRenderingContext2D | null = null;
+
+/**
+ * `kit.measure(text, { size, font, weight, tracking })` → the text's width in px with the kit's fonts (loaded before
+ * frame 0). Scene code cannot touch the DOM, so word-by-word layouts measure here.
+ */
+export function measure(text: string, options: { size: number; font?: FontName; weight?: number; tracking?: number }): number {
+	if (typeof text !== 'string' || !Number.isFinite(options?.size)) throw kitError('measure(text, { size, font?, weight?, tracking? }).');
+	const { size, font = 'display', weight = 600, tracking = 0 } = options;
+	if (!(font in FAMILY)) throw kitError(`measure font "${String(font)}": use ${Object.keys(FAMILY).join(', ')}.`);
+	const extra = tracking * size * Math.max(0, text.length - 1);
+	if (typeof document === 'undefined') return text.length * size * 0.56 + extra;
+	measureContext ??= document.createElement('canvas').getContext('2d');
+	if (!measureContext) return text.length * size * 0.56 + extra;
+	measureContext.font = `${weight} ${size}px ${FAMILY[font]}`;
+	return measureContext.measureText(text).width + extra;
+}

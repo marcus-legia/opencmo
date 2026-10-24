@@ -9,13 +9,14 @@
     ".": "./src/index.ts",
     "./job": "./src/job.ts",
     "./guide-example": "./src/guide-example.ts",
-    "./templates": "./templates/index.ts"
+    "./templates": "./templates/index.ts",
+    "./styles": "./styles/index.ts"
   },
   "bin": {
     "clip-motion": "./src/cli.ts"
   },
   "scripts": {
-    "check": "node scripts/build-templates.mjs --check && tsc --noEmit && vitest run"
+    "check": "node scripts/build-templates.mjs --check && node scripts/build-styles.mjs --check && tsc --noEmit && vitest run"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.535",

@@ -83,7 +83,30 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 
 export type ProbedBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number };
 
-/** Preview only: once fonts are in, log every tagged box (after camera transforms) for layout.ts. */
+/**
+ * The part of a tagged box the viewer can see: clipped by every ancestor that hides overflow (a masked row, a phone
+ * screen), and nothing when the box or an ancestor is fully transparent.
+ */
+function visiblePart(element: HTMLElement, rect: DOMRect, root: HTMLElement | null): { left: number; top: number; right: number; bottom: number; width: number; height: number } | null {
+	let left = rect.left;
+	let top = rect.top;
+	let right = rect.right;
+	let bottom = rect.bottom;
+	for (let node: HTMLElement | null = element; node && node !== root; node = node.parentElement) {
+		const style = getComputedStyle(node);
+		if (Number(style.opacity) < 0.05) return null;
+		if (node !== element && (style.overflowX !== 'visible' || style.overflowY !== 'visible')) {
+			const clip = node.getBoundingClientRect();
+			left = Math.max(left, clip.left);
+			top = Math.max(top, clip.top);
+			right = Math.min(right, clip.right);
+			bottom = Math.min(bottom, clip.bottom);
+		}
+	}
+	return right > left && bottom > top ? { left, top, right, bottom, width: right - left, height: bottom - top } : null;
+}
+
+/** Preview only: once fonts are in, log every visible tagged box (after camera transforms) for layout.ts. */
 function LayoutProbe() {
 	const ref = useRef<HTMLDivElement>(null);
 	const [handle] = useState(() => delayRender('Measuring layout'));
@@ -94,13 +117,18 @@ function LayoutProbe() {
 			const root = ref.current?.parentElement;
 			const origin = root?.getBoundingClientRect() ?? { left: 0, top: 0 };
 			const boxes: ProbedBox[] = [];
+			const frame = root?.getBoundingClientRect();
 			for (const element of Array.from(root?.querySelectorAll<HTMLElement>('[data-box]') ?? [])) {
-				const rect = element.getBoundingClientRect();
-				if (rect.width === 0 || rect.height === 0) continue;
+				const full = element.getBoundingClientRect();
+				if (full.width === 0 || full.height === 0) continue;
+				const rect = visiblePart(element, full, root ?? null);
+				// Hidden by a mask (a row window), faded out, or wholly off the frame: the viewer does not see it.
+				if (!rect || rect.width < 1 || rect.height < 1) continue;
+				if (frame && (rect.right <= frame.left || rect.left >= frame.right || rect.bottom <= frame.top || rect.top >= frame.bottom)) continue;
 				const kind = element.dataset.box === 'text' ? 'text' : 'mark';
 				const size = Number(element.dataset.size);
 				const area = element.offsetWidth * element.offsetHeight;
-				const scale = area ? Math.sqrt((rect.width * rect.height) / area) : 1;
+				const scale = area ? Math.sqrt((full.width * full.height) / area) : 1;
 				boxes.push({ kind, name: element.dataset.name ?? '', x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height, ...(kind === 'text' && size ? { size: size * scale } : {}) });
 			}
 			console.log(`${LAYOUT_LOG}${JSON.stringify(boxes)}`);

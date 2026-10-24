@@ -56,3 +56,23 @@ describe('drawOn and speedBlur', () => {
 		expect(speedBlur(1000)).toBe(6);
 	});
 });
+
+describe('travel, snap, smear', async () => {
+	const { travel, snap, smear } = await import('./curves.ts');
+	it('travel starts at the distance, rests at 0 and never overshoots past the cap', () => {
+		expect(travel(0, 1400, { overshoot: 24 })).toBeCloseTo(1400);
+		expect(travel(1, 1400, { overshoot: 24 })).toBeCloseTo(0);
+		const lowest = Math.min(...Array.from({ length: 401 }, (_, i) => travel(i / 400, 1400, { overshoot: 24 })));
+		expect(lowest).toBeLessThan(-5);
+		expect(lowest).toBeGreaterThanOrEqual(-24);
+	});
+	it('snap lands on 1 after a small overshoot', () => {
+		expect(snap(0)).toBe(0);
+		expect(snap(1)).toBe(1);
+		expect(snap(0.8, { overshoot: 0.02 })).toBeCloseTo(1.02);
+	});
+	it('smear is nothing at rest and capped when fast', () => {
+		expect(smear(0, 400)).toEqual({ blur: 0, stretch: 1 });
+		expect(smear(500, 400).blur).toBe(28);
+	});
+});
