@@ -36,9 +36,9 @@ Branch: **`plan/editor/2026-10-24-explainer-freeform-motion`**, shared by both s
 
 Plan tasks 1, 2 (clip-motion part), 4 (scene + test), 5 step 3 (frames).
 
-- [ ] A1 Plan Task 1: `kit.Mark`, `MOVES_INSIDE`, new `beatIssues` message, tests; plus the first `guide-example.ts`
+- [x] A1 Plan Task 1: `kit.Mark`, `MOVES_INSIDE`, new `beatIssues` message, tests; plus the first `guide-example.ts`
   and its re-export from `src/index.ts` (contract above). Push as soon as `npm run check:clip-motion` is green.
-- [ ] A2 Plan Task 2, `preview.ts` only: reword user-facing review/checklist strings that name icons or Lotties as the subject.
+- [x] A2 Plan Task 2, `preview.ts` only (nothing to change: no user-facing string there names icons; the review checklist lives in `explainer-tool.ts`, see Request 1): reword user-facing review/checklist strings that name icons or Lotties as the subject.
 - [ ] A3 Plan Task 4: the real "Why the sea looks flat" scene and the `guide example` golden test (clean layout report,
   a `Mark` in every beat). Look at the stills.
 - [ ] A4 Plan Task 5 step 3, **after B3 is pushed**: before (`main`) / after (branch) frames of the flat-earth prompt
@@ -71,4 +71,7 @@ Plan tasks 2 (guide part), 3, 4 (wiring into the guide), 5 steps 1-2.
 
 ## Requests
 
-(none yet)
+1. **A → B, `apps/web/lib/agent/explainer-tool.ts` `REVIEW_CHECKLIST`**: add a line after 1 (Subject):
+   `"2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?"`
+   and renumber the rest. Without it the review never asks for the quality the plan is about. (Assert it in
+   `explainer-tool.check.ts`.)
