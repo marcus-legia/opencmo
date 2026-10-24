@@ -1,5 +1,11 @@
 # Explainer free-form motion: work split for two sessions, one PR
 
+> ## ⛔ SESSION B: STOP NOW (owner, 2026-10-24)
+> Do not commit or push anything more to this branch. The owner replaced the remaining work with one refactor
+> done by the other session: [`2026-10-24-motion-studio-refactor.md`](2026-10-24-motion-studio-refactor.md).
+> Leave your worktree as it is and end the session.
+
+
 Plan: [`2026-10-24-explainer-freeform-motion-plan.md`](2026-10-24-explainer-freeform-motion-plan.md) — read it whole
 before starting; this file only says who does what.
 
