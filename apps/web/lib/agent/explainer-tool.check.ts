@@ -73,7 +73,7 @@ async function main() {
   assert.ok(scene.beats.every((beat) => !("visual" in beat)), "visual must not reach the spec");
   const card = explainerCard(prepared, "clip");
   assert.match(card.changes[0]!, / · paper, playful · voice Aria · /);
-  assert.match(card.changes[1]!, /· Picture: a syringe icon slides in from the left/);
+  assert.match(card.changes[1]!, /· Picture: a drawn syringe slides in from the left/);
 
   // A3: a numeric direction first, previews at chosen times, the review checklist with every clean preview.
   const noDirection = await runPreviewExplainer({ ...input, direction: undefined }, { preview: async () => assert.fail("must not render") });

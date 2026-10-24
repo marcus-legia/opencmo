@@ -71,7 +71,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: "explain",
     label: "Explain a concept",
     hint: "A narrated animated explainer, 15-90 s",
-    directive: 'read_guide "explainer" and follow its steps: show the storyboard (say, label and visual of every beat) and ask before writing any code',
+    directive: 'read_guide "explainer" and follow its steps: choose the art direction first (list_motion_styles, get_motion_style), then show the storyboard (say, label and visual of every beat) with the direction in one line, and ask before writing any code',
     requires: ["add_explainer"],
   },
   ...(styleReady ? [STYLE_COMMAND] : []),
