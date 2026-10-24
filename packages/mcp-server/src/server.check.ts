@@ -77,12 +77,12 @@ for (const name of ["list_motion_styles", "get_motion_style", "list_motion_templ
 }
 assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_template")!, { id: "nope" }, ctx)).content), /use one of analytics-glow/);
 assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_style")!, { id: "nope" }, ctx)).content), /use one of .*kinetic-type/);
-for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "wait_for_media", "plan_video"]) {
+for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "wait_for_media", "plan_video"]) {
   assert.ok(names.includes(name), `${name} is offered`);
 }
 // Browser-only in the app; over MCP `capture` is `capture_frame`, and the look group draws on the worker.
 for (const name of ["capture_frame", "inspect_color", "media_grab", "media_waveform", "save_frame", "list_versions", "restore_version"]) assert.ok(names.includes(name), `${name} is offered`);
-for (const name of ["capture", "preview_3d", "ask_user", "update_plan", "undo", "request_export"]) {
+for (const name of ["capture", "preview_3d", "find_lotties", "add_3d_scene", "ask_user", "update_plan", "undo", "request_export"]) {
   assert.ok(!names.includes(name), `${name} is not offered over MCP`);
 }
 for (const tool of tools) {
@@ -247,7 +247,7 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal(result.structuredContent.available, true);
   assert.equal(result.structuredContent.narrated, false);
   assert.equal(typeof result.structuredContent.silent_clip, "object", "the silent clip section says how to make one");
-  // The subject is drawn in scene code; icons and Lotties are only looked up for supporting symbols.
+  // The subject is drawn in scene code; icons are only looked up for supporting symbols.
   assert.ok(result.structuredContent.read_first.some((line) => line.includes("in a Mark")), "read_first says to draw the subject in a Mark");
   assert.match(result.structuredContent.read_first[0]!, /^list_motion_styles/, "read_first starts with art direction");
   assert.ok(!JSON.stringify(result.structuredContent).includes("for every noun of the narration"), "no icon lookup for every noun");

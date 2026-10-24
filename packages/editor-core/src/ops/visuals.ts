@@ -20,9 +20,7 @@ import { defaultRegion, r2, toPixels, visualGroup, type Box, type Node } from '.
 import { buildDiagram, diagramInput, type DiagramInput } from '../visuals/diagram';
 import { buildGraph, ExprError, graphInput, type GraphInput } from '../visuals/graph';
 import { buildIcon, IconError, iconInput, type IconInput } from '../visuals/icon';
-import { buildLottie, LottieError, lottieInput, type LottieInput } from '../visuals/lottie';
 import { buildShape, SHAPE_NAMES, shapeInput, type ShapeInput } from '../visuals/shape';
-import { buildThree, threeInput, type ThreeInput } from '../visuals/three';
 import { buildTitle, measureTitle, titleInput, titleName, titleSafe, type TitleInput } from '../visuals/title';
 import { buildHook, hookArea, hookInput, type HookInput } from '../visuals/hook';
 import { buildList, listInput, listItem, type ListInput } from '../visuals/list';
@@ -96,7 +94,7 @@ async function built(make: () => Node[] | Promise<Node[]>): Promise<Node[]> {
 	try {
 		return await make();
 	} catch (error) {
-		if (error instanceof ExprError || error instanceof IconError || error instanceof LottieError) throw new OpFailure(error.message);
+		if (error instanceof ExprError || error instanceof IconError) throw new OpFailure(error.message);
 		throw error;
 	}
 }
@@ -195,18 +193,6 @@ const BUILDERS: Record<string, Builder> = {
 		build: (input: ChartInput, frame, area, duration) => buildChart(input, frame, area, duration),
 		title: (input: ChartInput) => `${input.type[0]!.toUpperCase()}${input.type.slice(1)} chart`,
 	},
-	add_3d: {
-		name: 'add_3d',
-		schema: threeInput,
-		build: (input: ThreeInput, frame, area) => buildThree(input, frame, area),
-		title: () => '3D scene',
-	},
-	add_lottie: {
-		name: 'add_lottie',
-		schema: lottieInput,
-		build: (input: LottieInput, frame) => buildLottie(input, frame),
-		title: (input: LottieInput) => `Animation: ${input.animation.replace(/^builtin:/, '').split('/').pop()}`,
-	},
 	add_icon: {
 		name: 'add_icon',
 		schema: iconInput,
@@ -248,7 +234,7 @@ async function visualNode(op: string, input: Record<string, unknown>, when: Timi
 	// Trong khoảng chia đôi, visual không nói chỗ nào thì vào panel, không đè người nói.
 	const panel = panelRegionAt(document, when.start);
 	const region = (input.region as Box | undefined) ?? panel ?? defaultRegion(frame);
-	if (panel && (op === 'add_icon' || op === 'add_lottie') && !input.at) {
+	if (panel && op === 'add_icon' && !input.at) {
 		input = { ...input, at: [r2(panel.x + panel.width / 2), r2(panel.y + panel.height / 2)] };
 	}
 	// Brand Kit đã áp vào clip: màu/font mặc định của builder đổi sang của kit.
@@ -338,10 +324,6 @@ export const addList = {
 		return addTo(document, await visualNode('add_list', spec, when, frame, document, ctx));
 	},
 };
-export const addLottie = visualOp('add_lottie', lottieInput, (input) => `Add the ${input.animation.split('/').pop()} animation`);
-// 3D phẳng vẽ CPU: agent không dùng nữa (spec code-scenes: 3D của agent là code
-// three.js qua add_3d_scene). Op giữ nguyên cho document cũ và update_visual.
-export const add3d = { ...visualOp('add_3d', threeInput, (input) => `Add a 3D scene (${input.objects.map((object) => object.type).join(', ')})`), agent: false as const };
 
 // ------------------------------------------------------------------ sửa lại
 
@@ -376,7 +358,7 @@ export const updateVisual = {
 		const found = byId(document, input.id);
 		const mark = (found?.entity.marks as { visual?: { op?: string; input?: Record<string, unknown> } } | undefined)?.visual;
 		if (!found || found.tag !== 'group' || !mark?.op || !BUILDERS[mark.op]) {
-			throw new OpFailure(`"${input.id}" is not a visual made with add_shape, add_icon, add_lottie, add_diagram, add_chart, add_graph, add_title or add_3d.`);
+			throw new OpFailure(`"${input.id}" is not a visual made with add_shape, add_icon, add_diagram, add_chart, add_graph or add_title.`);
 		}
 		const builder = BUILDERS[mark.op]!;
 		const merged = { ...(mark.input ?? {}), ...input.changes };

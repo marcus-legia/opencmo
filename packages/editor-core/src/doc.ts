@@ -89,6 +89,16 @@ export const firstOf = <K extends ClipNode['kind']>(document: ClipDocument, kind
 
 export const sceneOf = (document: ClipDocument): SceneNode | undefined => firstOf(activeView(document), 'scene');
 
+const RATIOS = { '9:16': 9 / 16, '4:5': 4 / 5, '1:1': 1, '16:9': 16 / 9 } as const;
+
+/** The listed aspect ratio nearest the active scene's frame: generated media is asked for in that shape. */
+export function frameRatio(document: ClipDocument): keyof typeof RATIOS | null {
+  const scene = sceneOf(document);
+  if (!scene?.width || !scene.height) return null;
+  const aspect = scene.width / scene.height;
+  return (Object.keys(RATIOS) as (keyof typeof RATIOS)[]).reduce((best, key) => (Math.abs(Math.log(RATIOS[key] / aspect)) < Math.abs(Math.log(RATIOS[best] / aspect)) ? key : best));
+}
+
 export const isMaster = (node: ClipNode): boolean =>
   node.kind === 'video' && (node as { src?: unknown }).src === MASTER_SRC;
 

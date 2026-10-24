@@ -58,17 +58,16 @@ WEB_ROOT = "/root/web"
 _ENGINE = Path(__file__).parent
 _PACKAGES = _ENGINE.parent
 _NODE_IGNORE = ["node_modules", "node_modules/**", "**/*.test.ts"]
-# Font + bộ Lottie của clip (R7c): một bản ở packages/clip-media cho cả hai image.
+# The clip fonts (R7c): one copy in packages/clip-media for every image.
 MEDIA_ROOT = f"{WEB_ROOT}/packages/clip-media"
 _MEDIA_ENV = {
     "OPENCMO_EDITOR_FONTS": f"{MEDIA_ROOT}/fonts",
-    "OPENCMO_EDITOR_LOTTIE": f"{MEDIA_ROOT}/lottie",
 }
 
 
 def _with_node(img: modal.Image) -> modal.Image:
-    # Exporter và clip-three chạy THẲNG file .ts bằng type stripping — cần
-    # Node ≥ 22.18, apt của bookworm chỉ có 18.
+    # The exporter and clip-motion run .ts files directly with type stripping: Node ≥ 22.18,
+    # bookworm's apt only has 18.
     return img.run_commands(
         f"curl -sSLf https://nodejs.org/dist/v{NODE_VERSION}/node-v{NODE_VERSION}-linux-x64.tar.xz"
         " | tar -xJ -C /usr/local --strip-components=1",
@@ -109,8 +108,7 @@ def _with_engine(img: modal.Image) -> modal.Image:
 
 
 def _with_media(img: modal.Image) -> modal.Image:
-    # Renderer vẽ chữ bằng đúng các file font này; Lottie `builtin:<tên>` đọc ở
-    # thư mục lottie (OPENCMO_EDITOR_LOTTIE, không suy từ thư mục font).
+    # The renderers draw text with exactly these font files.
     return img.add_local_dir(_PACKAGES / "clip-media", remote_path=MEDIA_ROOT, copy=True)
 
 
@@ -135,7 +133,7 @@ cpu_image = (
     .pip_install("fastapi[standard]")
 )
 # Export trên server (task `render_document`). Chỉ ba package exporter cần cùng
-# font/Lottie của clip. Không kéo cả monorepo: Next, Playwright là vài trăm MB
+# font của clip. Không kéo cả monorepo: Next, Playwright là vài trăm MB
 # image không ai dùng tới ở đây.
 cpu_image = (
     _with_media(_with_node(cpu_image))
@@ -152,8 +150,6 @@ cpu_image = (
         {
             "OPENCMO_CLIP_EXPORT": f"{WEB_ROOT}/packages/clip-export/src/cli.ts",
             **_MEDIA_ENV,
-            # Task `generate` của model studio-3d spawn `render_three` bên dưới.
-            "OPENCMO_3D": "modal",
             # Explainers: the worker makes the voice, then spawns `render_motion` below.
             "OPENCMO_MOTION": "modal",
             # Proof B-roll: task `capture_page` calls `page_capture` below; no Chromium here.
@@ -163,57 +159,6 @@ cpu_image = (
 )
 # Tên cũ: `modal.App(image=…)` và mọi hàm không khai image riêng dùng image CPU.
 image = cpu_image
-
-# 3D Studio (spec 2026-09-30-studio-3d): image RIÊNG cho hàm GPU — Chromium +
-# three chỉ nằm ở đây, image worker không phình thêm vài trăm MB.
-#
-# Chromium vẽ WebGL qua ANGLE/EGL của driver NVIDIA (`chromiumGpuArgs` ở
-# clip-three/src/render.ts). KHÔNG dùng ANGLE/Vulkan: trên L4 nó mất WebGL context
-# ở khung 2 của mọi video và MP4 ra tối sầm, mất nền + ánh sáng môi trường, không
-# báo lỗi (đo 02/10). File ICD Vulkan bên dưới giữ cho `vulkaninfo` chẩn đoán.
-# `renderer` trong log của mỗi lượt cho biết chạy trên gì (rơi về SwiftShader thì
-# cùng hình, chậm ~20 lần). Đo 02/10 (L4, cảnh code 1080×1920, 4 s): 164 ms/khung;
-# trước khi có thư viện X11/GLVND bên dưới thì treo hẳn.
-_ICD = '{"file_format_version":"1.0.0","ICD":{"library_path":"libGLX_nvidia.so.0","api_version":"1.3"}}'
-gpu_image = (
-    modal.Image.debian_slim(python_version="3.12")
-    # libx11/libxext/libglvnd/libegl: driver NVIDIA mà Modal gắn vào
-    # (libGLX_nvidia, libEGL_nvidia) cần chúng để nạp. Thiếu thì Vulkan loader báo
-    # "Could not get vkCreateInstance" và Chromium TREO lúc tạo WebGL (đo L4
-    # 01/10, `packages/clip-three/spike/smoke.mts`); có thì ANGLE chạy NVIDIA L4.
-    .apt_install(
-        "ffmpeg", "curl", "xz-utils", "libvulkan1", "vulkan-tools",
-        "libx11-6", "libxext6", "libglvnd0", "libegl1", "libgl1", "libgles2",
-    )
-)
-gpu_image = (
-    _with_node(gpu_image)
-    .run_commands(
-        "mkdir -p /etc/vulkan/icd.d",
-        f"echo '{_ICD}' > /etc/vulkan/icd.d/nvidia_icd.json",
-    )
-)
-gpu_image = (
-    # Font tiêu đề của Brand Kit: cùng file woff2 mà editor và exporter 2D dùng.
-    _with_media(_with_engine(gpu_image))
-    .add_local_dir(_PACKAGES / "clip-three", remote_path=f"{WEB_ROOT}/packages/clip-three", copy=True, ignore=_NODE_IGNORE)
-    .run_commands(
-        f"cd {WEB_ROOT}/packages/clip-three && npm install --omit=dev --no-audit --no-fund",
-        # Chromium của đúng bản playwright-core đang dùng, kèm thư viện hệ thống.
-        f"cd {WEB_ROOT}/packages/clip-three && npx playwright-core install --with-deps chromium",
-        "ln -sf \"$(find /root/.cache/ms-playwright -path '*chrome-linux*' -name chrome -type f | head -1)\""
-        " /usr/local/bin/chromium-3d",
-    )
-    .env(
-        {
-            "OPENCMO_CLIP_THREE": f"{WEB_ROOT}/packages/clip-three/src/cli.ts",
-            **_MEDIA_ENV,
-            "CHROMIUM_PATH": "/usr/local/bin/chromium-3d",
-            "OPENCMO_3D_GPU": "1",
-            "NVIDIA_DRIVER_CAPABILITIES": "all",
-        }
-    )
-)
 
 # Explainers (docs/explainer-build.md): a CPU image of its own for `clip-motion` (Remotion +
 # headless Chromium). Rendering is CPU work, so no GPU; the worker image does not carry Chromium.
@@ -232,14 +177,13 @@ motion_image = (
     # For the `motion_preview` endpoint.
     .pip_install("fastapi[standard]")
     .add_local_dir(_PACKAGES / "clip-motion", remote_path=f"{WEB_ROOT}/packages/clip-motion", copy=True, ignore=_NODE_IGNORE)
-    # v2 kit: every Lucide icon (`<Icon>`) and the built-in Lottie pack (`<Lottie>`, in clip-media
-    # above) are copied into the Remotion bundle, never fetched. The CLI only sees OPENCMO_MOTION_*.
+    # v2 kit: every Lucide icon (`<Icon>`) is copied into the Remotion bundle, never fetched. The CLI
+    # only sees OPENCMO_MOTION_*.
     .add_local_dir(_PACKAGES / "clip-icons" / "data", remote_path=f"{WEB_ROOT}/packages/clip-icons/data", copy=True)
     .env({
         **_MEDIA_ENV,
         "OPENCMO_MOTION_CACHE": "/root/motion-cache",
         "OPENCMO_MOTION_ICONS": f"{WEB_ROOT}/packages/clip-icons/data/icons.json",
-        "OPENCMO_MOTION_LOTTIE": f"{MEDIA_ROOT}/lottie",
     })
     .run_commands(
         f"cd {WEB_ROOT}/packages/clip-motion && npm install --omit=dev --no-audit --no-fund",
@@ -251,7 +195,7 @@ motion_image = (
     )
     .env({"OPENCMO_CLIP_MOTION": f"{WEB_ROOT}/packages/clip-motion/src/cli.ts", "OPENCMO_MOTION_CHROME": "/usr/local/bin/chrome-motion"})
     # Bundle the composition into the image (cached by source hash under OPENCMO_MOTION_CACHE)
-    # and prove the image renders the v2 kit (icons, Lotties, both themes): a cold container then
+    # and prove the image renders the v2 kit (icons, both themes): a cold container then
     # starts at the render, not at webpack. Remotion rejects a concurrency above the core count, and
     # the image builder may have one core: same rule as `cli_env`, min(cores, 4).
     .run_commands(
@@ -370,31 +314,6 @@ def run_task(task_id: str, attempt_id: str) -> None:
         handler(store, task)
     finally:
         store.close()
-
-
-@app.function(
-    image=gpu_image,
-    gpu="L4",
-    timeout=600,
-    cpu=2,
-    memory=4096,
-    max_containers=4,
-    # Cảnh `code` chạy code do agent viết (spec code-scenes): không secret, và
-    # Chromium tự cắt mạng ra ngoài (`OFFLINE` trong clip-three/src/render.ts).
-    # KHÔNG dùng `block_network=True`: nó chặn cả đường Modal tải kết quả > 2 MiB
-    # lên kho blob — MP4 không về được, lỗi DNS tới r2.cloudflarestorage.com (01/10).
-)
-def render_three(payload: dict) -> bytes:
-    """3D Studio: một cảnh → bytes MP4. Không đụng database hay Storage —
-    task `generate` (trong `run_task`) spawn hàm này, hỏi lại, rồi tự upload.
-
-    Lỗi đi ra là `ProviderError` với câu tiếng Anh (Modal pickle giữ message),
-    để worker chốt đúng lời cho người dùng.
-    """
-    from opencmo.ai.providers.three import render_local
-
-    with tempfile.TemporaryDirectory(prefix="opencmo-3d-") as tmp:
-        return render_local(payload, Path(tmp), gpu=True).read_bytes()
 
 
 @app.function(

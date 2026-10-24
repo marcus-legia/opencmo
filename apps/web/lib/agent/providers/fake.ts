@@ -35,9 +35,7 @@
  *   "ai image at Ns"   → generate_media image placed by time, no quote (project without a script); "variants" → 3 variants
  *   "generate b-roll:" → starter B-roll: nhiều generate_media image trong MỘT lượt (một thẻ duyệt)
  *   "generate"/"b-roll" → generate_media image: brief theo một dòng của <clip_context>
- *   "3d visual"        → update_plan + preview_3d (cảnh code: cột nhân đôi, neo "growing") → add_3d_scene
  *   "repurpose"        → add_voiceover replace: kịch bản mới từ hai dòng đầu (thẻ duyệt có giá)
- *   "3d studio"/"3d animation" → preview_3d (cảnh code: số đếm lên, con số của câu trích) → add_3d_scene (thẻ duyệt có giá)
  *   "more visual"      → update_plan → add_icon + add_diagram neo bằng quote
  *   "square"/"1:1"     → set_frame 1080×1080
  *   "vertical"/"9:16"  → set_frame 1080×1920
@@ -50,7 +48,6 @@
  *   "stat"             → add_chart stat 3 lúc "first three seconds" (14–17s mẫu)
  *   "split the screen" → set_layout split-bottom 16–21s → add_diagram cùng khoảng (tự vào panel)
  *   "icon"             → find_icons → add_icon trending-up lúc "growing" (1.5–4s mẫu)
- *   "emoji"            → find_lotties → add_lottie emoji/scream neo quote "people lose viewers"
  *   "b-roll from the library" → search_transcript + list_library in one step → place_broll at "better hooks"
  *   "hook title" / "caption style … classic" / "punch-in zoom" / "problems … fix" / "make it better" /
  *   "call to action" / "uppercase … outline" / "fade to black" → the eval's edit tasks, done as the guides say
@@ -75,10 +72,6 @@ type Block = { type: string; text?: string; tool_use_id?: string; is_error?: boo
 
 const text = (value: string) => ({ type: "text", text: value, citations: null });
 
-/** Cảnh code mẫu (spec code-scenes). Câu trích nằm ở dòng đầu để bước sau đọc lại. */
-function sceneCode(quote: string, body: string): string {
-  return `// quote: ${quote.replace(/\n/g, " ")}\n${body}`;
-}
 /** The tool input of an explainer: the storyboard (with `visual` per beat), its code and its look. */
 const explainerInput = (explainer: FakeExplainer) => ({ ...explainer });
 /** The words that asked for an explainer: the latest `/explain` command of the conversation. */
@@ -86,7 +79,6 @@ const explainAsk = (history: StoredMessage[]): string =>
   [...history].reverse().map(userText).find((words) => /<command name="\/explain">/.test(words)) ?? "";
 const EXPLAINER_SCRIPT = "Explainer script";
 const explainerVoice = () => aiModel("motion-explainer")?.limits.voices?.[0] ?? "Aria";
-const quoteOf = (code: string): string => /^\/\/ quote: (.*)$/m.exec(code)?.[1] ?? "";
 const use = (name: string, input: Record<string, unknown>) => ({ type: "tool_use", id: id(), name, input });
 
 const ROUGHCUT_PLAN = "Rough cut plan";
@@ -178,13 +170,6 @@ function script(history: StoredMessage[]): unknown[] {
         text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}.\n${checked}\nEvery still shows what its beat says. Here is the price.`),
         use("add_explainer", { ...explainerInput(explainer), voice: explainerVoice() }),
       ];
-    }
-    if (previous.includes("preview_3d")) {
-      const call = anthropicFormat.callsIn(assistant?.content ?? []).find((item) => item.name === "preview_3d");
-      const code = String((call?.input as { code?: string } | undefined)?.code ?? "");
-      const parsed = JSON.parse(raw0) as { ok?: boolean; error?: string; layout?: { issues?: string[] }[] };
-      if (!parsed.ok) return [text(`The 3D preview failed: ${parsed.error ?? "unknown error"}`)];
-      return [use("add_3d_scene", { title: "Hero moment", code, quote: quoteOf(code) })];
     }
     // /roughcut after "go": the reads came back together; cut the earlier takes and the fillers in one
     // call, then the pauses, then say what went.
@@ -287,7 +272,7 @@ function script(history: StoredMessage[]): unknown[] {
       if (parsed.ok) return [text("Your files are rendering. Each one gets a Download button here when it's ready.")];
       return [text(`That didn't work: ${parsed.error ?? parsed.INVALID_INPUT ?? "unknown error"}`)];
     }
-    if (previous.includes("generate_media") || previous.includes("add_3d_scene") || previous.includes("add_voiceover") || previous.includes("add_explainer")) {
+    if (previous.includes("generate_media") || previous.includes("add_voiceover") || previous.includes("add_explainer")) {
       const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
       const parsed = JSON.parse(raw) as { declined?: boolean; ok?: boolean; error?: string; INVALID_INPUT?: string };
       if (parsed.declined) return [text("Okay, I didn't create anything.")];
@@ -575,39 +560,6 @@ function script(history: StoredMessage[]): unknown[] {
       use("generate_media", { kind: "image", quote, idea: "a strong opening grabs attention", subject: "a person stopping mid-scroll on their phone", setting: "a busy street", style: "photo" }),
     ];
   }
-  if (/3d studio|premium 3d|3d animation/.test(ask)) {
-    // Con số của câu được trích (chữ số hoặc số viết bằng chữ) — không bịa số.
-    const NUMBERS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-    const line = quoted ?? lines.find((item) => /\d|\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(item)) ?? lines[0] ?? "";
-    const token = /(\d[\d,.]*)|\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/i.exec(line);
-    const value = token?.[1] ? Number(token[1].replace(/,/g, "")) : NUMBERS[(token?.[2] ?? "three").toLowerCase()]!;
-    const quote = line.split(" ").slice(0, 6).join(" ");
-    const code = sceneCode(
-      quote,
-      `const counter = kit.counter(${value}, { size: 1.2 });\nkit.label('seconds to hook', { size: 0.3, at: counter.mesh, lift: 0.3 });\nreturn (t) => { counter.set(kit.phase(t, 0.3, 1.8)); kit.frame({ yaw: 8 + 6 * t / 4, push: t / 4 }); };`,
-    );
-    return [
-      use("update_plan", { items: [{ text: `'${quote}' → 3D number counting up to ${value}`, status: "active" }] }),
-      use("preview_3d", { code, duration: 4, aspect_ratio: "1:1" }),
-    ];
-  }
-  if (/3d visual/.test(ask)) {
-    // Câu chứa từ khoá dài nhất của câu lệnh ("habits", "growing"…), vài từ đầu làm quote.
-    const keys = ask.split(/[^a-z]+/).filter((word) => word.length > 4 && !["visual", "explains", "about", "compounds"].includes(word));
-    const key = keys.map((word) => word.replace(/s$/, "")).find((word) => lines.some((item) => item.toLowerCase().includes(word))) ?? "growing";
-    const line = lines.find((item) => item.toLowerCase().includes(key)) ?? lineWith("growing");
-    const words = line.split(" ");
-    const at = Math.max(0, words.findIndex((word) => word.toLowerCase().includes(key)));
-    const quote = words.slice(at, at + 4).join(" ");
-    const code = sceneCode(
-      quote,
-      "const bars = kit.bars([1, 2, 4, 8], { showValues: false });\nkit.label('Compounds', { size: 0.4, at: bars.group, lift: 0.7 });\nreturn (t) => { bars.grow(kit.phase(t, 0.2, 2.2)); kit.frame({ yaw: 12 + t, push: t / 4 }); };",
-    );
-    return [
-      use("update_plan", { items: [{ text: `'${quote}' → 3D bars doubling`, status: "active" }] }),
-      use("preview_3d", { code, duration: 4, aspect_ratio: "1:1" }),
-    ];
-  }
   if (/more visual/.test(ask)) {
     return [
       use("update_plan", { items: [{ text: "[6s] 'better hooks' → icon", status: "active" }, { text: "[16s] 'start with the result' → diagram", status: "pending" }] }),
@@ -643,9 +595,6 @@ function script(history: StoredMessage[]): unknown[] {
       use("set_layout", { mode: "split-bottom", start: 16, end: 21.5 }),
       use("add_diagram", { nodes: [{ label: "Start with the result" }, { label: "Show how you got there" }], layout: "column", start: 16.2, end: 21 }),
     ];
-  }
-  if (/\bemoji\b/.test(ask)) {
-    return [use("find_lotties", { query: "shock scared lose" }), use("add_lottie", { animation: "emoji/scream", size: 0.25, quote: "people lose viewers" })];
   }
   if (/\bicon\b/.test(ask)) return [use("find_icons", { query: "growth" }), use("add_icon", { name: "trending-up", motion: "pop", start: 2.2, end: 4.5 })];
   if (/diagram/.test(ask)) {

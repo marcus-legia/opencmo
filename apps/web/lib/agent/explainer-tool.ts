@@ -3,7 +3,7 @@
  *
  * `preview_explainer` renders stills of the scene code the model wrote (Remotion, through
  * `previewMotion`) and returns them as images plus a layout report, so the model looks at its own
- * work and fixes it — the `preview_3d` loop, but rendered on the server. Free.
+ * work and fixes it, rendered on the server. Free.
  *
  * `add_explainer` saves the previewed code (`scene_codes`, by hash), builds the `motion-explainer`
  * spec and shows a price card listing the beats; on Approve the generation starts and op

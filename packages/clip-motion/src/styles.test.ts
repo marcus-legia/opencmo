@@ -1,5 +1,5 @@
 /**
- * Motion styles (styles/): each example is valid scene code built from the kit core — no icons, Lotties or Stage —
+ * Motion styles (styles/): each example is valid scene code built from the kit core — no icons or Stage —
  * and previews with no layout, beat or jump issue. Previews need Chrome Headless Shell.
  */
 
@@ -29,7 +29,7 @@ describe('motion styles', () => {
 		for (const style of MOTION_STYLES) {
 			for (const section of ['## Palette', '## Background', '## Type', '## Motion', '## Composition', '## Do / don']) expect(style.guide, `${style.id}: ${section}`).toContain(section);
 			expect(guardScene(style.code), style.id).toBeNull();
-			expect(style.code, style.id).not.toMatch(/<(Icon|Lottie|Stage)\b/);
+			expect(style.code, style.id).not.toMatch(/<(Icon|Stage)\b/);
 			expect(style.seconds).toBeGreaterThanOrEqual(CLIP_SECONDS.min);
 			expect(style.seconds).toBeLessThanOrEqual(CLIP_SECONDS.max);
 			expect(style.beats.reduce((sum, beat) => sum + beat.seconds, 0), style.id).toBeCloseTo(style.seconds, 5);

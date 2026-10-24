@@ -32,7 +32,6 @@ import { cleanAudio, makeRoom, rippleDelete, setAudioRoll, setCaptionBreaks, set
 import { deleteMarker, setMarker } from './markers';
 import { insertNode, replaceSrc } from './library';
 import { activateScene, duplicateElements, groupElements, insertScene, pasteNodes, ungroupElements } from './structure';
-import { add3dStudio } from './studio3d';
 import { addExplainer, syncExplainer } from './explainer';
 import { createTimeline, deleteTimeline, renameTimeline, setActiveTimeline, STAGE_OPS } from './timelines';
 import { applyBrand } from './brand';
@@ -45,7 +44,7 @@ import { addIntro } from '../motion/intro';
 import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
 import { createVideo, redoKeyframe } from './create-video';
-import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
+import { addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
 import { styleOp, type StyleDeps } from '../style/apply';
@@ -113,7 +112,6 @@ export {
 	type ExplainerInput,
 	type ExplainerScene,
 } from './explainer';
-export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
 
 // Style skills (Track A): runs the other ops of this registry, so it reaches them by name. The
 // annotations break the type cycle with REGISTRY.
@@ -172,12 +170,9 @@ const REGISTRY = [
 	activateScene,
 	addShape,
 	addIcon,
-	addLottie,
 	addDiagram,
 	addChart,
 	addGraph,
-	add3d,
-	add3dStudio,
 	addVoiceover,
 	syncVoiceover,
 	updateVisual,

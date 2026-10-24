@@ -51,8 +51,6 @@ export function laneOf(node: object): Lane | null {
     case 'text':
       return 'text';
     case 'path':
-    case 'lottie':
-    case 'scene3d':
       return 'graphic';
     case 'sequence': {
       if ((entity.marks as Entity | undefined)?.['text-cut']) return null;

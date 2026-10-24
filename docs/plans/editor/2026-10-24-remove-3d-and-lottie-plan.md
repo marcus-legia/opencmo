@@ -1,8 +1,37 @@
 # Remove 3D (three.js) and Lottie: Remotion is the one way to make motion
 
-Status: **plan, not started** (owner, 2026-10-24: "remove 3D, three.js and Lottie from the project; only Remotion").
-Depends on: the motion studio refactor (`2026-10-24-motion-studio-refactor.md`) being merged and deployed, so the
-replacement (styles, the kit core, free drawing) is live before anything is taken away.
+Status: **built, not deployed** (2026-10-24, branch `plan/editor/2026-10-24-explainer-freeform-motion`). The owner asked
+for the whole removal at once, so Phases 1 and 3 landed together; Phase 2 was decided by measuring (below).
+Deploy it after (or with) the motion studio refactor (`2026-10-24-motion-studio-refactor.md`) on the same branch.
+
+## What was done (2026-10-24)
+
+- **Measured first (Phase 2):** production had 11 editor documents, **0** with a Lottie, `scene3d` or `studio-3d`
+  layer, and 0 `studio-3d` generations. So the layers were dropped from the schema without a document migration
+  (option B); `DOCUMENT_VERSION` stays 1. A local document that still has one fails `validate` (dev data only).
+- **Deleted:** `packages/clip-three`, `clip-render/src/three/` (CPU-projected `scene3d`), the `add_3d`,
+  `add_3d_studio`, `add_lottie` ops, `visuals/lottie.ts`, `visuals/emoji.ts`, `packages/clip-media/lottie/` (CC0 pack +
+  Noto animated emoji), `kit.Lottie` / `kit.lotties` and `@remotion/lottie`, Skottie in `clip-export` (`job.lottie`
+  is gone from the export job), CanvasKit in the editor preview (`canvaskit-wasm`, CSP `wasm-unsafe-eval`), the 3D
+  sandbox page (`/sandbox/three.html`, its CSP and `frame-src 'self'`), the GPU image and `render_three` on Modal,
+  the `opencmo-3d` provider, Lottie uploads (`LOTTIE` asset type; a `.json` upload is refused unread by
+  `probe_media`), the 3D/Lottie tools (`preview_3d`, `add_3d_scene`, `find_lotties`) in the Assistant and MCP, the
+  `3d` guide, the `emoji` / `explain3d` / `code3d` eval tasks, the Visuals panel's Animation / 3D / 3D Studio tabs
+  and the Inspector's 3D camera / Lottie playback sections, the `three-scene` parity sample.
+- **Intro recipe:** the `lottie` element kind is gone; ambient motion is the moving background.
+- **SQL:** `20261227090000_remove_studio_3d.sql` deletes the `studio-3d` row (turns it off instead where a
+  generation still references it); pgTAP `201_remove_studio_3d`. `scene_codes`, `save_scene_code` and
+  `agent_raise_hold_3d` stay: explainers use them. `ai-models.json` drops `studio-3d`.
+- **Kept on purpose:** `three` in `apps/web` for the marketing blog's `scene` block and the landing hero (three
+  published posts use it; not the product). Lucide icons stay (plain SVG paths). The LottieFiles motion-design
+  notice stays: its adapted text is still in `motion-guide.ts`.
+- **Checked:** typecheck of every touched package and the web app; vitest of clip-doc, clip-render, editor-core,
+  clip-export (real ffmpeg), clip-assets, clip-motion (one golden still fails the same way on the untouched branch:
+  sandbox Chromium); `check:contracts`; fake agent eval 40/40; MCP checks; engine pytest + ruff (one motion test
+  fails the same way on the untouched branch); `supabase test db` 1659/1659; schema dump unchanged; a stress export
+  of every drawn visual rendered and looked at.
+
+The plan as written before the build follows.
 
 ## Why
 

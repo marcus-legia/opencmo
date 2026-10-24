@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from opencmo.backends.supabase import Task
@@ -137,45 +136,21 @@ def test_lut_hong_hoac_1d_thi_reject_va_xoa(tmp_path):
         assert store.removed == [("media", ["user-1/job-1/look.cube"])]
 
 
-def _lottie_store(tmp_path, body: str):
+def test_a_json_upload_is_refused_without_being_read(tmp_path):
+    """Lottie uploads were removed (2026-10-24): a .json never reaches a renderer."""
     store = FakeStore(tmp_path)
     store.get_media_asset = lambda _id: {
         "id": "asset-1", "user_id": "user-1", "job_id": "job-1",
         "storage_path": "media/user-1/job-1/wave.json",
     }
-    store.download_object = lambda _bucket, _path, dest, **_kw: dest.write_text(body)
-    return store
 
+    def download(*_args, **_kw):
+        raise AssertionError("a .json upload must not be downloaded")
 
-def test_lottie_hop_le_thi_ready_kich_thuoc_va_thoi_luong(tmp_path):
-    """G4: Lottie lên Storage để export trên server vẽ được (trước chỉ nằm ở máy người dùng)."""
-    body = '{"v":"5.7.4","fr":30,"ip":0,"op":90,"w":512,"h":256,"layers":[]}'
-    store = _lottie_store(tmp_path, body)
+    store.download_object = download
     probe_media.process(store, Task(id="task-5", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1"))
-    assert store.completed[1] == {"duration": 3.0, "width": 512, "height": 256, "ok": True, "error": None}
-    assert store.removed == []
-
-
-def test_json_khong_phai_lottie_thi_reject_va_xoa(tmp_path):
-    for body in ['{"segments":[]}', "[1,2]", "not json", '{"v":"5","fr":0,"w":1,"h":1,"layers":[]}']:
-        store = _lottie_store(tmp_path, body)
-        probe_media.process(store, Task(id="task-6", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1"))
-        assert store.completed[1]["ok"] is False, body
-        assert store.removed == [("media", ["user-1/job-1/wave.json"])], body
-
-
-def test_lottie_tro_file_ngoai_thi_reject(tmp_path):
-    """Skottie trên worker không được đọc file khác trên máy qua tài nguyên ngoài của Lottie."""
-    for asset in ({"id": "i", "w": 1, "h": 1, "u": "/etc/", "p": "passwd"}, {"id": "i", "w": 1, "h": 1, "u": "", "p": "../x.png", "e": 0}):
-        body = json.dumps({"v": "5.7.4", "fr": 30, "ip": 0, "op": 30, "w": 10, "h": 10, "layers": [], "assets": [asset]})
-        store = _lottie_store(tmp_path, body)
-        probe_media.process(store, Task(id="task-7", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1"))
-        assert store.completed[1]["ok"] is False, asset
-    embedded = json.dumps({"v": "5.7.4", "fr": 30, "ip": 0, "op": 30, "w": 10, "h": 10, "layers": [],
-                           "assets": [{"id": "i", "w": 1, "h": 1, "u": "", "p": "data:image/png;base64,AAAA", "e": 1}]})
-    store = _lottie_store(tmp_path, embedded)
-    probe_media.process(store, Task(id="task-8", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="attempt-1"))
-    assert store.completed[1]["ok"] is True, "ảnh nhúng data: vẫn được"
+    assert store.completed[1]["ok"] is False
+    assert store.removed == [("media", ["user-1/job-1/wave.json"])]
 
 
 def test_audio_the_user_adds_is_stored_so_export_can_mix_it(tmp_path):

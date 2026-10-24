@@ -72,7 +72,7 @@ const UNSAFE_SECONDS = 0.5;
 const STEP = 6;
 const seconds = (frames: number): number => Math.round((frames / FPS) * 100) / 100;
 
-const VISUAL = new Set<ClipNode['kind']>(['video', 'image', 'rect', 'path', 'scene3d', 'lottie', 'text', 'captions']);
+const VISUAL = new Set<ClipNode['kind']>(['video', 'image', 'rect', 'path', 'text', 'captions']);
 /** Thứ phủ được nền: thiếu chúng thì khung là màu nền scene (thường đen). */
 const BACKDROP = new Set<ClipNode['kind']>(['video', 'image', 'rect', 'path']);
 

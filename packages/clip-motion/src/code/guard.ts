@@ -1,6 +1,6 @@
 /**
  * Scene code is the BODY of `(React, R, kit) => { …; return function Scene() { … } }`, written by the
- * Assistant. Like clip-three's guard this is not the security boundary (the render runs in a
+ * Assistant. This is not the security boundary (the render runs in a
  * container without network or secrets, and Chromium is launched offline); it keeps renders
  * deterministic and gives the agent a precise message to fix.
  */

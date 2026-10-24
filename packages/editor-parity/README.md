@@ -61,9 +61,6 @@ Hai cờ trong manifest:
 - `oracle: "opencmo"`: tính năng DS không có (node `path`, spec visuals). Ảnh
   tham chiếu do đích `node` của clip-render vẽ rồi được duyệt bằng mắt; mẫu này
   giữ preview (Chromium) và export (Node) vẽ giống nhau và bắt hồi quy.
-  `three-scene` (3D chiếu CPU) có ngưỡng tile 6: lưới 1.5 px trên mặt cong khử
-  răng cưa khác nhau giữa hai bản Skia (đã xem ảnh diff: chỉ nét lưới, hình học
-  trùng, mean 0.14).
 
 - `perTarget: true` (only `anim-units`): letters moving at sub-pixel positions rasterize further apart
   between Skia (Node) and Chromium (tile 20–44 on this sample) than a real regression lands from either

@@ -28,7 +28,6 @@ from opencmo.media.ffmpeg import USER_HTTP_INPUT, USER_INPUT
 from opencmo.worker.render_document_task import (
     CLIP_EXPORT,
     EDITOR_FONTS,
-    EDITOR_LOTTIE,
     MASTER,
     SourceError,
     _node,
@@ -97,7 +96,6 @@ def _document_job(store: Any, request: dict[str, Any], clip: dict[str, Any], job
         "media": media,
         "transcripts": transcripts,
         "fonts": str(EDITOR_FONTS),
-        "lottie": str(EDITOR_LOTTIE),
     }
 
 
@@ -220,7 +218,7 @@ def look(store: Any, request: dict[str, Any], root: Path) -> dict[str, Any]:
         file = sources.media_url(path or MASTER)
         if op == "grab":
             spec = {"op": "grab", "file": str(file), "document": {"version": 1, "stage": {"children": []}},
-                    "media": [], "transcripts": [], "fonts": str(EDITOR_FONTS), "lottie": str(EDITOR_LOTTIE),
+                    "media": [], "transcripts": [], "fonts": str(EDITOR_FONTS),
                     **{key: params[key] for key in ("times", "count") if key in params}}
             return _render(spec, root)
         data = waveform_of(

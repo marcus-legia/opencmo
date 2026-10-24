@@ -34,7 +34,7 @@ Decide in this order (the three pillars):
 3. Narrative: setup -> action -> resolution. The hero (the first element, usually the title or the logo) enters first; supporting elements follow; nothing competes with the hero.
 
 Rules the reviewer enforces:
-- elements: ${INTRO_ELEMENTS.join(", ")}. The first element is the hero. Use the title and tagline text you are given, word for word. Only add "logo" when the project has a brand logo. Lottie names: pick from the list you are given.
+- elements: ${INTRO_ELEMENTS.join(", ")}. The first element is the hero. Use the title and tagline text you are given, word for word. Only add "logo" when the project has a brand logo.
 - One entrance beat per element: {target, at, dur, motion}. motion is one of ${INTRO_MOTIONS.join(", ")}. word_slide is for text only; draw is for the accent line.
 - Stagger entrances 0.15-0.4 s apart; at most ${MAX_MOVING} elements moving at the same moment.
 - Every beat finishes before the exit starts (seconds minus the personality's exit time).
@@ -43,7 +43,7 @@ Rules the reviewer enforces:
 - Leave "easing" empty to use the personality's curve; set it only for a deliberate exception.
 - background: "gradient" by default (brand colours); "none" only when the user wants the speaker visible behind the words.
 
-Three motion layers make an intro feel alive: primary (title), secondary (accent line, tagline), ambient (a subtle lottie such as sparkle). Two layers are often enough; never more than five elements.`;
+Three motion layers make an intro feel alive: primary (title), secondary (accent line, tagline), ambient (the background gradient moving slowly). Two layers are often enough; never more than five elements.`;
 
 /**
  * Motion for explainers (read_guide "explainer"). The kit turns the personality into frames,

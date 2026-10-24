@@ -18,8 +18,8 @@ in the advisory.
 
 In scope: this repository and the hosted service at opencmo.io — for example authentication
 and authorization (RLS, RPC ownership checks, API keys), credit and billing logic, file
-upload and storage access, and server-side media processing (ffmpeg, the exporter, Lottie and
-3D rendering).
+upload and storage access, and server-side media processing (ffmpeg, the exporter, explainer
+rendering).
 
 Out of scope: denial of service through volume, social engineering, and issues in third-party
 services (Supabase, Vercel, Modal, AI providers) that are not caused by how OpenCMO uses them.

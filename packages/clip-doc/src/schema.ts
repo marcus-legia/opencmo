@@ -25,7 +25,6 @@
 
 import { z } from 'zod';
 
-import { parseExpr } from './expr.ts';
 import { parsePath } from './path.ts';
 
 export const DOCUMENT_VERSION = 1;
@@ -87,9 +86,6 @@ export const TRACK_PROPERTIES = [
   'trimEnd',
   'dashOffset',
   'd',
-  'cameraPhi',
-  'cameraTheta',
-  'cameraDistance',
 ] as const;
 
 export const NAMED_EASINGS = [
@@ -255,7 +251,7 @@ export type AssetDeclaration =
       resolution?: string;
       audio?: boolean;
       voice?: string;
-      /** 3D Studio (`studio-3d`): dữ liệu cảnh — kiểm đầy đủ ở editor-core/route. */
+      /** Explainer (`motion-explainer`): its script and code ref — checked in editor-core/route. */
       scene?: Record<string, unknown>;
       seed?: number;
       refs?: AssetInput[];
@@ -575,14 +571,14 @@ export const BrandMarkSchema = z
     version: z.literal(1),
     colors: z
       .object({
-        /** Màu chính: nhãn nổi bật, vật thể 3D. */
+        /** Màu chính: nhãn nổi bật. */
         primary: hex,
         secondary: hex,
         /** Màu nhấn: mũi tên, icon, cột nổi bật, từ đang đọc của phụ đề. */
         accent: hex,
         /** Chữ trên visual. */
         text: hex,
-        /** Nền ô/panel của visual và nền cảnh 3D. */
+        /** Nền ô/panel của visual. */
         background: hex,
       })
       .strict(),
@@ -620,8 +616,6 @@ export const MarksSchema = z
     visual: z.object({ op: z.string().min(1), input: z.unknown() }).strict().optional(),
     /** The style skill whose `apply_style` placed this visual: a rerun replaces only these. */
     style: z.string().min(1).max(64).optional(),
-    /** Câu nói mà cảnh 3D neo vào. */
-    studio3d: z.object({ quote: z.string() }).strict().optional(),
     /** Seed variants of the shown AI media that are not on screen; `pick_variant` swaps one in. */
     variants: z.array(AssetDeclarationSchema).min(1).max(2).optional(),
   })
@@ -737,140 +731,6 @@ const PathBase = z
     trimStart: unit.optional(),
     trimEnd: unit.optional(),
     ...decorations,
-    marks,
-  })
-  .strict();
-
-// ------------------------------------------------------------------ 3D
-//
-// Cảnh 3D kiểu manim (spec visuals V5): clip-render chiếu đa giác trên CPU —
-// không WebGL, preview và export vẽ bằng cùng Canvas 2D. Trục z hướng lên như
-// manim; camera nhìn về gốc toạ độ.
-
-export const OBJECT3D_TYPES = ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'surface', 'axes', 'extrude', 'line', 'points'] as const;
-export const OBJECT3D_TRACKS = ['x', 'y', 'z', 'rotateX', 'rotateY', 'rotateZ', 'scale', 'opacity', 'progress'] as const;
-
-const vec3 = z.tuple([num, num, num]);
-const range = z.tuple([num, num]);
-
-export const Track3DSchema = z
-  .object({ id: id.optional(), property: z.enum(OBJECT3D_TRACKS), keyframes: z.array(KeyframeSchema) })
-  .strict();
-
-export const Object3DSchema = z
-  .object({
-    id: id.optional(),
-    name: z.string().optional(),
-    type: z.enum(OBJECT3D_TYPES),
-    position: vec3.optional(),
-    /** Độ, quanh trục x rồi y rồi z. */
-    rotation: vec3.optional(),
-    scale: z.union([num, vec3]).optional(),
-    color: color.optional(),
-    /** Mặt cong: màu thứ hai — tô theo độ cao từ `color` tới `color2`. */
-    color2: color.optional(),
-    opacity: unit.optional(),
-    /** Chỉ vẽ cạnh, không tô mặt. */
-    wireframe: z.boolean().optional(),
-    /** Màu nét cạnh vẽ đè lên mặt (lưới của mặt cong kiểu manim). */
-    edges: color.optional(),
-    /** Cube: cạnh. Sphere/cylinder/cone: bán kính. Torus: bán kính lớn. */
-    size: num.optional(),
-    radius: num.optional(),
-    /** Torus: bán kính ống. */
-    tube: num.optional(),
-    height: num.optional(),
-    /** Số chia lưới (sphere, torus, surface…). */
-    resolution: z.number().int().min(3).max(96).optional(),
-    /** Surface: z = f(x, y) (và t = giây, cho mặt chuyển động). */
-    expr: z
-      .string()
-      .min(1)
-      .max(200)
-      .superRefine((value, ctx) => {
-        try {
-          parseExpr(value, ['x', 'y', 't']);
-        } catch (error) {
-          ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid formula.' });
-        }
-      })
-      .optional(),
-    xRange: range.optional(),
-    yRange: range.optional(),
-    /** Axes: nửa chiều dài mỗi trục. */
-    length: num.optional(),
-    /** Extrude: đường SVG (mặt phẳng xy) và độ dày theo z. */
-    d: z
-      .string()
-      .min(1)
-      .max(20_000)
-      .superRefine((value, ctx) => {
-        try {
-          parsePath(value);
-        } catch (error) {
-          ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : 'Invalid path data.' });
-        }
-      })
-      .optional(),
-    depth: num.optional(),
-    /** Line/points: toạ độ 3D. */
-    points: z.array(vec3).max(2000).optional(),
-    /** Line/axes: bề dày nét, px. */
-    width: num.optional(),
-    tracks: z.array(Track3DSchema).optional(),
-  })
-  .strict();
-
-export const Camera3DSchema = z
-  .object({
-    /** Góc từ trục z xuống (độ): 0 = nhìn thẳng từ trên, 90 = ngang. */
-    phi: num.optional(),
-    /** Góc quanh trục z (độ). */
-    theta: num.optional(),
-    distance: num.optional(),
-    /** Góc nhìn dọc (độ). */
-    fov: num.optional(),
-    /** Camera tự quay quanh trục z, độ mỗi giây (ambient rotation của manim). */
-    orbit: num.optional(),
-  })
-  .strict();
-
-export const Light3DSchema = z.object({ direction: vec3.optional(), ambient: unit.optional() }).strict();
-
-const Scene3DBase = z
-  .object({
-    kind: z.literal('scene3d'),
-    ...visual,
-    muted: z.boolean().optional(),
-    camera: Camera3DSchema.optional(),
-    light: Light3DSchema.optional(),
-    background: color.optional(),
-    objects: z.array(Object3DSchema).max(64),
-    ...decorations,
-    marks,
-  })
-  .strict();
-
-/**
- * Animation Lottie (spec visuals-2 L3): nhân vật, icon động. Vẽ bằng Skottie của
- * Skia ở cả hai đường (`@napi-rs/canvas` khi export, CanvasKit trong trình
- * duyệt). `src` là file trong thư viện hoặc `builtin:<tên>` (bộ có sẵn).
- */
-const LottieBase = z
-  .object({
-    kind: z.literal('lottie'),
-    ...visual,
-    src: source,
-    /** Tốc độ phát (1 = gốc). */
-    speed: num.optional(),
-    /** Hết animation thì lặp lại (mặc định có). */
-    loop: z.boolean().optional(),
-    /** Giây của animation ở đầu node. */
-    offset: num.optional(),
-    shadows,
-    effects,
-    tracks,
-    animations,
     marks,
   })
   .strict();
@@ -1064,9 +924,6 @@ type Parent = { children?: ClipNode[] };
 
 export type RectNode = z.infer<typeof RectBase> & Masked & Parent;
 export type PathNode = z.infer<typeof PathBase> & Masked;
-export type LottieNode = z.infer<typeof LottieBase> & Masked;
-export type Scene3DNode = z.infer<typeof Scene3DBase> & Masked;
-export type Object3D = z.infer<typeof Object3DSchema>;
 export type TextNode = z.infer<typeof TextBase> & Masked;
 export type VideoNode = z.infer<typeof VideoBase> & Masked;
 export type ImageNode = z.infer<typeof ImageBase> & Masked;
@@ -1080,8 +937,6 @@ export type ClipNode =
   | SceneNode
   | RectNode
   | PathNode
-  | Scene3DNode
-  | LottieNode
   | TextNode
   | VideoNode
   | ImageNode
@@ -1097,8 +952,6 @@ const childList = z.array(z.lazy((): z.ZodType<ClipNode> => NodeSchema)).optiona
 
 const RectFull = RectBase.extend({ masks: maskList, children: childList }).strict();
 const PathFull = PathBase.extend({ masks: maskList }).strict();
-const Scene3DFull = Scene3DBase.extend({ masks: maskList }).strict();
-const LottieFull = LottieBase.extend({ masks: maskList }).strict();
 const TextFull = TextBase.extend({ masks: maskList }).strict();
 const VideoFull = VideoBase.extend({ masks: maskList }).strict();
 const ImageFull = ImageBase.extend({ masks: maskList }).strict();
@@ -1108,8 +961,6 @@ const SceneFull = SceneBase.extend({ masks: maskList, children: childList }).str
 
 export const RectSchema: z.ZodType<RectNode> = RectFull;
 export const PathSchema: z.ZodType<PathNode> = PathFull;
-export const Scene3DSchema: z.ZodType<Scene3DNode> = Scene3DFull;
-export const LottieSchema: z.ZodType<LottieNode> = LottieFull;
 export const TextSchema: z.ZodType<TextNode> = TextFull;
 export const VideoSchema: z.ZodType<VideoNode> = VideoFull;
 export const ImageSchema: z.ZodType<ImageNode> = ImageFull;
@@ -1122,8 +973,6 @@ export const NodeSchema: z.ZodType<ClipNode> = z.discriminatedUnion('kind', [
   SceneFull,
   RectFull,
   PathFull,
-  Scene3DFull,
-  LottieFull,
   TextFull,
   VideoFull,
   ImageFull,
@@ -1139,8 +988,6 @@ export const NODE_SHAPES: Record<NodeKind, z.ZodObject> = {
   scene: SceneBase,
   rect: RectBase,
   path: PathBase,
-  scene3d: Scene3DBase,
-  lottie: LottieBase,
   text: TextBase,
   video: VideoBase,
   image: ImageBase,

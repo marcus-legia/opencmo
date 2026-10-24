@@ -80,8 +80,8 @@ const BIG_TYPE = 0.09;
 
 /** Marks that are not a picture of the subject on their own. */
 const FRAMES_ONLY = new Set(['Board', 'Box']);
-/** Marks that move inside their box (canvas fields, Lottie, a Mark the scene animates), so an unchanged box does not mean a still beat. */
-const MOVES_INSIDE = /^(DotField|Spectrogram|Waveform|Lottie\b|Shape blob|Mark\b)/;
+/** Marks that move inside their box (canvas fields, a Mark the scene animates), so an unchanged box does not mean a still beat. */
+const MOVES_INSIDE = /^(DotField|Spectrogram|Waveform|Shape blob|Mark\b)/;
 
 function signature(boxes: LaidBox[]): string {
 	return boxes
@@ -92,7 +92,7 @@ function signature(boxes: LaidBox[]): string {
 
 /**
  * Per-beat issues from the layout samples of each beat (`probeFrames`): a beat with no picture (icon, shape,
- * Lottie, path, data mark…), and a beat where nothing moves between its two samples.
+ * path, data mark…), and a beat where nothing moves between its two samples.
  */
 export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[], frame?: { width: number; height: number }): string[] {
 	// Display type this big is the picture of a beat (a promise, a number), not a caption.

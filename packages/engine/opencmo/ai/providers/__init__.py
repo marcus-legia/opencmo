@@ -10,7 +10,6 @@ from opencmo.ai.providers.elevenlabs import ElevenLabsProvider
 from opencmo.ai.providers.fake import FakeProvider
 from opencmo.ai.providers.fal import FalProvider
 from opencmo.ai.providers.motion import MotionLocalProvider, MotionModalProvider, fake_voice
-from opencmo.ai.providers.three import ThreeLocalProvider, ThreeModalProvider
 
 __all__ = ["ProviderAdapter", "ProviderError", "Result", "adapter_for"]
 
@@ -39,17 +38,6 @@ def adapter_for(model: AiModel) -> ProviderAdapter:
         if not key:
             raise SpecError(NOT_SET_UP)
         return FalProvider(key)
-    if model.provider == "opencmo-3d":
-        # Renderer của chính mình: không khoá, chỉ cần biết chạy ở đâu. Thiếu
-        # cả hai thì model giả (khi được bật) vẽ khung màu thay cho cảnh 3D.
-        mode = os.environ.get("OPENCMO_3D", "")
-        if mode == "modal":
-            return ThreeModalProvider()
-        if mode == "local":
-            return ThreeLocalProvider()
-        if fake_allowed():
-            return FakeProvider()
-        raise SpecError(NOT_SET_UP)
     if model.provider == "opencmo-motion":
         # Explainers: our own renderer plus the voice. The voice needs the ElevenLabs key unless
         # it is faked for local runs; a silent motion clip needs only the renderer. Without a

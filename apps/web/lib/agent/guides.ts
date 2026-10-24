@@ -60,7 +60,7 @@ ${kinds}
 - Caption presets: ${CAPTION_PRESETS.join(", ")}. Captions also take colors (up to 3 hex), verticalAlign top|center|bottom, offsetY, and fontScale (0.25–3, 1 = preset size) to make the text bigger or smaller. Captions have no width or scale: resize them with fontScale only. Lines wider than the frame wrap automatically.
 - Fonts: ${FONTS.join(", ")}. fontWeight 100-900; textCase original|upper|lower; textAlign left|center|right. textAlign only works when the text has BOTH width and height; without them the box shrinks to the text and it starts at x. To center text on a card, give the text the card's x, y, width and height.
 - Text style (set_props on text): background {color, paddingX?, paddingY?, radius?, outlineColor?, outlineWidth?, perLine?} draws a box behind the text (perLine: one box per line); decoration ["underline"|"overline"|"strike"]; fill "footage" makes the text a window onto the layers below (the rest of the frame takes the text color) and "inverted" draws it with a difference blend; tiltX/tiltY (-89..89 degrees) lean the text in fake perspective. Flip any element with a negative scaleX/scaleY.
-- Elements have no perspective or rotateY: fake a card flip with scaleX keyframes and depth with shadows. For real 3D (objects, depth, a camera move) write a 3D animation (read_guide "3d"); generate_media is only for concrete real-world footage.
+- Elements have no perspective or rotateY: fake a card flip with scaleX keyframes and depth with shadows. For real depth or a camera move, make a motion clip (read_guide "explainer"); generate_media is only for concrete real-world footage.
 - volume is dB (0 = as recorded, -60 near silent); muted: true silences.
 `;
 }
@@ -129,7 +129,7 @@ Times after cuts: get_transcript and find_silences use SOURCE seconds; everythin
 
 1. Read the whole script once. Say to yourself in one sentence what the clip argues; every visual must serve that.
 2. Mark the beats a picture makes faster: a list of steps, a before/after or A vs B, a number, a trend, a cause and effect, a metaphor ("it compounds", "a snowball"). Skip lines that are just the speaker's opinion or a joke: the face does that best.
-3. For each beat pick ONE tool (see the system prompt): drawn visuals for anything abstract or numeric; a 3D animation for "3D", a hero moment or a physical metaphor; generate_media only for a concrete scene and only when the user wants AI media.
+3. For each beat pick ONE tool (see the system prompt): drawn visuals for anything abstract or numeric; a motion clip (read_guide "explainer") for a hero moment or a physical metaphor; generate_media only for a concrete scene and only when the user wants AI media.
 4. Labels, numbers and steps come from the words of the script, shortened to 1-4 words. Never add a statistic the speaker did not say.
 5. Timing: pass quote with the exact words (a few are enough); leave start/end out and the tool times it to the line. Give start/end only to stretch or shorten it.
 6. Leave the first line (the hook) on the face. At most one visual on screen; 2-6 seconds each; at least one second of face between visuals.
@@ -243,7 +243,6 @@ Use apply_color (one call can set many adjustments on many elements) and check w
 Use a visual when the speaker explains something a picture makes faster: steps, a loop, a comparison, a number, a trend, a formula. One visual at a time; 2-6 seconds each; never more than one idea on screen.
 
 - Icons: find_icons {query} then add_icon {name, at, size, motion}. Match the word being said (money → dollar-sign or wallet, growth → trending-up, time → clock, idea → lightbulb). Motion adds life: spin for loops/refresh, bounce for a person, pulse for a heart or a target, fly for anything travelling (an arrow from a bow-arrow to a target, with orient true). Keep 1-3 icons on screen at once.
-- Animations: find_lotties {query} then add_lottie {animation, at, size} for motion that icons cannot do — a stick person who walks, runs, waves, points, jumps or cheers; effects (confetti, check-draw, lightbulb-on for an idea, rocket-launch for a launch, target-hit for a goal, clock-tick for time pressure, heart-beat, sparkle); animated emoji (emoji/fire, emoji/joy, emoji/thinking, emoji/exploding-head…) for a feeling or reaction on the line that carries it. One at a time, sized 0.25-0.4 (emoji 0.2-0.3), away from the speaker's face; flip: true to face the other way. Emoji are playful: skip them on serious topics.
 - Point at things: add_shape arrow/circle/underline/highlight/check/cross. They draw on like a hand sketch. Coordinates are 0-1 of the frame.
 - Steps or a process: add_diagram layout "column" on vertical video (3-5 short labels, 1-4 words each), "row" for 2-3 steps, "cycle" for a loop, "tree" for one idea splitting into parts, "compare" for A vs B with 2-3 bullet items each.
 - Numbers: add_chart "stat" for one big number (value + short label), "bar" to compare 2-6 values, "line" for growth over time, "donut"/"pie" for shares of a whole.
@@ -257,50 +256,10 @@ Use a visual when the speaker explains something a picture makes faster: steps, 
   brand: `# Brand kit
 
 When <clip_context> has "brand", the clip is on the user's brand kit:
-- Drawn visuals (charts, diagrams, icons, shapes, graphs) and 3D Studio scenes take the brand colors and heading font automatically. Do not pass colors unless the user asks for a different one.
+- Drawn visuals (charts, diagrams, icons, shapes, graphs) take the brand colors and heading font automatically. Do not pass colors unless the user asks for a different one.
 - Text you add (add_text, insert_node): use the brand heading_font for titles and the brand colors for highlights.
 - Captions already use the brand style; do not change caption style unless asked.
 - You cannot create or change brand kits. If the user wants their brand applied or edited, tell them: menu › Apply brand kit in the editor, or the Brand kit page in the app.`,
-
-  "3d": `# 3D animations (preview_3d → add_3d_scene)
-
-You write three.js code for a short 3D animation that makes the speaker's point land faster than words. It renders on our GPUs as a video on the clip (credits after the user approves). Use it for ONE or two strong moments per clip, never as decoration.
-
-## 1. Brief first (write it in update_plan or your reply)
-- quote: the exact words from <clip_context> it plays over.
-- idea: what the viewer must understand, in one sentence.
-- metaphor: ONE concrete physical picture of that idea — "a staircase whose steps get taller", "a calendar shedding pages until a wall", "a tower of paper rising". Physical objects and motion beat text. A plain chart only when the speaker gives numbers.
-- beats: 2-4 timed steps (seconds from the animation's start) that follow the words.
-- text: at most 3 short labels (1-3 words) taken from the speaker's words. Numbers only if the speaker says them.
-
-## 2. The code
-The BODY of function (THREE, stage, kit) { … } that ends with return (t) => { … } (t = seconds, 0 to duration). Build everything once, then only move/scale/show things inside the update. Pure function of t: no Math.random (use stage.random() while building), no Date, timers, fetch or DOM — they are not available.
-
-Already there: a dark studio (gradient background, key + rim lights, soft shadows, reflections, a glossy floor at y = 0, bloom on emissive materials, floating dust).
-- stage.root: add everything here. Give important objects a name ("calendar", "wall") — the layout report uses it.
-- kit.frame({ yaw, pitch, padding, push }) — CALL IT EVERY FRAME. It frames the whole scene (its final state) automatically; you only choose the angle (yaw/pitch in degrees; 10-25 / 8-20 look good) and a slow push-in (0 → 1). Animate yaw a few degrees over time for life. Do not place the camera yourself.
-- kit.label(text, { size, at: object or THREE.Vector3, lift, glow, font: 'display' | 'body' }) — 3D text that faces the camera and sits on top of its object. Use it for every word on screen.
-- Data pieces (numbers are always right):
-  - kit.bars(values, { labels, highlight, showValues }) → { group, grow(p) } — p 0→1 grows the bars one by one.
-  - kit.counter(value, { prefix, suffix, decimals, size }) → { mesh, set(p) } — counts up as p goes 0→1.
-  - kit.product('phone'|'laptop'|'coin'|'gift'|'trophy'|'rocket'|'lightbulb'|'globe'|'box'|'bottle') → { object, animate(t) }.
-- Timing: kit.phase(t, start, length) → 0..1; kit.stagger(t, index, { start, step, length }); easings kit.easeOutBack (pop), kit.easeOutCubic, kit.easeInOutCubic, kit.easeOutExpo; kit.clamp01.
-- Materials: kit.glossy(color, { metalness, roughness, emissive }) (emissive 1.5-3 glows), kit.metal(color, roughness).
-- Colors: stage.palette.colors (6), stage.palette.text, stage.accent (a THREE.Color) — they match the background and the brand kit. Make the key element the accent with a little glow; use 2-3 colors.
-- Shapes: BoxGeometry, CylinderGeometry, CapsuleGeometry, TorusGeometry, SphereGeometry, ExtrudeGeometry; set mesh.castShadow = true. Keep the subject 3-5 units wide, standing on the floor, centred near x = 0.
-- Look: one clear subject; build up with easeOutBack, staggered 0.1-0.25 s; hold the final state still for the last ~0.6 s. Under 100k triangles and 300 meshes (InstancedMesh for many copies). No new geometries inside the update except labels.
-
-## 3. Preview and fix — required
-preview_3d { code, duration, aspect_ratio } returns 4 frames and a layout report. Look at the frames AND read the report:
-- an error (compile / build / frame + message) → fix the code;
-- "… is cut off" / "outside the frame" → move or shrink that object, or rely on kit.frame (did you call it every frame?);
-- "nearly empty" → the scene is too small or off camera;
-- check that the metaphor reads at a glance on a phone and the text is legible.
-Fix and preview again — up to 3 rounds — until there are no errors and no layout issues.
-
-## 4. Add it
-add_3d_scene { title, code (exactly what you last previewed), quote, theme? }. Duration comes from the quote (3-10 s); use the same duration in preview_3d. The video always takes the shape of the area it fills, so preview in that shape: full screen = clip_context.frame (a 16:9 clip is landscape); the panel of a split = 1:1 or 4:5.
-After it renders (about half a minute) capture a frame in its middle to confirm it sits well on the clip.`,
 
   explainer: `# Animated explainers and motion clips (/explain → preview_explainer → add_explainer)
 
@@ -380,7 +339,7 @@ A new AI voice on the clip. It costs credits (the user approves the price) and a
   1. get_transcript and read <clip_context>: what is the clip actually about?
   2. Write a NEW script in your own words from the angle the user wants (commentary, summary, a lesson, a reaction). Do not copy the speaker's sentences. Fit the clip: about 3 words per second of clip (a 30 s clip ≈ 85-90 words). Short sentences read better.
   3. add_voiceover mode "replace" with the script and a voice.
-  4. Add visuals that follow the NEW script (add_chart, add_diagram, a 3D animation with add_3d_scene, library media, generate_media when the user wants AI B-roll). The new captions have the new words; plan beats with update_plan by script position.
+  4. Add visuals that follow the NEW script (add_chart, add_diagram, a motion clip with add_explainer, library media, generate_media when the user wants AI B-roll). The new captions have the new words; plan beats with update_plan by script position.
 - mode "overlay" (a short line over the clip): start (clip seconds) or quote (it starts after those words); the original audio drops by duck_db (default -18 dB) while it speaks. Captions off by default.
 - Voices: pick one that fits the tone; say which one you picked.
 - The voice appears as a layer named "Voiceover: …"; deleting it restores the original audio and captions.
@@ -408,7 +367,7 @@ The Video agent team builds intros: do not assemble them with add_text and keyfr
 2. plan_video {recipe: "intro", brief: the user's words}. Pass title only when the user gave the exact words, seconds only when they asked for a length.
 3. The user approves a storyboard (beats with times). If they cancel, ask what to change and call plan_video again with a better brief.
 4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
-5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no lottie").`,
+5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no tagline").`,
 
   video: `# A whole AI video (create_video → animate_video, /video)
 

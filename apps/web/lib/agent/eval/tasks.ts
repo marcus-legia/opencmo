@@ -121,7 +121,7 @@ function blankEdit(document: ClipDocument): void {
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
-  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer"].includes(call.name));
+  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_explainer"].includes(call.name));
   const first = priced[0];
   if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
   // One video card, not a retry loop that shows the founder a new price each time.
@@ -482,50 +482,17 @@ export const TASKS: EvalTask[] = [
       const notes: string[] = [];
       const at = clipTime(outcome.document, "growing");
       const found = all(outcome.document).find((item) => {
-        const visual = (item.entity.marks as { visual?: { op?: string; input?: { name?: string; animation?: string } } } | undefined)?.visual;
-        return item.tag === "group" && (visual?.op === "add_icon" || visual?.op === "add_lottie");
+        const visual = (item.entity.marks as { visual?: { op?: string; input?: { name?: string } } } | undefined)?.visual;
+        return item.tag === "group" && visual?.op === "add_icon";
       });
       if (!check(notes, Boolean(found), "no icon")) return { pass: false, notes };
-      const input = (found!.entity.marks as { visual: { op: string; input: { name?: string; animation?: string; motion?: string } } }).visual.input;
-      const name = String(input.name ?? input.animation ?? "");
+      const input = (found!.entity.marks as { visual: { op: string; input: { name?: string; motion?: string } } }).visual.input;
+      const name = String(input.name ?? "");
       const fits = check(notes, /user|people|person|trend|grow|chart|sprout|rocket|arrow-up|walk|cheer|megaphone/.test(name), `icon: ${name}`);
       const start = Number(found!.entity.start ?? 0);
       const end = Number(found!.entity.end ?? 0);
       const timed = check(notes, at !== null && start <= at + 0.5 && end >= at + 0.8, `shown ${start}-${end}s, word at ${at}s`);
       return { pass: fits && timed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "emoji",
-    prompt: "Add a fitting animated emoji reaction when I say 'people lose viewers'.",
-    grade(outcome) {
-      const notes: string[] = [];
-      const at = clipTime(outcome.document, "lose");
-      const found = visuals(outcome.document).find((item) => item.op === "add_lottie");
-      if (!check(notes, Boolean(found), "no animation")) return { pass: false, notes };
-      const animation = String((found!.input as { animation?: string }).animation ?? "");
-      const emoji = check(notes, animation.startsWith("emoji/"), `not an emoji: ${animation}`);
-      const fits = check(notes, /scream|fearful|anxious|cry|sob|weary|pensive|skull|grimacing|astonished|open-mouth|exploding|chart-down|broken|warning/.test(animation), `emoji: ${animation}`);
-      const timed = check(notes, at !== null && found!.start <= at + 0.5 && found!.end >= at + 0.8, `shown ${found!.start}-${found!.end}s, word at ${at}s`);
-      return { pass: emoji && fits && timed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "explain3d",
-    prompt: "Add a 3D visual that explains how growing an audience compounds.",
-    grade(outcome) {
-      const notes: string[] = [];
-      const noGen = check(notes, !outcome.tools.includes("generate_media"), "used generate_media for an explainer");
-      // "3D" → cảnh code (spec code-scenes); visual vẽ phẳng vẫn chấp nhận được cho ý trừu tượng.
-      const scene = outcome.generations?.find((item) => item.model.id === "studio-3d");
-      const drawn = visuals(outcome.document).find((item) => ["add_graph", "add_diagram", "add_chart"].includes(item.op));
-      const visual = scene ? { start: Number((scene.op as { start?: number }).start ?? -1), quote: scene.quote } : drawn;
-      if (!check(notes, Boolean(visual), "no 3D animation or drawn visual")) return { pass: false, notes };
-      const previewed = check(notes, !scene || outcome.tools.includes("preview_3d"), "added a 3D scene without previewing it");
-      const at = clipTime(outcome.document, "growing");
-      const grounded = check(notes, at !== null && Math.abs(visual!.start - at) <= 1.5, `starts ${visual!.start}s, "growing" at ${at}s`);
-      const quoted = check(notes, quoteFound(outcome.document, visual!.quote), `quote not in transcript: ${visual!.quote ?? "(none)"}`);
-      return { pass: noGen && previewed && grounded && quoted && sane(outcome, notes), notes };
     },
   },
   {
@@ -788,31 +755,6 @@ export const TASKS: EvalTask[] = [
       // B-roll pack: every still comes with variants for the user to pick from.
       const packed = check(notes, stills.every((item) => (item.variants?.length ?? 0) >= 1), "stills without variants");
       return { pass: several && noVideo && grounded && distinct && offHook && short && packed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "code3d",
-    prompt: "Make a 3D animation for 'the first three seconds' — it's the hero moment of this clip.",
-    grade(outcome) {
-      const notes: string[] = [];
-      // Spec code-scenes: preview trước rồi mới đặt — model phải NHÌN cảnh trước khi trả tiền render.
-      const previewed = outcome.tools.indexOf("preview_3d");
-      const added = outcome.tools.indexOf("add_3d_scene");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
-      const gen = outcome.generations?.find((item) => item.model.id === "studio-3d");
-      if (!check(notes, Boolean(gen), "no 3D animation prepared")) return { pass: false, notes };
-      const scene = gen!.spec.scene as { template?: string; code_ref?: string } | undefined;
-      const code = check(notes, scene?.template === "code" && /^[0-9a-f]{64}$/.test(scene.code_ref ?? ""), `scene: ${JSON.stringify(scene)}`);
-      const quoted = check(notes, quoteFound(outcome.document, gen!.quote), `quote not in transcript: ${gen!.quote ?? "(none)"}`);
-      const at = clipTime(outcome.document, "three");
-      const start = Number((gen!.op as { start?: number }).start ?? -1);
-      const timed = check(notes, at !== null && Math.abs(start - at) <= 1.5, `starts ${start}s, "three" at ${at}s`);
-      const placed = check(
-        notes,
-        all(outcome.document).some((item) => ((item.entity.paints as { src?: { model?: string } }[] | undefined) ?? []).some((paint) => paint.src?.model === "studio-3d")),
-        "the render is not on the clip",
-      );
-      return { pass: order && code && quoted && timed && placed && sane(outcome, notes), notes };
     },
   },
   {

@@ -973,19 +973,6 @@
       "oracle": "opencmo"
     },
     {
-      "id": "three-scene",
-      "checklist": [
-        "VIS-03"
-      ],
-      "phase": "A2",
-      "times": [
-        0.5,
-        1.5
-      ],
-      "fixtures": [],
-      "oracle": "opencmo"
-    },
-    {
       "id": "anim-units",
       "checklist": [
         "ANI-05"

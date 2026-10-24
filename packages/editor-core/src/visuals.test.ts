@@ -7,8 +7,6 @@ import { applyOps, type OpContext } from './ops';
 import { formatValue } from './visuals/chart';
 import { parseGraph as parseExpr } from './visuals/graph';
 import { wrapLabel } from './visuals/common';
-import { BUILTIN_LOTTIES, findLotties } from './visuals/lottie';
-import { existsSync } from 'node:fs';
 
 const ctx = { master: { width: 1920, height: 1080 }, readTranscript: async () => [], saveTranscript: async () => 'x' } as unknown as OpContext;
 const base = {
@@ -124,17 +122,6 @@ describe('phụ trợ', () => {
 	});
 });
 
-describe('add_3d', () => {
-	it('đặt scene3d trong vùng, schema kiểm công thức', async () => {
-		const { document } = await applyOps(base, [{ op: 'add_3d', start: 0, end: 4, title: 'Waves', objects: [{ type: 'axes' }, { type: 'surface', expr: 'sin(x) cos(y)' }], camera: { orbit: 15 } }] as never, ctx);
-		const group = lastChild(document);
-		const node = group.children!.find((child) => child.kind === 'scene3d')!;
-		expect((node.objects as unknown[]).length).toBe(2);
-		expect(() => validate(document)).not.toThrow();
-		await expect(applyOps(base, [{ op: 'add_3d', start: 0, end: 4, objects: [{ type: 'surface', expr: 'import(x)' }] }] as never, ctx)).rejects.toThrow();
-	});
-});
-
 describe('add_icon', () => {
 	it('icon Lucide thành path 24×24, motion là keyframe', async () => {
 		const { document } = await applyOps(base, [
@@ -193,38 +180,6 @@ describe('ca biên (review 29/09)', () => {
 		expect(mask.y + mask.height).toBeGreaterThanOrEqual(vh! - 0.5);
 		expect(vx! + mask.x).toBeGreaterThan(0);
 		expect(vy! + mask.y).toBeGreaterThan(0);
-	});
-});
-
-describe('add_lottie', () => {
-	it('bộ có sẵn thành node lottie builtin:, file thư viện giữ path; lật + nhãn', async () => {
-		const { document } = await applyOps(base, [
-			{ op: 'add_lottie', start: 0, end: 3, animation: 'walk', flip: true, speed: 1.5, label: 'Day one' },
-			{ op: 'add_lottie', start: 1, end: 3, animation: 'folder/rocket.json', loop: false },
-		] as never, ctx);
-		expect(() => validate(document)).not.toThrow();
-		const [walk, upload] = scene(document).children!;
-		expect(walk!.children![0]).toMatchObject({ kind: 'lottie', src: 'builtin:walk', speed: 1.5, scaleX: -1 });
-		expect(walk!.children!.some((child) => child.kind === 'text' && child.text === 'Day one')).toBe(true);
-		expect(upload!.children![0]).toMatchObject({ kind: 'lottie', src: 'folder/rocket.json', loop: false });
-	});
-
-	it('tên lạ báo lỗi kèm danh sách; tìm theo tag', async () => {
-		await expect(applyOps(base, [{ op: 'add_lottie', start: 0, end: 2, animation: 'dance' }] as never, ctx)).rejects.toThrow(/walk, run/);
-		expect(findLotties('celebrate win').map((entry) => entry.name)).toEqual(expect.arrayContaining(['cheer', 'confetti']));
-	});
-
-	it('emoji Noto: builtin:emoji/<tên>, tìm theo nghĩa, tên duy nhất và có file', async () => {
-		const { document } = await applyOps(base, [{ op: 'add_lottie', start: 0, end: 2, animation: 'emoji/fire', size: 0.25 }] as never, ctx);
-		expect(scene(document).children![0]!.children![0]).toMatchObject({ kind: 'lottie', src: 'builtin:emoji/fire' });
-		expect(findLotties('laugh funny').slice(0, 3).map((entry) => entry.name)).toEqual(expect.arrayContaining(['emoji/joy']));
-		expect(findLotties('idea')[0]!.name).toMatch(/lightbulb|light-bulb/);
-		const names = BUILTIN_LOTTIES().map((entry) => entry.name);
-		expect(new Set(names).size).toBe(names.length);
-		// Danh mục khớp file đã tải/sinh: tên nào thiếu file là nút bấm ra ô "thiếu media".
-		const root = new URL('../../clip-media/lottie/', import.meta.url);
-		const missing = names.filter((name) => !existsSync(new URL(`${name}.json`, root)));
-		expect(missing).toEqual([]);
 	});
 });
 

@@ -28,10 +28,6 @@
       "mean": 1.2,
       "tile": 6
     },
-    "three-scene": {
-      "mean": 1,
-      "tile": 6
-    },
     "anim-units": {
       "mean": 1,
       "tile": 14

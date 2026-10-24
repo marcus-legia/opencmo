@@ -24,9 +24,8 @@ code failed (last stderr line is the message for the agent; never retried) · 1 
 | `OPENCMO_MOTION_CACHE` | bundle cache dir, default `$TMPDIR/opencmo-motion` |
 | `OPENCMO_EDITOR_FONTS` | fonts dir, default `packages/clip-media/fonts` |
 | `OPENCMO_MOTION_ICONS` | Lucide icon data, default `packages/clip-icons/data/icons.json` |
-| `OPENCMO_MOTION_LOTTIE` | built-in Lottie animations, default `packages/clip-media/lottie` |
 
-Fonts, icon data and Lottie files are copied into one public dir of the Remotion bundle (`src/assets.ts`), so
+Fonts and icon data are copied into one public dir of the Remotion bundle (`src/assets.ts`), so
 scenes load them from the local bundle server and never from the network.
 
 The job contract (`MotionJob`, `PreviewResult`, `estimateDuration`) is in `src/job.ts` and
@@ -93,11 +92,6 @@ length), `exitAt` and `exitDur`; before `at` and after its exit it renders nothi
   with `find_icons`). The 16 v1 names (`kit.icons`: mic, music, phone, search, database, wave, bolt, user, lock,
   server, cloud, chart, clock, globe, key, play) keep their v1 drawings. An unknown name fails with the 5 closest
   names.
-- `<Lottie name x? y? size? loop? speed?>` – a built-in animation that plays from `at` in step with the frame:
-  the OpenCMO pack (`walk`, `run`, `wave`, `point`, `cheer`, `heart-beat`, `lightbulb-on`, `rocket-launch`,
-  `target-hit`, `confetti`…, CC0) and the Noto animated emoji (`emoji/brain`, `emoji/robot`, `emoji/rocket`…,
-  CC BY 4.0). `kit.lotties` lists every name (the Assistant searches them with `find_lotties`). Pops in like the
-  other marks; `loop` defaults to true, `speed` 0–4. Costs about 5 ms per frame for three on screen.
 
 ### Text board (v2)
 - `<Headline items={[{ text, at, color? }]} y? size? exitAt?>` – the one headline row (≤ 6 words each). Each item
@@ -162,14 +156,14 @@ follow on shapes, and the Stage's ambient layer. A job without `personality` kee
 ### Preview layout report (v2)
 Stills at beat midpoints are returned to the Assistant; extra layout samples (6 frames after each beat starts,
 and every beat's midpoint, at quarter size) are only measured. Issues: text over text, outside the safe area,
-text under 36 px, a frame more than 85% empty, **a beat with no picture** (no icon, shape, Lottie, path or data
-mark; a Board alone does not count) and **a beat where nothing moves** (Lottie, dot fields and blobs move inside
-their box and are not reported).
+text under 36 px, a frame more than 85% empty, **a beat with no picture** (no icon, shape, path or data mark; a
+Board alone does not count) and **a beat where nothing moves** (dot fields, blobs and Marks move inside their box
+and are not reported).
 
 ## Example
 
 The full v2 reference scene is `fixtures/vaccine.scene.jsx` (paper, playful: icons, a cell shape, a Group that
-is knocked back, bursts, a steps Board, a Lottie). A short one:
+is knocked back, bursts, a steps Board). A short one:
 
 ```jsx
 const { Stage, Title, Label, DotField, Check } = kit;
@@ -193,8 +187,8 @@ return function Scene() {
 - **One continuous scene.** Transform what is on screen (swap a label, filter the dots, morph, push the
   camera) instead of cutting to something new. About one change per beat.
 - **At most three things move at once.** Start the next only when the previous has landed.
-- **Subject first.** Every beat shows the things its narration names: an icon (`find_icons`), a built-in Lottie
-  (`find_lotties`) or a kit shape. Never an icon whose name does not match the noun.
+- **Subject first.** Every beat shows the things its narration names: an icon (`find_icons`), a drawn `Mark` or a
+  kit shape. Never an icon whose name does not match the noun.
 - **One `Headline`** for the headline row (≤ 6 words an item); a `Board` when a beat lists steps, facts or a
   comparison. Text `exitAt` is when the text is gone, so the next one can enter at that frame.
 - **Three motion layers** each beat: the primary change, a secondary reaction (a halo, a `Group react`, a
@@ -214,6 +208,3 @@ return function Scene() {
 - Edit `fixtures/<name>.scene.jsx`, then `node scripts/build-showcase.ts` embeds it into `<name>.job.json`.
 - `node scripts/bench.ts <job.json> <from> <to> [gl] [concurrency]`: ms/frame for a frame range, to compare GL
   backends or concurrency before changing the defaults.
-
-After changing `packages/clip-media/lottie`, run `node scripts/build-lotties.ts` (a test keeps `src/kit/lotties.ts`
-equal to the folder).

@@ -581,7 +581,7 @@ def test_prompt_text_reads_what_a_model_reads_and_skips_code_and_settings():
 def test_our_own_renderers_get_their_prompt_checked_too(monkeypatch):
     seen = _claude(monkeypatch, allowed=False)
     with pytest.raises(ProviderError):
-        moderation.check_prompt(get_model("studio-3d"), {"prompt": "a hateful banner", "aspectRatio": "16:9", "scene": {"template": "orbit"}})
+        moderation.check_prompt(get_model("motion-explainer"), {"prompt": "a hateful banner", "aspectRatio": "16:9", "scene": {"template": "explainer"}})
     assert seen["system"] == moderation.PROMPT_POLICY
 
 

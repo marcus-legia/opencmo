@@ -449,64 +449,6 @@ describe('layout (hộp cho canvas và op hình học)', () => {
   });
 });
 
-describe('lottie', () => {
-  it('xin khung theo giây cục bộ × speed + offset, đúng cỡ pixel của hộp', () => {
-    const calls: [unknown, number, number, number, boolean][] = [];
-    const frame = createCanvas(10, 10);
-    frame.getContext('2d').fillStyle = '#00FF00';
-    frame.getContext('2d').fillRect(0, 0, 10, 10);
-    const media: MediaHost = {
-      ...NO_MEDIA,
-      lottie: (src, seconds, width, height, loop) => {
-        calls.push([src, seconds, width, height, loop]);
-        return frame as never;
-      },
-    };
-    const renderer = createRenderer(project([
-      {
-        kind: 'lottie',
-        x: 10,
-        y: 10,
-        width: 40,
-        height: 20,
-        start: 1,
-        src: 'builtin:walk',
-        speed: 2,
-        loop: false,
-        offset: 0.5,
-      },
-    ]), media);
-    const canvas = createCanvas(200, 200);
-    renderer.render(canvas.getContext('2d') as never, renderer.exportFrame(2));
-    // Giây cục bộ = 1 → 1 × 2 + 0.5.
-    expect(calls.at(-1)).toEqual(['builtin:walk', 2.5, 40, 20, false]);
-    expect([...canvas.getContext('2d').getImageData(20, 20, 1, 1).data.slice(0, 3)]).toEqual([0, 255, 0]);
-  });
-
-  it('nguồn hỏng vẽ màu báo thiếu; builtin: không cần tải', () => {
-    const media: MediaHost = { ...NO_MEDIA, lottie: () => 'failed' };
-    expect(pixel([{ kind: 'lottie', width: 100, height: 100, src: 'x.json' }], 0, 50, 50, media)).not.toEqual([0, 0, 0]);
-    const document = project([{ kind: 'lottie', src: 'builtin:walk' }, { kind: 'lottie', src: 'upload.json' }]);
-    expect(mediaSources(document).map((item) => [item.kind, item.src])).toEqual([['lottie', 'upload.json']]);
-  });
-});
-
-describe('lottie: thời gian + tên builtin (dùng chung preview/export)', async () => {
-  const { builtinLottieName, lottieTime } = await import('./index.ts');
-  it('lặp quay vòng, không lặp dừng ở khung cuối', () => {
-    expect(lottieTime(5, 2, 30, true)).toBeCloseTo(1);
-    expect(lottieTime(5, 2, 30, false)).toBeCloseTo(2 - 1 / 30);
-    expect(lottieTime(5, 0, 30, true)).toBe(0);
-  });
-  it('builtin cho một cấp thư mục, bỏ ký tự lạ, không thoát thư mục', () => {
-    expect(builtinLottieName('builtin:walk')).toBe('walk');
-    expect(builtinLottieName('builtin:emoji/fire')).toBe('emoji/fire');
-    expect(builtinLottieName('builtin:../../etc/passwd')).toBe(null);
-    expect(builtinLottieName('builtin:..%2Fsecret')).toBe(null);
-    expect(builtinLottieName('builtin:a/b/c')).toBe(null);
-    expect(builtinLottieName('folder/x.json')).toBe(null);
-  });
-});
 
 describe('objectPosition (E5)', () => {
   it('cover cắt theo điểm neo: neo trái giữ nửa trái của ảnh, mặc định giữ giữa', () => {

@@ -215,7 +215,7 @@ describe('vaccine-drawn fixture (the eval scene of a model following the guide)'
 	it('keeps the scene file and the job fixture in sync, and previews clean', { timeout: 240_000 }, async () => {
 		const job = JSON.parse(readFileSync(join(fixtures, 'vaccine-drawn.job.json'), 'utf8'));
 		expect(job.code).toBe(readFileSync(join(fixtures, 'vaccine-drawn.scene.jsx'), 'utf8'));
-		expect(job.code).not.toMatch(/<(Icon|Lottie|Stage|Headline)\b/);
+		expect(job.code).not.toMatch(/<(Icon|Stage|Headline)\b/);
 		const parsed = parseJob(job);
 		if (!parsed.ok) throw new Error(parsed.message);
 		const result = await previewJob(parsed.job, mkdtempSync(join(tmpdir(), 'clip-motion-vaccine-drawn-')));
@@ -305,9 +305,9 @@ describe('guide example', () => {
 		expect(result.stills.length).toBeGreaterThanOrEqual(EXPLAINER_EXAMPLE_BEATS.length);
 	});
 
-	it('draws without icons or Lotties', () => {
+	it('draws without icons', () => {
 		expect(EXPLAINER_EXAMPLE).toContain('<Mark ');
-		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Icon|Lottie)\b/);
+		expect(EXPLAINER_EXAMPLE).not.toMatch(/<Icon\b/);
 		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Stage|Headline)\b/);
 		expect(EXPLAINER_EXAMPLE).toContain('<Shot beat={0}>');
 		expect(EXPLAINER_EXAMPLE).toContain('kit.travel(');

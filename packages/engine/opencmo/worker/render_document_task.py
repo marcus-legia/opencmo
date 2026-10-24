@@ -56,9 +56,8 @@ def _canonical(task: Task) -> tuple[str, str]:
 
 _REPO = Path(__file__).resolve().parents[4]
 CLIP_EXPORT = Path(os.environ.get("OPENCMO_CLIP_EXPORT", _REPO / "packages/clip-export/src/cli.ts"))
-# Font + Lottie của clip ở `packages/clip-media` (R7c); Modal đặt hai biến này.
+# The clip fonts live in `packages/clip-media` (R7c); Modal sets this variable.
 EDITOR_FONTS = Path(os.environ.get("OPENCMO_EDITOR_FONTS", _REPO / "packages/clip-media/fonts"))
-EDITOR_LOTTIE = Path(os.environ.get("OPENCMO_EDITOR_LOTTIE", _REPO / "packages/clip-media/lottie"))
 
 MASTER = "assets/master.mp4"
 TRANSCRIPT = "assets/transcript.json"
@@ -433,7 +432,6 @@ def _run(ctx: TaskContext) -> None:
         "media": media,
         "transcripts": transcripts,
         "fonts": str(EDITOR_FONTS),
-        "lottie": str(EDITOR_LOTTIE),
         "out": str(final),
         "resolution": resolution,
     }
