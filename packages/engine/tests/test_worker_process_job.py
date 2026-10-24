@@ -81,6 +81,7 @@ def media(monkeypatch):
         "header": 300.0,
         "master": 300.0,
         "probes": [],
+        "faces": [],
     }
 
     def probe(path, **kwargs):
@@ -110,6 +111,13 @@ def media(monkeypatch):
     monkeypatch.setattr(process_job, "preview_head", preview)
     monkeypatch.setattr(process_job, "extract_audio", audio)
     monkeypatch.setattr(process_job, "transcribe_audio", transcribe)
+
+    def faces(_master, _duration, **_kwargs):
+        if isinstance(said["faces"], Exception):
+            raise said["faces"]
+        return said["faces"]
+
+    monkeypatch.setattr(process_job, "face_track", faces)
     return said
 
 
@@ -131,6 +139,36 @@ def test_upload_publishes_one_full_clip_with_master_transcript_and_settings(medi
     assert master["bucket"] == "renders" and master["object"].startswith(f"user-1/{clip['id']}/master/")
     assert master["transcript"].endswith(".transcript.json")
     assert published["title"] == "talk__abc.mp4"
+    assert not [call for call in store.calls if call[0] == "fail"]
+
+
+def test_the_speakers_face_track_reaches_the_editor_in_the_manifest(media):
+    from opencmo.steps.reframe import Face
+
+    # A speaker on the right for the first half, on the left after a cut.
+    media["faces"] = [(t / 2, Face(frame=t, x=0.8 if t < 300 else 0.25, w=0.09, area=0.012)) for t in range(600)]
+    store = FakeStore()
+    process_job.process(store, _job())
+    published = _published(store)
+    master = published["manifest"]["masters"][published["clips"][0]["id"]]
+    frame = master["focus"]["frame"]
+    assert frame[0] == [0.0, 0.8], "the face on the right, not the centre"
+    # The camera cuts on the editor's frame grid where the speaker moved, and holds there.
+    assert [149.967, 0.8] in frame and [150.0, 0.25] in frame and frame[-1][1] == 0.25
+    assert master["focus"]["reframe"], "the 9:16 track for later frame changes"
+    assert ("stage", "reframe") in store.calls
+
+
+def test_no_face_or_a_failed_face_pass_still_publishes_framed_in_the_centre(media):
+    store = FakeStore()
+    process_job.process(store, _job())
+    published = _published(store)
+    assert "focus" not in published["manifest"]["masters"][published["clips"][0]["id"]]
+    media["faces"] = RuntimeError("detector crashed")
+    store = FakeStore()
+    process_job.process(store, _job())
+    published = _published(store)
+    assert "focus" not in published["manifest"]["masters"][published["clips"][0]["id"]]
     assert not [call for call in store.calls if call[0] == "fail"]
 
 

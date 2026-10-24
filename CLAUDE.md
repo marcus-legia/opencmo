@@ -125,6 +125,9 @@ render or export, extract a frame from the full-size file (not `*.preview.mp4`) 
 
 - A Scribe failure does not fail an upload: the video is published without a transcript and
   the editor shows "no speech". Check the worker log, not the job status, when words are missing.
+- Face tracking does not fail an upload either: without the engine's `[face]` extra, the model, or
+  `libegl1`/`libgles2`, the master is published framed in the centre (speaker possibly half cut).
+  Check the worker log for "framing in the centre" and `masters[clip].focus` in the job manifest.
 
 ## Layout
 

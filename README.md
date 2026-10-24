@@ -85,7 +85,7 @@ and FFmpeg/ffprobe.
 ```bash
 npm ci
 uv venv --python 3.12 packages/engine/.venv312
-uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[worker,dev]'
+uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[worker,dev,face]'
 cp apps/web/.env.example apps/web/.env.local   # fill in what you need; most keys are optional
 npm run dev                                    # web on http://127.0.0.1:3000
 ```

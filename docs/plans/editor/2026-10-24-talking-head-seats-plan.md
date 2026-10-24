@@ -1,6 +1,6 @@
 # Talking-head seats: card, circle and aperture placed from the measured face (plan O8)
 
-Status: **plan** (2026-10-24). Item O8 of [`2026-10-24-opus-animation-plan.md`](2026-10-24-opus-animation-plan.md),
+Status: **plan**; step 1 (the face pass) **built 2026-10-24**. Item O8 of [`2026-10-24-opus-animation-plan.md`](2026-10-24-opus-animation-plan.md),
 planned separately as that plan asks. Nothing here is built yet.
 
 ## Why
@@ -44,6 +44,18 @@ kept on screen. Today `set_layout` gives the second kind as splits (`split-top`,
    `/usr/bin/time -v` on a 45-minute upload under the 2 GB peak. It writes the reframe mark's `track` again plus an
    optional `faces: [t, cx, cy, w, h][]` (source seconds, fractions of the source). Clips without `faces` fall back
    to `pip`. The `ffmpeg-ram-budget` skill applies. Test: an engine fixture with a known face position.
+   **Built (2026-10-24):** `packages/engine/opencmo/steps/reframe.py` (the old algorithm, kept: most face area wins,
+   cuts on the frame grid) runs after the remux in `process_job.py` (stage `reframe`) and writes
+   `masters[clip].focus = { frame, reframe }`, which the editor's generator already turns into `x` keyframes and the
+   `reframe` mark. Changes from the old code: square 270 px tiles along the long side (the short-range model squeezes
+   its input to 128 px: a whole 16:9 frame gave 0 detections on a seated speaker, tiles 0.97), band ends rounded
+   inward (a face at 0.278 got a crop at 0.165), a 600-key cap so a 15-min upload is tracked to the end (the clip cap
+   of 40 stopped at ~90 s), a still speaker keeps two equal keys (no keys meant a centred crop), and a detector that
+   cannot start (missing libEGL on Modal) falls back to the centre instead of failing the job. Each face keeps
+   `y` and `h` in memory for step 2; they are not published yet. Measured: 15-min 1080p upload 60 s, peak 119 MB
+   ffmpeg + 197 MB Python; 30 s 4K 181 MB. A real export of the tracked document keeps the face in frame across a
+   cut. `tests/contracts/reframe/focus-points.json` was regenerated (its `$comment` says why).
+
 2. **Seat geometry** (`editor-core/src/layout.ts`, pure functions). `seatRect(form, position, canvas)` with the numbers
    above, and `seatCrop(rect, head, source)` → `objectPosition` + `fits` (the head box with 18% margin above and 12%
    below fits inside the rect at cover scale), returning a narrower rect when it does not. Unit tests per canvas and

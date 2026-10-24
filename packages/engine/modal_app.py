@@ -58,6 +58,14 @@ WEB_ROOT = "/root/web"
 _ENGINE = Path(__file__).parent
 _PACKAGES = _ENGINE.parent
 _NODE_IGNORE = ["node_modules", "node_modules/**", "**/*.test.ts"]
+
+# The face model is baked into the upload worker's image: a cold container per job would otherwise download it each
+# time, one more network failure point (opencmo/steps/reframe.py).
+FACE_MODEL_REMOTE = "/root/models/blaze_face_short_range.tflite"
+FACE_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_detector/"
+    "blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+)
 # The clip fonts (R7c): one copy in packages/clip-media for every image.
 MEDIA_ROOT = f"{WEB_ROOT}/packages/clip-media"
 _MEDIA_ENV = {
@@ -74,7 +82,7 @@ def _with_node(img: modal.Image) -> modal.Image:
     )
 
 
-def _with_engine(img: modal.Image) -> modal.Image:
+def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
     # Cài engine từ chính repo này. Đổi sang `.pip_install("opencmo-engine")`
     # nếu sau này publish lên PyPI.
     #
@@ -104,7 +112,8 @@ def _with_engine(img: modal.Image) -> modal.Image:
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )
-    return img.run_commands("pip install /root/engine")
+    # The upload worker takes the [face] extra (MediaPipe) for face tracking; the other images never track faces.
+    return img.run_commands(f"pip install '/root/engine{'[face]' if face else ''}'")
 
 
 def _with_media(img: modal.Image) -> modal.Image:
@@ -121,16 +130,22 @@ cpu_image = (
     #
     # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
     # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
+    #
+    # `libegl1`/`libgles2` are for MediaPipe, not ffmpeg: its Tasks API loads `libmediapipe.so` with ctypes, which
+    # NEEDS both. Without them `FaceDetector.create_from_options` raised `OSError: libEGL.so.1` on Modal only (dev
+    # machines have them); reframe.py now falls back to the centre on that error, but the tracking would be lost.
     .apt_install(
-        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig",
+        "ffmpeg", "curl", "fonts-dejavu-core", "fontconfig", "libegl1", "libgles2",
         "fonts-noto-cjk", "fonts-noto-core", "fonts-noto-color-emoji",
     )
 )
 cpu_image = (
-    _with_engine(cpu_image)
+    _with_engine(cpu_image, face=True)
     # Cho `submit` — web app là TypeScript nên không gọi được `run_job.spawn()`
     # trực tiếp; nó cần một endpoint HTTP.
     .pip_install("fastapi[standard]")
+    .run_commands("mkdir -p /root/models", f"curl -sSLf -o {FACE_MODEL_REMOTE} {FACE_MODEL_URL}")
+    .env({"OPENCMO_FACE_MODEL": FACE_MODEL_REMOTE})
 )
 # Export trên server (task `render_document`). Chỉ ba package exporter cần cùng
 # font của clip. Không kéo cả monorepo: Next, Playwright là vài trăm MB
