@@ -119,18 +119,43 @@ video-perception (sample by change, not uniformly).
 video in code: opening type → prompt box → inputs → chat with the agent → approve → storyboard → results → logo, flowing
 as one piece. Learn its method and give it to the editor; a ready template is a by-product, not the goal.
 
-- [ ] Read the whole source (`Film.tsx`, `code-ui/*`, `directed/*`, `locked/Workflow.tsx`, `multiples/*`, `config/*.json`)
+- [x] Read the whole source (`Film.tsx`, `code-ui/*`, `directed/*`, `locked/Workflow.tsx`, `multiples/*`, `config/*.json`)
   and write down how it holds together: content kept apart from code (`template.json`), section starts
   (`timeline.json`), voice phrases with times (`audio-cues.json`), one film clock with a time warp, camera as a shot list,
   shared elements carried from scene to scene, one text stream for the screenplay.
-- [ ] Teach it to the Assistant: a guide section "a product video of several scenes" (one subject carried across scenes,
+- [x] Teach it to the Assistant: a guide section "a product video of several scenes" (one subject carried across scenes,
   section starts from the voice phrases, `kit.retime` to tighten without moving landings, transitions that keep position
   and identity), and `preview_explainer` checks over the whole timeline (O2 sheets per section).
-- [ ] Optional: port the video as a motion template with slots (copy, product name, logo, colours, the user's own
+- [ ] Optional (not done): port the video as a motion template with slots (copy, product name, logo, colours, the user's own
   screenshots, voice phrases), with notice in `THIRD_PARTY_NOTICES.md`; never Opus's media, logo or narration. Fonts it
   uses that we lack (Geist, Instrument Serif, both OFL): map to fonts we ship unless a side-by-side still shows a loss.
-- [ ] Check: make one multi-scene demo video in the editor (any sample product), extract frames from the full-size file,
+- [x] Check: make one multi-scene demo video in the editor (any sample product), extract frames from the full-size file,
   look at them. Not published; it only proves the method.
+
+**Built (2026-10-24).** How the film holds together: copy lives in `config/template.json` apart from code; section
+starts in `config/timeline.json` (frames, e.g. `inputStart 209`, `workflowStart 288`, `outputStart 715`); voice
+phrases with times in `config/audio-cues.json`; one film clock remapped by a monotone cubic warp (`timing.json`
+knots → `sourceAt`) so landings stay put while stretches tighten; a camera as a shot list with pose blur
+(`canvasCamera`); and scene changes as **handoffs**: `OutputHandoff.ts` runs several named phases off one clock
+(cards retire, background dissolves, prompt arrives, each on its own curve and window) while "the outgoing audio
+panel and incoming prompt follow the same rectangle" (`handoffPanel`).
+
+- Kit: `kit.phases(frame, { name: [from, to, curve] })` and `kit.handoff(frame, [from, to], boxA, boxB, curve)`
+  (`packages/clip-motion/src/kit/curves.ts`, unit tests), next to O1's `retime` and `shots`.
+- Guide `explainer`: a section "A product video of several scenes" (one clock with section constants, copy in
+  SLOTS, one subject carried across scenes with `kit.handoff`, staggered phases, the shot-list camera with the pan
+  formula, product moments with a typed ask and a cursor, `kit.retime`, previewing every section and a sheet per
+  handoff). MCP kit description and the clip-motion README list the helpers.
+- The demo, kept as the template **`product-tour`** (our own scene written with the method, 14 s, 16:9, slots for
+  copy, metric, colours and the user's own dashboard screenshot): opening lines stream in → a prompt box types the ask
+  and a cursor presses the button → the box grows into the dashboard (handoff) → the camera pushes in on the metric
+  card while the other cards step back and the number rolls up → pull back to the name and the call to action. Its
+  first preview found a dead white gap mid-handoff (old content left before the new arrived), 26 px labels, and the
+  zoom cropping a neighbour's label; all three were fixed (overlapping phases, 36 px labels, one visual centre during
+  the push) and the preview came back with no issue. Rendered to MP4 and checked frame by frame (frames in
+  `2026-10-24-opus-animation-frames/o3/`).
+- Not done: porting the Agent Opus film itself (its UI is Opus's product, so as a template it would be someone
+  else's demo). `product-tour` covers the same use with our own scene.
 
 ### O4. Talking-head camera moves and pacing (`packages/editor-core/src/ops/`, guides), one PR
 

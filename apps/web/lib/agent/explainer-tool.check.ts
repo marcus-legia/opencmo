@@ -203,10 +203,10 @@ async function main() {
 
   // B5: motion templates. The list is short; an unknown id answers with the ids; a template comes with its code.
   const listed = runMotionTemplateTool("list_motion_templates", {});
-  assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel"]);
+  assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel", "product-tour"]);
   const nope = runMotionTemplateTool("get_motion_template", { id: "nope" });
   assert.equal(nope.ok, false);
-  assert.match(nope.content, /Unknown template \\"nope\\": use one of analytics-glow, mark-lockup, phone-carousel\./);
+  assert.match(nope.content, /Unknown template \\"nope\\": use one of analytics-glow, mark-lockup, phone-carousel, product-tour\./);
   const lockup = JSON.parse(runMotionTemplateTool("get_motion_template", { id: "mark-lockup" }).content) as { code: string; direction: string; format: string };
   assert.match(lockup.code, /const SLOTS = \{/);
   assert.equal(lockup.format, "16:9");

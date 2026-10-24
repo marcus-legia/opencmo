@@ -130,7 +130,7 @@ registerGroup({
       uri: "opencmo://kit/explainer",
       name: "kit-explainer",
       title: "Explainer scene-code kit",
-      description: "What explainer scene code may use: shots, the core (Mark for your drawings, Text and TypeStream for typography, intent curves, travel, Streak, MotionBlur, a shot-list Camera, retime, Goo, fx backgrounds and finish), timing helpers, and the library for small symbols and product frames.",
+      description: "What explainer scene code may use: shots, the core (Mark for your drawings, Text and TypeStream for typography, intent curves, travel, Streak, MotionBlur, a shot-list Camera, retime, phases and handoff for scene changes, Goo, fx backgrounds and finish), timing helpers, and the library for small symbols and product frames.",
       mimeType: "text/markdown",
       read: async () => explainerKit(),
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { curves, drawOn, noise, poseBlur, retime, shots, speedBlur, tween } from './curves.ts';
+import { curves, drawOn, handoff, noise, phases, poseBlur, retime, shots, speedBlur, tween } from './curves.ts';
 
 describe('curves', () => {
 	it('every curve starts at 0 and lands on 1', () => {
@@ -127,5 +127,27 @@ describe('shots and poseBlur', () => {
 	});
 	it('rejects a bad scale', () => {
 		expect(() => shots([{ from: 0, to: 5, pose: { scale: 20 } }])).toThrow(/scale/);
+	});
+});
+
+describe('phases and handoff', () => {
+	it('staggers named parts on one clock, each eased and held', () => {
+		const at = (frame: number) => phases(frame, { cards: [0, 10, 'leave'], prompt: [5, 20, 'arrive'] });
+		expect(at(0)).toEqual({ cards: 0, prompt: 0 });
+		expect(at(10).cards).toBe(1);
+		expect(at(10).prompt).toBeGreaterThan(0);
+		expect(at(10).prompt).toBeLessThan(1);
+		expect(at(40)).toEqual({ cards: 1, prompt: 1 });
+		expect(() => phases(0, { bad: [0] as never })).toThrow(/needs \[fromFrame, toFrame/);
+	});
+
+	it('carries one box from layout A to layout B', () => {
+		const a = { x: 100, y: 700, w: 1600, h: 120 };
+		const b = { x: 290, y: 470, w: 1340, h: 160 };
+		expect(handoff(0, [10, 30], a, b)).toEqual({ ...a, p: 0 });
+		expect(handoff(30, [10, 30], a, b)).toEqual({ ...b, p: 1 });
+		const mid = handoff(20, [10, 30], a, b, 'linear');
+		expect(mid).toEqual({ x: 195, y: 585, w: 1470, h: 140, p: 0.5 });
+		expect(() => handoff(0, [0, 1], a, { x: 0 } as never)).toThrow(/boxes are/);
 	});
 });

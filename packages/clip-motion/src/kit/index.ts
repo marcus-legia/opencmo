@@ -16,7 +16,7 @@ import { Camera, Stage } from './stage.tsx';
 import { makeDevices } from './devices.tsx';
 import { makeImage } from './image.tsx';
 import { Mark } from './mark.tsx';
-import { curves, drawOn, noise, poseBlur, retime, shots, smear, snap, speedBlur, travel, tween } from './curves.ts';
+import { curves, drawOn, handoff, noise, phases, poseBlur, retime, shots, smear, snap, speedBlur, travel, tween } from './curves.ts';
 import { oklab } from './color.ts';
 import { auditChecks, makeAudit, type AuditCheck } from './audit.ts';
 import { Streak } from './streak.tsx';
@@ -61,6 +61,8 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		retime,
 		shots,
 		poseBlur,
+		phases,
+		handoff,
 		oklab,
 		audit,
 		fx: Object.freeze({ GradientField, ShaderField, Grain, Vignette, LightSweep, Fill, MotionBlur, Goo }),

@@ -139,6 +139,8 @@ anything placed with these helpers lands on the narration in both.
 - `<Camera shots={[{ from, to, pose: { scale, x, y } }]} blur?>` – a shot-list camera: holds between moves, each move
   on `impulse`, blurred along the move by its speed (`kit.shots`, `kit.poseBlur`), crisp at rest.
 - `kit.retime(knots)` → `{ source, output }` – a monotone cubic time warp through `[outputFrame, sceneFrame]` knots.
+- `kit.phases(frame, { name: [from, to, curve?] })` → each name's eased 0..1 – staggered parts of one scene change on one clock.
+- `kit.handoff(frame, [from, to], boxA, boxB, curve?)` → `{ x, y, w, h, p }` – one rectangle carried from scene A's layout to scene B's.
 - `<TypeStream text x y size dur …>` – a paragraph streaming in letter by letter on one schedule, blur → sharp.
 - `<fx.MotionBlur samples? shutter?>{(frame) => …}</fx.MotionBlur>` – sub-frame motion blur; the earlier samples are
   marked `data-ghost` and skipped by the layout probe.

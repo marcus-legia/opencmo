@@ -246,3 +246,36 @@ export function poseBlur(prev: Pose, next: Pose, options: { k?: number; max?: [n
 	const y = Math.min(max[1], (Math.abs(next.y - prev.y) + zoom) * k);
 	return { x: x < 0.15 ? 0 : Math.round(x * 100) / 100, y: y < 0.15 ? 0 : Math.round(y * 100) / 100 };
 }
+
+export type Phase = [from: number, to: number, curve?: CurveName | Ease];
+
+/**
+ * Named progress values from one clock (learned from agent-opus `OutputHandoff.ts`, MIT): a scene change is several
+ * parts moving on staggered windows of one frame count — the old cards retire first, the background dissolves, the
+ * new prompt arrives last — not one fade. Each name gets its eased 0..1 at `frame`.
+ */
+export function phases<T extends Record<string, Phase>>(frame: number, spec: T): { [K in keyof T]: number } {
+	if (!spec || typeof spec !== 'object') throw new Error('kit.phases needs { name: [fromFrame, toFrame, curve?] }.');
+	const out = {} as { [K in keyof T]: number };
+	for (const [name, phase] of Object.entries(spec) as [keyof T & string, Phase][]) {
+		if (!Array.isArray(phase) || !Number.isFinite(phase[0]) || !Number.isFinite(phase[1])) throw new Error(`kit.phases: "${name}" needs [fromFrame, toFrame, curve?].`);
+		out[name as keyof T] = tween(frame, [phase[0], phase[1]], [0, 1], phase[2] ?? 'glide');
+	}
+	return out;
+}
+
+export type HandoffBox = { x: number; y: number; w: number; h: number };
+
+/**
+ * One rectangle carried from scene A's layout to scene B's (agent-opus: "the outgoing panel and the incoming prompt
+ * follow the same rectangle"): draw A's content and B's content in the box it returns, crossfading on `p`, and the
+ * eye follows one object through the cut. Held at A before `frames[0]` and at B after `frames[1]`.
+ */
+export function handoff(frame: number, frames: [number, number], from: HandoffBox, to: HandoffBox, curve: CurveName | Ease = 'glide'): HandoffBox & { p: number } {
+	for (const box of [from, to]) {
+		if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) throw new Error('kit.handoff: boxes are { x, y, w, h } in px.');
+	}
+	const p = tween(frame, frames, [0, 1], curve);
+	const mix = (a: number, b: number) => a + (b - a) * p;
+	return { x: mix(from.x, to.x), y: mix(from.y, to.y), w: mix(from.w, to.w), h: mix(from.h, to.h), p };
+}

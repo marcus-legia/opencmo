@@ -341,6 +341,17 @@ ${EXPLAINER_MOTION}
 Example (a narrated explainer, shot by shot, every subject drawn, its own palette; visuals: ${EXPLAINER_EXAMPLE_BEATS.map((beat, i) => `${i + 1}) ${beat.visual}`).join("; ")}):
 ${EXPLAINER_EXAMPLE}
 
+## A product video of several scenes (a demo, a launch, a tour)
+A pro team's 40 s product film reads as ONE piece, not a slideshow (learned from a published Remotion product video). How:
+- One clock. Write the section starts as constants at the top (T = { open: 0, prompt: 72, handoff: 166, … } frames); in a narrated video each section starts at a voice phrase (kit.cue / kit.beat), never at a guessed frame. Copy (names, lines, numbers) sits in a SLOTS object at the top, apart from the motion.
+- One subject carried across scenes. The thing the viewer watches must survive the cut: the prompt box grows into the dashboard, the card becomes the chart's frame. kit.handoff(frame, [f0, f1], boxA, boxB, curve) gives the one rectangle between scene A's layout and scene B's; draw A's content and B's content in it.
+- A scene change is staggered parts on one clock, not a fade: kit.phases(frame, { old: [f0, f1, 'leave'], background: [f0, f2, 'glide'], fresh: [f1, f3, 'arrive'] }) — old content retires first, the new arrives last, a few frames overlap.
+- The camera is a shot list (Camera shots, pose blur while moving): push in on the one thing that matters (the number, the button), hold, pull back. Pan target t = scale × (frame centre − subject centre).
+- Product moments: type the user's real ask with a caret, glide a cursor to the button and press it, let the result rise in. The user's own screenshots (assets) beat drawn mock-ups whenever they exist.
+- Tighten without moving landings: kit.retime([[outputFrame, sceneFrame], …]) speeds up the stretches between knots and keeps every approved landing where it was.
+- Preview the whole timeline, not one beat: times at every section start and landing, and a sheet across each handoff (one per round).
+- list_motion_templates has "product-tour" (prompt → dashboard → key number → name), built this way: start from it for a product moment and change its SLOTS.
+
 ## 4. Preview, look, fix — required
 preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
 - times: up to 12 seconds you choose, around every main move (its start, middle and landing). Without times: beat midpoints and the last frame.
