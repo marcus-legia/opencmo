@@ -7,11 +7,15 @@ Branch: **`plan/editor/2026-10-24-explainer-freeform-motion`**, shared by both s
 
 ## Rules for both sessions
 
-- Each session works in its **own git worktree** of the shared branch (two sessions in one working tree overwrite
-  each other's files): `git worktree add ../opencmo-<a|b> plan/editor/2026-10-24-explainer-freeform-motion`.
+- Each session works in its **own working tree** (two sessions in one tree overwrite each other's files). Session A
+  uses the main checkout `~/code/opencmo`, which has the branch checked out. Git allows a branch in only one worktree,
+  so Session B uses a local branch of its own that pushes to the shared one:
+  `git fetch origin && git worktree add -b explainer-freeform-b ../opencmo-b origin/plan/editor/2026-10-24-explainer-freeform-motion`,
+  then `npm install` there. B syncs with `git pull --rebase origin plan/editor/2026-10-24-explainer-freeform-motion`
+  and pushes with `git push origin HEAD:plan/editor/2026-10-24-explainer-freeform-motion`.
 - Touch only the files your session owns (table below). Need a change in the other session's file → write it under
   "Requests" at the end of this file, commit, push; the owner of the file does it.
-- `git pull --rebase` before every push. Small commits, one per task step 5 of the plan.
+- `git pull --rebase` before every push (B: with the remote branch named, see above). Small commits, one per task step 5 of the plan.
 - Run heavy suites one at a time (`npm run check:clip-motion` renders video; don't run it while the other session's
   build or render is running on the same machine).
 - Tick the checkbox here when a task is committed and pushed.
