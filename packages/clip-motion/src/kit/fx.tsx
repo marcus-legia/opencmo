@@ -38,7 +38,7 @@ export function GradientField({ colors, speed = 1, seed = 1, softness = 160 }: G
 		const n = noise(seed * 31 + i * 7);
 		const x = 0.5 + 0.38 * n(t + i * 3.1, 0.5);
 		const y = 0.5 + 0.38 * n(t * 0.9 + i * 5.7, 2.5);
-		const r = (0.55 + 0.15 * n(t * 0.6 + i, 4.5)) * Math.max(width, height);
+		const r = (0.7 + 0.15 * n(t * 0.6 + i, 4.5)) * Math.max(width, height);
 		return { color, x: x * width, y: y * height, r };
 	});
 	return (
@@ -47,7 +47,7 @@ export function GradientField({ colors, speed = 1, seed = 1, softness = 160 }: G
 				{blobs.map((blob, i) => (
 					<div
 						key={i}
-						style={{ position: 'absolute', left: blob.x - blob.r / 2, top: blob.y - blob.r / 2, width: blob.r, height: blob.r, borderRadius: '50%', background: `radial-gradient(circle, ${blob.color} 0%, transparent 68%)` }}
+						style={{ position: 'absolute', left: blob.x - blob.r / 2, top: blob.y - blob.r / 2, width: blob.r, height: blob.r, borderRadius: '50%', background: `radial-gradient(circle, ${blob.color} 0%, ${blob.color} 22%, transparent 66%)` }}
 					/>
 				))}
 			</AbsoluteFill>

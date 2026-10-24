@@ -2,6 +2,39 @@
 
 export const STYLE_DATA = [
 	{
+		"id": "gradient-flow",
+		"title": "Gradient flow",
+		"line": "A slow-flowing mesh gradient, one huge number that rolls up, frosted glass capsules that fill like a chart, a single sheen of light.",
+		"bestFor": [
+			"results and metrics",
+			"growth and money",
+			"SaaS and AI products",
+			"a before/after in numbers",
+			"pricing and plans"
+		],
+		"format": "9:16",
+		"seconds": 5,
+		"beats": [
+			{
+				"say": "Three point two times more views.",
+				"visual": "On a flowing violet-orange gradient, 3.2× rolls up from 0.0× under a small caps label.",
+				"seconds": 1.6
+			},
+			{
+				"say": "Week after week.",
+				"visual": "Three frosted glass capsules fill left to right, one after another, each with its value.",
+				"seconds": 1.6
+			},
+			{
+				"say": "And it keeps going.",
+				"visual": "A sheen of light crosses the capsules; everything rests while the gradient keeps flowing.",
+				"seconds": 1.8
+			}
+		],
+		"guide": "# Gradient flow\n\nA living colour field and one big number. Use it for results, growth, money and anything a SaaS or AI product\nclaims with a figure. The field never stops moving, so even a still beat feels alive.\n\n## Palette\n- Field: deep base `#0E0B24` with three blobs `#5B3DF5` (violet), `#FF6A3D` (orange), `#14B8A6` (teal). For a brand,\n  swap the blobs for the brand colour and its two neighbours on the colour wheel; keep a dark base.\n- Ink `#FFFFFF`, soft ink `rgba(255,255,255,0.72)`. Fills: a warm white gradient (`#FFD3B8 → #FFFFFF`) with a glow.\n\n## Background\n- `fx.GradientField` (speed 1-1.5, softness 150-190), `fx.Vignette` tinted with the base (0.3-0.4), `fx.Grain` 0.05.\n- One `fx.LightSweep` near the end (18°, white at 25-30%) as the finishing sheen. Never two.\n\n## Type\n- The number: `font=\"Unbounded\"`, weight 800, tracking -0.04 em, about 30% of the frame width, centred, line height 1.\n- Labels: `font=\"Inter\"`, weight 600, small caps feel (UPPERCASE, tracking 0.12-0.16 em), 38-42 px, soft ink.\n\n## Motion (30 fps)\n- The number rolls from 0 to its value over 34 frames on `out` while rising 40 px and fading in; it shows one decimal.\n- Glass capsules enter 8 frames before they fill (fade + 24 px rise on `soft`), then fill over 26 frames on `out`,\n  staggered 7 frames. Values appear when their capsule is most of the way full.\n- Hold everything still after it lands; the field keeps flowing underneath.\n\n## Composition\n- Centre column: label at 17%, number at 20-34%, capsules from 50% down with 2.8% gaps, inside 9% side margins.\n  Leave the bottom 17% for captions.\n\n## Do / don't\n- Do: frosted glass (`backdropFilter: blur(24px)`, white at 10%, a 1.5 px white border at 28%, a soft shadow).\n- Don't: flat solid backgrounds, more than one number this big, pie charts, icons, a second accent colour.",
+		"code": "// Gradient flow: a mesh gradient that never stops moving, one big number, frosted glass capsules filling like a chart.\nconst { Text, Mark, fx } = kit;\nconst { useCurrentFrame } = R;\n\nconst FIELD = ['#0E0B24', '#5B3DF5', '#FF6A3D', '#14B8A6'];\nconst INK = '#FFFFFF';\nconst SOFT = 'rgba(255, 255, 255, 0.72)';\nconst FILL = 'linear-gradient(90deg, #FFD3B8 0%, #FFFFFF 100%)';\n\nconst W = kit.width;\nconst H = kit.height;\nconst M = Math.round(W * 0.09);\nconst NUMBER = 3.2;\nconst ROWS = [\n  { label: 'WEEK 1', value: 0.38, text: '1.4×' },\n  { label: 'WEEK 2', value: 0.66, text: '2.3×' },\n  { label: 'WEEK 3', value: 1, text: '3.2×' },\n];\nconst CAP = { x: M, w: W - 2 * M, h: Math.round(H * 0.06), gap: Math.round(H * 0.028), top: Math.round(H * 0.5) };\n\nconst b = kit.beat;\n\nfunction Capsule({ row, i }) {\n  const f = useCurrentFrame();\n  const at = b(1).from + i * 7;\n  const grow = kit.tween(f, [at, at + 26], [0, row.value], 'out');\n  const enter = kit.tween(f, [at - 8, at + 6], [0, 1], 'soft');\n  const y = CAP.top + i * (CAP.h + CAP.gap);\n  return (\n    <Mark name={`capsule ${i + 1}`} x={CAP.x} y={y} w={CAP.w} h={CAP.h} at={at - 8}>\n      <div style={{ position: 'absolute', inset: 0, borderRadius: CAP.h, background: 'rgba(255, 255, 255, 0.10)', border: '1.5px solid rgba(255, 255, 255, 0.28)', backdropFilter: 'blur(24px)', boxShadow: '0 20px 60px rgba(10, 6, 40, 0.35), inset 0 1px 0 rgba(255,255,255,0.35)', opacity: enter, transform: `translateY(${(1 - enter) * 24}px)`, overflow: 'hidden' }}>\n        <div style={{ position: 'absolute', left: 6, top: 6, bottom: 6, width: `calc(${grow * 100}% - 12px)`, borderRadius: CAP.h, background: FILL, boxShadow: '0 0 30px rgba(255, 210, 180, 0.55)' }} />\n      </div>\n    </Mark>\n  );\n}\n\nreturn function Scene() {\n  const f = useCurrentFrame();\n  const roll = kit.tween(f, [b(0).from + 6, b(0).from + 40], [0, NUMBER], 'out');\n  const rise = kit.tween(f, [b(0).from, b(0).from + 22], [40, 0], 'out');\n  const fade = kit.tween(f, [b(0).from, b(0).from + 14], [0, 1], 'soft');\n  return (\n    <>\n      <fx.GradientField colors={FIELD} speed={1.3} softness={170} seed={4} />\n      <fx.Vignette strength={0.35} color=\"#0E0B24\" />\n      <Text text=\"MORE VIEWS PER POST\" x={W / 2} y={H * 0.17} size={42} font=\"Inter\" weight={600} tracking={0.16} color={SOFT} align=\"center\" style={{ opacity: fade }} />\n      <Text name=\"count\" text={`${roll.toFixed(1)}×`} x={W / 2} y={H * 0.205} size={Math.round(W * 0.3)} font=\"Unbounded\" weight={800} tracking={-0.04} lineHeight={1} color={INK} align=\"center\" style={{ opacity: fade, transform: `translateY(${rise}px)`, textShadow: '0 12px 60px rgba(20, 8, 60, 0.35)' }} />\n      {ROWS.map((row, i) => (\n        <React.Fragment key={row.label}>\n          <Capsule row={row} i={i} />\n          <Text name={`label ${i + 1}`} text={row.label} x={CAP.x + 8} y={CAP.top + i * (CAP.h + CAP.gap) - 54} size={38} font=\"Inter\" weight={600} tracking={0.12} color={SOFT} at={b(1).from + i * 7} />\n          <Text name={`value ${i + 1}`} text={row.text} x={CAP.x + CAP.w - 8} y={CAP.top + i * (CAP.h + CAP.gap) - 54} size={38} font=\"Inter\" weight={700} color={INK} align=\"right\" at={b(1).from + i * 7 + 20} />\n        </React.Fragment>\n      ))}\n      <fx.LightSweep at={b(2).from + 4} dur={36} angle={18} width={0.4} color=\"rgba(255, 255, 255, 0.22)\" />\n      <fx.Grain opacity={0.05} />\n    </>\n  );\n};\n"
+	},
+	{
 		"id": "kinetic-type",
 		"title": "Kinetic type",
 		"line": "Big tight type is the picture: words snap in from the side with a capped overshoot and a motion streak, rows are masked windows, one accent colour on near-black.",
