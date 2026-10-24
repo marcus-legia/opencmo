@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { parseJob, prepare } from './prepare.ts';
+import { EXPLAINER_EXAMPLE, EXPLAINER_EXAMPLE_BEATS } from './guide-example.ts';
 import { previewJob, renderStills } from './preview.ts';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
@@ -207,6 +208,31 @@ describe('kit.Mark', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-mark-'));
 		const [still] = await renderStills(job(scene(60)), prepare(job(scene(60))).compiled, [30], dir, { scale: 0.25, format: 'png' });
 		expect((still!.boxes ?? []).some((box) => box.name === 'Mark disc')).toBe(false);
+	});
+});
+
+describe('guide example', () => {
+	it('previews with a clean layout report (no beat without a drawing, nothing still, no jumps)', { timeout: 240_000 }, async () => {
+		const parsed = parseJob({
+			title: 'Why the sea looks flat',
+			code: EXPLAINER_EXAMPLE,
+			beats: EXPLAINER_EXAMPLE_BEATS.map(({ say, label }) => ({ say, label })),
+			format: '9:16',
+			duration: 15,
+		});
+		if (!parsed.ok) throw new Error(parsed.message);
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-example-'));
+		const result = await previewJob(parsed.job, dir);
+		if (!result.ok) throw new Error(`${result.phase}: ${result.message}`);
+		expect(result.issues).toEqual([]);
+		expect(result.stills.length).toBeGreaterThanOrEqual(EXPLAINER_EXAMPLE_BEATS.length);
+	});
+
+	it('draws without icons or Lotties', () => {
+		expect(EXPLAINER_EXAMPLE).toContain('<Mark ');
+		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Icon|Lottie)\b/);
+		expect(EXPLAINER_EXAMPLE).toContain('Easing.bezier');
+		expect(EXPLAINER_EXAMPLE).toContain('strokeDashoffset');
 	});
 });
 

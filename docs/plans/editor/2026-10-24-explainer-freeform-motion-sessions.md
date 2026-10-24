@@ -39,7 +39,7 @@ Plan tasks 1, 2 (clip-motion part), 4 (scene + test), 5 step 3 (frames).
 - [x] A1 Plan Task 1: `kit.Mark`, `MOVES_INSIDE`, new `beatIssues` message, tests; plus the first `guide-example.ts`
   and its re-export from `src/index.ts` (contract above). Push as soon as `npm run check:clip-motion` is green.
 - [x] A2 Plan Task 2, `preview.ts` only (nothing to change: no user-facing string there names icons; the review checklist lives in `explainer-tool.ts`, see Request 1): reword user-facing review/checklist strings that name icons or Lotties as the subject.
-- [ ] A3 Plan Task 4: the real "Why the sea looks flat" scene and the `guide example` golden test (clean layout report,
+- [x] A3 Plan Task 4: the real "Why the sea looks flat" scene and the `guide example` golden test (clean layout report,
   a `Mark` in every beat). Look at the stills.
 - [ ] A4 Plan Task 5 step 3, **after B3 is pushed**: before (`main`) / after (branch) frames of the flat-earth prompt
   over a local MCP client, saved to `docs/plans/editor/2026-10-24-explainer-freeform-frames/{before,after}/`.
