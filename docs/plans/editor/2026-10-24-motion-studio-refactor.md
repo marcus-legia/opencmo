@@ -1,6 +1,6 @@
 # Motion studio refactor: art direction first, the kit as a library
 
-Status: **in progress** (2026-10-24), one session (Session B stopped after B1; this plan takes over B2-B4).
+Status: **built, not deployed** (2026-10-24), one session (Session B stopped after B1; this plan takes over B2-B4).
 Branch: `plan/editor/2026-10-24-explainer-freeform-motion` (the free-form plan's A1-A3 and B1 are its first commits).
 Supersedes the free-form plan's remaining tasks (B2 wiring, B3 eval, A4 frames) — they are folded in below.
 
@@ -52,7 +52,7 @@ background, type and motion vocabulary).
 
 ## Work (one session, in this order; each ends green and committed)
 
-- [ ] **R1 Kit core** (`packages/clip-motion/src/kit/`): `Text` (`text.tsx`, tagged with `TextTag`, props
+- [x] **R1 Kit core** (`packages/clip-motion/src/kit/`): `Text` (`text.tsx`, tagged with `TextTag`, props
   `name? text x y w? size font? weight? color? align? tracking? lineHeight? at? exitAt?`), `Shot` + `useShot()`
   (`shot.tsx`: children render from `beat(i).from - pre` to `beat(i).to + post`; `useShot()` → `{ frame, frames, progress }`
   local to the shot), `curves.ts` (`expoOut, quartOut, quintOut, backOut(capped), anticipate, smooth, snap` as
@@ -60,7 +60,7 @@ background, type and motion vocabulary).
   `drawOn(progress)` → stroke props, `speedBlur(prev, next, k, max)`, `fx.tsx` (`Grain`, `Vignette`,
   `GradientField` (animated mesh of 3-5 colour blobs), `LightSweep`). Tests: vitest units for curves/noise, golden
   renders for `Text` (box + size reported), `Shot` (renders only in its range), `GradientField` (not a flat colour).
-- [ ] **R2 Motion styles** (`packages/clip-motion/styles/`, `scripts/build-styles.mjs`, `src/styles.ts`): six styles,
+- [x] **R2 Motion styles** (`packages/clip-motion/styles/`, `scripts/build-styles.mjs`, `src/styles.ts`): six styles,
   each with an example shot that uses no icon/Lottie and no `Stage`, rendered in `golden.test.ts` with a clean layout
   report: `editorial` (Fraunces, ink on warm paper, one accent, Swiss grid, hard cuts), `kinetic-type` (Plus Jakarta
   800, type is the subject, mask reveals, snap curves — after `pf-type-snap`), `product-ui` (soft light field, devices,
@@ -68,18 +68,20 @@ background, type and motion vocabulary).
   data lines — the old blueprint done right), `gradient-flow` (mesh gradient field, big numbers, glass capsules —
   after `pf-color-field`, `template-analytics-glow`), `paper-cutout` (layered paper shapes, soft drop shadows,
   2-frame jitter). Port code from the Opus remakes only under MIT with notice in `THIRD_PARTY_NOTICES.md`.
-- [ ] **R3 Tools** (`apps/web/lib/agent/explainer-tool.ts`, `scope.ts`, `packages/mcp-server/src/groups/explainer.ts`):
+- [x] **R3 Tools** (`apps/web/lib/agent/explainer-tool.ts`, `scope.ts`, `packages/mcp-server/src/groups/explainer.ts`):
   `list_motion_styles` (id, title, one line, best for) and `get_motion_style` (STYLE.md + example code), free, no clip;
   mirror `list_motion_templates`. `get_explainer_kit.read_first` names them first. Checks in `explainer-tool.check.ts`
   and `server.check.ts`.
-- [ ] **R4 Guide rewrite** (`apps/web/lib/agent/guides.ts` `explainer`, `motion-guide.ts`): order = art direction
+- [x] **R4 Guide rewrite** (`apps/web/lib/agent/guides.ts` `explainer`, `motion-guide.ts`): order = art direction
   (pick or derive a style) → storyboard → direction with numbers per shot → code (shots, core, curves, fx; library only
   when needed) → preview loop with the beauty bar → add. The example is `EXPLAINER_EXAMPLE` rebuilt in the
   `neon-tech` style with `Shot`s. Remove the two-themes/four-colours/Headline-every-video rules.
   `REVIEW_CHECKLIST` gains the bar and the forcing question. Checks in `agent-design.check.ts`.
-- [ ] **R5 Eval** (`apps/web/lib/agent/eval/tasks.ts`): `drawable(visual, code)` accepts a `Mark`/`Text`/style-built
+- [x] **R5 Eval** (`apps/web/lib/agent/eval/tasks.ts`): `drawable(visual, code)` accepts a `Mark`/`Text`/style-built
   shot; a fake case with a Mark-only scene. Fake eval green.
-- [ ] **R6 Look** : the owner's flat-earth prompt and one OpenCMO product explainer, before (`main`) / after (branch),
+- [ ] **R6 Look** (partly: every style and both example scenes were rendered and looked at, sheets in
+  `docs/plans/editor/2026-10-24-explainer-freeform-frames/`; the before/after through a real MCP client needs the
+  deploy): the owner's flat-earth prompt and one OpenCMO product explainer, before (`main`) / after (branch),
   stills in `docs/plans/editor/2026-10-24-explainer-freeform-frames/{before,after}/`, looked at side by side.
 
 ## Verify
@@ -93,3 +95,12 @@ background, type and motion vocabulary).
 2. MCP: `npm run build --workspace @opencmo/mcp-server && cd packages/engine && .venv312/bin/modal deploy mcp_app.py`;
    stop any `opencmo-mcp` container older than the deploy.
 3. Web: Vercel on merge. 4. claude.ai: reconnect the opencmo connector, new chat.
+
+## Built beyond the list (found while building)
+
+- Fonts: motion loaded variable fonts without a weight range, so every weight above 400 rendered as 400 in every
+  explainer. Now the editor's 32 families with their real ranges (kept equal to clip-render's catalog by a test).
+- Layout probe: measures only what is visible (clipped by masks, faded out, off-frame); the safe-area rule skips boxes
+  in mid-move; display type of 9%+ of the short side counts as a beat's picture.
+- Ported from Opus's MIT pf-type-snap: `kit.travel` (capped overshoot in px), `kit.snap`, `kit.smear` / `Streak`.
+- Next: [`2026-10-24-remove-3d-and-lottie-plan.md`](2026-10-24-remove-3d-and-lottie-plan.md).
