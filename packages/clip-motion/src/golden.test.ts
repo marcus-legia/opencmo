@@ -295,8 +295,10 @@ describe('guide example', () => {
 	it('draws without icons or Lotties', () => {
 		expect(EXPLAINER_EXAMPLE).toContain('<Mark ');
 		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Icon|Lottie)\b/);
-		expect(EXPLAINER_EXAMPLE).toContain('Easing.bezier');
-		expect(EXPLAINER_EXAMPLE).toContain('strokeDashoffset');
+		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Stage|Headline)\b/);
+		expect(EXPLAINER_EXAMPLE).toContain('<Shot beat={0}>');
+		expect(EXPLAINER_EXAMPLE).toContain('kit.travel(');
+		expect(EXPLAINER_EXAMPLE).toContain('kit.drawOn(');
 	});
 });
 

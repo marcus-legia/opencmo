@@ -70,12 +70,13 @@ const tools = await registry.tools(ctx);
 const names = tools.map((tool) => tool.name);
 assert.equal(new Set(names).size, names.length, "tool names are unique");
 // Motion templates need no clip (B5).
-for (const name of ["list_motion_templates", "get_motion_template"]) {
+for (const name of ["list_motion_styles", "get_motion_style", "list_motion_templates", "get_motion_template"]) {
   const tool = tools.find((item) => item.name === name);
   assert.ok(tool, `${name} is offered`);
   assert.ok(!("clip_id" in (describeTool(tool).inputSchema.properties ?? {})), `${name} needs no clip`);
 }
 assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_template")!, { id: "nope" }, ctx)).content), /use one of analytics-glow/);
+assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "get_motion_style")!, { id: "nope" }, ctx)).content), /use one of .*kinetic-type/);
 for (const name of ["list_projects", "list_clips", "new_edit", "open_in_editor", "get_project_state", "add_text", "remove_words", "check", "export_clip", "get_export", "get_generation", "get_explainer_kit", "read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "wait_for_media", "plan_video"]) {
   assert.ok(names.includes(name), `${name} is offered`);
 }
@@ -248,6 +249,7 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal(typeof result.structuredContent.silent_clip, "object", "the silent clip section says how to make one");
   // The subject is drawn in scene code; icons and Lotties are only looked up for supporting symbols.
   assert.ok(result.structuredContent.read_first.some((line) => line.includes("in a Mark")), "read_first says to draw the subject in a Mark");
+  assert.match(result.structuredContent.read_first[0]!, /^list_motion_styles/, "read_first starts with art direction");
   assert.ok(!JSON.stringify(result.structuredContent).includes("for every noun of the narration"), "no icon lookup for every noun");
   for (const [key, value] of Object.entries({ OPENCMO_MOTION: saved.motion, ELEVENLABS_API_KEY: saved.eleven, OPENCMO_VOICE_ENABLED: saved.voice, OPENCMO_MOTION_FAKE_VOICE: saved.fakeVoice, OPENCMO_AI_FAKE: saved.fake })) {
     if (value === undefined) delete process.env[key];
@@ -268,7 +270,7 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.ok(uris.includes("opencmo://guides/explainer") && uris.includes("opencmo://guides/motion") && uris.includes("opencmo://kit/explainer"));
   const kit = await registry.resource("opencmo://kit/explainer")!.read(ctx);
   assert.match(kit, /^# Explainer scene-code kit/);
-  assert.ok(kit.includes("Draw it yourself") && kit.includes("<Mark"), "the kit leads with drawing in a Mark");
+  assert.ok(kit.includes("The core") && kit.includes("<Mark") && kit.includes("<Shot beat"), "the kit leads with the core: Mark, Text, Shot");
   const kitResource = registry.resources().find((resource) => resource.uri === "opencmo://kit/explainer")!;
   assert.match(kitResource.description ?? "", /Mark/, "the kit resource names free-form drawing");
   assert.ok(!kit.includes("## 4."), "the kit is the code section only");

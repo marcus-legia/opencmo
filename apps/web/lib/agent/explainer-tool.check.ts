@@ -175,6 +175,14 @@ async function main() {
   const narrated = await runPreviewExplainer({ ...input, beats: input.beats.slice(0, 2) }, { preview: async () => assert.fail("must not render") });
   assert.match(narrated.content, /3 to 16 beats/);
 
+  // Motion styles: the list names each with what it suits; one style comes with its guide and example code.
+  const styles = JSON.parse(runMotionTemplateTool("list_motion_styles", {}).content) as { styles: { id: string; bestFor: string[] }[] };
+  assert.ok(styles.styles.some((item) => item.id === "kinetic-type") && styles.styles.every((item) => item.bestFor.length > 0));
+  const kinetic = JSON.parse(runMotionTemplateTool("get_motion_style", { id: "kinetic-type" }).content) as { guide: string; code: string };
+  assert.match(kinetic.guide, /## Palette/);
+  assert.match(kinetic.code, /kit\.travel|kit\.snap/);
+  assert.equal(runMotionTemplateTool("get_motion_style", { id: "nope" }).ok, false);
+
   // B5: motion templates. The list is short; an unknown id answers with the ids; a template comes with its code.
   const listed = runMotionTemplateTool("list_motion_templates", {});
   assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel"]);

@@ -302,108 +302,75 @@ Fix and preview again — up to 3 rounds — until there are no errors and no la
 add_3d_scene { title, code (exactly what you last previewed), quote, theme? }. Duration comes from the quote (3-10 s); use the same duration in preview_3d. The video always takes the shape of the area it fills, so preview in that shape: full screen = clip_context.frame (a 16:9 clip is landscape); the panel of a split = 1:1 or 4:5.
 After it renders (about half a minute) capture a frame in its middle to confirm it sits well on the clip.`,
 
-  explainer: `# Animated explainers (/explain → preview_explainer → add_explainer)
+  explainer: `# Animated explainers and motion clips (/explain → preview_explainer → add_explainer)
 
-An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene. The viewer must understand it with the sound off: every beat SHOWS the things its narration names (the sea, a ship, a virus, a coin…), drawn by you in the scene code (SVG shapes and paths, CSS transforms, your own curves) inside a Mark, with one headline row and a text board where the beat lists steps or facts. Icons, Lotties and kit shapes are for small supporting details, or when a standard symbol is the clearest picture (a check, a clock). It renders as one video layer with its own voice; captions of the voice are added to the clip automatically (credits after the user approves).
+An explainer is a 15-90 s narrated animation of ONE idea; a motion clip (silent: true) is 3-30 s with no voice. Both are Remotion scenes YOU write: your own art direction, your own drawings, your own motion. The viewer must understand it with the sound off: every beat SHOWS what its narration names, drawn in the scene code (SVG, CSS, type), not stock clip-art. The bar is a launch video by a top design team. It renders as one video layer; an explainer gets its own voice and captions (credits after the user approves).
 
-## 1. The look
-theme — from the topic:
-- blueprint (navy, glowing lines): software, data, AI, networks, money and markets.
-- paper (warm off-white, flat colours, soft shadows): science, health, the body, nature.
-- paper: people, habits, how-to, everyday life.
-- The user's words win ("dark", "techy" → blueprint; "light", "friendly" → paper).
-personality — from the topic and the user's words:
-- premium: ideas, finance, serious topics.
-- corporate: processes, products, B2B.
-- playful: science for everyone, health, kids, consumer.
-- energetic: launches, sport, tips, sales.
+## 1. Art direction first
+Before the storyboard, decide the look of THIS video: palette (hex values), background, fonts, motion vocabulary.
+- list_motion_styles → named directions with what each suits (kinetic type for hooks and claims, gradient flow for results and numbers, neon tech for how software works…). get_motion_style { id } → its guide (palette, background, fonts, motion numbers, composition, do and don't) and an example shot's code: read the code, it shows the techniques.
+- Or derive your own from the user's brand (apply_brand_kit colours, their site) the same way: 1 field colour, 1 ink, 1 accent (2 at most), a display font and a text font from kit.fonts, a motion character.
+- One direction for the whole video. Tell the user which one and why in one line with the storyboard.
+- theme and personality on the tools only seed kit.color and the library pieces; your scene paints its own background and picks its own colours. Send theme "blueprint" for a dark direction, "paper" for a light one.
 
-## 2. Storyboard first — subject first, then show it and ask
-Before any code, for EVERY beat:
-1. Write say (6-20 words of narration, about 4 s) and label (the main words on screen, at most 5 words).
-2. List the nouns of say and decide how to DRAW each one: its silhouette in 2-4 SVG primitives (the sea is a band under a curve, a ship a hull path, a mast line and a sail triangle), its colour from kit.color, and how it moves or changes. find_icons / find_lotties only for a supporting symbol (a check, a clock, a heart beat).
-3. Write visual: what is drawn and how it changes (e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve").
-Never use an icon whose name does not match the noun (memory cells are not "database"): draw the thing itself instead.
-Show the storyboard in your reply — for each beat: say, label and visual — plus the theme and personality, and ask "Shall I make it?". Wait for the user's go (skip the wait only when the user already said to go ahead).
-- Pick one structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
-- Beat 1 is the hook: the surprising question or fact, never "In this video…". 4-12 beats.
-- Each beat transforms the picture: a virus splits, an antibody locks on, a coin pile grows. No slideshow of separate pictures.
-- Only facts you are sure of, or the user's own words. Nothing about real people or other brands.
+## 2. Storyboard — subject first, then show it and ask
+For EVERY beat:
+1. say (6-20 words of narration, about 4 s) and label (the main words on screen, at most 5).
+2. The subject: what is DRAWN (the sea is a band under a curve, a ship a hull path, a mast line and a sail; a claim is set as big type; a number rolls up), and how it moves or changes.
+3. visual: one line, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon draws across it; a ship sinks hull-first".
+Show the storyboard (say, label, visual per beat) and the direction in one line, and ask "Shall I make it?". Wait for the go unless the user already said to go ahead.
+- One structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
+- Beat 1 is the hook: a surprising question or fact, never "In this video…". 4-12 beats.
+- Each beat transforms the picture; no slideshow of separate pictures, no rows of cards, no title-plus-bullets screens.
+- Only facts you are sure of, or the user's words. Nothing about real people or other brands.
+Silent motion clips: every beat gives its seconds (0.5-30, at most 8 beats, 30 s in all); say is the storyboard line, never read aloud. For an intro, a logo reveal, a product moment. list_motion_templates has finished ones (brand reveal, phone carousel, analytics card): get_motion_template, change only its SLOTS, keep its motion.
 
-Silent motion clips (silent: true): 3-30 s with no voice, for an intro, a logo reveal or a product moment (a new feature on a phone, a number that grew). Every beat gives its seconds (0.5-30, at most 8 beats, 30 s in all); say is the storyboard line, never read aloud. Use them when the picture is the message; when the idea needs explaining, make a narrated explainer.
-Motion templates: list_motion_templates shows finished silent clips (a brand reveal, a phone carousel of app screens, an analytics card). When one fits the moment, get_motion_template, change only its SLOTS (texts, colours, image names you also pass as assets) and keep its motion, direction and beats: they were reviewed frame by frame.
-
-After the go, before any code, write the direction (the tools' direction field, 120-3000 characters): the motion spec you will code from, with numbers.
-- Per beat: the one visual centre (where the eye goes), then every move: what, from → to in pixels or % of the frame, start and end in seconds of the beat, and the curve (ease-out for entrances, ease-in-out for moves, a spring for pops).
-- The reveal order, and what stays alive between moves (the ambient layer, a slow camera push).
-- No slide layouts: no rows of parallel cards, no title-plus-bullets screens. One subject transforms.
-- End with the bar: resting text crisp and readable, nothing clipped or overlapping, nothing jumping.
-Example line: "Beat 2: the horizon (the 'sea' Mark, hero area) bends from a straight line into an arc whose middle rises 35% of the Mark's height, 0.2 s → 1.8 s, Easing.bezier(0.34, 1.2, 0.64, 1) (overshoot about 3%, then settle); the sea band shrinks with it."
+After the go, before code, write the direction (the tools' direction field, 120-3000 characters): the spec you code from, with numbers. Per shot: the one visual centre, then every move — what, from → to in px or % of the frame, start and end in seconds, the curve (kit.curves name). What stays alive between moves (a slow push, a drifting field, a breathing glow). End with the bar: "match every number, then make it as beautiful as possible: easing, motion blur, typography, depth, composition; resting text crisp; nothing clipped or overlapping by accident."
 
 ## 3. The code
-The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data and geometry once above return function Scene(); inside Scene read the frame and compose JSX: kit components and your drawings in Marks. Start with const { Stage, Headline, Mark, … } = kit;
-- R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
-- Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed) or the seeded data helpers; time comes from the frame.
-- Positions are pixels of the composition (1920×1080, 1080×1920 or 1080×1080); times are FRAMES (30 fps), taken from the timing helpers. Every component takes at (enter frame), dur, exitAt and exitDur; before at and after its exit it renders nothing.
-Layout
-- <Stage grid? ambient?> — the theme's field (blueprint: navy, grid, bloom; paper: off-white, soft shadow). Wrap the whole scene in it. kit.theme and kit.personality are what the job set.
-- <Camera keys={[{ at, focus: [x, y], zoom, dur? }]}> — slow push-ins and pans of what is inside. Keep text OUTSIDE the Camera.
-- kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (the bottom 17% is the captions' place). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
-Draw it yourself — the subject of each beat
-- <Mark name x y w h at? dur? exitAt? exitDur?>…</Mark> wraps every drawing: a box (top-left x, y and size in pixels, like Image) holding plain JSX: svg, g, path, ellipse, rect, a div with CSS transforms and filters. The layout report and the jump check only see tagged boxes, so a drawing outside a Mark reads as an empty frame. Give every Mark a unique name ("sea", "ship", "ship-wake"; never two "ship"): the jump check matches marks by name. A Mark adds no entrance: your code moves what is inside it (from R.useCurrentFrame()); exitAt fades it out. Size it to the drawing's resting box; motion inside it is fine.
-- Draw the thing as itself: its silhouette, depth from a lighter and a darker fill or a soft shadow, colours from kit.color (kit.color.signal, kit.color.answer…). A recognisable drawing beats a stock icon in a ring.
-- Motion recipes from the ported templates (read packages/clip-motion/templates/phone-carousel/scene.jsx for a whole one: its own cubic-bezier curves, capped overshoot, speed-linked blur):
-  - Named curves: R.Easing.bezier(x1, y1, x2, y2) as the easing of R.interpolate (clamp both ends). The primary move overshoots about 3% of its travel, then settles: Easing.bezier(0.34, 1.2, 0.64, 1); a plain move: Easing.bezier(0.65, 0, 0.35, 1).
-  - Speed-linked blur: blur what moves in proportion to its speed, filter: \`blur(\${k * speed}px)\`, peaking at about 4 px mid-move and 0 at rest.
-  - Draw a line on: pathLength={1} strokeDasharray={1} strokeDashoffset from 1 to 0.
-  - Morph: kit.morph(a, b, t) between two point lists, then build the path from the points.
-  - A slow camera: Camera keys around the drawings for a push-in or a pull-back; text stays outside it.
-- Compute geometry once above return function Scene(): paths as small functions of one or two numbers, helpers for repeated parts; per frame only interpolate those numbers. Never inline long path strings per frame. The code limit is 32,000 characters.
-Things to draw — supporting pieces
-- <Icon name x y size color?> — ANY Lucide name from find_icons; it draws itself on. An unknown name is an error listing the 5 closest names.
-- <Lottie name x? y? size? loop? speed?> — a built-in animation from find_lotties (walk, heart-beat, rocket-launch, emoji/brain…), playing from at in step with the frame. At most three on screen.
-- <Shape kind x? y? size? color? color2? fill? label? secondary? breathe? rotate?> — kind: circle, cell (membrane + nucleus), blob (organic, breathes), ring (draws on), pill, capsule (two colours), star. label (≤ 3 words) sits under it; secondary adds a halo that follows a few frames late.
-- <Path d x? y? size? color? fill? draw? width?> — any SVG path in a 24×24 box, drawn on (for what neither icons nor shapes have).
-- <Arrow from={[x, y]} to={[x, y]} curve? color? width? dashed? head?> — draws itself; the head pops in as it lands.
-- <Group x? y? keys={[{ at, x?, y?, scale?, rotate?, dur? }]} react={{ at, from: [x, y], strength? }}> — moves its children together (key x/y are pixel offsets; the group's x/y is the pivot); react knocks it away from an impact and lets it settle.
-- <Burst at x? y? count? size? color?> — a 24-frame particle burst for an impact or a success.
-Text
-- <Title text kicker? y? size?> — the big opening title.
-- <Headline items={[{ text, at, color? }]} y? size? exitAt?> — THE headline row (at most 5 words per item: the label of each beat); each item has fully left before the next rises in, so headlines never overlap. Use one Headline instead of several Labels.
-- <Board kind="steps|facts|compare" title? lines={['…', '…', '…']} area? at lineAt? exitAt> — up to 3 lines of at most 8 words, revealed one by one (lineAt: one frame per line, e.g. kit.cue of each step), when a beat lists steps, facts or numbers; compare lines are "left | right".
-- A text's exitAt is the frame it is gone by.
-- <Label text …>, <Mono text …> (data text, typed in), <Counter to from? prefix? suffix? decimals?> — for a word or number placed on a mark.
-Data and marks (for data topics)
-- <DotField …>, <Spectrogram data={kit.spectrogram(seed, { cols, rows, peaks })} …>, <Waveform …>, <Axes area x? y?>, <Scatter area points highlight? highlightAt?>, <FitLine area from to>, <Link from to curve? dashed? dots? width?>, <Box area | x y w h label? dashed?>, <Check x y size kind="check|cross">.
-Timing — never hard-code frames
-- kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word of beat i is spoken (the beat start when it is not there); kit.at(i, 0..1) → a frame part-way through beat i. Previews use estimated timings; the final render uses the real voice, so anything placed with these lands on the narration in both.
-- kit.enter(frame, { at, dur, ease }) → 0..1, kit.stagger(i, { at, each }), kit.morph(a, b, t), kit.lerp, kit.random(seed).
-- Colours by name (color="answer"): signal (what we follow), answer (the result; the brand accent replaces it), wrong (red: errors, the enemy), noise (grey: what does not matter), text, dim, field; on paper also ink, accent2, soft. Never pick other colours.
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute constants, geometry and helpers once above return function Scene(); inside, read the frame and compose JSX.
+- R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random.
+- Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed), kit.noise(seed); time comes from the frame.
+- Pixels of the composition (1920×1080, 1080×1920 or 1080×1080; kit.width, kit.height), frames at 30 fps (kit.fps, kit.frames). Keep text inside kit.area('full'): the bottom 17% is the captions' place.
+Write it shot by shot (small pieces are what make motion good)
+- One function component per beat (or per two short beats), composed with <Shot beat={i} through? pre? post?>: its children render only during that beat (pre/post frames overlap a neighbour for a transition), and kit.useShot() inside gives { frame, frames, progress } counted from the shot's start. Things that live across beats (a background, a subject that transforms) sit outside the shots.
+- Timing: kit.beat(i) → { from, to, frames }; kit.cue(i, 'word') → the frame that word is spoken; kit.at(i, 0..1). Previews use estimated timings and the render the real voice, so anything placed with these lands on the narration in both. Never hard-code frames of a narrated explainer.
+The core — what scenes are built from
+- <Mark name x y w h at? exitAt?>…</Mark> wraps every drawing (svg, path, a div with transforms and filters): a box, top-left x, y and size in px, sized to the drawing's resting box. The layout report and the jump check only see tagged boxes; a drawing outside a Mark reads as an empty frame. Unique names ("sea", "ship"). No entrance of its own: your code moves what is inside.
+- <Text text x y size w? font? weight? color? align? tracking? lineHeight? upper? italic? name? at? exitAt? style?> — free typography the report still checks (size ≥ 36 px at 1080, overlap, safe area). x is the left edge, centre or right edge by align; y the top. font: a role (display, text, title, mono) or any family in kit.fonts — Inter, Plus Jakarta Sans, Space Grotesk, Unbounded, Sora, Archivo Black, Anton, Bebas Neue, Oswald, DM Serif Display, Playfair Display, Fraunces, Source Code Pro… (kit.fonts maps each to its weight range). color: any #hex, rgb() or hsl(). Animate it through style (transform, opacity, clipPath) or one Text per word (unique names). kit.measure(text, { size, font, weight, tracking }) → its width in px.
+- Backgrounds and finish (kit.fx): <fx.Fill color to? angle?>, <fx.GradientField colors={[base, …3 blobs]} speed? softness? seed?> (a flowing mesh), <fx.Vignette strength? color?>, <fx.Grain opacity?>, <fx.LightSweep at dur? angle? width? color?>. Paint the field first, grain last.
+- Curves: kit.curves — linear, smooth (moves), out (entrances), soft, in (exits), snap (decisive edits), back (about 3% overshoot), anticipate (a 5% wind-up). kit.tween(frame, [f0, f1], [a, b], curve) eases a number or a point and holds before and after.
+- Motion that reads as premium:
+  - kit.travel(u, distance, { overshoot: 24 }) → px offset of an entrance that overshoots by at most 24 px and settles with zero speed (u is 0..1 progress).
+  - kit.snap(u, { overshoot: 0.02 }) → a two-phase snap progress for a hand-over.
+  - <Streak speed size axis? origin?> — directional motion blur and a stretch tied to speed (px per frame: the offset now minus the offset a frame ago); nothing at rest, so resting text is crisp.
+  - kit.speedBlur(speed) → px of plain blur; kit.drawOn(p) → stroke props that draw a path on; kit.morph(a, b, t) between point lists; kit.noise(seed)(t) for organic drift; kit.stagger(i, { at, each }).
+  - Something is always alive: a slow push (scale 1 → 1.04 over the video), a drifting field, a breathing glow (±15%).
+- Compute geometry once: paths as small functions of one or two numbers; per frame only interpolate those numbers. The code limit is 32,000 characters.
+The library — only when it is the clearest picture
+- <Image name x y w h fit? radius?> (the user's own images passed as assets), <Phone>/<Browser> frames around them, for product moments.
+- <Icon name x y size color?> (Lucide, find_icons) for a small standard symbol: a check, a clock, a lock. Never as the subject of a beat.
+- <Shape>, <Path>, <Arrow>, <Group>, <Burst>, <Camera>, <Stage>, <Headline>, <Board>, <Title>, <Label>, <Counter>, data marks (<Axes>, <Scatter>, <FitLine>, <Waveform>…) and kit.color still work; reach for them only when your own drawing would not be better.
 
 ${EXPLAINER_MOTION}
 
-Do and don't
-- Do: one continuous scene; transform what is on screen. The subject drawn in a Mark in every beat. One Headline row. A Board for lists.
-- Don't: decorative dots or icons that do not match the narration; two texts in the same place; text inside the Camera; captions in the scene (the clip gets them from the voice).
-
-Example: every subject drawn in a Mark, no icons. Its beats' visuals: ${EXPLAINER_EXAMPLE_BEATS.map((beat, i) => `${i + 1}) ${beat.visual}`).join("; ")}.
+Example (a narrated explainer, shot by shot, every subject drawn, its own palette; visuals: ${EXPLAINER_EXAMPLE_BEATS.map((beat, i) => `${i + 1}) ${beat.visual}`).join("; ")}):
 ${EXPLAINER_EXAMPLE}
 
 ## 4. Preview, look, fix — required
 preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
-- times: up to 12 seconds you choose, around every main move of your direction (its start, middle and landing). Without times: beat midpoints and the last frame. The layout report also samples 6 frames after every beat start and each beat's midpoint.
-- Subject check: write one line per still — "shows X; the beat says Y". Where X is not what Y names, fix that beat (the drawing, its time, or its place) before anything else.
+- times: up to 12 seconds you choose, around every main move (its start, middle and landing). Without times: beat midpoints and the last frame.
+- Subject check: one line per still — "shows X; the beat says Y". Fix any beat where they differ first.
 - An error (phase job/compile/guard/render + message) → fix the code.
-- "overlaps" → use Headline for the headline row, or move one text to another area or time.
-- "outside the safe area" → place it with kit.area. "text under 36 px" → fewer words, bigger primitive.
-- "more than 85% empty" or "beat N shows nothing drawn" → draw the beat's subject bigger, as a Mark.
-- "nothing moves during beat N" → give it a primary, a secondary and an ambient motion.
-- "jumps N px in one frame" → ease the move (kit.enter / a Group key with dur) or make it a deliberate cut.
-- Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that, and preview again.
-Up to 6 rounds; stop when a round finds nothing to fix. A clean layout report is the floor, not the bar.
+- "overlaps" → move one text to another place or time. "outside the safe area" → keep resting text inside kit.area('full') (moving text may cross it). "text under 36 px" → fewer words, bigger type.
+- "more than 85% empty" or "beat N shows nothing drawn" → draw the subject bigger, in a Mark, or set the claim as big type.
+- "nothing moves during beat N" → a move, a reaction, or something alive (push, drift, glow).
+- "jumps N px in one frame" → ease the move (kit.travel, a curve) and give it a Streak, or make it a deliberate cut.
+- Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that, preview again.
+Up to 6 rounds; stop when a round finds nothing. A clean layout report is the floor, not the bar.
 
 ## 5. Add it
-add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration. The card shows each beat with its picture, the look, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer "Captions · <title>" follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration (from the beats' seconds for a silent clip). The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 

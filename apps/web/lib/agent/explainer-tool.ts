@@ -35,6 +35,7 @@ import {
 } from "@opencmo/editor-core";
 import { priceOf, type GenerationSpec } from "@opencmo/editor-core/generate";
 import { MAX_PREVIEW_STILLS } from "@opencmo/clip-motion/job";
+import { MOTION_STYLES, motionStyle } from "@opencmo/clip-motion/styles";
 import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
 import { ApiError } from "@/lib/api/errors";
@@ -84,7 +85,8 @@ export const REVIEW_CHECKLIST = [
   "4. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
   "5. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
   "6. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
-  "7. Finish: margins even, colours from the palette, the last frame a clean end state?",
+  "7. Finish: margins even, colours from your direction's palette, type set with care (tracking, weight, line height), the last frame a clean end state?",
+  "8. The bar: would this pass in a launch video by a top design team? Name what they would do differently here (depth, a bolder type scale, a better curve, more life in the rest) and do it.",
   "Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing.",
 ].join("\n");
 
@@ -221,11 +223,26 @@ const issueOf = (error: z.ZodError) => {
  * Motion templates (ported from Opus's MIT remakes, `packages/clip-motion/templates`): finished silent clips a model
  * starts from instead of a blank scene. Free, no clip needed; the MCP server registers the same two tools.
  */
-export const MOTION_TEMPLATE_TOOLS = new Set(["list_motion_templates", "get_motion_template"]);
+export const MOTION_TEMPLATE_TOOLS = new Set(["list_motion_styles", "get_motion_style", "list_motion_templates", "get_motion_template"]);
 
 export const getMotionTemplateInput = z.object({ id: z.string().min(1).max(60).describe("A template id from list_motion_templates.") });
+export const getMotionStyleInput = z.object({ id: z.string().min(1).max(60).describe("A style id from list_motion_styles.") });
 
 export const motionTemplateSpecs = (): ToolSpec[] => [
+  {
+    name: "list_motion_styles",
+    description:
+      "List the motion styles: named art directions (palette, background, type, motion vocabulary) each with a finished example shot. Pick the one that fits the topic before the storyboard, or derive your own from the user's brand. Free.",
+    schema: { type: "object", properties: {}, additionalProperties: false },
+    strict: false,
+  },
+  {
+    name: "get_motion_style",
+    description:
+      "Get one motion style: its guide (palette hex values, background recipe, fonts, motion with numbers, composition, do and don't) and the scene code of its example shot. Read the code to learn the techniques, then write your own scene in that direction. Free.",
+    schema: sanitize(z.toJSONSchema(getMotionStyleInput, { io: "input" })).schema as Record<string, unknown>,
+    strict: false,
+  },
   {
     name: "list_motion_templates",
     description:
@@ -243,6 +260,24 @@ export const motionTemplateSpecs = (): ToolSpec[] => [
 ];
 
 export function runMotionTemplateTool(name: string, input: unknown): ToolOutcome {
+  if (name === "list_motion_styles") {
+    const styles = MOTION_STYLES.map(({ id, title, line, bestFor, format, seconds }) => ({ id, title, line, bestFor, example: { format, seconds } }));
+    return { ok: true, content: JSON.stringify({ styles, next: "get_motion_style { id } for its guide and example code." }), summary: `${styles.length} motion styles` };
+  }
+  if (name === "get_motion_style") {
+    const parsed = getMotionStyleInput.safeParse(input);
+    if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: issueOf(parsed.error) }), summary: "Invalid style" };
+    const style = motionStyle(parsed.data.id);
+    if (!style) return { ok: false, content: JSON.stringify({ error: `Unknown style "${parsed.data.id}": use one of ${MOTION_STYLES.map((item) => item.id).join(", ")}.` }), summary: "Unknown style" };
+    return {
+      ok: true,
+      content: JSON.stringify({
+        ...style,
+        how: "Follow the guide's palette, background, fonts and motion numbers in YOUR scene; the example is a reference for techniques, not a template to fill. It previews as a silent clip with its beats if you want to see it first.",
+      }),
+      summary: `Style: ${style.title}`,
+    };
+  }
   if (name === "list_motion_templates") {
     const templates = MOTION_TEMPLATES.map(({ id, title, description, kind, format, seconds, slots }) => ({ id, title, description, kind, format, seconds, slots }));
     return { ok: true, content: JSON.stringify({ templates, next: "get_motion_template { id } for its code, direction and beats." }), summary: `${templates.length} motion templates` };

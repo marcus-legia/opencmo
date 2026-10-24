@@ -53,8 +53,8 @@ export const EXPLAINER_MOTION = `Motion (one personality for the whole video, se
 - premium: calm and smooth, long settles; ideas, money, B2B. corporate: crisp and even, no overshoot; process, data, how a product works. playful: bouncy, a small overshoot; science for everyone, health, kids, consumer. energetic: fast and punchy; launches, sport, "3 tips".
 - Decide in this order: what the viewer should feel in this beat → which mark carries that (the primary) → what supports it.
 - Every beat has three layers. Primary: the one mark the narration is about enters or transforms on its cue word. Secondary: something that answers it 3-10 frames later (a halo follows it with secondary, a label or arrow lands, a Group of nearby marks reacts with react). Ambient: the field keeps breathing (Stage ambient, on by default) so no frame is frozen.
-- Setup → action → resolution inside each beat: anticipation before the primary moves, the move, then a settle. The kit adds anticipation and settle to every entrance; don't fake them with extra keyframes.
-- Use the personality's curve for entrances; for the primary move of a beat write your own (Easing.bezier), with an overshoot capped at about 3% of the move and a settle.
+- Setup → action → resolution inside each beat: anticipation before the primary moves (kit.curves.anticipate), the move, then a settle (kit.travel caps the overshoot in px; kit.curves.back overshoots about 3%). Fast moves get a Streak; resting things are crisp.
+- Entrances fast, settles long: an entrance takes 12-24 frames, a settle about as long again. Exits are quicker than entrances (kit.curves.in, 8-14 frames).
 - Stagger related marks 3-8 frames apart (kit.stagger); at most three primaries in motion at once; the next starts when the previous has landed.
 - A beat of 3-6 s holds one main change. Let it land and read for at least 1 s before the next beat replaces it; hold the last state still for the final second.
 - Write these choices into the direction as numbers (positions, seconds, curves) before the code, then code exactly them: the preview is checked against the direction.`;

@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-import { EXPLAINER_CODE_CHARS, getMotionTemplateInput, runMotionTemplateTool } from "@/lib/agent/explainer-tool";
+import { EXPLAINER_CODE_CHARS, getMotionStyleInput, getMotionTemplateInput, runMotionTemplateTool } from "@/lib/agent/explainer-tool";
 import { iconsInput, lottiesInput, runTool } from "@/lib/agent/tools";
 import type { AgentWorkspace } from "@/lib/agent/workspace";
 import { availableModels, loadCatalog } from "@/lib/generate/models";
@@ -88,11 +88,33 @@ registerGroup({
               }
             : "Silent motion clips are not available on this server.",
           lotties: LOTTIE_PACK.map((entry) => entry.name),
-          read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "draw each beat's subject yourself in a Mark (read the 'Draw it yourself' section); find_icons / find_lotties only for supporting symbols"],
+          read_first: [
+            "list_motion_styles, then get_motion_style for the one that fits: art direction first (palette, background, fonts, motion), with an example shot's code to learn from",
+            'read_guide "explainer" (art direction, storyboard, shots, the kit core, the preview loop)',
+            "draw each beat's subject yourself in a Mark or set it as big type with Text; icons only for small standard symbols",
+          ],
         };
         if (!model && !clip) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
       },
+    },
+    {
+      name: "list_motion_styles",
+      title: "List motion styles",
+      description:
+        "Named art directions for explainers and motion clips (kinetic type, gradient flow, neon tech…): what each looks like and what it suits. Pick one before the storyboard, or derive your own from the user's brand. Free, no clip needed.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("list_motion_styles", input)),
+    },
+    {
+      name: "get_motion_style",
+      title: "Get a motion style",
+      description:
+        "One motion style: its guide (palette hex values, background, fonts, motion with numbers, composition, do and don't) and its example shot's scene code. Learn the techniques from the code, then write your own scene in that direction. Free, no clip needed.",
+      inputSchema: getMotionStyleInput,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      run: async (input) => fromOutcome(runMotionTemplateTool("get_motion_style", input)),
     },
     {
       name: "list_motion_templates",

@@ -243,21 +243,22 @@ async function main(): Promise<void> {
     assert.ok(SYSTEM_PROMPT.length < 6000, `the prompt stays short (${SYSTEM_PROMPT.length} chars)`);
   }
 
-  // 8. Explainers draw their subject in scene code (a Mark); icons and Lotties are supporting pieces.
+  // 8. Explainers draw their subject in scene code (a Mark); icons are a library for small symbols.
   // The review loop names a missing drawing, so it no longer pushes the model back to icons.
   {
     const { z } = await import("zod");
     const { readGuide } = await import("./guides");
     const { previewExplainerInput } = await import("./explainer-tool");
     const guide = readGuide("explainer");
-    for (const text of ["<Mark", "Easing.bezier", "strokeDashoffset", "templates/phone-carousel/scene.jsx", '"beat N shows nothing drawn"']) {
+    // Motion studio: art direction first (styles), the kit core, shots; the old two-themes/four-colours rules are gone.
+    for (const text of ["<Mark", "<Text ", "<Shot beat", "kit.travel", "<Streak", "kit.drawOn", "fx.GradientField", "list_motion_styles", "get_motion_style", "Art direction first", '"beat N shows nothing drawn"']) {
       assert.ok(guide.includes(text), `the explainer guide names ${text}`);
     }
     // The example is the scene golden.test.ts renders, not a copy that can drift.
     const { EXPLAINER_EXAMPLE } = await import("@opencmo/clip-motion/guide-example");
     assert.ok(guide.includes(EXPLAINER_EXAMPLE), "the guide's example is the rendered example scene");
     assert.ok(!/<Icon name="syringe"/.test(guide), "the icon-only example is gone");
-    for (const old of ["The subject's icon in every beat", "icons, built-in Lottie animations or kit shapes", "shows no icon, shape or Lottie"]) {
+    for (const old of ["The subject's icon in every beat", "icons, built-in Lottie animations or kit shapes", "shows no icon, shape or Lottie", "Never pick other colours", "Wrap the whole scene in it", "<Lottie", "find_lotties"]) {
       assert.ok(!guide.includes(old), `the explainer guide no longer says "${old}"`);
     }
     const schema = JSON.stringify(z.toJSONSchema(previewExplainerInput, { io: "input" }));
