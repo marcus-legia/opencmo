@@ -2,7 +2,8 @@ import React from 'react';
 
 import { fontFamily, LIBRARY, ROLES } from '../remotion/fonts.ts';
 import { kitError, TextTag, useLife, usePalette, type LifeProps } from './context.tsx';
-import { ease } from './motion.ts';
+import { curves, type CurveName } from './curves.ts';
+import { ease, type Ease } from './motion.ts';
 import type { Palette } from './theme.ts';
 
 export type FontName = keyof typeof ROLES | keyof typeof LIBRARY;
@@ -79,6 +80,99 @@ export function Text(props: TextProps) {
 	return (
 		<TextTag name={props.name ?? props.text} size={props.size} style={style}>
 			{props.text}
+		</TextTag>
+	);
+}
+
+export type TypeStreamProps = Omit<TextProps, 'text'> & {
+	/** One string, or lines (line breaks are layout only: the whole text is ONE stream). */
+	text: string | string[];
+	/** Frames the whole stream takes to emit, from `at`. */
+	dur: number;
+	/** Frames one letter takes to go from blurred and clear to sharp; letters overlap. Default 10 (about 1/3 s). */
+	letter?: number;
+	/** Starting blur of a letter in px. */
+	blur?: number;
+	/** How emission is spread over `dur`: a curve name or function (default: fast start, long thinning tail). */
+	curve?: CurveName | Ease;
+};
+
+// After the screenplay stream of opus-pro/opusclip-video-tools templates/agent-opus (MIT, Copyright (c) 2026 OpusClip).
+const STREAM_EMIT: Ease = (t) => {
+	const shape = curves.soft;
+	return shape(Math.min(1, Math.max(0, t)) * 0.8) / shape(0.8);
+};
+
+/**
+ * `kit.TypeStream`: text that streams in letter by letter on one schedule for the whole paragraph, each letter
+ * fading in from a blur to sharp. Resting letters carry no filter, so the text is crisp once it has landed.
+ */
+export function TypeStream(props: TypeStreamProps) {
+	const palette = usePalette();
+	const lines = Array.isArray(props.text) ? props.text : [props.text];
+	if (!lines.length || !lines.every((line) => typeof line === 'string')) throw kitError('TypeStream needs text: a string or a list of lines.');
+	if (![props.x, props.y, props.size, props.dur].every(Number.isFinite) || props.size <= 0 || props.dur <= 0) throw kitError('TypeStream needs x, y, size (px) and dur (frames).');
+	if (props.font !== undefined && !isFont(props.font)) throw kitError(`TypeStream font "${String(props.font)}": use ${FONT_NAMES}.`);
+	const life = useLife(props, ease.out, 0);
+	if (!life.visible) return null;
+	const at = props.at ?? 0;
+	const letter = Math.max(1, props.letter ?? 10);
+	const blur = Math.max(0, props.blur ?? 20);
+	const emit = typeof props.curve === 'function' ? props.curve : props.curve ? curves[props.curve] : STREAM_EMIT;
+	if (!emit) throw kitError(`TypeStream curve "${String(props.curve)}": use ${Object.keys(curves).join(', ')}.`);
+	const total = lines.reduce((sum, line) => sum + Array.from(line).length, 0);
+	// Letter i starts when the emission front reaches it: invert the curve once per letter.
+	const startOf = (i: number) => {
+		let lo = 0;
+		let hi = 1;
+		for (let step = 0; step < 24; step++) {
+			const mid = (lo + hi) / 2;
+			if (emit(mid) * total < i + 1) lo = mid;
+			else hi = mid;
+		}
+		return at + ((lo + hi) / 2) * Math.max(1, props.dur - letter);
+	};
+	const align = props.align ?? 'left';
+	const width = props.w;
+	const left = align === 'left' ? props.x : align === 'center' ? props.x - (width ?? 0) / 2 : props.x - (width ?? 0);
+	let index = 0;
+	const style: React.CSSProperties = {
+		position: 'absolute',
+		left,
+		top: props.y,
+		...(width !== undefined ? { width } : { whiteSpace: 'pre' }),
+		fontFamily: fontFamily(props.font ?? 'display'),
+		fontSize: props.size,
+		fontWeight: props.weight ?? 600,
+		fontStyle: props.italic ? 'italic' : 'normal',
+		letterSpacing: `${props.tracking ?? 0}em`,
+		lineHeight: props.lineHeight ?? 1.1,
+		textAlign: align,
+		textTransform: props.upper ? 'uppercase' : 'none',
+		color: colorOf(props.color, palette),
+		opacity: 1 - life.out,
+		...props.style,
+		transform: [width === undefined ? (align === 'center' ? 'translateX(-50%)' : align === 'right' ? 'translateX(-100%)' : '') : '', props.style?.transform ?? ''].filter(Boolean).join(' ') || undefined,
+	};
+	return (
+		<TextTag name={props.name ?? lines.join(' ')} size={props.size} style={style}>
+			{lines.map((line, row) => (
+				<div key={row} style={{ whiteSpace: 'pre-wrap' }}>
+					{/* Words stay whole when the line wraps: letters live inside a no-wrap word span. */}
+					{line.split(/(\s+)/).filter(Boolean).map((word, w) => (
+						<span key={w} style={{ whiteSpace: 'pre', display: /\s/.test(word) ? 'inline' : 'inline-block' }}>
+							{Array.from(word).map((char, k) => {
+								const p = curves.arrive(Math.min(1, Math.max(0, (life.frame - startOf(index++)) / letter)));
+								return (
+									<span key={k} style={{ display: 'inline-block', whiteSpace: 'pre', opacity: p, filter: p >= 1 || blur === 0 ? undefined : `blur(${(blur * (1 - p)).toFixed(2)}px)` }}>
+										{char}
+									</span>
+								);
+							})}
+						</span>
+					))}
+				</div>
+			))}
 		</TextTag>
 	);
 }

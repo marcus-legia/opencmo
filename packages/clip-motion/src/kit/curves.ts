@@ -17,6 +17,20 @@ export const curves = Object.freeze({
 	snap: Easing.bezier(0.85, 0, 0.15, 1) as Ease,
 	back: Easing.bezier(0.34, 1.22, 0.64, 1) as Ease,
 	anticipate: Easing.bezier(0.38, -0.28, 0.42, 1) as Ease,
+	// Curves named by intent, after the launch films of opus-pro/opusclip-video-tools (templates/agent-opus, MIT,
+	// Copyright (c) 2026 OpusClip): pick by what the motion does, not by how it looks.
+	/** Something landing: a fast start and a long brake into rest. */
+	arrive: Easing.bezier(0.22, 1, 0.36, 1) as Ease,
+	/** Travel between two resting places: slow out, fast middle, slow in. */
+	glide: Easing.bezier(0.76, 0, 0.24, 1) as Ease,
+	/** Something leaving: it accelerates away and never brakes. */
+	leave: Easing.bezier(0.4, 0, 1, 1) as Ease,
+	/** A container growing to its new size (a pill into a card). */
+	expand: Easing.bezier(0.7, 0, 0.2, 1) as Ease,
+	/** A stream of letters or items that eases in and thins out. */
+	stream: Easing.bezier(0.22, 0.06, 0.62, 1) as Ease,
+	/** One camera move between two holds: brief acceleration, fast travel, short braking, zero velocity at both ends. */
+	impulse: Easing.bezier(0.62, 0, 0.18, 1) as Ease,
 });
 
 export type CurveName = keyof typeof curves;
@@ -133,4 +147,102 @@ export function smear(speed: number, size: number): { blur: number; stretch: num
 	const blur = Math.min(28, v * 0.22);
 	const px = Math.min(84, v * 0.85);
 	return { blur: blur < 0.35 ? 0 : Math.round(blur * 100) / 100, stretch: px < 0.6 ? 1 : 1 + px / Math.max(1, size) };
+}
+
+// retime, shots and poseBlur are ported from opus-pro/opusclip-video-tools templates/agent-opus/project/src/agent-opus/
+// code-ui/motion.ts (MIT, Copyright (c) 2026 OpusClip; see THIRD_PARTY_NOTICES.md).
+
+export type Retime = {
+	/** The scene frame to draw at output frame `frame` (pass it to the scene's clock). */
+	source: (frame: number) => number;
+	/** The output frame where scene frame `frame` now lands. */
+	output: (frame: number) => number;
+};
+
+/**
+ * A time warp through `knots` of `[outputFrame, sceneFrame]`, both increasing: a monotone cubic, so speed changes
+ * smoothly through every knot and never jumps. Tighten or stretch a scene while every approved landing stays on its
+ * knot. Outside the knots it continues 1:1.
+ */
+export function retime(knots: [number, number][]): Retime {
+	if (!Array.isArray(knots) || knots.length < 2) throw new Error('kit.retime needs at least two [outputFrame, sceneFrame] knots.');
+	const x = knots.map((k) => k[0]);
+	const y = knots.map((k) => k[1]);
+	for (let i = 1; i < knots.length; i++) {
+		if (!(x[i]! > x[i - 1]!) || !(y[i]! > y[i - 1]!)) throw new Error('kit.retime: knots must increase in both output and scene frames.');
+	}
+	const h = x.slice(1).map((v, i) => v - x[i]!);
+	const d = y.slice(1).map((v, i) => (v - y[i]!) / h[i]!);
+	const tangent = x.map((_, i) => {
+		if (i === 0) return d[0]!;
+		if (i === x.length - 1) return d[d.length - 1]!;
+		if (d[i - 1]! * d[i]! <= 0) return 0;
+		const a = 2 * h[i]! + h[i - 1]!;
+		const b = h[i]! + 2 * h[i - 1]!;
+		return (a + b) / (a / d[i - 1]! + b / d[i]!);
+	});
+	const last = x.length - 1;
+	const source = (f: number) => {
+		if (f <= x[0]!) return y[0]! + (f - x[0]!);
+		if (f >= x[last]!) return y[last]! + (f - x[last]!);
+		let i = 0;
+		while (x[i + 1]! < f) i++;
+		const u = (f - x[i]!) / h[i]!;
+		return (2 * u ** 3 - 3 * u * u + 1) * y[i]! + (u ** 3 - 2 * u * u + u) * h[i]! * tangent[i]! + (-2 * u ** 3 + 3 * u * u) * y[i + 1]! + (u ** 3 - u * u) * h[i]! * tangent[i + 1]!;
+	};
+	const output = (f: number) => {
+		if (f <= y[0]!) return x[0]! + (f - y[0]!);
+		if (f >= y[last]!) return x[last]! + (f - y[last]!);
+		let lo = x[0]!;
+		let hi = x[last]!;
+		for (let i = 0; i < 48; i++) {
+			const mid = (lo + hi) / 2;
+			if (source(mid) < f) lo = mid;
+			else hi = mid;
+		}
+		return (lo + hi) / 2;
+	};
+	return { source, output };
+}
+
+export type Pose = { scale: number; x: number; y: number };
+export type ShotMove = { from: number; to: number; pose: Partial<Pose>; curve?: CurveName | Ease };
+
+/**
+ * A camera as a list of moves: each move goes from the previous pose to `pose` between frames `from` and `to` on
+ * `impulse` (or its own curve), and the camera holds between moves. `x`/`y` are px offsets, `scale` zooms about the
+ * frame centre. Returns the pose at a frame.
+ */
+export function shots(moves: ShotMove[], start: Partial<Pose> = {}): (frame: number) => Pose {
+	if (!Array.isArray(moves)) throw new Error('kit.shots needs a list of { from, to, pose } moves.');
+	const list = [...moves].sort((a, b) => a.from - b.from);
+	for (const move of list) {
+		if (!Number.isFinite(move.from) || !Number.isFinite(move.to) || move.to < move.from) throw new Error('kit.shots: every move needs from <= to (frames).');
+		if (move.pose.scale !== undefined && !(move.pose.scale >= 0.2 && move.pose.scale <= 6)) throw new Error('kit.shots: scale must be between 0.2 and 6.');
+	}
+	const first: Pose = { scale: start.scale ?? 1, x: start.x ?? 0, y: start.y ?? 0 };
+	return (frame: number) => {
+		let pose = first;
+		for (const move of list) {
+			if (frame < move.from) break;
+			const goal: Pose = { scale: move.pose.scale ?? pose.scale, x: move.pose.x ?? pose.x, y: move.pose.y ?? pose.y };
+			const shape = typeof move.curve === 'function' ? move.curve : curves[move.curve ?? 'impulse'];
+			const t = move.to === move.from ? 1 : shape(Math.min(1, (frame - move.from) / (move.to - move.from)));
+			if (frame <= move.to) return { scale: pose.scale + (goal.scale - pose.scale) * t, x: pose.x + (goal.x - pose.x) * t, y: pose.y + (goal.y - pose.y) * t };
+			pose = goal;
+		}
+		return pose;
+	};
+}
+
+/**
+ * Directional blur in px for a camera moving from pose `prev` to `next` in one frame: a zoom counts as travel, both
+ * axes are capped, and it is zero at rest so resting frames are crisp.
+ */
+export function poseBlur(prev: Pose, next: Pose, options: { k?: number; max?: [number, number] } = {}): { x: number; y: number } {
+	const { k = 0.13, max = [16, 12] } = options;
+	const zoom = Math.abs(next.scale - prev.scale) * 850;
+	const x = Math.min(max[0], (Math.abs(next.x - prev.x) + zoom) * k);
+	const y = Math.min(max[1], (Math.abs(next.y - prev.y) + zoom) * k);
+	return { x: x < 0.15 ? 0 : Math.round(x * 100) / 100, y: y < 0.15 ? 0 : Math.round(y * 100) / 100 };
 }

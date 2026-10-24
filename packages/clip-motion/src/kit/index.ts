@@ -16,11 +16,12 @@ import { Camera, Stage } from './stage.tsx';
 import { makeDevices } from './devices.tsx';
 import { makeImage } from './image.tsx';
 import { Mark } from './mark.tsx';
-import { curves, drawOn, noise, smear, snap, speedBlur, travel, tween } from './curves.ts';
+import { curves, drawOn, noise, poseBlur, retime, shots, smear, snap, speedBlur, travel, tween } from './curves.ts';
+import { oklab } from './color.ts';
 import { Streak } from './streak.tsx';
-import { Fill, GradientField, Grain, LightSweep, Vignette } from './fx.tsx';
+import { Fill, Goo, GradientField, Grain, LightSweep, MotionBlur, ShaderField, Vignette } from './fx.tsx';
 import { makeShot, useShot } from './shot.tsx';
-import { measure, Text } from './type.tsx';
+import { measure, Text, TypeStream } from './type.tsx';
 import { FAMILY, fontFamily, LIBRARY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
@@ -41,6 +42,7 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		// Core: free-form scenes are built from these (read_guide "explainer", "Core")
 		Mark,
 		Text,
+		TypeStream,
 		measure,
 		Shot,
 		useShot,
@@ -53,7 +55,11 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		snap,
 		smear,
 		Streak,
-		fx: Object.freeze({ GradientField, Grain, Vignette, LightSweep, Fill }),
+		retime,
+		shots,
+		poseBlur,
+		oklab,
+		fx: Object.freeze({ GradientField, ShaderField, Grain, Vignette, LightSweep, Fill, MotionBlur, Goo }),
 		font: Object.freeze({ ...FAMILY, ...Object.fromEntries(Object.keys(LIBRARY).map((name) => [name, fontFamily(name)])) }),
 		fonts: Object.freeze(Object.fromEntries(Object.entries(LIBRARY).map(([name, { weights }]) => [name, weights]))),
 		// Library: ready-made pieces, used only when they are the clearest picture

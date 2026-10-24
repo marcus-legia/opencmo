@@ -119,6 +119,8 @@ function LayoutProbe() {
 			const boxes: ProbedBox[] = [];
 			const frame = root?.getBoundingClientRect();
 			for (const element of Array.from(root?.querySelectorAll<HTMLElement>('[data-box]') ?? [])) {
+				// MotionBlur's earlier samples are ghosts of the same element: only its newest sample is measured.
+				if (element.closest('[data-ghost]')) continue;
 				const full = element.getBoundingClientRect();
 				if (full.width === 0 || full.height === 0) continue;
 				const rect = visiblePart(element, full, root ?? null);

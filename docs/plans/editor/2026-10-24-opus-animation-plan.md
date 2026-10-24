@@ -43,43 +43,49 @@ and each ends with a real video made in the editor (CLAUDE.md, "Every phase ends
 3. **New kit pieces are core, not library.** They carry no visual opinion (no colour, no font), so every style uses them.
 4. **Numbers before code** stays the rule (from the 22/10 plan): a shot's direction has timings, curves and geometry; the
    new audit checks those numbers.
-5. **Dependency:** `@remotion/motion-blur@4.0.535` (MIT, same version as our Remotion) is the only new package.
+5. **No new package:** motion blur is our own sub-frame sampler (see O1 notes).
 
 ## Work
 
-### O1. Craft kit (`packages/clip-motion/src/kit/`), one PR
+### O1. Craft kit (`packages/clip-motion/src/kit/`), one PR — built 2026-10-24
+
+Built notes: `MotionBlur` is our own (Remotion's `CameraMotionBlur` duplicates the layout tags), so no new package;
+its children may be a function `(frame) => …` (a position computed outside does not blur). `ShaderField` falls back
+to `GradientField` where the Chromium GL backend gives no WebGL2 (here only `swangle` does); scene code may not call
+`getContext`. Frames: `2026-10-24-opus-animation-frames/o1/`.
+
 
 Learned from `templates/agent-opus/project/src/agent-opus/code-ui/motion.ts`, `directed/Conversation.tsx` and the remakes'
 BUILD-LOGs (MIT; port the maths with notice, rename to our style).
 
-- [ ] **Intent eases** (`curves.ts`): `kit.ease.arrive (.22,1,.36,1)`, `travel (.76,0,.24,1)`, `leave (.4,0,1,1)`,
+- [x] **Intent eases** (`curves.ts`): `kit.ease.arrive (.22,1,.36,1)`, `travel (.76,0,.24,1)`, `leave (.4,0,1,1)`,
   `expand (.7,0,.2,1)`, `stream (.22,.06,.62,1)`, `impulse` (the `.62/.18` sweep with zero end velocity). Guide line:
   "arrivals decelerate, exits accelerate, pick the curve by intent". vitest: endpoints, monotone, `impulse` end velocity 0.
-- [ ] **Camera shot list** (`stage.tsx`): `kit.shots([{ from, to, pose: { scale, x, y } }, …])` → the pose at a frame, held
+- [x] **Camera shot list** (`stage.tsx`): `kit.shots([{ from, to, pose: { scale, x, y } }, …])` → the pose at a frame, held
   between shots, joined by `impulse`; `kit.poseBlur(prev, next, { k, max })` gives x/y blur from the pose change (the
   `blurFor` rule: scale change counts, capped 16/12 px). `Camera` gains `shots` and applies the blur on the moving layer
   only. Golden: 3 frames (rest, mid-move blurred, rest crisp).
-- [ ] **Retime** (`timing.ts`): `kit.retime(knots)` → a monotone cubic time warp (`[outputSec, sourceSec]` knots) with its
+- [x] **Retime** (`timing.ts`): `kit.retime(knots)` → a monotone cubic time warp (`[outputSec, sourceSec]` knots) with its
   inverse, so a whole scene speeds up or slows down without moving any approved landing. vitest: monotone, passes every
   knot, inverse round-trips within 1e-6.
-- [ ] **TypeStream** (`text.tsx`): letters of a whole paragraph emitted on ONE schedule (one curve over the whole text,
+- [x] **TypeStream** (`text.tsx`): letters of a whole paragraph emitted on ONE schedule (one curve over the whole text,
   line breaks are layout only), each letter going from blur (default 20 px) to sharp over `letterMs` (default 323), with
   an optional tail speed-up. Tagged like `Text` so the layout report measures it. Golden: mid-stream and settled.
-- [ ] **MotionBlur** (`fx.tsx`): `kit.fx.MotionBlur` wraps `@remotion/motion-blur` `CameraMotionBlur` (shutter angle,
+- [x] **MotionBlur** (`fx.tsx`): `kit.fx.MotionBlur` wraps `@remotion/motion-blur` `CameraMotionBlur` (shutter angle,
   samples 6–48). Guide: use it on fast travel only, never on resting text; measure render time on the vaccine fixture
   (budget: ≤ 2× the frame time at 16 samples, else lower the default).
-- [ ] **Goo and OKLab** (`fx.tsx`, `color.ts`): `kit.fx.Goo` (SVG gaussian + alpha threshold, SourceGraphic composited
+- [x] **Goo and OKLab** (`fx.tsx`, `color.ts`): `kit.fx.Goo` (SVG gaussian + alpha threshold, SourceGraphic composited
   *over* so shapes keep their exact size) for liquid splits and merges; `kit.mix.oklab(a, b, t)` so colour changes never
   pass through mud. Golden: a pill splitting into three circles; vitest: OKLab mid-point of lime→green is not olive.
-- [ ] **ShaderField** (`fx.tsx`, optional in this PR): a WebGL2 fragment-shader background with no library, drawn from
+- [x] **ShaderField** (`fx.tsx`, optional in this PR): a WebGL2 fragment-shader background with no library, drawn from
   the frame only, context created inside the window and released outside it (the AIP `code-drawn` rules), grain ≤ 2 %.
   `guard.ts` already refuses `requestAnimationFrame`, timers and `Math.random`; add a rule refusing `getContext` in
   scene code, so `ShaderField` is the only place a WebGL context is made. Golden: not a flat colour, identical on two
   renders.
-- [ ] Guide (`apps/web/lib/agent/guides.ts` `explainer`, `motion-guide.ts`): the kinetic-type purpose table (introduce an
+- [x] Guide (`apps/web/lib/agent/guides.ts` `explainer`, `motion-guide.ts`): the kinetic-type purpose table (introduce an
   idea, change one word through a mask, pick one of several, turn text into a UI action, emphasise and resolve) in our
   own words; "change one variable per review round"; the new pieces in the core list.
-- [ ] Look: re-render the six style examples and both fixtures, contact sheet in
+- [x] Look: re-render the six style examples and both fixtures, contact sheet in
   `docs/plans/editor/2026-10-24-opus-animation-frames/o1/`.
 
 ### O2. Review loop that measures (`packages/clip-motion/src/preview.ts`, `layout.ts`, tool `preview_explainer`), one PR

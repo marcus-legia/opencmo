@@ -323,3 +323,40 @@ describe('kit.color', () => {
 		expect(makeKit(job('blueprint'), { width: 1920, height: 1080 }).color.text).toBe('#EAF0FA');
 	});
 });
+
+describe('craft pieces (MotionBlur, TypeStream, shot camera, Goo, ShaderField)', () => {
+	const code = `
+const { Text, TypeStream, Camera, fx, tween, curves } = kit;
+return function Scene() {
+  const f = R.useCurrentFrame();
+  const split = tween(f, [70, 92], [0, 1], curves.expand);
+  return (
+    <R.AbsoluteFill>
+      <fx.ShaderField colors={['#ff7f73', '#b6dcee', '#144b41']} />
+      <Camera shots={[{ from: 24, to: 40, pose: { scale: 1.1 } }]}>
+        <TypeStream name="headline" text={['Ship the week', 'in one click.']} x={160} y={140} size={110} font="Fraunces" color="#0b1d1a" at={0} dur={40} />
+        <fx.MotionBlur samples={24}>
+          {(t) => <Text name="mover" text="GO" x={tween(t, [48, 64], [200, 1600], curves.glide)} y={520} size={90} color="#0b1d1a" />}
+        </fx.MotionBlur>
+        <fx.Goo>
+          {[-1, 0, 1].map((k) => <div key={k} style={{ position: 'absolute', left: 960 - (k === 0 ? 60 + (1 - split) * 150 : 60) + k * split * 170, top: 800, width: k === 0 ? 120 + (1 - split) * 300 : 120, height: 120, borderRadius: 60, background: '#111111' }} />)}
+        </fx.Goo>
+      </Camera>
+    </R.AbsoluteFill>
+  );
+};`;
+	it('streams, blurs only while moving, measures each text once, and splits the goo', { timeout: 180_000 }, async () => {
+		const parsed = parseJob({ kind: 'clip', title: 'Craft', code, beats: [{ say: 'Craft.', seconds: 4 }], format: '16:9', duration: 4 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-craft-'));
+		const [mid, rest] = await renderStills(parsed.job, prepare(parsed.job).compiled, [56, 119], dir, { scale: 0.5, format: 'png' });
+		// The MotionBlur's ghost samples are not measured: one "mover" box, and the stream is one text.
+		expect(mid!.boxes!.filter((box) => box.name === 'mover')).toHaveLength(1);
+		expect(rest!.boxes!.filter((box) => box.name === 'headline')).toHaveLength(1);
+		// Goo at rest: three separate dark discs on the row through their centres (y 860 → 430 at half size).
+		const { data, width } = pixels(rest!.file);
+		const row = Array.from({ length: width }, (_, x) => data[(430 * width + x) * 3]! < 60);
+		const runs = row.reduce((count, dark, x) => count + (dark && !row[x - 1] ? 1 : 0), 0);
+		expect(runs).toBe(3);
+	});
+});

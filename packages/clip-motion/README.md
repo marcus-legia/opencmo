@@ -133,6 +133,20 @@ anything placed with these helpers lands on the narration in both.
   highlight) · `soft` (panels). Each theme has its own values with the same meanings. Pass a name
   (`color="answer"`) or `#rrggbb`.
 
+### Craft (core, after Opus's launch films and remakes, MIT)
+- `kit.curves.arrive | glide | leave | expand | stream | impulse` – curves named by intent (lands, travels, exits,
+  grows, streams, one camera move with zero end velocity).
+- `<Camera shots={[{ from, to, pose: { scale, x, y } }]} blur?>` – a shot-list camera: holds between moves, each move
+  on `impulse`, blurred along the move by its speed (`kit.shots`, `kit.poseBlur`), crisp at rest.
+- `kit.retime(knots)` → `{ source, output }` – a monotone cubic time warp through `[outputFrame, sceneFrame]` knots.
+- `<TypeStream text x y size dur …>` – a paragraph streaming in letter by letter on one schedule, blur → sharp.
+- `<fx.MotionBlur samples? shutter?>{(frame) => …}</fx.MotionBlur>` – sub-frame motion blur; the earlier samples are
+  marked `data-ghost` and skipped by the layout probe.
+- `<fx.Goo blur?>` – liquid merge and split of touching shapes; `kit.oklab(a, b, t)` – colour mix in OKLab.
+- `<fx.ShaderField colors speed? scale? grain?>` – a WebGL2 fragment-shader colour field; falls back to
+  `GradientField` where the Chromium GL backend has no WebGL2 (in this sandbox only `swangle` has it). Scene code may
+  not call `getContext` itself.
+
 ### Look and personality (v2)
 The job's `theme` and `personality` set the look and the tempo for the whole video; the scene code never picks
 easing or durations.
