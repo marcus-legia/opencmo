@@ -222,6 +222,11 @@ intros). Each: port under MIT with notice, slots for copy/brand/screens, golden 
 - [ ] Caption band per visual moment (position and ink), so captions never cross a panel.
 - [ ] Plan this one separately when O1–O5 have shipped videos; it overlaps the active-speaker reframe work.
 
+**Planned (2026-10-24)** in [`2026-10-24-talking-head-seats-plan.md`](2026-10-24-talking-head-seats-plan.md). Reading the
+code for it found that new uploads have no face track at all: the engine's face pass left with the clipping pipeline
+(2026-10-20), so `set_frame` and `punch_in` centre the frame on them. The seats plan starts by bringing a face pass
+back (with the head box), then builds the seat forms, the caption band per moment and the morphs.
+
 ## Verify (each PR)
 
 `npm run typecheck && npm run build`; `npm run check:clip-motion` (golden stills need Chrome Headless Shell; CI is the
