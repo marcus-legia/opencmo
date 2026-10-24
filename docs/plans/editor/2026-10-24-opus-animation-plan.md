@@ -1,0 +1,195 @@
+# Learn everything Opus does in animation: craft kit, review loop, launch film, talking-head camera
+
+Status: **plan, not started** (2026-10-24). Owner ask: "remove 3D and Lottie, then study everything Opus Agent did in
+animation and plan it for us". The removal is done (`2026-10-24-remove-3d-and-lottie-plan.md`); this plan is the second
+half. Source report (Vietnamese): [`docs/research/editor/2026-10-24-opus-animation-toan-bo.md`](../../research/editor/2026-10-24-opus-animation-toan-bo.md).
+Builds on the motion studio refactor (`2026-10-24-motion-studio-refactor.md`, same branch): styles, `Shot`, `Text`,
+`Mark`, `kit.curves`, `kit.fx`, three ported MIT templates.
+
+## Why
+
+Opus makes animation in five places (Agent Opus motion graphics, the Opus Video Studio plugin with 43 templates and 34
+Claude Opus 5.5 remakes, the AI Producer talking-head plugin, Story Mode camera rules, video-perception). What makes their
+work look good is not a big library: it is craft written into each file, and a review loop that measures. Most of it fits
+our one renderer (Remotion in `clip-motion`) or our editor document ops, with no new runtime.
+
+Ranked by the spearhead question ("does it let us make the next OpenCMO marketing video in the editor?"):
+
+| # | Item | Video it unlocks | Cost |
+|---|---|---|---|
+| O1 | Craft kit: intent eases, camera shot list, retime, type stream, sub-frame motion blur, goo, OKLab | Every explainer and motion clip looks finished | S–M |
+| O2 | Review loop: contact sheet, zoom crop, audit over time | Fewer broken renders; the model fixes what it can measure | M |
+| O3 | Launch film template ported from Opus `agent-opus` (MIT), then the OpenCMO launch film | **The OpenCMO launch video** (landing hero, X, Product Hunt) | L |
+| O4 | Talking-head camera moves and pacing (AI Producer recipes) | Founder clips (V1) that feel edited | M |
+| O5 | Style-frame gate before code (Agent Opus Motion Designer flow) | The right look on the first full render | S |
+| O6 | Dynamic caption patterns with a selection table | Founder clips, explainers | M |
+| O7 | More MIT components as templates | Feature launches, data stories | M each |
+| O8 | Talking-head registers: seat / overlay / full cover from the measured face | Founder explainers with on-screen visuals | L |
+
+Order: O1 → O2 → O3 (ends with the real launch video) → O4 → O5 → O6 → O7 → O8. Each is its own PR on its own branch,
+and each ends with a real video made in the editor (CLAUDE.md, "Every phase ends with a real video").
+
+## Decisions
+
+1. **One renderer.** Everything here is either Remotion in `clip-motion` (scene code, templates, kit) or editor-core ops
+   rendered by `clip-render` (talking-head moves, captions, layouts). No three.js, no Lottie, no in-browser compile.
+2. **Copy only MIT code, with notice.** `templates/` and `remakes/` of `opus-pro/opusclip-video-tools` and
+   `opus-pro/ai-producer-plugin` are MIT (AIP's composition skill is Apache-2.0). Add each ported file to
+   `THIRD_PARTY_NOTICES.md` (the existing `LICENSE-opus-remakes.md` row covers templates and remakes). Never copy media,
+   logos, voices or sample brands. `plugins/opus-video-studio/` has no licence: learn the ideas, write our own words.
+   `reelmakeeasy` is AGPL: learn only.
+3. **New kit pieces are core, not library.** They carry no visual opinion (no colour, no font), so every style uses them.
+4. **Numbers before code** stays the rule (from the 22/10 plan): a shot's direction has timings, curves and geometry; the
+   new audit checks those numbers.
+5. **Dependency:** `@remotion/motion-blur@4.0.535` (MIT, same version as our Remotion) is the only new package.
+
+## Work
+
+### O1. Craft kit (`packages/clip-motion/src/kit/`), one PR
+
+Learned from `templates/agent-opus/project/src/agent-opus/code-ui/motion.ts`, `directed/Conversation.tsx` and the remakes'
+BUILD-LOGs (MIT; port the maths with notice, rename to our style).
+
+- [ ] **Intent eases** (`curves.ts`): `kit.ease.arrive (.22,1,.36,1)`, `travel (.76,0,.24,1)`, `leave (.4,0,1,1)`,
+  `expand (.7,0,.2,1)`, `stream (.22,.06,.62,1)`, `impulse` (the `.62/.18` sweep with zero end velocity). Guide line:
+  "arrivals decelerate, exits accelerate, pick the curve by intent". vitest: endpoints, monotone, `impulse` end velocity 0.
+- [ ] **Camera shot list** (`stage.tsx`): `kit.shots([{ from, to, pose: { scale, x, y } }, …])` → the pose at a frame, held
+  between shots, joined by `impulse`; `kit.poseBlur(prev, next, { k, max })` gives x/y blur from the pose change (the
+  `blurFor` rule: scale change counts, capped 16/12 px). `Camera` gains `shots` and applies the blur on the moving layer
+  only. Golden: 3 frames (rest, mid-move blurred, rest crisp).
+- [ ] **Retime** (`timing.ts`): `kit.retime(knots)` → a monotone cubic time warp (`[outputSec, sourceSec]` knots) with its
+  inverse, so a whole scene speeds up or slows down without moving any approved landing. vitest: monotone, passes every
+  knot, inverse round-trips within 1e-6.
+- [ ] **TypeStream** (`text.tsx`): letters of a whole paragraph emitted on ONE schedule (one curve over the whole text,
+  line breaks are layout only), each letter going from blur (default 20 px) to sharp over `letterMs` (default 323), with
+  an optional tail speed-up. Tagged like `Text` so the layout report measures it. Golden: mid-stream and settled.
+- [ ] **MotionBlur** (`fx.tsx`): `kit.fx.MotionBlur` wraps `@remotion/motion-blur` `CameraMotionBlur` (shutter angle,
+  samples 6–48). Guide: use it on fast travel only, never on resting text; measure render time on the vaccine fixture
+  (budget: ≤ 2× the frame time at 16 samples, else lower the default).
+- [ ] **Goo and OKLab** (`fx.tsx`, `color.ts`): `kit.fx.Goo` (SVG gaussian + alpha threshold, SourceGraphic composited
+  *over* so shapes keep their exact size) for liquid splits and merges; `kit.mix.oklab(a, b, t)` so colour changes never
+  pass through mud. Golden: a pill splitting into three circles; vitest: OKLab mid-point of lime→green is not olive.
+- [ ] **ShaderField** (`fx.tsx`, optional in this PR): a WebGL2 fragment-shader background with no library, drawn from
+  the frame only, context created inside the window and released outside it (the AIP `code-drawn` rules), grain ≤ 2 %.
+  `guard.ts` already refuses `requestAnimationFrame`, timers and `Math.random`; add a rule refusing `getContext` in
+  scene code, so `ShaderField` is the only place a WebGL context is made. Golden: not a flat colour, identical on two
+  renders.
+- [ ] Guide (`apps/web/lib/agent/guides.ts` `explainer`, `motion-guide.ts`): the kinetic-type purpose table (introduce an
+  idea, change one word through a mask, pick one of several, turn text into a UI action, emphasise and resolve) in our
+  own words; "change one variable per review round"; the new pieces in the core list.
+- [ ] Look: re-render the six style examples and both fixtures, contact sheet in
+  `docs/plans/editor/2026-10-24-opus-animation-frames/o1/`.
+
+### O2. Review loop that measures (`packages/clip-motion/src/preview.ts`, `layout.ts`, tool `preview_explainer`), one PR
+
+Learned from the remakes' BUILD-LOGs (contact sheets, segment checks, zoom crops, luma, `spatial-audit.json`) and
+video-perception (sample by change, not uniformly).
+
+- [ ] `preview_explainer` takes `sheet: { from, to, count ≤ 12 }` → one contact-sheet image of `count` frames across a
+  window, labelled with frame numbers, so the model sees motion, not three stills. Counts against the existing 60
+  previews/hour.
+- [ ] `zoom: { time, box }` → a full-resolution crop to check that resting text is crisp.
+- [ ] **Audit over time** in the layout probe (every 2nd frame of each shot at quarter size, measured only):
+  overlap area between tagged boxes per frame (report the worst frame and px²), smallest clearance to the safe area,
+  **jumps** (a tagged box moving more than 12 % of the short side in one frame, or scale changing more than 1.4× in 3
+  frames: the "teleport" and "dive too violent" cases), and **resting crispness** (a tagged box with a blur filter or a
+  non-identity transform after its last keyframe).
+- [ ] **Scene-declared checks**: `kit.audit.clear(nameA, nameB, { px })`, `kit.audit.inside(name, area)` let the code
+  state its own numeric promises (the `spatial-audit.json` idea); the report lists pass/fail per check.
+- [ ] Review checklist (`REVIEW_CHECKLIST`): read the audit first, fix one layer, replay that shot and its neighbours.
+- [ ] Eval (`apps/web/lib/agent/eval/tasks.ts`): a fake case whose first preview has an overlap and a jump; the fake
+  provider fixes it after reading the audit. Checks: `explainer-tool.check.ts`, MCP `server.check.ts`.
+
+### O3. Launch film template, then the OpenCMO launch video, one PR + one video
+
+Port `templates/agent-opus/project` (MIT, 1920×1080, 30 fps, 40.8 s) as `packages/clip-motion/templates/launch-film/`.
+
+- [ ] Read the whole source first (`Film.tsx`, `code-ui/*`, `directed/*`, `locked/Workflow.tsx`, `multiples/*`,
+  `config/*.json`); write down which scenes we keep. Keep its structure: config-driven copy/brand/media
+  (`template.json`), section starts (`timeline.json`), voice phrases with times (`audio-cues.json`), one film clock,
+  camera shots, the screenplay stream.
+- [ ] Map it onto our template system (`templates/index.gen.ts`, slots): copy lines, product name and site, logo SVG,
+  brand colours, 3–6 real UI screenshots (`job.assets`), the storyboard sketches drawn in code. No Opus media, logo,
+  narration or sample videos; their slots start empty and the template refuses to render without the user's own.
+- [ ] Fonts: the film uses Fraunces (we ship it), Geist and Instrument Serif (both OFL): add Geist and Instrument Serif
+  with `apps/web/scripts/fetch-fonts.mts` and the font catalog test, or map to our families (Inter/DM Serif Display) —
+  decide after a side-by-side still.
+- [ ] Narration: our voice (ElevenLabs premade) generated from the template's phrase list; `audio-cues` times come from
+  the voice's word timings, then `kit.retime` keeps every landing on its phrase.
+- [ ] Notice: add the template to `THIRD_PARTY_NOTICES.md` and `templates/LICENSE-opus-remakes.md`.
+- [ ] **The real video**: OpenCMO's own launch film (story: an idea → `/video` in the editor → your own clips and
+  script → the agent drafts → you approve → B-roll on the right words → every format). Real screenshots of the editor.
+  Render 16:9 and 9:16; extract frames from the full-size file and look at them; publish; keep as landing material.
+
+### O4. Talking-head camera moves and pacing (`packages/editor-core/src/ops/`, guides), one PR
+
+Learned from AI Producer `aip-composition/references/motion-recipes.md` and `aip/SKILL.md` (MIT; we rewrite them as
+document keyframes so preview and export draw the same thing).
+
+- [ ] Op `add_camera_move { kind, quote | start, duration?, params? }` with kinds `impact_shake` (0.2–0.45 s, amplitude
+  2–40 px), `white_flash` (≤ 0.35 s), `whip` (0.25–0.4 s, ±160 px), `push_in` (amount 0.02–0.4), `handheld`
+  (1–12 px, ramps in/out over 0.4 s), `beat_pulse` (0.2–0.3 s, 1–15 %). Each is a pure function of `(t, d, params,
+  seed)` baked into keyframes on the speaker piece (`x`, `y`, `scale`, `rotation`) or a white rect (`flash`); seeded
+  noise, never `Math.random`. Rerunning on the same words replaces the move.
+- [ ] Rules enforced in the op (not only the guide): at most one shake or flash per 20 s of clip; never on a piece hidden
+  by a layout panel; the zoom keeps the frame covered (reuse the `punch_in` margin rule).
+- [ ] Guide `pacing` (new) or `hooks`: a new visual beat every 4–6 s of speech; punch-ins ≥ 1.3× on emphasis; a
+  monochrome close-up for one sentence on an aside (existing colour ops); return to the full-frame speaker between
+  visuals; labels pass a deletion test.
+- [ ] Tests: op golden (keyframes for each kind), the 20 s rule, cover rule; export a real founder clip with a shake on
+  the number and a push-in on the build-up; look at frames.
+
+### O5. Style-frame gate (`/explain` flow), one PR
+
+Agent Opus's Motion Designer settles style and key frames before the clip.
+
+- [ ] Guide step 1 becomes: pick two or three directions (motion styles or one derived from the brand kit), write only
+  the first beat's hero shot for each, preview them as one sheet, and ask the user to pick (`ask_user` with the sheet in
+  the app; over MCP the client shows the image). Then storyboard and the full scene in the chosen direction.
+- [ ] `preview_explainer` accepts `variants: [{ code }]` (2–3) and returns one labelled sheet; counts as one preview.
+- [ ] Fake eval and MCP check updated.
+
+### O6. Dynamic caption patterns (`packages/clip-render/src/captions.ts`, editor-core captions), one PR
+
+- [ ] Compare our caption presets with AI Producer's eight patterns (`blur-ladder`, `editorial-stack`, `inverted-stack`,
+  `lead-in-flare`, `pace-adaptive`, `scribble-subtitle`, `solo-word-punch`, `tilt-slam`): which we already draw, which are
+  missing. Build the missing ones that fit our renderer (the emphasis word in a serif, at most one per phrase).
+- [ ] Guide `captions`: a selection table by video type (tutorial, talking head, story-time, hype, dense) and the rule
+  "quiet pattern when visuals share the frame most of the time".
+- [ ] Golden per pattern on the parity fixtures.
+
+### O7. More MIT components as templates, one PR per two or three
+
+Priority by the videos we need: `pf-type-snap` (headline snap: feature launches), `pf-cart-checkout` (a UI action with a
+cursor: product demos), `template-case-research` (query → answer → evidence: the agent explaining itself),
+`pf-trail-recap` (data reveal), `pf-color-field` (shader field, after O1's `ShaderField`), `study-brand-*` (short logo
+intros). Each: port under MIT with notice, slots for copy/brand/screens, golden stills, `list_motion_templates` entry.
+
+### O8. Talking-head registers from the measured face (`packages/editor-core/src/layout.ts`, `layouts.ts`), later
+
+- [ ] Add seat forms beside `set_layout`'s splits: `card`, `circle`, `aperture` at the positions each frame allows
+  (9:16 low-centred, 1:1 lower corner, 16:9 side column), placed from the face track, never `50% 50%`.
+- [ ] Caption band per visual moment (position and ink), so captions never cross a panel.
+- [ ] Plan this one separately when O1–O5 have shipped videos; it overlaps the active-speaker reframe work.
+
+## Verify (each PR)
+
+`npm run typecheck && npm run build`; `npm run check:clip-motion` (golden stills need Chrome Headless Shell; CI is the
+authority); `npm run test:editor-core` (O4, O8); `npm run test:clip-render` + parity (O6); `cd apps/web && npm run
+check:contracts` and the fake agent eval; `npm run check:mcp-server`; for O3 and O4 a real render, frames extracted from
+the full-size file and looked at. Peak RAM of a motion render stays < 2 GB (`/usr/bin/time -v` on the vaccine fixture
+before and after `MotionBlur`).
+
+## Not doing
+
+- three.js / `@remotion/three` (owner decision 2026-10-24), Lottie.
+- Compiling scene code in the browser (Agent Opus does; we render on the server in a sandbox).
+- Copying text from `opus-video-studio/plugins/` (no licence) or from `reelmakeeasy` (AGPL).
+- Story Mode camera rules: already in the long-take plan (F2).
+
+## Open questions for the owner
+
+1. O3: is the OpenCMO launch film the next marketing video, before a founder clip (O4)? (Recommended: yes — it is the
+   landing hero and the Product Hunt video, and it shows the editor itself.)
+2. O3: add Geist and Instrument Serif, or map the film to fonts we ship? (Decide from a side-by-side still.)
+3. O4: allow `white_flash` at all for founders' clips, or only shake/whip/push? (Recommended: allow, with the 20 s rule.)

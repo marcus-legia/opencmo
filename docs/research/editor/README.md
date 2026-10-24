@@ -8,6 +8,7 @@ Mới nhất ở trên. Mỗi lượt thêm một dòng và kiểm danh sách n�
 
 | Ngày | Chủ đề | Báo cáo | Nguồn chính |
 |---|---|---|---|
+| 2026-10-24 | Toàn bộ những gì Opus làm về animation | [2026-10-24-opus-animation-toan-bo.md](2026-10-24-opus-animation-toan-bo.md) — năm nơi Opus làm animation; tay nghề trong code (ease theo ý định, camera shot list, time-warp, chữ phát từng ký tự, motion blur sub-frame); audit bằng số; phim `agent-opus` MIT; hiệu ứng camera và phụ đề của AI Producer | opusclip-video-tools (`templates/`, `remakes/`, `plugins/`), ai-producer-plugin, reelmakeeasy, video-perception, bundle Agent Opus |
 | 2026-10-22 | Vì sao animation của Opus và Claude Design đẹp hơn explainer của mình | [2026-10-22-motion-quality-opus-claude-design.md](2026-10-22-motion-quality-opus-claude-design.md) — spec có số, vòng tự xem lại, ảnh thật, template từ remakes MIT | opus-pro/opusclip-video-tools (`remakes/opus-5.5`, `motion-ui`), claude-video-export, prompt Claude Design (cộng đồng) |
 | 2026-10-18 | Reframe theo người đang nói, tự chia đôi khung podcast 2 người | [2026-10-18-active-speaker-reframe.md](2026-10-18-active-speaker-reframe.md) — diarize của Scribe + `jawOpen` để cắt theo lượt nói, luật split của clip-forge, chỉ số `speaker_coverage` | Vizard Speaker Identification (15/07), Joyspace; clip-forge, ClippyMe, LR-ASD, ClipsAI, FluxClip, AutoFlip |
 | 2026-10-17 | Chữ động theo ký tự/từ/dòng, lower third | [2026-10-17-text-animator-lower-thirds.md](2026-10-17-text-animator-lower-thirds.md) — text animator kiểu range selector, sửa tách grapheme, visual `add_title` gắn vào câu nói | OpusClip Animated Lower Thirds (28/09), Descript captions (17/09); Skottie, anime.js, motion-canvas, HyperFrames registry, iart-ai lower-thirds/kinetic-typography, AIEV |
@@ -19,6 +20,10 @@ Mỗi lượt thêm các repo đã đọc code vào đây và ưu tiên repo ch�
 
 | Repo | Licence | Đọc ngày | File đã đọc | Báo cáo |
 |---|---|---|---|---|
+| opus-pro/opusclip-video-tools (đọc lại) | MIT (`templates/`, `remakes/`), không licence (`plugins/`) | 2026-10-24 | `templates/agent-opus/project/**`, `remakes/opus-5.5/*/project/{TASK.md,BUILD-LOG.md,src}` (cả 34), `plugins/opus-video-studio/{skills/motion-ui,docs,helpers}` — đọc lại vì lần trước chỉ đọc 2 remake và chưa đọc template | [2026-10-24](2026-10-24-opus-animation-toan-bo.md) |
+| [opus-pro/ai-producer-plugin](https://github.com/opus-pro/ai-producer-plugin) | MIT; composition Apache-2.0 | 2026-10-24 | `plugins/aip/skills/{aip,aip-framing,aip-composition,aip-dynamic-caption}/SKILL.md`, `aip-composition/references/{motion-recipes,code-drawn}.md` | [2026-10-24](2026-10-24-opus-animation-toan-bo.md) |
+| [opus-pro/reelmakeeasy](https://github.com/opus-pro/reelmakeeasy) | AGPL-3.0 (chỉ học) | 2026-10-24 | `skills/reelmakeeasy-camera/SKILL.md`, `skills/reelmakeeasy-beat-loop/SKILL.md` | [2026-10-24](2026-10-24-opus-animation-toan-bo.md) |
+| [opus-pro/video-perception](https://github.com/opus-pro/video-perception) | MIT | 2026-10-24 | `README.md` | [2026-10-24](2026-10-24-opus-animation-toan-bo.md) |
 | opus-pro/opusclip-video-tools | MIT (`remakes/`), không licence (`plugins/`) | 2026-10-22 | `remakes/opus-5.5/{README.md,pf-brand-dots/project/*,pf-phone-carousel/project/TASK.md}`, `plugins/opus-video-studio/{skills/motion-ui/SKILL.md,docs/*.md}` | 2026-10-22-motion-quality-opus-claude-design.md |
 | dawoodtrumboo/claude-video-export | MIT | 2026-10-22 | `README.md`, `starter/animations.jsx` | 2026-10-22-motion-quality-opus-claude-design.md |
 | [google/skia](https://github.com/google/skia) (Skottie) | BSD-3-Clause | 2026-10-17 | `modules/skottie/src/text/RangeSelector.cpp`, `TextAnimator.cpp`, `TextAdapter.cpp` | [2026-10-17](2026-10-17-text-animator-lower-thirds.md) |
