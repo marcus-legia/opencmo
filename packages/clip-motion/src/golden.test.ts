@@ -211,6 +211,19 @@ describe('kit.Mark', () => {
 	});
 });
 
+describe('vaccine-drawn fixture (the eval scene of a model following the guide)', () => {
+	it('keeps the scene file and the job fixture in sync, and previews clean', { timeout: 240_000 }, async () => {
+		const job = JSON.parse(readFileSync(join(fixtures, 'vaccine-drawn.job.json'), 'utf8'));
+		expect(job.code).toBe(readFileSync(join(fixtures, 'vaccine-drawn.scene.jsx'), 'utf8'));
+		expect(job.code).not.toMatch(/<(Icon|Lottie|Stage|Headline)\b/);
+		const parsed = parseJob(job);
+		if (!parsed.ok) throw new Error(parsed.message);
+		const result = await previewJob(parsed.job, mkdtempSync(join(tmpdir(), 'clip-motion-vaccine-drawn-')));
+		if (!result.ok) throw new Error(`${result.phase}: ${result.message}`);
+		expect(result.issues).toEqual([]);
+	});
+});
+
 describe('font library', () => {
 	it('matches the editor font catalog (files and weight ranges)', async () => {
 		const { LIBRARY } = await import('./remotion/fonts.ts');

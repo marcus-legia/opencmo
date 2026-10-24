@@ -7,7 +7,6 @@
 
 import type { ClipDocument } from "@opencmo/clip-doc";
 import {
-  BUILTIN_LOTTIES,
   MASTER_SRC,
   clipWords,
   findQuote,
@@ -158,24 +157,17 @@ const srcOf = (entity: Entity): string[] => [
   ...(((entity.paints as { src?: unknown }[] | undefined) ?? []).flatMap((paint) => (typeof paint.src === "string" ? [paint.src] : []))),
 ];
 
-/** Things an explainer can draw (`docs/explainer-v2-build.md`, kit API v2): Lucide icons, built-in Lotties, kit shapes. */
+/** Lucide icon names, for checking the icons a scene uses are real. */
 const ICON_NAMES = new Set(Object.keys((icons as { icons: Record<string, unknown> }).icons));
-const LOTTIE_NAMES = new Set(BUILTIN_LOTTIES().map((entry) => entry.name));
-const SHAPE_KINDS = new Set(["circle", "cell", "blob", "ring", "pill", "capsule", "star", "arrow", "path"]);
-
-/** Does a storyboard `visual` name something drawable? Single words and hyphen-joined pairs ("shield check"). */
-function drawable(visual: string): boolean {
-  const words = visual.toLowerCase().split(/[^a-z0-9/-]+/).filter(Boolean);
-  const names = [...words, ...words.slice(1).map((word, index) => `${words[index]}-${word}`)];
-  return names.some((name) => ICON_NAMES.has(name) || LOTTIE_NAMES.has(name) || SHAPE_KINDS.has(name));
-}
-
 /** The last `add_explainer` call's storyboard and code (the spec keeps neither the visuals nor the code). */
 function storyboardOf(outcome: Outcome) {
   const call = [...(outcome.calls ?? [])].reverse().find((item) => item.name === "add_explainer");
   const input = (call?.input ?? {}) as { beats?: { say?: string; visual?: string }[]; code?: string; theme?: string; personality?: string };
   return { beats: input.beats ?? [], code: input.code ?? "" };
 }
+
+/** Every Mark name the scene code draws (`<Mark name="virus" …>`): its own drawings. */
+const codeMarks = (code: string): string[] => [...code.matchAll(/<Mark\b[^>]*?\bname=["'{`]+([^"'`}]+)/g)].map((match) => match[1]!);
 
 /** Every icon name the scene code draws (`<Icon name="virus" …>`). */
 const codeIcons = (code: string): string[] => [...code.matchAll(/<Icon\b[^>]*?\bname=["'{`]+([a-z0-9-]+)/g)].map((match) => match[1]!);
@@ -733,18 +725,21 @@ export const TASKS: EvalTask[] = [
       const scene = gen!.spec.scene as { theme?: string; personality?: string } | undefined;
       const look = check(notes, Boolean(scene?.theme && scene.personality), `theme ${scene?.theme ?? "(none)"}, personality ${scene?.personality ?? "(none)"}`);
       const { beats, code } = storyboardOf(outcome);
-      const unpictured = beats.filter((beat) => !drawable(beat.visual ?? "")).map((beat) => beat.visual ?? "(none)");
-      const pictured = check(notes, beats.length >= 3 && !unpictured.length, `visuals that name no icon, Lottie or shape: ${unpictured.join(" | ")}`);
+      // Motion studio: the subjects are drawn (Marks) or set as type, scene code is written shot by shot,
+      // and icons, when any, are real names. The old rule (subject icons and a Headline row) is gone.
+      const vague = beats.filter((beat) => (beat.visual ?? "").trim().split(/\s+/).length < 6).map((beat) => beat.visual ?? "(none)");
+      const pictured = check(notes, beats.length >= 3 && !vague.length, `visuals too vague to draw from: ${vague.join(" | ")}`);
+      const marks = codeMarks(code);
+      const drawnSubjects = check(notes, marks.length >= Math.min(3, beats.length), `drawn subjects (Mark names): ${marks.join(", ") || "none"}`);
+      const onTopic = check(notes, marks.some((name) => /virus|antibod|immune|cell|syringe|shield|vaccin/i.test(name)), `no Mark draws the vaccine story: ${marks.join(", ") || "none"}`);
+      const shots = check(notes, /<Shot\s+[^>]*beat=/.test(code), "the scene is not written shot by shot (<Shot beat>)");
       const drawn = codeIcons(code);
       const unknown = drawn.filter((name) => !ICON_NAMES.has(name));
       const real = check(notes, !unknown.length, `unknown icons in the code: ${unknown.join(", ")}`);
-      const subject = new Set(drawn.filter((name) => /virus|syringe|shield|dna|microscope|biohazard|pill|bacteria|heart-pulse/.test(name)));
-      const onTopic = check(notes, subject.size >= 3, `subject icons: ${[...subject].join(", ") || "none"}`);
       const offTopic = drawn.filter((name) => /database|server|cpu|hard-drive/.test(name));
       const relevant = check(notes, !offTopic.length, `icons unrelated to vaccines: ${offTopic.join(", ")}`);
-      const headline = check(notes, /<Headline\b/.test(code), "no Headline row in the scene code");
       const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
-      return { pass: order && look && pictured && real && onTopic && relevant && headline && shape, notes };
+      return { pass: order && look && pictured && drawnSubjects && onTopic && shots && real && relevant && shape, notes };
     },
   },
   {
