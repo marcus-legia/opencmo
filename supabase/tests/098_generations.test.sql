@@ -3,7 +3,7 @@
 --   tạo    — kiểm catalog + spec, đặt trước credit, task `generate` cùng giao dịch
 --   trùng  — cùng (project, hash) trả lại lượt cũ, không trừ lần hai; request id lặp
 --   chốt   — complete_generation gắn media asset, chốt ≤ đặt trước, hoàn phần dư
---   hoàn   — fail_task / reclaim / huỷ → hoàn TOÀN BỘ, một lần
+--   hoàn   — fail_task / reclaim / huỷ khi đang xếp hàng → hoàn TOÀN BỘ, một lần; huỷ khi đang chạy → giữ credit
 --   quyền  — người khác không tạo trên project, không huỷ, không đọc
 create extension if not exists pgtap with schema extensions;
 
@@ -191,6 +191,8 @@ select is(public.credit_balance('e9800000-0000-4000-8000-00000000000a'), 5, 'kh�
 reset role;
 create temporary table claimed3 as select * from public.claim_next_task(array['generate'], 300);
 grant select on claimed3 to authenticated;
+-- The worker marks the paid request as sent right before calling the provider.
+select ok(public.mark_generation_sent((select id from claimed3), (select attempt_id from claimed3)), 'worker marks the request sent');
 set local role authenticated;
 select is(
   (select public.cancel_generation((select (payload->>'generation_id')::uuid from claimed3))->>'status'),
@@ -203,7 +205,10 @@ select ok(
     'x.mp4', 3, 1, 1, 3),
   'worker chốt sau khi bị huỷ: false (worker xoá file)'
 );
-select is(public.credit_balance('e9800000-0000-4000-8000-00000000000a'), 8, 'huỷ lúc chạy hoàn toàn bộ');
+-- The worker had sent the paid request: cancelling stops the result, the credits stay spent.
+select is(public.credit_balance('e9800000-0000-4000-8000-00000000000a'), 5, 'cancelled while running: no refund');
+select is((select credits_final from public.generations where id = (select (payload->>'generation_id')::uuid from claimed3)), 3,
+  'cancelled while running: credits_final is the hold');
 
 -- quyền: người dùng không gọi được RPC của worker
 set local role authenticated;

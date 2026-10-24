@@ -46,7 +46,7 @@ const PROMPTS: Record<string, { guide: GuideName; steps: string }> = {
   explain: {
     guide: "explainer",
     steps:
-      "Pick the clip (or a blank New edit the user names) with list_projects / list_clips. Read get_explainer_kit. Show the storyboard (say, label and visual of every beat, the theme and personality) and wait for the user's go before writing code. Then preview_explainer until clean (at most 3 rounds), add_explainer for the price, confirm only after the user agrees, and poll get_generation.",
+      "Pick the clip (or a blank New edit the user names) with list_projects / list_clips. Read get_explainer_kit. Show the storyboard (say, label and visual of every beat, the theme and personality) and wait for the user's go before writing code. Then write the direction (the motion spec with numbers: positions, seconds, curves per move) and code from it. preview_explainer with times around the main moves, answer the review checklist it returns, fix the one worst problem and preview again (up to 6 rounds, stop when a round finds nothing). Then add_explainer for the price, confirm only after the user agrees, and poll get_generation.",
   },
   video: {
     guide: "video",

@@ -675,6 +675,10 @@ begin
       return v_session;
     end if;
   end if;
+  if (select count(*) from public.agent_sessions
+      where user_id = v_user and scope = 'cmo' and created_at > now() - interval '1 hour') >= 30 then
+    raise exception 'Too many new conversations in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
   insert into public.agent_sessions(user_id, scope, model)
   values (v_user, 'cmo', p_model) returning * into v_session;
   return v_session;
@@ -1170,7 +1174,11 @@ declare
   -- A narrated video (explainer) takes a voice, like a voiceover.
   v_voiced boolean := p_model.kind = 'voice' or (p_model.kind = 'video' and p_model.limits ? 'voices');
   v_explainer boolean := p_model.provider = 'opencmo-motion';
+  -- The scene template a motion model renders: narrated explainers take voices, silent clips do not.
+  v_template text := case when p_model.provider = 'opencmo-motion'
+    then case when p_model.limits ? 'voices' then 'explainer' else 'clip' end end;
   v_beat jsonb;
+  v_seconds numeric := 0;
 begin
   if v_scene then
     v_allowed := v_allowed || array['scene'];
@@ -1260,15 +1268,18 @@ begin
       or jsonb_typeof(p_spec->'scene'->'template') is distinct from 'string') then
     raise exception 'Describe the 3D scene first.' using errcode = '22023';
   end if;
-  if v_scene and octet_length((p_spec->'scene')::text) > 4000 then
+  if v_scene and octet_length((case when v_explainer then (p_spec->'scene') - 'assets' else p_spec->'scene' end)::text) > 4000 then
     raise exception 'This 3D scene has too much data.' using errcode = '22023';
   end if;
   -- Explainers: the explainer model takes only explainer scenes, and only it takes them. The
   -- script is checked here because the price and the voice are computed from it.
-  if v_scene and v_explainer <> (p_spec->'scene'->>'template' = 'explainer') then
-    if v_explainer then
-      raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  if v_scene and v_explainer and p_spec->'scene'->>'template' is distinct from v_template then
+    if v_template = 'clip' then
+      raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
     end if;
+    raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
+  end if;
+  if v_scene and not v_explainer and p_spec->'scene'->>'template' in ('explainer', 'clip') then
     raise exception 'Describe the 3D scene first.' using errcode = '22023';
   end if;
   if v_explainer and (
@@ -1281,7 +1292,9 @@ begin
       jsonb_typeof(p_spec->'scene'->'title') is distinct from 'string'
       or length(btrim(p_spec->'scene'->>'title')) not between 1 and 60
       or jsonb_typeof(p_spec->'scene'->'beats') is distinct from 'array'
-      or jsonb_array_length(p_spec->'scene'->'beats') not between 3 and 16
+      -- Explainers: 3-16 narrated beats; silent clips (motion quality B1): 1-8 timed beats.
+      or jsonb_array_length(p_spec->'scene'->'beats') not between
+         case v_template when 'clip' then 1 else 3 end and case v_template when 'clip' then 8 else 16 end
       or (p_spec->'scene' ? 'accent' and (jsonb_typeof(p_spec->'scene'->'accent') is distinct from 'string'
           or p_spec->'scene'->>'accent' !~ '^#[0-9a-fA-F]{6}$'))
       -- v2: the look and the motion personality, the same names as `THEMES` and
@@ -1290,9 +1303,12 @@ begin
           or p_spec->'scene'->>'theme' not in ('blueprint', 'paper')))
       or (p_spec->'scene' ? 'personality' and (jsonb_typeof(p_spec->'scene'->'personality') is distinct from 'string'
           or p_spec->'scene'->>'personality' not in ('premium', 'corporate', 'playful', 'energetic')))) then
+    if v_template = 'clip' then
+      raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
+    end if;
     raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
   end if;
-  if v_explainer then
+  if v_template = 'explainer' then
     for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
       if jsonb_typeof(v_beat) is distinct from 'object'
           or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label'))
@@ -1303,6 +1319,35 @@ begin
         raise exception 'This explainer script is not valid. Write it again.' using errcode = '22023';
       end if;
     end loop;
+  end if;
+  -- A silent clip: every beat says how long it lasts (0.5-30 s), and they add up to at most 30 s and
+  -- to no more than the paid duration.
+  if v_template = 'clip' then
+    for v_beat in select b from jsonb_array_elements(p_spec->'scene'->'beats') b loop
+      if jsonb_typeof(v_beat) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(v_beat) k where k not in ('say', 'label', 'seconds'))
+          or jsonb_typeof(v_beat->'say') is distinct from 'string'
+          or length(btrim(v_beat->>'say')) not between 1 and 240
+          or (v_beat ? 'label' and (jsonb_typeof(v_beat->'label') is distinct from 'string'
+              or length(btrim(v_beat->>'label')) > 40))
+          or jsonb_typeof(v_beat->'seconds') is distinct from 'number'
+          or (v_beat->>'seconds')::numeric not between 0.5 and 30 then
+        raise exception 'This motion clip is not valid. Write it again.' using errcode = '22023';
+      end if;
+      v_seconds := v_seconds + (v_beat->>'seconds')::numeric;
+    end loop;
+    if v_seconds > 30 then
+      raise exception 'This motion clip is longer than 30 seconds. Shorten its beats.' using errcode = '22023';
+    end if;
+    if v_seconds > (p_spec->>'duration')::numeric then
+      raise exception 'This motion clip''s beats last longer than its paid length. Shorten its beats or make it longer.' using errcode = '22023';
+    end if;
+  end if;
+  -- Images the scene shows (kit.Image): at most 6, each the caller's own library object
+  -- (motion quality A5). The worker checks them again against the task's owner.
+  if v_explainer and p_spec->'scene' ? 'assets'
+      and not public.ai_motion_assets_ok(p_spec->'scene'->'assets') then
+    raise exception 'An image in this animation is not in your library. Pick it again.' using errcode = '22023';
   end if;
   if v_scene and p_spec->'scene'->>'template' = 'code' and (
       jsonb_typeof(p_spec->'scene'->'code_ref') is distinct from 'string'
@@ -1361,6 +1406,27 @@ $$;
 
 
 --
+-- Name: ai_motion_assets_ok(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ai_motion_assets_ok(p_assets jsonb) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $_$
+  select jsonb_typeof(p_assets) = 'array'
+     and jsonb_array_length(p_assets) <= 6
+     and not exists (
+       select 1 from jsonb_array_elements(p_assets) a
+       where jsonb_typeof(a) is distinct from 'object'
+          or exists (select 1 from jsonb_object_keys(a) k where k not in ('name', 'ref'))
+          or jsonb_typeof(a->'name') is distinct from 'string'
+          or a->>'name' !~ '^[a-z][a-z0-9-]{0,31}$'
+          or not public.ai_media_ref_ok(a->'ref'))
+     and (select count(distinct a->>'name') from jsonb_array_elements(p_assets) a) = jsonb_array_length(p_assets);
+$_$;
+
+
+--
 -- Name: ai_price(public.ai_models, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1374,9 +1440,10 @@ CREATE FUNCTION public.ai_price(p_model public.ai_models, p_spec jsonb) RETURNS 
       when 'second' then (p_model.price->>'credits')::numeric * ceil(coalesce((p_spec->>'duration')::numeric, 1))
       when 'kchars' then (p_model.price->>'credits')::numeric
         * greatest(1, ceil(length(btrim(p_spec->>'prompt')) / 1000.0))
-      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters.
+      -- Explainer: render per started 10 s plus the voice per started 1,000 narration characters
+      -- (none for a silent motion clip, whose row has no `voiceKchars`).
       when 'explainer' then (p_model.price->>'credits')::numeric * ceil((p_spec->>'duration')::numeric / 10)
-        + (p_model.price->>'voiceKchars')::numeric * greatest(1, ceil(coalesce((
+        + coalesce((p_model.price->>'voiceKchars')::numeric, 0) * greatest(1, ceil(coalesce((
             select length(string_agg(btrim(b->>'say'), ' ' order by i))
             from jsonb_array_elements(p_spec->'scene'->'beats') with ordinality as t(b, i)), 0) / 1000.0))
     end)
@@ -4035,6 +4102,12 @@ begin
     return jsonb_build_object('generation', to_jsonb(v_generation), 'reused', true);
   end if;
 
+  -- New generations only (reuse returned above): each one runs a paid prompt check on the worker, and a
+  -- blocked prompt is refunded in full, so the web's `generations` limit alone left a free loop open.
+  if not public.rate_limit_hit('generation_create', 120, 3600) then
+    raise exception 'Too many generations started. Wait a while and try again.' using errcode = 'P0001';
+  end if;
+
   if (select count(*) from public.generations
       where user_id = v_user and status in ('queued', 'running')) >= public.generation_active_limit() then
     raise exception 'Too many generations are running. Wait for one to finish.' using errcode = 'P0001';
@@ -4433,6 +4506,47 @@ CREATE FUNCTION public.editor_json(p_clip_id uuid) RETURNS jsonb
   )
   from public.editor_projects p
   where p.clip_id = p_clip_id;
+$$;
+
+
+--
+-- Name: enforce_write_budget(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_write_budget() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_rows int;
+  v_bytes bigint;
+  v_size bigint;
+begin
+  if v_user is null then
+    return new;
+  end if;
+  -- Serialised per user and table, so parallel calls cannot all pass the same check.
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':write-budget:' || tg_table_name, 0));
+  -- Statements, not a CASE expression: plpgsql resolves every `new.<field>` in an expression on each table.
+  if tg_table_name = 'editor_transcripts' then
+    v_size := octet_length(new.body);
+  elsif tg_table_name = 'editor_revisions' then
+    v_size := pg_column_size(new.document);
+  else
+    v_size := pg_column_size(new.body);
+  end if;
+  delete from public.write_budget_ledger
+  where user_id = v_user and table_name = tg_table_name and created_at <= now() - interval '1 hour';
+  select count(*), coalesce(sum(bytes), 0) into v_rows, v_bytes
+  from public.write_budget_ledger where user_id = v_user and table_name = tg_table_name;
+  if v_rows >= public.write_budget_rows(tg_table_name) or v_bytes + v_size > public.write_budget_bytes() then
+    raise exception 'You have saved a lot of changes in the last hour. Wait a few minutes and try again.'
+      using errcode = 'P0001';
+  end if;
+  insert into public.write_budget_ledger (user_id, table_name, bytes) values (v_user, tg_table_name, v_size);
+  return new;
+end;
 $$;
 
 
@@ -5094,6 +5208,31 @@ $$;
 
 
 --
+-- Name: mark_generation_sent(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_generation_sent(p_task_id uuid, p_attempt_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rows int;
+begin
+  -- Locks the task first, as the cancel path does, so a cancel either lands before (false: the worker
+  -- stops without paying) or after (the credits stay spent).
+  perform 1 from public.tasks
+  where id = p_task_id and kind = 'generate' and status = 'running' and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then return false; end if;
+  update public.generations set sent_at = coalesce(sent_at, now())
+  where task_id = p_task_id and status = 'running';
+  get diagnostics v_rows = row_count;
+  return v_rows = 1;
+end;
+$$;
+
+
+--
 -- Name: mcp_admit(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5142,6 +5281,9 @@ begin
     raise exception 'That confirm code is not valid. Ask for the price again.' using errcode = '22023';
   end if;
   delete from public.mcp_confirms where user_id = v_user and used_at < now() - interval '1 day';
+  if (select count(*) from public.mcp_confirms where user_id = v_user and used_at > now() - interval '1 hour') >= 600 then
+    raise exception 'Too many confirm codes in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
   insert into public.mcp_confirms (user_id, nonce) values (v_user, p_nonce) on conflict do nothing;
   get diagnostics v_count = row_count;
   return v_count = 1;
@@ -5505,9 +5647,18 @@ begin
    select id,polar_customer_id into v_user,v_link from public.profiles where lower(email)=lower(v_email) for update;
   end if;
 
-  if v_link is not null and v_link<>v_customer then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
-  update public.profiles set polar_customer_id=v_customer where id=v_user;
-  insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user);
+  if v_link is not null and v_link<>v_customer then
+   -- A second Polar customer for the same account. Matched by email it proves nothing: skip. Matched by
+   -- the external id our checkout link set, the payment is the account's: credit it, keep the first link.
+   if v_external_user is null then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
+   raise warning 'polar: order % for user % comes from customer %, account is linked to %', v_id, v_user, v_customer, v_link;
+   -- Map the second customer too: its later events (a refund, a cancelled subscription) may carry no
+   -- external id, and the email path would skip them as "account already linked".
+   insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user) on conflict (customer_id) do nothing;
+  else
+   update public.profiles set polar_customer_id=v_customer where id=v_user;
+   insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user);
+  end if;
  end if;
  if p_event_type in ('order.paid','order.refunded') then
   insert into public.polar_purchases(order_id,customer_id,user_id,product_id,total_amount,currency)
@@ -5889,7 +6040,13 @@ begin
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
       or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
+      -- 30 until motion quality A3 (PR #104) raised MCP previews to 60: both, so either PR can merge first.
       or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600)
+      or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
+      -- POST /api/v1/generations: each request can run a paid moderation call.
+      or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
+      -- `create_generation` itself: a direct PostgREST call skips the route's bucket.
+      or (p_bucket = 'generation_create' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
@@ -6151,16 +6308,16 @@ CREATE FUNCTION public.refund_caption_translation(p_charge_id uuid) RETURNS bool
     SET search_path TO 'public'
     AS $$
 declare
-  v_user uuid := public.require_user();
   v_row public.caption_translations;
 begin
-  select * into v_row from public.caption_translations
-  where id = p_charge_id and user_id = v_user for update;
+  -- Called by the web server (service role) after its own LLM call failed. A user who could call it
+  -- would refund a translation while the paid LLM call was still running.
+  select * into v_row from public.caption_translations where id = p_charge_id for update;
   if not found or v_row.status <> 'charged' then
     return false;
   end if;
   update public.caption_translations set status = 'refunded' where id = v_row.id;
-  perform public.credit_refund(v_user, 'caption_translation', v_row.id, 'Caption translation refund',
+  perform public.credit_refund(v_row.user_id, 'caption_translation', v_row.id, 'Caption translation refund',
     (select job_id from public.clips where id = v_row.clip_id));
   return true;
 end;
@@ -6856,9 +7013,21 @@ begin
   -- Retry cùng lúc không được tiêu quá số dư.
   perform 1 from public.profiles where id = v_user for update;
 
+  -- Same caps as create_upload_edit: the route's limit alone is skipped by calling this RPC directly.
+  if (select count(*) from public.jobs
+      where user_id = v_user and status in ('queued', 'running') and purging_at is null) >= 3
+  then
+    raise exception 'You already have 3 projects in progress. Please wait for one to finish.'
+      using errcode = 'P0001';
+  end if;
+  if not public.rate_limit_hit('retry', 20, 3600) then
+    raise exception 'Too many retries. Please wait a while and try again.'
+      using errcode = 'P0001';
+  end if;
+
   select status into v_status
   from public.jobs
-  where id = p_job_id and user_id = v_user
+  where id = p_job_id and user_id = v_user and purging_at is null
   for update;
 
   if not found then
@@ -7584,6 +7753,22 @@ begin
     update public.generations set status = 'running' where id = v_generation.id;
   elsif new.status = 'queued' then
     update public.generations set status = 'queued' where id = v_generation.id;
+  elsif new.status = 'cancelled' and v_generation.sent_at is not null then
+    -- The worker sent the paid request (`mark_generation_sent`, right before the provider call):
+    -- cancelling stops the result, not the bill. Until then nothing was paid, so a cancel while the
+    -- worker downloads or checks inputs is refunded below, and so is one after a reclaim that never
+    -- reached the provider; a reclaimed task that had reached it keeps its credits even when queued.
+    update public.generations
+    set status = 'cancelled',
+        credits_final = greatest(public.credit_held('generation', v_generation.id), 0),
+        error = null,
+        finished_at = now()
+    where id = v_generation.id;
+    update public.tasks
+    set status = 'failed', error = 'The shot before this one did not finish. Your credits were refunded.',
+        finished_at = now()
+    where status = 'awaiting_input'
+      and id in (select task_id from public.generations where after_id = v_generation.id);
   elsif new.status in ('failed', 'cancelled') then
     update public.generations
     set status = new.status,
@@ -7765,6 +7950,28 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: write_budget_bytes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.write_budget_bytes() RETURNS bigint
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select 128::bigint * 1024 * 1024;
+$$;
+
+
+--
+-- Name: write_budget_rows(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.write_budget_rows(p_table text) RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select case p_table when 'marketing_documents' then 300 else 1200 end;
 $$;
 
 
@@ -8028,6 +8235,7 @@ CREATE TABLE public.generations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
     after_id uuid,
+    sent_at timestamp with time zone,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
     CONSTRAINT generations_kind_check CHECK ((kind = ANY (ARRAY['image'::text, 'video'::text, 'voice'::text, 'audio'::text]))),
@@ -8374,6 +8582,18 @@ CREATE TABLE public.worker_operations (
     job_id uuid NOT NULL,
     kind text NOT NULL,
     result jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: write_budget_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.write_budget_ledger (
+    user_id uuid NOT NULL,
+    table_name text NOT NULL,
+    bytes bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -8794,14 +9014,6 @@ ALTER TABLE ONLY public.polar_customers
 
 
 --
--- Name: polar_customers polar_customers_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.polar_customers
-    ADD CONSTRAINT polar_customers_user_id_key UNIQUE (user_id);
-
-
---
 -- Name: polar_purchases polar_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9106,10 +9318,24 @@ CREATE INDEX editor_feedback_created_idx ON public.editor_feedback USING btree (
 
 
 --
+-- Name: editor_revisions_clip_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_revisions_clip_created_idx ON public.editor_revisions USING btree (clip_id, created_at);
+
+
+--
 -- Name: editor_revisions_clip_number_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX editor_revisions_clip_number_idx ON public.editor_revisions USING btree (clip_id, number DESC);
+
+
+--
+-- Name: editor_transcripts_clip_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_transcripts_clip_created_idx ON public.editor_transcripts USING btree (clip_id, created_at);
 
 
 --
@@ -9183,6 +9409,13 @@ CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_a
 
 
 --
+-- Name: marketing_documents_user_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX marketing_documents_user_created_idx ON public.marketing_documents USING btree (user_id, created_at);
+
+
+--
 -- Name: mcp_confirms_used_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9229,6 +9462,13 @@ CREATE INDEX page_captures_task_idx ON public.page_captures USING btree (task_id
 --
 
 CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: polar_customers_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX polar_customers_user_idx ON public.polar_customers USING btree (user_id);
 
 
 --
@@ -9323,6 +9563,13 @@ CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations U
 
 
 --
+-- Name: write_budget_ledger_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX write_budget_ledger_user_idx ON public.write_budget_ledger USING btree (user_id, table_name, created_at);
+
+
+--
 -- Name: agent_messages agent_messages_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9358,6 +9605,20 @@ CREATE TRIGGER editor_revisions_immutable BEFORE UPDATE ON public.editor_revisio
 
 
 --
+-- Name: editor_revisions editor_revisions_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_revisions_write_budget BEFORE INSERT ON public.editor_revisions FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
+
+
+--
+-- Name: editor_transcripts editor_transcripts_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_transcripts_write_budget BEFORE INSERT ON public.editor_transcripts FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
+
+
+--
 -- Name: jobs jobs_project; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9376,6 +9637,13 @@ CREATE TRIGGER jobs_record_storage_deletions BEFORE DELETE ON public.jobs FOR EA
 --
 
 CREATE TRIGGER jobs_storage_expiry BEFORE UPDATE OF status, finished_at ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.set_job_storage_expiry();
+
+
+--
+-- Name: marketing_documents marketing_documents_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER marketing_documents_write_budget BEFORE INSERT ON public.marketing_documents FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
 
 
 --
@@ -10020,6 +10288,14 @@ ALTER TABLE ONLY public.worker_operations
 
 
 --
+-- Name: write_budget_ledger write_budget_ledger_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.write_budget_ledger
+    ADD CONSTRAINT write_budget_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: agent_messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10373,6 +10649,12 @@ ALTER TABLE public.worker_draft_initializations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: write_budget_ledger; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets đọc B-roll của chính mình; Type: POLICY; Schema: public; Owner: -

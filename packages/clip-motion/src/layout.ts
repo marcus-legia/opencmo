@@ -21,7 +21,11 @@ function quote(name: string): string {
 	return name.length > 40 ? `"${name.slice(0, 37)}…"` : `"${name}"`;
 }
 
-export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }): string[] {
+/**
+ * `clip`: a silent motion clip (logo reveal, carousel) is designed motion, not a narrated diagram: marks may cross
+ * the frame's edges and the frame may be mostly field. Text keeps every rule.
+ */
+export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: number; seconds: number }, options: { clip?: boolean } = {}): string[] {
 	const { width, height } = frame;
 	const at = `at ${frame.seconds.toFixed(1)} s`;
 	const issues: string[] = [];
@@ -38,7 +42,7 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 
 	const tolerance = 2;
 	const safe = { left: width * SAFE.left - tolerance, right: width * SAFE.right + tolerance, top: height * SAFE.top - tolerance, bottom: height * SAFE.bottom + tolerance };
-	for (const box of boxes) {
+	for (const box of options.clip ? texts : boxes) {
 		const sides = [
 			box.x < safe.left ? 'left' : null,
 			box.x + box.w > safe.right ? 'right' : null,
@@ -53,6 +57,7 @@ export function layoutIssues(boxes: LaidBox[], frame: { width: number; height: n
 		if (box.size !== undefined && box.size < minimum - 0.5) issues.push(`Text ${quote(box.name)} is ${Math.round(box.size)} px, under the ${Math.round(minimum)} px minimum ${at}.`);
 	}
 
+	if (options.clip) return issues;
 	// Coverage of the safe area by anything tagged, on a coarse grid.
 	const cellW = (safe.right - safe.left) / GRID;
 	const cellH = (safe.bottom - safe.top) / GRID;
@@ -100,3 +105,33 @@ export function beatIssues(samples: { beat: number; boxes: LaidBox[] | null }[])
 	}
 	return issues;
 }
+
+/** A move of more than this share of the frame's short side between two frames (1/30 s) reads as a jump. */
+const JUMP_SHARE = 0.12;
+
+/**
+ * Marks and texts that leap between two consecutive frames: the same `kind` + `name` (only when it is unique in both
+ * frames, so two icons of one name are never confused), centre moved more than 12% of the short side. A box that
+ * appears or disappears is a cut, not a jump.
+ */
+export function jumpIssues(pairs: { seconds: number; a: LaidBox[]; b: LaidBox[] }[], frame: { width: number; height: number }): string[] {
+	const limit = JUMP_SHARE * Math.min(frame.width, frame.height);
+	const key = (box: LaidBox) => `${box.kind}:${box.name}`;
+	const unique = (boxes: LaidBox[]) => {
+		const counts = new Map<string, number>();
+		for (const box of boxes) counts.set(key(box), (counts.get(key(box)) ?? 0) + 1);
+		return new Map(boxes.filter((box) => counts.get(key(box)) === 1).map((box) => [key(box), box]));
+	};
+	const issues: string[] = [];
+	for (const pair of pairs) {
+		const after = unique(pair.b);
+		for (const [name, a] of unique(pair.a)) {
+			const b = after.get(name);
+			if (!b) continue;
+			const moved = Math.hypot(b.x + b.w / 2 - (a.x + a.w / 2), b.y + b.h / 2 - (a.y + a.h / 2));
+			if (moved > limit) issues.push(`${quote(a.name)} jumps ${Math.round(moved)} px in one frame at ${pair.seconds.toFixed(1)} s: ease the move or cut on purpose.`);
+		}
+	}
+	return issues;
+}
+

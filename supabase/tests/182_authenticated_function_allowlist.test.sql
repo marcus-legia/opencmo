@@ -4,7 +4,7 @@
 -- A new function is on this surface by default (Postgres grants EXECUTE to PUBLIC). This test
 -- fails until it is either listed here — a conscious decision that users may call it directly,
 -- with its own ownership checks and limits — or revoked from `authenticated`.
--- Known debt: `create_generation` skips the route's moderation; PR #71's billing work removes it.
+-- `create_generation` skips the route's moderation when called directly; the worker checks the prompt again (`check_prompt`).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -97,7 +97,6 @@ insert into allowed values
   ('purge_in_progress()'),
   ('put_editor_transcript(uuid,text)'),
   ('rate_limit_hit(text,integer,integer)'),
-  ('refund_caption_translation(uuid)'),
   ('refund_media_captions_from_task()'),
   ('register_media_asset(uuid,text,text,uuid)'),
   ('rename_blank_edit(uuid,text)'),

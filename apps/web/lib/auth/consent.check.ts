@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 
-import { allowedRedirectHost } from "./consent";
+import { allowedRedirectHost, isLoopbackRedirect } from "./consent";
 
 const env = {};
 assert.equal(allowedRedirectHost("https://claude.ai/api/mcp/auth_callback", env), "claude.ai");
@@ -21,11 +21,18 @@ for (const uri of [
   "https://claude.ai@evil.example/cb",
   "claude.ai/cb",
   "",
+  "http://claude.ai/cb",
+  "https://localhost:6274/oauth/callback",
+  "ftp://127.0.0.1/cb",
+  "javascript://localhost/%0aalert(1)",
 ]) {
   assert.equal(allowedRedirectHost(uri, env), null, uri);
 }
 assert.equal(allowedRedirectHost("https://CLAUDE.AI/cb", env), "claude.ai", "hostnames compare case-insensitively");
 assert.equal(allowedRedirectHost("https://cursor.example/cb", { OPENCMO_OAUTH_REDIRECT_HOSTS: "cursor.example" }), "cursor.example");
 assert.equal(allowedRedirectHost("https://claude.ai/cb", { OPENCMO_OAUTH_REDIRECT_HOSTS: "cursor.example" }), null);
+
+assert.equal(isLoopbackRedirect("http://127.0.0.1:33418/callback"), true);
+assert.equal(isLoopbackRedirect("https://claude.ai/cb"), false);
 
 console.log("OAuth redirect hosts: allowlist holds.");

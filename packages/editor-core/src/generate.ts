@@ -13,7 +13,7 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
-import { EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
+import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, sceneBytes, type ExplainerScene } from './explainer';
 
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
@@ -115,10 +115,20 @@ const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
 
 /** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref, not a 3D template. */
 export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.provider === 'opencmo-motion';
+/** A silent motion clip (`motion-clip`): the same renderer, no voice in the catalog row. */
+export const isMotionClip = (model: Pick<AiModel, 'provider' | 'limits'>): boolean => isExplainer(model) && !model.limits.voices?.length;
 
-// Measured like SQL: a script that passes here must not fail there with the 3D wording.
-const explainerScene = ExplainerSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+// Measured like SQL: a script that passes here must not fail there with the 3D wording. Images are capped on their own
+// (6 refs), so they never count against the script.
+const scriptBytes = ({ assets: _assets, ...scene }: { assets?: unknown }) => sceneBytes(scene);
+const explainerScene = ExplainerSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
 	message: 'The script is too long for one explainer. Use fewer or shorter beats.',
+});
+const clipScene = ClipSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+	message: 'The storyboard is too long for one motion clip. Use fewer or shorter beats.',
+}).refine((scene) => scene.beats.reduce((sum, beat) => sum + beat.seconds, 0) <= CLIP_MAX_SECONDS + 1e-9, {
+	message: 'This motion clip is longer than 30 seconds. Shorten its beats.',
+	path: ['beats'],
 });
 
 export function specSchema(model: AiModel) {
@@ -160,9 +170,9 @@ export function specSchema(model: AiModel) {
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),
-				...(limits.scene ? { scene: isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
+				...(limits.scene ? { scene: isMotionClip(model) ? clipScene : isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
 				// Explainers voice their narration in the render job: the premade voice is part of the spec.
-				...(isExplainer(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
+				...(isExplainer(model) && !isMotionClip(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
 				seed,
 			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
 				message: 'A shot that continues the previous one cannot also start from an image.',
@@ -186,6 +196,18 @@ export function specSchema(model: AiModel) {
 	}
 }
 
+/** SQL `btrim(text)`: spaces only, not tabs or newlines. `String.trim` strips both and priced a voice 1× under SQL. */
+// An index scan, not `/ +$/`: that regex backtracks quadratically on a long run of inner spaces.
+const sqlTrim = (text: string): string => {
+	let start = 0;
+	let end = text.length;
+	while (start < end && text[start] === ' ') start++;
+	while (end > start && text[end - 1] === ' ') end--;
+	return text.slice(start, end);
+};
+/** SQL `length(text)` counts code points; `String.length` counts UTF-16 units (an emoji is 2). */
+const sqlLength = (text: string): number => [...text].length;
+
 /**
  * Giá credit đặt trước cho một spec — cùng công thức với `ai_price()` trong
  * SQL. Worker có thể chốt thấp hơn (chi phí thật), không bao giờ cao hơn.
@@ -198,7 +220,7 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 			case 'second':
 				return model.price.credits * Math.ceil(spec.duration ?? 1);
 			case 'kchars':
-				return model.price.credits * Math.max(1, Math.ceil(spec.prompt.trim().length / 1000));
+				return model.price.credits * Math.max(1, Math.ceil(sqlLength(sqlTrim(spec.prompt)) / 1000));
 			case 'explainer':
 				// Integer credits per started 10 s: 0.1 per second rounds differently in JS, SQL and Python.
 				return model.price.credits * Math.ceil((spec.duration ?? 0) / 10);
@@ -207,8 +229,8 @@ export function priceOf(model: AiModel, spec: GenerationSpec): number {
 	const factor = (spec.resolution && model.price.resolution?.[spec.resolution]) || 1;
 	const scene = spec.scene as Partial<ExplainerScene> | undefined;
 	const voice = model.price.voiceKchars && Array.isArray(scene?.beats)
-		// Code points, as SQL `length()` and Python `len()` count them.
-		? model.price.voiceKchars * Math.max(1, Math.ceil([...narrationOf(scene.beats)].length / 1000))
+		// Each line trimmed and joined as SQL's `string_agg(btrim(say), ' ')`, not as `narrationOf`.
+		? model.price.voiceKchars * Math.max(1, Math.ceil(sqlLength(scene.beats.map((beat) => sqlTrim(beat.say)).join(' ')) / 1000))
 		: 0;
 	return Math.ceil(base * factor) + voice;
 }

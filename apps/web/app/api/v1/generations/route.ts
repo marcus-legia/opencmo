@@ -22,6 +22,8 @@ const body = z.object({
  * Cùng spec trong cùng project đang chạy/đã xong → trả lại lượt cũ
  * (`reused: true`), không trừ credit lần hai.
  */
+// The `generations` rate limit is counted inside `checkGeneration`, after the free refusals and reuse:
+// the editor retries a waiting shot every couple of seconds, and resuming paid media must not be limited.
 export const POST = withApi({ body }, async ({ supabase, body }) => {
   const result = await createGeneration(supabase, {
     jobId: body.job_id,

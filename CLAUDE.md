@@ -138,7 +138,7 @@ apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes v
   lib/generate/         AI media generation
   lib/cmo/              the AI CMO job engine
   lib/mcp/              MCP server (API keys → short-lived user JWT under RLS)
-  lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger
+  lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds
 supabase/migrations/    at the repo ROOT; every migration needs a pgTAP test in supabase/tests/
 scripts/dev.mjs         one-command dev stack
 ```
