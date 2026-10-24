@@ -24,6 +24,8 @@ export const MAX_PREVIEW_STILLS = 12;
 export const STAGED_ASSET = 'bundle:';
 /** Frames in one preview contact sheet (`sheet`). */
 export const MAX_SHEET_FRAMES = 9;
+/** Style directions in one preview (`variants`): the hero still of each, side by side. */
+export const MAX_VARIANTS = 3;
 export const CLIP_SECONDS = { min: 3, max: 30 } as const;
 const BEAT_SECONDS = { min: 0.5, max: 30 } as const;
 
@@ -73,6 +75,8 @@ export const MotionJobSchema = z.object({
 	// preview only: a full-resolution crop of one frame (px of the composition), to check that resting text is crisp
 	zoom: z.object({ t: z.number().finite().min(0), x: z.number().finite().min(0), y: z.number().finite().min(0), w: z.number().finite().min(16), h: z.number().finite().min(16) }).strict().optional(),
 	assets: z.array(AssetSchema).max(MAX_ASSETS).optional(),
+	// preview only: 2-3 style directions (other scene code for the same beats); each renders one hero still at `stills[0]`
+	variants: z.array(z.object({ label: z.string().trim().min(1).max(40), code: z.string().min(1).max(MAX_CODE_CHARS) }).strict()).min(2).max(MAX_VARIANTS).optional(),
 }).strict().superRefine((job, ctx) => {
 	const names = new Set<string>();
 	job.assets?.forEach((asset, i) => {
@@ -100,8 +104,11 @@ export type MotionJob = z.infer<typeof MotionJobSchema>;
 export type MotionAsset = z.infer<typeof AssetSchema>;
 export type MotionFormat = MotionJob['format'];
 
-/** A preview image: a still at `t`, the contact sheet (`times` in reading order, `columns` per row) or the zoom crop. */
-export type PreviewStill = { t: number; file: string; kind?: 'sheet' | 'zoom'; times?: number[]; columns?: number };
+/**
+ * A preview image: a still at `t`, the contact sheet (`times` in reading order, `columns` per row), the zoom crop, or
+ * the style directions' hero stills side by side (`labels` left to right).
+ */
+export type PreviewStill = { t: number; file: string; kind?: 'sheet' | 'zoom' | 'variants'; times?: number[]; columns?: number; labels?: string[] };
 
 export type PreviewResult =
 	| { ok: true; stills: PreviewStill[]; issues: string[]; estimated: boolean }

@@ -182,8 +182,18 @@ export const previewExplainerInput = z
       .object({ t: z.number().finite().min(0), x: z.number().finite().min(0), y: z.number().finite().min(0), w: z.number().finite().min(16), h: z.number().finite().min(16) })
       .optional()
       .describe("A full-resolution crop of one frame (px of the composition): check that resting text and fine lines are crisp."),
+    code: sceneFields.code.optional().describe('The body of (React, R, kit) => { …; return function Scene() { … } } with JSX, no imports (read_guide "explainer"). Leave it out when you send variants.'),
+    variants: z
+      .array(z.object({ label: z.string().trim().min(1).max(40).describe('The direction\'s name for the user, e.g. "Kinetic type".'), code: sceneFields.code }))
+      .min(2)
+      .max(3)
+      .optional()
+      .describe("Style directions to choose from before the whole video: 2-3 scene codes of the same hero shot, each rendered at times[0] (default: beat 1's middle), returned as ONE image side by side, left to right in this order. Counts as one preview."),
   })
-  .superRefine(silentRules);
+  .superRefine(silentRules)
+  .superRefine((value, ctx) => {
+    if (value.code === undefined && !value.variants) ctx.addIssue({ code: "custom", path: ["code"], message: "send the scene code, or variants to compare directions." });
+  });
 
 export const addExplainerInput = z
   .object({
@@ -211,6 +221,8 @@ export type MotionJob = {
   sheet?: { from: number; to: number; count: number };
   /** Preview only: a full-resolution crop of one frame. */
   zoom?: { t: number; x: number; y: number; w: number; h: number };
+  /** Preview only: 2-3 style directions, one hero still each, side by side. */
+  variants?: { label: string; code: string }[];
   /** A silent motion clip: beats timed by their own seconds. */
   kind?: "clip";
   /** Images for kit.Image: signed URLs in a preview. */
@@ -219,7 +231,7 @@ export type MotionJob = {
 
 /** What `previewMotion` returns (`apps/web/lib/motion/preview.ts`): `PreviewResult` plus base64 JPEGs. */
 export type MotionPreview =
-  | { ok: true; stills: { t: number; file: string; kind?: "sheet" | "zoom"; times?: number[]; columns?: number }[]; issues: string[]; estimated: boolean; images?: string[] }
+  | { ok: true; stills: { t: number; file: string; kind?: "sheet" | "zoom" | "variants"; times?: number[]; columns?: number; labels?: string[] }[]; issues: string[]; estimated: boolean; images?: string[] }
   | { ok: false; phase: "job" | "compile" | "guard" | "render"; message: string };
 
 export type PreviewMotion = (job: MotionJob) => Promise<MotionPreview>;
@@ -324,7 +336,7 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
+        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. Before the whole video, variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -355,7 +367,7 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
   return {
     ...(input.silent ? { kind: "clip" as const } : {}),
     title: input.title,
-    code: input.code,
+    code: input.code ?? input.variants![0]!.code,
     beats,
     format: input.format,
     duration: input.silent ? clipSeconds(clipBeats(input.beats)) : explainerSeconds(beats),
@@ -366,6 +378,7 @@ export function previewJob(input: z.infer<typeof previewExplainerInput>, accent?
     ...(input.times?.length ? { stills: input.times } : {}),
     ...(input.sheet ? { sheet: input.sheet } : {}),
     ...(input.zoom ? { zoom: input.zoom } : {}),
+    ...(input.variants ? { variants: input.variants.map(({ label, code }) => ({ label, code })) } : {}),
   };
 }
 
@@ -402,12 +415,28 @@ export async function runPreviewExplainer(
   const images: Image[] = (result.images ?? []).map((data) => ({ data, mimeType: "image/jpeg" }));
   if (!images.length) return { ok: false, content: JSON.stringify({ error: "No stills came back." }), summary: "Explainer preview failed" };
   const count = result.issues.length;
+  if (parsed.data.variants) {
+    // Style directions: the user picks, so no review rounds yet.
+    const labels = parsed.data.variants.map((variant) => variant.label);
+    return {
+      ok: true,
+      content: JSON.stringify({
+        ok: true,
+        stills: result.stills.map((still) => `style directions at ${still.t} s, left to right: ${(still.labels ?? labels).join(", ")}`),
+        images: "one image: the directions side by side, left to right",
+        issues: result.issues,
+        next: `Show the user the image and ask which direction to take (ask_user with options ${labels.map((label) => `"${label}"`).join(", ")}). Then the storyboard and the whole scene in the chosen direction.`,
+      }),
+      summary: `Previewed ${labels.length} style directions`,
+      images,
+    };
+  }
   return {
     ok: true,
     content: JSON.stringify({
       ok: true,
       duration: job.duration,
-      stills: result.stills.map((still) => (still.kind === "sheet" ? `contact sheet of ${still.times?.join(", ")} s, ${still.columns} per row` : still.kind === "zoom" ? `zoom at ${still.t} s (full resolution)` : still.t)),
+      stills: result.stills.map((still) => (still.kind === "variants" ? `style directions at ${still.t} s, left to right: ${still.labels?.join(", ")}` : still.kind === "sheet" ? `contact sheet of ${still.times?.join(", ")} s, ${still.columns} per row` : still.kind === "zoom" ? `zoom at ${still.t} s (full resolution)` : still.t)),
       images: "one image per entry of stills, in order",
       issues: result.issues,
       ...(result.estimated ? { timing: "estimated from the script; the real voice sets the final timing" } : {}),

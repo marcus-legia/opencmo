@@ -94,6 +94,21 @@ async function main() {
   const looked = previewJob({ ...input, sheet: { from: 1, to: 2, count: 6 }, zoom: { t: 2, x: 0, y: 0, w: 400, h: 200 } });
   assert.deepEqual([looked.sheet, looked.zoom], [{ from: 1, to: 2, count: 6 }, { t: 2, x: 0, y: 0, w: 400, h: 200 }], "the sheet and the zoom reach the job");
   assert.ok(!previewExplainerInput.safeParse({ ...input, sheet: { from: 2, to: 1, count: 4 } }).success, "a sheet runs forward");
+  // Style directions (plan O5): variants instead of code, the first one's code fills the job's.
+  const { code: _code, ...noCode } = input;
+  const directions = previewExplainerInput.parse({ ...noCode, variants: [{ label: "A", code: input.code }, { label: "B", code: `${input.code}\n` }] });
+  const directed = previewJob(directions);
+  assert.equal(directed.code, input.code);
+  assert.deepEqual(directed.variants?.map((variant) => variant.label), ["A", "B"]);
+  assert.ok(!previewExplainerInput.safeParse(noCode).success, "a preview needs code or variants");
+  assert.ok(!previewExplainerInput.safeParse({ ...noCode, variants: [{ label: "A", code: input.code }] }).success, "two directions at least");
+  const sheetOf = await runPreviewExplainer(directions, {
+    preview: async () => ({ ok: true, stills: [{ t: 1, file: "variants.jpg", kind: "variants", labels: ["A", "B"] }], issues: [], estimated: true, images: ["AAAA"] }),
+  });
+  assert.ok(sheetOf.ok && sheetOf.images?.length === 1);
+  assert.match(sheetOf.content, /left to right: A, B/);
+  assert.match(sheetOf.content, /ask_user/);
+  assert.doesNotMatch(sheetOf.content, /review/, "no review rounds before a direction is picked");
   const review = JSON.parse(reviewed.content) as { review?: string; rounds?: string };
   assert.equal(review.review, REVIEW_CHECKLIST);
   assert.equal(PREVIEW_ROUNDS, 6);

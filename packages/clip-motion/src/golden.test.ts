@@ -360,3 +360,28 @@ return function Scene() {
 		expect(runs).toBe(3);
 	});
 });
+
+describe('style directions (variants)', () => {
+	const fill = (color: string) => `const { fx } = kit;\nreturn function Scene() { return <fx.Fill color="${color}" />; };`;
+	const job = (variants: { label: string; code: string }[]) => {
+		const parsed = parseJob({ title: 'Directions', code: variants[0]!.code, variants, beats: [{ say: 'One.', seconds: 2 }], kind: 'clip', format: '16:9', duration: 3, stills: [1] });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+
+	it('renders each direction at the same moment, side by side, labelled left to right', { timeout: 180_000 }, async () => {
+		const result = await previewJob(job([{ label: 'Warm', code: fill('#e0301e') }, { label: 'Cool', code: fill('#1e50e0') }]), mkdtempSync(join(tmpdir(), 'clip-motion-variants-')));
+		if (!result.ok) throw new Error(result.message);
+		expect(result.stills).toHaveLength(1);
+		expect(result.stills[0]).toMatchObject({ kind: 'variants', labels: ['Warm', 'Cool'], t: 1 });
+		const { data, width, height } = pixels(result.stills[0]!.file);
+		const at = (x: number) => [...data.subarray((Math.round(height / 2) * width + x) * 3, (Math.round(height / 2) * width + x) * 3 + 3)];
+		expect(at(Math.round(width / 4))[0]).toBeGreaterThan(180);
+		expect(at(Math.round((3 * width) / 4))[2]).toBeGreaterThan(180);
+	});
+
+	it('names the direction whose code fails', { timeout: 120_000 }, async () => {
+		const result = await previewJob(job([{ label: 'Warm', code: fill('#e0301e') }, { label: 'Broken', code: 'return function Scene() { return <div>; };' }]), mkdtempSync(join(tmpdir(), 'clip-motion-variants-')));
+		expect(result).toMatchObject({ ok: false, message: expect.stringMatching(/^Broken: /) });
+	});
+});

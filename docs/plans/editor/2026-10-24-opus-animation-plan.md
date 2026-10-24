@@ -168,11 +168,21 @@ Not done: a `speaker.cameraMove` capability for style skills (no style preset as
 
 Agent Opus's Motion Designer settles style and key frames before the clip.
 
-- [ ] Guide step 1 becomes: pick two or three directions (motion styles or one derived from the brand kit), write only
+- [x] Guide step 1 becomes: pick two or three directions (motion styles or one derived from the brand kit), write only
   the first beat's hero shot for each, preview them as one sheet, and ask the user to pick (`ask_user` with the sheet in
   the app; over MCP the client shows the image). Then storyboard and the full scene in the chosen direction.
-- [ ] `preview_explainer` accepts `variants: [{ code }]` (2–3) and returns one labelled sheet; counts as one preview.
-- [ ] Fake eval and MCP check updated.
+- [x] `preview_explainer` accepts `variants: [{ code }]` (2–3) and returns one labelled sheet; counts as one preview.
+- [x] Fake eval and MCP check updated.
+
+**Built (2026-10-24).** `preview_explainer` takes `variants: [{ label, code }]` (2-3; `code` may then be left out):
+clip-motion's `previewVariants` compiles each direction, renders its hero still at `times[0]` (default beat 1's
+middle) in one browser, reports each one's layout issues under its label, and tiles them left to right into one
+image (`kind: 'variants'`, `labels`). A direction that fails to compile fails the preview with its label. The result
+skips the review rounds and asks the model to show the image and `ask_user` with the labels. Guide `explainer`
+step 1 and the `/explain` directive offer it for a new video with no chosen look; the MCP instructions say the same
+(the tool schema is shared). Tests: two clip-motion goldens (side-by-side colours, the failing label), the
+explainer-tool check, and the fake eval task `explain-directions` (directions previewed in one call before asking,
+then the whole scene and add_explainer).
 
 ### O6. Dynamic caption patterns (`packages/clip-render/src/captions.ts`, editor-core captions), one PR
 

@@ -692,6 +692,22 @@ export const TASKS: EvalTask[] = [
       return { pass: sheet && promised && added, notes };
     },
   },
+  // Plan O5: the look is picked from hero shots before the whole scene is written.
+  {
+    id: "explain-directions",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. Show me a couple of directions to pick from first, then make it.",
+    answer: "Gradient flow",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const calls = outcome.calls ?? [];
+      const asked = calls.findIndex((call) => call.name === "ask_user");
+      const compared = calls.findIndex((call) => call.name === "preview_explainer" && ((call.input as { variants?: unknown[] }).variants?.length ?? 0) >= 2);
+      const first = check(notes, compared >= 0 && asked > compared, "did not preview 2-3 directions in one call before asking");
+      const added = check(notes, outcome.tools.includes("add_explainer"), `tools: ${outcome.tools.join(", ")}`);
+      return { pass: first && added, notes };
+    },
+  },
   // Explainer v2 (docs/explainer-v2-build.md): the subject is on screen, mapped noun by noun before any code.
   {
     id: "explain-vaccine",

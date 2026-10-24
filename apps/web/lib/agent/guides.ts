@@ -277,7 +277,8 @@ An explainer is a 15-90 s narrated animation of ONE idea; a motion clip (silent:
 Before the storyboard, decide the look of THIS video: palette (hex values), background, fonts, motion vocabulary.
 - list_motion_styles → named directions with what each suits (kinetic type for hooks and claims, gradient flow for results and numbers, neon tech for how software works…). get_motion_style { id } → its guide (palette, background, fonts, motion numbers, composition, do and don't) and an example shot's code: read the code, it shows the techniques.
 - Or derive your own from the user's brand (apply_brand_kit colours, their site) the same way: 1 field colour, 1 ink, 1 accent (2 at most), a display font and a text font from kit.fonts, a motion character.
-- One direction for the whole video. Tell the user which one and why in one line with the storyboard.
+- Let the user pick the look before you write the whole video (a pro motion team settles style frames first): choose two or three directions that fit (styles or one from the brand), write ONLY the hero shot of beat 1 in each (a short scene, same beats), and preview them together with preview_explainer variants [{ label, code }] and times [the hero moment]. It returns one image, the directions side by side left to right, and counts as one preview. Show it and ask which one (ask_user with the labels). Skip this when the user already named a style or a template, or for a quick fix of a scene they have.
+- Then one direction for the whole video. Tell the user which one and why in one line with the storyboard.
 - theme and personality on the tools only seed kit.color and the library pieces; your scene paints its own background and picks its own colours. Send theme "blueprint" for a dark direction, "paper" for a light one.
 
 ## 2. Storyboard — subject first, then show it and ask

@@ -98,6 +98,45 @@ function crop(file: string, box: { x: number; y: number; w: number; h: number },
 
 export type PreviewOptions = { log?: Log; scale?: number; browser?: HeadlessBrowser };
 
+/**
+ * Style directions (plan O5, learned from Agent Opus's Motion Designer, which settles the look before the clip): the
+ * hero still of each variant's code at the same moment, side by side in one image, so the user picks a direction
+ * before the whole scene is written. A variant that fails to compile fails the preview with its label.
+ */
+async function previewVariants(job: MotionJob, outdir: string, options: PreviewOptions): Promise<PreviewResult> {
+	const timeline = buildTimeline(job);
+	const { width, height } = frameSize(job.format);
+	const frame = previewFrames(timeline, job.stills?.slice(0, 1))[0]!;
+	const out = resolve(outdir);
+	const files: string[] = [];
+	const issues: string[] = [];
+	let own: HeadlessBrowser | null = null;
+	const staged = stageAssets(job, await getBundle(options.log));
+	try {
+		const browser = options.browser ?? (own = await openPreviewBrowser());
+		for (const [index, variant] of job.variants!.entries()) {
+			const one = { ...staged.job, code: variant.code, variants: undefined };
+			let compiled: string | null;
+			try {
+				({ compiled } = prepare(one));
+				const [still] = await renderStills(one, compiled, [frame], join(out, `variant-${index}`), { ...options, browser, scale: 0.4, format: 'png' });
+				files.push(still!.file);
+				if (still!.boxes) issues.push(...layoutIssues(still!.boxes, { width, height, seconds: frame / FPS }, { clip: job.kind === 'clip' }).map((issue) => `${variant.label}: ${issue}`));
+			} catch (error) {
+				if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: `${variant.label}: ${error.message}` };
+				throw error;
+			}
+		}
+		tile(files, files.length, join(out, 'variants.jpg'));
+	} finally {
+		if (own) await own.close({ silent: true }).catch(() => undefined);
+		staged.dispose();
+		for (const index of job.variants!.keys()) rmSync(join(out, `variant-${index}`), { recursive: true, force: true });
+	}
+	const t = Math.round((frame / FPS) * 100) / 100;
+	return { ok: true, stills: [{ t, file: join(out, 'variants.jpg'), kind: 'variants', labels: job.variants!.map((variant) => variant.label) }], issues: [...new Set(issues)], estimated: timeline.estimated };
+}
+
 export async function previewJob(input: MotionJob, outdir: string, options: PreviewOptions = {}): Promise<PreviewResult> {
 	const started = Date.now();
 	let job: MotionJob;
@@ -108,6 +147,7 @@ export async function previewJob(input: MotionJob, outdir: string, options: Prev
 		if (error instanceof MotionCodeFailure) return { ok: false, phase: error.phase, message: error.message };
 		throw error;
 	}
+	if (job.variants?.length) return previewVariants(job, outdir, options);
 	const timeline = buildTimeline(job);
 	const { width, height } = frameSize(job.format);
 	let stills: Still[];

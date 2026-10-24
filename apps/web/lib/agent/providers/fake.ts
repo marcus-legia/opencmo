@@ -79,6 +79,12 @@ const explainerInput = (explainer: FakeExplainer, ask = "") => {
   const mark = /<Mark\b[^>]*?\bname=["'{`]+([^"'`}]+)/.exec(explainer.code)?.[1] ?? "subject";
   return { ...explainer, code: `kit.audit.inside(${JSON.stringify(mark)}, "full");\n${explainer.code}`, sheet: { from: 1, to: 4, count: 6 } };
 };
+/** Asked for directions first: two hero shots of beat 1 to pick from, one preview (guide step 1). */
+const wantsDirections = (ask: string) => /\bshow me (a couple of|two|three|some) (style )?directions\b/i.test(ask);
+const directionsInput = (explainer: FakeExplainer) => {
+  const { code, ...rest } = explainer;
+  return { ...rest, variants: [{ label: "Kinetic type", code }, { label: "Gradient flow", code }], times: [1] };
+};
 /** The words that asked for an explainer: the latest `/explain` command of the conversation. */
 /** add_explainer takes the previewed scene, not the preview's look requests (sheet, zoom, times). */
 const addInput = <T extends object>(input: T) => {
@@ -164,6 +170,11 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("apply_color")) return [text(results.some((block) => block.is_error) ? "The grade could not be applied." : "The clip now has a warm cinematic grade.")];
     if (previous.includes("ask_user")) {
       const parsed = JSON.parse(raw0) as { user_answer?: { choices?: string[]; text?: string }; skipped?: boolean };
+      // The direction is picked: now the whole scene in it.
+      if (wantsDirections(explainAsk(history))) {
+        const explainer = explainerFor(explainAsk(history));
+        return [text("Writing the whole animation in that direction."), use("preview_explainer", explainerInput(explainer, explainAsk(history)))];
+      }
       if (parsed.skipped) return [text("No problem, I'll keep it as it is.")];
       return [text(`You chose: ${[...(parsed.user_answer?.choices ?? []), parsed.user_answer?.text].filter(Boolean).join(", ")}.`)];
     }
@@ -173,6 +184,10 @@ function script(history: StoredMessage[]): unknown[] {
       const raw = typeof content === "string" ? content : ((content as Block[]).find((item) => item.type === "text")?.text ?? "{}");
       const parsed = JSON.parse(raw) as { ok?: boolean; error?: string; issues?: string[] };
       if (!parsed.ok) return [text(`The explainer preview failed: ${parsed.error ?? "unknown error"}`)];
+      const sent = anthropicFormat.callsIn(assistant?.content ?? []).find((call) => call.name === "preview_explainer")?.input as { variants?: { label: string }[] } | undefined;
+      if (sent?.variants) {
+        return [use("ask_user", { question: "Which direction should the explainer take?", options: sent.variants.map((variant) => variant.label), multi: false })];
+      }
       // The subject check of the guide: one line per still, what it shows against what the beat says.
       const explainer = explainerFor(explainAsk(history));
       const checked = explainer.beats.map((beat, index) => `Still ${index + 1}: shows ${beat.visual}; the beat says “${beat.say}”`).join("\n");
@@ -434,6 +449,7 @@ function script(history: StoredMessage[]): unknown[] {
   // straight away when the user already said so ("go ahead", "no need to show it").
   if (/<command name="\/explain">/.test(ask)) {
     const explainer = explainerFor(ask);
+    if (wantsDirections(ask)) return [text("Two directions for the opening shot first."), use("preview_explainer", directionsInput(explainer))];
     if (/\bgo ahead\b|\bjust (do|make) it\b|no need to (show|ask)/.test(ask)) {
       return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer, ask))];
     }
