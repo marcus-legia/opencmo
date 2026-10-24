@@ -1,7 +1,8 @@
 """Task `generate`: sinh một media asset bằng provider trong catalog (spec §7.3).
 
 Tiền không được đụng tới ở đây: `create_generation` đã đặt trước, trigger trên
-`tasks` hoàn toàn bộ khi task chết bằng bất kỳ đường nào, và
+`tasks` hoàn toàn bộ khi task chết bằng bất kỳ đường nào, and a cancel after
+`mark_generation_sent` (right before the provider call) keeps the hold, and
 `complete_generation` chốt ≤ phần đặt trước. Việc của worker chỉ là: kiểm lại
 spec (lớp thứ ba), gọi provider, tải kết quả THEO STREAM lên bucket `media`,
 và chốt.
@@ -27,7 +28,13 @@ from opencmo.ai.catalog import (
     validate_spec,
     with_row,
 )
-from opencmo.ai.moderation import check_input, check_input_video, check_output, text_quality
+from opencmo.ai.moderation import (
+    check_input,
+    check_input_video,
+    check_output,
+    check_prompt,
+    text_quality,
+)
 from opencmo.ai.providers import ProviderError, adapter_for
 from opencmo.ai.providers.motion import motion_assets
 from opencmo.backends.retry import TransientError
@@ -266,10 +273,15 @@ def process(store: Any, task: Task) -> None:
     object_name = ""
     with task_workspace(store, task, "generate") as (heartbeat, root):
         try:
+            # Before any download or provider call: the web checked this text, a direct RPC call did not.
+            check_prompt(model, spec)
             try:
                 inputs = _prepare_inputs(store, task, model, spec, root, generation)
             except SpecError as exc:
                 store.fail_task(task.id, task.attempt_id, str(exc))
+                return
+            # The paid step: cancelling after this keeps the credits, cancelling before it refunds them.
+            if heartbeat.lost.is_set() or not store.mark_generation_sent(task.id, task.attempt_id):
                 return
             result = adapter.run(model, inputs, root, alive=lambda: not heartbeat.lost.is_set())
             if result is None or heartbeat.lost.is_set():

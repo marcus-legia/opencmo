@@ -10,6 +10,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { notFound, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { LlmError, llmReady, structured } from "@/lib/cmo/jobs/llm";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { aiFakeEnabled } from "@/lib/generate/models";
 
 import { applyTranslation, captionSeconds, fakeTranslate, parseTranscript, type TranscriptLine } from "./captions-translate";
@@ -73,7 +74,8 @@ export async function translateCaptions(
   } catch (error) {
     // Hoàn hỏng thì phí nằm lại ở trạng thái `charged`: phải hiện ra log để đối soát,
     // nhưng không được che lỗi gốc mà người dùng cần thấy.
-    const { error: refundError } = await supabase.rpc("refund_caption_translation", { p_charge_id: charge.charge_id });
+    // Service role: a user who could call the refund would do it while the paid LLM call is still running.
+    const { error: refundError } = await createAdminClient().rpc("refund_caption_translation", { p_charge_id: charge.charge_id });
     if (refundError) console.error(`[captions] refund_caption_translation ${charge.charge_id} failed: ${refundError.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(422, error instanceof LlmError ? error.message : TRANSLATE_FAILED);

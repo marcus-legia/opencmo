@@ -89,21 +89,28 @@ export async function lookAt(
   if (!url || !token) return { answer: { error: NOT_SET_UP } };
 
   const { clip_id, ...params } = input;
-  let seen: LookedAt;
+  let context: ClipContext;
   try {
-    const context = await clipContext(supabase, clip_id);
-    seen = { context, project: await ensureProject(supabase, context, clip_id) };
+    context = await clipContext(supabase, clip_id);
   } catch {
     return { answer: { error: "That clip was not found. Use list_clips to find its id." } };
   }
 
-  // Counted only once the clip is the caller's: a wrong id does not spend the hour's looks.
+  // Counted once the clip is the caller's (a wrong id does not spend the hour's looks), and before
+  // `ensureProject`, which can write a project row: a refused look does no work.
   const { data: allowed, error: limited } = await supabase.rpc("rate_limit_hit", { p_bucket: "mcp_look", p_limit: LOOK_LIMIT, p_window_seconds: 3600 });
   if (limited) {
     console.error("[mcp] look rate limit", limited.message);
     return { answer: { error: FAILED } };
   }
   if (allowed === false) return { answer: { error: `You can look at frames ${LOOK_LIMIT} times an hour. Try again later, or give the user open_in_editor's link.` } };
+
+  let seen: LookedAt;
+  try {
+    seen = { context, project: await ensureProject(supabase, context, clip_id) };
+  } catch {
+    return { answer: { error: "That clip was not found. Use list_clips to find its id." } };
+  }
 
   let res: Response;
   try {

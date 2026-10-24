@@ -105,8 +105,8 @@ async function readJson(request: NextRequest): Promise<unknown> {
     throw new ApiError(413, "That request is too large.");
   }
   const text = await request.text();
-  // `content-length` có thể vắng mặt (chunked) — đo lại trên chuỗi thật.
-  if (text.length > MAX_BODY_BYTES) {
+  // `content-length` may be missing (chunked): measure the real body, in bytes, not UTF-16 units.
+  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
     throw new ApiError(413, "That request is too large.");
   }
   if (!text) return undefined;
@@ -159,16 +159,7 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
         user = { id: data.user.id, email: data.user.email ?? undefined };
       }
 
-      if (options.rateLimit) {
-        const { bucket, limit, windowSeconds } = options.rateLimit;
-        const { data, error } = await supabase.rpc("rate_limit_hit", {
-          p_bucket: bucket,
-          p_limit: limit,
-          p_window_seconds: windowSeconds,
-        });
-        if (error) throw apiErrorFromPostgrest(error);
-        if (data === false) return errorResponse(429, TOO_MANY);
-      }
+      if (options.rateLimit) await hitRateLimit(supabase, options.rateLimit);
 
       let body: unknown = undefined;
       if (options.body) {
@@ -210,6 +201,17 @@ export function withApi<Schema extends z.ZodType | undefined = undefined>(
 ) {
   return async (request: NextRequest, routeContext: RouteContext): Promise<NextResponse> =>
     handleApi(options, handler, request, await createServerClient(), routeContext);
+}
+
+/** One `rate_limit_hit()` call; throws 429 when the bucket is full. For limits a handler counts mid-way. */
+export async function hitRateLimit(supabase: SupabaseClient, { bucket, limit, windowSeconds }: RateLimit): Promise<void> {
+  const { data, error } = await supabase.rpc("rate_limit_hit", {
+    p_bucket: bucket,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+  if (error) throw apiErrorFromPostgrest(error);
+  if (data === false) throw new ApiError(429, TOO_MANY);
 }
 
 /**

@@ -109,9 +109,11 @@ def test_fake_am_thanh_dung_thoi_luong(tmp_path, model, spec, seconds):
 # ------------------------------------------------------------------- task
 
 class FakeStore:
-    def __init__(self, generation: dict, *, complete: bool = True) -> None:
+    def __init__(self, generation: dict, *, complete: bool = True, sent: bool = True) -> None:
         self.generation = generation
         self.complete_result = complete
+        self.sent_result = sent
+        self.sent: list[tuple] = []
         self.uploaded: list[tuple] = []
         self.completed: dict | None = None
         self.failed: list[str] = []
@@ -128,6 +130,10 @@ class FakeStore:
         assert local.exists()
         self.uploaded.append((bucket, path, content_type))
         return path
+
+    def mark_generation_sent(self, task_id, attempt_id):
+        self.sent.append((task_id, attempt_id))
+        return self.sent_result
 
     def complete_generation(self, task_id, attempt_id, **kwargs):
         self.completed = kwargs
@@ -177,6 +183,18 @@ def test_sinh_anh_tai_len_media_va_chot(monkeypatch):
     assert (store.completed["width"], store.completed["height"]) == (1024, 1024)
     assert store.completed["duration"] is None, "ảnh không có thời lượng"
     assert store.completed["credits"] == 1
+    assert store.sent == [("task-1", "attempt-1")], "the paid request is marked sent before the provider runs"
+
+
+def test_cancelled_before_the_provider_call_never_calls_it(monkeypatch):
+    """The cancel landed while inputs were checked: SQL refunds in full, so the provider must not be paid."""
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    store = FakeStore(_generation(), sent=False)
+    called = []
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: type("A", (), {"run": lambda *a, **k: called.append(1)})())
+    generate_task.process(store, _task())
+    assert called == []
+    assert store.uploaded == [] and store.completed is None and store.failed == []
 
 
 def test_retried_attempt_uploads_its_own_object(monkeypatch):
@@ -261,6 +279,18 @@ def test_anh_bi_kiem_duyet_chan_thi_hong_va_khong_len_bucket(monkeypatch):
     assert store.failed == ["This result was blocked by our content policy. Your credits were refunded."]
     assert store.uploaded == []
     assert store.completed is None
+
+
+def test_a_blocked_prompt_fails_the_task_before_the_provider_runs(monkeypatch):
+    # create_generation is callable straight through PostgREST, past the web's moderation.
+    monkeypatch.setenv("OPENCMO_AI_FAKE", "1")
+    spec = {"prompt": "a red fox [[flag]]", "aspectRatio": "1:1"}
+    store = FakeStore(_generation(spec=spec, spec_hash=generate_task.spec_hash("fake-image", spec)))
+    ran: list = []
+    monkeypatch.setattr(generate_task, "_prepare_inputs", lambda *args, **_: ran.append(args) or {})
+    generate_task.process(store, _task())
+    assert store.failed == ["This request goes against our content policy. Your credits were refunded."]
+    assert ran == [] and store.uploaded == []
 
 
 def test_kiem_duyet_bo_qua_canh_3d_cua_minh():

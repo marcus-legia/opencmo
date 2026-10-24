@@ -49,6 +49,8 @@ type Resolved = { type: Declaration["generate"]; model: string; spec: Record<str
 type GenerationView = {
   id: string;
   status: "queued" | "running" | "done" | "failed" | "cancelled";
+  /** Final credits once finished: more than 0 on a cancelled one means it was cancelled after it was sent. */
+  credits?: number;
   error: string | null;
   asset: { id: string; name: string; url: string } | null;
 };
@@ -439,7 +441,11 @@ export function useGenerations({
         }
         if (view.status !== "done" || !view.asset) {
           throw new Error(
-            view.status === "cancelled" ? "Generation was cancelled. Your credits were refunded." : (view.error ?? "Generation failed. Your credits were refunded."),
+            view.status === "cancelled"
+              ? view.credits
+                ? "Generation was cancelled after it was sent. Its credits were spent."
+                : "Generation was cancelled. Your credits were refunded."
+              : (view.error ?? "Generation failed. Your credits were refunded."),
           );
         }
         const download = await fetch(view.asset.url).catch(() => null);

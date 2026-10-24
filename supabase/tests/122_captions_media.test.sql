@@ -4,7 +4,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(21);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('e1220000-0000-4000-8000-00000000000a', 'cap-a@test.local'),
@@ -61,9 +61,16 @@ set local request.jwt.claims = '{"sub":"e1220000-0000-4000-8000-00000000000a"}';
 create temp table tr as select public.charge_caption_translation('e1222000-0000-4000-8000-00000000000a', 30) as v;
 select is(public.credit_balance('e1220000-0000-4000-8000-00000000000a'), 1, 'dịch 30 s: trừ 1 credit');
 select is(public.complete_caption_translation((select (v ->> 'charge_id')::uuid from tr), '[{"text":"hola","words":[{"word":"hola","start":0,"end":0.5}]}]') ~ '^[0-9a-f]{64}$', true, 'chốt bản dịch: trả hash');
-select is(public.refund_caption_translation((select (v ->> 'charge_id')::uuid from tr)), false, 'đã chốt thì không hoàn');
 create temp table tr2 as select public.charge_caption_translation('e1222000-0000-4000-8000-00000000000a', 30) as v;
+grant select on tr, tr2 to authenticated;
+-- A user who could refund would do it while the server's paid LLM call is still running.
+select throws_ok($$ select public.refund_caption_translation((select (v ->> 'charge_id')::uuid from tr2)) $$, '42501', null,
+  'a user cannot refund their own translation');
+-- The server refunds with the service role after its LLM call failed.
+reset role;
+select is(public.refund_caption_translation((select (v ->> 'charge_id')::uuid from tr)), false, 'đã chốt thì không hoàn');
 select is(public.refund_caption_translation((select (v ->> 'charge_id')::uuid from tr2)), true, 'lỗi giữa chừng: hoàn lại');
+set local role authenticated;
 select is(public.credit_balance('e1220000-0000-4000-8000-00000000000a'), 1, '...số dư về như trước lượt dịch');
 select throws_ok($$ select public.complete_caption_translation((select (v ->> 'charge_id')::uuid from tr2), '[]') $$, 'P0001', 'This translation was cancelled. Try again.', 'đã hoàn thì không lấy được bản dịch');
 

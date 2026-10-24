@@ -6,10 +6,10 @@
  */
 
 import { MASTER_SRC } from "@opencmo/editor-core";
-import { specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
+import { priceOf, specSchema, type AiModel, type GenerationSpec } from "@opencmo/editor-core/generate";
 
 import { ApiError } from "@/lib/api/errors";
-import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
+import { hitRateLimit, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { wakeWorker } from "@/lib/modal";
 
 import { availableModel, loadCatalog, specHash, type GenerationRow } from "./models";
@@ -102,6 +102,58 @@ async function pinClipVideo(supabase: SupabaseClient, request: CreateRequest, mo
   return spec;
 }
 
+/** Requests that can reach the paid moderation call, per user. `create_generation` has its own cap in SQL. */
+export const GENERATION_RATE_LIMIT = { bucket: "generations", limit: 120, windowSeconds: 3600 } as const;
+
+/**
+ * True when `create_generation` will hand back a generation instead of making one: the same request id
+ * (a retried POST), or a live generation with this hash (the editor picking up what the Assistant
+ * started). Those were paid for and moderated when they were made, so the balance, the rate limit and
+ * the moderation call are skipped: a low balance must not hide media the user already paid for.
+ * Read under RLS, so only the caller's own rows count. SQL decides again inside its lock.
+ */
+async function reusable(supabase: SupabaseClient, request: CreateRequest, hash: string): Promise<boolean> {
+  const task = await supabase.from("tasks").select("id").eq("request_id", request.requestId).maybeSingle<{ id: string }>();
+  if (task.error) throw task.error;
+  if (task.data) return true;
+  const live = await supabase
+    .from("generations")
+    .select("status, media_asset_id")
+    .eq("job_id", request.jobId)
+    .eq("spec_hash", hash)
+    .in("status", ["queued", "running", "done"])
+    .returns<{ status: string; media_asset_id: string | null }[]>();
+  if (live.error) throw live.error;
+  // A finished generation whose file was deleted is retired by the RPC, not reused.
+  return (live.data ?? []).some((row) => row.status !== "done" || row.media_asset_id);
+}
+
+/**
+ * The same refusal `create_generation` gives for a shot whose parent was not started, made before the
+ * rate limit and moderation: the editor retries it every couple of seconds while the chain starts.
+ */
+async function requireParent(supabase: SupabaseClient, request: CreateRequest, spec: GenerationSpec): Promise<void> {
+  const after = (spec as { after?: unknown }).after;
+  if (typeof after !== "string") return;
+  const parent = await supabase
+    .from("generations")
+    .select("id")
+    .eq("job_id", request.jobId)
+    .eq("spec_hash", after)
+    .in("status", ["queued", "running", "done"])
+    .limit(1);
+  if (parent.error) throw parent.error;
+  if (!parent.data?.length) throw new ApiError(422, "Start the shot before this one first.");
+}
+
+/** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */
+async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
+  const { data, error } = await supabase.from("profiles").select("credit_balance").maybeSingle<{ credit_balance: number | null }>();
+  if (error) throw error;
+  const left = Number(data?.credit_balance ?? 0);
+  if (left < needed) throw new ApiError(409, `Not enough credits: ${needed} needed, ${left} left. Top up on the Credits page.`);
+}
+
 export type PreparedCreate = { request: CreateRequest; model: AiModel; spec: GenerationSpec };
 
 /**
@@ -124,6 +176,12 @@ export async function checkGeneration(supabase: SupabaseClient, request: CreateR
   } else {
     spec = normalizeSpec(model, input);
   }
+  if (await reusable(supabase, request, specHash(model.id, spec))) return { request, model, spec };
+  await requireParent(supabase, request, spec);
+  // Everything below costs us: the free refusals above come first, so a retry loop waiting on them is free.
+  await hitRateLimit(supabase, GENERATION_RATE_LIMIT);
+  // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it.
+  await requireCredits(supabase, priceOf(model, spec));
   // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
   await moderateText(specText(spec).join("\n"), { kind: model.kind });
   return { request, model, spec };

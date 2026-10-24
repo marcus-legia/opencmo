@@ -122,6 +122,14 @@ async function main(): Promise<void> {
     assert.equal(res.status, 413);
   });
 
+  await check("a chunked body over 256 KB in bytes is refused even when it is under in characters", async () => {
+    // 3-byte characters: about 90k characters, about 270 KB, and no content-length (chunked).
+    const big = "中".repeat(Math.ceil(MAX_BODY_BYTES / 3) + 1_000);
+    assert.ok(JSON.stringify({ big }).length < MAX_BODY_BYTES, "under the cap in UTF-16 units");
+    const res = await handleApi({ body: z.object({ big: z.string() }) }, ok, request("POST", { body: { big } }), fakeClient());
+    assert.equal(res.status, 413);
+  });
+
   await check("body không phải JSON thành 422, không phải 500", async () => {
     const bad = request("POST");
     bad.text = async () => "{oops";

@@ -24,17 +24,34 @@ const DEFAULT_REDIRECT_HOSTS = "claude.ai,claude.com,localhost,127.0.0.1";
  * host is the part a phishing client cannot fake. Exact hostnames, no subdomains.
  */
 export function allowedRedirectHost(redirectUri: string, env: Record<string, string | undefined> = process.env): string | null {
-  let host: string;
+  let url: URL;
   try {
-    host = new URL(redirectUri).hostname;
+    url = new URL(redirectUri);
   } catch {
     return null;
   }
+  const host = url.hostname;
+  // Loopback is how desktop and CLI clients (Claude Code) receive the code (RFC 8252): plain http to
+  // this computer. Every other host must be https, so the code never crosses the network in clear.
+  if (url.protocol !== (isLoopbackHost(host) ? "http:" : "https:")) return null;
   const allowed = (env.OPENCMO_OAUTH_REDIRECT_HOSTS ?? DEFAULT_REDIRECT_HOSTS)
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   return allowed.includes(host.toLowerCase()) ? host : null;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return ["localhost", "127.0.0.1"].includes(host.toLowerCase());
+}
+
+/** The code goes to an app on the founder's own computer: the consent page says so, since any local program can listen there. */
+export function isLoopbackRedirect(redirectUri: string): boolean {
+  try {
+    return isLoopbackHost(new URL(redirectUri).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** Records the grant the MCP server checks on every request (`mcp_grants`). */

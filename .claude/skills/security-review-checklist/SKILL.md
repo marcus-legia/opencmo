@@ -15,7 +15,7 @@ then the generic review.
 | New tables are reachable and no wider than needed | `create table` without `grant` in the same migration (unreachable after 2026-10-30); a grant wider than RLS and the RPCs need | `supabase-migrations` |
 | Refunds are provable | A refund on rows that can't prove the work was in flight; credits moved outside `credit_*` / `refund_job` | `supabase-migrations` |
 | User media can't exhaust the worker | A decode/encode of user media with no size or thread cap; no before/after peak RSS in the PR | `ffmpeg-ram-budget` |
-| Limits come before the expensive part | A rate limit checked after reads, writes or worker calls it is meant to bound (`apps/web/lib/mcp/look.ts` runs `ensureProject` before `rate_limit_hit`) | — |
+| Limits come before the expensive part | A rate limit checked after reads, writes or worker calls it is meant to bound (`apps/web/lib/mcp/look.ts` ran `ensureProject` before `rate_limit_hit` until 2026-10-22) | — |
 
 ## How to report
 

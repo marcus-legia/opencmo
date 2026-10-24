@@ -59,6 +59,16 @@ class GenerationsMixin(_Http):
         row = rows[0] if isinstance(rows, list) and rows else None
         return str(row["code"]) if isinstance(row, dict) and isinstance(row.get("code"), str) else None
 
+    def mark_generation_sent(self, task_id: str, attempt_id: str | None) -> bool:
+        """Right before the paid provider call: from here a cancel keeps the credits. False = the
+        task was cancelled or reclaimed meanwhile, and the caller must not call the provider."""
+        resp = self._rpc(
+            "mark_generation_sent",
+            {"p_task_id": task_id, "p_attempt_id": attempt_id},
+            idempotent=True,
+        )
+        return resp.json() is True
+
     def complete_generation(
         self,
         task_id: str,

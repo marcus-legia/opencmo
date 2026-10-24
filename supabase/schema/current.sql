@@ -675,6 +675,10 @@ begin
       return v_session;
     end if;
   end if;
+  if (select count(*) from public.agent_sessions
+      where user_id = v_user and scope = 'cmo' and created_at > now() - interval '1 hour') >= 30 then
+    raise exception 'Too many new conversations in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
   insert into public.agent_sessions(user_id, scope, model)
   values (v_user, 'cmo', p_model) returning * into v_session;
   return v_session;
@@ -4106,6 +4110,12 @@ begin
     return jsonb_build_object('generation', to_jsonb(v_generation), 'reused', true);
   end if;
 
+  -- New generations only (reuse returned above): each one runs a paid prompt check on the worker, and a
+  -- blocked prompt is refunded in full, so the web's `generations` limit alone left a free loop open.
+  if not public.rate_limit_hit('generation_create', 120, 3600) then
+    raise exception 'Too many generations started. Wait a while and try again.' using errcode = 'P0001';
+  end if;
+
   if (select count(*) from public.generations
       where user_id = v_user and status in ('queued', 'running')) >= public.generation_active_limit() then
     raise exception 'Too many generations are running. Wait for one to finish.' using errcode = 'P0001';
@@ -4504,6 +4514,47 @@ CREATE FUNCTION public.editor_json(p_clip_id uuid) RETURNS jsonb
   )
   from public.editor_projects p
   where p.clip_id = p_clip_id;
+$$;
+
+
+--
+-- Name: enforce_write_budget(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_write_budget() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_rows int;
+  v_bytes bigint;
+  v_size bigint;
+begin
+  if v_user is null then
+    return new;
+  end if;
+  -- Serialised per user and table, so parallel calls cannot all pass the same check.
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':write-budget:' || tg_table_name, 0));
+  -- Statements, not a CASE expression: plpgsql resolves every `new.<field>` in an expression on each table.
+  if tg_table_name = 'editor_transcripts' then
+    v_size := octet_length(new.body);
+  elsif tg_table_name = 'editor_revisions' then
+    v_size := pg_column_size(new.document);
+  else
+    v_size := pg_column_size(new.body);
+  end if;
+  delete from public.write_budget_ledger
+  where user_id = v_user and table_name = tg_table_name and created_at <= now() - interval '1 hour';
+  select count(*), coalesce(sum(bytes), 0) into v_rows, v_bytes
+  from public.write_budget_ledger where user_id = v_user and table_name = tg_table_name;
+  if v_rows >= public.write_budget_rows(tg_table_name) or v_bytes + v_size > public.write_budget_bytes() then
+    raise exception 'You have saved a lot of changes in the last hour. Wait a few minutes and try again.'
+      using errcode = 'P0001';
+  end if;
+  insert into public.write_budget_ledger (user_id, table_name, bytes) values (v_user, tg_table_name, v_size);
+  return new;
+end;
 $$;
 
 
@@ -5180,6 +5231,31 @@ $$;
 
 
 --
+-- Name: mark_generation_sent(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_generation_sent(p_task_id uuid, p_attempt_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rows int;
+begin
+  -- Locks the task first, as the cancel path does, so a cancel either lands before (false: the worker
+  -- stops without paying) or after (the credits stay spent).
+  perform 1 from public.tasks
+  where id = p_task_id and kind = 'generate' and status = 'running' and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then return false; end if;
+  update public.generations set sent_at = coalesce(sent_at, now())
+  where task_id = p_task_id and status = 'running';
+  get diagnostics v_rows = row_count;
+  return v_rows = 1;
+end;
+$$;
+
+
+--
 -- Name: mcp_admit(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5228,6 +5304,9 @@ begin
     raise exception 'That confirm code is not valid. Ask for the price again.' using errcode = '22023';
   end if;
   delete from public.mcp_confirms where user_id = v_user and used_at < now() - interval '1 day';
+  if (select count(*) from public.mcp_confirms where user_id = v_user and used_at > now() - interval '1 hour') >= 600 then
+    raise exception 'Too many confirm codes in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
   insert into public.mcp_confirms (user_id, nonce) values (v_user, p_nonce) on conflict do nothing;
   get diagnostics v_count = row_count;
   return v_count = 1;
@@ -5591,9 +5670,18 @@ begin
    select id,polar_customer_id into v_user,v_link from public.profiles where lower(email)=lower(v_email) for update;
   end if;
 
-  if v_link is not null and v_link<>v_customer then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
-  update public.profiles set polar_customer_id=v_customer where id=v_user;
-  insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user);
+  if v_link is not null and v_link<>v_customer then
+   -- A second Polar customer for the same account. Matched by email it proves nothing: skip. Matched by
+   -- the external id our checkout link set, the payment is the account's: credit it, keep the first link.
+   if v_external_user is null then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
+   raise warning 'polar: order % for user % comes from customer %, account is linked to %', v_id, v_user, v_customer, v_link;
+   -- Map the second customer too: its later events (a refund, a cancelled subscription) may carry no
+   -- external id, and the email path would skip them as "account already linked".
+   insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user) on conflict (customer_id) do nothing;
+  else
+   update public.profiles set polar_customer_id=v_customer where id=v_user;
+   insert into public.polar_customers(customer_id,user_id) values(v_customer,v_user);
+  end if;
  end if;
  if p_event_type in ('order.paid','order.refunded') then
   insert into public.polar_purchases(order_id,customer_id,user_id,product_id,total_amount,currency)
@@ -5980,6 +6068,8 @@ begin
       or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
       -- POST /api/v1/generations: each request can run a paid moderation call.
       or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
+      -- `create_generation` itself: a direct PostgREST call skips the route's bucket.
+      or (p_bucket = 'generation_create' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_look' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
@@ -6241,16 +6331,16 @@ CREATE FUNCTION public.refund_caption_translation(p_charge_id uuid) RETURNS bool
     SET search_path TO 'public'
     AS $$
 declare
-  v_user uuid := public.require_user();
   v_row public.caption_translations;
 begin
-  select * into v_row from public.caption_translations
-  where id = p_charge_id and user_id = v_user for update;
+  -- Called by the web server (service role) after its own LLM call failed. A user who could call it
+  -- would refund a translation while the paid LLM call was still running.
+  select * into v_row from public.caption_translations where id = p_charge_id for update;
   if not found or v_row.status <> 'charged' then
     return false;
   end if;
   update public.caption_translations set status = 'refunded' where id = v_row.id;
-  perform public.credit_refund(v_user, 'caption_translation', v_row.id, 'Caption translation refund',
+  perform public.credit_refund(v_row.user_id, 'caption_translation', v_row.id, 'Caption translation refund',
     (select job_id from public.clips where id = v_row.clip_id));
   return true;
 end;
@@ -6946,9 +7036,21 @@ begin
   -- Retry cùng lúc không được tiêu quá số dư.
   perform 1 from public.profiles where id = v_user for update;
 
+  -- Same caps as create_upload_edit: the route's limit alone is skipped by calling this RPC directly.
+  if (select count(*) from public.jobs
+      where user_id = v_user and status in ('queued', 'running') and purging_at is null) >= 3
+  then
+    raise exception 'You already have 3 projects in progress. Please wait for one to finish.'
+      using errcode = 'P0001';
+  end if;
+  if not public.rate_limit_hit('retry', 20, 3600) then
+    raise exception 'Too many retries. Please wait a while and try again.'
+      using errcode = 'P0001';
+  end if;
+
   select status into v_status
   from public.jobs
-  where id = p_job_id and user_id = v_user
+  where id = p_job_id and user_id = v_user and purging_at is null
   for update;
 
   if not found then
@@ -7674,6 +7776,22 @@ begin
     update public.generations set status = 'running' where id = v_generation.id;
   elsif new.status = 'queued' then
     update public.generations set status = 'queued' where id = v_generation.id;
+  elsif new.status = 'cancelled' and v_generation.sent_at is not null then
+    -- The worker sent the paid request (`mark_generation_sent`, right before the provider call):
+    -- cancelling stops the result, not the bill. Until then nothing was paid, so a cancel while the
+    -- worker downloads or checks inputs is refunded below, and so is one after a reclaim that never
+    -- reached the provider; a reclaimed task that had reached it keeps its credits even when queued.
+    update public.generations
+    set status = 'cancelled',
+        credits_final = greatest(public.credit_held('generation', v_generation.id), 0),
+        error = null,
+        finished_at = now()
+    where id = v_generation.id;
+    update public.tasks
+    set status = 'failed', error = 'The shot before this one did not finish. Your credits were refunded.',
+        finished_at = now()
+    where status = 'awaiting_input'
+      and id in (select task_id from public.generations where after_id = v_generation.id);
   elsif new.status in ('failed', 'cancelled') then
     update public.generations
     set status = new.status,
@@ -7855,6 +7973,28 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: write_budget_bytes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.write_budget_bytes() RETURNS bigint
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select 128::bigint * 1024 * 1024;
+$$;
+
+
+--
+-- Name: write_budget_rows(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.write_budget_rows(p_table text) RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select case p_table when 'marketing_documents' then 300 else 1200 end;
 $$;
 
 
@@ -8118,6 +8258,7 @@ CREATE TABLE public.generations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
     after_id uuid,
+    sent_at timestamp with time zone,
     quality jsonb,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
@@ -8466,6 +8607,18 @@ CREATE TABLE public.worker_operations (
     job_id uuid NOT NULL,
     kind text NOT NULL,
     result jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: write_budget_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.write_budget_ledger (
+    user_id uuid NOT NULL,
+    table_name text NOT NULL,
+    bytes bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -8886,14 +9039,6 @@ ALTER TABLE ONLY public.polar_customers
 
 
 --
--- Name: polar_customers polar_customers_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.polar_customers
-    ADD CONSTRAINT polar_customers_user_id_key UNIQUE (user_id);
-
-
---
 -- Name: polar_purchases polar_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9198,10 +9343,24 @@ CREATE INDEX editor_feedback_created_idx ON public.editor_feedback USING btree (
 
 
 --
+-- Name: editor_revisions_clip_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_revisions_clip_created_idx ON public.editor_revisions USING btree (clip_id, created_at);
+
+
+--
 -- Name: editor_revisions_clip_number_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX editor_revisions_clip_number_idx ON public.editor_revisions USING btree (clip_id, number DESC);
+
+
+--
+-- Name: editor_transcripts_clip_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_transcripts_clip_created_idx ON public.editor_transcripts USING btree (clip_id, created_at);
 
 
 --
@@ -9275,6 +9434,13 @@ CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_a
 
 
 --
+-- Name: marketing_documents_user_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX marketing_documents_user_created_idx ON public.marketing_documents USING btree (user_id, created_at);
+
+
+--
 -- Name: mcp_confirms_used_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9321,6 +9487,13 @@ CREATE INDEX page_captures_task_idx ON public.page_captures USING btree (task_id
 --
 
 CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: polar_customers_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX polar_customers_user_idx ON public.polar_customers USING btree (user_id);
 
 
 --
@@ -9415,6 +9588,13 @@ CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations U
 
 
 --
+-- Name: write_budget_ledger_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX write_budget_ledger_user_idx ON public.write_budget_ledger USING btree (user_id, table_name, created_at);
+
+
+--
 -- Name: agent_messages agent_messages_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9450,6 +9630,20 @@ CREATE TRIGGER editor_revisions_immutable BEFORE UPDATE ON public.editor_revisio
 
 
 --
+-- Name: editor_revisions editor_revisions_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_revisions_write_budget BEFORE INSERT ON public.editor_revisions FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
+
+
+--
+-- Name: editor_transcripts editor_transcripts_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_transcripts_write_budget BEFORE INSERT ON public.editor_transcripts FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
+
+
+--
 -- Name: jobs jobs_project; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9468,6 +9662,13 @@ CREATE TRIGGER jobs_record_storage_deletions BEFORE DELETE ON public.jobs FOR EA
 --
 
 CREATE TRIGGER jobs_storage_expiry BEFORE UPDATE OF status, finished_at ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.set_job_storage_expiry();
+
+
+--
+-- Name: marketing_documents marketing_documents_write_budget; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER marketing_documents_write_budget BEFORE INSERT ON public.marketing_documents FOR EACH ROW EXECUTE FUNCTION public.enforce_write_budget();
 
 
 --
@@ -10112,6 +10313,14 @@ ALTER TABLE ONLY public.worker_operations
 
 
 --
+-- Name: write_budget_ledger write_budget_ledger_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.write_budget_ledger
+    ADD CONSTRAINT write_budget_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: agent_messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10465,6 +10674,12 @@ ALTER TABLE public.worker_draft_initializations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: write_budget_ledger; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets đọc B-roll của chính mình; Type: POLICY; Schema: public; Owner: -
