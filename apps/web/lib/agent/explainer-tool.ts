@@ -58,7 +58,7 @@ const beat = z.object({
     .trim()
     .min(1)
     .max(160)
-    .describe('What is drawn in this beat, naming the icons, Lotties or kit shapes, e.g. "a syringe enters left; a virus icon splits into 3 grey fragments".'),
+    .describe('What is drawn in this beat and how it changes, drawn in the scene code, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve".'),
   seconds: z.number().min(0.5).max(30).optional().describe("Silent clips only: how long this beat lasts, 0.5-30 s. A narrated explainer is timed by its voice."),
 });
 
@@ -79,11 +79,12 @@ export const DIRECTION_HELP =
 export const REVIEW_CHECKLIST = [
   "Answer each line about the stills you just saw, in order:",
   "1. Subject: does every still show what its beat says (\"shows X; the beat says Y\")?",
-  "2. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
-  "3. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
-  "4. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
-  "5. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
-  "6. Finish: margins even, colours from the palette, the last frame a clean end state?",
+  "2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?",
+  "3. Direction: is every move where your direction puts it at that time (position, size, order)? Name any number that is off.",
+  "4. One visual centre per beat: is the eye drawn to one thing, or do several things compete, like slide cards?",
+  "5. Text: is resting text crisp, big enough and fully inside the frame, never over another text or mark?",
+  "6. Motion: does something change in every beat, and does each move ease in and settle (no jumps, no frozen beat)?",
+  "7. Finish: margins even, colours from the palette, the last frame a clean end state?",
   "Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing.",
 ].join("\n");
 

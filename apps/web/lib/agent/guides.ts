@@ -303,7 +303,7 @@ After it renders (about half a minute) capture a frame in its middle to confirm 
 
   explainer: `# Animated explainers (/explain → preview_explainer → add_explainer)
 
-An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene. The viewer must understand it with the sound off: every beat SHOWS the things its narration names (a virus, a syringe, a shield, a phone, a coin…), drawn with icons, built-in Lottie animations or kit shapes, with one headline row and a text board where the beat lists steps or facts. It renders as one video layer with its own voice; captions of the voice are added to the clip automatically (credits after the user approves).
+An explainer is a 15-90 s narrated animation of ONE idea, in one continuous scene. The viewer must understand it with the sound off: every beat SHOWS the things its narration names (the sea, a ship, a virus, a coin…), drawn by you in the scene code (SVG shapes and paths, CSS transforms, your own curves) inside a Mark, with one headline row and a text board where the beat lists steps or facts. Icons, Lotties and kit shapes are for small supporting details, or when a standard symbol is the clearest picture (a check, a clock). It renders as one video layer with its own voice; captions of the voice are added to the clip automatically (credits after the user approves).
 
 ## 1. The look
 theme — from the topic:
@@ -320,9 +320,9 @@ personality — from the topic and the user's words:
 ## 2. Storyboard first — subject first, then show it and ask
 Before any code, for EVERY beat:
 1. Write say (6-20 words of narration, about 4 s) and label (the main words on screen, at most 5 words).
-2. List the nouns of say. Find each one: find_icons (about 1,850 Lucide icons: virus, syringe, shield-check, dna, microscope, heart-pulse, coins, piggy-bank, smartphone…), find_lotties (built-in animations: walk, heart-beat, emoji/brain…), or a kit shape (circle, cell, blob, ring, pill, capsule, star, arrow, a free path).
-3. Write visual: what is drawn and how it changes, naming those icons, Lotties or shapes (e.g. "a syringe enters left; a virus icon splits into 3 grey fragments").
-Never use an icon whose name does not match the noun (memory cells are not "database"; a cell is a cell shape, not a dot). A noun nothing matches → a labelled shape, not an unrelated icon.
+2. List the nouns of say and decide how to DRAW each one: its silhouette in 2-4 SVG primitives (the sea is a band under a curve, a ship a hull path, a mast line and a sail triangle), its colour from kit.color, and how it moves or changes. find_icons / find_lotties only for a supporting symbol (a check, a clock, a heart beat).
+3. Write visual: what is drawn and how it changes (e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve").
+Never use an icon whose name does not match the noun (memory cells are not "database"): draw the thing itself instead.
 Show the storyboard in your reply — for each beat: say, label and visual — plus the theme and personality, and ask "Shall I make it?". Wait for the user's go (skip the wait only when the user already said to go ahead).
 - Pick one structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
 - Beat 1 is the hook: the surprising question or fact, never "In this video…". 4-12 beats.
@@ -337,10 +337,10 @@ After the go, before any code, write the direction (the tools' direction field, 
 - The reveal order, and what stays alive between moves (the ambient layer, a slow camera push).
 - No slide layouts: no rows of parallel cards, no title-plus-bullets screens. One subject transforms.
 - End with the bar: resting text crisp and readable, nothing clipped or overlapping, nothing jumping.
-Example line: "Beat 2: the virus (420 px) pops at the centre at 0.1 s, splits at 1.8 s into 3 grey fragments that drift 140 px outward over 0.6 s, ease-out."
+Example line: "Beat 2: the horizon (the 'sea' Mark, hero area) bends from a straight line into an arc whose middle rises 35% of the Mark's height, 0.2 s → 1.8 s, Easing.bezier(0.34, 1.2, 0.64, 1) (overshoot about 3%, then settle); the sea band shrinks with it."
 
 ## 3. The code
-The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data once above return function Scene(); inside Scene only compose kit components. Start with const { Stage, Headline, Icon, … } = kit;
+The BODY of (React, R, kit) => { …; return function Scene() { … } } with JSX. No imports. Compute data and geometry once above return function Scene(); inside Scene read the frame and compose JSX: kit components and your drawings in Marks. Start with const { Stage, Headline, Mark, … } = kit;
 - R is a safe part of Remotion: AbsoluteFill, Series, Freeze, Loop, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, measureSpring, Easing, random. Don't time things with Sequence (it shifts frames for everything inside): use at.
 - Rejected with the line number: fetch, XMLHttpRequest, WebSocket, import, require, eval, Function, Date, Math.random, timers, document, window, storage, constructor, Remotion media and render control. Randomness: kit.random(seed) or the seeded data helpers; time comes from the frame.
 - Positions are pixels of the composition (1920×1080, 1080×1920 or 1080×1080); times are FRAMES (30 fps), taken from the timing helpers. Every component takes at (enter frame), dur, exitAt and exitDur; before at and after its exit it renders nothing.
@@ -348,7 +348,17 @@ Layout
 - <Stage grid? ambient?> — the theme's field (blueprint: navy, grid, bloom; paper: off-white, soft shadow). Wrap the whole scene in it. kit.theme and kit.personality are what the job set.
 - <Camera keys={[{ at, focus: [x, y], zoom, dur? }]}> — slow push-ins and pans of what is inside. Keep text OUTSIDE the Camera.
 - kit.area('full' | 'hero' | 'left' | 'right' | 'top' | 'bottom') → { x, y, w, h, cx, cy } inside the safe area (the bottom 17% is the captions' place). kit.place(area, [u, v]) → pixels of a normalised point (y down); kit.plot(area, [u, v]) → pixels of a data point (y up), aligned with Axes, Scatter and FitLine. kit.width, kit.height, kit.portrait, kit.fps, kit.frames, kit.beats.
-Things to draw — the subject of each beat
+Draw it yourself — the subject of each beat
+- <Mark name x y w h at? dur? exitAt? exitDur?>…</Mark> wraps every drawing: a box (top-left x, y and size in pixels, like Image) holding plain JSX: svg, g, path, ellipse, rect, a div with CSS transforms and filters. The layout report and the jump check only see tagged boxes, so a drawing outside a Mark reads as an empty frame. Give every Mark a unique name ("sea", "ship", "ship-wake"; never two "ship"): the jump check matches marks by name. A Mark adds no entrance: your code moves what is inside it (from R.useCurrentFrame()); exitAt fades it out. Size it to the drawing's resting box; motion inside it is fine.
+- Draw the thing as itself: its silhouette, depth from a lighter and a darker fill or a soft shadow, colours from kit.color (kit.color.signal, kit.color.answer…). A recognisable drawing beats a stock icon in a ring.
+- Motion recipes from the ported templates (read packages/clip-motion/templates/phone-carousel/scene.jsx for a whole one: its own cubic-bezier curves, capped overshoot, speed-linked blur):
+  - Named curves: R.Easing.bezier(x1, y1, x2, y2) as the easing of R.interpolate (clamp both ends). The primary move overshoots about 3% of its travel, then settles: Easing.bezier(0.34, 1.2, 0.64, 1); a plain move: Easing.bezier(0.65, 0, 0.35, 1).
+  - Speed-linked blur: blur what moves in proportion to its speed, filter: \`blur(\${k * speed}px)\`, peaking at about 4 px mid-move and 0 at rest.
+  - Draw a line on: pathLength={1} strokeDasharray={1} strokeDashoffset from 1 to 0.
+  - Morph: kit.morph(a, b, t) between two point lists, then build the path from the points.
+  - A slow camera: Camera keys around the drawings for a push-in or a pull-back; text stays outside it.
+- Compute geometry once above return function Scene(): paths as small functions of one or two numbers, helpers for repeated parts; per frame only interpolate those numbers. Never inline long path strings per frame. The code limit is 32,000 characters.
+Things to draw — supporting pieces
 - <Icon name x y size color?> — ANY Lucide name from find_icons; it draws itself on. An unknown name is an error listing the 5 closest names.
 - <Lottie name x? y? size? loop? speed?> — a built-in animation from find_lotties (walk, heart-beat, rocket-launch, emoji/brain…), playing from at in step with the frame. At most three on screen.
 - <Shape kind x? y? size? color? color2? fill? label? secondary? breathe? rotate?> — kind: circle, cell (membrane + nucleus), blob (organic, breathes), ring (draws on), pill, capsule (two colours), star. label (≤ 3 words) sits under it; secondary adds a halo that follows a few frames late.
@@ -372,7 +382,7 @@ Timing — never hard-code frames
 ${EXPLAINER_MOTION}
 
 Do and don't
-- Do: one continuous scene; transform what is on screen. One Headline row. A Board for lists. The subject's icon in every beat.
+- Do: one continuous scene; transform what is on screen. The subject drawn in a Mark in every beat. One Headline row. A Board for lists.
 - Don't: decorative dots or icons that do not match the narration; two texts in the same place; text inside the Camera; captions in the scene (the clip gets them from the voice).
 
 Example:
@@ -396,11 +406,11 @@ return function Scene() {
 ## 4. Preview, look, fix — required
 preview_explainer { title, beats (with visual), direction, code, format, theme, personality, times } returns stills and a layout report.
 - times: up to 12 seconds you choose, around every main move of your direction (its start, middle and landing). Without times: beat midpoints and the last frame. The layout report also samples 6 frames after every beat start and each beat's midpoint.
-- Subject check: write one line per still — "shows X; the beat says Y". Where X is not what Y names, fix that beat (the icon, its time, or its place) before anything else.
+- Subject check: write one line per still — "shows X; the beat says Y". Where X is not what Y names, fix that beat (the drawing, its time, or its place) before anything else.
 - An error (phase job/compile/guard/render + message) → fix the code.
 - "overlaps" → use Headline for the headline row, or move one text to another area or time.
 - "outside the safe area" → place it with kit.area. "text under 36 px" → fewer words, bigger primitive.
-- "more than 85% empty" or "beat N shows no icon, shape or Lottie" → the beat needs its subject.
+- "more than 85% empty" or "beat N shows nothing drawn" → draw the beat's subject bigger, as a Mark.
 - "nothing moves during beat N" → give it a primary, a secondary and an ambient motion.
 - "jumps N px in one frame" → ease the move (kit.enter / a Group key with dur) or make it a deliberate cut.
 - Then answer the review checklist that comes back with the stills, line by line, against your direction. Name the one worst problem, fix only that, and preview again.

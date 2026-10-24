@@ -1,6 +1,6 @@
 /**
  * How the Assistant is put together, offline: which tool calls may run at the same time, which
- * tools each kind of clip gets, and what the system prompt promises.
+ * tools each kind of clip gets, what the system prompt promises, and how the explainer guide draws.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/agent-design.check.ts
  */
@@ -241,6 +241,24 @@ async function main(): Promise<void> {
     }
     assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");
     assert.ok(SYSTEM_PROMPT.length < 6000, `the prompt stays short (${SYSTEM_PROMPT.length} chars)`);
+  }
+
+  // 8. Explainers draw their subject in scene code (a Mark); icons and Lotties are supporting pieces.
+  // The review loop names a missing drawing, so it no longer pushes the model back to icons.
+  {
+    const { z } = await import("zod");
+    const { readGuide } = await import("./guides");
+    const { previewExplainerInput } = await import("./explainer-tool");
+    const guide = readGuide("explainer");
+    for (const text of ["<Mark", "Easing.bezier", "strokeDashoffset", "templates/phone-carousel/scene.jsx", '"beat N shows nothing drawn"']) {
+      assert.ok(guide.includes(text), `the explainer guide names ${text}`);
+    }
+    for (const old of ["The subject's icon in every beat", "icons, built-in Lottie animations or kit shapes", "shows no icon, shape or Lottie"]) {
+      assert.ok(!guide.includes(old), `the explainer guide no longer says "${old}"`);
+    }
+    const schema = JSON.stringify(z.toJSONSchema(previewExplainerInput, { io: "input" }));
+    assert.ok(!schema.includes("naming the icons, Lotties or kit shapes"), "beats[].visual asks for a drawing, not icon names");
+    assert.ok(schema.includes("a flat disc tilts 30°"), "beats[].visual gives a drawn example");
   }
 
   console.log("agent-design.check: ok");

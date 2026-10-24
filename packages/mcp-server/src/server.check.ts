@@ -241,11 +241,14 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   process.env.OPENCMO_MOTION = "modal";
   for (const key of ["ELEVENLABS_API_KEY", "OPENCMO_VOICE_ENABLED", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_AI_FAKE"]) delete process.env[key];
   const kit = (await registry.tools(ctx)).find((tool) => tool.name === "get_explainer_kit")!;
-  const result = (await callTool(kit, {}, ctx)) as unknown as { isError?: boolean; structuredContent: { available: boolean; narrated: boolean; silent_clip: unknown } };
+  const result = (await callTool(kit, {}, ctx)) as unknown as { isError?: boolean; structuredContent: { available: boolean; narrated: boolean; silent_clip: unknown; read_first: string[] } };
   assert.equal(result.isError ?? false, false, "silent clips alone are not an error");
   assert.equal(result.structuredContent.available, true);
   assert.equal(result.structuredContent.narrated, false);
   assert.equal(typeof result.structuredContent.silent_clip, "object", "the silent clip section says how to make one");
+  // The subject is drawn in scene code; icons and Lotties are only looked up for supporting symbols.
+  assert.ok(result.structuredContent.read_first.some((line) => line.includes("in a Mark")), "read_first says to draw the subject in a Mark");
+  assert.ok(!JSON.stringify(result.structuredContent).includes("for every noun of the narration"), "no icon lookup for every noun");
   for (const [key, value] of Object.entries({ OPENCMO_MOTION: saved.motion, ELEVENLABS_API_KEY: saved.eleven, OPENCMO_VOICE_ENABLED: saved.voice, OPENCMO_MOTION_FAKE_VOICE: saved.fakeVoice, OPENCMO_AI_FAKE: saved.fake })) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -265,6 +268,9 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.ok(uris.includes("opencmo://guides/explainer") && uris.includes("opencmo://guides/motion") && uris.includes("opencmo://kit/explainer"));
   const kit = await registry.resource("opencmo://kit/explainer")!.read(ctx);
   assert.match(kit, /^# Explainer scene-code kit/);
+  assert.ok(kit.includes("Draw it yourself") && kit.includes("<Mark"), "the kit leads with drawing in a Mark");
+  const kitResource = registry.resources().find((resource) => resource.uri === "opencmo://kit/explainer")!;
+  assert.match(kitResource.description ?? "", /Mark/, "the kit resource names free-form drawing");
   assert.ok(!kit.includes("## 4."), "the kit is the code section only");
   assert.deepEqual(registry.templates().map((template) => template.uriTemplate), ["opencmo://skills/mine/{name}"]);
 }

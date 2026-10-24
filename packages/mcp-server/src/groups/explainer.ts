@@ -88,7 +88,7 @@ registerGroup({
               }
             : "Silent motion clips are not available on this server.",
           lotties: LOTTIE_PACK.map((entry) => entry.name),
-          read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "find_icons and find_lotties for every noun of the narration"],
+          read_first: ['read_guide "explainer" (storyboard rules, the kit, the preview loop)', "draw each beat's subject yourself in a Mark (read the 'Draw it yourself' section); find_icons / find_lotties only for supporting symbols"],
         };
         if (!model && !clip) return { ...errorResult("Explainers are not available on this server."), structuredContent: result };
         return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };

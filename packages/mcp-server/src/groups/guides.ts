@@ -130,7 +130,7 @@ registerGroup({
       uri: "opencmo://kit/explainer",
       name: "kit-explainer",
       title: "Explainer scene-code kit",
-      description: "What explainer scene code may use: layout, icons, Lotties, shapes, text, data marks and timing helpers.",
+      description: "What explainer scene code may use: drawing the subject yourself in a Mark (SVG, curves, motion recipes), layout, text, supporting icons, Lotties and shapes, data marks and timing helpers.",
       mimeType: "text/markdown",
       read: async () => explainerKit(),
     },

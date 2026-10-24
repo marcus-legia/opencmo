@@ -95,6 +95,7 @@ async function main() {
   assert.equal(review.review, REVIEW_CHECKLIST);
   assert.equal(PREVIEW_ROUNDS, 6);
   assert.match(review.rounds ?? "", /Up to 6 previews/);
+  assert.match(REVIEW_CHECKLIST, /\n2\. Drawing: is the subject drawn as itself .*not a stock icon in a ring or a medallion\?\n3\. Direction/, "the review asks for a drawn subject");
   assert.match(REVIEW_CHECKLIST, /Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing\.$/);
   const tooMany = await runPreviewExplainer({ ...input, times: Array.from({ length: 13 }, (_, i) => i) }, { preview: async () => assert.fail("must not render") });
   assert.match(tooMany.content, /times/);

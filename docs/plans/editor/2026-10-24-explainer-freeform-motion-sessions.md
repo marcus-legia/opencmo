@@ -49,7 +49,7 @@ Plan tasks 1, 2 (clip-motion part), 4 (scene + test), 5 step 3 (frames).
 
 Plan tasks 2 (guide part), 3, 4 (wiring into the guide), 5 steps 1-2.
 
-- [ ] B1 Plan Task 3: rewrite the `explainer` guide, `EXPLAINER_MOTION`, `visual` describe, `read_first`,
+- [x] B1 Plan Task 3: rewrite the `explainer` guide, `EXPLAINER_MOTION`, `visual` describe, `read_first`,
   `kit-explainer` resource description, with the checks in `agent-design.check.ts` and `server.check.ts`.
   Include Task 2's §4 bullet (`"beat N shows nothing drawn"`) and its two asserts.
 - [ ] B2 Plan Task 4 wiring: replace the guide's icon-only "Example:" block with `${EXPLAINER_EXAMPLE}` (after A1 is
@@ -75,3 +75,4 @@ Plan tasks 2 (guide part), 3, 4 (wiring into the guide), 5 steps 1-2.
    `"2. Drawing: is the subject drawn as itself (its silhouette, depth and its own motion in a Mark), not a stock icon in a ring or a medallion?"`
    and renumber the rest. Without it the review never asks for the quality the plan is about. (Assert it in
    `explainer-tool.check.ts`.)
+   **Done (B, with B1).**
