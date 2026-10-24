@@ -7,7 +7,7 @@ Newest first.
 
 | Date | Plan | Source report | PR |
 |---|---|---|---|
-| 2026-10-24 | [Learn everything Opus does in animation: craft kit, review loop, launch film, talking-head camera](2026-10-24-opus-animation-plan.md) (O1–O8) | `docs/research/editor/2026-10-24-opus-animation-toan-bo.md` | — |
+| 2026-10-24 | [Learn how Opus makes video, into the editor: craft kit, review loop, talking-head camera, multi-scene videos](2026-10-24-opus-animation-plan.md) (O1–O8) | `docs/research/editor/2026-10-24-opus-animation-toan-bo.md` | — |
 | 2026-10-24 | [Remove 3D (three.js) and Lottie](2026-10-24-remove-3d-and-lottie-plan.md) (built) | Owner decision 2026-10-24 | — |
 | 2026-10-24 | [Motion studio refactor: art direction first, the kit as a library](2026-10-24-motion-studio-refactor.md) · [free-form motion](2026-10-24-explainer-freeform-motion-plan.md) | Owner test of explainers over MCP | — |
 | 2026-10-23 | [AI long take: keyframes first, then the shots between them, as an editable scene](2026-10-23-ai-long-take-plan.md) · [sessions](2026-10-23-ai-long-take-sessions.md) | Owner conversation 2026-10-23 + `opencmo-internal` Opus specs | [#111](https://github.com/marcus-legia/opencmo/pull/111) |

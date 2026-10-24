@@ -17,9 +17,9 @@
 - AI Producer (MIT, phần composition Apache-2.0 từ HyperFrames) cho thấy cách họ làm **video người nói** sống động: mỗi
   beat chọn một "register" (người nói / ngồi vào khung / phủ lên / phủ kín) theo khuôn mặt đo được, hiệu ứng camera là
   hàm thuần có giới hạn (shake ≤ 0,45 s, flash ≤ 0,35 s, tối đa một lần mỗi 20 s), cứ 4–6 s có một nhịp hình mới.
-- Khuyến nghị: làm theo thứ tự (1) bổ sung tay nghề vào kit + vòng xem lại, (2) port phim `agent-opus` thành template
-  phim ra mắt OpenCMO và làm video thật, (3) hiệu ứng camera cho video người nói, (4) cổng "style frame" trước khi
-  viết code. Plan: `docs/plans/editor/2026-10-24-opus-animation-plan.md`.
+- Khuyến nghị (owner 24/10: học cách Opus làm video để đưa vào editor; trang marketing để sau): (1) bổ sung tay nghề vào
+  kit + vòng xem lại, (2) hiệu ứng camera cho video người nói, (3) cổng "style frame" trước khi viết code, (4) học cách
+  video `agent-opus` ghép nhiều cảnh thành một mạch và dạy lại cho Assistant. Plan: `docs/plans/editor/2026-10-24-opus-animation-plan.md`.
 
 ## Phát hiện
 
@@ -167,7 +167,7 @@ cùng renderer Remotion chứ không phải runtime thứ hai; chỉ nêu để 
 | Goo, OKLab, shader field | `kit/fx.tsx`, `kit/color.ts` | `Goo`, `kit.mix.oklab`, `ShaderField` (WebGL2 thuần, nhả context) | MIT, notice | M | golden; guard cấm rAF |
 | Audit + contact sheet (BUILD-LOG) | `src/preview.ts`, `layout.ts`, tool `preview_explainer` | `sheet {from,to,count}`, `zoom`, audit theo thời gian: đè nhau, hở, vận tốc nhảy, nghỉ còn filter | Tự viết | M | vitest + eval |
 | Motion Designer 3 bước | guide `explainer`, `explainer-tool.ts` | Cổng "style frame": 2–3 still hero trước khi viết cả cảnh | Tự viết | S | eval fake + MCP |
-| Phim `agent-opus` | `packages/clip-motion/templates/launch-film/` | Template phim ra mắt có slot (chữ, logo, ảnh UI thật, câu thoại) | MIT, notice | L | Render phim OpenCMO thật, xem từng đoạn |
+| Video `agent-opus` | guide `explainer`, `preview_explainer`, (tuỳ chọn) `packages/clip-motion/templates/` | Cách ghép nhiều cảnh thành một mạch; template có slot là phụ | MIT, notice | M–L | Làm một video demo nhiều cảnh trong editor, xem khung |
 | Hiệu ứng camera AI Producer | `packages/editor-core/src/ops/` (op mới), guide | `add_camera_move` (shake/flash/whip/push/handheld/pulse) thành keyframe trên video người nói | MIT ý tưởng, tự viết | M | test op + export thật, nhìn khung |
 | 8 kiểu phụ đề | `clip-render/src/captions.ts`, `editor-core` caption presets | So với preset hiện có, thêm kiểu còn thiếu + bảng chọn trong guide | Tự viết | M | golden caption |
 | Register seat/overlay/full-cover | `editor-core/src/layout.ts`, `layouts.ts` | Thêm `circle`/`card`/`aperture` seat theo mặt đo được, dải phụ đề theo moment | Tự viết | L | test layout + nhìn khung |
@@ -177,10 +177,10 @@ cùng renderer Remotion chứ không phải runtime thứ hai; chỉ nêu để 
 1. **Bổ sung tay nghề vào kit và vòng xem lại** (S+M). Rẻ, dùng ngay cho mọi explainer, motion clip và cả MCP: ease theo
    ý định, camera shot list, retime, TypeStream, MotionBlur, Goo/OKLab; preview có contact sheet, zoom, audit theo thời
    gian. Cải thiện chất lượng (giữ chân) và giảm số lượt render hỏng (chi phí).
-2. **Port phim `agent-opus` thành template phim ra mắt và làm video ra mắt OpenCMO** (L). Đây là video marketing đầu
-   tiên làm hoàn toàn trong editor — đúng câu hỏi xếp hạng của roadmap spearhead. Cần ảnh chụp UI thật của OpenCMO.
-3. **Hiệu ứng camera + nhịp cho video người nói** (M). Founder clip (V1) sống động hơn ngay, không cần AI tốn tiền.
-4. **Cổng style frame** (S). Học đúng luồng Motion Designer của Agent Opus: chốt style bằng still trước, code sau.
+2. **Hiệu ứng camera + nhịp cho video người nói** (M). Video người nói trong editor sống động hơn ngay, không cần AI tốn tiền.
+3. **Cổng style frame** (S). Học đúng luồng Motion Designer của Agent Opus: chốt style bằng still trước, code sau.
+4. **Video nhiều cảnh theo cách của `agent-opus`** (M–L). Học cách họ giữ một chủ thể xuyên cảnh, chia đoạn theo câu
+   thoại, nắn thời gian; dạy lại cho Assistant. Template có sẵn chỉ là sản phẩm phụ. Video marketing của OpenCMO để sau.
 5. **Phụ đề động theo bảng chọn** (M), rồi **register seat/overlay** (L) — sau khi 1–4 ra video thật.
 6. Không làm: lấy lại three.js; biên dịch code trong trình duyệt như Agent Opus (mình render trên server, an toàn hơn);
    chép chữ trong `plugins/` (không licence).

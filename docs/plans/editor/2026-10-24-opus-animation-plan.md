@@ -1,4 +1,4 @@
-# Learn everything Opus does in animation: craft kit, review loop, launch film, talking-head camera
+# Learn how Opus makes video, into the editor: craft kit, review loop, talking-head camera, multi-scene videos
 
 Status: **plan, not started** (2026-10-24). Owner ask: "remove 3D and Lottie, then study everything Opus Agent did in
 animation and plan it for us". The removal is done (`2026-10-24-remove-3d-and-lottie-plan.md`); this plan is the second
@@ -13,20 +13,22 @@ Claude Opus 5.5 remakes, the AI Producer talking-head plugin, Story Mode camera 
 work look good is not a big library: it is craft written into each file, and a review loop that measures. Most of it fits
 our one renderer (Remotion in `clip-motion`) or our editor document ops, with no new runtime.
 
-Ranked by the spearhead question ("does it let us make the next OpenCMO marketing video in the editor?"):
+**Scope (owner, 2026-10-24): learn Opus's ways of making video and build them into the editor.** Marketing pages and
+OpenCMO's own launch video come later; nothing here touches the landing page. Ranked by how much each item raises the
+quality of videos made in the editor:
 
 | # | Item | Video it unlocks | Cost |
 |---|---|---|---|
 | O1 | Craft kit: intent eases, camera shot list, retime, type stream, sub-frame motion blur, goo, OKLab | Every explainer and motion clip looks finished | S–M |
 | O2 | Review loop: contact sheet, zoom crop, audit over time | Fewer broken renders; the model fixes what it can measure | M |
-| O3 | Launch film template ported from Opus `agent-opus` (MIT), then the OpenCMO launch film | **The OpenCMO launch video** (landing hero, X, Product Hunt) | L |
+| O3 | Multi-scene product videos: learn how Opus's 40.8 s `agent-opus` video is built (MIT) and teach it to the editor | Product demos and feature videos of several scenes that flow as one | M–L |
 | O4 | Talking-head camera moves and pacing (AI Producer recipes) | Founder clips (V1) that feel edited | M |
 | O5 | Style-frame gate before code (Agent Opus Motion Designer flow) | The right look on the first full render | S |
 | O6 | Dynamic caption patterns with a selection table | Founder clips, explainers | M |
 | O7 | More MIT components as templates | Feature launches, data stories | M each |
 | O8 | Talking-head registers: seat / overlay / full cover from the measured face | Founder explainers with on-screen visuals | L |
 
-Order: O1 → O2 → O3 (ends with the real launch video) → O4 → O5 → O6 → O7 → O8. Each is its own PR on its own branch,
+Order: O1 → O2 → O4 → O5 → O3 → O6 → O7 → O8. Each is its own PR on its own branch,
 and each ends with a real video made in the editor (CLAUDE.md, "Every phase ends with a real video").
 
 ## Decisions
@@ -100,26 +102,24 @@ video-perception (sample by change, not uniformly).
 - [ ] Eval (`apps/web/lib/agent/eval/tasks.ts`): a fake case whose first preview has an overlap and a jump; the fake
   provider fixes it after reading the audit. Checks: `explainer-tool.check.ts`, MCP `server.check.ts`.
 
-### O3. Launch film template, then the OpenCMO launch video, one PR + one video
+### O3. Multi-scene product videos, learned from Opus's `agent-opus` video, one PR
 
-Port `templates/agent-opus/project` (MIT, 1920×1080, 30 fps, 40.8 s) as `packages/clip-motion/templates/launch-film/`.
+`templates/agent-opus/project` (MIT, 1920×1080, 30 fps, 40.8 s) is the best example Opus publishes of a whole product
+video in code: opening type → prompt box → inputs → chat with the agent → approve → storyboard → results → logo, flowing
+as one piece. Learn its method and give it to the editor; a ready template is a by-product, not the goal.
 
-- [ ] Read the whole source first (`Film.tsx`, `code-ui/*`, `directed/*`, `locked/Workflow.tsx`, `multiples/*`,
-  `config/*.json`); write down which scenes we keep. Keep its structure: config-driven copy/brand/media
-  (`template.json`), section starts (`timeline.json`), voice phrases with times (`audio-cues.json`), one film clock,
-  camera shots, the screenplay stream.
-- [ ] Map it onto our template system (`templates/index.gen.ts`, slots): copy lines, product name and site, logo SVG,
-  brand colours, 3–6 real UI screenshots (`job.assets`), the storyboard sketches drawn in code. No Opus media, logo,
-  narration or sample videos; their slots start empty and the template refuses to render without the user's own.
-- [ ] Fonts: the film uses Fraunces (we ship it), Geist and Instrument Serif (both OFL): add Geist and Instrument Serif
-  with `apps/web/scripts/fetch-fonts.mts` and the font catalog test, or map to our families (Inter/DM Serif Display) —
-  decide after a side-by-side still.
-- [ ] Narration: our voice (ElevenLabs premade) generated from the template's phrase list; `audio-cues` times come from
-  the voice's word timings, then `kit.retime` keeps every landing on its phrase.
-- [ ] Notice: add the template to `THIRD_PARTY_NOTICES.md` and `templates/LICENSE-opus-remakes.md`.
-- [ ] **The real video**: OpenCMO's own launch film (story: an idea → `/video` in the editor → your own clips and
-  script → the agent drafts → you approve → B-roll on the right words → every format). Real screenshots of the editor.
-  Render 16:9 and 9:16; extract frames from the full-size file and look at them; publish; keep as landing material.
+- [ ] Read the whole source (`Film.tsx`, `code-ui/*`, `directed/*`, `locked/Workflow.tsx`, `multiples/*`, `config/*.json`)
+  and write down how it holds together: content kept apart from code (`template.json`), section starts
+  (`timeline.json`), voice phrases with times (`audio-cues.json`), one film clock with a time warp, camera as a shot list,
+  shared elements carried from scene to scene, one text stream for the screenplay.
+- [ ] Teach it to the Assistant: a guide section "a product video of several scenes" (one subject carried across scenes,
+  section starts from the voice phrases, `kit.retime` to tighten without moving landings, transitions that keep position
+  and identity), and `preview_explainer` checks over the whole timeline (O2 sheets per section).
+- [ ] Optional: port the video as a motion template with slots (copy, product name, logo, colours, the user's own
+  screenshots, voice phrases), with notice in `THIRD_PARTY_NOTICES.md`; never Opus's media, logo or narration. Fonts it
+  uses that we lack (Geist, Instrument Serif, both OFL): map to fonts we ship unless a side-by-side still shows a loss.
+- [ ] Check: make one multi-scene demo video in the editor (any sample product), extract frames from the full-size file,
+  look at them. Not published; it only proves the method.
 
 ### O4. Talking-head camera moves and pacing (`packages/editor-core/src/ops/`, guides), one PR
 
@@ -189,7 +189,4 @@ before and after `MotionBlur`).
 
 ## Open questions for the owner
 
-1. O3: is the OpenCMO launch film the next marketing video, before a founder clip (O4)? (Recommended: yes — it is the
-   landing hero and the Product Hunt video, and it shows the editor itself.)
-2. O3: add Geist and Instrument Serif, or map the film to fonts we ship? (Decide from a side-by-side still.)
-3. O4: allow `white_flash` at all for founders' clips, or only shake/whip/push? (Recommended: allow, with the 20 s rule.)
+1. O4: allow `white_flash` at all for founders' clips, or only shake/whip/push? (Recommended: allow, with the 20 s rule.)
