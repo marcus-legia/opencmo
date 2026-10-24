@@ -145,7 +145,8 @@ export function jumpIssues(pairs: { seconds: number; a: LaidBox[]; b: LaidBox[] 
 			const b = after.get(name);
 			if (!b) continue;
 			const moved = Math.hypot(b.x + b.w / 2 - (a.x + a.w / 2), b.y + b.h / 2 - (a.y + a.h / 2));
-			if (moved > limit) issues.push(`${quote(a.name)} jumps ${Math.round(moved)} px in one frame at ${pair.seconds.toFixed(1)} s: ease the move or cut on purpose.`);
+			// A move blurred along its path (a Streak, a smear filter) is the bridge the guide asks for, not a jump.
+			if (moved > limit && !a.soft && !b.soft) issues.push(`${quote(a.name)} jumps ${Math.round(moved)} px in one frame at ${pair.seconds.toFixed(1)} s: ease the move or cut on purpose.`);
 			// A zoom that grows or shrinks both sides by over a quarter in one frame reads as a lurch (Opus's "dive too violent").
 			const grow = Math.min(b.w / Math.max(1, a.w), b.h / Math.max(1, a.h));
 			const shrink = Math.min(a.w / Math.max(1, b.w), a.h / Math.max(1, b.h));

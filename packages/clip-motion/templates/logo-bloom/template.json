@@ -1,0 +1,19 @@
+{
+  "id": "logo-bloom",
+  "title": "Logo bloom",
+  "description": "A short logo intro: the mark grows out of a seed, turning a quarter turn and pulling focus as it lands with motion blur, then the wordmark settles in under it. 2.5 s, silent, 16:9.",
+  "kind": "clip",
+  "format": "16:9",
+  "seconds": 3,
+  "slots": [
+    { "name": "logo", "kind": "image", "note": "The user's square logo from the library (transparent PNG is best), as an asset name; null draws an eight-petal mark in the ink colour.", "default": "null" },
+    { "name": "wordmark", "kind": "text", "note": "The brand name under the mark, at most 14 characters; empty for the mark alone.", "default": "forma" },
+    { "name": "background", "kind": "color", "note": "The field.", "default": "#FAF8FA" },
+    { "name": "ink", "kind": "color", "note": "The drawn mark and the wordmark.", "default": "#28232C" }
+  ],
+  "beats": [
+    { "say": "The mark blooms out of a seed.", "visual": "A tiny blurred seed grows into the logo while turning a quarter turn, with motion blur, and lands sharp.", "seconds": 0.8 },
+    { "say": "The wordmark settles in.", "label": "Wordmark", "visual": "The brand name fades up 10 px under the mark and the lockup holds still.", "seconds": 2.2 }
+  ],
+  "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/study-brand-bloom", "license": "MIT" }
+}

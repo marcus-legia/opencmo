@@ -240,6 +240,15 @@ cursor: product demos), `template-case-research` (query → answer → evidence:
 `pf-trail-recap` (data reveal), `pf-color-field` (shader field, after O1's `ShaderField`), `study-brand-*` (short logo
 intros). Each: port under MIT with notice, slots for copy/brand/screens, golden stills, `list_motion_templates` entry.
 
+**First batch built (2026-10-24):** `type-snap` (from `pf-type-snap`: three words snap in with a capped overshoot and
+a speed smear, then a second set replaces them behind a feathered seam; 9:16, Inter for Geist, words, labels and
+colours as slots) and `logo-bloom` (from `study-brand-bloom`: the mark blooms out of a seed with a quarter turn, a
+focus pull and a 16-sample shutter, then the wordmark; the eight-petal mark redrawn in SVG because the remake
+rasterises on a canvas our guard refuses; the user's logo can replace it). Same curves and timings as the remakes,
+previews with no layout issue, notice in `THIRD_PARTY_NOTICES.md`. Template durations must be whole seconds
+(type-snap is 5 s, the remake 4.8 s). Next batch: `pf-cart-checkout` (a cursor UI action, product demos),
+`template-case-research` (query → answer → evidence), `pf-trail-recap` (data reveal).
+
 ### O8. Talking-head registers from the measured face (`packages/editor-core/src/layout.ts`, `layouts.ts`), later
 
 - [ ] Add seat forms beside `set_layout`'s splits: `card`, `circle`, `aperture` at the positions each frame allows

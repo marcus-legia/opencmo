@@ -32,7 +32,7 @@ describe('motion templates', () => {
 	});
 
 	it('has the ported templates and our own, MIT, each with a usable direction', () => {
-		expect(MOTION_TEMPLATES.map((template) => template.id)).toEqual(['analytics-glow', 'mark-lockup', 'phone-carousel', 'product-tour']);
+		expect(MOTION_TEMPLATES.map((template) => template.id)).toEqual(['analytics-glow', 'logo-bloom', 'mark-lockup', 'phone-carousel', 'product-tour', 'type-snap']);
 		expect(motionTemplate('nope')).toBeUndefined();
 		for (const template of MOTION_TEMPLATES) {
 			expect(template.source.license).toBe('MIT');

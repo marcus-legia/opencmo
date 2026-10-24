@@ -74,6 +74,10 @@ describe('jumpIssues', () => {
 		expect(jumpIssues([{ seconds: 2.5, a: [icon], b: [{ ...icon, x: 700 }] }], size)).toEqual(['"Icon rocket" jumps 300 px in one frame at 2.5 s: ease the move or cut on purpose.']);
 	});
 
+	it('lets a move blurred along its path pass (a streak bridges it)', () => {
+		expect(jumpIssues([{ seconds: 2.5, a: [{ ...icon, soft: true }], b: [{ ...icon, x: 700, soft: true }] }], size)).toEqual([]);
+	});
+
 	it('ignores a box that appears or disappears', () => {
 		expect(jumpIssues([{ seconds: 1, a: [icon], b: [] }, { seconds: 2, a: [], b: [icon] }], size)).toEqual([]);
 	});
