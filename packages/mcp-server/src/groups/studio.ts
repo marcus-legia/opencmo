@@ -37,7 +37,7 @@ import { errorResult, registerGroup, type McpResult, type McpTool, type McpToolC
 /** In-app only: they need the user at the screen, or a turn to belong to. */
 const SKIP = new Set(["update_plan", "ask_user", "undo"]);
 /** Need no clip: registered without clip_id by the guides and explainer groups. */
-export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "list_motion_templates", "get_motion_template"]);
+export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties"]);
 
 /** Tools whose in-app version waits on an approval card: here, price → confirm. */
 export const PRICED = new Set([
@@ -57,7 +57,7 @@ export const PRICED = new Set([
 const RENAME: Record<string, string> = { request_export: "export_clip" };
 
 /** Free previews cost us a render each: per user per hour (A9, `rate_limit_hit` bucket `mcp_preview`). */
-export const PREVIEW_LIMIT = 60;
+export const PREVIEW_LIMIT = 30;
 
 /** Writes that only remove or replace (MCP `destructiveHint`); every write is still a checkpoint. */
 const DESTRUCTIVE = /^(delete_|remove_|ripple_delete|restore_all|ungroup_|merge_lines|split_|trim_|slip_|replace_)/;

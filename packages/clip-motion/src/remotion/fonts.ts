@@ -5,15 +5,12 @@ export const FONTS = {
 	title: { family: 'OpenCMO Motion Title', file: 'fraunces.woff2' },
 	text: { family: 'OpenCMO Motion Text', file: 'inter.woff2' },
 	mono: { family: 'OpenCMO Motion Mono', file: 'source-code-pro.woff2' },
-	// Display face for brand moments and product titles (OFL, packages/clip-media/fonts/LICENSE-OFL.txt).
-	display: { family: 'OpenCMO Motion Display', file: 'plus-jakarta-sans.woff2' },
 } as const;
 
 export const FAMILY = {
 	title: `'${FONTS.title.family}', Georgia, serif`,
 	text: `'${FONTS.text.family}', system-ui, sans-serif`,
 	mono: `'${FONTS.mono.family}', ui-monospace, monospace`,
-	display: `'${FONTS.display.family}', system-ui, sans-serif`,
 };
 
 let loading: Promise<void> | null = null;

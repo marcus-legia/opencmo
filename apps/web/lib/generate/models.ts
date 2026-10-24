@@ -32,8 +32,8 @@ export const voiceEnabled = (): boolean => Boolean(process.env.ELEVENLABS_API_KE
  * không ở đây — nhưng web và worker dùng CHUNG một bộ biến, nên có khoá ở web
  * là dấu hiệu worker cũng có. Thiếu ở worker thì task hỏng và credit được hoàn.
  */
-function providerEnabled(model: AiModel): boolean {
-  switch (model.provider) {
+function providerEnabled(provider: string): boolean {
+  switch (provider) {
     case "fake":
       return aiFakeEnabled();
     case "elevenlabs":
@@ -47,11 +47,11 @@ function providerEnabled(model: AiModel): boolean {
       return ["modal", "local"].includes(process.env.OPENCMO_3D ?? "") || aiFakeEnabled();
     case "opencmo-motion":
       // Explainers: Remotion on Modal, or the CLI on this machine when developing, plus a voice
-      // (ElevenLabs, or the silent fake voice outside production). A silent motion clip needs only
-      // the renderer. Same rule as `adapter_for` in the worker.
+      // (ElevenLabs, or the silent fake voice outside production). Same rule as `adapter_for` in
+      // the worker.
       return (
         (["modal", "local"].includes(process.env.OPENCMO_MOTION ?? "") &&
-          (!model.limits.voices || voiceEnabled() || (process.env.OPENCMO_MOTION_FAKE_VOICE === "1" && !isProduction()))) ||
+          (voiceEnabled() || (process.env.OPENCMO_MOTION_FAKE_VOICE === "1" && !isProduction()))) ||
         aiFakeEnabled()
       );
     default:
@@ -108,7 +108,7 @@ export const resetCatalog = () => void (catalogRows = null);
 
 /** Model dùng được ngay bây giờ. */
 export function availableModels(): AiModel[] {
-  return catalog().filter((model) => providerEnabled(model) && allowedHere(model));
+  return catalog().filter((model) => providerEnabled(model.provider) && allowedHere(model));
 }
 
 export const availableModel = (id: string): AiModel | undefined => availableModels().find((model) => model.id === id);

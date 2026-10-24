@@ -13,7 +13,7 @@ import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
 
 import catalog from '../../contracts/ai-models.json';
 
-import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
+import { EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, narrationOf, sceneBytes, type ExplainerScene } from './explainer';
 
 export type GenerationKind = 'image' | 'video' | 'voice' | 'audio';
 
@@ -115,20 +115,10 @@ const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
 
 /** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref, not a 3D template. */
 export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.provider === 'opencmo-motion';
-/** A silent motion clip (`motion-clip`): the same renderer, no voice in the catalog row. */
-export const isMotionClip = (model: Pick<AiModel, 'provider' | 'limits'>): boolean => isExplainer(model) && !model.limits.voices?.length;
 
-// Measured like SQL: a script that passes here must not fail there with the 3D wording. Images are capped on their own
-// (6 refs), so they never count against the script.
-const scriptBytes = ({ assets: _assets, ...scene }: { assets?: unknown }) => sceneBytes(scene);
-const explainerScene = ExplainerSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
+// Measured like SQL: a script that passes here must not fail there with the 3D wording.
+const explainerScene = ExplainerSceneSchema.refine((scene) => sceneBytes(scene) <= EXPLAINER_SCENE_BYTES, {
 	message: 'The script is too long for one explainer. Use fewer or shorter beats.',
-});
-const clipScene = ClipSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
-	message: 'The storyboard is too long for one motion clip. Use fewer or shorter beats.',
-}).refine((scene) => scene.beats.reduce((sum, beat) => sum + beat.seconds, 0) <= CLIP_MAX_SECONDS + 1e-9, {
-	message: 'This motion clip is longer than 30 seconds. Shorten its beats.',
-	path: ['beats'],
 });
 
 export function specSchema(model: AiModel) {
@@ -170,9 +160,9 @@ export function specSchema(model: AiModel) {
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),
-				...(limits.scene ? { scene: isMotionClip(model) ? clipScene : isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
+				...(limits.scene ? { scene: isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
 				// Explainers voice their narration in the render job: the premade voice is part of the spec.
-				...(isExplainer(model) && !isMotionClip(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
+				...(isExplainer(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
 				seed,
 			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
 				message: 'A shot that continues the previous one cannot also start from an image.',
