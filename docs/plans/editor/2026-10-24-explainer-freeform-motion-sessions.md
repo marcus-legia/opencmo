@@ -5,6 +5,9 @@ before starting; this file only says who does what.
 
 Branch: **`plan/editor/2026-10-24-explainer-freeform-motion`**, shared by both sessions, one PR to `main`.
 
+> **2026-10-24: Session B stopped after B1.** The owner asked for one larger refactor instead; the remaining items
+> (B2, B3, B4, A4) moved into [`2026-10-24-motion-studio-refactor.md`](2026-10-24-motion-studio-refactor.md), done by one session.
+
 ## Rules for both sessions
 
 - Each session works in its **own working tree** (two sessions in one tree overwrite each other's files). Session A
