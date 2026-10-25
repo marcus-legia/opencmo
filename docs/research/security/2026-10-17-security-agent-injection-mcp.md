@@ -145,7 +145,7 @@ nào đụng tới landing page.
    - Lưu ký ức do agent viết với loại riêng (ví dụ `agent`) thay vì `user`, để `139_cmo_memory_tiers` xếp chúng dưới
      ghi chú founder tự gõ và UI bộ nhớ hiện được nguồn gốc. Migration mới + pgTAP test.
    - Áp cùng cổng chặn trong `apps/web/lib/cmo/mcp/cmo.ts` để đường MCP không lách được.
-   - Thuộc: track CMO (`docs/cmo-architecture-implementation.md`) và là việc tiếp theo của PR #59.
+   - Thuộc: track CMO (`docs/architecture/ai-cmo.md`) và là việc tiếp theo của PR #59.
 
 2. **Gom việc làm sạch chữ không tin cậy vào một helper.** Chi phí **S** (nửa ngày). Cải thiện: **rủi ro**, và chất
    lượng onboarding (**activation**: chữ SEO bị giấu không còn làm bẩn document sản phẩm).

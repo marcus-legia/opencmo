@@ -164,6 +164,7 @@ scripts/dev.mjs         one-command dev stack
 
 - Don't expand scope. Note out-of-scope improvements in the PR or an issue instead.
 - Commit only when asked. Commit messages in English.
+- An HTML doc ships with a markdown twin of the same name for agents (`docs/architecture/README.md`); change both together.
 
 ## Product advisor role
 

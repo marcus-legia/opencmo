@@ -144,7 +144,7 @@ Xếp theo giá trị cho activation / retention / doanh thu.
 - **Kiểm:** pgTAP — người dùng khác không đọc được outcome; duyệt nguyên văn → similarity = 1 và
   `chosen_version` đúng; sửa → < 1; skip → có hàng với `final_text` null. Test `jobs.check.ts` cho
   `classify_edits` với provider giả. Theo dõi 2 tuần trước khi đổi prompt nào dựa trên nó.
-- **Thuộc:** track CMO (`docs/cmo-architecture-implementation.md`). Không thêm gì ra ngoài: chỉ đọc lựa chọn của
+- **Thuộc:** track CMO (`docs/architecture/ai-cmo.md`). Không thêm gì ra ngoài: chỉ đọc lựa chọn của
   chính founder trên bản nháp của họ.
 
 ### 2. Tầng judge trong `cmo:eval`, chạy sau bước kiểm bằng code
@@ -165,7 +165,7 @@ Xếp theo giá trị cho activation / retention / doanh thu.
 - **Kiểm:** `--provider fake` vẫn chạy được trong CI (judge giả trả nhãn cố định). Hiệu chỉnh một lần: tự dán nhãn
   ~40 bản nháp thật, tính Cohen's kappa giữa judge và nhãn người (công thức trong `stats.ts` của inbox-zero); kappa
   < 0,6 thì sửa prompt judge trước khi tin vào nó. Ghi chi phí judge mỗi lần chạy (đã có `onUsage`).
-- **Thuộc:** track CMO; thay cho dòng "judge the drafts by eye" trong `docs/cmo-architecture-implementation.md`.
+- **Thuộc:** track CMO; thay cho dòng "judge the drafts by eye" trong `docs/cmo-architecture-implementation.md` (đã xoá 25/10/2026).
 
 ### 3. Eval cho onboarding (W0) — khoảnh khắc activation
 
