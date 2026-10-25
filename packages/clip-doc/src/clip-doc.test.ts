@@ -42,6 +42,25 @@ describe('migrate', () => {
     expect(migrate(JSON.parse(JSON.stringify(document)))).toEqual(document);
   });
 
+  it('drops the removed Lottie and 3D layers from documents saved before 2026-10-24', () => {
+    const scene = {
+      kind: 'scene', name: 'S', width: 1080, height: 1920, active: true,
+      children: [
+        { kind: 'lottie', src: 'builtin:wave' },
+        { kind: 'group', children: [{ kind: 'scene3d', objects: [] }, { kind: 'rect', fill: '#fff', marks: { studio3d: { quote: 'hi' } } }] },
+        { kind: 'rect', fill: '#000', tracks: [{ property: 'cameraPhi', keyframes: [] }, { property: 'x', keyframes: [{ time: 0, value: 1 }] }] },
+      ],
+    };
+    const document = validate({ version: 1, stage: { children: [scene] } });
+    expect(document.stage.children[0]).toEqual({
+      kind: 'scene', name: 'S', width: 1080, height: 1920, active: true,
+      children: [
+        { kind: 'group', children: [{ kind: 'rect', fill: '#fff', marks: {} }] },
+        { kind: 'rect', fill: '#000', tracks: [{ property: 'x', keyframes: [{ time: 0, value: 1 }] }] },
+      ],
+    });
+  });
+
   it('version lạ, thiếu, mới hơn editor', () => {
     expect(() => migrate({ stage: { children: [] } })).toThrow(/no valid version/);
     expect(() => migrate({ version: 99, stage: { children: [] } })).toThrow(/newer than this editor/);

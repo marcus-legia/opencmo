@@ -337,11 +337,36 @@ function keyframes(ranges: LayoutRange[], W: number, H: number, duration: number
     tracks.backdrop.push(key(t, g.backdrop));
   };
   let previous = -1;
+  // Touching ranges of the same shape (split by a colour change) are one layout on screen: the panel stays open
+  // across the seam instead of closing and opening again.
+  const continues = (a: LayoutRange | undefined, b: LayoutRange | undefined) =>
+    !!a && !!b && b.start - a.end < 2 * FRAME && JSON.stringify([a.mode, a.ratio, a.anchor, a.rect, a.focus, a.fit]) === JSON.stringify([b.mode, b.ratio, b.anchor, b.rect, b.focus, b.fit]);
   for (const [index, range] of ranges.entries()) {
     const next = ranges[index + 1];
     const { open, closed } = geometry(range, W, H, focusX);
     const T = Math.min(TRANSITION, (range.end - range.start) / 4);
     const hidden = { ...closed, opacity: 0 };
+    if (continues(ranges[index - 1], range) || continues(range, next)) {
+      if (!continues(ranges[index - 1], range)) {
+        if (range.start < FRAME) push(0, open);
+        else {
+          if (range.start - FRAME > previous) push(range.start - FRAME, hidden);
+          const joined = previous >= 0 && range.start - (previous - FRAME) < 2 * FRAME;
+          push(joined ? Math.max(range.start, previous - FRAME) + FRAME / 2 : range.start, closed);
+          push(range.start + T, open);
+        }
+      }
+      if (!continues(range, next)) {
+        if (range.end > duration - FRAME) push(duration, open);
+        else {
+          push(range.end - T, open);
+          push(range.end, closed);
+          if (range.end + FRAME <= duration && !(next && next.start - range.end < 2 * FRAME)) push(range.end + FRAME, hidden);
+        }
+      }
+      previous = range.end + FRAME;
+      continue;
+    }
     // Một frame trước: panel đổi sang hình gập của khoảng này khi còn vô hình,
     // để không nội suy từ hình của khoảng trước qua khoảng hở.
     // Khoảng chạm đầu/cuối clip thì vào/ra thẳng, không có cú trượt ở khung đầu/cuối.
@@ -380,6 +405,11 @@ function masterTarget(document: ClipDocument): ClipNode | undefined {
   return all.find((node) => node.kind === 'sequence' && !!(node.marks as Record<string, unknown> | undefined)?.['text-cut']) ?? all.find(isMaster);
 }
 
+/** Whether the clip has a speaker the layouts can move (a master video, or the cut-by-words sequence). */
+export function hasSpeaker(document: ClipDocument): boolean {
+  return !!masterTarget(document);
+}
+
 type Located = { list: Entity[]; index: number };
 function locateIn(root: Entity, target: Entity): Located | null {
   for (const key of ['children', 'masks']) {
@@ -414,6 +444,9 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
   // Gỡ trạng thái cũ: panel bỏ đi, group Speaker trả con về chỗ. Giữ bản cũ
   // để dùng lại khi dựng ra y hệt — id giữ nguyên, op gọi lại là "không đổi".
   const previous: Record<string, Entity> = {};
+  // Where the backdrop was: a layer slipped between it and the speaker (an explainer placed behind a facecam)
+  // must stay above it, or the opaque backdrop covers it on the next rebuild.
+  let backdropAt: Located | null = null;
   const unwrap = (holder: Entity) => {
     for (const key of ['children', 'masks']) {
       const list = holder[key] as Entity[] | undefined;
@@ -421,6 +454,7 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
       for (let index = list.length - 1; index >= 0; index--) {
         const node = list[index]!;
         const role = layoutRole(node);
+        if (role === BACKDROP) backdropAt = { list, index };
         if (role === PANEL || role === BACKDROP) (previous[role] = node), list.splice(index, 1);
         else if (role === SPEAKER) (previous[SPEAKER] = node), list.splice(index, 1, ...((node.children as Entity[] | undefined) ?? []));
         else unwrap(node);
@@ -541,6 +575,12 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
       },
       [['opacity', tracks.backdrop]],
     );
+    const kept = backdropAt as Located | null;
+    if (kept?.list === where.list && kept.index < where.index) {
+      where.list.splice(where.index, 1, ...nodesOut);
+      where.list.splice(kept.index, 0, reuse(previous[BACKDROP], backdrop));
+      return document;
+    }
     nodesOut.unshift(reuse(previous[BACKDROP], backdrop));
   }
   where.list.splice(where.index, 1, ...nodesOut);
@@ -635,16 +675,18 @@ export function speakerBandAt(document: ClipDocument, time: number): { y: number
 
 /**
  * The panel's fill: one colour when every range shares it, else a colour track that switches at each range's start
- * (one frame before it, while the panel is still hidden), so a light range next to a dark one never fades through
- * grey on screen.
+ * (one frame before it, while the panel is still hidden; at the seam when it touches the range before), so a light
+ * range next to a dark one never fades through grey on screen.
  */
 function panelPaint(ranges: LayoutRange[]): Entity {
   const colours = ranges.map((range) => range.background ?? PANEL_COLOR);
   if (new Set(colours).size <= 1) return { type: 'solid', color: colours[0] ?? PANEL_COLOR };
   const keys: { time: number; value: string }[] = [];
   ranges.forEach((range, index) => {
-    const at = Math.max(0, range.start - FRAME);
-    if (index > 0) keys.push({ time: round(Math.max(0, at - FRAME / 2)), value: colours[index - 1]! });
+    // A range touching the one before: that panel is still on screen one frame early, so switch at the seam.
+    const touching = index > 0 && range.start - ranges[index - 1]!.end < 2 * FRAME;
+    const at = touching ? range.start + FRAME / 4 : Math.max(0, range.start - FRAME);
+    if (index > 0) keys.push({ time: round(Math.max(0, touching ? range.start : at - FRAME / 2)), value: colours[index - 1]! });
     keys.push({ time: round(at), value: colours[index]! });
   });
   return { type: 'solid', color: colours[0]!, tracks: [{ property: 'color', keyframes: keys.filter((key, i) => keys.findIndex((other) => other.time === key.time) === i) }] };
@@ -653,11 +695,17 @@ function panelPaint(ranges: LayoutRange[]): Entity {
 // ------------------------------------------------------------------ captions per layout
 
 /** The tracks `seatCaptions` writes on the master captions: their ids start with this. */
-const CAPTION_TRACK = 'layout-caption-';
+export const CAPTION_TRACK = 'layout-caption-';
 /** Caption centre above a split's seam, share of the frame height: inside the band the visual keeps clear. */
 const SEAM_LIFT = 0.05;
-/** Caption ink over a light panel: a near-black with a large lightness gap, never a mid grey. */
-const DARK_INK = '#15181E';
+/** Ink over a light panel, for captions and visuals alike: a near-black with a large lightness gap, never a mid grey. */
+export const DARK_INK = '#15181E';
+
+/** A panel colour light enough that the default light ink fades on it (Rec. 709 luma). */
+export function isLightColor(hex: string): boolean {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 >= 0.6;
+}
 
 /**
  * Where the captions' centre goes while a layout range shows (px), or null to leave them. Learned from AI
@@ -667,12 +715,6 @@ const DARK_INK = '#15181E';
  * - pip: under the visual on a landscape frame, centred on its side; above the cell's row on a vertical frame;
  * - side-by-side: the foot of the speaker's column.
  */
-const lightGround = (range: LayoutRange): boolean => {
-  if (!range.background) return false;
-  const n = parseInt(range.background.slice(1), 16);
-  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 >= 0.6;
-};
-
 function captionSpot(range: LayoutRange, W: number, H: number): { x?: number; y: number } | null {
   if (range.mode === 'split-bottom') return { y: (1 - range.ratio) * H - SEAM_LIFT * H };
   if (range.mode === 'split-top') return { y: range.ratio * H - SEAM_LIFT * H };
@@ -695,10 +737,33 @@ function captionSpot(range: LayoutRange, W: number, H: number): { x?: number; y:
   return null;
 }
 
+/** Whether captions at this range's spot sit on the panel (or backdrop) rather than on the speaker's video. */
+const captionsOnPanel = (range: LayoutRange): boolean => range.mode === 'split-bottom' || range.mode === 'pip' || range.mode === 'visual-only';
+
+/**
+ * Keys that take each range's value on the layout's 0.3 s moves and go back to `base` after. A range that runs
+ * straight on into the next goes from its value to the next one's in one move, not back to `base` and out again.
+ */
+function rangeKeys<V>(entries: { range: LayoutRange; value: V }[], base: V, duration: number, local: (time: number) => number): { time: number; value: V }[] {
+  const keys: { time: number; value: V }[] = [];
+  entries.forEach(({ range, value }, index) => {
+    const before = entries[index - 1];
+    const after = entries[index + 1];
+    const T = Math.min(TRANSITION, (range.end - range.start) / 4);
+    if (range.start < FRAME) keys.push({ time: local(0), value });
+    else if (before && range.start - before.range.end < 2 * FRAME) keys.push({ time: local(range.start + T), value });
+    else keys.push({ time: local(range.start), value: base }, { time: local(range.start + T), value });
+    if (range.end > duration - FRAME || (after && after.range.start - range.end < 2 * FRAME)) keys.push({ time: local(range.end), value });
+    else keys.push({ time: local(range.end - T), value }, { time: local(range.end), value: base });
+  });
+  return keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
+}
+
 /**
  * The clip's own captions move to their place for each layout range (`captionSpot`), on the layout's own 0.3 s
- * moves, and back after. The captions stay the editor's own layer and style: only `offsetX`/`offsetY` tracks are
- * added, and a hand-made one of either is the user's choice of position and stops the moves.
+ * moves, and back after; over a light panel they also turn dark. The captions stay the editor's own layer and
+ * style: only `offsetX`/`offsetY`/`color` tracks are added, and a hand-made offset is the user's choice of position
+ * and stops the moves. Run after every layout or caption style change, so the tracks follow the current style.
  */
 function seatCaptions(document: ClipDocument): ClipDocument {
   const scene = sceneOf(document) as unknown as Entity | undefined;
@@ -706,58 +771,46 @@ function seatCaptions(document: ClipDocument): ClipDocument {
   if (!scene || !captions || !scene.width || !scene.height) return document;
   const tracks = ((captions.tracks as Entity[] | undefined) ?? []).filter((track) => !String(track.id ?? '').startsWith(CAPTION_TRACK));
   const own = tracks.some((track) => track.property === 'offsetY' || track.property === 'offsetX');
-  // Unique across timelines: each has its own captions layer, named now if it has no id yet (the next stamp keeps it).
-  if (typeof captions.id !== 'string') captions.id = drawId();
   const W = scene.width as number;
   const H = scene.height as number;
-  const spots = own ? [] : readLayout(document).flatMap((range) => {
+  const ranges = own ? [] : readLayout(document);
+  const spots = ranges.flatMap((range) => {
     const spot = captionSpot(range, W, H);
     return spot ? [{ range, spot }] : [];
   });
-  const duration = (scene.workarea as [number, number] | undefined)?.[1] ?? Infinity;
+  // The same clip length the panels are built on: a range that reaches the end holds there for both.
+  const duration = (scene.workarea as [number, number] | undefined)?.[1] ?? summarizeProject(document).duration ?? Infinity;
   const baseY = Number(captions.offsetY ?? 0);
   const baseX = Number(captions.offsetX ?? 0);
   const box = placeCaption({ ...(captions as object), offsetY: 0, offsetX: 0 } as never, { width: W, height: H });
-  // Caption keyframes run on the captions' own clock: seconds of its source from `sourceIn`.
-  const local = (time: number) => round(time - Number(captions.start ?? 0) + Number(captions.sourceIn ?? 0));
-  const build = (axis: 'x' | 'y') => {
+  // Caption keyframes run on the captions' own clock, as the renderer reads it: `sourceIn` + clip time × rate.
+  const rate = typeof captions.playbackRate === 'number' && captions.playbackRate > 0 ? captions.playbackRate : 1;
+  const local = (time: number) => round((time - Number(captions.start ?? 0)) * rate + Number(captions.sourceIn ?? 0));
+  const written: { kind: string; property: string; keys: { time: number; value: number | string }[] }[] = [];
+  for (const axis of ['y', 'x'] as const) {
     const base = axis === 'y' ? baseY : baseX;
     const centre = axis === 'y' ? box.y + box.height / 2 : box.x + box.width / 2;
-    const keys: { time: number; value: number }[] = [];
-    for (const { range, spot } of spots) {
-      const target = spot[axis];
-      const value = target === undefined ? base : round(target - centre);
-      const T = Math.min(TRANSITION, (range.end - range.start) / 4);
-      if (range.start >= FRAME) keys.push({ time: local(range.start), value: base });
-      keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value });
-      if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value }, { time: local(range.end), value: base });
-      else keys.push({ time: local(range.end), value });
-    }
-    const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
-    if (!unique.length || unique.every((key) => key.value === base)) return;
-    // Stable ids: a layout op run again must leave the document unchanged.
-    const id = `${CAPTION_TRACK}offset${axis.toUpperCase()}-${captions.id as string}`;
-    tracks.push({ id, property: axis === 'y' ? 'offsetY' : 'offsetX', keyframes: unique.map((key, index) => ({ id: `${id}-${index}`, ...key })) });
-  };
-  build('y');
-  build('x');
-  // Caption ink (AI Producer's `ink` per caption window): over a light panel the preset's light ink fades away, so
-  // the captions turn dark for that range. Stark draws with a difference blend and has no ink to change.
+    const entries = spots.map(({ range, spot }) => ({ range, value: spot[axis] === undefined ? base : round(spot[axis]! - centre) }));
+    const keys = rangeKeys(entries, base, duration, local);
+    if (keys.length && !keys.every((key) => key.value === base)) written.push({ kind: `offset${axis.toUpperCase()}`, property: axis === 'y' ? 'offsetY' : 'offsetX', keys });
+  }
+  // Caption ink (AI Producer's `ink` per caption window): where the captions sit on a light panel the preset's light
+  // ink fades away, so they turn dark for that range. Over the speaker's video they keep it. Stark draws with a
+  // difference blend and has no ink to change.
   const preset = captionPresetText((captions.preset as never) ?? 'classic');
   const ink = typeof captions.color === 'string' ? captions.color : preset.color;
-  const light = spots.filter(({ range }) => lightGround(range));
-  if (ink && !own && light.length && !tracks.some((track) => track.property === 'color')) {
-    const keys: { time: number; value: string }[] = [];
-    for (const { range } of light) {
-      const T = Math.min(TRANSITION, (range.end - range.start) / 4);
-      if (range.start >= FRAME) keys.push({ time: local(range.start), value: ink });
-      keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value: DARK_INK });
-      if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value: DARK_INK }, { time: local(range.end), value: ink });
-      else keys.push({ time: local(range.end), value: DARK_INK });
+  const light = ranges.filter((range) => range.background && isLightColor(range.background) && captionsOnPanel(range));
+  if (ink && isLightColor(ink) && light.length && !tracks.some((track) => track.property === 'color')) {
+    written.push({ kind: 'color', property: 'color', keys: rangeKeys(light.map((range) => ({ range, value: DARK_INK })), ink, duration, local) });
+  }
+  if (written.length) {
+    // Unique across timelines: each has its own captions layer, named now if it has no id yet (the next stamp keeps it).
+    if (typeof captions.id !== 'string') captions.id = drawId();
+    for (const { kind, property, keys } of written) {
+      // Stable ids: a layout op run again must leave the document unchanged.
+      const id = `${CAPTION_TRACK}${kind}-${captions.id as string}`;
+      tracks.push({ id, property, keyframes: keys.map((key, index) => ({ id: `${id}-${index}`, ...key })) });
     }
-    const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
-    const id = `${CAPTION_TRACK}color-${captions.id as string}`;
-    tracks.push({ id, property: 'color', keyframes: unique.map((key, index) => ({ id: `${id}-${index}`, ...key })) });
   }
   if (tracks.length) captions.tracks = tracks;
   else delete captions.tracks;

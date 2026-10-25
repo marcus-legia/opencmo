@@ -477,6 +477,32 @@ describe('add_explainer places on a 16:9 talking video', () => {
 		expect(layerOf(document)).toMatchObject({ x: 960, y: 60, width: 960, height: 960 });
 	});
 
+	it('keeps the panel colour of the range it replaces', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 20, background: '#F4F1EA' }, placed('1:1', 'right')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { start: number; background?: string }[] } }).layout.ranges;
+		expect(ranges.every((range) => range.background === '#F4F1EA')).toBe(true);
+	});
+
+	it('without a place, fills the visual column of a side-by-side already there', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'side-by-side', anchor: 'left', start: 2, end: 20 }, placed('1:1', undefined as never)], ctx);
+		const layer = layerOf(document) as unknown as { x: number; width: number };
+		expect(layer.x).toBeGreaterThanOrEqual(960 - 1);
+		expect(layer.x + layer.width).toBeLessThanOrEqual(1920);
+	});
+
+	it('without a place, holds a layout that ends before the animation does', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'pip', start: 2, end: 6 }, placed('16:9', undefined as never)], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { start: number; end: number }[] } }).layout.ranges;
+		expect(ranges).toEqual([expect.objectContaining({ start: 2, end: 10 })]);
+	});
+
+	it('refuses columns on a vertical frame and layouts without a speaker', async () => {
+		const tall = validate({ version: 1, stage: { children: [{ ...(talk.stage.children[0] as object), width: 1080, height: 1920 }] } }) as ClipDocument;
+		await expect(applyOps(tall, [placed('1:1', 'left')], ctx)).rejects.toThrow(/vertical/);
+		const noSpeaker = validate({ version: 1, stage: { children: [{ kind: 'scene', id: 'sc', width: 1920, height: 1080, workarea: [0, 30], active: true, children: [{ kind: 'rect', fill: '#123456', start: 0, end: 30 }] }] } }) as ClipDocument;
+		await expect(applyOps(noSpeaker, [placed('1:1', 'right')], ctx)).rejects.toThrow(/no speaker video/);
+	});
+
 	it('behind: the animation fills the frame under a corner facecam', async () => {
 		const { document } = await applyOps(talk, [placed('16:9', 'behind')], ctx);
 		const ranges = (sceneNode(document).marks as { layout: { ranges: { mode: string; ratio: number }[] } }).layout.ranges;
@@ -485,5 +511,10 @@ describe('add_explainer places on a 16:9 talking video', () => {
 		const order = roles(document);
 		expect(order.indexOf('Motion clip: Setup steps')).toBeLessThan(order.indexOf('speaker'));
 		expect(order.indexOf('Motion clip: Setup steps')).toBeGreaterThan(order.indexOf('backdrop'));
+		// The next rebuild (another layout range here) keeps the backdrop under the animation.
+		const { document: again } = await applyOps(document, [{ op: 'set_layout', mode: 'pip', start: 20, end: 26 }], ctx);
+		const after = roles(again);
+		expect(after.indexOf('Motion clip: Setup steps')).toBeGreaterThan(after.indexOf('backdrop'));
+		expect(after.indexOf('Motion clip: Setup steps')).toBeLessThan(after.indexOf('speaker'));
 	});
 });

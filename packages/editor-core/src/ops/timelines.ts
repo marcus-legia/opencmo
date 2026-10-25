@@ -12,6 +12,7 @@ import { z } from 'zod';
 import type { ClipDocument, SceneNode } from '@opencmo/clip-doc';
 
 import { clone, stamp, timelineLabel, timelinesOf, walk, type Entity } from '../doc';
+import { CAPTION_TRACK } from '../layout';
 import { OpFailure } from './context';
 import { copyOf } from './timeline';
 
@@ -81,6 +82,13 @@ function relink(document: ClipDocument, original: Entity, copy: Entity): void {
   pair(original, copy);
   stamp(document);
   const renamed = new Map([...oldIds].map(([entity, id]) => [id, entity.id as string]));
+  // The layout's caption tracks are known by an id built from their captions' id; a random one would make them
+  // look hand-made in the copy and stop every later caption move there.
+  for (const [entity, id] of oldIds) {
+    if (!id.startsWith(CAPTION_TRACK)) continue;
+    const owner = [...oldIds].find(([other, old]) => other.kind === 'captions' && (id.endsWith(`-${old}`) || id.includes(`-${old}-`)));
+    if (owner) entity.id = id.replace(`-${owner[1]}`, `-${owner[0].id as string}`);
+  }
   walk({ version: 1, stage: { children: [copy] } } as unknown as ClipDocument, ({ entity }) => {
     if (entity.kind === 'captions' && typeof entity.source === 'string' && renamed.has(entity.source)) {
       entity.source = renamed.get(entity.source);

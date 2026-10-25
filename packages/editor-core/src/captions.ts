@@ -24,7 +24,7 @@ import { FPS } from '@opencmo/clip-render';
 
 import { activeView, assign, clone, copyOf, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
 import { faceXTrack, type FaceFrame, type XKey } from './face-track';
-import { rebuildLayout } from './layout';
+import { readLayout, rebuildLayout } from './layout';
 import { OpFailure } from './ops/context';
 import { keptDuration, keptRanges, round, type Range } from './transcript';
 
@@ -672,7 +672,8 @@ export function writeCaptionStyle(input: ClipDocument, style: CaptionStyle): Cli
     assign(captions, 'colors', style.colors?.length ? [...style.colors] : undefined);
     for (const key of STYLE_KEYS) if (key in style) assign(captions, key, style[key] ?? undefined);
   }
-  return document;
+  // The layout's caption tracks were built for the old style (its box, its ink): rebuild them for this one.
+  return readLayout(document).length ? rebuildLayout(document) : document;
 }
 
 

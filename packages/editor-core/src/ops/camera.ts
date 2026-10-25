@@ -19,7 +19,7 @@ import { z } from 'zod';
 
 import { CAMERA_MOVE_KINDS, type CameraMove, type ClipDocument } from '@opencmo/clip-doc';
 
-import { clone, sceneOf, type Entity } from '../doc';
+import { clone, drawId, sceneOf, type Entity } from '../doc';
 import { readLayout } from '../layout';
 import { round } from '../transcript';
 import { OpFailure, type OpContext } from './context';
@@ -287,6 +287,9 @@ export function syncCameraMoves(input: ClipDocument): ClipDocument {
 
 	const document = clone(input);
 	const scene = sceneOf(document) as unknown as Entity;
+	// Every timeline is baked, so the scene's id goes into the keys: a duplicated timeline must not share them.
+	if (typeof scene.id !== 'string') scene.id = drawId();
+	const prefix = `${TRACK_PREFIX}${scene.id as string}-`;
 	const frame = { width: Number(scene.width ?? 0), height: Number(scene.height ?? 0) };
 	const panels = readLayout(document);
 	const fresh = new Set<string>();
@@ -357,7 +360,7 @@ export function syncCameraMoves(input: ClipDocument): ClipDocument {
 			const frames = values[property];
 			if (frames.every((item) => Math.abs(item.value - base[property]) < 1e-3)) continue;
 			// Ids are unique in the document and the same on every rebuild, so an unrelated op changes nothing here.
-			const key = `${TRACK_PREFIX}${index}-${property}`;
+			const key = `${prefix}${index}-${property}`;
 			owned.push({ id: key, property, keyframes: frames.map((item, at) => ({ id: `${key}-${at}`, ...item })) });
 		}
 		for (const item of owned) fresh.add(fingerprint(item));
@@ -369,7 +372,7 @@ export function syncCameraMoves(input: ClipDocument): ClipDocument {
 	for (const [index, move] of live.filter((item) => item.kind === 'white_flash').entries()) {
 		const times = new Set<number>([0.04, move.duration].map(round));
 		for (let t = 0; t < move.duration; t += KINDS.white_flash.step) times.add(round(t));
-		const key = `${TRACK_PREFIX}flash-${index}`;
+		const key = `${prefix}flash-${index}`;
 		const keyframes = [...times].sort((a, b) => a - b).map((time, at) => ({ id: `${key}-${at}`, time, value: round(flashOpacity(move, time)) }));
 		children.push({
 			id: key,

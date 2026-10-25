@@ -14,7 +14,7 @@ import { createRenderer, FPS, type LayoutBox } from '@opencmo/clip-render';
 import { byId, clone, sceneOf, type Entity } from '../doc';
 import { readBrand, rebrand, themeFromBrand } from '../brand';
 import { buildChart, chartInput, type ChartInput } from '../visuals/chart';
-import { panelBackgroundAt, panelRegionAt } from '../layout';
+import { DARK_INK, isLightColor, panelBackgroundAt, panelRegionAt } from '../layout';
 import { clipScript, clipWords, findQuote, quoteTiming } from '../script';
 import { defaultRegion, r2, toPixels, visualGroup, type Box, type Node, type Theme } from '../visuals/common';
 import { buildDiagram, diagramInput, type DiagramInput } from '../visuals/diagram';
@@ -228,20 +228,15 @@ const BUILDERS: Record<string, Builder> = {
 	},
 };
 
-const luminance = (hex: string): number => {
-	const n = parseInt(hex.slice(1), 16);
-	const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255);
-	return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
-};
-
 /**
  * The visual's ink against the panel it lands on: a light panel (a light room, a light brand colour) with the light
  * default text left the numbers and labels unreadable (seen in a 9:16 render with a #E8E2D6 panel), so text and
- * lines turn dark there. A brand whose text is already dark keeps it.
+ * lines turn dark there, and the cards they sit on (list rows, diagram nodes, a title's panel) turn light, or the
+ * dark text lands on a dark card. A brand whose text is already dark keeps it.
  */
 function onGround(theme: Theme, ground: string | null): Theme {
-	if (!ground || luminance(ground) < 0.6 || luminance(theme.text) < 0.5) return theme;
-	return { ...theme, text: '#15181E', line: '#15181E' };
+	if (!ground || !isLightColor(ground) || !isLightColor(theme.text)) return theme;
+	return { ...theme, text: DARK_INK, line: DARK_INK, panel: '#FFFFFF' };
 }
 
 /** Dựng group của một visual từ op + input đã kiểm. */

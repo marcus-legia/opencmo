@@ -153,6 +153,17 @@ describe('add_camera_move', () => {
 		expect(video!.tracks!.find((item) => item.property === 'x')!.id).not.toMatch(/^camera-/);
 	});
 
+	it('a duplicated timeline keeps its own ids, so the project still saves', async () => {
+		const ctx = memory();
+		const moved = await applyOps(SOURCE, [{ op: 'add_camera_move', kind: 'push_in', start: 4 }, { op: 'add_camera_move', kind: 'white_flash', start: 1 }], ctx);
+		const main = (moved.document.stage.children[0] as unknown as { id: string }).id;
+		const { document } = await applyOps(moved.document, [{ op: 'create_timeline', from: main }, { op: 'add_camera_move', kind: 'push_in', start: 12 }], ctx);
+		expect(document.stage.children).toHaveLength(2);
+		expect(() => validate(document)).not.toThrow();
+		const ids = JSON.stringify(document).match(/"camera-[^"]*-0"/g) ?? [];
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+
 	it('allows one shake or flash per 20 s', async () => {
 		const ctx = memory();
 		const once = await applyOps(SOURCE, [{ op: 'add_camera_move', kind: 'impact_shake', start: 1 }], ctx);

@@ -101,6 +101,21 @@ describe('layouts on a landscape frame', () => {
 		expect(JSON.stringify(dark)).not.toContain('#15181E');
 	});
 
+	it('a list on a light panel gets light rows under its dark text', async () => {
+		const { document } = await applyOps(
+			landscape,
+			[
+				{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 18, background: '#F4F1EA' },
+				{ op: 'add_list', items: [{ label: 'Install it' }, { label: 'Run it' }], start: 3, end: 10 },
+			],
+			ctx,
+		);
+		const list = (document.stage.children[0] as unknown as Entity).children!.find((child) => String(child.name ?? '').startsWith('List'))!;
+		const json = JSON.stringify(list);
+		expect(json).toContain('#15181E');
+		expect(json).not.toContain('#0F172A');
+	});
+
 	it('over a light panel the captions turn dark for the range and back after', async () => {
 		const portrait = validate({
 			version: 1,
@@ -114,6 +129,23 @@ describe('layouts on a landscape frame', () => {
 		expect((dark.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!.tracks!.some((track) => track.property === 'color')).toBe(false);
 	});
 
+	it('a duplicated timeline keeps moving its captions with its own layouts', async () => {
+		const portrait = validate({
+			version: 1,
+			stage: { children: [{ kind: 'scene', id: 'main', width: 1080, height: 1920, workarea: [0, 30], active: true, children: [{ kind: 'video', id: 'master', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 }, { kind: 'captions', id: 'subs', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 }] }] },
+		}) as ClipDocument;
+		const split = await applyOps(portrait, [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 10 }], ctx);
+		const { document } = await applyOps(split.document, [{ op: 'create_timeline', from: 'main' }, { op: 'set_layout', mode: 'split-bottom', start: 2, end: 10, ratio: 0.6 }], ctx);
+		const copy = document.stage.children.find((scene) => (scene as unknown as Entity).active) as unknown as Entity;
+		const captions = copy.children!.find((child) => child.kind === 'captions')!;
+		const offsets = captions.tracks!.filter((track) => track.property === 'offsetY');
+		// One track, ours, rebuilt for the new ratio: not a stale copy taken for a hand-made one.
+		expect(offsets).toHaveLength(1);
+		expect((offsets[0] as { id?: string }).id).toBe(`layout-caption-offsetY-${captions.id as string}`);
+		const original = (document.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!.tracks!.find((track) => track.property === 'offsetY')!;
+		expect(offsets[0]!.keyframes[1]!.value).not.toBe(original.keyframes[1]!.value);
+	});
+
 	it('a portrait frame keeps its bigger cell and centred crops (the video pans to the face itself)', async () => {
 		const portrait = validate({
 			version: 1,
@@ -122,5 +154,74 @@ describe('layouts on a landscape frame', () => {
 		expect(speakerFocusX(portrait)).toBe(0.5);
 		const { document } = await applyOps(portrait, [{ op: 'set_layout', mode: 'pip', start: 2, end: 20 }], ctx);
 		expect(readLayout(document)[0]!.ratio).toBe(0.36);
+	});
+});
+
+describe('captions follow the layout', () => {
+	const talk = (captions: Record<string, unknown> = {}) =>
+		validate({
+			version: 1,
+			stage: { children: [{ kind: 'scene', width: 1080, height: 1920, workarea: [0, 30], active: true, children: [{ kind: 'video', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 }, { kind: 'captions', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30, ...captions }] }] },
+		}) as ClipDocument;
+	const captionsOf = (document: ClipDocument) => (document.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!;
+	const keysOf = (document: ClipDocument, property: string) => captionsOf(document).tracks?.find((track) => track.property === property)?.keyframes.map(({ time, value }) => [time, value]);
+
+	it('keep their ink over the speaker, and turn dark over a full light panel', async () => {
+		const { document: top } = await applyOps(talk(), [{ op: 'set_layout', mode: 'split-top', start: 2, end: 10, background: '#F4F1EA' }], ctx);
+		expect(keysOf(top, 'color')).toBeUndefined();
+		const { document: full } = await applyOps(talk(), [{ op: 'set_layout', mode: 'visual-only', start: 2, end: 10, background: '#FFFFFF' }], ctx);
+		expect(keysOf(full, 'color')).toEqual([[2, '#FFFFFF'], [2.3, '#15181E'], [9.7, '#15181E'], [10, '#FFFFFF']]);
+	});
+
+	it('move on their own clock when the master is sped up', async () => {
+		const { document } = await applyOps(talk({ playbackRate: 2, sourceOut: 60 }), [{ op: 'set_layout', mode: 'split-bottom', start: 4, end: 10 }], ctx);
+		expect(keysOf(document, 'offsetY')!.map(([time]) => time)).toEqual([8, 8.6, 19.4, 20]);
+	});
+
+	it('go straight from one layout to the next that touches it', async () => {
+		const { document } = await applyOps(
+			talk(),
+			[
+				{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 6 },
+				{ op: 'set_layout', mode: 'pip', start: 6, end: 12 },
+			],
+			ctx,
+		);
+		const keys = keysOf(document, 'offsetY')!;
+		const inner = keys.filter(([time]) => (time as number) > 2 && (time as number) < 12);
+		expect(inner.some(([, value]) => value === 0)).toBe(false);
+	});
+
+	it('take a new caption colour across the light range too', async () => {
+		const { document } = await applyOps(talk(), [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 10, background: '#F4F1EA' }], ctx);
+		const { document: yellow } = await applyOps(document, [{ op: 'set_caption_style', preset: 'classic', color: '#FFD400' }], ctx);
+		expect(keysOf(yellow, 'color')).toEqual([[2, '#FFD400'], [2.3, '#15181E'], [9.7, '#15181E'], [10, '#FFD400']]);
+	});
+});
+
+describe('a colour change inside a layout', () => {
+	const portrait = validate({
+		version: 1,
+		stage: { children: [{ kind: 'scene', width: 1080, height: 1920, workarea: [0, 30], active: true, children: [{ kind: 'video', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 }] }] },
+	}) as ClipDocument;
+	const panelOf = (document: ClipDocument) => (document.stage.children[0] as unknown as Entity).children!.find((child) => (child.marks as { layout?: string } | undefined)?.layout === 'panel')!;
+
+	it('keeps the panel open across the seams and switches its colour there', async () => {
+		const { document } = await applyOps(
+			portrait,
+			[
+				{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 15 },
+				{ op: 'set_layout', mode: 'split-bottom', start: 5, end: 8, background: '#F4F1EA' },
+			],
+			ctx,
+		);
+		expect(readLayout(document)).toHaveLength(3);
+		const height = panelOf(document).tracks!.find((track) => track.property === 'height')!.keyframes;
+		const open = height.find((key) => key.time > 2.5)!.value;
+		expect(height.filter((key) => key.time > 2.5 && key.time < 14.5).every((key) => key.value === open)).toBe(true);
+		const colour = ((panelOf(document).paints as { tracks: { keyframes: { time: number; value: string }[] }[] }[])[0]!.tracks[0]!.keyframes);
+		// Dark until the seam at 5 s, light until 8 s: never light while range A is still on screen.
+		expect(colour.filter((key) => key.time < 5).every((key) => key.value === '#0F172A')).toBe(true);
+		expect(colour.find((key) => key.time > 5 && key.time < 8)!.value).toBe('#F4F1EA');
 	});
 });

@@ -14,6 +14,30 @@ type Step = (document: Record<string, unknown>) => Record<string, unknown>;
 /** `STEPS[n]` đưa version n lên n + 1. Chưa có bước nào: version 1 là bản đầu. */
 const STEPS: Record<number, Step> = {};
 
+const REMOVED_KINDS = new Set(['lottie', 'scene3d']);
+const REMOVED_TRACKS = new Set(['cameraPhi', 'cameraTheta', 'cameraDistance']);
+
+/**
+ * Lottie and 3D were removed on 2026-10-24 without a version bump, so version-1 documents saved before that
+ * still carry them and would fail the strict schema (the project could not be opened or exported). Dropping
+ * them on every read keeps those projects editable; it is a no-op for anything saved since.
+ */
+function pruneRemoved(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => !(item && typeof item === 'object' && REMOVED_KINDS.has((item as { kind?: unknown }).kind as string)))
+      .filter((item) => !(item && typeof item === 'object' && REMOVED_TRACKS.has((item as { property?: unknown }).property as string)))
+      .map(pruneRemoved);
+  }
+  if (!value || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (key === 'studio3d') continue;
+    out[key] = pruneRemoved(item);
+  }
+  return out;
+}
+
 export function migrate(input: unknown): ClipDocument {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new Error('document must be an object');
@@ -33,5 +57,5 @@ export function migrate(input: unknown): ClipDocument {
     version += 1;
     document.version = version;
   }
-  return DocumentSchema.parse(document);
+  return DocumentSchema.parse(pruneRemoved(document));
 }

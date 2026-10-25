@@ -18,7 +18,7 @@ import { clone, sceneOf, walk, type Entity } from '../doc';
 import { holderOf } from './captions';
 import { OpFailure, type OpContext } from './context';
 import { checked, setFrame, setLayout } from './project';
-import { speakerBandAt } from '../layout';
+import { hasSpeaker, panelBackgroundAt, panelRegionAt, readLayout, speakerBandAt } from '../layout';
 import { voiceTranscript } from './voiceover';
 import {
 	CLIP_MAX_SECONDS,
@@ -120,6 +120,14 @@ export const addExplainer = {
 		// Full frame when the format matches the clip; otherwise the largest centred box of its shape, inside the
 		// visual band when the frame is split.
 		let area = { x: 0, y: 0, width: root.width, height: root.height };
+		const laidOut = !blank && input.place !== undefined && input.place !== 'full';
+		if (laidOut && !hasSpeaker(next)) throw new OpFailure(`There is no speaker video to put next to the animation. Use place "full".`);
+		if (laidOut && (input.place === 'left' || input.place === 'right') && root.width < root.height) {
+			throw new OpFailure(`Columns are for a landscape frame; this ${root.width}x${root.height} frame is vertical. Use place "top" or "bottom".`);
+		}
+		// A panel colour the user chose for this span stays: the new layout replaces the range under it.
+		const background = panelBackgroundAt(next, start) ?? undefined;
+		const keep = background ? { background } : {};
 		if (!blank && (input.place === 'top' || input.place === 'bottom')) {
 			// The band takes the full width at the animation's own shape; the speaker gets the rest.
 			const band = Math.round((root.width * formatHeight) / formatWidth);
@@ -136,24 +144,38 @@ export const addExplainer = {
 			}
 			const split = await setLayout.apply(
 				next,
-				{ op: 'set_layout', mode: input.place === 'top' ? 'split-bottom' : 'split-top', start, end, ratio } as never,
+				{ op: 'set_layout', mode: input.place === 'top' ? 'split-bottom' : 'split-top', start, end, ratio, ...keep } as never,
 				ctx,
 			);
 			next = split;
 			area = { x: 0, y: input.place === 'top' ? 0 : root.height - band, width: root.width, height: band };
 		} else if (!blank && (input.place === 'left' || input.place === 'right')) {
 			// The speaker takes the other column; the animation fits its column at its own shape.
-			next = await setLayout.apply(next, { op: 'set_layout', mode: 'side-by-side', start, end, anchor: input.place === 'left' ? 'right' : 'left' } as never, ctx);
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'side-by-side', start, end, anchor: input.place === 'left' ? 'right' : 'left', ...keep } as never, ctx);
 			const column = root.width / 2;
 			area = { x: input.place === 'left' ? 0 : column, y: 0, width: column, height: root.height };
 		} else if (!blank && input.place === 'behind') {
-			next = await setLayout.apply(next, { op: 'set_layout', mode: 'pip', start, end } as never, ctx);
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'pip', start, end, ...keep } as never, ctx);
 		} else if (!blank && input.place !== 'full') {
-			// A split already on screen: the animation fills its visual band, not the whole frame over the speaker.
-			const speaker = speakerBandAt(next, start);
-			if (speaker) {
-				const top = speaker.y > 0 ? 0 : Math.round(speaker.height * root.height);
-				area = { x: 0, y: top, width: root.width, height: Math.round((1 - speaker.height) * root.height) };
+			// A layout already on screen: the animation fills its visual area, not the whole frame over the speaker.
+			const ranges = readLayout(next);
+			const range = ranges.find((item) => start >= item.start - 1e-6 && start < item.end);
+			if (range && range.mode !== 'cell' && range.mode !== 'visual-only') {
+				// The layout holds for the whole animation (up to the next layout), or the speaker would come back full
+				// frame under a half-size animation.
+				const stop = Math.min(end, ranges.find((item) => item.start >= range.end - 1e-6)?.start ?? end);
+				if (stop > range.end + 1e-6) {
+					const { mode, ratio, anchor, background: colour } = range;
+					next = await setLayout.apply(next, { op: 'set_layout', mode, start: range.start, end: stop, ratio, ...(anchor ? { anchor } : {}), ...(colour ? { background: colour } : {}) } as never, ctx);
+				}
+				const speaker = speakerBandAt(next, start);
+				const region = panelRegionAt(next, start);
+				if (speaker) {
+					const top = speaker.y > 0 ? 0 : Math.round(speaker.height * root.height);
+					area = { x: 0, y: top, width: root.width, height: Math.round((1 - speaker.height) * root.height) };
+				} else if (region) {
+					area = { x: region.x * root.width, y: region.y * root.height, width: region.width * root.width, height: region.height * root.height };
+				}
 			}
 		}
 		const scene = sceneOf(next)!;
