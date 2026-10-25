@@ -166,7 +166,7 @@ scripts/dev.mjs         one-command dev stack
 ## Working style
 
 - Don't expand scope. Note out-of-scope improvements in the PR or an issue instead.
-- Commit only when asked. Commit messages in English.
+- Commit freely as work progresses (owner, 2026-10-25); push to the working branch. Commit messages in English.
 
 ## Product advisor role
 
