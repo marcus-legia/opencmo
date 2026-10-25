@@ -178,7 +178,7 @@ export const setLayout = {
     const start = input.start ?? anchored?.start ?? 0;
     const end = Math.min(input.end ?? anchored?.end ?? duration ?? start, duration ?? Infinity);
     if (!(end - start >= MIN_RANGE)) throw new OpFailure(`A layout needs at least ${MIN_RANGE} seconds inside the clip.`);
-    const defaults = layoutDefaults(input.mode);
+    const defaults = layoutDefaults(input.mode, scene.width / scene.height);
     const ratio = input.ratio ?? defaults.ratio;
     if (input.mode === 'pip' ? ratio > 0.5 : input.mode !== 'full' && input.mode !== 'visual-only' && ratio < 0.3) {
       throw new OpFailure(input.mode === 'pip' ? 'A picture-in-picture ratio is between 0.2 and 0.5.' : 'This layout ratio is between 0.3 and 0.7.');

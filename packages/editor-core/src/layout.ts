@@ -51,8 +51,9 @@ export type LayoutAnchor = (typeof LAYOUT_ANCHORS)[number];
 export type LayoutRange = StoredRange;
 
 /** Mặc định của từng kiểu: tỉ lệ (dải / ô PiP theo bề ngang / cột) và góc. */
-export function layoutDefaults(mode: LayoutMode): { ratio: number; anchor?: LayoutAnchor } {
-  if (mode === 'pip') return { ratio: 0.36, anchor: 'bottom-right' };
+export function layoutDefaults(mode: LayoutMode, aspect = 9 / 16): { ratio: number; anchor?: LayoutAnchor } {
+  // A YouTube facecam is about a quarter of the width; a portrait frame needs a bigger cell to read the face.
+  if (mode === 'pip') return { ratio: aspect >= 1 ? 0.24 : 0.36, anchor: 'bottom-right' };
   if (mode === 'side-by-side') return { ratio: 0.5, anchor: 'left' };
   return { ratio: 0.5 };
 }
@@ -86,6 +87,28 @@ const SPEAKER = 'speaker';
 const PANEL = 'panel';
 const BACKDROP = 'backdrop';
 
+const aspectOf = (document: ClipDocument): number => {
+  const scene = sceneOf(document);
+  return scene?.width && scene?.height ? (scene.width as number) / (scene.height as number) : 9 / 16;
+};
+
+/**
+ * Where the speaker's face is across the frame (0-1), for crops that cut a window out of the frame (pip, side
+ * column). A master wider than the frame pans itself to the face (portrait frames), so the window stays centred;
+ * on a landscape frame the master is not panned and the median of the face track places the window.
+ */
+export function speakerFocusX(document: ClipDocument): number {
+  const scene = sceneOf(document);
+  const W = Number(scene?.width ?? 0);
+  const target = masterTarget(document) as unknown as Entity | undefined;
+  const video = (target?.kind === 'sequence' ? ((target.children as Entity[] | undefined) ?? []).find((child) => child.kind === 'video') : target) as Entity | undefined;
+  if (!W || !video || Number(video.width ?? W) > W * 1.01) return 0.5;
+  const track = ((scene?.marks as { reframe?: { track?: [number, number][] } } | undefined)?.reframe?.track ?? []).map(([, focus]) => focus);
+  if (!track.length) return 0.5;
+  const sorted = [...track].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
+
 export function readLayout(document: ClipDocument): LayoutRange[] {
   const scene = sceneOf(document);
   const ranges = (scene?.marks?.layout as { ranges?: unknown } | undefined)?.ranges;
@@ -100,7 +123,7 @@ export function readLayout(document: ClipDocument): LayoutRange[] {
         ((LAYOUT_MODES as readonly string[]).includes(item.mode) ? item.mode !== ('full' as string) : item.mode === 'cell' && validRect(item.rect)),
     )
     .map((item) => {
-      const out: LayoutRange = { ...item, ratio: typeof item.ratio === 'number' ? item.ratio : item.mode === 'cell' ? 1 : layoutDefaults(item.mode).ratio };
+      const out: LayoutRange = { ...item, ratio: typeof item.ratio === 'number' ? item.ratio : item.mode === 'cell' ? 1 : layoutDefaults(item.mode, aspectOf(document)).ratio };
       if (item.mode === 'cell' || !FANCY.has(item.mode) || !LAYOUT_ANCHORS.includes(item.anchor as LayoutAnchor)) delete out.anchor;
       if (item.mode !== 'cell') delete out.rect, delete out.focus, delete out.fit;
       else if (item.fit !== 'fit') delete out.fit;
@@ -168,7 +191,7 @@ type Geometry = {
 const rest = (W: number, H: number) => ({ offsetX: 0, scale: 1, maskX: 0, maskY: 0, maskW: W, maskH: H, radius: 0, panelX: 0, panelW: W, backdrop: 0 });
 
 /** Hình học khi đã vào hẳn bố cục (`open`) và lúc panel còn gập (`closed`). */
-function geometry(range: LayoutRange, W: number, H: number): { open: Geometry; closed: Geometry } {
+function geometry(range: LayoutRange, W: number, H: number, focusX = 0.5): { open: Geometry; closed: Geometry } {
   const base = rest(W, H);
   if (range.mode === 'visual-only') {
     return { open: { ...base, offset: 0, panelY: 0, panelHeight: H, opacity: 1 }, closed: { ...base, offset: 0, panelY: 0, panelHeight: H, opacity: 0 } };
@@ -212,7 +235,9 @@ function geometry(range: LayoutRange, W: number, H: number): { open: Geometry; c
     // Ô vuông quanh mặt (cạnh = cạnh ngắn của khung), thu nhỏ về góc; panel cũ vô hình, nền ở dưới.
     const anchor = anchorFor(range);
     const side = Math.min(W, H);
-    const maskX = (W - side) / 2;
+    // Around the speaker's face (`speakerFocusX`): on a landscape frame the video is not panned, and a centred
+    // square cut an off-centre speaker in half.
+    const maskX = Math.min(Math.max(focusX * W - side / 2, 0), W - side);
     const maskY = Math.min(Math.max(FACE_Y * H - side / 2, 0), H - side);
     const screen = range.ratio * W;
     const scale = screen / side;
@@ -240,11 +265,11 @@ function geometry(range: LayoutRange, W: number, H: number): { open: Geometry; c
     // Một cột người nói (cắt quanh giữa khung, nơi bám mặt đặt mặt), panel phủ phần còn lại.
     const column = range.ratio * W;
     const left = anchorFor(range) === 'left';
-    const maskX = (W - column) / 2;
+    const maskX = Math.min(Math.max(focusX * W - column / 2, 0), W - column);
     const open: Geometry = {
       ...base,
       offset: 0,
-      offsetX: round((left ? column / 2 : W - column / 2) - W / 2),
+      offsetX: round((left ? column / 2 : W - column / 2) - (maskX + column / 2)),
       maskX: round(maskX),
       maskW: round(column),
       panelX: round(left ? column : 0),
@@ -275,7 +300,7 @@ type Key = { time: number; value: number; easing?: string };
 const key = (time: number, value: number): Key => ({ time: round(time), value: round(value), easing: 'easeInOut' });
 
 /** Keyframe của group + panel cho mọi khoảng; ngoài khoảng panel vô hình (opacity 0). */
-function keyframes(ranges: LayoutRange[], W: number, H: number, duration: number) {
+function keyframes(ranges: LayoutRange[], W: number, H: number, duration: number, focusX = 0.5) {
   const base = rest(W, H);
   const tracks = {
     offsetY: [key(0, 0)],
@@ -313,7 +338,7 @@ function keyframes(ranges: LayoutRange[], W: number, H: number, duration: number
   let previous = -1;
   for (const [index, range] of ranges.entries()) {
     const next = ranges[index + 1];
-    const { open, closed } = geometry(range, W, H);
+    const { open, closed } = geometry(range, W, H, focusX);
     const T = Math.min(TRANSITION, (range.end - range.start) / 4);
     const hidden = { ...closed, opacity: 0 };
     // Một frame trước: panel đổi sang hình gập của khoảng này khi còn vô hình,
@@ -423,7 +448,7 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
     .map((range) => ({ ...range, end: Math.min(range.end, duration) }))
     .filter((range) => range.end - range.start >= MIN_RANGE);
   if (!live.length) return document;
-  const tracks = keyframes(live, W, H, duration);
+  const tracks = keyframes(live, W, H, duration, speakerFocusX(document));
   const fancy = live.some((range) => FANCY.has(range.mode));
   const end = round(duration);
   // Track hằng thì ghi giá trị tĩnh: clip chỉ chia trên/dưới không mang track thừa.
@@ -568,6 +593,13 @@ export function panelRegionAt(document: ClipDocument, time: number): { x: number
   if (range.mode === 'visual-only') return { x: 0.06, y: 0.08, width: 0.88, height: 0.84 };
   const scene = sceneOf(document);
   const aspect = scene?.width && scene?.height ? (scene.width as number) / (scene.height as number) : 9 / 16;
+  if (range.mode === 'pip' && aspect >= 1) {
+    // Landscape or square: the visual takes the side away from the corner cell, full height (a YouTube facecam).
+    const cell = range.ratio + PIP_MARGIN * 2;
+    const right = anchorFor(range).endsWith('right');
+    const width = round(Math.max(0.3, 1 - cell - 0.08));
+    return { x: right ? 0.05 : round(cell + 0.03), y: 0.1, width, height: 0.8 };
+  }
   if (range.mode === 'pip') {
     // Visual nằm trên người nói trong z-order: chừa hẳn dải có ô PiP.
     const cell = round((range.ratio + PIP_MARGIN * 2) * aspect);
