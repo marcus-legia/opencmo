@@ -28,15 +28,17 @@ from __future__ import annotations
 import logging
 import os
 import statistics
+import subprocess
 import tempfile
 import urllib.request
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from math import ceil, floor
 from pathlib import Path
+from time import monotonic
 from typing import TypeVar
 
-from ..media.ffmpeg import USER_INPUT, try_run
+from ..media.ffmpeg import USER_INPUT
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +60,11 @@ TILE = 270
 TILE_OVERLAP = 0.5
 #: The worker container's CPUs (`run_job` in modal_app.py): ffmpeg's decoder threads stay within it.
 THREADS = 4
+#: Wall time for the whole pass (decode + detection). The upload job has 1800 s in all (`run_job`), and decoding is
+#: the cost: 0.27 s per second of 4K H.264 and 0.49 s per second of 4K HEVC on 4 CPUs (measured 2026-10-25), so a
+#: 15-minute 4K phone video can take 7-15 minutes. Past the budget the track stops where it got to, and the editor
+#: holds the last centre for the rest: the upload still has time to be transcribed and published.
+BUDGET_SECONDS = 420
 
 
 def _cache_dir() -> Path:
@@ -120,7 +127,7 @@ class Tile:
 
 
 def tiles_for(width: int, height: int) -> list[Tile]:
-    """Square tiles along the long side, overlapping by half; one tile for a near-square frame."""
+    """Square tiles along the long side, overlapping by half; one tile, the whole frame, for a near-square frame."""
     if width <= 0 or height <= 0:
         return [Tile(0.0, 0.0, 1.0, 1.0)]
     long_side, short_side = max(width, height), min(width, height)
@@ -135,34 +142,48 @@ def tiles_for(width: int, height: int) -> list[Tile]:
     return [Tile(0.0, offset, 1.0, share) for offset in offsets]
 
 
-def _extract_tiles(video: Path, workdir: Path, fps: float, tiles: list[Tile]) -> list[list[Path]]:
+def _extract_tiles(video: Path, workdir: Path, fps: float, tiles: list[Tile], timeout: float) -> tuple[list[list[Path]], bool]:
     """Small JPEG tiles of the video at `fps`, one image sequence per tile, read by the detector one file at a time.
+    Past `timeout` the frames written so far are kept (the last one may be half written, so it goes), and the flag
+    that says the sequences reach the end of the video is False.
 
-    The master is our own remux, but its streams are still the user's: read through the demuxer allowlist.
+    The master is our own remux, but its streams are still the user's: read through the demuxer allowlist. ffmpeg
+    turns a rotated phone video upright, so `tiles` are for the displayed size (`probe_file` gives that).
     """
     # Short side to TILE px, never upscaled past the source.
     scale = f"scale='if(gte(iw,ih),-2,min({TILE},iw))':'if(gte(iw,ih),min({TILE},ih),-2)'"
     labels = [f"t{i}" for i in range(len(tiles))]
+    # A whole-frame tile is the frame itself: a square crop of a near-square frame would miss its edge.
     crops = ";".join(
-        f"[s{i}]crop='min(iw,ih)':'min(iw,ih)':'(iw-min(iw,ih))*{_ratio(tile.x, tile.w)}':'(ih-min(iw,ih))*{_ratio(tile.y, tile.h)}'[{label}]"
+        f"[s{i}]null[{label}]"
+        if tile.w >= 1.0 and tile.h >= 1.0
+        else f"[s{i}]crop='min(iw,ih)':'min(iw,ih)':'(iw-min(iw,ih))*{_ratio(tile.x, tile.w)}':'(ih-min(iw,ih))*{_ratio(tile.y, tile.h)}'[{label}]"
         for i, (tile, label) in enumerate(zip(tiles, labels, strict=True))
     )
     graph = f"[0:v]fps={fps},{scale},split={len(tiles)}{''.join(f'[s{i}]' for i in range(len(tiles)))};{crops}"
     outputs: list[str] = []
     for label in labels:
         outputs += ["-map", f"[{label}]", "-q:v", "5", str(workdir / f"{label}_%05d.jpg")]
-    ok = try_run(
-        [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(THREADS),
-            *USER_INPUT, "-i", str(video),
-            "-filter_complex", graph, "-filter_complex_threads", str(THREADS),
-            *outputs,
-        ],
-        timeout=1800,
-    )
-    if not ok:
-        return []
-    return [sorted(workdir.glob(f"{label}_*.jpg")) for label in labels]
+    args = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-threads", str(THREADS),
+        *USER_INPUT, "-i", str(video),
+        "-filter_complex", graph, "-filter_complex_threads", str(THREADS),
+        *outputs,
+    ]
+    partial = False
+    try:
+        if subprocess.run(args, capture_output=True, timeout=max(timeout, 1.0), check=False).returncode != 0:
+            return [], False
+    except subprocess.TimeoutExpired:
+        partial = True
+        log.warning("Face tracking: decoding passed its %.0f s budget; tracking the start only.", timeout)
+    except (subprocess.SubprocessError, OSError):
+        return [], False
+    sequences = [sorted(workdir.glob(f"{label}_*.jpg")) for label in labels]
+    if partial:
+        frames = max(0, min((len(files) for files in sequences), default=0) - 1)
+        sequences = [files[:frames] for files in sequences]
+    return sequences, not partial
 
 
 def _ratio(offset: float, size: float) -> str:
@@ -200,16 +221,17 @@ def _merge(found: list[tuple[Face, float]]) -> list[tuple[Face, float]]:
     return kept
 
 
-def _detect_faces(sequences: list[list[Path]], tiles: list[Tile]) -> list[Face]:
+def _detect_faces(sequences: list[list[Path]], tiles: list[Tile], deadline: float | None = None) -> tuple[list[Face], int]:
     """Every face of every frame (not only the biggest: wide shots between close-ups made "the biggest" jump from one
-    person to another), mapped from its tile back to the frame. Empty when MediaPipe is missing or cannot start."""
+    person to another), mapped from its tile back to the frame, and how many frames were read (fewer when `deadline`,
+    a `monotonic()` value, passes). No faces when MediaPipe is missing or cannot start."""
     try:
         import mediapipe as mp  # type: ignore
         from mediapipe.tasks import python as mp_python  # type: ignore
         from mediapipe.tasks.python import vision  # type: ignore
     except ImportError:
         log.info("MediaPipe is not installed: framing in the centre. Install the engine's [face] extra.")
-        return []
+        return [], 0
     try:
         options = vision.FaceDetectorOptions(
             base_options=mp_python.BaseOptions(model_asset_path=str(face_model_path())),
@@ -221,12 +243,16 @@ def _detect_faces(sequences: list[list[Path]], tiles: list[Tile]) -> list[Face]:
     except Exception as exc:  # noqa: BLE001 - a missing model or libEGL must not fail the upload
         # On Modal a missing libEGL/libGLES raised OSError here and killed whole jobs; the image installs both now.
         log.warning("Face detector unavailable (%s): framing in the centre.", exc)
-        return []
+        return [], 0
 
     faces: list[Face] = []
     frames = min((len(files) for files in sequences), default=0)
+    done = 0
     try:
         for index in range(frames):
+            if deadline is not None and monotonic() > deadline:
+                log.warning("Face tracking: detection passed its budget at frame %d of %d; tracking the start only.", index, frames)
+                break
             found: list[tuple[Face, float]] = []
             for tile, files in zip(tiles, sequences, strict=True):
                 image = mp.Image.create_from_file(str(files[index]))
@@ -250,23 +276,36 @@ def _detect_faces(sequences: list[list[Path]], tiles: list[Tile]) -> list[Face]:
                         )
                     )
             faces.extend(face for face, _score in confident(_merge(found)))
+            done = index + 1
     finally:
         detector.close()
-    return faces
+    return faces, done
 
 
-def face_track(video: Path, duration: float, *, width: int, height: int) -> Track:
-    """Face positions over the whole video, `(source second, Face)` in time order."""
+def face_track(video: Path, duration: float, *, width: int, height: int, budget: float = BUDGET_SECONDS) -> tuple[Track, float]:
+    """Face positions, `(source second, Face)` in time order, and the seconds of video they cover: all of it, or
+    less when the pass ran out of its `budget` (wall seconds)."""
     fps = sample_fps(duration)
     tiles = tiles_for(width, height)
+    deadline = monotonic() + budget
     with tempfile.TemporaryDirectory(prefix="opencmo-frames-") as tmp:
-        sequences = _extract_tiles(video, Path(tmp), fps, tiles)
+        sequences, complete = _extract_tiles(video, Path(tmp), fps, tiles, timeout=budget)
         if not sequences or not sequences[0]:
-            return []
-        faces = _detect_faces(sequences, tiles)
-        frames = len(sequences[0])
-    log.info("Face track: %d detections in %d frames (%d tiles each) at %.0f fps", len(faces), frames, len(tiles), fps)
-    return [(face.frame / fps, face) for face in sorted(faces, key=lambda face: face.frame)]
+            return [], 0.0
+        faces, frames = _detect_faces(sequences, tiles, deadline)
+        total = len(sequences[0])
+    covered = duration if complete and frames >= total else min(duration, frames / fps)
+    log.info("Face track: %d detections in %d frames (%d tiles each) at %.0f fps, %.0f of %.0f s", len(faces), frames, len(tiles), fps, covered, duration)
+    return [(face.frame / fps, face) for face in sorted(faces, key=lambda face: face.frame)], covered
+
+
+def needs_tracking(width: int, height: int, frame_aspect: float) -> bool:
+    """Whether any crop the editor makes slides: a source as narrow as the frame and as a 9:16 reframe has nothing to
+    follow, and the pass would only cost decode time."""
+    if width <= 0 or height <= 0:
+        return False
+    source = width / height
+    return crop_window(source, frame_aspect) < 1.0 or crop_window(source, 9 / 16) < 1.0
 
 
 # ---------------------------------------------------------------- choosing the window

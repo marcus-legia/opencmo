@@ -38,6 +38,20 @@ def _parse_fps(raw: str) -> float:
         return 0.0
 
 
+def _quarter_turn(stream: dict) -> bool:
+    """Whether the stream is shown turned by 90 or 270 degrees: the display matrix's rotation, or the old `rotate`
+    tag of MP4s written before ffmpeg 5."""
+    angles: list[object] = [side.get("rotation") for side in stream.get("side_data_list") or [] if isinstance(side, dict)]
+    angles.append((stream.get("tags") or {}).get("rotate"))
+    for angle in angles:
+        try:
+            if round(float(str(angle))) % 180 == 90:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def probe_file(path: str, *, local_only: bool = False, user_url: bool = False) -> MediaInfo:
     """`local_only`: a file the USER supplied, read over `file` only. `user_url`: a user file read
     through a signed URL. Both apply the demuxer allowlist, so a "video" that is really an HLS
@@ -59,13 +73,20 @@ def probe_file(path: str, *, local_only: bool = False, user_url: bool = False) -
     if video is None:
         raise ValueError(f"No video stream found in {path}")
 
+    width = int(video.get("width") or 0)
+    height = int(video.get("height") or 0)
+    # A phone video stored sideways with a rotation tag plays upright everywhere (browsers, ffmpeg's autorotate), so
+    # its size is the displayed one: the coded size laid a portrait video out as landscape.
+    if _quarter_turn(video):
+        width, height = height, width
+
     has_audio = any(s.get("codec_type") == "audio" for s in streams)
     duration = float(data.get("format", {}).get("duration") or video.get("duration") or 0.0)
 
     return MediaInfo(
         duration=duration,
-        width=int(video.get("width") or 0),
-        height=int(video.get("height") or 0),
+        width=width,
+        height=height,
         fps=_parse_fps(str(video.get("r_frame_rate", "0/1"))),
         has_audio=has_audio,
         video_codec=str(video.get("codec_name") or ""),

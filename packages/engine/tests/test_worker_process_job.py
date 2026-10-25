@@ -112,10 +112,10 @@ def media(monkeypatch):
     monkeypatch.setattr(process_job, "extract_audio", audio)
     monkeypatch.setattr(process_job, "transcribe_audio", transcribe)
 
-    def faces(_master, _duration, **_kwargs):
+    def faces(_master, duration, **_kwargs):
         if isinstance(said["faces"], Exception):
             raise said["faces"]
-        return said["faces"]
+        return said["faces"], said.get("covered", duration)
 
     monkeypatch.setattr(process_job, "face_track", faces)
     return said
@@ -157,6 +157,20 @@ def test_the_speakers_face_track_reaches_the_editor_in_the_manifest(media):
     assert [149.967, 0.8] in frame and [150.0, 0.25] in frame and frame[-1][1] == 0.25
     assert master["focus"]["reframe"], "the 9:16 track for later frame changes"
     assert ("stage", "reframe") in store.calls
+
+
+def test_a_face_pass_cut_short_by_its_budget_publishes_the_start_it_tracked(media):
+    from opencmo.steps.reframe import Face
+
+    media["faces"] = [(t / 2, Face(frame=t, x=0.8, w=0.09, area=0.012)) for t in range(200)]
+    media["covered"] = 100.0
+    store = FakeStore()
+    process_job.process(store, _job())
+    published = _published(store)
+    frame = published["manifest"]["masters"][published["clips"][0]["id"]]["focus"]["frame"]
+    # Keys up to where the pass got; the editor holds the last centre after, not the middle of the frame.
+    assert frame[-1] == [100.0, 0.8]
+    assert not [call for call in store.calls if call[0] == "fail"]
 
 
 def test_no_face_or_a_failed_face_pass_still_publishes_framed_in_the_centre(media):

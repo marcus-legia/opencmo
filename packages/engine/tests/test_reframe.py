@@ -159,7 +159,7 @@ def test_tiles_come_from_real_ffmpeg_and_the_detector_sees_one_file_at_a_time(tm
     )
     seen: list[tuple[int, int]] = []
 
-    def detect(sequences, tiles):
+    def detect(sequences, tiles, deadline=None):
         assert len(sequences) == len(tiles) == 3
         assert all(len(files) == len(sequences[0]) for files in sequences)
         # Square tiles, the short side scaled to TILE (never above the source).
@@ -168,12 +168,13 @@ def test_tiles_come_from_real_ffmpeg_and_the_detector_sees_one_file_at_a_time(tm
             capture_output=True, text=True, check=True,
         )
         seen.append(tuple(int(v) for v in out.stdout.strip().split(",")))
-        return [Face(frame=0, x=0.7, w=0.1, area=0.01)]
+        return [Face(frame=0, x=0.7, w=0.1, area=0.01)], len(sequences[0])
 
     monkeypatch.setattr(reframe, "_detect_faces", detect)
-    track = face_track(video, 2.0, width=640, height=360)
+    track, covered = face_track(video, 2.0, width=640, height=360)
     assert seen == [(270, 270)]
     assert track == [(0.0, Face(frame=0, x=0.7, w=0.1, area=0.01))]
+    assert covered == 2.0
 
 
 def test_without_mediapipe_the_upload_is_framed_in_the_centre(monkeypatch, tmp_path: Path):
@@ -189,13 +190,13 @@ def test_without_mediapipe_the_upload_is_framed_in_the_centre(monkeypatch, tmp_p
     monkeypatch.setattr(builtins, "__import__", no_mediapipe)
     frame = tmp_path / "t0_00001.jpg"
     frame.write_bytes(b"jpg")
-    assert reframe._detect_faces([[frame]], [Tile(0, 0, 1, 1)]) == []
+    assert reframe._detect_faces([[frame]], [Tile(0, 0, 1, 1)]) == ([], 0)
 
 
 def test_unreadable_media_gives_no_track(tmp_path: Path):
     bad = tmp_path / "bad.mp4"
     bad.write_bytes(b"not a video")
-    assert face_track(bad, 10.0, width=1920, height=1080) == []
+    assert face_track(bad, 10.0, width=1920, height=1080) == ([], 0.0)
 
 
 def test_focus_points_match_the_shared_golden():
@@ -212,3 +213,82 @@ def test_focus_points_match_the_shared_golden():
         ]
         got = focus_points(track, case["window"], case["source_in"], case["source_out"], case["offset"])
         assert got == case["expected"], case["name"]
+
+
+def _size(image: Path) -> tuple[int, int]:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(image)],
+        capture_output=True, text=True, check=True,
+    )
+    return tuple(int(v) for v in out.stdout.strip().split(","))  # type: ignore[return-value]
+
+
+def test_a_rotated_phone_video_is_tiled_upright(tmp_path: Path):
+    from opencmo.media.probe import probe_file
+
+    flat = tmp_path / "flat.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-t", "1", "-pix_fmt", "yuv420p", str(flat)],
+        check=True,
+    )
+    phone = tmp_path / "phone.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-display_rotation", "90", "-i", str(flat), "-c", "copy", str(phone)], check=True)
+    info = probe_file(str(phone))
+    # Stored 640x360 and shown portrait, the way a phone writes it.
+    assert (info.width, info.height) == (360, 640)
+    tiles = tiles_for(info.width, info.height)
+    assert all(tile.w == 1.0 for tile in tiles)
+    sequences, complete = reframe._extract_tiles(phone, tmp_path, 2.0, tiles, timeout=60)
+    assert complete
+    # Each tile is its own square of the upright frame: the top and the bottom differ.
+    assert _size(sequences[0][0]) == (270, 270)
+    assert sequences[0][0].read_bytes() != sequences[-1][0].read_bytes()
+
+
+def test_a_near_square_frame_is_read_whole(tmp_path: Path):
+    video = tmp_path / "wide-ish.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=594x540:rate=30", "-t", "1", "-pix_fmt", "yuv420p", str(video)],
+        check=True,
+    )
+    tiles = tiles_for(594, 540)
+    assert tiles == [Tile(0.0, 0.0, 1.0, 1.0)]
+    sequences, _complete = reframe._extract_tiles(video, tmp_path, 2.0, tiles, timeout=60)
+    # The whole frame at 270 px high, not its left 540 px square.
+    assert _size(sequences[0][0]) == (298, 270)
+
+
+def test_a_pass_over_its_budget_tracks_the_start(tmp_path: Path, monkeypatch):
+    def slow(args, **kwargs):
+        for index in range(1, 6):
+            for label in ("t0", "t1", "t2"):
+                (tmp_path / f"{label}_{index:05d}.jpg").write_bytes(b"jpg")
+        raise subprocess.TimeoutExpired(args, kwargs.get("timeout"))
+
+    monkeypatch.setattr(reframe.subprocess, "run", slow)
+    monkeypatch.setattr(reframe.tempfile, "TemporaryDirectory", lambda prefix: _Here(tmp_path))
+    monkeypatch.setattr(reframe, "_detect_faces", lambda sequences, tiles, deadline=None: ([Face(frame=1, x=0.7, w=0.1, area=0.01)], len(sequences[0])))
+    track, covered = face_track(tmp_path / "long.mp4", 900.0, width=1920, height=1080, budget=1)
+    # Five frames written, the last maybe half: four kept, at 2 fps on a 15-minute video.
+    assert covered == 2.0
+    assert track == [(0.5, Face(frame=1, x=0.7, w=0.1, area=0.01))]
+    focus = editor_focus(track, source_width=1920, source_height=1080, frame_aspect=9 / 16, duration=covered)
+    assert focus["frame"][-1][0] <= covered
+
+
+class _Here:
+    def __init__(self, path: Path):
+        self.path = path
+
+    def __enter__(self) -> str:
+        return str(self.path)
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_a_source_as_narrow_as_the_frame_is_not_tracked():
+    assert not reframe.needs_tracking(1080, 1920, 9 / 16)
+    assert reframe.needs_tracking(1080, 1350, 9 / 16)
+    assert reframe.needs_tracking(1920, 1080, 16 / 9)
+    assert not reframe.needs_tracking(0, 0, 9 / 16)
