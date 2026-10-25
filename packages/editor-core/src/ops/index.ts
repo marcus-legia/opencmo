@@ -32,7 +32,6 @@ import { cleanAudio, makeRoom, rippleDelete, setAudioRoll, setCaptionBreaks, set
 import { deleteMarker, setMarker } from './markers';
 import { insertNode, replaceSrc } from './library';
 import { activateScene, duplicateElements, groupElements, insertScene, pasteNodes, ungroupElements } from './structure';
-import { add3dStudio } from './studio3d';
 import { addExplainer, syncExplainer } from './explainer';
 import { createTimeline, deleteTimeline, renameTimeline, setActiveTimeline, STAGE_OPS } from './timelines';
 import { applyBrand } from './brand';
@@ -45,9 +44,10 @@ import { addIntro } from '../motion/intro';
 import { replaceBackground } from './background';
 import { editVideo } from './edit-video';
 import { createVideo, redoKeyframe } from './create-video';
-import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
+import { addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
+import { addCameraMove, removeCameraMoves, syncCameraMoves } from './camera';
 import { styleOp, type StyleDeps } from '../style/apply';
 // Track C: proof B-roll.
 import { addProof } from '../proof';
@@ -58,6 +58,7 @@ export { checkShots, createVideoInput, keyframesOf, MAX_CHAIN, MAX_SHOTS, VIDEO_
 export { keyframeSource, type KeyframeSource } from './project';
 export { CUTOUT_PROMPT, frameAspect, MAX_SWAP_SECONDS, planBackgroundSwap, replaceBackgroundInput, type ReplaceBackground } from './background';
 export { editSeconds, editVideoInput, planVideoEdit, type EditVideo } from './edit-video';
+export { ACCENT_GAP, CAMERA_MARK, flashOpacity, moveDelta, readCameraMoves } from './camera';
 export { MARKER_COLORS, MARKER_STATUSES, readMarkers, type Marker } from './markers';
 export { loadCaptions, speechElement, type CaptionModel } from './captions';
 export { spreadCaptions } from './rows';
@@ -113,7 +114,6 @@ export {
 	type ExplainerInput,
 	type ExplainerScene,
 } from './explainer';
-export { frameRatio, planStudio3d, sceneOfInput, sceneSummary, studio3dInput, studio3dToolInput, STUDIO_MODEL, type Studio3dInput } from './studio3d';
 
 // Style skills (Track A): runs the other ops of this registry, so it reaches them by name. The
 // annotations break the type cycle with REGISTRY.
@@ -172,12 +172,9 @@ const REGISTRY = [
 	activateScene,
 	addShape,
 	addIcon,
-	addLottie,
 	addDiagram,
 	addChart,
 	addGraph,
-	add3d,
-	add3dStudio,
 	addVoiceover,
 	syncVoiceover,
 	updateVisual,
@@ -213,6 +210,9 @@ const REGISTRY = [
 	// Style skills, Track C.
 	addProof,
 	redoKeyframe,
+	// Plan O4: camera moves on the talking head.
+	addCameraMove,
+	removeCameraMoves,
 ] as const;
 
 type Definition = {
@@ -377,12 +377,12 @@ export async function applyOps(
 		current = next;
 		steps.push({ op: op.op, document: current });
 	}
-	// Trạng thái suy ra từ voiceover (tắt tiếng/hạ tiếng video gốc, phụ đề mồ
-	// côi) tính lại sau mọi lượt — document không có voiceover đi qua nguyên vẹn.
+	// Derived state is rebuilt after every batch: voiceover muting and ducking, orphan voice captions, and the
+	// keyframes camera moves bake onto the speaker. A document with neither passes through untouched.
 	if (current !== document) {
 		for (const scene of timelinesOf(current)) {
 			const view = viewOf(current, scene);
-			current = mergeView(current, scene, view, syncVoiceovers(view));
+			current = mergeView(current, scene, view, syncCameraMoves(syncVoiceovers(view)));
 		}
 	}
 	if (current !== document) current = captionsOnTop(current);

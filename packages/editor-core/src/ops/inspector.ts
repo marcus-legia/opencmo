@@ -200,7 +200,7 @@ export const COPY_GROUPS = {
 } as const;
 
 type CopyGroup = keyof typeof COPY_GROUPS;
-const VISUAL = new Set(['text', 'rect', 'path', 'image', 'video', 'lottie', 'group', 'scene3d', 'sequence']);
+const VISUAL = new Set(['text', 'rect', 'path', 'image', 'video', 'group', 'sequence']);
 const AUDIBLE = new Set(['video', 'audio']);
 
 /** Nhóm nào áp được từ loại `from` sang loại `to`. */

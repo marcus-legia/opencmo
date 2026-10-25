@@ -14,17 +14,12 @@ import { randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   describeOp,
-  planStudio3d,
   planVoiceover,
-  STUDIO_MODEL,
-  studio3dToolInput,
   voiceoverToolInput,
   type Op,
   type CreateVideoResult,
-  type Studio3dInput,
   type VoiceoverInput,
 } from "@opencmo/editor-core";
-import { MAX_CODE_CHARS, THEMES } from "@opencmo/clip-three";
 import { priceOf, type AiModel, type GenerationKind, type GenerationSpec } from "@opencmo/editor-core/generate";
 
 import { ApiError } from "@/lib/api/errors";
@@ -129,7 +124,7 @@ export function generateToolSpec(): ToolSpec | null {
   return {
     name: "generate_media",
     description:
-      `Create new media with AI and place it on the clip: an image or a short video of a concrete real-world scene, a voice-over (kind "voice", prompt = the exact text to speak) or a sound effect (kind "audio", prompt = the sound). It costs credits, so the user sees the price and must approve before anything is created. Only use it when the user asks for new media. For image/video fill the brief from <clip_context> (read_guide "script"): quote = the words it illustrates (it starts when they are spoken) — or, on a project without a script, start = the second it appears (read_guide "blank") — idea, subject, action, setting, style, camera, mood, avoid; the server writes the final prompt. Never use it for diagrams, charts, numbers, text or "3D explanations": draw those with add_diagram/add_chart/add_graph, or write a 3D animation (add_3d_scene). The result appears on the clip when it is ready (seconds for images and voice, minutes for video). Available models: ${listing}.`,
+      `Create new media with AI and place it on the clip: an image or a short video of a concrete real-world scene, a voice-over (kind "voice", prompt = the exact text to speak) or a sound effect (kind "audio", prompt = the sound). It costs credits, so the user sees the price and must approve before anything is created. Only use it when the user asks for new media. For image/video fill the brief from <clip_context> (read_guide "script"): quote = the words it illustrates (it starts when they are spoken) — or, on a project without a script, start = the second it appears (read_guide "blank") — idea, subject, action, setting, style, camera, mood, avoid; the server writes the final prompt. Never use it for diagrams, charts, numbers, text or "3D explanations": draw those with add_diagram/add_chart/add_graph, or make an explainer animation (add_explainer). The result appears on the clip when it is ready (seconds for images and voice, minutes for video). Available models: ${listing}.`,
     schema: sanitize(z.toJSONSchema(generateInput, { io: "input" })).schema as Record<string, unknown>,
     strict: true,
     approval: true,
@@ -182,7 +177,7 @@ export async function prepareGeneration(
     return `${issue?.path.join(".") ?? ""}: ${issue?.message ?? "Invalid input."}`;
   }
   const request = parsed.data;
-  // Model 3D Studio cần dữ liệu cảnh — chỉ đi qua tool `add_3d_studio`.
+  // Explainers carry a scene and have their own tool.
   const models = availableModels().filter((model) => model.kind === request.kind && !model.limits.scene && !model.limits.sourceVideo);
   const model = request.model ? models.find((candidate) => candidate.id === request.model) : models[0];
   if (!model) {
@@ -315,115 +310,6 @@ export function generateCard(prepared: PreparedGeneration, clipId: string) {
   };
 }
 
-// ------------------------------------------------------------------ 3D Studio
-
-/** Tool có khi model `studio-3d` bật (GPU Modal, CLI local, hoặc bản fake). */
-export function studioToolSpec(): ToolSpec | null {
-  if (!availableModels().some((model) => model.id === STUDIO_MODEL)) return null;
-  return {
-    name: "add_3d_studio",
-    description:
-      'Render a premium 3D scene (studio lighting, glossy materials, camera move) as a short video on the clip, for credits after the user approves the price. Templates: "bars" (2-6 labelled values, highlight the key one), "number" (one big number counting up, with prefix/suffix like $ or %), "rise" (3-12 values over time as a glowing growth line), "product" (a 3D object on a turntable: phone, laptop, coin, gift, trophy, rocket, lightbulb, globe, box, bottle). Use it when a number or result the speaker says deserves a hero moment, or when the user asks for premium/3D visuals; the data must come from the script (quote = the words it illustrates). For free, instant visuals use add_chart/add_3d instead. It appears when rendered (about half a minute). read_guide "3d".',
-    schema: sanitize(z.toJSONSchema(studio3dToolInput, { io: "input" })).schema as Record<string, unknown>,
-    strict: false,
-    approval: true,
-  };
-}
-
-/** Dựng kế hoạch (mốc, vị trí, spec) trên document hiện tại của clip. */
-export type PlanStudio = (input: Studio3dInput) => Promise<Awaited<ReturnType<typeof planStudio3d>>>;
-
-export async function prepareStudio(input: unknown, plan: PlanStudio): Promise<PreparedGeneration | string> {
-  const parsed = studio3dToolInput.safeParse(input);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return `${issue?.path.join(".") ?? ""}: ${issue?.message ?? "Invalid input."}`;
-  }
-  const model = availableModels().find((candidate) => candidate.id === STUDIO_MODEL);
-  if (!model) return "3D Studio is not available.";
-  const request = { op: "add_3d_studio" as const, ...parsed.data };
-  let planned: Awaited<ReturnType<PlanStudio>>;
-  try {
-    planned = await plan(request);
-  } catch (err) {
-    return (err as Error).message;
-  }
-  let spec: GenerationSpec;
-  try {
-    spec = normalizeSpec(model, planned.spec);
-  } catch (err) {
-    return err instanceof ApiError ? err.message : "Invalid input.";
-  }
-  // Ghim mốc + tỉ lệ vào op: áp sau khi duyệt ra ĐÚNG spec đã báo giá.
-  const op = { ...request, start: planned.start, end: planned.end, aspect_ratio: spec.aspectRatio } as unknown as Op;
-  return { model, spec, op, credits: priceOf(model, spec), ...(request.quote ? { quote: request.quote } : {}) };
-}
-
-// ------------------------------------------------------------------ Cảnh code (spec code-scenes)
-
-const sceneRegion = z
-  .object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().min(0.05).max(1), height: z.number().min(0.05).max(1) })
-  .strict();
-
-/** add_3d_scene: code three.js agent đã preview_3d và sửa xong, đặt lên clip như một video. */
-export const sceneToolInput = z.object({
-  title: z.string().trim().min(1).max(40).describe("Short name of the animation (price card, layer and file name), e.g. \"Effort staircase\"."),
-  code: z.string().min(1).max(MAX_CODE_CHARS).describe("The scene code exactly as last previewed with preview_3d."),
-  quote: z.string().trim().min(2).max(300).optional().describe("Exact words from <clip_context> the animation plays over; it starts on them."),
-  start: z.number().finite().min(0).optional().describe("Clip seconds; give only to adjust the quote timing."),
-  end: z.number().finite().min(0).optional(),
-  region: sceneRegion.optional().describe("Where it sits (0-1 of the frame). Default: the panel of a split, else the visual area."),
-  theme: z.enum(THEMES).optional(),
-  seed: z.number().int().min(0).max(2_147_483_647).optional(),
-});
-
-export function sceneToolSpec(): ToolSpec | null {
-  if (!availableModels().some((model) => model.id === STUDIO_MODEL)) return null;
-  return {
-    name: "add_3d_scene",
-    description:
-      'Put a 3D animation you wrote as three.js code on the clip: it renders on our GPUs as a short video (about half a minute) for credits after the user approves the price. Only send code you have checked with preview_3d (no errors, no layout issues). read_guide "3d" first.',
-    schema: sanitize(z.toJSONSchema(sceneToolInput, { io: "input" })).schema as Record<string, unknown>,
-    strict: false,
-    approval: true,
-  };
-}
-
-/** Mọi chữ trong các chuỗi của code: font brand được subset theo chúng (chữ nằm trong code, không trong field). */
-export function codeGlyphs(code: string): string | undefined {
-  const literals = code.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) ?? [];
-  const chars = [...new Set(literals.map((literal) => literal.slice(1, -1)).join("").replace(/\s/g, ""))].join("");
-  return chars ? chars.slice(0, 400) : undefined;
-}
-
-/**
- * Lưu code (scene_codes, theo sha256) rồi đi ĐÚNG đường của 3D Studio với
- * `{template: "code", code_ref}`: kế hoạch đặt, giá, thẻ duyệt, generation.
- * Code không bao giờ nằm trong spec/document — chỉ tham chiếu.
- */
-export async function prepareScene(input: unknown, plan: PlanStudio, save: (code: string) => Promise<string>): Promise<PreparedGeneration | string> {
-  const parsed = sceneToolInput.safeParse(input);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return `${issue?.path.join(".") ?? ""}: ${issue?.message ?? "Invalid input."}`;
-  }
-  // Không nhận aspect_ratio: server lấy đúng hình vùng đặt cảnh. Agent từng truyền
-  // 9:16 (theo guide cũ) trên clip 16:9 → cảnh thành dải dọc giữa khung (02/10).
-  // kit.frame() tự canh camera theo tỉ lệ nên code đã preview ở tỉ lệ khác vẫn đúng.
-  const { code, title, theme, ...placement } = parsed.data;
-  let hash: string;
-  try {
-    hash = await save(code);
-  } catch (err) {
-    return err instanceof ApiError ? err.message : "Could not save the scene code.";
-  }
-  const glyphs = codeGlyphs(`${title} ${code}`);
-  return prepareStudio(
-    { ...placement, template: "code", code_ref: hash, title, ...(theme ? { theme } : {}), ...(glyphs ? { glyphs } : {}) },
-    plan,
-  );
-}
-
 // ------------------------------------------------------------------ Voiceover
 
 /** Giọng dùng được lúc này; tên giọng là duy nhất trên mọi model (giọng quyết định model). */
@@ -554,8 +440,8 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   }
   const generation = { id: started[0]!.id, credits_reserved: started.reduce((sum, item) => sum + item.credits_reserved, 0) };
 
-  // Op đã chốt lúc chuẩn bị (`add_generated`, hoặc `add_3d_studio` với mốc và
-  // tỉ lệ ghim sẵn): khai báo nó ghi ra đúng spec vừa tạo generation.
+  // The op fixed at preparation (`add_generated`, with its times pinned): its declaration writes
+  // exactly the spec the generation was just created with.
   // Stop pressed while the credits were held: give them back before anything lands on the clip.
   if (env.alive && !(await env.alive())) return { outcome: stopped(await cancelAll()) };
   const applied = await env.applyOp(prepared.op);

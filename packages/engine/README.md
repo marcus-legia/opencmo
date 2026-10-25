@@ -15,7 +15,7 @@ sudo apt install ffmpeg          # Debian/Ubuntu
 brew install ffmpeg              # macOS
 
 uv venv --python 3.12 .venv && source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -e '.[dev,face]'   # face: MediaPipe for face tracking on upload (optional)
 ```
 
 ## Configure

@@ -44,18 +44,6 @@ test("Blank New edit: import media, add text, export, with no project", async ({
   await expect(page.getByTestId("asset-broll.mp4")).toBeVisible();
   await page.getByTestId("asset-broll.mp4").locator(".ed2-lib-icon").dblclick();
   await expect(page.locator(".ed2-bar-broll")).toHaveCount(2);
-  // G4: Lottie người dùng tải lên (một ô xanh lá) — trước đây chỉ nằm ở máy, Export báo
-  // "only saved on the device". Giờ lên Storage, worker export vẽ nó bằng Skottie.
-  const lottie = testInfo.outputPath("green.json");
-  const square = { a: 0, k: 100 };
-  writeFileSync(lottie, JSON.stringify({
-    v: "5.7.4", fr: 30, ip: 0, op: 120, w: 400, h: 400,
-    layers: [{ ind: 1, ty: 1, sc: "#00ff00", sw: 400, sh: 400, ip: 0, op: 120, st: 0,
-      ks: { o: square, r: { a: 0, k: 0 }, p: { a: 0, k: [200, 200, 0] }, a: { a: 0, k: [200, 200, 0] }, s: { a: 0, k: [100, 100, 100] } } }],
-  }));
-  await page.getByTestId("import-input").setInputFiles(lottie);
-  await expect(page.getByTestId("asset-green.json")).toBeVisible();
-  await page.getByTestId("asset-green.json").locator(".ed2-lib-icon").dblclick();
 
   // Chữ bằng công cụ Text.
   const canvas = page.getByTestId("editor-canvas");
@@ -73,7 +61,7 @@ test("Blank New edit: import media, add text, export, with no project", async ({
   // Export: file thư viện phải lên Storage trước (worker đọc từ đó).
   await expect
     .poll(async () => JSON.stringify(await (await page.request.get(`/api/v1/editor/project?clip_id=${clipId}`)).json()), { timeout: 240_000 })
-    .toMatch(/"state":"synced"[\s\S]*"state":"synced"[\s\S]*"state":"synced"/);
+    .toMatch(/"state":"synced"[\s\S]*"state":"synced"/);
   const exportButton = page.getByTestId("toolbar-export");
   await expect(exportButton).toBeEnabled();
   await exportButton.click();
@@ -89,11 +77,6 @@ test("Blank New edit: import media, add text, export, with no project", async ({
   const raw = execFileSync("ffmpeg", ["-v", "error", "-i", frame, "-vf", "crop=8:8:20:1200,scale=1:1,format=rgb24", "-f", "rawvideo", "pipe:1"]);
   expect(raw[0]!, `rgb ${[...raw]}`).toBeGreaterThan(180);
   expect(raw[1]!).toBeLessThan(80);
-  // Lottie có mặt trong bản xuất: có điểm ảnh xanh lá thuần.
-  const small = execFileSync("ffmpeg", ["-v", "error", "-i", frame, "-vf", "scale=108:192,format=rgb24", "-f", "rawvideo", "pipe:1"]);
-  let green = 0;
-  for (let i = 0; i < small.length; i += 3) if (small[i + 1]! > 200 && small[i]! < 80 && small[i + 2]! < 80) green++;
-  expect(green, "điểm ảnh xanh lá của Lottie").toBeGreaterThan(20);
 
   // Assistant chạy được trong bản trống (không master, không transcript): lập plan rồi thêm chữ,
   // và đổi khung vuông.

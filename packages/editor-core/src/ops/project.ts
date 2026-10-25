@@ -138,7 +138,7 @@ export const setProjectSettings = {
 // ---------------------------------------------------------------------------
 // Bố cục người nói + visual (`layout.ts`)
 
-type SetLayout = { op: 'set_layout'; mode: LayoutMode; start?: number; end?: number; ratio?: number; anchor?: LayoutAnchor; quote?: string };
+type SetLayout = { op: 'set_layout'; mode: LayoutMode; start?: number; end?: number; ratio?: number; anchor?: LayoutAnchor; quote?: string; background?: string };
 
 export const setLayout = {
   name: 'set_layout',
@@ -157,6 +157,8 @@ export const setLayout = {
     anchor: z.enum(LAYOUT_ANCHORS).optional(),
     /** Câu người nói mở đầu phần giải thích; thiếu start/end thì bố cục bám theo câu này. */
     quote: z.string().trim().min(2).max(300).optional(),
+    /** The panel's colour, e.g. the light wall of the speaker's room or a brand colour. Default: dark. */
+    background: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colours are hex, like #F4F1EA.').optional(),
   }),
   describe: (input: SetLayout) =>
     input.mode === 'full'
@@ -178,7 +180,7 @@ export const setLayout = {
     const start = input.start ?? anchored?.start ?? 0;
     const end = Math.min(input.end ?? anchored?.end ?? duration ?? start, duration ?? Infinity);
     if (!(end - start >= MIN_RANGE)) throw new OpFailure(`A layout needs at least ${MIN_RANGE} seconds inside the clip.`);
-    const defaults = layoutDefaults(input.mode);
+    const defaults = layoutDefaults(input.mode, scene.width / scene.height);
     const ratio = input.ratio ?? defaults.ratio;
     if (input.mode === 'pip' ? ratio > 0.5 : input.mode !== 'full' && input.mode !== 'visual-only' && ratio < 0.3) {
       throw new OpFailure(input.mode === 'pip' ? 'A picture-in-picture ratio is between 0.2 and 0.5.' : 'This layout ratio is between 0.3 and 0.7.');
@@ -186,7 +188,7 @@ export const setLayout = {
     const anchor = input.anchor ?? defaults.anchor;
     if (anchor && input.mode === 'pip' && (anchor === 'left' || anchor === 'right')) throw new OpFailure('Picture-in-picture goes in a corner: top-left, top-right, bottom-left or bottom-right.');
     if (anchor && input.mode === 'side-by-side' && anchor !== 'left' && anchor !== 'right') throw new OpFailure('Side by side puts the speaker on the left or the right.');
-    const ranges = mergeLayout(readLayout(document), { start, end, mode: input.mode, ratio, anchor });
+    const ranges = mergeLayout(readLayout(document), { start, end, mode: input.mode, ratio, anchor, ...(input.background ? { background: input.background } : {}) });
     return checked(writeLayout(document, ranges), 'That layout cannot be applied');
   },
 };

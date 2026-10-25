@@ -44,10 +44,8 @@ def test_spec_hop_le_va_chi_model_explainer_nhan_no() -> None:
     validate_spec(model(), SPEC)
     validate_spec(model(), {**SPEC, "seed": 3, "scene": {**SPEC["scene"], "accent": "#12ABef"}})
     validate_spec(model(), {**SPEC, "scene": {**SPEC["scene"], "theme": "paper", "personality": "playful"}})
-    with pytest.raises(SpecError, match="Describe the 3D scene"):
-        validate_spec(get_model("studio-3d"), {k: v for k, v in SPEC.items() if k != "voice"} | {"duration": 5, "aspectRatio": "9:16"})
     with pytest.raises(SpecError, match="does not take"):
-        validate_spec(get_model("studio-3d"), {**SPEC, "duration": 5, "aspectRatio": "9:16"})
+        validate_spec(get_model("gemini-video"), {**SPEC, "duration": 8, "aspectRatio": "9:16"})
 
 
 @pytest.mark.parametrize(

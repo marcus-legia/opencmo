@@ -79,12 +79,6 @@ export interface MediaHost {
   /** Transcript của `<captions src>` đã đọc sẵn; null khi chưa có (phụ đề trống). */
   transcript?(src: string): Transcript | null;
   /**
-   * Khung của animation Lottie ở `seconds` giây của animation, vẽ ở `width×height`
-   * PIXEL (đã tính độ phóng) để không nhoè. `loop` = lặp khi quá độ dài. Nơi chạy
-   * giữ engine (Skottie) — renderer chỉ `drawImage` như khung video.
-   */
-  lottie?(src: AssetInput, seconds: number, width: number, height: number, loop: boolean): MediaResult;
-  /**
    * Canvas tạm `width×height` cho chỉnh màu trên pixel (E3, `grade.ts`). Không có thì
    * renderer dùng `OffscreenCanvas` toàn cục (trình duyệt); Node phải cấp `createCanvas`.
    */
@@ -96,5 +90,4 @@ export interface MediaHost {
 export type MediaNeed =
   | { kind: 'image'; src: AssetInput }
   | { kind: 'video'; src: AssetInput; seconds: number }
-  | { kind: 'lottie'; src: AssetInput; seconds: number }
   | { kind: 'lut'; src: string };

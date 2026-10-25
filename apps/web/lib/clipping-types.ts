@@ -17,6 +17,7 @@ export type ProcessingStage =
   | "probe"
   | "download"
   | "render"
+  | "reframe"
   | "transcribe"
   | "done"
   | "failed"

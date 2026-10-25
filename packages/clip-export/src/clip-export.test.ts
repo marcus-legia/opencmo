@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createCanvas } from '@napi-rs/canvas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { validate } from '@opencmo/clip-doc';
@@ -12,10 +11,8 @@ import { validate } from '@opencmo/clip-doc';
 import { planMix } from './audio.ts';
 import { exportJob, parallelFor } from './export.ts';
 import { sourceKey } from './job.ts';
-import { hasExternalAssets, lottieHost } from './segment.ts';
 
 const FONTS = fileURLToPath(new URL('../../clip-media/fonts', import.meta.url));
-const LOTTIE = fileURLToPath(new URL('../../clip-media/lottie', import.meta.url));
 const TRANSCRIPT = fileURLToPath(new URL('../../editor-parity/fixtures/transcript.json', import.meta.url));
 
 describe('planMix', () => {
@@ -97,48 +94,7 @@ describe('job', () => {
     expect(parallelFor(1, 16)).toBe(2);
     expect(parallelFor(3, 16)).toBe(1);
     expect(parallelFor(0, 1)).toBe(1);
-    // Visual nặng (stress 29/09): ba cảnh 3D không video → 2 đoạn thay vì 3.
     expect(parallelFor(0, 16)).toBe(3);
-    expect(parallelFor(0, 16, 180)).toBe(2);
-  });
-});
-
-describe('lottieHost (Skottie)', () => {
-  /** Đếm điểm ảnh có màu — qua drawImage vì getImageData không thấy nét Skottie. */
-  function painted(frame: unknown): number {
-    const probe = createCanvas(64, 64);
-    const ctx = probe.getContext('2d');
-    ctx.drawImage(frame as never, 0, 0);
-    const data = ctx.getImageData(0, 0, 64, 64).data;
-    let count = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) count++;
-    return count;
-  }
-
-  it('vẽ bộ có sẵn đúng cỡ xin, đổi theo giây; nguồn thiếu → failed', () => {
-    const host = lottieHost({ lottie: LOTTIE }, new Map());
-    const a = host('builtin:walk', 0.1, 64, 64, true);
-    expect((a as { width: number }).width).toBe(64);
-    const first = painted(a);
-    expect(first).toBeGreaterThan(100);
-    // Lặp: 1 giây sau là cùng khung.
-    expect(painted(host('builtin:walk', 1.1, 64, 64, true))).toBe(first);
-    expect(host('builtin:no-such', 0, 64, 64, true)).toBe('failed');
-    expect(host('upload.json', 0, 64, 64, true)).toBe('failed');
-  });
-
-  it('Lottie người dùng có tài nguyên ngoài không được nạp (đọc file trên worker)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'lottie-'));
-    const base = { v: '5.7.4', fr: 30, ip: 0, op: 30, w: 64, h: 64, layers: [{ ind: 1, ty: 1, sc: '#00ff00', sw: 64, sh: 64, ip: 0, op: 30, st: 0, ks: {} }] };
-    const external = join(dir, 'external.json');
-    writeFileSync(external, JSON.stringify({ ...base, assets: [{ id: 'i', w: 1, h: 1, u: '/etc/', p: 'hostname' }] }));
-    const clean = join(dir, 'clean.json');
-    writeFileSync(clean, JSON.stringify(base));
-    const host = lottieHost({ lottie: LOTTIE }, new Map([['user/external.json', external], ['user/clean.json', clean]]));
-    expect(host('user/external.json', 0, 64, 64, true)).toBe('failed');
-    expect(host('user/clean.json', 0, 64, 64, true)).not.toBe('failed');
-    expect(hasExternalAssets(JSON.stringify({ ...base, assets: [{ id: 'i', p: 'data:image/png;base64,AA', e: 1 }] }))).toBe(false);
-    rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -183,7 +139,7 @@ describe('exportJob (ffmpeg thật)', () => {
     document,
     media: [{ src: 'assets/master.mp4', file: join(dir, 'master.mp4') }],
     transcripts: [{ src: 'assets/transcript.json', file: TRANSCRIPT }],
-    fonts: FONTS, lottie: LOTTIE,
+    fonts: FONTS,
     out: join(dir, out),
     resolution: 720,
     parallel,
@@ -361,7 +317,7 @@ describe('exportJob (ffmpeg thật)', () => {
       },
     });
     const exportDoc = (out: string, rolled: boolean) =>
-      exportJob({ document: documentFor(rolled) as never, media: [{ src: 'assets/roll.mp4', file: join(dir, 'roll.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, out), resolution: 720, parallel: 1 });
+      exportJob({ document: documentFor(rolled) as never, media: [{ src: 'assets/roll.mp4', file: join(dir, 'roll.mp4') }], transcripts: [], fonts: FONTS, out: join(dir, out), resolution: 720, parallel: 1 });
     await exportDoc('straight.mp4', false);
     await exportDoc('lcut.mp4', true);
     // Giây xuất 1.2: hình là giây nguồn 3.2 (khung 96 → xám 192) ở CẢ HAI bản.
@@ -392,7 +348,7 @@ describe('exportJob (ffmpeg thật)', () => {
       },
     });
     const exportDoc = (out: string, effects: unknown[]) =>
-      exportJob({ document: documentFor(effects) as never, media: [{ src: 'assets/color.mp4', file: join(dir, 'color.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, out), resolution: 720, parallel: 1 });
+      exportJob({ document: documentFor(effects) as never, media: [{ src: 'assets/color.mp4', file: join(dir, 'color.mp4') }], transcripts: [], fonts: FONTS, out: join(dir, out), resolution: 720, parallel: 1 });
     // Độ lệch chroma trung bình (|U−128| + |V−128|) của khung 10.
     const chromaOf = (file: string) => {
       const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, file), '-vf', 'select=eq(n\\,10),scale=90:160,format=yuv444p', '-frames:v', '1', '-f', 'rawvideo', 'pipe:1']);
@@ -435,7 +391,7 @@ describe('exportJob (ffmpeg thật)', () => {
       exportJob({
         document: documentFor(lut) as never,
         media: [{ src: 'assets/master.mp4', file: join(dir, 'master.mp4') }, { src: lut, file: join(dir, lut) }],
-        transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, out), resolution: 720, parallel: 1,
+        transcripts: [], fonts: FONTS, out: join(dir, out), resolution: 720, parallel: 1,
       });
     await run('lut.mp4', 'invert.cube');
     // Nguồn khung N xám mức 4N: khung 10 là 40 → đảo ra ~215.
@@ -459,7 +415,7 @@ describe('exportJob (ffmpeg thật)', () => {
     await exportJob({
       document: document as never,
       media: Object.keys(colors).map((name) => ({ src: `${name}.png`, file: join(dir, `${name}.png`) })),
-      transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'grid.mp4'), resolution: 720, parallel: 1,
+      transcripts: [], fonts: FONTS, out: join(dir, 'grid.mp4'), resolution: 720, parallel: 1,
     });
     const rgb = (x: number, y: number) => [...execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'grid.mp4'), '-vf', `crop=4:4:${x}:${y},format=rgb24`, '-frames:v', '1', '-f', 'rawvideo', 'pipe:1']).subarray(0, 3)];
     const points: [keyof typeof colors, number, number][] = [['red', 180, 320], ['lime', 540, 320], ['blue', 180, 960], ['yellow', 540, 960]];
@@ -485,7 +441,7 @@ describe('exportJob (ffmpeg thật)', () => {
     await exportJob({
       document: document as never,
       media: [{ src: 'assets/text-bg.mp4', file: join(dir, 'text-bg.mp4') }],
-      transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'text-style.mp4'), resolution: 720, parallel: 1,
+      transcripts: [], fonts: FONTS, out: join(dir, 'text-style.mp4'), resolution: 720, parallel: 1,
     });
     const rgb = (x: number, y: number) => [...execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'text-style.mp4'), '-vf', `select=eq(n\\,20),crop=4:4:${x}:${y},format=rgb24`, '-frames:v', '1', '-f', 'rawvideo', 'pipe:1']).subarray(0, 3)];
     if (process.env.KEEP_FRAMES) execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(dir, 'text-style.mp4'), '-vf', 'select=eq(n\\,20)', '-frames:v', '1', process.env.KEEP_FRAMES]);
@@ -504,7 +460,7 @@ describe('exportJob (ffmpeg thật)', () => {
     run(['-f', 'lavfi', '-i', 'color=c=red:s=640x180:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=640x180:d=1', '-filter_complex', '[0][1]vstack', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', join(dir, 'coded.mp4')]);
     run(['-display_rotation', '90', '-i', join(dir, 'coded.mp4'), '-c', 'copy', join(dir, 'rotated.mp4')]);
     const document = clip([{ kind: 'video', src: 'rotated.mp4', width: 360, height: 640, objectFit: 'cover', start: 0, end: 1 }]);
-    await exportJob({ document, media: [{ src: 'rotated.mp4', file: join(dir, 'rotated.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'upright.mp4'), resolution: 720, parallel: 1 });
+    await exportJob({ document, media: [{ src: 'rotated.mp4', file: join(dir, 'rotated.mp4') }], transcripts: [], fonts: FONTS, out: join(dir, 'upright.mp4'), resolution: 720, parallel: 1 });
     const rgb = (x: number, y: number) => [...execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'upright.mp4'), '-vf', `crop=4:4:${x}:${y},format=rgb24`, '-frames:v', '1', '-f', 'rawvideo', 'pipe:1']).subarray(0, 3)];
     const pure = (pixel: number[]) => (pixel[0]! > 200 && pixel[2]! < 60) || (pixel[2]! > 200 && pixel[0]! < 60);
     // Upright: each half is one colour from top to bottom.
@@ -521,7 +477,7 @@ describe('exportJob (ffmpeg thật)', () => {
     // The grey level of a frame is 4 × its frame number at 30 fps, so it tells the source time.
     run(['-f', 'lavfi', '-i', "color=s=360x640:r=30:d=2,format=gray,geq=lum='4*N'", '-vf', "select='lt(mod(n\\,4)\\,2)'", '-fps_mode', 'vfr', '-c:v', 'libx264', '-preset', 'veryfast', '-qp', '0', '-pix_fmt', 'yuv420p', join(dir, 'vfr.mp4')]);
     const document = clip([{ kind: 'video', src: 'vfr.mp4', width: 360, height: 640, start: 0, end: 2 }]);
-    await exportJob({ document, media: [{ src: 'vfr.mp4', file: join(dir, 'vfr.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE, out: join(dir, 'vfr-out.mp4'), resolution: 720, parallel: 1 });
+    await exportJob({ document, media: [{ src: 'vfr.mp4', file: join(dir, 'vfr.mp4') }], transcripts: [], fonts: FONTS, out: join(dir, 'vfr-out.mp4'), resolution: 720, parallel: 1 });
     // At 1 s of output the source shows frame ~29 (the last kept before 30): grey ~116, not ~240.
     expect(Math.abs(grayAt(join(dir, 'vfr-out.mp4'), 30) - 116)).toBeLessThan(12);
   });

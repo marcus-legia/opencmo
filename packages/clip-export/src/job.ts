@@ -19,12 +19,6 @@ export const JobSchema = z
     transcripts: z.array(z.object({ src: z.string(), file: z.string().min(1) }).strict()).default([]),
     /** Thư mục chứa font của editor (`FONTS[*].file`) — `packages/clip-media/fonts`. */
     fonts: z.string().min(1),
-    /**
-     * Thư mục bộ Lottie có sẵn (`builtin:<tên>`) — `packages/clip-media/lottie`.
-     * Bắt buộc, không suy từ `fonts`: dời một bên mà quên bên kia thì Lottie rỗng
-     * mà không lỗi nào báo.
-     */
-    lottie: z.string().min(1),
     out: z.string().min(1),
     /** Cạnh ngắn của bản xuất, như nút 720p/1080p của editor. */
     resolution: z.union([z.literal(720), z.literal(1080)]).default(1080),

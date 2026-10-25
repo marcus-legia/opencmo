@@ -105,7 +105,7 @@ SQL layer is the one a client cannot skip.
 **Untrusted media.** ffmpeg chooses a demuxer from file content, so a user "video" can be an
 HLS playlist that makes the worker fetch arbitrary URLs or read local files. User media is
 read through stdin (`image2pipe`), with a forced format (`-f mov`), or with a demuxer
-allowlist (`USER_MEDIA_FORMATS`); Lottie files that reference external assets are rejected.
+allowlist (`USER_MEDIA_FORMATS`); `.json` uploads (formerly Lottie) are refused unread.
 
 **Retention is a queue, not a sweep.** Deleting an expired project first records every object
 path in `storage_deletions`, then deletes the files, and deletes the rows last. That table
@@ -201,7 +201,7 @@ allowlist (`USER_MEDIA_FORMATS` / `USER_INPUT`).
 | Queue | **Postgres** (`claim_*` functions) | No separate service; `for update skip locked` handles contention |
 | Billing | Polar (merchant of record) | Handles VAT/sales tax |
 | Errors | Sentry (optional) | |
-| Landing hero 3D | `three` (same version as `packages/clip-three`) | Loaded with `import()` after first paint; static SVG fallback without WebGL or with reduced motion |
+| Landing hero 3D | `three` (pinned in `apps/web`; marketing pages only, not the product) | Loaded with `import()` after first paint; static SVG fallback without WebGL or with reduced motion |
 
 **One provider for auth + DB + storage + queue.** The strongest reason is not price but that
 **Row Level Security applies to files**: "only the owner can read their clips" is a SQL
@@ -261,7 +261,7 @@ opencmo/
 │   ├── clip-render/              # renders the document: Canvas 2D in browser + Node
 │   ├── clip-export/              # server export: document → MP4
 │   ├── clip-assets/              # media library manifest
-│   ├── clip-icons/ clip-media/ clip-three/
+│   ├── clip-icons/ clip-media/ clip-motion/
 │   ├── editor-core/              # operations on the document — the only write path
 │   ├── editor-parity/            # golden images + comparison scripts
 │   ├── contracts/                # JSON contracts shared by Python and TypeScript
@@ -311,20 +311,14 @@ The editor targets desktop browsers (Chrome, Edge, Safari 17+, Firefox). `Device
 
 ---
 
-## 10. 3D scenes: Chromium + three.js in a separate GPU container
+## 10. Motion: one renderer (Remotion)
 
-Two rules from §2 still hold:
-
-- **Not in the worker.** The `generate` task spawns the Modal function `render_three` (an L4
-  GPU with its own image containing Chromium, three.js and a Vulkan ICD) and polls it. The GPU
-  container is separate from the job, so its memory does not count against the worker's 2 GB
-  budget, and the worker image does not grow by a browser.
-- **Frames never pass through Python.** The page renders, posts pixels to a Node HTTP server,
-  and Node streams them straight into ffmpeg's stdin (respecting `drain`).
-
-A 3D scene is just another generation: its spec hash (JCS) is the cache key, and the editor
-and exporter treat the result like any generated video. three.js does not run inside the
-exporter because software WebGL measured 178–531 ms per frame, far above the 150 ms budget.
+Explainers and motion clips are Remotion scenes the Assistant writes, rendered by `clip-motion` in
+its own CPU container (`render_motion`, `motion_preview`) and placed on the clip like any generated
+video. 3D scenes (three.js on an L4 GPU, `clip-three`) and Lottie layers (Skottie in the exporter,
+CanvasKit in the preview) were removed on 2026-10-24: they were two more renderers to keep secure
+and working, and no saved document used them. Depth comes from CSS perspective in Remotion; small
+motion from drawn SVG (`kit.drawOn`, `kit.travel`, `Streak`).
 
 ---
 

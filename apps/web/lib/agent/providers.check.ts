@@ -172,7 +172,7 @@ for (const tool of searched.slice(1)) assert.equal(Boolean(tool.defer_loading), 
 const loaded = searched.filter((tool) => !tool.defer_loading).length;
 assert.ok(loaded < searched.length / 2 + 5, `most tools wait for a search (${loaded} of ${searched.length} loaded)`);
 // Every always-loaded name is a real tool of the clip scope (or a priced one configured elsewhere).
-const priced = new Set(["create_video", "animate_video", "redo_keyframe", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "add_3d_scene", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill", "preview_explainer", "add_explainer"]);
+const priced = new Set(["create_video", "animate_video", "redo_keyframe", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "request_export", "add_captions", "place_broll", "wait_for_media", "undo", "read_skill", "preview_explainer", "add_explainer"]);
 for (const name of ALWAYS_LOADED) assert.ok(names.includes(name) || priced.has(name), `${name} is a tool`);
 
 // Ảnh đính kèm câu lệnh (khung đang xem) nằm giữa câu lệnh và trạng thái.
@@ -276,12 +276,13 @@ void main().catch((err) => {
   process.exit(1);
 });
 
-// The explainer guide sends the model to find_icons / find_lotties for every beat: they must be loaded
-// with the explainer tools, or each /explain starts with a tool search.
-for (const name of ["preview_explainer", "add_explainer", "find_icons", "find_lotties"]) {
+// The explainer guide sends the model to find_icons: it must be loaded with the explainer tools, or
+// each /explain starts with a tool search.
+for (const name of ["preview_explainer", "add_explainer", "find_icons"]) {
   assert.ok(ALWAYS_LOADED.has(name), `${name} is always loaded`);
 }
-assert.ok(TOOL_SPECS.some((tool) => tool.name === "find_icons") && TOOL_SPECS.some((tool) => tool.name === "find_lotties"), "find_icons and find_lotties are real tools");
+assert.ok(TOOL_SPECS.some((tool) => tool.name === "find_icons"), "find_icons is a real tool");
+assert.ok(!TOOL_SPECS.some((tool) => ["find_lotties", "preview_3d"].includes(tool.name)), "3D and Lottie tools are gone");
 
 /** Stop mid-stream: the call is still billed for what it used (input known, output streamed so far). */
 async function stoppedStepChecks(): Promise<void> {

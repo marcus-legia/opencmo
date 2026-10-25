@@ -1,0 +1,15 @@
+{
+  "id": "kinetic-type",
+  "title": "Kinetic type",
+  "line": "Big tight type is the picture: words snap in from the side with a capped overshoot and a motion streak, rows are masked windows, one accent colour on near-black.",
+  "bestFor": ["hooks and promises", "launch lines", "manifestos", "a number or claim that must land", "any beat with no physical subject"],
+  "format": "9:16",
+  "seconds": 5.5,
+  "beats": [
+    { "say": "Cut by words.", "visual": "CUT / BY / WORDS. snap in from the right one row after another, WORDS. in lime.", "seconds": 1.2 },
+    { "say": "Hold the line.", "visual": "The three rows rest, crisp; the kicker and the footer stay fixed.", "seconds": 1.6 },
+    { "say": "Then the next idea pushes it out.", "visual": "Each row hands over: the old word slides left out of its window as SHIP / EVERY / WEEK. pushes in from the right.", "seconds": 0.9 },
+    { "say": "Ship every week.", "visual": "SHIP / EVERY / WEEK. rest, WEEK. in lime; hold to the end.", "seconds": 1.8 }
+  ],
+  "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/pf-type-snap", "license": "MIT" }
+}

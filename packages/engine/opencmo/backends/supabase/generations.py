@@ -47,7 +47,7 @@ class GenerationsMixin(_Http):
         return _first_row(resp.json())
 
     def get_scene_code(self, user_id: str, code_hash: str) -> str | None:
-        """Code của cảnh `template: "code"` (spec code-scenes), đúng của người dùng đó."""
+        """The scene code of an explainer or motion clip, only the given user's own."""
         resp = self._send(
             "GET",
             "/rest/v1/scene_codes",

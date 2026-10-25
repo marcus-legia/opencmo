@@ -1,10 +1,10 @@
 /**
- * Chép font + Lottie của clip (`packages/clip-media`) sang `public/` để web phục
- * vụ cùng origin (CSP `font-src 'self'`). Chạy ở `predev`/`prebuild` và trong
- * `scripts/dev.mjs`; hai đích nằm trong `.gitignore`.
+ * Copies the clip fonts (`packages/clip-media/fonts`) into `public/` so the web serves them from its own
+ * origin (CSP `font-src 'self'`). Runs in `predev`/`prebuild` and in `scripts/dev.mjs`; the target is in
+ * `.gitignore`.
  *
- * Chép lại toàn bộ mỗi lần (vài chục MB, dưới một giây): so mtime để bỏ qua
- * thì một file bị xoá ở nguồn sẽ còn sống mãi ở đích.
+ * Copies everything every time (a few MB, under a second): skipping by mtime would keep a file deleted at
+ * the source alive at the target forever.
  */
 import { cpSync, existsSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,10 +13,10 @@ import { fileURLToPath } from 'node:url';
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MEDIA = join(WEB, '..', '..', 'packages', 'clip-media');
 
-for (const name of ['fonts', 'lottie']) {
-  const from = join(MEDIA, name);
-  if (!existsSync(from)) throw new Error(`Thiếu ${from} — font/Lottie của clip đã dời sang packages/clip-media.`);
-  const to = join(WEB, 'public', name);
-  rmSync(to, { recursive: true, force: true });
-  cpSync(from, to, { recursive: true });
-}
+const from = join(MEDIA, 'fonts');
+if (!existsSync(from)) throw new Error(`Missing ${from}: the clip fonts live in packages/clip-media.`);
+const to = join(WEB, 'public', 'fonts');
+rmSync(to, { recursive: true, force: true });
+cpSync(from, to, { recursive: true });
+// The Lottie pack was removed (2026-10-24); a copy left by an older checkout must not be served.
+rmSync(join(WEB, 'public', 'lottie'), { recursive: true, force: true });

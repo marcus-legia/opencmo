@@ -39,7 +39,7 @@ export function has(kind: unknown, key: string): boolean {
   if (!shape) return false;
   if (key in shape.shape) return true;
   // `masks`/`children` gắn thêm ngoài schema gốc.
-  return key === "masks" && ["rect", "path", "scene3d", "text", "video", "image", "group", "scene"].includes(kind as string);
+  return key === "masks" && ["rect", "path", "text", "video", "image", "group", "scene"].includes(kind as string);
 }
 
 const TRACKABLE = new Set<string>(TRACK_PROPERTIES);

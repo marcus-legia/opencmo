@@ -16,7 +16,6 @@ import { readBrand } from '../brand';
 import { clone } from '../doc';
 import { checked } from '../ops/project';
 import { activeScene } from '../ops/timeline';
-import { buildLottie, lottieSrc } from '../visuals/lottie';
 import { r2, type Node } from '../visuals/common';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -24,7 +23,7 @@ const key = z.string().regex(/^[a-z][a-z0-9_]{0,23}$/, 'Element keys are short l
 
 export const PERSONALITIES = ['playful', 'premium', 'corporate', 'energetic'] as const;
 export const INTRO_MOTIONS = ['fade', 'slide_up', 'slide_left', 'scale_in', 'pop', 'word_slide', 'draw'] as const;
-export const INTRO_ELEMENTS = ['title', 'tagline', 'logo', 'accent_line', 'lottie'] as const;
+export const INTRO_ELEMENTS = ['title', 'tagline', 'logo', 'accent_line'] as const;
 
 export const introSpecSchema = z.object({
 	personality: z.enum(PERSONALITIES),
@@ -37,7 +36,6 @@ export const introSpecSchema = z.object({
 				key,
 				kind: z.enum(INTRO_ELEMENTS),
 				text: z.string().min(1).max(80).optional(),
-				lottie: z.string().min(1).max(60).optional(),
 				/** Vertical centre, 0–1 of the frame. On the title it moves the whole title/line/tagline block. */
 				y: z.number().min(0.08).max(0.92).optional(),
 			}),
@@ -85,7 +83,6 @@ export function reviewIntro(spec: IntroSpec, options: { hasLogo: boolean }): str
 	const exitAt = spec.seconds - PERSONALITY[spec.personality].exit;
 	for (const element of spec.elements) {
 		if ((element.kind === 'title' || element.kind === 'tagline') && !element.text) issues.push(`${element.key}: a ${element.kind} needs text.`);
-		if (element.kind === 'lottie' && (!element.lottie || !lottieSrc(element.lottie))) issues.push(`${element.key}: "${element.lottie ?? ''}" is not a built-in animation.`);
 		if (element.kind === 'logo' && !options.hasLogo) issues.push(`${element.key}: this project has no brand logo; drop the logo element.`);
 		const beats = spec.beats.filter((beat) => beat.target === element.key);
 		if (beats.length !== 1) issues.push(`${element.key}: give it exactly one entrance beat (it has ${beats.length}).`);
@@ -253,11 +250,6 @@ export function buildIntro(spec: IntroSpec, document: ClipDocument): Node {
 				tracks: tracksFor(size),
 			});
 			return;
-		}
-		if (element.kind === 'lottie' && element.lottie) {
-			for (const node of buildLottie({ animation: element.lottie, at: [0.5, element.y ?? 0.7], size: 0.28 } as never, frame)) {
-				children.push({ ...node, tracks: tracksFor(0) });
-			}
 		}
 	});
 

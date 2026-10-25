@@ -3,13 +3,14 @@
  * `visual` per beat, and scene code written only with the kit, as a model following the guide would.
  *
  * - `SHOWCASE_EXPLAINER`: Track A's v1 showcase (Shazam), with the pictures its code draws.
- * - `VACCINE_EXPLAINER`: Track A's v2 reference scene (`fixtures/vaccine.job.json`), subject first: Lucide
+ * - `VACCINE_EXPLAINER`: the motion-studio scene (`fixtures/vaccine-drawn.job.json`): its own palette, one shot per beat,
+ *   every subject drawn in a Mark. It replaced Track A's icon scene (Lucide
  *   icons (`syringe`, `shield-check`, `virus`, `dna`), a `cell` shape, one `Headline` row, a `Board` for the
- *   steps, a Lottie, the `paper` theme and the `playful` personality.
+ *   steps, a Lottie, the `paper` theme and the `playful` personality).
  */
 
 import showcase from "../../../../../packages/clip-motion/fixtures/showcase.job.json";
-import vaccine from "../../../../../packages/clip-motion/fixtures/vaccine.job.json";
+import vaccine from "../../../../../packages/clip-motion/fixtures/vaccine-drawn.job.json";
 
 type Format = "16:9" | "9:16" | "1:1";
 type Theme = "blueprint" | "paper";
@@ -41,12 +42,14 @@ export const SHOWCASE_EXPLAINER: FakeExplainer = {
   title: showcase.title,
   beats: showcase.beats.map((beat, index) => ({ ...beat, visual: SHOWCASE_VISUALS[index] ?? "the spectrogram stays on screen" })),
   direction: [
-    "Visual centre: one spectrogram grid, 1500x600 px centred at 50%/52%, from beat 2 to the end; the camera pushes in 1.0 → 1.15 over beats 3-6, ease-in-out.",
-    "Beat 1: the waveform draws left → right across 80% of the width in 1.2 s, ease-out, then calms (amplitude 100% → 30% over 0.8 s).",
-    "Beat 2: grid cells fill column by column, 3 frames apart. Beat 3: the brightest 24 cells pop to dots (spring), the rest dim to 20% over 0.5 s.",
-    "Beats 4-6: links draw 0.4 s each, ease-out; the mono code types at 20 chars/s; axes draw in 0.6 s, the scatter stagger 2 frames.",
-    "Beat 7: matches slide onto one line over 1 s, ease-in-out. Beat 8: the check pops at 50%/45% and holds 1.5 s.",
-    "Bar: resting text crisp, nothing clipped or overlapping, no jumps.",
+    "Warm paper direction: field #F4EFE6 to #E9E1D3, ink #1D2733, teal #0E9E86 for the body, red #D9384E for the virus, grey #9AA6B8 for harmless pieces; DM Serif Display titles, Inter 600 steps.",
+    "One shot per beat; each title travels up 60 px with a 6 px capped overshoot over 18 frames. Subjects sit on the mid line (56%) and are scaled 1.45x together.",
+    "Beat 1: the syringe slides from -500 px to 33% of the width over 21 frames (out); the shield outline draws on over 30 frames (smooth) from frame 20.",
+    "Beat 2: the virus (r 110) pops on back over 14 frames, then at 45% of the beat splits into 3 grey fragments drifting 170 px out over 18 frames.",
+    "Beat 3: three antibodies travel 150-250 px right toward the fragment, staggered 6 frames, 24 frames each (out).",
+    "Beat 4: the virus sails from 95% to 62% of the width over half the beat (smooth); antibodies lock on in 16 frames (snap) and it turns grey.",
+    "Beat 5: a rail draws down in 30 frames; three 100 px step lines slide 60 px in on show, build, remember. Beat 6: the shield draws in 26 frames, the check from frame 20.",
+    "Bar: match every number, then make it as beautiful as possible; resting text crisp, nothing clipped or overlapping.",
   ].join(" "),
   code: showcase.code,
   format: showcase.format as Format,
@@ -59,32 +62,32 @@ export const VACCINE_EXPLAINER: FakeExplainer = {
     {
       say: "A vaccine trains your immune system before the real virus ever arrives.",
       label: "Training, not fighting",
-      visual: "a syringe icon slides in from the left; a shield-check icon draws on the right",
+      visual: "a drawn syringe slides in from the left; a teal shield outline draws on at the right",
     },
     {
       say: "It carries only a harmless piece of the virus, like a photo of a suspect.",
       label: "A harmless piece",
-      visual: "a red virus icon splits into 3 small grey virus fragments",
+      visual: "a red spiked virus pops in at the centre, then splits into 3 small grey fragments that drift apart",
     },
     {
       say: "Your immune cells study that piece and build antibodies that fit it.",
       label: "Antibodies that fit",
-      visual: "an immune cell shape points an arrow at a fragment; a dna icon in a ring shape appears on the right",
+      visual: "a teal immune cell on the left releases three Y-shaped antibodies that travel toward a grey fragment",
     },
     {
       say: "When the real virus shows up, your body can recognise it at once.",
       label: "Ready for the real virus",
-      visual: "a red virus icon moves right and is knocked back by a large shield-check icon, with a burst",
+      visual: "a red virus sails in from the right; antibodies lock onto it and it turns grey",
     },
     {
       say: "Show a harmless piece, build matching antibodies, and remember them for years.",
       label: "Three steps",
-      visual: "a steps board on the left reveals three lines one by one; a syringe icon stands on the right",
+      visual: "a teal rail draws down the left; three big step lines slide in beside it on their cue words",
     },
     {
       say: "That memory is why one small shot can protect you.",
       label: "Protected",
-      visual: "a check mark lands in the centre; a confetti Lottie plays",
+      visual: "a teal shield draws on at the centre and a check mark draws inside it",
     },
   ],
   direction: [

@@ -15,7 +15,7 @@
  * - Record "partial" (`state: pending|error`) là một lượt sinh chưa có bytes.
  */
 
-export type AssetType = 'VIDEO' | 'IMAGE' | 'AUDIO' | 'TRANSCRIPT' | 'LOTTIE' | 'LUT' | 'SCRIPT' | 'SEQUENCE';
+export type AssetType = 'VIDEO' | 'IMAGE' | 'AUDIO' | 'TRANSCRIPT' | 'LUT' | 'SCRIPT' | 'SEQUENCE';
 
 export type CloudState = 'uploading' | 'synced' | 'failed';
 
@@ -79,7 +79,7 @@ export const stemOf = (path: string): string => splitName(basename(path)).stem;
 
 // ------------------------------------------------------------------ đọc manifest
 
-const TYPES = new Set<AssetType>(['VIDEO', 'IMAGE', 'AUDIO', 'TRANSCRIPT', 'LOTTIE', 'LUT', 'SCRIPT', 'SEQUENCE']);
+const TYPES = new Set<AssetType>(['VIDEO', 'IMAGE', 'AUDIO', 'TRANSCRIPT', 'LUT', 'SCRIPT', 'SEQUENCE']);
 
 /**
  * Manifest lấy từ database thành manifest đúng dạng. Dễ tính: thiếu hay hỏng là
@@ -307,26 +307,6 @@ export function typeOfMime(mime: string): 'VIDEO' | 'IMAGE' | 'AUDIO' | 'TRANSCR
   if (mime.startsWith('image/')) return 'IMAGE';
   if (mime.startsWith('audio/')) return 'AUDIO';
   return null;
-}
-
-/**
- * File `.json` là Lottie hay transcript: cùng MIME nên phải nhìn nội dung. Lottie
- * luôn có `v` (phiên bản), `fr` (khung/giây) và mảng `layers`; transcript thì
- * không có cả ba. Trả cỡ và độ dài để record có như ảnh/video.
- */
-export function lottieInfo(text: string): { width: number; height: number; duration: number } | null {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
-  const { v, fr, ip, op, w, h, layers } = json as Record<string, unknown>;
-  if (typeof v !== 'string' || typeof fr !== 'number' || !(fr > 0) || !Array.isArray(layers)) return null;
-  if (typeof w !== 'number' || typeof h !== 'number' || !(w > 0) || !(h > 0)) return null;
-  const frames = (typeof op === 'number' ? op : 0) - (typeof ip === 'number' ? ip : 0);
-  return { width: w, height: h, duration: Math.max(0, Math.round((frames / fr) * 1000) / 1000) };
 }
 
 // ------------------------------------------------------------------ danh tính

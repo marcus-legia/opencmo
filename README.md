@@ -57,10 +57,9 @@ opencmo/
 │   ├── clip-render/            Canvas 2D renderer, shared by the browser preview and the exporter
 │   ├── clip-export/            server export: document → MP4
 │   ├── clip-motion/            explainer animations (Remotion), rendered on the worker
-│   ├── clip-three/             3D scenes, rendered on a GPU worker
 │   ├── clip-icons/             animated icon library
 │   ├── clip-assets/            the editor media library: manifest, folders, rename/move/delete
-│   ├── clip-media/             bundled fonts and Lottie animations
+│   ├── clip-media/             bundled fonts
 │   ├── editor-parity/          golden-image tests that keep the renderer pixel-stable
 │   ├── skills/                 style skills: markdown + frontmatter → a generated index
 │   └── mcp-server/             MCP server (Streamable HTTP, stateless) so your own Claude
@@ -86,7 +85,7 @@ and FFmpeg/ffprobe.
 ```bash
 npm ci
 uv venv --python 3.12 packages/engine/.venv312
-uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[worker,dev]'
+uv pip install --python packages/engine/.venv312/bin/python -e 'packages/engine[worker,dev,face]'
 cp apps/web/.env.example apps/web/.env.local   # fill in what you need; most keys are optional
 npm run dev                                    # web on http://127.0.0.1:3000
 ```

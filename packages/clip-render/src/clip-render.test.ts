@@ -214,6 +214,28 @@ describe('chữ (A3)', () => {
 describe('phụ đề (A3)', () => {
   const words = (spec: [string, number, number][]) => spec.map(([text, start, end]) => ({ text, start, end }));
 
+  it('flare (lead-in-flare): the payoff word lands on its own line in the serif once spoken', async () => {
+    const { captionFrame, groupWords, presetOf } = await import('./captions.ts');
+    const node = { kind: 'captions' as const, preset: 'flare' as const, colors: ['#FF6A55'] };
+    const groups = groupWords([{ words: words([['we', 0, 0.3], ['ship', 0.3, 0.6], ['weekly', 0.6, 1.2]]) }], presetOf(node).limit);
+    expect(captionFrame(node, groups, 0.4, 0).text).toBe('we ship');
+    const landed = captionFrame(node, groups, 1, 0);
+    expect(landed.text).toBe('we ship\nweekly');
+    expect(landed.node.ranges).toEqual([expect.objectContaining({ start: 8, end: 14, fontFamily: 'Fraunces', fontStyle: 'italic', paints: [{ type: 'solid', color: '#FF6A55' }] })]);
+    // An emphasized word is the payoff instead of the last one (its id is its source start in ms).
+    const marked = captionFrame({ ...node, emphasis: [{ start: 0.3, end: 0.3 }] }, groups, 1, 0);
+    expect(marked.text).toBe('we weekly\nship');
+  });
+
+  it('slam (tilt-slam): the loudest word sits on a tilted accent slab', async () => {
+    const { captionFrame, groupWords, presetOf } = await import('./captions.ts');
+    const node = { kind: 'captions' as const, preset: 'slam' as const };
+    const groups = groupWords([{ words: words([['it', 0, 0.2], ['changed', 0.2, 0.6], ['everything', 0.6, 1.2]]) }], presetOf(node).limit);
+    const frame = captionFrame(node, groups, 0.1, 0);
+    expect(frame.text).toBe('it changed');
+    expect(frame.block).toMatchObject({ color: '#FFD400', angle: -4, range: { start: 3, end: 10 } });
+  });
+
   it('nhóm từ: không gộp qua câu, đóng sau dấu câu, giới hạn độ dài/thời lượng', async () => {
     const { groupWords } = await import('./captions.ts');
     const transcript = [
@@ -349,7 +371,7 @@ describe('phụ đề (A3)', () => {
     const line = 'who was in a drawing lesson she was six and she was at the back';
     const transcript = [{ text: line, words: words([[line, 0, 3]]) }];
     const media: MediaHost = { ...NO_MEDIA, transcript: () => transcript };
-    for (const preset of ['spotlight', 'stark', 'classic', 'guinea', 'cascade']) {
+    for (const preset of ['spotlight', 'stark', 'classic', 'guinea', 'cascade', 'flare', 'slam']) {
       const document = project([{ kind: 'captions', src: 't.json', preset }], { width: 1080, height: 1920, fill: '#000000' });
       const renderer = createRenderer(document, media);
       const canvas = createCanvas(1080, 1920);
@@ -449,64 +471,6 @@ describe('layout (hộp cho canvas và op hình học)', () => {
   });
 });
 
-describe('lottie', () => {
-  it('xin khung theo giây cục bộ × speed + offset, đúng cỡ pixel của hộp', () => {
-    const calls: [unknown, number, number, number, boolean][] = [];
-    const frame = createCanvas(10, 10);
-    frame.getContext('2d').fillStyle = '#00FF00';
-    frame.getContext('2d').fillRect(0, 0, 10, 10);
-    const media: MediaHost = {
-      ...NO_MEDIA,
-      lottie: (src, seconds, width, height, loop) => {
-        calls.push([src, seconds, width, height, loop]);
-        return frame as never;
-      },
-    };
-    const renderer = createRenderer(project([
-      {
-        kind: 'lottie',
-        x: 10,
-        y: 10,
-        width: 40,
-        height: 20,
-        start: 1,
-        src: 'builtin:walk',
-        speed: 2,
-        loop: false,
-        offset: 0.5,
-      },
-    ]), media);
-    const canvas = createCanvas(200, 200);
-    renderer.render(canvas.getContext('2d') as never, renderer.exportFrame(2));
-    // Giây cục bộ = 1 → 1 × 2 + 0.5.
-    expect(calls.at(-1)).toEqual(['builtin:walk', 2.5, 40, 20, false]);
-    expect([...canvas.getContext('2d').getImageData(20, 20, 1, 1).data.slice(0, 3)]).toEqual([0, 255, 0]);
-  });
-
-  it('nguồn hỏng vẽ màu báo thiếu; builtin: không cần tải', () => {
-    const media: MediaHost = { ...NO_MEDIA, lottie: () => 'failed' };
-    expect(pixel([{ kind: 'lottie', width: 100, height: 100, src: 'x.json' }], 0, 50, 50, media)).not.toEqual([0, 0, 0]);
-    const document = project([{ kind: 'lottie', src: 'builtin:walk' }, { kind: 'lottie', src: 'upload.json' }]);
-    expect(mediaSources(document).map((item) => [item.kind, item.src])).toEqual([['lottie', 'upload.json']]);
-  });
-});
-
-describe('lottie: thời gian + tên builtin (dùng chung preview/export)', async () => {
-  const { builtinLottieName, lottieTime } = await import('./index.ts');
-  it('lặp quay vòng, không lặp dừng ở khung cuối', () => {
-    expect(lottieTime(5, 2, 30, true)).toBeCloseTo(1);
-    expect(lottieTime(5, 2, 30, false)).toBeCloseTo(2 - 1 / 30);
-    expect(lottieTime(5, 0, 30, true)).toBe(0);
-  });
-  it('builtin cho một cấp thư mục, bỏ ký tự lạ, không thoát thư mục', () => {
-    expect(builtinLottieName('builtin:walk')).toBe('walk');
-    expect(builtinLottieName('builtin:emoji/fire')).toBe('emoji/fire');
-    expect(builtinLottieName('builtin:../../etc/passwd')).toBe(null);
-    expect(builtinLottieName('builtin:..%2Fsecret')).toBe(null);
-    expect(builtinLottieName('builtin:a/b/c')).toBe(null);
-    expect(builtinLottieName('folder/x.json')).toBe(null);
-  });
-});
 
 describe('objectPosition (E5)', () => {
   it('cover cắt theo điểm neo: neo trái giữ nửa trái của ảnh, mặc định giữ giữa', () => {

@@ -73,7 +73,7 @@ async function main() {
   assert.ok(scene.beats.every((beat) => !("visual" in beat)), "visual must not reach the spec");
   const card = explainerCard(prepared, "clip");
   assert.match(card.changes[0]!, / · paper, playful · voice Aria · /);
-  assert.match(card.changes[1]!, /· Picture: a syringe icon slides in from the left/);
+  assert.match(card.changes[1]!, /· Picture: a drawn syringe slides in from the left/);
 
   // A3: a numeric direction first, previews at chosen times, the review checklist with every clean preview.
   const noDirection = await runPreviewExplainer({ ...input, direction: undefined }, { preview: async () => assert.fail("must not render") });
@@ -91,10 +91,29 @@ async function main() {
   });
   assert.deepEqual(timed!.stills, [2, 2, 99], "times reach clip-motion as stills; it clamps and dedupes");
   assert.ok(!("stills" in previewJob(input)), "no times: the default stills");
+  const looked = previewJob({ ...input, sheet: { from: 1, to: 2, count: 6 }, zoom: { t: 2, x: 0, y: 0, w: 400, h: 200 } });
+  assert.deepEqual([looked.sheet, looked.zoom], [{ from: 1, to: 2, count: 6 }, { t: 2, x: 0, y: 0, w: 400, h: 200 }], "the sheet and the zoom reach the job");
+  assert.ok(!previewExplainerInput.safeParse({ ...input, sheet: { from: 2, to: 1, count: 4 } }).success, "a sheet runs forward");
+  // Style directions (plan O5): variants instead of code, the first one's code fills the job's.
+  const { code: _code, ...noCode } = input;
+  const directions = previewExplainerInput.parse({ ...noCode, variants: [{ label: "A", code: input.code }, { label: "B", code: `${input.code}\n` }] });
+  const directed = previewJob(directions);
+  assert.equal(directed.code, input.code);
+  assert.deepEqual(directed.variants?.map((variant) => variant.label), ["A", "B"]);
+  assert.ok(!previewExplainerInput.safeParse(noCode).success, "a preview needs code or variants");
+  assert.ok(!previewExplainerInput.safeParse({ ...noCode, variants: [{ label: "A", code: input.code }] }).success, "two directions at least");
+  const sheetOf = await runPreviewExplainer(directions, {
+    preview: async () => ({ ok: true, stills: [{ t: 1, file: "variants.jpg", kind: "variants", labels: ["A", "B"] }], issues: [], estimated: true, images: ["AAAA"] }),
+  });
+  assert.ok(sheetOf.ok && sheetOf.images?.length === 1);
+  assert.match(sheetOf.content, /left to right: A, B/);
+  assert.match(sheetOf.content, /ask_user/);
+  assert.doesNotMatch(sheetOf.content, /review/, "no review rounds before a direction is picked");
   const review = JSON.parse(reviewed.content) as { review?: string; rounds?: string };
   assert.equal(review.review, REVIEW_CHECKLIST);
   assert.equal(PREVIEW_ROUNDS, 6);
   assert.match(review.rounds ?? "", /Up to 6 previews/);
+  assert.match(REVIEW_CHECKLIST, /\n2\. Drawing: is the subject drawn as itself .*not a stock icon in a ring or a medallion\?\n3\. Direction/, "the review asks for a drawn subject");
   assert.match(REVIEW_CHECKLIST, /Name the one worst problem you see, fix only that, and preview again; stop when a round finds nothing\.$/);
   const tooMany = await runPreviewExplainer({ ...input, times: Array.from({ length: 13 }, (_, i) => i) }, { preview: async () => assert.fail("must not render") });
   assert.match(tooMany.content, /times/);
@@ -174,12 +193,20 @@ async function main() {
   const narrated = await runPreviewExplainer({ ...input, beats: input.beats.slice(0, 2) }, { preview: async () => assert.fail("must not render") });
   assert.match(narrated.content, /3 to 16 beats/);
 
+  // Motion styles: the list names each with what it suits; one style comes with its guide and example code.
+  const styles = JSON.parse(runMotionTemplateTool("list_motion_styles", {}).content) as { styles: { id: string; bestFor: string[] }[] };
+  assert.ok(styles.styles.some((item) => item.id === "kinetic-type") && styles.styles.every((item) => item.bestFor.length > 0));
+  const kinetic = JSON.parse(runMotionTemplateTool("get_motion_style", { id: "kinetic-type" }).content) as { guide: string; code: string };
+  assert.match(kinetic.guide, /## Palette/);
+  assert.match(kinetic.code, /kit\.travel|kit\.snap/);
+  assert.equal(runMotionTemplateTool("get_motion_style", { id: "nope" }).ok, false);
+
   // B5: motion templates. The list is short; an unknown id answers with the ids; a template comes with its code.
   const listed = runMotionTemplateTool("list_motion_templates", {});
-  assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "mark-lockup", "phone-carousel"]);
+  assert.deepEqual((JSON.parse(listed.content) as { templates: { id: string }[] }).templates.map((item) => item.id), ["analytics-glow", "logo-bloom", "mark-lockup", "phone-carousel", "product-tour", "type-snap"]);
   const nope = runMotionTemplateTool("get_motion_template", { id: "nope" });
   assert.equal(nope.ok, false);
-  assert.match(nope.content, /Unknown template \\"nope\\": use one of analytics-glow, mark-lockup, phone-carousel\./);
+  assert.match(nope.content, /Unknown template \\"nope\\": use one of analytics-glow, logo-bloom, mark-lockup, phone-carousel, product-tour, type-snap\./);
   const lockup = JSON.parse(runMotionTemplateTool("get_motion_template", { id: "mark-lockup" }).content) as { code: string; direction: string; format: string };
   assert.match(lockup.code, /const SLOTS = \{/);
   assert.equal(lockup.format, "16:9");

@@ -1,0 +1,13 @@
+{
+  "id": "paper-cutout",
+  "title": "Paper cutout",
+  "line": "Layers of cut paper with real drop shadows slide in with parallax and a slight stop-motion step; friendly, handmade, warm.",
+  "bestFor": ["consumer and lifestyle topics", "health, habits and how-tos", "kids and education", "a journey or a plan over time", "friendly brand stories"],
+  "format": "9:16",
+  "seconds": 5,
+  "beats": [
+    { "say": "Plan your week.", "visual": "Four layers of cut-paper hills slide up one after another with parallax; a paper sun pops behind them.", "seconds": 1.8 },
+    { "say": "One step at a time.", "visual": "A paper strip with PLAN YOUR WEEK drops in; a dashed paper path winds over the hills with three flags.", "seconds": 1.7 },
+    { "say": "And watch it grow.", "visual": "The flags pop up one by one along the path; the layers sway slightly on twos.", "seconds": 1.5 }
+  ]
+}
