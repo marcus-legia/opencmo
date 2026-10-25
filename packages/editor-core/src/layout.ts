@@ -138,7 +138,7 @@ export function readLayout(document: ClipDocument): LayoutRange[] {
  */
 export function mergeLayout(
   ranges: LayoutRange[],
-  next: { start: number; end: number; mode: LayoutMode | 'cell'; ratio: number; anchor?: LayoutAnchor; rect?: [number, number, number, number]; focus?: [number, number]; fit?: 'fit' },
+  next: { start: number; end: number; mode: LayoutMode | 'cell'; ratio: number; anchor?: LayoutAnchor; rect?: [number, number, number, number]; focus?: [number, number]; fit?: 'fit'; background?: string },
 ): LayoutRange[] {
   const out: LayoutRange[] = [];
   for (const range of ranges) {
@@ -150,6 +150,7 @@ export function mergeLayout(
   }
   if (next.mode !== 'full') {
     const range: LayoutRange = { start: next.start, end: next.end, mode: next.mode, ratio: next.ratio };
+    if (next.background) range.background = next.background.toUpperCase();
     if (next.mode !== 'cell' && FANCY.has(next.mode) && next.anchor) range.anchor = next.anchor;
     if (next.mode === 'cell' && next.rect) {
       range.rect = next.rect;
@@ -163,7 +164,7 @@ export function mergeLayout(
   for (const range of out) {
     const last = merged.at(-1);
     const sameCell = JSON.stringify([last?.rect, last?.focus, last?.fit]) === JSON.stringify([range.rect, range.focus, range.fit]);
-    if (last && Math.abs(last.end - range.start) < 1e-6 && last.mode === range.mode && last.ratio === range.ratio && last.anchor === range.anchor && sameCell) last.end = range.end;
+    if (last && Math.abs(last.end - range.start) < 1e-6 && last.mode === range.mode && last.ratio === range.ratio && last.anchor === range.anchor && last.background === range.background && sameCell) last.end = range.end;
     else merged.push({ ...range });
   }
   return merged.filter((range) => range.end - range.start >= MIN_RANGE).map((range) => ({ ...range, start: round(range.start), end: round(range.end) }));
@@ -508,7 +509,7 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
     width: W,
     height: tracks.height[0]?.value ?? 0,
     opacity: 0,
-    paints: [{ type: 'solid', color: PANEL_COLOR }],
+    paints: [panelPaint(live)],
     tracks: [
       { property: 'y', keyframes: tracks.y },
       { property: 'height', keyframes: tracks.height },
@@ -536,7 +537,7 @@ function rebuildPanels(input: ClipDocument): ClipDocument {
         y: 0,
         width: W,
         height: H,
-        paints: [{ type: 'solid', color: PANEL_COLOR }],
+        paints: [panelPaint(live)],
       },
       [['opacity', tracks.backdrop]],
     );
@@ -598,7 +599,8 @@ export function panelRegionAt(document: ClipDocument, time: number): { x: number
     const cell = range.ratio + PIP_MARGIN * 2;
     const right = anchorFor(range).endsWith('right');
     const width = round(Math.max(0.3, 1 - cell - 0.08));
-    return { x: right ? 0.05 : round(cell + 0.03), y: 0.1, width, height: 0.8 };
+    // Up to 0.8 of the height: the captions sit under the visual on this side (`captionSpot`).
+    return { x: right ? 0.05 : round(cell + 0.03), y: 0.08, width, height: 0.72 };
   }
   if (range.mode === 'pip') {
     // Visual nằm trên người nói trong z-order: chừa hẳn dải có ô PiP.
@@ -624,55 +626,107 @@ export function speakerBandAt(document: ClipDocument, time: number): { y: number
   return range.mode === 'split-bottom' ? { y: 1 - range.ratio, height: range.ratio } : { y: 0, height: range.ratio };
 }
 
-// ------------------------------------------------------------------ captions at the seam
+/**
+ * The panel's fill: one colour when every range shares it, else a colour track that switches at each range's start
+ * (one frame before it, while the panel is still hidden), so a light range next to a dark one never fades through
+ * grey on screen.
+ */
+function panelPaint(ranges: LayoutRange[]): Entity {
+  const colours = ranges.map((range) => range.background ?? PANEL_COLOR);
+  if (new Set(colours).size <= 1) return { type: 'solid', color: colours[0] ?? PANEL_COLOR };
+  const keys: { time: number; value: string }[] = [];
+  ranges.forEach((range, index) => {
+    const at = Math.max(0, range.start - FRAME);
+    if (index > 0) keys.push({ time: round(Math.max(0, at - FRAME / 2)), value: colours[index - 1]! });
+    keys.push({ time: round(at), value: colours[index]! });
+  });
+  return { type: 'solid', color: colours[0]!, tracks: [{ property: 'color', keyframes: keys.filter((key, i) => keys.findIndex((other) => other.time === key.time) === i) }] };
+}
 
-/** The track `seatCaptions` writes on the master captions: its id starts with this. */
-const CAPTION_TRACK = 'layout-caption-offsetY';
-/** Caption centre above the seam, share of the frame height: inside the band the visual keeps clear. */
+// ------------------------------------------------------------------ captions per layout
+
+/** The tracks `seatCaptions` writes on the master captions: their ids start with this. */
+const CAPTION_TRACK = 'layout-caption-';
+/** Caption centre above a split's seam, share of the frame height: inside the band the visual keeps clear. */
 const SEAM_LIFT = 0.05;
 
 /**
- * The clip's own captions move to the seam between the visual and the speaker while the frame is split, and back
- * after. Left where they were, they land on the speaker's face in the lower band (learned from AI Producer's framing
- * rules: under a portrait seat the captions sit between the visual and the speaker, about y 920-1110 of 1920). With
- * the visual on top the centre sits just above the seam, in the bottom part the visual leaves empty; with the visual
- * at the bottom it sits at the foot of the speaker's band. The captions stay the editor's own layer and style; only
- * an `offsetY` track is added, on the same 0.3 s moves as the layout.
+ * Where the captions' centre goes while a layout range shows (px), or null to leave them. Learned from AI
+ * Producer's framing rules: the captions get their own place, never on the face and never across the visual.
+ * - split: just above the seam (visual on top: the strip the visual keeps clear; visual below: the foot of the
+ *   speaker's band);
+ * - pip: under the visual on a landscape frame, centred on its side; above the cell's row on a vertical frame;
+ * - side-by-side: the foot of the speaker's column.
+ */
+function captionSpot(range: LayoutRange, W: number, H: number): { x?: number; y: number } | null {
+  if (range.mode === 'split-bottom') return { y: (1 - range.ratio) * H - SEAM_LIFT * H };
+  if (range.mode === 'split-top') return { y: range.ratio * H - SEAM_LIFT * H };
+  if (range.mode === 'pip') {
+    const anchor = anchorFor(range);
+    const cell = range.ratio * W;
+    const margin = PIP_MARGIN * W;
+    if (W >= H) {
+      const right = anchor.endsWith('right');
+      const visualLeft = right ? 0 : cell + margin * 2;
+      const visualRight = right ? W - cell - margin * 2 : W;
+      return { x: (visualLeft + visualRight) / 2, y: 0.88 * H };
+    }
+    return anchor.startsWith('bottom') ? { y: H - margin - cell - 0.04 * H } : { y: margin + cell + 0.06 * H };
+  }
+  if (range.mode === 'side-by-side') {
+    const column = range.ratio * W;
+    return { x: anchorFor(range) === 'left' ? column / 2 : W - column / 2, y: 0.86 * H };
+  }
+  return null;
+}
+
+/**
+ * The clip's own captions move to their place for each layout range (`captionSpot`), on the layout's own 0.3 s
+ * moves, and back after. The captions stay the editor's own layer and style: only `offsetX`/`offsetY` tracks are
+ * added, and a hand-made one of either is the user's choice of position and stops the moves.
  */
 function seatCaptions(document: ClipDocument): ClipDocument {
   const scene = sceneOf(document) as unknown as Entity | undefined;
   const captions = masterCaptions(document) as unknown as Entity | null;
   if (!scene || !captions || !scene.width || !scene.height) return document;
   const tracks = ((captions.tracks as Entity[] | undefined) ?? []).filter((track) => !String(track.id ?? '').startsWith(CAPTION_TRACK));
+  const own = tracks.some((track) => track.property === 'offsetY' || track.property === 'offsetX');
   // Unique across timelines: each has its own captions layer, named now if it has no id yet (the next stamp keeps it).
   if (typeof captions.id !== 'string') captions.id = drawId();
-  const trackId = `${CAPTION_TRACK}-${captions.id}`;
-  // A hand-made offsetY track is the user's choice of position: leave it.
-  const own = tracks.some((track) => track.property === 'offsetY');
   const W = scene.width as number;
   const H = scene.height as number;
-  const ranges = own ? [] : readLayout(document).filter((range) => range.mode === 'split-top' || range.mode === 'split-bottom');
+  const spots = own ? [] : readLayout(document).flatMap((range) => {
+    const spot = captionSpot(range, W, H);
+    return spot ? [{ range, spot }] : [];
+  });
   const duration = (scene.workarea as [number, number] | undefined)?.[1] ?? Infinity;
-  const base = Number(captions.offsetY ?? 0);
-  const box = placeCaption({ ...(captions as object), offsetY: 0 } as never, { width: W, height: H });
-  const centre = box.y + box.height / 2;
+  const baseY = Number(captions.offsetY ?? 0);
+  const baseX = Number(captions.offsetX ?? 0);
+  const box = placeCaption({ ...(captions as object), offsetY: 0, offsetX: 0 } as never, { width: W, height: H });
   // Caption keyframes run on the captions' own clock: seconds of its source from `sourceIn`.
   const local = (time: number) => round(time - Number(captions.start ?? 0) + Number(captions.sourceIn ?? 0));
-  const keys: { time: number; value: number }[] = [];
-  for (const range of ranges) {
-    const seam = range.mode === 'split-bottom' ? (1 - range.ratio) * H : range.ratio * H;
-    const value = round(seam - SEAM_LIFT * H - centre);
-    const T = Math.min(TRANSITION, (range.end - range.start) / 4);
-    if (range.start >= FRAME) keys.push({ time: local(range.start), value: base });
-    keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value });
-    if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value }, { time: local(range.end), value: base });
-    else keys.push({ time: local(range.end), value });
-  }
-  const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
-  // Stable ids: a layout op run again must leave the document unchanged.
-  if (unique.length) tracks.push({ id: trackId, property: 'offsetY', keyframes: unique.map((key, index) => ({ id: `${trackId}-${index}`, ...key })) });
+  const build = (axis: 'x' | 'y') => {
+    const base = axis === 'y' ? baseY : baseX;
+    const centre = axis === 'y' ? box.y + box.height / 2 : box.x + box.width / 2;
+    const keys: { time: number; value: number }[] = [];
+    for (const { range, spot } of spots) {
+      const target = spot[axis];
+      const value = target === undefined ? base : round(target - centre);
+      const T = Math.min(TRANSITION, (range.end - range.start) / 4);
+      if (range.start >= FRAME) keys.push({ time: local(range.start), value: base });
+      keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value });
+      if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value }, { time: local(range.end), value: base });
+      else keys.push({ time: local(range.end), value });
+    }
+    const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
+    if (!unique.length || unique.every((key) => key.value === base)) return;
+    // Stable ids: a layout op run again must leave the document unchanged.
+    const id = `${CAPTION_TRACK}offset${axis.toUpperCase()}-${captions.id as string}`;
+    tracks.push({ id, property: axis === 'y' ? 'offsetY' : 'offsetX', keyframes: unique.map((key, index) => ({ id: `${id}-${index}`, ...key })) });
+  };
+  build('y');
+  build('x');
   if (tracks.length) captions.tracks = tracks;
   else delete captions.tracks;
   return document;
 }
-

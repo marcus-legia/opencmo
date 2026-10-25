@@ -492,6 +492,8 @@ export const LayoutRangeSchema = z
     rect: z.tuple([unitBox, unitBox, unitBox, unitBox]).optional(),
     focus: z.tuple([unitBox, unitBox]).optional(),
     fit: z.literal('fit').optional(),
+    /** The panel's colour for this range (a light room, a brand colour); absent = the default dark panel. */
+    background: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   })
   .strict();
 

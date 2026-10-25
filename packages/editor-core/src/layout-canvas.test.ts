@@ -35,7 +35,7 @@ describe('layouts on a landscape frame', () => {
 		const { document } = await applyOps(landscape, [{ op: 'set_layout', mode: 'pip', anchor: 'bottom-right', start: 2, end: 20 }], ctx);
 		expect(readLayout(document)[0]!.ratio).toBe(0.24);
 		const region = panelRegionAt(document, 5)!;
-		expect(region).toEqual({ x: 0.05, y: 0.1, width: 0.6, height: 0.8 });
+		expect(region).toEqual({ x: 0.05, y: 0.08, width: 0.6, height: 0.72 });
 		const { document: left } = await applyOps(landscape, [{ op: 'set_layout', mode: 'pip', anchor: 'top-left', start: 2, end: 20 }], ctx);
 		expect(panelRegionAt(left, 5)!.x).toBeCloseTo(0.35, 6);
 	});
@@ -49,6 +49,41 @@ describe('layouts on a landscape frame', () => {
 		// A 960 column around 1440 starts at 960 and moves to the left half.
 		expect(valueAt(mask(side), 'x', 2.3)).toBe(960);
 		expect(valueAt(speakerGroup(side), 'offsetX', 2.3)).toBe(-960);
+	});
+
+	it("the clip's captions go under the visual beside a facecam, and to the foot of the speaker's column", async () => {
+		const withCaptions = structuredClone(landscape) as unknown as { stage: { children: { children: unknown[] }[] } };
+		withCaptions.stage.children[0]!.children.push({ kind: 'captions', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 });
+		const doc = withCaptions as unknown as ClipDocument;
+		const captionsOf = (document: ClipDocument) => (document.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!;
+		const { document } = await applyOps(doc, [{ op: 'set_layout', mode: 'pip', anchor: 'bottom-right', start: 2, end: 20 }], ctx);
+		// classic is centred (960, 540): the visual side is 0-1305.6 px (cell and two margins away), captions at 0.88 of the height.
+		expect(valueAt(captionsOf(document), 'offsetX', 2.3)).toBeCloseTo(652.8 - 960, 3);
+		expect(valueAt(captionsOf(document), 'offsetY', 2.3)).toBeCloseTo(950.4 - 540, 3);
+		expect(valueAt(captionsOf(document), 'offsetX', 20)).toBe(0);
+		const { document: side } = await applyOps(doc, [{ op: 'set_layout', mode: 'side-by-side', anchor: 'right', start: 2, end: 20 }], ctx);
+		expect(valueAt(captionsOf(side), 'offsetX', 2.3)).toBe(1440 - 960);
+	});
+
+	it('the panel takes the colour asked for, per range, switching while it is hidden', async () => {
+		const { document } = await applyOps(
+			landscape,
+			[
+				{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 8, background: '#f4f1ea' },
+				{ op: 'set_layout', mode: 'pip', start: 12, end: 18 },
+			],
+			ctx,
+		);
+		expect(readLayout(document)[0]!.background).toBe('#F4F1EA');
+		const panel = (document.stage.children[0] as unknown as Entity).children!.find((child) => (child.marks as { layout?: string } | undefined)?.layout === 'panel')!;
+		const paint = (panel.paints as { color: string; tracks?: { keyframes: { time: number; value: string }[] }[] }[])[0]!;
+		expect(paint.color).toBe('#F4F1EA');
+		const keys = paint.tracks![0]!.keyframes;
+		expect(keys.at(-1)).toMatchObject({ value: '#0F172A' });
+		expect(keys.at(-1)!.time).toBeLessThan(12);
+		const { document: one } = await applyOps(landscape, [{ op: 'set_layout', mode: 'pip', start: 2, end: 8, background: '#FFFFFF' }], ctx);
+		const solid = (one.stage.children[0] as unknown as Entity).children!.find((child) => (child.marks as { layout?: string } | undefined)?.layout === 'backdrop')!;
+		expect(solid.paints).toMatchObject([{ type: 'solid', color: '#FFFFFF' }]);
 	});
 
 	it('a portrait frame keeps its bigger cell and centred crops (the video pans to the face itself)', async () => {

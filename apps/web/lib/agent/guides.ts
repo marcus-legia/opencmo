@@ -255,6 +255,8 @@ Use apply_color (one call can set many adjustments on many elements) and check w
   | 16:9 | pip (a corner facecam over a full visual: tutorials, screen recordings, YouTube), side-by-side (speaker one column, visual the other), visual-only | split-top/bottom (the speaker becomes a thin band) |
   | 1:1 | split-bottom, pip in a lower corner, side-by-side | — |
   On 16:9 and 1:1 the corner cell and the speaker column cut around the speaker's measured face.
+- background (hex) colours the panel: match the speaker's room (a light wall: a light panel reads as one picture, like the reels look) or a brand colour; default dark. Keep visuals readable on it (apply the brand so visuals take its text colour).
+- The clip's captions move by themselves for each layout: to the seam of a split, under the visual beside a facecam, to the foot of the speaker's column. Do not move them by hand inside a layout range.
 - Use a split while the speaker explains something with steps, a comparison or numbers (3-15 s): the diagram, chart, icons or animation go in the panel. Use a short visual-only (2-4 s) for one striking number or image. Keep at least half of the clip full frame: the face is what holds attention.
 - Add the layout FIRST, then the visuals for that range: visuals without an explicit region or at land in the panel on their own.
 - The layout wraps the clip video in "Speaker" (a group, or a masked rect once pip/side-by-side is used) and adds a rect "Layout panel" (plus "Layout backdrop" for pip): do not edit or delete them by hand; call set_layout again. It survives text cuts and set_frame.
