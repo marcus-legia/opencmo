@@ -658,10 +658,9 @@ export function readCaptionStyle(document: ClipDocument): CaptionStyle | null {
 }
 
 /**
- * Đặt kiểu cho mọi `<captions>` (video và voiceover cùng một kiểu) và CHỈ thế —
- * áp brand không được đè nội dung. `preset`/`colors` luôn ghi; các khoá còn lại
- * chỉ ghi khi có mặt (null = về mặc định của preset, thiếu = giữ nguyên).
- * Project không có phụ đề thì trả nguyên document.
+ * Styles every `<captions>` (video and voiceover share one style) and ONLY that: applying a brand must not overwrite
+ * content. `preset`/`colors` are always written; the other keys only when present (null = the preset's default,
+ * absent = unchanged). A project with no captions comes back unchanged.
  */
 export function writeCaptionStyle(input: ClipDocument, style: CaptionStyle): ClipDocument {
   const document = clone(input);

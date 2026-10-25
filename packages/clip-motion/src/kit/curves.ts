@@ -96,7 +96,12 @@ export function speedBlur(speed: number, options: { k?: number; max?: number } =
 // travel and snap are ported from opus-pro/opusclip-video-tools remakes/opus-5.5/pf-type-snap/project/src/easing.ts
 // (MIT, Copyright (c) 2026 OpusClip; see THIRD_PARTY_NOTICES.md).
 
+/** Peaks by curve: `travel` runs per element per frame, and a curve's peak never changes. */
+const peaks = new WeakMap<Ease, { p: number; u: number }>();
+
 function peakOf(curve: Ease, samples = 2000): { p: number; u: number } {
+	const known = peaks.get(curve);
+	if (known) return known;
 	let p = -Infinity;
 	let u = 0;
 	for (let i = 0; i <= samples; i++) {
@@ -106,7 +111,9 @@ function peakOf(curve: Ease, samples = 2000): { p: number; u: number } {
 			u = i / samples;
 		}
 	}
-	return { p, u };
+	const peak = { p, u };
+	peaks.set(curve, peak);
+	return peak;
 }
 
 /**

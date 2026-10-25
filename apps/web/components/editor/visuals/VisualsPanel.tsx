@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Bảng Visuals (spec visuals V3): chèn visual giải thích mà không cần agent —
- * mũi tên/khoanh/gạch chân, diagram, biểu đồ, đồ thị. Mỗi nút là MỘT
- * op của editor-core (cùng op agent gọi), đặt ở playhead, dài 4 giây.
+ * The Visuals panel (spec visuals V3): explainer visuals without the agent — arrows, circles, underlines,
+ * diagrams, charts, graphs. Each button is ONE editor-core op (the same op the agent calls), placed at the
+ * playhead for 4 seconds.
  *
- * Chọn sẵn một visual trên canvas thì bảng mở ở chế độ sửa: đổi nhãn/số/công
- * thức rồi "Update" là `update_visual` — sinh lại tại chỗ, giữ id và thời gian.
+ * With a visual already selected on the canvas the panel opens in edit mode: change its labels, numbers or
+ * formula and "Update" runs `update_visual`, which rebuilds it in place with the same id and timing.
  *
  * Titles (lower third, name tag, chapter) stay up 5.5 s so a name and role can be read.
  */

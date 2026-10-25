@@ -1,4 +1,4 @@
-"""Đọc metadata của file media bằng ffprobe."""
+"""Media file metadata, read with ffprobe."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class MediaInfo:
 
 
 def _parse_fps(raw: str) -> float:
-    """ffprobe trả fps dạng phân số, ví dụ '30000/1001'."""
+    """ffprobe gives fps as a fraction, e.g. '30000/1001'."""
     if "/" in raw:
         num, _, den = raw.partition("/")
         try:

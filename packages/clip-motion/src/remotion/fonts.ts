@@ -1,4 +1,4 @@
-import { continueRender, delayRender, staticFile } from 'remotion';
+import { continueRender, delayRender, getInputProps, staticFile } from 'remotion';
 
 /**
  * The editor's font library (packages/clip-media/fonts, OFL; the bundle's public dir), with each file's weight range
@@ -60,14 +60,29 @@ export const FAMILY = {
 	display: fontFamily('display'),
 };
 
+/**
+ * The library fonts a scene's code can reach: the four roles, and every library name its code mentions. Code that
+ * picks a font by a computed key (`kit.font[name]`, `kit.fonts`) may reach any, so it gets them all. Loading all 32
+ * (several MB of variable fonts) in every render and preview tab cost start-up time for scenes that use one or two.
+ */
+export function fontsFor(code: string | undefined): LibraryFont[] {
+	const all = Object.keys(LIBRARY) as LibraryFont[];
+	if (code === undefined || /kit\.font\s*\[|kit\.fonts\b/.test(code)) return all;
+	const roles = new Set<string>(Object.values(ROLES));
+	return all.filter((name) => roles.has(name) || code.includes(name));
+}
+
 let loading: Promise<void> | null = null;
 
 /** Every frame waits for the fonts, so text never renders in a fallback face. */
 export function loadFonts(): Promise<void> {
 	if (loading) return loading;
 	const handle = delayRender('Loading fonts');
+	const job = (getInputProps() as { job?: { code?: unknown } }).job;
+	const names = fontsFor(typeof job?.code === 'string' ? job.code : undefined);
 	loading = Promise.all(
-		Object.entries(LIBRARY).map(async ([family, { file, weights }]) => {
+		names.map(async (family) => {
+			const { file, weights } = LIBRARY[family];
 			const face = new FontFace(family, `url(${staticFile(file)}) format('woff2')`, { weight: `${weights[0]} ${weights[1]}` });
 			document.fonts.add(await face.load());
 		}),

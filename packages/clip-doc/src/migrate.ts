@@ -1,17 +1,16 @@
 /**
- * Đọc document đã lưu ở version bất kỳ → version hiện tại, rồi validate.
+ * Reads a document saved at any version up to the current one, then validates it.
  *
- * Mỗi lần đổi schema theo kiểu không tương thích thì tăng `DOCUMENT_VERSION` và
- * thêm MỘT bước vào `STEPS`: bước n nhận document version n, trả version n+1.
- * Không bao giờ sửa một bước đã có — document cũ trong database đi qua đúng chuỗi
- * đó mãi mãi.
+ * Every incompatible schema change bumps `DOCUMENT_VERSION` and adds ONE step to `STEPS`: step n takes a version-n
+ * document and returns version n+1. Never edit a step that exists: old documents in the database go through that
+ * exact chain forever.
  */
 
 import { DOCUMENT_VERSION, DocumentSchema, type ClipDocument } from './schema.ts';
 
 type Step = (document: Record<string, unknown>) => Record<string, unknown>;
 
-/** `STEPS[n]` đưa version n lên n + 1. Chưa có bước nào: version 1 là bản đầu. */
+/** `STEPS[n]` takes version n to n + 1. None yet: version 1 is the first. */
 const STEPS: Record<number, Step> = {};
 
 const REMOVED_KINDS = new Set(['lottie', 'scene3d']);

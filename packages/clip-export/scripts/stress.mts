@@ -1,14 +1,14 @@
 /**
- * Stress test export cho visual nặng (diagram, chart, graph, icon) — KHÔNG chạy trong CI.
+ * Export stress test for heavy visuals (diagram, chart, graph, icon). NOT run in CI.
  *
  *   npx tsx packages/clip-export/scripts/stress.mts <out-dir> [visuals|mixed|plain ...]
- *     [--base <job.json có master + transcript>] [--res 720|1080] [--fps 24|25|30|50|60]
+ *     [--base <job.json with a master + transcript>] [--res 720|1080] [--fps 24|25|30|50|60]
  *
- * Mỗi ca: dựng document bằng op thật của editor-core, ghi job, chạy CLI export
- * dưới `/usr/bin/time -v`, rồi báo thời gian, RAM đỉnh, số khung đen và rút
- * vài khung PNG để NHÌN. `time -v` chỉ báo RSS của tiến trình con LỚN NHẤT;
- * export mở nhiều tiến trình (đoạn song song + ffmpeg) nên script còn lấy mẫu
- * TỔNG PSS cả cây tiến trình mỗi 100 ms — con số so với trần 2 GB. Ca `mixed` cần `--base` (job có video master).
+ * Each case builds a document with the real editor-core ops, writes a job, runs the export CLI under
+ * `/usr/bin/time -v`, then reports time, peak RAM and black frames, and pulls a few PNG frames to LOOK at.
+ * `time -v` only reports the RSS of the LARGEST child; the export runs many processes (parallel segments +
+ * ffmpeg), so the script also samples the TOTAL PSS of the process tree every 100 ms: the number to hold against
+ * the 2 GB budget. The `mixed` case needs `--base` (a job with a master video).
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -38,7 +38,7 @@ const fps = flag('--fps');
 const KILL_MB = Number(flag('--kill-mb') ?? 3000);
 const [outDir, ...wanted] = args;
 if (!outDir) {
-	process.stderr.write('dùng: stress.mts <out-dir> [visuals|mixed|plain ...] [--base job.json] [--res 720|1080]\n');
+	process.stderr.write('usage: stress.mts <out-dir> [visuals|mixed|plain ...] [--base job.json] [--res 720|1080]\n');
 	process.exit(2);
 }
 mkdirSync(outDir, { recursive: true });

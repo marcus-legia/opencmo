@@ -141,15 +141,14 @@ cpu_image = (
 )
 cpu_image = (
     _with_engine(cpu_image, face=True)
-    # Cho `submit` — web app là TypeScript nên không gọi được `run_job.spawn()`
-    # trực tiếp; nó cần một endpoint HTTP.
+    # For `submit`: the web app is TypeScript and cannot call `run_job.spawn()` directly; it needs an HTTP
+    # endpoint.
     .pip_install("fastapi[standard]")
     .run_commands("mkdir -p /root/models", f"curl -sSLf -o {FACE_MODEL_REMOTE} {FACE_MODEL_URL}")
     .env({"OPENCMO_FACE_MODEL": FACE_MODEL_REMOTE})
 )
-# Export trên server (task `render_document`). Chỉ ba package exporter cần cùng
-# font của clip. Không kéo cả monorepo: Next, Playwright là vài trăm MB
-# image không ai dùng tới ở đây.
+# Server export (task `render_document`). Only the three exporter packages and the clip fonts. Not the whole
+# monorepo: Next and Playwright are hundreds of MB of image nothing here uses.
 cpu_image = (
     _with_media(_with_node(cpu_image))
     .add_local_file(_ENGINE / "clip_export_package.json", remote_path=f"{WEB_ROOT}/package.json", copy=True)

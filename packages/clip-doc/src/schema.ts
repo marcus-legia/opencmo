@@ -573,14 +573,14 @@ export const BrandMarkSchema = z
     version: z.literal(1),
     colors: z
       .object({
-        /** Màu chính: nhãn nổi bật. */
+        /** The main colour: highlighted labels. */
         primary: hex,
         secondary: hex,
-        /** Màu nhấn: mũi tên, icon, cột nổi bật, từ đang đọc của phụ đề. */
+        /** The accent: arrows, icons, the highlighted bar, the caption word being spoken. */
         accent: hex,
-        /** Chữ trên visual. */
+        /** Text on visuals. */
         text: hex,
-        /** Nền ô/panel của visual. */
+        /** The fill of a visual's cards and panels. */
         background: hex,
       })
       .strict(),

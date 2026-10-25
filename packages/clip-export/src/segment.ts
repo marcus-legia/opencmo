@@ -101,16 +101,16 @@ export async function loadHost(job: Job, probes: Record<string, Probe>) {
 }
 
 /**
- * `canvas.data()` cấp một Buffer native 8 MB mỗi khung 1080×1920 mà V8 không
- * tính vào heap: GC chỉ chạy theo rác JS, nên với cảnh ít JS (video)
- * hàng trăm buffer đã ghi xong vẫn nằm chờ — đo 29/09: ~480 MB mỗi đoạn. Gọi GC
- * mỗi `GC_EVERY` khung giữ phần tồn đọng dưới ~15 × 8 MB; mất ~1 ms mỗi lần.
+ * `canvas.data()` allocates a native 8 MB Buffer per 1080×1920 frame that V8 does not count in its heap: GC only
+ * runs on JS garbage, so in scenes with little JS (video) hundreds of already-written buffers wait around
+ * (measured 09-29: ~480 MB per segment). Collecting every `GC_EVERY` frames keeps the backlog under ~15 × 8 MB, at
+ * ~1 ms each time.
  */
 const GC_EVERY = 15;
 setFlagsFromString('--expose-gc');
 const collect = runInNewContext('gc') as () => void;
 
-/** `onFrames(n)`: báo thêm n khung đã vẽ + mã hoá — thanh tiến độ Export (02/10). */
+/** `onFrames(n)`: n more frames drawn and encoded, for the Export progress bar (10-02). */
 export async function renderSegment(input: SegmentInput, onFrames: (count: number) => void = () => {}): Promise<void> {
   const { job, probes } = input;
   registerFonts(job.fonts);

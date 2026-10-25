@@ -488,7 +488,7 @@ export const TOOL_SPECS: ToolSpec[] = [
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
 
-// `generate_media`/`add_voiceover` ghi lên clip (khai báo `generate.*`) sau thẻ duyệt.
+// `generate_media`/`add_voiceover` write to the clip (a `generate.*` declaration) after the approval card.
 /**
  * Tools that only read: the model often asks for several in one step (state, transcript, library),
  * and they can run at the same time. Anything that writes, pauses or spends stays in order.

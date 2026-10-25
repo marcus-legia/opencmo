@@ -4,27 +4,25 @@ import { CATEGORY_REDIRECTS } from "./content/blog/categories";
 import blogRedirects from "./content/blog/redirects.json";
 
 /**
- * Header bảo mật.
+ * Security headers.
  *
- * CSP viết theo đúng những thứ app này thật sự nạp; không có `unsafe-eval`,
- * không có wildcard host. Hai chỗ bắt buộc phải nới, kèm lý do:
+ * The CSP lists exactly what this app loads: no `unsafe-eval`, no wildcard host. Two places must be loosened,
+ * and why:
  *
- *   - `script-src 'unsafe-inline'`: Next nhúng dữ liệu hydration bằng thẻ
- *     `<script>` inline. Nonce cho từng request thì phải bỏ hẳn render tĩnh.
- *   - `style-src 'unsafe-inline'`: canvas editor đặt vị trí chữ bằng `style`
- *     trên từng phần tử — đó là cách người dùng kéo chữ trên khung hình.
+ *   - `script-src 'unsafe-inline'`: Next embeds hydration data in inline `<script>` tags. A per-request nonce
+ *     would mean giving up static rendering entirely.
+ *   - `style-src 'unsafe-inline'`: the editor canvas positions text with a `style` on each element; that is how
+ *     users drag text on the frame.
  *
- * `'unsafe-eval'` CHỈ thêm khi `next dev`: Fast Refresh của React chạy module
- * bằng `eval`, không có nó thì mỗi lần sửa file là một lỗi CSP và hot reload
- * chết. Bản production dựng sẵn không cần eval, nên không bao giờ nới ở đó —
- * điều kiện dựa vào `NODE_ENV`, thứ mà `next build` luôn đặt là `production`.
+ * `'unsafe-eval'` is added ONLY under `next dev`: React Fast Refresh runs modules through `eval`, and without it
+ * every edit is a CSP error and hot reload dies. A production build needs no eval, so it is never loosened there;
+ * the condition reads `NODE_ENV`, which `next build` always sets to `production`.
  *
- * `connect-src`/`media-src` phải có host Supabase: trình duyệt nói THẲNG với
- * Storage và Realtime (ràng buộc web số 3 và số 5 — file không đi qua Next).
+ * `connect-src`/`media-src` need the Supabase host: the browser talks DIRECTLY to Storage and Realtime (web rules
+ * 3 and 5: files never pass through Next).
  *
- * Biến môi trường đọc BÊN TRONG `headers()`, không ở thân module: `next start`
- * nạp `.env.local` sau khi require file config, nên đọc ở ngoài sẽ ra chuỗi
- * rỗng và CSP tự chặn chính Supabase của mình.
+ * Environment variables are read INSIDE `headers()`, not in the module body: `next start` loads `.env.local` after
+ * requiring the config file, so reading them outside gives empty strings and the CSP blocks our own Supabase.
  */
 /**
  * Host của trình phát YouTube.

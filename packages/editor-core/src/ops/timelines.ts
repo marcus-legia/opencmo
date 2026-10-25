@@ -1,10 +1,10 @@
 /**
- * Nhiều timeline (E2-a, học Palmier `create_timeline` / `set_active_timeline`):
- * mỗi timeline là một scene cấp stage của cùng document. Nhân bản là cách làm
- * phiên bản — "bản cắt gọn hơn", "bản 9:16" — mà bản gốc giữ nguyên.
+ * Several timelines (E2-a, learned from Palmier's `create_timeline` / `set_active_timeline`): each timeline is a
+ * stage-level scene of the same document. Duplicating is how versions are made ("a tighter cut", "a 9:16 cut")
+ * while the original stays as it is.
  *
- * Các op ở đây chạy trên CẢ document (applyOps không thu về timeline đang mở như
- * op thường), vì chính chúng chọn timeline.
+ * The ops here run on the WHOLE document (applyOps does not narrow them to the open timeline as it does ordinary
+ * ops), since choosing the timeline is what they do.
  */
 
 import { z } from 'zod';
@@ -18,7 +18,7 @@ import { copyOf } from './timeline';
 
 const timelineId = z.string().min(1).max(64);
 const timelineName = z.string().trim().min(1).max(60);
-/** Khoảng trống giữa hai timeline đặt cạnh nhau trên canvas. */
+/** The gap between two timelines side by side on the canvas. */
 const GAP = 200;
 
 
@@ -51,7 +51,7 @@ export const createTimeline = {
       node = copyOf(source as unknown as Entity);
       node.name = input.name ?? `${timelineLabel(source, index)} copy`;
     } else {
-      // Timeline trống thừa hưởng cỡ khung của timeline đang mở, như Palmier.
+      // A blank timeline takes the open timeline's frame size, as in Palmier.
       node = { kind: 'scene', name: input.name ?? `Timeline ${scenes.length + 1}`, width: source.width, height: source.height, fill: source.fill ?? '#000000', workarea: [0, 10] };
     }
     node.x = right + GAP;
@@ -139,7 +139,7 @@ export const deleteTimeline = {
     const next = clone(document);
     const index = next.stage.children.findIndex((node) => node.id === target.id);
     const [removed] = next.stage.children.splice(index, 1);
-    // Xoá timeline đang mở: mở timeline đứng trước nó (hoặc timeline đầu).
+    // Deleting the open timeline opens the one before it (or the first).
     if ((removed as SceneNode).active || !timelinesOf(next).some((scene) => scene.active)) {
       const remaining = timelinesOf(next);
       activate(next, remaining[Math.max(0, scenes.indexOf(target) - 1)] as unknown as Entity);
@@ -148,5 +148,5 @@ export const deleteTimeline = {
   },
 };
 
-/** Op chọn/tạo/xoá timeline: chạy trên cả document, không thu về timeline đang mở. */
+/** Ops that pick, create or delete timelines: they run on the whole document, not the open timeline. */
 export const STAGE_OPS = new Set(['insert_scene', 'activate_scene', 'create_timeline', 'set_active_timeline', 'rename_timeline', 'delete_timeline']);
