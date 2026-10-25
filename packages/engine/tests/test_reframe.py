@@ -276,6 +276,37 @@ def test_a_pass_over_its_budget_tracks_the_start(tmp_path: Path, monkeypatch):
     assert focus["frame"][-1][0] <= covered
 
 
+def test_a_decode_that_runs_over_still_leaves_time_to_detect(tmp_path: Path, monkeypatch):
+    # Regression: decode and detection shared one deadline, so a decode stopped by its timeout handed detection a
+    # deadline already past and the long upload got no track at all. The clock here only moves when decoding times
+    # out, and the detector stops at the deadline as the real loop does.
+    clock = [0.0]
+    monkeypatch.setattr(reframe, "monotonic", lambda: clock[0])
+
+    def slow(args, **kwargs):
+        for index in range(1, 6):
+            for label in ("t0", "t1", "t2"):
+                (tmp_path / f"{label}_{index:05d}.jpg").write_bytes(b"jpg")
+        clock[0] += kwargs["timeout"] + 0.5  # a killed decode stops just after its timeout
+        raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+
+    def detect(sequences, tiles, deadline=None):
+        faces, done = [], 0
+        for index in range(len(sequences[0])):
+            if deadline is not None and reframe.monotonic() > deadline:
+                break
+            faces.append(Face(frame=index, x=0.7, w=0.1, area=0.01))
+            done = index + 1
+        return faces, done
+
+    monkeypatch.setattr(reframe.subprocess, "run", slow)
+    monkeypatch.setattr(reframe.tempfile, "TemporaryDirectory", lambda prefix: _Here(tmp_path))
+    monkeypatch.setattr(reframe, "_detect_faces", detect)
+    track, covered = face_track(tmp_path / "long.mp4", 900.0, width=1920, height=1080, budget=100)
+    assert clock[0] == pytest.approx(100 * reframe.DECODE_SHARE + 0.5)
+    assert covered == 2.0 and len(track) == 4
+
+
 class _Here:
     def __init__(self, path: Path):
         self.path = path

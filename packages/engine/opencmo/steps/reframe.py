@@ -65,6 +65,9 @@ THREADS = 4
 #: 15-minute 4K phone video can take 7-15 minutes. Past the budget the track stops where it got to, and the editor
 #: holds the last centre for the rest: the upload still has time to be transcribed and published.
 BUDGET_SECONDS = 420
+#: Decoding may use this share of the budget; the rest is kept for detection, which only starts once decoding has
+#: stopped: one deadline for both left a decode that ran over with no time to read a single frame (no track at all).
+DECODE_SHARE = 0.7
 
 
 def _cache_dir() -> Path:
@@ -289,7 +292,7 @@ def face_track(video: Path, duration: float, *, width: int, height: int, budget:
     tiles = tiles_for(width, height)
     deadline = monotonic() + budget
     with tempfile.TemporaryDirectory(prefix="opencmo-frames-") as tmp:
-        sequences, complete = _extract_tiles(video, Path(tmp), fps, tiles, timeout=budget)
+        sequences, complete = _extract_tiles(video, Path(tmp), fps, tiles, timeout=budget * DECODE_SHARE)
         if not sequences or not sequences[0]:
             return [], 0.0
         faces, frames = _detect_faces(sequences, tiles, deadline)
