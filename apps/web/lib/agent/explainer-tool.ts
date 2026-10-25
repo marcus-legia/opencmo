@@ -202,9 +202,9 @@ export const addExplainerInput = z
     voice: z.string().min(1).max(100).optional().describe("A premade narration voice from the list in this tool's description. Leave it out for a silent clip."),
     start: z.number().finite().min(0).optional().describe("Clip seconds where it starts. Default: the playhead, or 0 on a blank clip."),
     place: z
-      .enum(["full", "top", "bottom"])
+      .enum(["full", "top", "bottom", "left", "right", "behind"])
       .optional()
-      .describe("On a clip with a speaker: top = the animation in the upper band and the speaker below it for the animation's time (bottom = the other way round); the split is sized to the animation's shape, so on a 9:16 clip use format 1:1 (or 16:9). Default: full frame, or the visual band of a split already there."),
+      .describe("On a clip with a speaker, for the animation's time: top = the animation in the upper band and the speaker below (bottom = the other way round; the split is sized to the animation's shape, so on 9:16 use format 1:1 or 16:9); left/right = the animation in that column and the speaker in the other (16:9; format 1:1 fills the column best); behind = the animation fills the frame and the speaker sits in a corner over it, a YouTube facecam (16:9; keep the bottom-right corner of the scene empty). Default: full frame, or the visual area of a layout already there."),
   })
   .superRefine(silentRules);
 

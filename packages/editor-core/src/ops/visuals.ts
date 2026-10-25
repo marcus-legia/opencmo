@@ -14,9 +14,9 @@ import { createRenderer, FPS, type LayoutBox } from '@opencmo/clip-render';
 import { byId, clone, sceneOf, type Entity } from '../doc';
 import { readBrand, rebrand, themeFromBrand } from '../brand';
 import { buildChart, chartInput, type ChartInput } from '../visuals/chart';
-import { panelRegionAt } from '../layout';
+import { panelBackgroundAt, panelRegionAt } from '../layout';
 import { clipScript, clipWords, findQuote, quoteTiming } from '../script';
-import { defaultRegion, r2, toPixels, visualGroup, type Box, type Node } from '../visuals/common';
+import { defaultRegion, r2, toPixels, visualGroup, type Box, type Node, type Theme } from '../visuals/common';
 import { buildDiagram, diagramInput, type DiagramInput } from '../visuals/diagram';
 import { buildGraph, ExprError, graphInput, type GraphInput } from '../visuals/graph';
 import { buildIcon, IconError, iconInput, type IconInput } from '../visuals/icon';
@@ -228,6 +228,22 @@ const BUILDERS: Record<string, Builder> = {
 	},
 };
 
+const luminance = (hex: string): number => {
+	const n = parseInt(hex.slice(1), 16);
+	const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255);
+	return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+
+/**
+ * The visual's ink against the panel it lands on: a light panel (a light room, a light brand colour) with the light
+ * default text left the numbers and labels unreadable (seen in a 9:16 render with a #E8E2D6 panel), so text and
+ * lines turn dark there. A brand whose text is already dark keeps it.
+ */
+function onGround(theme: Theme, ground: string | null): Theme {
+	if (!ground || luminance(ground) < 0.6 || luminance(theme.text) < 0.5) return theme;
+	return { ...theme, text: '#15181E', line: '#15181E' };
+}
+
 /** Dựng group của một visual từ op + input đã kiểm. */
 async function visualNode(op: string, input: Record<string, unknown>, when: Timing, frame: Frame, document: ClipDocument, ctx: Pick<OpContext, 'media'> | undefined): Promise<Node> {
 	const builder = BUILDERS[op]!;
@@ -239,7 +255,7 @@ async function visualNode(op: string, input: Record<string, unknown>, when: Timi
 	}
 	// Brand Kit đã áp vào clip: màu/font mặc định của builder đổi sang của kit.
 	const area = builder.area ? builder.area(input as never, frame, document, when, ctx) : toPixels(region, frame);
-	const children = rebrand(await built(() => builder.build(input as never, frame, area, when.end - when.start)), themeFromBrand(readBrand(document)));
+	const children = rebrand(await built(() => builder.build(input as never, frame, area, when.end - when.start)), onGround(themeFromBrand(readBrand(document)), panel ? panelBackgroundAt(document, when.start) : null));
 	return visualGroup(builder.title(input as never), children, when, frame, { op, input }, { ownExit: builder.ownExit });
 }
 

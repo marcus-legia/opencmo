@@ -74,10 +74,11 @@ export const explainerInput = z
 		start: z.number().finite().min(0).optional(),
 		/**
 		 * On a clip with a speaker: `top` puts the animation in the upper band and the speaker below it (a split for
-		 * the animation's time), `bottom` the other way round. Default: full frame, or the panel of a split already
-		 * there.
+		 * the animation's time), `bottom` the other way round; `left`/`right` put it in one column and the speaker in
+		 * the other (16:9); `behind` fills the frame with it and puts the speaker in a corner over it (a facecam).
+		 * Default: full frame, or the panel of a split already there.
 		 */
-		place: z.enum(['full', 'top', 'bottom']).optional(),
+		place: z.enum(['full', 'top', 'bottom', 'left', 'right', 'behind']).optional(),
 		spec: specInput,
 	})
 	.superRefine((value, ctx) => {
@@ -140,6 +141,13 @@ export const addExplainer = {
 			);
 			next = split;
 			area = { x: 0, y: input.place === 'top' ? 0 : root.height - band, width: root.width, height: band };
+		} else if (!blank && (input.place === 'left' || input.place === 'right')) {
+			// The speaker takes the other column; the animation fits its column at its own shape.
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'side-by-side', start, end, anchor: input.place === 'left' ? 'right' : 'left' } as never, ctx);
+			const column = root.width / 2;
+			area = { x: input.place === 'left' ? 0 : column, y: 0, width: column, height: root.height };
+		} else if (!blank && input.place === 'behind') {
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'pip', start, end } as never, ctx);
 		} else if (!blank && input.place !== 'full') {
 			// A split already on screen: the animation fills its visual band, not the whole frame over the speaker.
 			const speaker = speakerBandAt(next, start);
@@ -163,9 +171,11 @@ export const addExplainer = {
 			scene: input.spec.scene as Record<string, unknown>,
 			...(input.spec.seed === undefined ? {} : { seed: input.spec.seed }),
 		};
-		// Under captions and text like every generated media: they stay readable on top.
+		// Under captions and text like every generated media: they stay readable on top. Behind a facecam it goes
+		// under the speaker's cell instead, or it would cover the speaker.
 		const children = [...(scene.children ?? [])];
-		const at = children.findIndex((child) => child.kind === 'captions' || child.kind === 'text');
+		const speakerAt = children.findIndex((child) => (child as { marks?: { layout?: string } }).marks?.layout === 'speaker');
+		const at = input.place === 'behind' && speakerAt >= 0 ? speakerAt : children.findIndex((child) => child.kind === 'captions' || child.kind === 'text');
 		children.splice(at < 0 ? children.length : at, 0, {
 			kind: 'rect',
 			name: silent(input) ? motionClipLayerName(input.title) : explainerLayerName(input.title),

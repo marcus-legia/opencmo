@@ -1,6 +1,6 @@
 # Talking-head layouts that work in 16:9 and 9:16 (the base for every talking-head template)
 
-Status: **plan, building** (2026-10-25). Owner ask: many video templates like the reference reels (talking head with a
+Status: **built** (2026-10-25), steps 1-5; speaker framing inside a band is the next item (seats plan). Owner ask: many video templates like the reference reels (talking head with a
 visual above or beside it, 9:16) and YouTube-style videos (16:9, the speaker in a small corner over the visual) must
 come out of the editor, so the layout layer has to be right first. Extends
 [`2026-10-24-talking-head-seats-plan.md`](2026-10-24-talking-head-seats-plan.md) (O8), which plans the seat shapes.
@@ -40,6 +40,13 @@ with a chart over a spoken range and the clip's captions, frames looked at:
 4. **`add_explainer` places**: `left`/`right` (side-by-side, the animation in the visual column) and `behind` (pip:
    the animation full frame, the speaker in a corner cell), next to `top`/`bottom`.
 5. **Look again**: the same ten renders, plus the new places, frames in `2026-10-25-talking-head-layouts-frames/`.
+
+**Built (2026-10-25).** All five steps, plus two found while looking at the renders: drawn visuals on a light panel
+take dark text (`onGround` in `ops/visuals.ts`), and the captions take a dark ink over a light panel (a `color` track,
+AI Producer's caption `ink`). The split's visual area stops short of the seam so a chart's axis labels and the captions
+never meet. Frames: `2026-10-25-talking-head-layouts-frames/landscape.jpg` (16:9 pip, side-by-side, explainer right and
+behind) and `portrait.jpg` (9:16 splits, pip, the light "reels" split). Still wrong: on 9:16 `split-top` the speaker's
+head is cropped in its band (the band keeps the 9:16 zoom) - next, from the measured head (seats plan step 2).
 
 Later (the seats plan): speaker framing inside a band from the measured head (today the band keeps the 9:16 zoom),
 circle/aperture shapes, morphs between layouts.

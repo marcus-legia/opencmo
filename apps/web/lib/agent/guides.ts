@@ -379,7 +379,10 @@ When the user asks for an animation over part of their video ("explain this in t
 - silent: true. The speaker's own voice is the narration: a second voice on top would talk over them. Each beat's seconds follow the sentence it illustrates (clip seconds from <clip_context>), and the beats' say lines quote what the speaker says there.
 - start = the clip second where that sentence begins; the whole clip lasts as long as the explanation (3-30 s).
 - No captions inside the animation: never set the speaker's words as text in the scene. The clip's own captions layer shows them, and moves to the seam between the animation and the speaker for the split. Text in the animation is labels of the picture only (a number, a name, a short claim).
-- place "top" (the animation above, the speaker below; "bottom" for the other way round). The split is sized to the animation's shape: on a 9:16 clip use format 1:1 (the top 1080x1080, the speaker in the 1080x840 band under it) or 16:9 (a shorter band). place "full" covers the speaker for that time instead.
+- Where it goes, by the clip's frame:
+  - 9:16: place "top" (the animation above, the speaker below; "bottom" for the reverse). The split is sized to the animation's shape: format 1:1 gives the top 1080x1080 and the speaker the 840 px band under it; 16:9 gives a shorter band.
+  - 16:9: place "behind" (the animation full frame, the speaker as a corner facecam over it: tutorials, YouTube; keep the bottom-right corner of the scene empty) or "left"/"right" (the animation in one column, the speaker in the other; format 1:1).
+  - place "full" covers the speaker for that time instead.
 - Compose for the band: one subject centred, nothing important in the outer 6%, and the bottom 17% kept clear as the preview asks (inside the band it is breathing room above the seam to the speaker).
 - After it renders, capture a frame in the middle: the animation in its band, the face whole in the other, captions not crossing the seam.
 

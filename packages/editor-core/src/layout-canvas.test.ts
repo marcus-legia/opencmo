@@ -86,6 +86,34 @@ describe('layouts on a landscape frame', () => {
 		expect(solid.paints).toMatchObject([{ type: 'solid', color: '#FFFFFF' }]);
 	});
 
+	it('a visual on a light panel draws its text dark', async () => {
+		const { document } = await applyOps(
+			landscape,
+			[
+				{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 18, background: '#E8E2D6' },
+				{ op: 'add_chart', type: 'bar', title: 'Signups', data: [{ label: 'Jan', value: 1 }, { label: 'Feb', value: 2 }], start: 3, end: 10 },
+			],
+			ctx,
+		);
+		const json = JSON.stringify(document);
+		expect(json).toContain('#15181E');
+		const { document: dark } = await applyOps(landscape, [{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 18 }, { op: 'add_chart', type: 'bar', title: 'Signups', data: [{ label: 'Jan', value: 1 }], start: 3, end: 10 }], ctx);
+		expect(JSON.stringify(dark)).not.toContain('#15181E');
+	});
+
+	it('over a light panel the captions turn dark for the range and back after', async () => {
+		const portrait = validate({
+			version: 1,
+			stage: { children: [{ kind: 'scene', width: 1080, height: 1920, workarea: [0, 30], active: true, children: [{ kind: 'video', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 }, { kind: 'captions', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 }] }] },
+		}) as ClipDocument;
+		const { document } = await applyOps(portrait, [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 10, background: '#E8E2D6' }], ctx);
+		const captions = (document.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!;
+		const ink = captions.tracks!.find((track) => track.property === 'color')!.keyframes.map(({ time, value }) => [time, value]);
+		expect(ink).toEqual([[2, '#FFFFFF'], [2.3, '#15181E'], [9.7, '#15181E'], [10, '#FFFFFF']]);
+		const { document: dark } = await applyOps(portrait, [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 10 }], ctx);
+		expect((dark.stage.children[0] as unknown as Entity).children!.find((child) => child.kind === 'captions')!.tracks!.some((track) => track.property === 'color')).toBe(false);
+	});
+
 	it('a portrait frame keeps its bigger cell and centred crops (the video pans to the face itself)', async () => {
 		const portrait = validate({
 			version: 1,

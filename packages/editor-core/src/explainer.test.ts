@@ -437,3 +437,53 @@ describe('add_explainer placed in half the frame over the speaker', () => {
 		expect(sceneNode(document).children!.find((child) => child.name === 'Motion clip: How the funnel leaks')).toMatchObject({ y: 0, height: 960, width: 960, x: 60 });
 	});
 });
+
+describe('add_explainer places on a 16:9 talking video', () => {
+	const talk = validate({
+		version: 1,
+		stage: {
+			children: [
+				{
+					kind: 'scene',
+					id: 'sc',
+					width: 1920,
+					height: 1080,
+					workarea: [0, 30],
+					active: true,
+					children: [
+						{ kind: 'video', id: 'talk', src: 'assets/master.mp4', x: 0, width: 1920, height: 1080, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 },
+						{ kind: 'captions', id: 'cap', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 },
+					],
+				},
+			],
+		},
+	}) as ClipDocument;
+	const placed = (format: '1:1' | '16:9', place: string) => ({
+		op: 'add_explainer',
+		title: 'Setup steps',
+		format,
+		duration: 6,
+		start: 4,
+		place,
+		spec: { prompt: 'Motion clip: Setup steps', aspectRatio: format, duration: 6, scene: { template: 'clip', code_ref: CODE_REF, title: 'Setup steps', beats: [{ say: 'Install it.', seconds: 3 }, { say: 'Run it.', seconds: 3 }] } },
+	});
+	const layerOf = (document: ClipDocument) => sceneNode(document).children!.find((child) => child.name === 'Motion clip: Setup steps')!;
+	const roles = (document: ClipDocument) => sceneNode(document).children!.map((child) => (child.marks as { layout?: string } | undefined)?.layout ?? child.name ?? child.kind);
+
+	it('right: the speaker in the left column, the animation fitted to the right one', async () => {
+		const { document } = await applyOps(talk, [placed('1:1', 'right')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { mode: string; anchor: string }[] } }).layout.ranges;
+		expect(ranges[0]).toMatchObject({ mode: 'side-by-side', anchor: 'left' });
+		expect(layerOf(document)).toMatchObject({ x: 960, y: 60, width: 960, height: 960 });
+	});
+
+	it('behind: the animation fills the frame under a corner facecam', async () => {
+		const { document } = await applyOps(talk, [placed('16:9', 'behind')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { mode: string; ratio: number }[] } }).layout.ranges;
+		expect(ranges[0]).toMatchObject({ mode: 'pip', ratio: 0.24 });
+		expect(layerOf(document)).toMatchObject({ x: 0, y: 0, width: 1920, height: 1080 });
+		const order = roles(document);
+		expect(order.indexOf('Motion clip: Setup steps')).toBeLessThan(order.indexOf('speaker'));
+		expect(order.indexOf('Motion clip: Setup steps')).toBeGreaterThan(order.indexOf('backdrop'));
+	});
+});

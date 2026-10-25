@@ -33,7 +33,7 @@
 
 import { FRAME_RATE, LAYOUT_ANCHORS, LAYOUT_MODES, type ClipDocument, type ClipNode, type LayoutRange as StoredRange } from '@opencmo/clip-doc';
 
-import { placeCaption } from '@opencmo/clip-render';
+import { captionPresetText, placeCaption } from '@opencmo/clip-render';
 
 import { masterCaptions } from './captions';
 import { clone, drawId, isMaster, nodes, sceneOf, type Entity } from './doc';
@@ -616,7 +616,14 @@ export function panelRegionAt(document: ClipDocument, time: number): { x: number
   }
   const panel = 1 - range.ratio;
   const top = range.mode === 'split-bottom' ? 0 : range.ratio;
-  return { x: 0.06, y: round(top + panel * 0.1), width: 0.88, height: round(panel * 0.8) };
+  // Visual on top: it stops short of the seam, where the captions sit (`captionSpot`).
+  return { x: 0.06, y: round(top + panel * 0.1), width: 0.88, height: round(panel * (range.mode === 'split-bottom' ? 0.72 : 0.8)) };
+}
+
+/** The panel colour asked for at `time` (`set_layout { background }`), or null for the default dark panel. */
+export function panelBackgroundAt(document: ClipDocument, time: number): string | null {
+  const range = readLayout(document).find((item) => time >= item.start - 1e-6 && time < item.end);
+  return range?.background ?? null;
 }
 
 /** Dải người nói (chuẩn hoá) ở giây `time`; null khi không chia hoặc cảnh visual riêng. */
@@ -649,6 +656,8 @@ function panelPaint(ranges: LayoutRange[]): Entity {
 const CAPTION_TRACK = 'layout-caption-';
 /** Caption centre above a split's seam, share of the frame height: inside the band the visual keeps clear. */
 const SEAM_LIFT = 0.05;
+/** Caption ink over a light panel: a near-black with a large lightness gap, never a mid grey. */
+const DARK_INK = '#15181E';
 
 /**
  * Where the captions' centre goes while a layout range shows (px), or null to leave them. Learned from AI
@@ -658,6 +667,12 @@ const SEAM_LIFT = 0.05;
  * - pip: under the visual on a landscape frame, centred on its side; above the cell's row on a vertical frame;
  * - side-by-side: the foot of the speaker's column.
  */
+const lightGround = (range: LayoutRange): boolean => {
+  if (!range.background) return false;
+  const n = parseInt(range.background.slice(1), 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 >= 0.6;
+};
+
 function captionSpot(range: LayoutRange, W: number, H: number): { x?: number; y: number } | null {
   if (range.mode === 'split-bottom') return { y: (1 - range.ratio) * H - SEAM_LIFT * H };
   if (range.mode === 'split-top') return { y: range.ratio * H - SEAM_LIFT * H };
@@ -726,6 +741,24 @@ function seatCaptions(document: ClipDocument): ClipDocument {
   };
   build('y');
   build('x');
+  // Caption ink (AI Producer's `ink` per caption window): over a light panel the preset's light ink fades away, so
+  // the captions turn dark for that range. Stark draws with a difference blend and has no ink to change.
+  const preset = captionPresetText((captions.preset as never) ?? 'classic');
+  const ink = typeof captions.color === 'string' ? captions.color : preset.color;
+  const light = spots.filter(({ range }) => lightGround(range));
+  if (ink && !own && light.length && !tracks.some((track) => track.property === 'color')) {
+    const keys: { time: number; value: string }[] = [];
+    for (const { range } of light) {
+      const T = Math.min(TRANSITION, (range.end - range.start) / 4);
+      if (range.start >= FRAME) keys.push({ time: local(range.start), value: ink });
+      keys.push({ time: local(range.start >= FRAME ? range.start + T : 0), value: DARK_INK });
+      if (range.end <= duration - FRAME) keys.push({ time: local(range.end - T), value: DARK_INK }, { time: local(range.end), value: ink });
+      else keys.push({ time: local(range.end), value: DARK_INK });
+    }
+    const unique = keys.filter((key, index) => keys.findIndex((other) => other.time === key.time) === index).sort((a, b) => a.time - b.time);
+    const id = `${CAPTION_TRACK}color-${captions.id as string}`;
+    tracks.push({ id, property: 'color', keyframes: unique.map((key, index) => ({ id: `${id}-${index}`, ...key })) });
+  }
   if (tracks.length) captions.tracks = tracks;
   else delete captions.tracks;
   return document;
