@@ -72,6 +72,9 @@ Hai cờ trong manifest:
   motion blur, and Chromium and Node round those translucent passes differently: a uniform mean of
   1.0–1.2 over the whole frame with no edge out of place (diff looked at, 2026-10-16). Its own
   `mean: 1.3`; the tile threshold stays 4, so a moved or missing shot still fails.
+- `cap-flare`: the payoff word lands with a scale-in in Fraunces italic at 1.7x; mid-landing (1.4 s) Skia and
+  Chromium 141 rasterize it tile 7.3 apart (CI, 2026-10-25), with every other frame and text sample under 4. Its own
+  `tile: 14`, the Node text threshold; a missing word or wrong font lands at tile 50+.
 - Drawing references on a dev machine: hide system copies of the bundled fonts first (a system Inter,
   e.g. `/usr/share/fonts/opentype/inter`, wins over `inter.woff2` in `@napi-rs/canvas` and widens text by
   tile ~100). The bundled brand fonts are Latin subsets: Vietnamese letters (ư, ơ, ễ…) come from a

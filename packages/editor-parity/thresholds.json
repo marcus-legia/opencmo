@@ -35,6 +35,10 @@
     "transition-whip": {
       "mean": 1.3,
       "tile": 4
+    },
+    "cap-flare": {
+      "mean": 1,
+      "tile": 14
     }
   },
   "targets": {
