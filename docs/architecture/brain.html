@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CMO Brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+
+/* Layout: two diagrams (workflow, then system design with providers), a department map table, provider and skill audits. */
+:root{
+  --bg:#f5f6f8; --paper:#ffffff; --fg:#1b2333; --muted:#5b6578; --line:#c9cfdb;
+  --lapis:#2747a8; --lapis-soft:#e6ebf8; --gate:#a86a12; --gate-soft:#fbf1e1;
+  --warn:#b4322a; --warn-soft:#fbe9e7; --ok:#21734a; --ok-soft:#e3f3ea;
+  --ext:#6b4fa3; --ext-soft:#efeaf8;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1060px;margin:0 auto;padding-block:32px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:44px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1,h2{font-family:var(--display);font-weight:600}
+h1{font-size:2rem;line-height:1.15}
+h2{font-size:1.4rem}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+code{font-family:var(--mono);font-size:.84em;background:var(--lapis-soft);padding:1px 5px;border-radius:4px}
+a{color:var(--lapis)}
+.lede{color:var(--muted);max-width:64ch;margin-top:8px}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sec{display:grid;gap:14px}
+.sec-head{display:grid;gap:4px}
+
+.diagram{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:820px;height:auto}
+.hint{display:none;font-size:.8rem;color:var(--muted)}
+@media (max-width:860px){.hint{display:block}}
+
+.n-dept{fill:var(--paper);stroke:var(--lapis);stroke-width:1.5}
+.n-bar{fill:var(--lapis)}
+.n-in{fill:var(--lapis-soft);stroke:none}
+.n-user{fill:var(--gate-soft);stroke:var(--gate);stroke-width:2}
+.n-ext{fill:var(--ext-soft);stroke:var(--ext);stroke-width:1.2}
+.n-chip{fill:var(--lapis-soft)}
+.n-chip-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1}
+.n-chip-user{fill:var(--gate)}
+.t{fill:var(--fg);font-family:var(--body);font-size:14px}
+.t-title{fill:var(--fg);font-family:var(--display);font-size:21px;font-weight:600}
+.t-title-s{fill:var(--fg);font-family:var(--display);font-size:17px;font-weight:600}
+.t-eye{fill:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-user{fill:var(--gate);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-ext{fill:var(--ext);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-b{fill:var(--fg);font-family:var(--body);font-size:14px;font-weight:600}
+.t-s{fill:var(--muted);font-family:var(--body);font-size:12px}
+.t-m{fill:var(--fg);font-family:var(--body);font-size:13px}
+.t-warn{fill:var(--warn);font-family:var(--body);font-size:12px}
+.t-new{fill:var(--ok);font-family:var(--mono);font-size:11px}
+.t-chip{fill:var(--lapis);font-family:var(--mono);font-size:11px}
+.t-chip-user{fill:var(--paper);font-family:var(--mono);font-size:11px}
+.t-edge{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.e{fill:none;stroke:var(--muted);stroke-width:1.6}
+.e-dash{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4}
+.e-ok{fill:none;stroke:var(--ok);stroke-width:2}
+.m{fill:var(--muted)}
+.m-ok{fill:var(--ok)}
+.div{stroke:var(--line);stroke-width:1}
+
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.82rem;color:var(--muted)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+.tbl{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;margin:1px 2px 1px 0;white-space:nowrap}
+.p-new{background:var(--ok-soft);color:var(--ok)}
+.p-plan{background:var(--gate-soft);color:var(--gate)}
+.p-no{background:var(--warn-soft);color:var(--warn)}
+.p-ok{background:var(--lapis-soft);color:var(--lapis)}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:10px;align-content:start;min-width:0}
+.card .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+.card.r .k{color:var(--warn)} .card.y .k{color:var(--gate)} .card.g .k{color:var(--ok)} .card.b .k{color:var(--lapis)}
+.plist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.plist li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.plist li:last-child{border-bottom:0}
+.plist .what{color:var(--muted);font-size:.86rem}
+.order{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.order li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+.order li::before{content:counter(s);font-family:var(--mono);font-size:.8rem;width:24px;height:24px;border-radius:50%;background:var(--lapis-soft);color:var(--lapis);display:grid;place-items:center}
+
+/* Additions: brain node, proposed nodes, status dots, state nodes. */
+.n-brain{fill:var(--paper);stroke:var(--lapis);stroke-width:2.5}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-new2{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.dot-ok{fill:var(--ok)} .dot-part{fill:var(--gate)} .dot-miss{fill:var(--warn)}
+.diagram svg.wide{min-width:1000px}
+.t-cap{fill:var(--fg);font-family:var(--mono);font-size:10.5px}
+.bus{stroke:var(--muted);stroke-width:1.6}
+.dec{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.dec.own{background:var(--lapis-soft);color:var(--lapis)} .dec.buy{background:var(--ext-soft);color:var(--ext)} .dec.mix{background:var(--gate-soft);color:var(--gate)}
+.src{font-size:.82rem;color:var(--muted)}
+.dotk{width:10px;height:10px;border-radius:50%;display:inline-block}
+.prose{max-width:72ch;display:grid;gap:10px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.rules .card p{font-size:.92rem}
+.st{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.st.ok{background:var(--ok-soft);color:var(--ok)} .st.part{background:var(--gate-soft);color:var(--gate)} .st.miss{background:var(--warn-soft);color:var(--warn)}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+/* Additions for the before/after page: numbered badges, proposed (dashed) nodes, state nodes. */
+.bd circle{fill:var(--warn)}
+.bd text{fill:var(--paper);font-family:var(--mono);font-size:12px;font-weight:600;text-anchor:middle}
+.nb circle{fill:var(--lapis)}
+.nb text{fill:var(--paper);font-family:var(--mono);font-size:11px;font-weight:600;text-anchor:middle}
+.nb-new circle{fill:var(--ok)}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-grp{fill:none;stroke:var(--line);stroke-width:1.2}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.diagram svg.wide{min-width:1000px}
+.badge-list{counter-reset:none;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.badge-list li{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;min-width:0}
+.badge-list .no{font-family:var(--mono);font-size:.78rem;font-weight:600;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.badge-list.r .no{background:var(--warn)}
+.badge-list.b .no{background:var(--lapis)}
+.badge-list.b li.new .no{background:var(--ok)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 28px}
+.keep li::marker{color:var(--ok)}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+.vs td:nth-child(2){color:var(--muted)}
+.prose{max-width:72ch;display:grid;gap:10px}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.86rem}
+.toc a{text-decoration:none}
+.code{font-family:var(--mono);font-size:.78rem;line-height:1.5;margin:0;white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px}
+.prose-note{color:var(--muted);max-width:72ch;font-size:.92rem}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+
+body{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">opencmo.io · architecture · brain · research before build · 2026-10-25</p>
+    <h1>The CMO brain</h1>
+    <p class="lede">What the brain is today, what nine outside systems teach us, and the design we propose: a small LLM planner on top of deterministic code that owns dispatch, budgets and approval. Markdown twin for agents: <code>brain.md</code>. Parent page: <code>ai-cmo.html</code>. Status: proposed, nothing here is built yet.</p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#verdict">1 Verdict</a><a href="#today">2 Brain today</a><a href="#learn">3 What others teach</a><a href="#design">4 Design</a><a href="#runtime">4b Runtime</a><a href="#cycle">5 Weekly cycle</a><a href="#orders">6 Work orders</a><a href="#registry">7 Registry</a><a href="#studio">7b Studio</a><a href="#memory">8 Memory</a><a href="#safety">9 Budgets and gates</a><a href="#evals">10 Evals</a><a href="#phases">11 Build phases</a><a href="#decide">12 Decisions</a><a href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <section class="sec" id="verdict">
+    <div class="sec-head"><p class="eyebrow">1</p><h2>Verdict</h2></div>
+    <div class="grid2">
+      <div class="card g"><span class="k">Keep</span>
+        <ul>
+          <li>One loop, many configurations: the CMO chat already runs on the Assistant loop with its own scope (<code>lib/agent/scope.ts</code>).</li>
+          <li>One place that asks a model (<code>think.ts</code>), with two brains: our models, or the founder's own Claude through the inbox. No competitor we read has the second.</li>
+          <li>Steps logged before and after each call, leases, <code>Deferred</code>, credit hold per run, daily limits in SQL.</li>
+          <li>Memory in three tiers with a Sunday summary: this is what Letta calls sleep-time compute, already built.</li>
+          <li>Learning from the founder's edits (<code>cmo_draft_outcomes</code>, <code>classify-edits.ts</code>).</li>
+        </ul>
+      </div>
+      <div class="card r"><span class="k">Add</span>
+        <ul>
+          <li>A <b>work order tree</b> with briefs, dependencies and budgets, so one weekly plan becomes tracked work in every department.</li>
+          <li>A <b>progress ledger</b>: a daily, code-only check of the tree that triggers a replan only when work is stuck.</li>
+          <li>A <b>capability registry</b> so the brain can reach Studio, Schedule and Publish through the same tools as buttons and MCP.</li>
+          <li><b>Event rules</b>, a <b>weekly budget</b> with a cost ceiling and a kill switch, and a <b>corrections log</b> the brain reads first.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="prose-note">Do not adopt a multi-agent framework (CrewAI, LangGraph, AutoGen) or a hosted workflow engine (Inngest, Temporal, Vercel Workflow). Every source below agrees that the reliable part is code-owned control flow; our Postgres queue and Modal clock already give durability, and CLAUDE.md forbids a second runtime.</p>
+  </section>
+
+  <section class="sec" id="today">
+    <div class="sec-head"><p class="eyebrow">2</p><h2>The brain today</h2>
+      <p class="lede">Read from <code>main</code> (<code>eb858ca</code>). Most parts of a brain exist; they are not yet tied into one plan that reaches every department.</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Part</th><th>Where</th><th>What it does</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>Agents</td><td><code>lib/cmo/agents/registry.ts</code></td><td>12 agents, draft and check tiers, provider per agent by env, failover to another provider</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Two brains</td><td><code>lib/cmo/brain.ts</code>, <code>jobs/think.ts</code></td><td><code>opencmo</code> (our keys, credits) or <code>claude</code> (the founder's Claude over MCP; model calls become inbox requests and replay with the answer)</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>CMO chat</td><td><code>lib/agent/scope.ts</code>, <code>cmo-tools.ts</code></td><td>The Assistant loop with 10 CMO tools (<code>read_doc</code>, <code>list_calendar</code>, <code>list_approvals</code>, <code>create_task</code>, <code>remember</code>, <code>read_skill</code>, <code>read_site</code>, <code>get_run_result</code>, <code>set_week_goal</code>, <code>update_document</code>) and 9 research tools</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Job queue</td><td><code>cmo_runs</code>, <code>jobs/runner.ts</code></td><td>8 kinds (<code>onboard</code>, <code>plan_week</code>, <code>post_draft</code>, <code>sales_scan</code>, <code>competitor_research</code>, <code>pull_metrics</code>, <code>summarize_memory</code>, <code>review_week</code>); steps logged, lease, defer, credit hold, daily limit</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Loops</td><td><code>lib/cmo/loops.ts</code></td><td>7 loops with a cadence and a condition; the daily cron enqueues what is due</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Memory</td><td><code>marketing_documents</code>, <code>cmo_memories</code>, <code>cmo_lessons</code></td><td>Profile, events by topic with importance and expiry, weekly lessons</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Goals</td><td><code>cmo_goals</code>, <code>review_week</code></td><td>One weekly goal the founder approves; measured and proposed again on Sunday</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Plan → work</td><td><code>content_items</code></td><td>The week plan is calendar rows; a due row triggers a draft loop. No tree, no dependencies, no budget per order</td><td><span class="st part">partial</span></td></tr>
+          <tr><td>Reach into Studio</td><td>none</td><td>No CMO tool touches the editor; video briefs were removed with clipping on 2026-10-20</td><td><span class="st miss">missing</span></td></tr>
+          <tr><td>Progress check</td><td>none</td><td>Nothing notices a plan that stalls mid-week</td><td><span class="st miss">missing</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="learn">
+    <div class="sec-head"><p class="eyebrow">3</p><h2>What others teach</h2>
+      <p class="lede">Nine sources: two direct competitors, two open-source CMO repos, four agent designs, and Anthropic's own write-ups. Each row says what to take and what to leave.</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead>
+        <tbody>
+          <tr><td>Okara AI CMO</td><td>Competitor, launched 2026-03-16 at $99/month; one orchestration layer over 6–10 sub-agents (SEO, GEO, Reddit, X, LinkedIn, UGC video); 120,000+ businesses on Vercel</td><td>URL → shared context every agent reads; every draft held for approval; a morning inbox of a few concrete actions</td><td>Agents as the product (it sells cards, we sell departments); reported Reddit replies flagged as AI</td></tr>
+          <tr><td>Higgsfield Supercomputer (our own study, 2026-10-19)</td><td>One chat agent, ~250 tools, <code>ai_cmo_*</code> tools, subagents with toolsets, AI Employees with skills and memory</td><td>Subagent = goal + role + toolset chosen per task; plan and credit price shown before render; states <code>awaiting_approval</code> / <code>awaiting_user_answer</code>; recurring tasks</td><td>250 tools in one context; recreate-an-ad and face features (product rules)</td></tr>
+          <tr><td>Agent Opus planner (our own study, 2026-10-19)</td><td>One planner LLM, 7 tools, strict one-action JSON, runtime owns phase changes</td><td>Runtime owns transitions that cost money; structured <code>last_failure</code> the next step must fix; atomic todo items the planner closes</td><td>Their AGPL code; long-take video pipeline here (Studio's concern)</td></tr>
+          <tr><td>ai-cmo-operator (MIT)</td><td>Open-source "AI VP of Marketing": parent orchestrator routes, specialists act; Claude Agent SDK, Supabase, Resend</td><td>Orchestrator only routes; every skill ends with a concrete artifact; load 2–5 context files per job; append-only corrections log; code gates for invented numbers, voice and stage fit; cost ceiling auto-pause; 30-second kill switch</td><td>Editor-only operator; markdown files as the database</td></tr>
+          <tr><td>OpenCMO on GitHub (study8677)</td><td>Open-source BYOK "AI CMO" with the same name, OpenAI Agents SDK, approval queue, SQLite</td><td>Little technically. The name collision matters: check trademark and search before launch</td><td>Auto-publish switch (<code>OPENCMO_AUTO_PUBLISH</code>)</td></tr>
+          <tr><td>Anthropic, multi-agent research</td><td>Lead agent + 3–5 parallel subagents</td><td>Brief = objective, output format, tools and sources, boundaries; effort scaled in the prompt; plan saved outside the context; resume from the failing step; start evals with ~20 real cases, judge outcomes not paths</td><td>Parallel subagents by default: ~15× the tokens of a chat; fits breadth-first research only</td></tr>
+          <tr><td>12-factor agents (HumanLayer)</td><td>Principles for production agents</td><td>Own the control flow; contact humans through a tool call that pauses and resumes; small focused agents; state lives in your database</td><td>—</td></tr>
+          <tr><td>Magentic-One (Microsoft)</td><td>Orchestrator with two ledgers</td><td>Task ledger (facts, guesses, plan) + progress ledger (done? looping? progressing? next step); replan only when progress stalls</td><td>Free-form "next speaker" selection between agents</td></tr>
+          <tr><td>Letta / Hermes Agent / Anthropic context engineering</td><td>Agent memory designs</td><td>Always-visible core blocks + searchable archive; sleep-time memory work; just-in-time retrieval over preloading; skills that improve after use</td><td>Self-editing skills without review: our skills change only through an approval card</td></tr>
+          <tr><td>Inngest, Vercel Workflow, Temporal</td><td>Durable execution engines</td><td>Memoized steps, durable sleep, wait-for-event: we copy the ideas onto <code>cmo_runs.steps</code>, <code>Deferred</code> and the inbox</td><td>The engines: a second runtime</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="design">
+    <div class="sec-head"><p class="eyebrow">4</p><h2>Design: an LLM planner on top of code that owns the rest</h2>
+      <p class="lede">Only two parts of the brain call a model: the Planner and the Reviewer. Dispatch, budgets, gates, event rules and the progress check are code, so they are cheap, testable and cannot be argued with.</p></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--lapis-soft)"></i>Built</span>
+      <span><i class="sw" style="background:var(--ok-soft);outline:1px dashed var(--ok)"></i>To build</span>
+      <span><i class="sw" style="background:var(--gate-soft);outline:2px solid var(--gate)"></i>Calls a model</span>
+    </div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+      <svg class="wide" viewBox="0 0 1200 640" role="img" aria-label="Brain anatomy: four triggers feed the brain; inside, the planner and reviewer call models, while ledgers, dispatcher, gatekeeper and event rules are code; memory and the think router sit below; work orders go out to seven departments.">
+        <defs><marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
+        <text class="t-eye" x="30" y="22">TRIGGERS</text>
+        <rect class="n-in" x="30" y="32" width="270" height="56" rx="10"/><text class="t-b" x="44" y="54">Clock</text><text class="t-s" x="44" y="74">Modal: daily 00:05 UTC, every minute</text>
+        <rect class="n-user" x="320" y="32" width="270" height="56" rx="10"/><text class="t-b" x="334" y="54">Founder</text><text class="t-s" x="334" y="74">CMO chat, buttons, approvals</text>
+        <rect class="n-ext" x="610" y="32" width="270" height="56" rx="10"/><text class="t-b" x="624" y="54">Founder's Claude</text><text class="t-s" x="624" y="74">MCP: CMO tools, inbox answers</text>
+        <rect class="n-new" x="900" y="32" width="270" height="56" rx="10"/><text class="t-b" x="914" y="54">Events</text><text class="t-s" x="914" y="74">a deliverable's status changed</text>
+        <path class="e" d="M600 88V112" marker-end="url(#b1)"/>
+
+        <rect class="n-brain" x="30" y="116" width="1140" height="360" rx="14"/>
+        <text class="t-eye" x="48" y="140">BRAIN · lib/cmo</text>
+
+        <rect class="n-user" x="48" y="154" width="260" height="92" rx="8"/><text class="t-b" x="60" y="176">Planner</text><text class="t-s" x="60" y="196">plan_week, replan, chat orders</text><text class="t-s" x="60" y="214">writes the task ledger and</text><text class="t-s" x="60" y="232">a tree of work order briefs</text>
+        <rect class="n-user" x="48" y="258" width="260" height="92" rx="8"/><text class="t-b" x="60" y="280">Reviewer</text><text class="t-s" x="60" y="300">review_week, summarize_memory</text><text class="t-s" x="60" y="318">measures the goal, writes</text><text class="t-s" x="60" y="336">lessons, proposes next goal</text>
+
+        <rect class="n-in" x="330" y="154" width="260" height="92" rx="8"/><text class="t-b" x="342" y="176">Task ledger</text><text class="t-s" x="342" y="196">goal (cmo_goals) · plan (calendar)</text><text class="t-s" x="342" y="214">facts: documents, last week's</text><text class="t-s" x="342" y="232">results, open questions</text>
+        <rect class="n-new" x="330" y="258" width="260" height="92" rx="8"/><text class="t-b" x="342" y="280">Progress ledger</text><text class="t-s" x="342" y="300">daily, code only: done? stuck?</text><text class="t-s" x="342" y="318">over budget? waiting on you?</text><text class="t-s" x="342" y="336">stuck → one replan, not a loop</text>
+
+        <rect class="n-new" x="612" y="154" width="260" height="92" rx="8"/><text class="t-b" x="624" y="176">Dispatcher</text><text class="t-s" x="624" y="196">brief → work_order: department,</text><text class="t-s" x="624" y="214">kind, depends_on, budget,</text><text class="t-s" x="624" y="232">capabilities from the registry</text>
+        <rect class="n-new" x="612" y="258" width="260" height="92" rx="8"/><text class="t-b" x="624" y="280">Event rules</text><text class="t-s" x="624" y="300">approved → Schedule order</text><text class="t-s" x="624" y="318">due → Publish order</text><text class="t-s" x="624" y="336">posted + 24 h → measure</text>
+
+        <rect class="n-new" x="894" y="154" width="258" height="196" rx="8"/><text class="t-b" x="906" y="176">Gatekeeper</text><text class="t-s" x="906" y="196">weekly budget per founder</text><text class="t-s" x="906" y="214">cost ceiling → pause the tree</text><text class="t-s" x="906" y="232">kill switch: one flag, all orders</text><text class="t-s" x="906" y="250">paid or outbound → approval</text><text class="t-s" x="906" y="268">RPC gates stay underneath:</text><text class="t-s" x="906" y="286">ownership, credit hold, limits</text><text class="t-s" x="906" y="304">(cmo_enqueue, credit_hold)</text><text class="t-warn" x="906" y="334">the brain never posts</text>
+
+        <rect class="n-in" x="48" y="364" width="824" height="96" rx="8"/><text class="t-b" x="60" y="386">Memory</text>
+        <text class="t-s" x="60" y="408">Core, always in context: marketing_documents (product, strategy, competitors, content strategy) · weekly goal</text>
+        <text class="t-s" x="60" y="426">Archive, by topic: cmo_memories (preference, fact, feedback, result) · cmo_lessons (weekly) · post_metrics</text>
+        <text class="t-new" x="60" y="446">NEW · corrections log: append-only rules from the founder's edits, read before anything else</text>
+
+        <rect class="n-in" x="894" y="364" width="258" height="96" rx="8"/><text class="t-b" x="906" y="386">Think router</text><text class="t-s" x="906" y="408">think(): one place asks a model</text><text class="t-s" x="906" y="426">opencmo → registry models</text><text class="t-s" x="906" y="444">claude → founder's inbox</text>
+
+        <path class="e" d="M600 476V500" marker-end="url(#b1)"/>
+        <text class="t-eye" x="30" y="520">WORK ORDERS → DEPARTMENTS</text>
+        <g>
+          <rect class="n-chip" x="30" y="530" width="150" height="32" rx="16"/><text class="t-chip" x="105" y="551" text-anchor="middle">Research</text>
+          <rect class="n-chip" x="192" y="530" width="150" height="32" rx="16"/><text class="t-chip" x="267" y="551" text-anchor="middle">Writer</text>
+          <rect class="n-chip" x="354" y="530" width="150" height="32" rx="16"/><text class="t-chip" x="429" y="551" text-anchor="middle">Sales</text>
+          <rect class="n-chip-new" x="516" y="530" width="150" height="32" rx="16"/><text class="t-new" x="591" y="551" text-anchor="middle">Studio</text>
+          <rect class="n-chip-new" x="678" y="530" width="150" height="32" rx="16"/><text class="t-new" x="753" y="551" text-anchor="middle">Schedule</text>
+          <rect class="n-chip-new" x="840" y="530" width="150" height="32" rx="16"/><text class="t-new" x="915" y="551" text-anchor="middle">Publish</text>
+          <rect class="n-chip-user" x="1002" y="530" width="168" height="32" rx="16"/><text class="t-chip-user" x="1086" y="551" text-anchor="middle">Approval (you)</text>
+        </g>
+        <path class="e" d="M600 562V586" marker-end="url(#b1)"/>
+        <rect class="n-in" x="30" y="590" width="1140" height="40" rx="10"/><text class="t-m" x="48" y="615">deliverables with a status → event rules → next order · metrics, edits and outcomes → memory → next week's plan</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="sec" id="runtime">
+    <div class="sec-head"><p class="eyebrow">4b</p><h2>How the brain runs without a browser</h2>
+      <p class="lede">No machine stays on for the brain. Supabase holds every order and its state, Modal is the clock and the muscle, Vercel is where the brain thinks, and the browser is only the screen where the founder reads and approves. Closing the browser stops nothing the brain does. Most of this already runs today.</p></div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+      <svg class="wide" viewBox="0 0 1200 470" role="img" aria-label="Modal wakes every minute and once a day, calls Vercel with a secret; Vercel claims orders from Supabase with a lease, thinks, writes results; heavy work goes to the Modal worker through the tasks table; the browser only reads and approves.">
+        <defs><marker id="rt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="rtn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
+        <rect class="n-in" x="30" y="30" width="330" height="150" rx="12"/>
+        <text class="t-eye" x="48" y="54">MODAL · THE CLOCK</text>
+        <text class="t-m" x="48" y="80">cmo_schedule · 00:05 UTC daily</text>
+        <text class="t-s" x="48" y="98">→ /api/cron/cmo: loops due today → queue</text>
+        <text class="t-m" x="48" y="124">sweep · every minute</text>
+        <text class="t-s" x="48" y="142">expire leases · count waiting orders ·</text>
+        <text class="t-s" x="48" y="160">call /api/internal/cmo/run once per order (≤ 10)</text>
+
+        <rect class="n-brain" x="430" y="30" width="340" height="150" rx="12"/>
+        <text class="t-eye" x="448" y="54">VERCEL · WHERE THE BRAIN THINKS</text>
+        <text class="t-m" x="448" y="80">answers 202 at once, works in after()</text>
+        <text class="t-s" x="448" y="98">claims one order with a lease, runs its steps,</text>
+        <text class="t-s" x="448" y="116">calls models through think(), writes results</text>
+        <text class="t-s" x="448" y="134">≤ 300 s per call; longer work defers itself</text>
+        <text class="t-s" x="448" y="152">(cmo_defer_run) and resumes on a later sweep</text>
+
+        <rect class="n-user" x="840" y="30" width="330" height="150" rx="12"/>
+        <text class="t-eye-user" x="858" y="54">BROWSER · ONLY THE SCREEN</text>
+        <text class="t-m" x="858" y="80">reads cards, approves, edits</text>
+        <text class="t-s" x="858" y="98">closed: orders keep running; cards wait in</text>
+        <text class="t-s" x="858" y="116">waiting_founder for days if needed</text>
+        <text class="t-new" x="858" y="142">NEW · reminders by email and web push</text>
+        <text class="t-s" x="858" y="160">so a waiting card reaches the founder</text>
+
+        <rect class="n-dept" x="30" y="240" width="1140" height="130" rx="12"/><rect class="n-bar" x="30" y="240" width="1140" height="5" rx="2"/>
+        <text class="t-eye" x="48" y="266">SUPABASE · THE TICKET RAIL (every order, task and result is a row)</text>
+        <rect class="n-in" x="48" y="280" width="260" height="74" rx="8"/><text class="t-b" x="60" y="302">cmo_runs → work_orders</text><text class="t-s" x="60" y="322">the brain's orders, leases,</text><text class="t-s" x="60" y="340">steps, status, budget</text>
+        <rect class="n-in" x="328" y="280" width="260" height="74" rx="8"/><text class="t-b" x="340" y="302">tasks · generations</text><text class="t-s" x="340" y="322">heavy work for the worker:</text><text class="t-s" x="340" y="340">render, keyframes, shots</text>
+        <rect class="n-in" x="608" y="280" width="260" height="74" rx="8"/><text class="t-b" x="620" y="302">content_items → deliverables</text><text class="t-s" x="620" y="322">what departments made,</text><text class="t-s" x="620" y="340">with a status</text>
+        <rect class="n-new" x="888" y="280" width="264" height="74" rx="8"/><text class="t-b" x="900" y="302">event rules</text><text class="t-s" x="900" y="322">a status change inserts the</text><text class="t-s" x="900" y="340">next order (wire 3)</text>
+
+        <rect class="n-in" x="30" y="400" width="560" height="56" rx="10"/>
+        <text class="t-eye" x="48" y="422">MODAL · THE WORKER (MUSCLE)</text>
+        <text class="t-s" x="48" y="442">claims tasks with a lease; render_document, keyframes, shots, voice, clips</text>
+        <rect class="n-ext" x="610" y="400" width="560" height="56" rx="10"/>
+        <text class="t-eye-ext" x="628" y="422">FOUNDER'S CLAUDE (claude brain mode)</text>
+        <text class="t-s" x="628" y="442">thinks on the founder's side; requests wait in cmo_inbox while it is closed</text>
+
+        <path class="e" d="M360 105H426" marker-end="url(#rt)"/><text class="t-edge" x="393" y="98" text-anchor="middle">wire 2</text>
+        <path class="e" d="M600 180V236" marker-start="url(#rt)" marker-end="url(#rt)"/><text class="t-edge" x="610" y="214">wire 1: claim, write</text>
+        <path class="e" d="M1005 180V236" marker-start="url(#rt)" marker-end="url(#rt)"/><text class="t-edge" x="1015" y="214">reads, approvals (RLS)</text>
+        <path class="e" d="M195 180V236" marker-end="url(#rt)"/><text class="t-edge" x="205" y="214">sweep counts rows</text>
+        <path class="e" d="M310 370V396" marker-start="url(#rt)" marker-end="url(#rt)"/><text class="t-edge" x="320" y="388">wire 1</text>
+        <path class="e" d="M890 370V396" marker-start="url(#rt)" marker-end="url(#rt)"/><text class="t-edge" x="900" y="388">inbox rows</text>
+      </svg>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Wire</th><th>What travels on it</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>1 · Rows in Postgres</td><td>The main wire. The brain gives an order by inserting a row with a brief; a department takes it by claiming the row with a lease, writes its result and changes the status. No agent calls another agent directly</td><td><span class="st ok">built</span> (<code>cmo_runs</code>, <code>tasks</code>, leases)</td></tr>
+          <tr><td>2 · HTTP with a secret</td><td>Modal → Vercel (<code>CRON_SECRET</code>) to wake the brain; Vercel → Modal <code>submit</code> (worker token) to start heavy work at once; MCP → worker <code>wake</code> (a token that can do nothing else)</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>3 · Event rules</td><td>A trigger on status changes inserts the next order: video approved → <code>cut_clips</code>; clip approved → Schedule; posted + 24 h → measure</td><td><span class="st miss">new</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid2">
+      <div class="card b"><span class="k">Long work: the brain never waits on a machine</span>
+        <ul>
+          <li>A video order hands its brief to the Studio team and moves to <code>waiting_order</code>; it holds no lease and no machine.</li>
+          <li>The worker makes keyframes and shots; when the team's generations are done, the next <code>sweep</code> sees it and wakes the order (<b>new</b>: one more check in <code>sweep</code>).</li>
+          <li>A card waits in <code>waiting_founder</code> for as long as it takes.</li>
+          <li>A crash mid-step loses nothing: the lease expires, the order goes back to the queue, the logged steps replay.</li>
+        </ul>
+      </div>
+      <div class="card r"><span class="k">The one part that needs a browser</span>
+        <p>The Assistant chat in the editor. When a turn hits its time or step limit, the open tab calls <code>continue</code> (<code>awaiting_continue</code> in <code>lib/agent/loop.ts</code>), and tools such as frame capture run in the tab. Close the tab mid-turn and the turn waits.</p>
+        <p>That is why the brain never drives the editor through a hidden chat. It calls the Studio team's entry points with <code>plan</code> / <code>decide</code>, which MCP already runs with no browser at all.</p>
+      </div>
+    </div>
+    <p class="prose-note">Compared with "an agent always on in the cloud" (one container kept alive per session), this keeps all state in Postgres and wakes compute only when a row is waiting: idle costs nothing, a crash resumes from the last logged step, and there is no second runtime.</p>
+  </section>
+
+  <section class="sec" id="cycle">
+    <div class="sec-head"><p class="eyebrow">5</p><h2>The weekly cycle</h2>
+      <p class="lede">The brain runs on a week, like the founder. Sunday learns, Monday plans, every day checks and drafts, events move work between departments at any hour. Times are the Modal clock (UTC).</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>When</th><th>What runs</th><th>Calls a model?</th><th>Credits</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>Sunday</td><td><code>summarize_memory</code> → lessons per topic; <code>review_week</code> → goal result, general lesson, next goal proposal; <code>competitor_research</code> when handles exist</td><td>yes</td><td>free, free, 2</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Monday</td><td><code>plan_week</code> → the task ledger and a work order tree: one order per calendar item, children per department (script → video → clips → captions)</td><td>yes, once</td><td>as today</td><td><span class="st part">tree is new</span></td></tr>
+          <tr><td>Every day 00:05</td><td><b>Progress check</b> over the tree: what is done, waiting on the founder, blocked, over budget, overdue. Only a stuck order costs a model call (one replan)</td><td>rarely</td><td>free</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Every day, when due</td><td><code>post_draft</code>, <code>sales_scan</code>, <code>pull_metrics</code>; later script, caption and Studio orders</td><td>yes</td><td>per kind</td><td><span class="st part">partial</span></td></tr>
+          <tr><td>Any time</td><td>Event rules: approved → Schedule; due → Publish order (reminder first); posted + 24 h → measure. Founder orders from chat or MCP become orders under the week's root</td><td>no</td><td>free</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Every morning (Okara's idea)</td><td>A short digest in the inbox and by email: what waits on you, what the brain did, what it plans today</td><td>no, a template</td><td>free</td><td><span class="st miss">new</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="orders">
+    <div class="sec-head"><p class="eyebrow">6</p><h2>Work orders</h2>
+      <p class="lede"><code>work_orders</code> grows out of <code>cmo_runs</code>; existing kinds keep working. The brief follows Anthropic's subagent brief and ai-cmo-operator's "ends with an artifact" rule; failures follow Agent Opus's structured <code>last_failure</code>.</p></div>
+    <div class="grid2">
+      <div class="card b"><span class="k">Row</span>
+<pre class="code">id, user_id, root_id, parent_id
+department      research | writer | sales | studio
+                | schedule | publish | brain
+kind            plan_week, post_draft, write_script,
+                build_video, cut_clips, schedule_slot,
+                publish_post, check_progress…
+status          see the state machine
+brief           { objective, output, sources,
+                  boundaries, done_when }
+depends_on      uuid[]   (all must be done)
+budget_credits  spent_credits
+deliverable_id  → deliverables
+brain           opencmo | claude
+created_by      loop | chat | event | mcp | founder
+steps, attempt, lease_until, due_at
+error           { code, message, retryable,
+                  repair_hint }</pre>
+      </div>
+      <div class="card b"><span class="k">Rules</span>
+        <ul>
+          <li><b>One writer of status:</b> an RPC per transition, so a job cannot mark itself done without a deliverable.</li>
+          <li><b>Ends with an artifact:</b> <code>done</code> needs a <code>deliverable_id</code> or a stated "nothing to do" reason.</li>
+          <li><b>Children inherit the root's budget;</b> a child cannot spend more than its parent has left.</li>
+          <li><b>Paid or outbound children wait</b> (<code>waiting_founder</code>) until approved, with the price shown, like Higgsfield's spend approval.</li>
+          <li><b>A failure is data:</b> the replan reads <code>error.code</code> and <code>repair_hint</code> and may not retry the same brief unchanged (Opus's duplicate guard).</li>
+          <li><b>Effort scales by kind,</b> not by the model's mood: the registry says how many steps and credits a kind may use.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+      <svg class="wide" viewBox="0 0 1100 262" role="img" aria-label="Work order states: queued to running; running pauses into waiting_founder, waiting_order or deferred and resumes; it ends done, failed or cancelled; failed goes to the planner for one replan with a new brief.">
+        <defs><marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
+        <rect class="n-grp" x="170" y="6" width="600" height="64" rx="10"/>
+        <text class="t-eye" x="184" y="24">PAUSED · NO LEASE HELD</text>
+        <rect class="n-user" x="184" y="30" width="170" height="32" rx="8"/><text class="t-st" x="269" y="51" text-anchor="middle">waiting_founder</text>
+        <rect class="n-new" x="384" y="30" width="170" height="32" rx="8"/><text class="t-st" x="469" y="51" text-anchor="middle">waiting_order</text>
+        <rect class="n-st" x="584" y="30" width="170" height="32" rx="8"/><text class="t-st" x="669" y="51" text-anchor="middle">deferred</text>
+        <rect class="n-st" x="20" y="110" width="120" height="44" rx="8"/><text class="t-st" x="80" y="137" text-anchor="middle">queued</text>
+        <rect class="n-st" x="200" y="110" width="120" height="44" rx="8"/><text class="t-st" x="260" y="137" text-anchor="middle">running</text>
+        <rect class="n-st" x="640" y="110" width="120" height="44" rx="8"/><text class="t-st" x="700" y="137" text-anchor="middle">done</text>
+        <rect class="n-st" x="640" y="190" width="120" height="44" rx="8"/><text class="t-st" x="700" y="217" text-anchor="middle">failed</text>
+        <rect class="n-st" x="400" y="190" width="120" height="44" rx="8"/><text class="t-st" x="460" y="217" text-anchor="middle">cancelled</text>
+        <rect class="n-user" x="860" y="190" width="210" height="44" rx="8"/><text class="t-st" x="965" y="217" text-anchor="middle">Planner: one replan</text>
+        <path class="e" d="M140 132H196" marker-end="url(#b2)"/>
+        <path class="e" d="M240 110V74" marker-end="url(#b2)"/><text class="t-edge" x="204" y="94">pauses</text>
+        <path class="e-dash" d="M290 74V106" marker-end="url(#b2)"/><text class="t-edge" x="298" y="94">resumes: approved, answered, timer</text>
+        <path class="e" d="M320 132H636" marker-end="url(#b2)"/><text class="t-edge" x="478" y="126" text-anchor="middle">deliverable written</text>
+        <path class="e" d="M320 146C480 160 560 200 636 208" marker-end="url(#b2)"/>
+        <path class="e" d="M290 154V212H396" marker-end="url(#b2)"/><text class="t-edge" x="300" y="250">rejected · over budget · kill switch</text>
+        <path class="e" d="M760 212H856" marker-end="url(#b2)"/>
+        <path class="e-dash" d="M965 190V170H80V158" marker-end="url(#b2)"/><text class="t-edge" x="900" y="164" text-anchor="end">a new brief, never the same one</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="sec" id="registry">
+    <div class="sec-head"><p class="eyebrow">7</p><h2>Capability registry</h2>
+      <p class="lede">One JSON file in <code>packages/contracts</code>, checked by <code>check:contracts</code> like <code>task-kinds.json</code>. Each entry says who may call it and what it costs, so the brain, buttons, the Assistant and MCP all see the same list. This is the bridge to Studio that is missing today.</p></div>
+    <div class="grid2">
+      <div class="card b"><span class="k">Entry</span>
+<pre class="code">{
+  "name": "build_video",
+  "department": "studio",
+  "effect": "spend",        // read | write | spend | outbound
+  "approval": "price",      // none | founder | price
+  "callers": ["brain", "ui", "assistant", "mcp"],
+  "order_kind": "build_video",
+  "max_steps": 40,
+  "credits": "quote",       // fixed number or quote
+  "input": "BuildVideoInput" // zod schema name
+}</pre>
+      </div>
+      <div class="card b"><span class="k">Why this shape</span>
+        <ul>
+          <li><code>effect</code> + <code>approval</code> come from Claude Code's read-only / destructive tool flags and the Vercel AI SDK's per-input tool approval (our reading notes in the internal repo).</li>
+          <li><code>callers</code> keeps the brain from getting a private path (rule 3 of <code>ai-cmo.html</code>).</li>
+          <li><code>max_steps</code> and <code>credits</code> are the effort budget Anthropic puts in the prompt; we put it in data, where code can enforce it.</li>
+          <li>Tools stay where they are (<code>editor-core</code> ops, <code>cmo-tools.ts</code>); the registry only lists them.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="studio">
+    <div class="sec-head"><p class="eyebrow">7b</p><h2>Brain ↔ Studio: the brain briefs the Video agent team</h2>
+      <p class="lede">Two levels of orchestration, the way Agent Opus does it: the brain plans the week and hands a video brief to Studio; Studio's own agent team plans and makes the video. The brain never drives single tools inside the team. It talks to Studio for two jobs: an AI long video, then short clips cut from it. Editing the founder's own video stays hands-on in the editor.</p></div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+<svg class="wide" viewBox="0 0 1200 600" role="img" aria-label="Studio agent team: three callers (brain, Assistant chat, MCP) reach the same entry points; the team lead is the pipeline runtime; three squads: long take (built), intro (built), clips (new); moderation and captions shared.">
+<defs><marker id="tm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
+<marker id="tmn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="n-brain" x="40" y="14" width="320" height="50" rx="10"/><text class="t-b" x="200" y="36" text-anchor="middle">Brain</text><text class="t-s" x="200" y="54" text-anchor="middle">work order: video brief</text>
+<path class="e-new" d="M200 64V88" marker-end="url(#tmn)"/>
+<rect class="n-user" x="440" y="14" width="320" height="50" rx="10"/><text class="t-b" x="600" y="36" text-anchor="middle">Assistant chat</text><text class="t-s" x="600" y="54" text-anchor="middle">/video · /intro · founder types</text>
+<path class="e" d="M600 64V88" marker-end="url(#tm)"/>
+<rect class="n-ext" x="840" y="14" width="320" height="50" rx="10"/><text class="t-b" x="1000" y="36" text-anchor="middle">MCP · founder&#x27;s Claude</text><text class="t-s" x="1000" y="54" text-anchor="middle">brings its own plan</text>
+<path class="e" d="M1000 64V88" marker-end="url(#tm)"/>
+<rect class="n-dept" x="20" y="92" width="1160" height="490" rx="12"/><rect class="n-bar" x="20" y="92" width="1160" height="5" rx="2"/>
+<text class="t-eye" x="38" y="118">STUDIO AGENT TEAM · lead = the pipeline runtime: owns the phases and the approval cards (the Agent Opus rule)</text>
+<rect class="n-chip" x="38" y="128" width="140" height="26" rx="13"/><text class="t-chip" x="108" y="145" text-anchor="middle">create_video</text>
+<rect class="n-chip" x="188" y="128" width="140" height="26" rx="13"/><text class="t-chip" x="258" y="145" text-anchor="middle">animate_video</text>
+<rect class="n-chip" x="338" y="128" width="140" height="26" rx="13"/><text class="t-chip" x="408" y="145" text-anchor="middle">redo_keyframe</text>
+<rect class="n-chip" x="488" y="128" width="140" height="26" rx="13"/><text class="t-chip" x="558" y="145" text-anchor="middle">plan_video</text>
+<rect class="n-chip-new" x="638" y="128" width="140" height="26" rx="13"/><text class="t-new" x="708" y="145" text-anchor="middle">cut_clips</text>
+<text class="t-s" x="800" y="145">entry points: plan (price, nothing spent) → card → decide</text>
+<text class="t-eye" x="38" y="178">LONG TAKE · /video · built on main (PR #111), learned from Agent Opus</text>
+<rect class="n-user" x="38" y="186" width="150" height="80" rx="8"/><text class="t-b" x="48" y="206">Director</text><text class="t-s" x="48" y="223">agent director</text><text class="t-s" x="48" y="238">script, beats,</text><text class="t-s" x="48" y="253">keyframe + motion</text><text class="t-chip" x="180" y="206" text-anchor="end">LLM</text>
+<path class="e" d="M188 226H196" marker-end="url(#tm)"/>
+<rect class="n-in" x="200" y="186" width="150" height="80" rx="8"/><text class="t-b" x="210" y="206">Reviewer</text><text class="t-s" x="210" y="223">review() in</text><text class="t-s" x="210" y="238">create-video.ts,</text><text class="t-s" x="210" y="253">sends back once</text><text class="t-chip" x="342" y="206" text-anchor="end">CODE</text>
+<path class="e" d="M350 226H359" marker-end="url(#tm)"/>
+<rect class="n-ext" x="363" y="186" width="150" height="80" rx="8"/><text class="t-b" x="373" y="206">Keyframes</text><text class="t-s" x="373" y="223">composeKeyframe-</text><text class="t-s" x="373" y="238">Prompt + nano-</text><text class="t-s" x="373" y="253">banana / seedream</text><text class="t-chip" x="505" y="206" text-anchor="end">MODEL</text>
+<path class="e" d="M513 226H521" marker-end="url(#tm)"/>
+<rect class="n-ext" x="525" y="186" width="150" height="80" rx="8"/><text class="t-b" x="535" y="206">Text checker</text><text class="t-s" x="535" y="223">vision call per</text><text class="t-s" x="535" y="238">keyframe, badge,</text><text class="t-s" x="535" y="253">never fails</text><text class="t-chip" x="667" y="206" text-anchor="end">MODEL</text>
+<path class="e" d="M675 226H683" marker-end="url(#tm)"/>
+<rect class="n-ext" x="687" y="186" width="150" height="80" rx="8"/><text class="t-b" x="697" y="206">Shot maker</text><text class="t-s" x="697" y="223">composeShotPrompt</text><text class="t-s" x="697" y="238">Veo 3.1 → Kling</text><text class="t-s" x="697" y="253">→ Seedance</text><text class="t-chip" x="829" y="206" text-anchor="end">MODEL</text>
+<path class="e" d="M837 226H846" marker-end="url(#tm)"/>
+<rect class="n-ext" x="850" y="186" width="150" height="80" rx="8"/><text class="t-b" x="860" y="206">Voice + music</text><text class="t-s" x="860" y="223">premade voices,</text><text class="t-s" x="860" y="238">word timings,</text><text class="t-s" x="860" y="253">music bed</text><text class="t-chip" x="992" y="206" text-anchor="end">MODEL</text>
+<path class="e" d="M1000 226H1008" marker-end="url(#tm)"/>
+<rect class="n-in" x="1012" y="186" width="150" height="80" rx="8"/><text class="t-b" x="1022" y="206">Builder</text><text class="t-s" x="1022" y="223">create_video op:</text><text class="t-s" x="1022" y="238">one sequence,</text><text class="t-s" x="1022" y="253">editable scene</text><text class="t-chip" x="1154" y="206" text-anchor="end">CODE</text>
+<text class="t-eye" x="38" y="292">INTRO · /intro (plan_video) · built</text>
+<rect class="n-user" x="38" y="300" width="150" height="80" rx="8"/><text class="t-b" x="48" y="320">Writer</text><text class="t-s" x="48" y="337">agent writer</text><text class="t-s" x="48" y="352">on-screen words</text><text class="t-chip" x="180" y="320" text-anchor="end">LLM</text>
+<path class="e" d="M188 340H359" marker-end="url(#tm)"/>
+<rect class="n-user" x="363" y="300" width="150" height="80" rx="8"/><text class="t-b" x="373" y="320">Motion director</text><text class="t-s" x="373" y="337">agent motion</text><text class="t-s" x="373" y="352">beats, timing,</text><text class="t-s" x="373" y="367">easing</text><text class="t-chip" x="505" y="320" text-anchor="end">LLM</text>
+<path class="e" d="M513 340H683" marker-end="url(#tm)"/>
+<rect class="n-in" x="687" y="300" width="150" height="80" rx="8"/><text class="t-b" x="697" y="320">Reviewer</text><text class="t-s" x="697" y="337">reviewIntro(),</text><text class="t-s" x="697" y="352">sends back once</text><text class="t-chip" x="829" y="320" text-anchor="end">CODE</text>
+<path class="e" d="M837 340H1008" marker-end="url(#tm)"/>
+<rect class="n-in" x="1012" y="300" width="150" height="80" rx="8"/><text class="t-b" x="1022" y="320">Builder</text><text class="t-s" x="1022" y="337">add_intro op,</text><text class="t-s" x="1022" y="352">one undo</text><text class="t-chip" x="1154" y="320" text-anchor="end">CODE</text>
+<text class="t-new" x="38" y="406">CLIPS · cut_clips · new, from a finished edit only</text>
+<rect class="n-new" x="38" y="414" width="150" height="80" rx="8"/><text class="t-b" x="48" y="434">Clip editor</text><text class="t-s" x="48" y="451">picks 2–5 ranges</text><text class="t-s" x="48" y="466">from beats and</text><text class="t-s" x="48" y="481">word timings</text><text class="t-chip" x="180" y="434" text-anchor="end">LLM</text>
+<path class="e-new" d="M188 454H359" marker-end="url(#tmn)"/>
+<rect class="n-new" x="363" y="414" width="150" height="80" rx="8"/><text class="t-b" x="373" y="434">Clip reviewer</text><text class="t-s" x="373" y="451">whole sentences,</text><text class="t-s" x="373" y="466">hook first,</text><text class="t-s" x="373" y="481">length per platform</text><text class="t-chip" x="505" y="434" text-anchor="end">CODE</text>
+<path class="e-new" d="M513 454H683" marker-end="url(#tmn)"/>
+<rect class="n-new" x="687" y="414" width="150" height="80" rx="8"/><text class="t-b" x="697" y="434">Builder</text><text class="t-s" x="697" y="451">make_clip op: copy</text><text class="t-s" x="697" y="466">timeline, workarea,</text><text class="t-s" x="697" y="481">frame 9:16</text><text class="t-chip" x="829" y="434" text-anchor="end">CODE</text>
+<path class="e-new" d="M837 454H1008" marker-end="url(#tmn)"/>
+<rect class="n-new" x="1012" y="414" width="150" height="80" rx="8"/><text class="t-b" x="1022" y="434">Renderer</text><text class="t-s" x="1022" y="451">render_document</text><text class="t-s" x="1022" y="466">per clip timeline</text><text class="t-s" x="1022" y="481">on the worker</text><text class="t-chip" x="1154" y="434" text-anchor="end">CODE</text>
+<rect class="n-in" x="38" y="510" width="1124" height="56" rx="8"/><text class="t-b" x="52" y="532">Shared by every squad</text><text class="t-s" x="52" y="552">Moderation (prompt before credits, image and 3 video frames after) · Captions (translate) · credit holds and no double payment by spec hash · Version history checkpoint on every write</text>
+</svg>
+
+    </div>
+    <div class="grid2">
+      <div class="card g"><span class="k">What is already built</span>
+        <ul>
+          <li><b>Long take</b> (<code>/video</code>, PR #111 on <code>main</code>): Director → code Reviewer → keyframes → contact sheet → shots between keyframes → one editable scene. Learned from Agent Opus: keyframes first, two approval cards, model chain by quality, prompt rules for shots.</li>
+          <li><b>Intro team</b> (<code>plan_video</code>, <code>lib/agent/video-team.ts</code>): Writer, Motion director, code Reviewer, Builder.</li>
+          <li>Team members are agents in the registry (<code>director</code>, <code>writer</code>, <code>motion</code>, <code>captions</code>, <code>moderation</code>), so each switches provider by env like every CMO agent.</li>
+          <li><b>Three callers already share the team:</b> the Assistant chat, and MCP (<code>packages/mcp-server/src/groups/studio.ts</code>), which runs the team's entry points without a chat by splitting each priced one into <code>plan</code> (nothing spent) and <code>decide</code>.</li>
+          <li>Open in the long-take plan: the real-model baseline (Tasks 0–1), the acceptance video (Task 8) and the release.</li>
+        </ul>
+      </div>
+      <div class="card b"><span class="k">What the brain adds</span>
+        <ul>
+          <li><b>The brain is the team's third caller</b>, next to the Assistant and MCP. It sends a video brief (topic, audience, length, frame, voice) from the week plan; the team's lead (the pipeline runtime) runs the squad and raises the same cards.</li>
+          <li>The cards land in the <b>Approval inbox</b> instead of the chat. The work order waits in <code>waiting_founder</code> on a card and in <code>waiting_order</code> while the team's generations run.</li>
+          <li>In the <code>claude</code> brain mode the founder's Claude can write the Director's plan, as MCP already allows; the code Reviewer checks it either way.</li>
+          <li><b>New squad: Clips.</b> Clip editor (LLM), Clip reviewer (code), Builder (<code>make_clip</code> op), Renderer. It runs only on an edit the founder marked finished.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card r"><span class="k">Rejected: the brain driving tools one by one, or a hidden chat</span>
+      <p>The first version of this section had the brain call <code>create_video</code> and <code>animate_video</code> itself. That skips the team: the brain would need to know keyframes, shot models and redo rules, and every change to the pipeline would break it. A hidden Assistant chat ("make this week's video") is worse: an open loop with unpredictable cost and cards nobody sees. The team owns how a video is made; the brain owns what video the week needs.</p>
+    </div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+<svg class="wide" viewBox="0 0 1140 720" role="img" aria-label="Sequence: the brain orders an AI video through the same Studio agent team MCP uses; three approval cards (storyboard and keyframe price, contact sheet and video price, finished video), then the brain cuts clips from the finished edit and sends them for a fourth approval.">
+<defs><marker id="sq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
+<marker id="sqn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="n-brain" x="30" y="10" width="240" height="50" rx="10"/><text class="t-b" x="150" y="32" text-anchor="middle">Brain</text><text class="t-s" x="150" y="50" text-anchor="middle">work order</text>
+<line class="div" x1="150" y1="60" x2="150" y2="700" stroke-dasharray="3 5"/>
+<rect class="n-in" x="310" y="10" width="240" height="50" rx="10"/><text class="t-b" x="430" y="32" text-anchor="middle">Studio agent team</text><text class="t-s" x="430" y="50" text-anchor="middle">lead: the pipeline runtime</text>
+<line class="div" x1="430" y1="60" x2="430" y2="700" stroke-dasharray="3 5"/>
+<rect class="n-in" x="590" y="10" width="240" height="50" rx="10"/><text class="t-b" x="710" y="32" text-anchor="middle">Worker + fal</text><text class="t-s" x="710" y="50" text-anchor="middle">tasks, render_document</text>
+<line class="div" x1="710" y1="60" x2="710" y2="700" stroke-dasharray="3 5"/>
+<rect class="n-user" x="870" y="10" width="240" height="50" rx="10"/><text class="t-b" x="990" y="32" text-anchor="middle">You · Approval</text><text class="t-s" x="990" y="50" text-anchor="middle">cards in the inbox</text>
+<line class="div" x1="990" y1="60" x2="990" y2="700" stroke-dasharray="3 5"/>
+<path class="e" d="M150 92H422" marker-end="url(#sq)"/>
+<text class="t-m" x="160" y="85">1  video brief → Director writes the plan</text>
+<path class="e" d="M430 132H158" marker-end="url(#sq)"/>
+<text class="t-m" x="160" y="125">2  Reviewer checks it; price of keyframes (nothing spent)</text>
+<path class="e" d="M150 172H982" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="160" y="165">3  CARD 1 · storyboard + keyframe price</text>
+<path class="e" d="M990 212H158" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="160" y="205">4  approve</text>
+<path class="e" d="M150 252H422" marker-end="url(#sq)"/>
+<text class="t-m" x="160" y="245">5  approved → team runs stage 1</text>
+<path class="e" d="M430 292H702" marker-end="url(#sq)"/>
+<text class="t-m" x="440" y="285">6  Keyframes + Text checker</text>
+<path class="e" d="M710 332H158" marker-end="url(#sq)"/>
+<text class="t-m" x="160" y="325">7  generations done → order resumes</text>
+<path class="e" d="M150 372H982" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="160" y="365">8  CARD 2 · contact sheet + exact video price</text>
+<path class="e" d="M990 412H158" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="160" y="405">9  approve (or redo one keyframe)</text>
+<path class="e" d="M150 452H702" marker-end="url(#sq)"/>
+<text class="t-m" x="160" y="445">10  Shot maker, Voice + music, Builder → one scene → render</text>
+<path class="e" d="M710 492H982" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="720" y="485">11  CARD 3 · finished video · open in editor to tweak</text>
+<path class="e" d="M990 532H158" marker-end="url(#sq)"/>
+<text class="t-eye-user" x="160" y="525">12  approve = this edit is finished</text>
+<path class="e-new" d="M150 572H422" marker-end="url(#sqn)"/>
+<text class="t-new" x="160" y="565">13  cut_clips → Clip editor picks, Clip reviewer checks, Builder</text>
+<path class="e-new" d="M430 612H702" marker-end="url(#sqn)"/>
+<text class="t-new" x="440" y="605">14  Renderer: one export per clip</text>
+<path class="e-new" d="M710 652H982" marker-end="url(#sqn)"/>
+<text class="t-new" x="720" y="645">15  CARD 4 · clips · approved ones go to Schedule</text>
+</svg>
+
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Piece</th><th>How</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>Video brief</td><td>A <code>build_video</code> work order from the week plan. The brief maps onto <code>create_video</code>'s input (prompt, seconds, aspect, voice) plus the Brand Kit and the strategy's voice</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Cards 1 and 2</td><td>The team's storyboard card and contact sheet, shown in the Approval inbox; redo one keyframe on card 2 as today</td><td><span class="st part">cards built; inbox placement new</span></td></tr>
+          <tr><td>Card 3 · finished</td><td>Approving the rendered video marks the edit finished, which is what the clip rule needs</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Clips squad</td><td>Clip editor reads beats and word timings (the voice-over has them), picks 2–5 ranges of 15–60 s; Clip reviewer checks whole sentences, hook first, platform length; Builder copies the timeline, sets workarea and 9:16; Renderer exports each</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Export of a named timeline</td><td>Export draws the active timeline over its workarea today; exporting a clip timeline without switching the founder's view needs a check</td><td><span class="st part">to check</span></td></tr>
+          <tr><td>Card 4 · clips</td><td>Each approved clip becomes a deliverable (<code>kind = clip</code>, <code>parent_id</code> = the video); event rules hand it to Schedule</td><td><span class="st miss">new</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><b>One adapter for the team.</b> Move what MCP's studio group does (build the clip scope, <code>plan</code>, sign, <code>decide</code>) into <code>lib/departments/studio</code>, and have MCP and the brain both call it, so the three callers can never drift apart.</p>
+      <p><b>Security:</b> the team runs under the founder's RLS session. The CMO runner holds the service role, so a Studio order mints a short-lived user JWT as MCP does; the service role never writes an editor document.</p>
+      <p><b>Money:</b> the Director's call is agent credits (none in <code>claude</code> mode); keyframes, shots, voice and music are media credits held as today; the Clips squad spends no generation credits. All of it counts against the order tree's budget.</p>
+      <p>This is phase B3. It lines up with the long-take plan's open Task 8 (a real OpenCMO video) and with E4.1 (export set) and E4.5 (hand-off to Post) of the editor roadmap.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="memory">
+    <div class="sec-head"><p class="eyebrow">8</p><h2>Memory</h2>
+      <p class="lede">Keep the three tiers. Add one tier on top and one rule for loading.</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Tier</th><th>Holds</th><th>Loaded</th><th>Comparable to</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>0 · Corrections</td><td>Short rules learned from the founder's edits and skip reasons ("never open with a question", "no emojis"), append-only, each with its source edit</td><td>Always, first</td><td>ai-cmo-operator <code>CORRECTIONS</code> log</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>1 · Profile</td><td>The four <code>marketing_documents</code> + the weekly goal</td><td>Always</td><td>Letta core memory blocks</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>2 · Events</td><td><code>cmo_memories</code> by topic, importance, expiry</td><td>The job's topic + <code>general</code></td><td>Letta archival memory</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>3 · Lessons</td><td><code>cmo_lessons</code>, one per topic per week</td><td>Before events</td><td>Letta sleep-time agents</td><td><span class="st ok">built</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><b>Loading rule:</b> a work order's brief names the documents and topics it needs, and the job loads only those (ai-cmo-operator loads 2–5 of 10 files; Anthropic calls this just-in-time retrieval). Corrections and the profile are the only tiers every job reads.</p>
+      <p><b>Where corrections come from:</b> <code>classify-edits.ts</code> already labels each edited approval. The Sunday summary turns repeated labels into a proposed correction; the founder approves it as a card. Hermes Agent lets skills rewrite themselves; we keep that behind approval.</p>
+      <p><b>Not now:</b> vector search. Topic filtering is enough until a founder passes about 200 memory rows (the old handoff doc set this threshold).</p>
+    </div>
+  </section>
+
+  <section class="sec" id="safety">
+    <div class="sec-head"><p class="eyebrow">9</p><h2>Budgets and gates</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Gate</th><th>Where</th><th>Rule</th><th>Learned from</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>Ownership, credit hold, daily limit</td><td>RPC (<code>cmo_enqueue</code>, <code>credit_hold</code>)</td><td>Every order passes them, whoever created it</td><td>our web rules</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Weekly budget</td><td><code>work_orders</code> root</td><td>The founder sets credits per week; the tree cannot exceed it</td><td>Higgsfield spend approval</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Cost ceiling</td><td>Progress check</td><td>Spend rising faster than planned pauses the tree and tells the founder</td><td>ai-cmo-operator</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Kill switch</td><td>One flag per founder + one global env</td><td>Stops every queued and running order within one sweep (a minute)</td><td>ai-cmo-operator (30 s)</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Invented numbers, voice, banned words</td><td>Code checks before the checker model</td><td><code>check-post.ts</code> today; extended per platform and with No AI Slop's banned list</td><td>ai-cmo-operator, our cascade judge</td><td><span class="st part">partial</span></td></tr>
+          <tr><td>Stage fit</td><td>Planner prompt + a code check</td><td>No tactics that do not fit the founder's stage (no paid ads before revenue, no PR before launch)</td><td>ai-cmo-operator "stage discipline"</td><td><span class="st miss">new</span></td></tr>
+          <tr><td>Outbound</td><td>Approval + Publish</td><td>The brain never posts; time and account are part of the approval</td><td>product rules</td><td><span class="st ok">rule</span></td></tr>
+          <tr><td>Untrusted text</td><td><code>lib/cmo/untrusted.ts</code></td><td>Reddit, X and site text is data, never instructions, in every brief</td><td>our security reports</td><td><span class="st ok">built</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="evals">
+    <div class="sec-head"><p class="eyebrow">10</p><h2>How we know the brain works</h2>
+      <p class="lede">Anthropic started with about 20 real cases and a single pass/fail judge; we already have the cascade judge and the edit taxonomy. Add the brain's own numbers.</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Measure</th><th>From</th><th>Target to start</th></tr></thead>
+        <tbody>
+          <tr><td>Plan accepted without edits</td><td>plan cards approved as is / all plans</td><td>half of plans</td></tr>
+          <tr><td>Drafts approved as is</td><td><code>cmo_draft_outcomes</code> similarity ≥ 0.95</td><td>up week over week</td></tr>
+          <tr><td>Orders done on time</td><td><code>work_orders</code> done before <code>due_at</code></td><td>most of them</td></tr>
+          <tr><td>Credits per approved deliverable</td><td>spent credits / approved deliverables</td><td>down week over week</td></tr>
+          <tr><td>Replans per week</td><td>progress check</td><td>few; many means bad briefs</td></tr>
+          <tr><td>Plan eval</td><td>~20 real founder profiles in <code>lib/cmo/jobs/eval</code>, judged on goal fit, mix, stage fit, feasibility</td><td>pass on the cascade judge</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="phases">
+    <div class="sec-head"><p class="eyebrow">11</p><h2>Build phases</h2></div>
+    <ol class="order">
+      <li><span><b>B0 · Corrections + budget fields.</b> Add tier 0 memory and a weekly budget on the profile; no new tables for orders yet. Small; useful the day it ships.</span></li>
+      <li><span><b>B1 · <code>work_orders</code> from <code>cmo_runs</code>.</b> Migration that adds the columns (root, parent, department, brief, depends_on, budget, deliverable, error) and keeps every existing kind running; <code>plan_week</code> writes a tree. pgTAP for every transition RPC.</span></li>
+      <li><span><b>B2 · Progress check + kill switch + morning digest.</b> Code only, runs in the daily cron; one replan for stuck orders.</span></li>
+      <li><span><b>B3 · Capability registry, event rules, Studio adapter.</b> The registry file and its check; event rules as a trigger table; <code>build_video</code> and <code>cut_clips</code> through the shared Studio adapter (section 7b), every paid step behind a card.</span></li>
+      <li><span><b>B4 · Brain evals.</b> 20 real profiles, plan judge, the measures above on the dashboard.</span></li>
+    </ol>
+    <p class="prose-note">Each phase gets its own plan in <code>docs/plans/</code> before code, as CLAUDE.md asks. B0–B2 do not touch the editor, so they do not compete with the editor roadmap; B3 is where the brain meets Studio.</p>
+  </section>
+
+  <section class="sec" id="decide">
+    <div class="sec-head"><p class="eyebrow">12</p><h2>Decisions for the owner</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>May the brain create free orders on its own (drafts, research, metrics)?</td><td>Yes. Paid or outbound orders always wait for the founder</td></tr>
+          <tr><td>2</td><td>Default weekly budget</td><td>Set after B1 from measured credits per approved deliverable; until then the existing daily limits</td></tr>
+          <tr><td>3</td><td>Extend <code>cmo_runs</code> or create <code>work_orders</code> next to it?</td><td>Extend and rename in one migration; two queues for the same work would split every lease rule, limit and status query</td></tr>
+          <tr><td>4</td><td>May the brain propose skill and correction changes?</td><td>Yes, as approval cards; never applied silently</td></tr>
+          <tr><td>5</td><td>Morning digest by email?</td><td>Yes once Resend is wired (change 6 of <code>ai-cmo.html</code>); in-app first</td></tr>
+          <tr><td>6</td><td>The open-source "OpenCMO" repo on GitHub</td><td>Check the trademark and search results for the name before launch spend</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot" id="sources">
+    <p><b>Sources.</b> Code: <code>apps/web/lib/cmo/</code> (<code>brain.ts</code>, <code>loops.ts</code>, <code>jobs/runner.ts</code>, <code>jobs/think.ts</code>, <code>agents/registry.ts</code>, <code>jobs/classify-edits.ts</code>), <code>apps/web/lib/agent/cmo-tools.ts</code>, <code>scope.ts</code>, <code>supabase/schema/current.sql</code>. Internal research: <code>opencmo-internal/docs/cmo/tham-khao.md</code> (Okara, repos read), <code>docs/specs/2026-10-19-hoc-higgsfield.md</code>, <code>2026-10-19-hoc-agent-opus-2-prompt-tool-agent.md</code>.</p>
+    <p>Outside: <a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic, How we built our multi-agent research system</a> · <a href="https://anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic, Effective context engineering for AI agents</a> · <a href="https://github.com/humanlayer/12-factor-agents">HumanLayer, 12-factor agents</a> · <a href="https://arxiv.org/pdf/2411.04468">Magentic-One (arXiv 2411.04468)</a> · <a href="https://github.com/guerrilla2799/ai-cmo-operator">ai-cmo-operator (MIT)</a> · <a href="https://github.com/study8677/OpenCMO">study8677/OpenCMO</a> · <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent (MIT)</a> · <a href="https://www.letta.com/blog/agent-memory">Letta, agent memory</a> · <a href="https://www.idlen.io/news/okara-ai-cmo-autonomous-marketing-agent">idlen.io on Okara</a> · <a href="https://vercel.com/blog/how-okara-runs-cmo-agents-for-120000-companies-on-vercel">Vercel, How Okara runs CMO agents</a> (summary only; the page did not load here) · <a href="https://www.alexcloudstar.com/blog/temporal-vs-inngest-vs-vercel-workflow-2026">Temporal vs Inngest vs Vercel Workflow</a>.</p>
+    <p>Okara's agent count and scale come from secondary write-ups and Vercel's case study summary; the Anthropic figures (15× tokens, 90.2%, ~20 starting cases) were read on Anthropic's page.</p>
+  </footer>
+</div>
+</body>
+</html>
