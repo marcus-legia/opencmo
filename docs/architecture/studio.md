@@ -112,6 +112,21 @@ Chain: Writer (LLM) → Reviewer (code) → Visuals → Builder → Renderer →
 - Outputs from one document: **MP4** (Reels, Shorts: timed slides, transitions, optional music bed) and a **PNG set**
   (TikTok photo mode up to 35 images with a cover index; Instagram and LinkedIn carousels), one card for both.
 
+**Decided 2026-10-26: one editor core, a Slides view** (owner's choice, following Canva: one editor for presentations
+and video with different views; CapCut: photo mode and templates in the main app). Not a second editor: a separate
+page with its own renderer would rebuild render, export, Brand Kit, captions and moderation, and CLAUDE.md allows one
+editor runtime.
+- Entry: "New" offers New video and New slideshow; a project of kind `slideshow` (the `clips` table allows
+  `full | blank` today; one migration adds it).
+- Slides view by default: slide strip on the left (add, delete, drag to reorder), frame in the middle, text, image,
+  colour and per-slide duration on the right; the timeline is hidden; "Timeline" switches to the full editor.
+- Same document underneath: each slide is a timed span on one timeline, changed only through new `editor-core` ops
+  (`add_slide`, `move_slide`, `set_slide_duration`…), so the Assistant and MCP get them; MP4 through `render_document`;
+  the PNG set is one still per slide from the same renderer.
+- From the brain: the slideshow lands in the Approval inbox; the card allows quick text edits per slide, and "Open in
+  Slides" for more.
+- Size: Slides view, slide ops and PNG export M; entry and project kind S.
+
 ## 8. Post image squad
 
 For a post that needs a picture, a video cover or a YouTube thumbnail (roadmap E4.2). Prefer a frame of the founder's
@@ -157,6 +172,7 @@ brain's B3 needs S1.
 | 3 | Approve one by one or as a batch? | one card, each short with its own approve and skip |
 | 4 | Name in code `short` instead of `clip`? | yes |
 | 5 | Slideshow outputs MP4 and PNG set? | both from one document |
+| — | Slideshow inside the editor or a separate page? | **decided**: one editor core, a Slides view, its own "New slideshow" entry (section 7) |
 | 6 | Look check on every render or only before a card? | only before a card |
 
 ## Sources

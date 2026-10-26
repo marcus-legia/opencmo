@@ -382,6 +382,16 @@ body{margin:0}
         </ul>
       </div>
     </div>
+    <div class="card g"><span class="k">Decided 2026-10-26: one editor core, a Slides view</span>
+      <p>Owner's choice, following Canva (one editor for presentations and video, different views) and CapCut (photo mode and templates inside the main app). Not a second editor: a separate page with its own renderer would rebuild render, export, Brand Kit, captions and moderation, and CLAUDE.md allows one editor runtime.</p>
+      <ul>
+        <li><b>Entry:</b> "New" offers New video and New slideshow. A slideshow is a project of a new kind <code>slideshow</code> (the <code>clips</code> table allows <code>full | blank</code> today, so one migration adds it).</li>
+        <li><b>Slides view by default:</b> a slide strip on the left (add, delete, drag to reorder), the frame in the middle, text, image, colour and per-slide duration on the right. The timeline is hidden; "Timeline" switches to the full editor for transitions and music.</li>
+        <li><b>Same document underneath:</b> each slide is a timed span on one timeline, changed only through new <code>editor-core</code> ops (<code>add_slide</code>, <code>move_slide</code>, <code>set_slide_duration</code>…), so the Assistant and MCP get them too. MP4 through <code>render_document</code>; the PNG set is one still per slide from the same renderer.</li>
+        <li><b>From the brain:</b> a slideshow lands in the Approval inbox; the card allows quick text edits per slide, and "Open in Slides" for more.</li>
+        <li><b>Size:</b> Slides view, slide ops and PNG export M; entry and project kind S.</li>
+      </ul>
+    </div>
   </section>
 
   <section class="sec" id="image">
@@ -445,6 +455,7 @@ body{margin:0}
           <tr><td>3</td><td>Approve shorts one by one or as a batch?</td><td>One card, each short with its own approve and skip</td></tr>
           <tr><td>4</td><td>Name in code: <code>short</code> instead of <code>clip</code>?</td><td>Yes (naming trap, section 2)</td></tr>
           <tr><td>5</td><td>Slideshow outputs: MP4 and PNG set?</td><td>Both from one document</td></tr>
+          <tr><td>—</td><td>Slideshow inside the editor or a separate page?</td><td><b>Decided:</b> one editor core with a Slides view and its own "New slideshow" entry (section 7)</td></tr>
           <tr><td>6</td><td>Run the look check on every render, or only before a card?</td><td>Only before a card; it costs a few vision calls per deliverable</td></tr>
         </tbody>
       </table>
