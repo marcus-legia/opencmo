@@ -12,6 +12,7 @@ twin for agents. The two must say the same thing; change both in the same commit
 | [`brain.html`](brain.html) · [`brain.md`](brain.md) | The CMO brain: today, lessons from outside, design, work orders, registry, memory, gates, evals, phases |
 | [`studio.html`](studio.html) · [`studio.md`](studio.md) | Studio, the video department: today, lessons from outside, one adapter and seven squads, Shorts, Slideshow, Post image, quality, phases |
 | [`approval.html`](approval.html) · [`approval.md`](approval.md) | Approval, the founder's department: one approvals table and decide RPC, card kinds, rules, reminders, safety, phases |
-| [`schedule-publish.html`](schedule-publish.html) · [`schedule-publish.md`](schedule-publish.md) | Schedule and Publish: remind mode first, then posting at the approved time through Zernio; slots, best time, one adapter, platform rules |
+| [`schedule-publish.html`](schedule-publish.html) · [`schedule-publish.md`](schedule-publish.md) | Schedule and Publish: every platform through Zernio, X included, at the approved time; slots, best time, one adapter, platform rules |
+| [`writer.html`](writer.html) · [`writer.md`](writer.md) | Writer, the words department: No AI Slop, voice samples, platform profiles, captions and video words for Studio, evals, phases |
 
-Next pages, one pair each: `research`, `writer`, `sales`.
+Next pages, one pair each: `research`, `sales`.
