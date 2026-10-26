@@ -10,13 +10,16 @@ composer or, once the owner decides, posts through Zernio at the approved time.
 
 ## 1. Verdict
 
-- **Ship first: remind mode, no tokens.** Schedule picks a time, the founder approves it on a schedule card, the Modal
-  clock fires, and the founder gets a notice with a composer already filled in (X intent, Threads web intent, copy +
-  open for LinkedIn and Facebook). Nothing posts by itself; no product rule changes; no platform review.
-- **Then, only after a decision: adapter mode.** Posting at the approved time through Zernio covers TikTok,
-  Instagram, YouTube, LinkedIn and more without our own app reviews, tokens stay out of our database. It changes "the
-  user posts" into "the user approves a time", so it waits for the owner's call and three Zernio checks: TikTok audit,
-  real price, terms.
+- **Decided 2026-10-26: every platform through Zernio, X included** (owner's call, to keep it simple). The founder
+  connects each account once through Zernio's OAuth link; at the approved time the worker posts through Zernio and a
+  webhook confirms. Tokens stay with Zernio; we never build a platform app; X goes the same way (Zernio passes X's
+  API price through).
+- This is still "assist, never act": nothing goes out without the founder's approval of content, time and account, on
+  the founder's own account. The copy changes from "you post it" to "you approve when it posts"; landing and cards
+  must say so.
+- **Before it ships:** check Zernio's TikTok audit (or TikTok posts go private), its real price per connected account,
+  and its terms for a SaaS reselling posting. The intent link stays only as a fallback for a founder with no
+  connected account (or when Zernio is down). X API cost passes through: ~$0.015 a post, ~$0.20 with a link.
 - **Found in the code:** no timezone anywhere for a founder; scheduling at a time needs one first.
 
 ## 2. Today (`main`, `eb858ca`)
@@ -85,9 +88,8 @@ drag and drop; moving an item changes the time and supersedes its card.
 
 | Adapter | Platforms | Who taps post | Tokens | Cost | State |
 |---|---|---|---|---|---|
-| `intent` | X (intent), Threads (web intent), LinkedIn and Facebook (copy + open) | the founder | none | $0 | X built |
-| `zernio` | TikTok, Instagram, YouTube, LinkedIn, Threads, Facebook, Pinterest, Bluesky… | the system at the approved time | held by Zernio; we keep account ids | ~$6 per connected account after 2 free (third-party listing) | new, after decision |
-| `x_api` | X | the system at the approved time | ours or through Zernio | ~$0.015 a post, ~$0.20 with a link | optional |
+| `zernio` (main, decided) | every platform: X, TikTok, Instagram, YouTube, LinkedIn, Threads, Facebook, Pinterest, Bluesky… | the system at the approved time | held by Zernio; we keep account ids | ~$6 per connected account after 2 free (third-party listing); X posts at X's API price | new |
+| `intent` (fallback) | X (intent), Threads (web intent), LinkedIn and Facebook (copy + open) | the founder | none | $0 | X built |
 
 - One function `publish(deliverable, slot)` → `{ status, external_id, url, error }`; the brain and event rules never
   know which adapter ran.
@@ -125,22 +127,23 @@ views per slot hour per platform (feeds the best-time pick) · posts per week pe
 
 ## 10. Build phases
 
-- **P0 Remind mode:** `profiles.timezone`; a time per calendar item; `schedule_slots` in remind mode; schedule cards
-  (Approval A3); `sweep` fires due slots; notice with composer for X and Threads, copy + open for LinkedIn and Facebook.
-- **P1 Best time:** default slots as data; own slots once a platform has enough posts; jitter; gaps and caps.
-- **P2 Adapter mode through Zernio:** only after the owner's decision and the Zernio checks; `social_accounts`, connect
-  and disconnect, media upload from the worker, `publish_post` orders, signed webhooks with receipts, TikTok fields.
-- **P3 Metrics through the adapter:** Zernio analytics next to today's public reading; the X API as an option.
+- **P0 Zernio checks and account connect:** TikTok audit, price, terms; `profiles.timezone`; a Zernio profile per
+  founder; `social_accounts` with connect and disconnect, X first.
+- **P1 Scheduled posting through Zernio:** a time per calendar item; `schedule_slots`; schedule cards (Approval A3);
+  `sweep` fires due slots into `publish_post` orders; media from the worker; signed webhooks with receipts; TikTok
+  fields on the card; intent fallback for founders with no connected account.
+- **P2 Best time:** default slots as data; own slots once a platform has enough posts; jitter; gaps and caps.
+- **P3 Metrics through Zernio:** Zernio analytics next to today's public reading.
 
-P0 needs Approval A0–A2. Studio S2–S3 (shorts, slideshows) make P2 worth its cost.
+P1 needs Approval A0–A1 and the A3 schedule card. Studio S2–S3 (shorts, slideshows) go out the same way.
 
 ## 11. Decisions for the owner
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Ship remind mode first, with no tokens? | yes (P0) |
-| 2 | Allow posting at the approved time (adapter mode)? | yes, only per slot with its own approval, after P0 works and the Zernio checks; it changes "the user posts" to "the user approves a time", and the landing copy must say so |
-| 3 | Zernio or our own platform apps? | Zernio, if its TikTok app is audited and the price holds |
+| 1 | Ship remind mode first, with no tokens? | **decided 2026-10-26: no**; everything through Zernio, the intent link only as a fallback |
+| 2 | Allow posting at the approved time (adapter mode)? | **decided: yes**, per slot with its own approval of content, time and account; landing and cards say "you approve when it posts" |
+| 3 | Zernio or our own platform apps? | **decided: Zernio for every platform, X included**; check its TikTok audit, price and terms before launch |
 | 4 | Minimum gap and daily cap per platform | 3 hours and the existing 5 a day for X; others from data |
 | 5 | AI-generated label on AI video | always on |
 | 6 | Natural posting jitter | yes, up to ±4 minutes |

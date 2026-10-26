@@ -149,7 +149,7 @@ tokens.
 | Calendar, best time, reminders | build | simple logic on our data | none added |
 | In-app notices, web push | build | VAPID keys, no provider | none added |
 | Email | buy: Resend | deliverability | free ~3,000/month; Pro ~$20 for 50,000 [1] |
-| Posting to X | build → API | today intent link ($0); scheduled posting needs the X API | ~$0.015 a post, ~$0.20 with a link [2] |
+| Posting to X | buy: Zernio (decided 2026-10-26) | all scheduled posting goes through Zernio, X included; the intent link stays as a fallback | X API price passed through: ~$0.015 a post, ~$0.20 with a link [2] |
 | Posting to TikTok, IG, YouTube, LinkedIn, Threads, FB | buy: Zernio | unaudited TikTok clients post privately to ≤ 5 users a day; Meta needs app review; the aggregator carries reviews and token refresh | ~$6 an account, first 2 free [3]; Ayrshare $149/month for one profile [4] |
 | Social account tokens | buy: Zernio holds them | we keep ids only | included |
 | Metrics after posting | mixed | ScrapeCreators today, Zernio analytics later | per call |
@@ -208,9 +208,9 @@ https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 1. Writer: No AI Slop + per-platform captions (small, no migration).
 2. The spine: `work_orders`, `deliverables`, department folders (changes 1, 2, 9), with pgTAP, keeping data.
 3. Registry + Studio takes a script (3); v1 is a "Build" button; headless (4) after one video's cost is measured.
-4. Approval inbox, notifications, Schedule v1 (5, 6, 7): reminders only, nothing posts by itself.
+4. Approval inbox, notifications, Schedule (5, 6, 7): scheduled posting through Zernio at the approved time (owner decision 2026-10-26; see `schedule-publish.md`).
 5. Studio: slideshow, clips from a finished edit (with editor roadmap E4.1).
-6. Publish adapter + Zernio (8), after the owner settles "approval with a time" and Zernio is checked.
+6. Publish adapter on Zernio for every platform (8), after the Zernio checks (TikTok audit, price, terms).
 
 ## 12. Next
 
