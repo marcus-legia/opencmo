@@ -143,7 +143,7 @@ superseded cards · send-back reasons (next eval cases).
 
 ## 12. Decisions for the owner
 
-| # | Question | Recommendation |
+| # | Question | Decision (owner, 2026-10-26: as recommended) |
 |---|---|---|
 | 1 | Auto-approve for anything? | only free, internal, reversible items; never posts, replies, schedules or paid work |
 | 2 | Approve from an email? | no; the email opens the card |
