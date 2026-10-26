@@ -105,7 +105,7 @@ drag and drop; moving an item changes the time and supersedes its card.
 |---|---|
 | X | 280 characters; at most two hashtags; a link makes an API post cost more; no automated replies by keyword |
 | Threads | 500 characters; no hashtags; web intent opens the app on phones |
-| TikTok | creator nickname and avatar, privacy selector from the account's options, comment/duet/stitch toggles, AI-generated label for AI video; photo posts up to 35 images |
+| TikTok | creator nickname and avatar, privacy selector from the account's options, comment/duet/stitch toggles, AI-generated label toggle (the founder decides); photo posts up to 35 images |
 | Instagram, YouTube, Facebook | business or creator accounts for Instagram; vertical specs for Reels and Shorts; titles and descriptions per platform from Writer |
 | LinkedIn | no confirmed text prefill on the share URL: copy, then open; API path through Zernio |
 
@@ -116,7 +116,7 @@ drag and drop; moving an item changes the time and supersedes its card.
 | Nothing goes out without an approved time and account | schedule card snapshot (Approval rule 1); the publish order checks it again |
 | Never late, never twice | `missed` after the window; lease on the slot; idempotency key per slot to the adapter |
 | Assist, never act on engagement | the adapter publishes only the founder's own posts; no likes, follows, comments, replies or multiple accounts |
-| Honest AI video | AI-generated label where offered, always on for long-take video |
+| AI-generated label | decided 2026-10-26: the founder decides; the card shows the platform's toggle (off by default) with one line of help; platform labelling rules are the poster's to follow |
 | Tokens | never in our database in adapter mode; the founder can disconnect any time |
 | Kill switch | the brain's kill switch stops waiting slots too |
 
@@ -145,7 +145,7 @@ P1 needs Approval A0–A1 and the A3 schedule card. Studio S2–S3 (shorts, slid
 | 2 | Allow posting at the approved time (adapter mode)? | **decided: yes**, per slot with its own approval of content, time and account; landing and cards say "you approve when it posts" |
 | 3 | Zernio or our own platform apps? | **decided: Zernio for every platform, X included**; check its TikTok audit, price and terms before launch |
 | 4 | Minimum gap and daily cap per platform | 3 hours and the existing 5 a day for X; others from data |
-| 5 | AI-generated label on AI video | always on |
+| 5 | AI-generated label on AI video | **decided 2026-10-26: the founder decides**; a toggle on the card, off by default |
 | 6 | Natural posting jitter | yes, up to ±4 minutes |
 
 ## Sources

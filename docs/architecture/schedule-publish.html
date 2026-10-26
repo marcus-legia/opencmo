@@ -329,7 +329,7 @@ external_id, external_url, error</pre>
         <tbody>
           <tr><td>X</td><td>280 characters; at most two hashtags (today's check); a link makes an API post cost more; no automated replies by keyword</td></tr>
           <tr><td>Threads</td><td>500 characters; no hashtags (Writer's short-video skill); web intent opens the app on phones</td></tr>
-          <tr><td>TikTok</td><td>Creator nickname and avatar, a privacy selector from the account's options, comment/duet/stitch toggles, the AI-generated label for AI video; photo posts up to 35 images</td></tr>
+          <tr><td>TikTok</td><td>Creator nickname and avatar, a privacy selector from the account's options, comment/duet/stitch toggles, the AI-generated label toggle (the founder decides); photo posts up to 35 images</td></tr>
           <tr><td>Instagram, YouTube, Facebook</td><td>Business or creator accounts for Instagram; vertical specs for Reels and Shorts; titles and descriptions per platform from Writer</td></tr>
           <tr><td>LinkedIn</td><td>No confirmed text prefill on the share URL: copy, then open; the API path goes through Zernio</td></tr>
         </tbody>
@@ -346,7 +346,7 @@ external_id, external_url, error</pre>
           <tr><td>Nothing goes out without an approved time and account</td><td>The schedule card's snapshot (Approval rule 1); the publish order checks it again before calling the adapter</td></tr>
           <tr><td>Never late, never twice</td><td><code>missed</code> after the window; a lease on the slot; an idempotency key per slot sent to the adapter</td></tr>
           <tr><td>Assist, never act on engagement</td><td>The adapter only publishes the founder's own posts; no likes, follows, comments, replies or multiple accounts</td></tr>
-          <tr><td>Honest AI video</td><td>The AI-generated label on platforms that offer it, always on for video made by the long take</td></tr>
+          <tr><td>AI-generated label</td><td>Decided 2026-10-26: the founder decides. The schedule card shows the platform's label toggle (off by default) with one line of help; platform rules on labelling realistic AI content are the poster's to follow</td></tr>
           <tr><td>Tokens</td><td>Never in our database in adapter mode; Zernio holds them; a founder can disconnect at any time</td></tr>
           <tr><td>Kill switch</td><td>The brain's kill switch stops waiting slots too (no publish order is created while it is on)</td></tr>
         </tbody>
@@ -390,7 +390,7 @@ external_id, external_url, error</pre>
           <tr><td>2</td><td>Allow posting at the approved time (adapter mode)?</td><td><b>Decided: yes</b>, per slot with its own approval of content, time and account; the landing copy and cards say "you approve when it posts"</td></tr>
           <tr><td>3</td><td>Zernio or our own platform apps?</td><td><b>Decided: Zernio for every platform, X included</b>; still to check its TikTok audit, price and terms before launch</td></tr>
           <tr><td>4</td><td>Minimum gap and daily cap per platform</td><td>Start with 3 hours and the existing 5 a day for X; set the others from data</td></tr>
-          <tr><td>5</td><td>AI-generated label on AI video</td><td>Always on</td></tr>
+          <tr><td>5</td><td>AI-generated label on AI video</td><td><b>Decided 2026-10-26: the founder decides</b>; a toggle on the card, off by default</td></tr>
           <tr><td>6</td><td>Natural posting jitter</td><td>Yes, up to ±4 minutes</td></tr>
         </tbody>
       </table>
