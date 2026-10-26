@@ -10,5 +10,6 @@ twin for agents. The two must say the same thing; change both in the same commit
 |---|---|
 | [`ai-cmo.html`](ai-cmo.html) · [`ai-cmo.md`](ai-cmo.md) | The CMO brain and its seven departments: target system, build or buy, contracts, build order |
 | [`brain.html`](brain.html) · [`brain.md`](brain.md) | The CMO brain: today, lessons from outside, design, work orders, registry, memory, gates, evals, phases |
+| [`studio.html`](studio.html) · [`studio.md`](studio.md) | Studio, the video department: today, lessons from outside, one adapter and seven squads, Shorts, Slideshow, Post image, quality, phases |
 
-Next pages, one pair each: `research`, `writer`, `sales`, `studio`, `approval`, `schedule`, `publish`.
+Next pages, one pair each: `research`, `writer`, `sales`, `approval`, `schedule`, `publish`.
