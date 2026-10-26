@@ -352,7 +352,7 @@ body{margin:0}
         <tbody>
           <tr><td>Words with times</td><td>Voice-over word timings and the plan's beats</td><td>Scribe words; diarization for who speaks</td></tr>
           <tr><td>Segmenter (code)</td><td>Beats are the candidates</td><td>Sentence ends + pauses + speaker turns; topic shifts in the ClipsAI style for long talks</td></tr>
-          <tr><td>Clip editor (LLM)</td><td colspan="2">Ranks 5–8 candidate ranges of 15–60 s and returns 2–5 with a hook line, a title and reasons against OpusClip's criteria (hook, flow, value). One cheap call; the brief says the platform</td></tr>
+          <tr><td>Clip editor (LLM)</td><td colspan="2">Ranks 5–8 candidate ranges of 15–60 s and returns 3 (the default) with a hook line, a title and reasons against OpusClip's criteria (hook, flow, value). One cheap call; the brief says the platform</td></tr>
           <tr><td>Clip reviewer (code)</td><td colspan="2">Starts on a sentence and ends on one; a hook in the first 3 s; length per platform; no name or number split; no overlap; sends back once</td></tr>
           <tr><td>Builder (<code>make_short</code> op)</td><td>Copy the timeline, set the workarea; already 9:16 when the video is</td><td>Copy, workarea, 9:16 with face or active-speaker reframe (report 2026-10-18)</td></tr>
           <tr><td>Style</td><td colspan="2">A style skill (hook title, captions with emphasis, punch-ins) applied by the same op path</td></tr>
@@ -450,13 +450,13 @@ body{margin:0}
       <table>
         <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td>Shorts from the founder's own finished edits too, or only from AI long videos?</td><td>Both; AI videos first (S2), own edits once "finished" exists. The source is always a finished edit in the founder's project</td></tr>
-          <tr><td>2</td><td>How many shorts per video by default?</td><td>3</td></tr>
-          <tr><td>3</td><td>Approve shorts one by one or as a batch?</td><td>One card, each short with its own approve and skip</td></tr>
-          <tr><td>4</td><td>Name in code: <code>short</code> instead of <code>clip</code>?</td><td>Yes (naming trap, section 2)</td></tr>
+          <tr><td>1</td><td>Shorts from the founder's own finished edits too, or only from AI long videos?</td><td><b>Decided 2026-10-26: both.</b> AI videos first (S2), own edits once "finished" exists; the source is always a finished edit in the founder's project</td></tr>
+          <tr><td>2</td><td>How many shorts per video by default?</td><td><b>Decided: 3</b></td></tr>
+          <tr><td>3</td><td>Approve shorts one by one or as a batch?</td><td><b>Decided: as a batch.</b> One card, one approval for all shorts of a video</td></tr>
+          <tr><td>4</td><td>Name in code: <code>short</code> instead of <code>clip</code>?</td><td><b>Decided: <code>short</code></b> (naming trap, section 2)</td></tr>
           <tr><td>5</td><td>Slideshow outputs: MP4 and PNG set?</td><td>Both from one document</td></tr>
           <tr><td>—</td><td>Slideshow inside the editor or a separate page?</td><td><b>Decided:</b> one editor core with a Slides view and its own "New slideshow" entry (section 7)</td></tr>
-          <tr><td>6</td><td>Run the look check on every render, or only before a card?</td><td>Only before a card; it costs a few vision calls per deliverable</td></tr>
+          <tr><td>6</td><td>Run the look check on every render, or only before a card?</td><td><b>Open.</b> Recommendation: only before a card; it costs a few vision calls per deliverable</td></tr>
         </tbody>
       </table>
     </div>

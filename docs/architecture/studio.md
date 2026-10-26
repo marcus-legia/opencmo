@@ -92,7 +92,7 @@ Chain: Segmenter (code) → Clip editor (LLM) → Clip reviewer (code) → Build
 |---|---|---|
 | Words with times | voice-over word timings and the plan's beats | Scribe words; diarization |
 | Segmenter (code) | beats are the candidates | sentence ends + pauses + speaker turns; topic shifts (ClipsAI style) for long talks |
-| Clip editor (LLM) | ranks 5–8 candidates of 15–60 s, returns 2–5 with hook line, title and reasons (hook, flow, value); one cheap call | same |
+| Clip editor (LLM) | ranks 5–8 candidates of 15–60 s, returns 3 (the default) with hook line, title and reasons (hook, flow, value); one cheap call | same |
 | Clip reviewer (code) | starts and ends on a sentence; hook in the first 3 s; length per platform; no name or number split; no overlap; sends back once | same |
 | Builder (`make_short`) | copy timeline, set workarea; already 9:16 when the video is | copy, workarea, 9:16 with face or active-speaker reframe |
 | Style | a style skill (hook title, captions with emphasis, punch-ins) through the same op path | same |
@@ -167,13 +167,13 @@ brain's B3 needs S1.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Shorts from the founder's own finished edits too? | both; AI videos first (S2), own edits once "finished" exists; the source is always a finished edit in the founder's project |
-| 2 | Shorts per video by default | 3 |
-| 3 | Approve one by one or as a batch? | one card, each short with its own approve and skip |
-| 4 | Name in code `short` instead of `clip`? | yes |
+| 1 | Shorts from the founder's own finished edits too? | **decided 2026-10-26: both**; AI videos first (S2), own edits once "finished" exists; the source is always a finished edit in the founder's project |
+| 2 | Shorts per video by default | **decided: 3** |
+| 3 | Approve one by one or as a batch? | **decided: as a batch**, one card, one approval for all shorts of a video |
+| 4 | Name in code `short` instead of `clip`? | **decided: `short`** |
 | 5 | Slideshow outputs MP4 and PNG set? | both from one document |
 | — | Slideshow inside the editor or a separate page? | **decided**: one editor core, a Slides view, its own "New slideshow" entry (section 7) |
-| 6 | Look check on every render or only before a card? | only before a card |
+| 6 | Look check on every render or only before a card? | **open**; recommendation: only before a card |
 
 ## Sources
 
