@@ -20,6 +20,7 @@
     "cmo:eval": "NODE_OPTIONS=--conditions=react-server tsx lib/cmo/jobs/eval.ts",
     "check:modal": "tsx lib/modal.check.ts",
     "test:e2e": "tsx e2e/run.ts",
+    "test:e2e:v2": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts ui-v2",
     "check:polar": "NODE_OPTIONS=--conditions=react-server tsx lib/polar.check.ts",
     "check:pricing": "NODE_OPTIONS=--conditions=react-server tsx lib/pricing.check.ts",
     "check:deploy": "tsx lib/deploy.check.ts",
@@ -53,6 +54,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.20.5",

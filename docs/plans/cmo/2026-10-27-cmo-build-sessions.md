@@ -100,10 +100,10 @@ the owner forwards it to the planner session.
 
 **Order:** U1 (push primitives early: C uses them) → U2 → U3 → U4 → U9 when C is at M2.
 
-- [ ] U1 tokens and primitives, `/app/design`
-- [ ] U2 shell, phone tab bar
-- [ ] U3 Dashboard, desktop and phone
-- [ ] U4 approval cards, `/app/inbox/[id]`
+- [x] U1 tokens and primitives, `/app/design`
+- [x] U2 shell, phone tab bar
+- [x] U3 Dashboard, desktop and phone
+- [x] U4 approval cards, `/app/inbox/[id]`
 - [ ] U9 look check, axe, full suite
 
 ## Session C: pages
@@ -196,6 +196,36 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   unknown time zone with "Choose a time zone from the list."). The Dashboard contract gained `digest`
   (`DigestSchema`: `dateLabel`, `waiting[]` with card ids for `/app/inbox/[id]`, `wentOut[]`, `stuck[]`; null = none);
   B shows it at the top of the queue. `cmo.pausedAt`, Settings and the digest turn live in W1-5.
+
+- **[B → A] Screens index for the rail.** `components/shell-v2/useScreensLive.ts` reads `GET /api/v1/screens` and
+  expects `{ live: { [screen]: boolean } }` (screen names in `components/shell-v2/nav.ts`; a screen is live when
+  production may show it). Until it answers, production hides every sample-only screen.
+- **[B → A] Dashboard and card contracts.** B coded the Dashboard and cards against presentational types in
+  `components/dashboard/model.ts` (`DashboardView`) and `components/cards/model.ts` (`ApprovalCardView`, ten bodies),
+  built from the frames. Please shape `DashboardScreen` and `ApprovalCard` in `lib/screens/` to match, or map onto
+  them in the loader, and move the fixture in `components/dashboard/sample.ts` into `lib/screens/fixtures/`. B then
+  swaps the import and drops the 404 fallback in `components/dashboard/useDashboard.ts`
+  (`GET /api/v1/screens/dashboard` → `{ data }`).
+- **[B → A] Decisions through A0.** `components/cards/decide.ts` calls today's routes by `card.ref`
+  (`content_item` / `opportunity` / `goal`). When `approval_decide` lands, give B its route; only `decide()` changes.
+- **[B → A] Pause (B2) and Realtime.** The Pause CMO confirm is built and disabled while `live.pause` is false; B
+  needs the pause/resume route and `paused` in the Dashboard data. With Realtime on `approvals` and
+  `work_order_events`, B adds the subscription to `useDashboard`.
+- **[B → C] Primitives are in.** `components/ui/` (Button, ButtonLink, Chip, Tabs, Segmented, Panel, Kpi, KpiStrip,
+  MonoLabel, Toggle, Field, SelectField, TextareaField, EmptyState, SampleTag, Sparkline); `/app/design` shows them.
+  Wrap a page in `<div className="v2-page">`; toasts go through `useShellState().toast` from
+  `components/shell-v2/ShellState`. Add your screens to `SCREENS` in `apps/web/e2e/ui-v2-look.spec.ts`.
+- **[B → planner] Outside B's paths:** `components/clipping/web/WebShell.tsx` now exports `ShellAccountContext` and
+  two types (no behaviour change), so pages calling `useShellAccount()` work under both shells.
+  **Deviations from the frames:** the ok green is `#2b7550` (the frame's `#2f7d57` is 4.3:1 on `#e6f1eb`); the live
+  log does not fade older lines (faded labels fall under 4.5:1); Ask your CMO is disabled with a reason (no screen
+  is designed for it yet). Session B worked on branch `claude/cmo-build-sessions-b-wl8vs8` because `cmo-build` did
+  not exist yet.
+- `[B]` Merged into `cmo-build` on 2026-10-27, after U0, A0 and B2 landed. The B requests above to A are answered by
+  A's notes before them; B's next step is to swap `components/dashboard/model.ts` and `components/cards/model.ts`
+  for `lib/screens/dashboard.ts` and `lib/screens/cards.ts`, decide through `POST /api/v1/approvals/[id]`, use
+  `PauseButton` on the Dashboard, show the digest, and answer C's requests (one flag helper, `/app` → `/app/setup`,
+  `?ask=1`, Setup without the rail, `components/screens/kit/` → `components/ui/`).
 
 ## Prompts to start each session
 
