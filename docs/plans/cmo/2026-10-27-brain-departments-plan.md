@@ -109,10 +109,11 @@ them; it orders the work and names the files.
 
 ### Task W1-6: Wave 1 acceptance (lead: Session A; reviewer: the planning session)
 
-- [ ] On a local stack with fake providers: onboard → plan_week writes a tree → posts and the Reddit scan run → cards
+- [x] On a local stack with fake providers: onboard → plan_week writes a tree → posts and the Reddit scan run → cards
   appear in the Dashboard queue live → approve one, the graph and log move → Pause stops the next run → the digest lists
   what waits.
-- [ ] Look: screenshots of the Dashboard and Brain with live data, next to their frames.
+- [ ] Look: screenshots of the Dashboard and Brain with live data, next to their frames. Brain done
+  ([`2026-10-27-brain-wave1-acceptance/`](2026-10-27-brain-wave1-acceptance/README.md)); the Dashboard waits for B's U3.
 
 ## 6. Waves 2 and 3 (outline; each gets its own plan before code)
 

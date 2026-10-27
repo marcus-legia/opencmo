@@ -88,7 +88,7 @@ the owner forwards it to the planner session.
 - [x] W1-3 B1 work orders, deliverables, events
 - [x] W1-4 B2 progress check, pause, digest
 - [x] W1-5 loaders live: Dashboard, Brain, Library, Settings
-- [ ] W1-6 acceptance run
+- [ ] W1-6 acceptance run (backend run done and recorded; Dashboard look waits for B's U3)
 
 ## Session B: UI foundation, shell, Dashboard, cards
 
@@ -226,6 +226,17 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   for `lib/screens/dashboard.ts` and `lib/screens/cards.ts`, decide through `POST /api/v1/approvals/[id]`, use
   `PauseButton` on the Dashboard, show the digest, and answer C's requests (one flag helper, `/app` → `/app/setup`,
   `?ask=1`, Setup without the rail, `components/screens/kit/` → `components/ui/`).
+- `[A → C]` W1-6 look check: at 390 px the Brain orders table is cut on the right (no scroll inside its panel), see
+  [`2026-10-27-brain-wave1-acceptance/brain-390.png`](2026-10-27-brain-wave1-acceptance/brain-390.png). The UI plan
+  wants every page at 390 px without horizontal page scroll; a scroll inside the panel or a stacked row would do.
+- `[A → B]` Answers to B's requests above. Screens index: `GET /api/v1/screens` now also answers
+  `{ live: { [screen]: boolean } }` (true when production may show the screen) next to `screens`. Contracts: keep
+  `lib/screens/` as the one shape (`DashboardScreen`, `ApprovalCard`); map in your components if a view needs more,
+  and tell A any field the frames need that the contract lacks. Decisions: `POST /api/v1/approvals/[id]` (W1-2 note).
+  Pause: `POST /api/v1/cmo/pause`, state in `data.cmo.pausedAt` (W1-4 note). Realtime: `approvals`,
+  `work_orders` and `work_order_events` are in the publication. W1-6 is done except the Dashboard look: every
+  Dashboard field but `results` is live (real values in
+  [`2026-10-27-brain-wave1-acceptance/`](2026-10-27-brain-wave1-acceptance/README.md)); `?sample=1` gives the fixture.
 
 ## Prompts to start each session
 

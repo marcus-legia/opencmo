@@ -18,7 +18,7 @@ begin;
 -- by UTF-8 bytes (`collate "C"`), which matches JCS's UTF-16 order outside the astral planes; a jsonb number keeps
 -- its written form, so snapshots never store fractions. Same output as `canonicalJson` in lib/settings-schema.ts.
 create or replace function public.jcs(p jsonb) returns text
-language plpgsql immutable strict set search_path = public
+language plpgsql stable strict set search_path = public
 as $$
 begin
   case jsonb_typeof(p)
@@ -103,7 +103,7 @@ $$;
 revoke all on function public.approval_snapshot(text, uuid) from public, anon, authenticated;
 
 create or replace function public.approval_hash(p_snapshot jsonb) returns text
-language sql immutable strict set search_path = public
+language sql stable strict set search_path = public
 as $$ select encode(extensions.digest(convert_to(public.jcs(p_snapshot), 'UTF8'), 'sha256'), 'hex') $$;
 revoke all on function public.approval_hash(jsonb) from public, anon, authenticated;
 

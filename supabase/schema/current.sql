@@ -1635,7 +1635,7 @@ $$;
 --
 
 CREATE FUNCTION public.approval_hash(p_snapshot jsonb) RETURNS text
-    LANGUAGE sql IMMUTABLE STRICT
+    LANGUAGE sql STABLE STRICT
     SET search_path TO 'public'
     AS $$ select encode(extensions.digest(convert_to(public.jcs(p_snapshot), 'UTF8'), 'sha256'), 'hex') $$;
 
@@ -5595,7 +5595,7 @@ $$;
 --
 
 CREATE FUNCTION public.jcs(p jsonb) RETURNS text
-    LANGUAGE plpgsql IMMUTABLE STRICT
+    LANGUAGE plpgsql STABLE STRICT
     SET search_path TO 'public'
     AS $$
 begin
@@ -8983,7 +8983,8 @@ begin
       case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
       jsonb_build_object('objective', v_item.idea, 'done_when',
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
-      least(v_price, greatest(v_free, 0)), (v_item.day + 1)::timestamptz, '{}', 'loop', v_item.id);
+      -- Due by the end of the item's own day (UTC, the calendar's day), so the page shows the day it was planned for.
+      least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'loop', v_item.id);
   end loop;
 
   if not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'review_week') then

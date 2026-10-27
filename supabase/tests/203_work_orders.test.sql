@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(41);
+select plan(42);
 
 -- Grants, RLS, Realtime.
 select ok(has_table_privilege('authenticated', 'public.work_orders', 'select'), 'founders read orders');
@@ -46,6 +46,7 @@ select is((select run_id from public.work_orders where id = pg_temp.id('root')),
 select is((select count(*)::int from public.work_orders where parent_id = pg_temp.id('root')), 4, 'one order per post and Reddit item, plus the Sunday review');
 select is((pg_temp.order_of('p1')).department, 'writer', 'posts go to Writer');
 select is((pg_temp.order_of('s1')).budget_credits, 5, 'a Reddit scan gets its price as budget');
+select is(((pg_temp.order_of('p1')).due_at at time zone 'UTC')::date, current_date, 'an order is due on its calendar day');
 select ok(not exists (select 1 from public.work_orders where kind = 'build_video'), 'video items wait for Studio orders');
 select ok(exists (select 1 from public.work_order_events where order_id = pg_temp.id('root') and text = 'Planned the week'), 'the log says so');
 

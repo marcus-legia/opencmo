@@ -82,7 +82,11 @@ async function weekTree(supabase: SupabaseClient, week = mondayUtc()): Promise<{
   const children = rows.filter((o) => o.parent_id !== null);
   const sorted: OrderDb[] = [];
   const visit = (parent: string) => {
-    for (const o of children.filter((c) => c.parent_id === parent)) {
+    // Orders of one plan share `created_at` (one transaction): sort siblings by when they are due.
+    const siblings = children
+      .filter((c) => c.parent_id === parent)
+      .sort((a, b) => (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999") || a.created_at.localeCompare(b.created_at));
+    for (const o of siblings) {
       sorted.push(o);
       visit(o.id);
     }
@@ -185,14 +189,17 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
         const running = mine.find((o) => o.status === "running");
         const stuck = mine.find((o) => verdict(o) === "stuck" || verdict(o) === "over_budget");
         const next = mine.filter((o) => o.status === "queued").sort((a, b) => (a.due_at ?? "9").localeCompare(b.due_at ?? "9"))[0];
+        const waitingOn = mine.find((o) => o.status === "waiting_founder");
         const state: "working" | "idle" | "stuck" = stuck ? "stuck" : running ? "working" : "idle";
         const line = stuck
           ? `Stuck: ${stuck.title}`
           : running
             ? `Working on “${running.title}”`
-            : next
-              ? `Next: “${next.title}”`
-              : "Idle";
+            : waitingOn
+              ? `“${waitingOn.title}” waits on you`
+              : next
+                ? `Next: “${next.title}”`
+                : "Idle";
         return { department, state, line: line.slice(0, 120), waiting: cards.filter((c) => c.department === department).length };
       });
       const anyStuck = nodes.some((n) => n.state === "stuck");

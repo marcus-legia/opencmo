@@ -299,7 +299,8 @@ begin
       case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
       jsonb_build_object('objective', v_item.idea, 'done_when',
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
-      least(v_price, greatest(v_free, 0)), (v_item.day + 1)::timestamptz, '{}', 'loop', v_item.id);
+      -- Due by the end of the item's own day (UTC, the calendar's day), so the page shows the day it was planned for.
+      least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'loop', v_item.id);
   end loop;
 
   if not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'review_week') then
