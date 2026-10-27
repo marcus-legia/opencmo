@@ -13,6 +13,7 @@ twin for agents. The two must say the same thing; change both in the same commit
 | [`studio.html`](studio.html) · [`studio.md`](studio.md) | Studio, the video department: today, lessons from outside, one adapter and seven squads, Shorts, Slideshow, Post image, quality, phases |
 | [`approval.html`](approval.html) · [`approval.md`](approval.md) | Approval, the founder's department: one approvals table and decide RPC, card kinds, rules, reminders, safety, phases |
 | [`schedule-publish.html`](schedule-publish.html) · [`schedule-publish.md`](schedule-publish.md) | Schedule and Publish: every platform through Zernio, X included, at the approved time; slots, best time, one adapter, platform rules |
-| [`writer.html`](writer.html) · [`writer.md`](writer.md) | Writer, the words department: No AI Slop, voice samples, platform profiles, captions and video words for Studio, evals, phases |
+| [`writer.html`](writer.html) · [`writer.md`](writer.md) | Writer, the words department: voice in memory, No AI Slop as guidance, platform profiles, captions and video words for Studio, evals, phases |
+| [`research-sales.html`](research-sales.html) · [`research-sales.md`](research-sales.md) | Research and Sales: evidence rules, niche video research, subreddit rules, reply outcomes, data risk, phases |
 
-Next pages, one pair each: `research`, `sales`.
+Next: the end-to-end workflow across the brain and every department.
