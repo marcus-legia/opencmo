@@ -1,0 +1,121 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+import { Logo } from "@/components/shell-v2/Logo";
+import { Button } from "@/components/ui";
+
+/** "5 things wait on you." from the queue count: the same number as the rail badge. */
+export function headline(count: number): string {
+  if (count === 0) return "Nothing waits on you.";
+  return count === 1 ? "1 thing waits on you." : `${count} things wait on you.`;
+}
+
+const ASK_LATER = "Asking your CMO from the Dashboard opens with the brain chat.";
+const PAUSE_LATER = "Pause works once the brain's off switch is live.";
+
+function useClock(timezone: string) {
+  // Empty on the server and the first client frame: the time is the viewer's, not the build machine's.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  if (!now) return { clock: "--:--:--", day: "", short: "" };
+  const zone = { timeZone: timezone };
+  return {
+    clock: new Intl.DateTimeFormat("en-GB", { ...zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(now),
+    day: new Intl.DateTimeFormat("en-GB", { ...zone, weekday: "long", day: "numeric", month: "short" }).format(now).replace(",", ""),
+    short: new Intl.DateTimeFormat("en-GB", { ...zone, weekday: "short", day: "numeric", month: "short" }).format(now).replace(",", ""),
+  };
+}
+
+export function DashboardHeader({
+  count,
+  timezone,
+  goal,
+  pauseLive,
+  paused,
+}: {
+  count: number;
+  timezone: string;
+  goal: { done: number; total: number };
+  pauseLive: boolean;
+  paused: boolean;
+}) {
+  const { clock, day, short } = useClock(timezone);
+  const confirm = useRef<HTMLDialogElement>(null);
+  const pct = goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
+
+  return (
+    <>
+      <header className="v2-dash-head">
+        <div className="v2-dash-phonebar">
+          <span className="v2-dash-phonebrand">
+            <Logo size={24} />
+            <span>OpenCMO</span>
+          </span>
+          <span className="v2-actions">
+            <Button variant="secondary" icon aria-label="Ask your CMO" disabled title={ASK_LATER}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="M4 5h16v11H9l-5 4z" />
+              </svg>
+            </Button>
+            <Button variant="danger" icon aria-label={paused ? "CMO paused" : "Pause CMO"} onClick={() => confirm.current?.showModal()}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M9 5v14M15 5v14" />
+              </svg>
+            </Button>
+          </span>
+        </div>
+
+        <div className="v2-dash-title">
+          <span className="v2-mono is-muted v2-dash-eyebrow">
+            <span className="v2-mark is-live" aria-hidden="true" />
+            <span className="v2-dash-wide">
+              Live · <span className="v2-num" data-testid="dash-clock">{clock}</span>
+              {day ? ` · ${day}` : null}
+            </span>
+            <span className="v2-dash-narrow">
+              {short ? `${short} · ` : null}goal {goal.done} of {goal.total}
+            </span>
+          </span>
+          <h1 className="v2-dash-headline" data-testid="dash-headline">
+            {headline(count)}
+          </h1>
+          <span className="v2-dash-narrow v2-dash-progress" aria-hidden="true">
+            <span style={{ width: `${pct}%` }} />
+          </span>
+        </div>
+
+        <div className="v2-actions v2-dash-wide">
+          <Button variant="secondary" disabled title={ASK_LATER}>
+            Ask your CMO
+          </Button>
+          <Button variant="danger" onClick={() => confirm.current?.showModal()}>
+            {paused ? "CMO paused" : "Pause CMO"}
+          </Button>
+        </div>
+      </header>
+
+      <dialog ref={confirm} className="v2-dialog" aria-labelledby="pause-title">
+        <form method="dialog" className="v2-dialog-body">
+          <h2 id="pause-title" className="v2-dialog-title">
+            Pause your CMO?
+          </h2>
+          <p>Nothing new starts and nothing goes out until you resume. Cards already waiting stay in the queue.</p>
+          {pauseLive ? null : <p className="v2-muted">{PAUSE_LATER}</p>}
+          <div className="v2-actions">
+            <Button type="submit" variant="danger" disabled={!pauseLive} title={pauseLive ? undefined : PAUSE_LATER}>
+              Pause CMO
+            </Button>
+            <Button type="submit" variant="quiet">
+              Keep working
+            </Button>
+          </div>
+        </form>
+      </dialog>
+    </>
+  );
+}

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { CmoView } from "@/components/cmo/CmoView";
 import { CmoWorkspace } from "@/components/cmo/workspace/CmoWorkspace";
+import { Dashboard } from "@/components/dashboard/Dashboard";
+import { UI_V2 } from "@/components/ui/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
 import { createServerClient } from "@/lib/supabase/server";
@@ -24,6 +26,9 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
   if (params.url || params.source || params.count || params.length) {
     redirect("/app/editor?panel=upload");
   }
+
+  // v2: the Dashboard reads its own data client-side; first-run setup moves to /app/setup (Session C, U8).
+  if (UI_V2) return <Dashboard />;
 
   const supabase = await createServerClient();
   const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
