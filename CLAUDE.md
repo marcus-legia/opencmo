@@ -163,7 +163,10 @@ scripts/dev.mjs         one-command dev stack
 ## Working style
 
 - Don't expand scope. Note out-of-scope improvements in the PR or an issue instead.
-- Commit only when asked. Commit messages in English.
+- **Commit and push as you go (owner, 2026-10-27).** Finished work is committed and pushed to the task's branch and
+  its PR right away, without waiting to be asked; nothing is left only in a session or a container, which can be
+  reclaimed. Each commit is green on its own (the checks of what it touches). Commit messages in English. Deploys,
+  merges and force-pushes still wait for the owner.
 - An HTML doc ships with a markdown twin of the same name for agents (`docs/architecture/README.md`); change both together.
 - **Parallel sessions (owner, 2026-10-27): one branch, one PR.** When a plan splits work across sessions, every session
   works on the same branch and the same PR; no session opens its own branch or PR. The plan creates that branch before
