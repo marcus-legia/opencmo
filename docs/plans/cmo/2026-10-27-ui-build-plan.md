@@ -97,47 +97,47 @@ the frames are not product data.
 
 ### Task U1: Tokens and primitives (Session B)
 
-- [ ] `styles/ui-v2.css`: the Landing v4 tokens as `--v2-*` under `html[data-ui="v2"]` (paper, paper2, paper3, ink,
+- [x] `styles/ui-v2.css`: the Landing v4 tokens as `--v2-*` under `html[data-ui="v2"]` (paper, paper2, paper3, ink,
   ink2, line, line2, char, brand, brand-deep, brand-soft, waiting text, ok, stuck; Inter + Source Code Pro;
   radius 4 and pill; mono label style). Values from `Tokens.dc.html`.
-- [ ] Fonts: Source Code Pro is already self-hosted (`packages/clip-media/fonts/`, synced to `/fonts` by
+- [x] Fonts: Source Code Pro is already self-hosted (`packages/clip-media/fonts/`, synced to `/fonts` by
   `media:sync`, used by `landing.css`); Inter as today. No Google Fonts link (CSP `font-src 'self'`).
-- [ ] `components/ui/`: `Button` (primary, secondary, quiet, danger, on-dark), `Chip` (running, waiting, stuck, posted,
+- [x] `components/ui/`: `Button` (primary, secondary, quiet, danger, on-dark), `Chip` (running, waiting, stuck, posted,
   scheduled, idle), `Tabs`, `Segmented`, `Panel` (header + body), `Kpi`, `MonoLabel`, `Toggle`, `Field` (input,
   select, textarea with label), `EmptyState`, `SampleTag`.
-- [ ] `/app/design` (flag-only, not linked): every primitive in every state, for screenshots.
+- [x] `/app/design` (flag-only, not linked): every primitive in every state, for screenshots.
 - [ ] Look: screenshot `/app/design` at 1440 and 390 and compare with `Tokens.dc.html`.
 
 ### Task U2: Shell (Session B)
 
-- [ ] v2 branch in `app/app/layout.tsx`: `data-ui="v2"` on `<html>`, new `Rail` (Dashboard + count, Analytics, Brain,
+- [x] v2 branch in `app/app/layout.tsx`: `data-ui="v2"` on `<html>`, new `Rail` (Dashboard + count, Analytics, Brain,
   Library; Departments: Research, Writer, Studio, Sales with stuck dot, Schedule; Make: Editor; Settings; credits).
-- [ ] Phone: bottom tab bar Today · Approve (count) · Calendar · More; More opens a sheet with the rest.
-- [ ] Rail items whose screen is not live in production are hidden (reads `live` from the screens route).
-- [ ] Keep the shell's Realtime channel and toast as today.
+- [x] Phone: bottom tab bar Today · Approve (count) · Calendar · More; More opens a sheet with the rest.
+- [x] Rail items whose screen is not live in production are hidden (reads `live` from the screens route).
+- [x] Keep the shell's Realtime channel and toast as today.
 
 ### Task U3: Dashboard (Session B)
 
-- [ ] Header: live clock, headline from the queue count, Ask your CMO, Pause CMO (opens a confirm; wired in B2).
-- [ ] Week strip: goal + progress, deliverables done, working now, words drafted, credits this week.
-- [ ] `TeamGraph`: Brain hub + six department nodes at the frame's positions; robot states working (bob, blink),
+- [x] Header: live clock, headline from the queue count, Ask your CMO, Pause CMO (opens a confirm; wired in B2).
+- [x] Week strip: goal + progress, deliverables done, working now, words drafted, credits this week.
+- [x] `TeamGraph`: Brain hub + six department nodes at the frame's positions; robot states working (bob, blink),
   idle (grey, eyes closed), stuck (red, shake); packets along active wires; node status line and waiting chip.
   Horizontal scroll inside its panel below 800 px; the phone shows the list version instead.
-- [ ] `LiveLog`: newest five events, `aria-live="polite"`.
-- [ ] Results · last 7 days table with sparklines and the "Brain used this" line; Going out today table.
-- [ ] Approval queue: one card open, the rest collapsed; approving removes the card, updates every count (rail badge,
+- [x] `LiveLog`: newest five events, `aria-live="polite"`.
+- [x] Results · last 7 days table with sparklines and the "Brain used this" line; Going out today table.
+- [x] Approval queue: one card open, the rest collapsed; approving removes the card, updates every count (rail badge,
   node chips, headline) and adds a log line. Optimistic, rolled back on error.
-- [ ] Phone version from `DashboardPhone.dc.html`.
+- [x] Phone version from `DashboardPhone.dc.html`.
 - [ ] e2e `ui-v2-dashboard.spec.ts` with fixtures: approve a card, counts drop, empty state shows at zero.
 
 ### Task U4: Approval cards (Session B)
 
-- [ ] `components/cards/`: one `ApprovalCard` frame (head: department · kind; body; foot: price, account, time; one
+- [x] `components/cards/`: one `ApprovalCard` frame (head: department · kind; body; foot: price, account, time; one
   primary action) and ten bodies: post (platform tabs, versions, checks), reply (score, quotes, draft), goal + week
   plan, script, price, finished video, shorts batch, slideshow, schedule, correction.
-- [ ] States: expired, decided elsewhere, needs credits, failed; empty queue.
-- [ ] `/app/inbox/[id]`: one card full page (the digest and push links open it).
-- [ ] Card actions call today's RPCs through `components/cmo/workspace/actions.ts` for post, reply and goal; the
+- [x] States: expired, decided elsewhere, needs credits, failed; empty queue.
+- [x] `/app/inbox/[id]`: one card full page (the digest and push links open it).
+- [x] Card actions call today's RPCs through `components/cmo/workspace/actions.ts` for post, reply and goal; the
   others are disabled with the reason until their phase.
 
 ### Task U5: Analytics and Brain (Session C)
