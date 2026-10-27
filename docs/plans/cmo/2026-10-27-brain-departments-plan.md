@@ -53,7 +53,7 @@ them; it orders the work and names the files.
 
 ### Task W1-0: Baseline (Session A)
 
-- [ ] `npm run db:reset && npm run db:test`, `npm run typecheck`, `check:contracts`: record the counts in the PR.
+- [x] `npm run db:reset && npm run db:test`, `npm run typecheck`, `check:contracts`: record the counts in the PR.
 
 ### Task W1-1: B0 corrections and budget (Session A)
 
