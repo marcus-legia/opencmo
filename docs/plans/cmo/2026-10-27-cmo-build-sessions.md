@@ -151,6 +151,8 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
     instead of folding it into `source`. "Who reads what" stays product copy in the UI, as C did. Reading Business
     and Brand Kit through today's `/api/v1/cmo/documents` and `/api/v1/brand-kits` is fine; Library's `documents` and
     `brandKits` go live in the screens route at W1-5 for the read view, and edits keep using those routes.
+  - `[C]` Done: Analytics, Brain and Library's Voice/Skills read `/api/v1/screens/[name]` through
+    `components/screens/useScreen.ts` and the `lib/screens` types; C's `data.ts` copies are deleted.
 - `[C → B]` Primitives: C builds stand-ins in `components/screens/kit/` with the U1 names (`Button`, `Chip`, `Tabs`,
   `Segmented`, `Panel`, `Kpi`, `MonoLabel`, `Toggle`, `EmptyState`, `SampleTag`) and tokens as `--scr-*` copied
   from `Tokens.dc.html`. Swapped for `components/ui/` when U1 lands.

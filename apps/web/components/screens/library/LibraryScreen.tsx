@@ -4,10 +4,23 @@ import { useState } from "react";
 
 import { BrandView } from "@/components/clipping/web/BrandView";
 
-import { Button, PageHeader, Panel, SampleTag, Screen, Tabs, Toggle } from "../kit";
+import type { LibraryScreen as Data } from "@/lib/screens/library";
+
+import { Button, ErrorNote, PageHeader, Panel, SampleTag, Screen, SkeletonBlocks, Tabs, Toggle } from "../kit";
 import { useTabParam } from "../useTabParam";
+import { useScreen, type ScreenState } from "../useScreen";
 import { BusinessDocs } from "./BusinessDocs";
-import { LIBRARY_SAMPLE, WHO_READS, type SkillItem } from "./data";
+
+type Skill = Data["skills"]["writing"][number];
+
+/** Who reads what: product copy, not data (the frame's side panel). */
+const WHO_READS: { who: string; what: string }[] = [
+  { who: "Brain", what: "Business, always. Picks the rest into each brief." },
+  { who: "Writer", what: "Business · Voice · Writing skills" },
+  { who: "Studio and the editor", what: "Business · Brand Kit · Video skills" },
+  { who: "Sales", what: "Business · Voice · Writing skills" },
+  { who: "Research", what: "Business (competitors list)" },
+];
 
 const TABS = [
   { id: "business", label: "Business · 4 documents" },
@@ -19,6 +32,9 @@ type Tab = (typeof TABS)[number]["id"];
 
 export function LibraryScreen() {
   const [tab, setTab] = useTabParam<Tab>("tab", TABS.map((t) => t.id), "business");
+  // Business and Brand Kit read today's routes (they also write through them); Voice and Skills come from the
+  // screens route, sample until brain B0.
+  const [screen] = useScreen("library");
 
   return (
     <Screen label="Library">
@@ -38,8 +54,8 @@ export function LibraryScreen() {
               <BrandView />
             </div>
           )}
-          {tab === "voice" && <VoiceTab />}
-          {tab === "skills" && <SkillsTab />}
+          {tab === "voice" && <Gate screen={screen}>{(data, sample) => <VoiceTab voice={data.voice} sample={sample} />}</Gate>}
+          {tab === "skills" && <Gate screen={screen}>{(data, sample) => <SkillsTab skills={data.skills} sample={sample} />}</Gate>}
         </div>
         <Panel as="aside" title="Who reads what" className="scr-side">
           <div className="scr-rows">
@@ -62,23 +78,43 @@ export function LibraryScreen() {
   );
 }
 
-/** Voice notes are learned by the brain (B0 corrections); sample until then. */
-function VoiceTab() {
-  const [notes, setNotes] = useState(LIBRARY_SAMPLE.voice.notes);
+function Gate({
+  screen,
+  children,
+}: {
+  screen: ScreenState<"library">;
+  children: (data: Data, sample: { voice: boolean; skills: boolean }) => React.ReactNode;
+}) {
+  if (screen.status === "loading") return <SkeletonBlocks rows={2} />;
+  if (screen.status === "error") return <ErrorNote>{screen.message}</ErrorNote>;
+  return <>{children(screen.data, { voice: !screen.live.voice, skills: !screen.live.skills })}</>;
+}
+
+/** Voice notes are learned by the brain (B0 corrections). Delete only hides the row until that RPC exists. */
+function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: boolean } }) {
+  const [notes, setNotes] = useState(voice.notes);
   return (
     <Panel
       tone="white"
-      title={<>Voice <SampleTag /></>}
+      title={<>Voice {sample.voice && <SampleTag />}</>}
       sub="Learned from your edits; newer notes win when two disagree. Delete any you don't agree with."
-      aside={<Button small disabled title="Arrives with the brain's corrections">Add a note</Button>}
+      aside={
+        <Button small disabled title="Notes are added from your edits for now">
+          Add a note
+        </Button>
+      }
     >
       <div className="scr-rows">
+        {notes.length === 0 && <p className="scr-row scr-muted">No notes yet. Writer learns them from what you change in its drafts.</p>}
         {notes.map((note) => (
           <div key={note.id} className="scr-row scr-row-inline">
             <span>
               <b>{note.text}</b>
               <br />
-              <span className="scr-tiny scr-muted">{note.source}</span>
+              <span className="scr-tiny scr-muted">
+                {note.source}
+                {note.replaces ? ` · replaces an older note “${note.replaces}”` : ""}
+              </span>
             </span>
             <Button
               small
@@ -90,39 +126,42 @@ function VoiceTab() {
             </Button>
           </div>
         ))}
-        <div className="scr-row">
-          <b>Words you always cut</b>
-          <span className="scr-cut-words">
-            {LIBRARY_SAMPLE.voice.cutWords.map((word) => (
-              <s key={word}>{word}</s>
-            ))}
-          </span>
-        </div>
+        {voice.wordsCut.length > 0 && (
+          <div className="scr-row">
+            <b>Words you always cut</b>
+            <span className="scr-cut-words">
+              {voice.wordsCut.map((word) => (
+                <s key={word}>{word}</s>
+              ))}
+            </span>
+          </div>
+        )}
       </div>
     </Panel>
   );
 }
 
-function SkillsTab() {
+function SkillsTab({ skills, sample }: { skills: Data["skills"]; sample: { skills: boolean } }) {
   return (
     <>
-      <SkillList title="Writing skills · used by Writer and Sales" items={LIBRARY_SAMPLE.writingSkills} />
-      <SkillList title="Video skills · used by Studio and the editor" items={LIBRARY_SAMPLE.videoSkills} />
+      <SkillList title="Writing skills · used by Writer and Sales" items={skills.writing} sample={sample.skills} />
+      <SkillList title="Video skills · used by Studio and the editor" items={skills.video} sample={sample.skills} />
     </>
   );
 }
 
-function SkillList({ title, items }: { title: string; items: SkillItem[] }) {
-  const [on, setOn] = useState(() => new Map(items.map((item) => [item.id, item.on])));
+function SkillList({ title, items, sample }: { title: string; items: Skill[]; sample: boolean }) {
+  const [on, setOn] = useState(() => new Map(items.map((item) => [item.id, item.enabled])));
   return (
-    <Panel tone="white" title={<>{title} <SampleTag /></>}>
+    <Panel tone="white" title={<>{title} {sample && <SampleTag />}</>}>
       <div className="scr-rows">
+        {items.length === 0 && <p className="scr-row scr-muted">None yet. Ask the editor Assistant to remember a recipe and it shows here.</p>}
         {items.map((item) => (
           <div key={item.id} className="scr-row scr-row-inline">
             <span>
               <b>{item.name}</b>
               <br />
-              <span className="scr-tiny scr-muted">{item.source}</span>
+              <span className="scr-tiny scr-muted">{item.note}</span>
             </span>
             <Toggle
               checked={on.get(item.id) ?? false}
