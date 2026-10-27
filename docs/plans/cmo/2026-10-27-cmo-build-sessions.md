@@ -125,7 +125,7 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 - [x] Skeleton routes
 - [x] U6 Library
 - [x] U5 Analytics, Brain
-- [ ] U7 department pages
+- [x] U7 department pages
 - [ ] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
 - [ ] U8 Settings, Setup
 
@@ -168,6 +168,10 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   budget by `creditsToFinish` and resumes the scan. Disabled with a reason until then. Live thread actions already
   call `POST /api/v1/cmo/opportunities/[id]` (`replied` / `dismissed` + reason) when `live.threads` is true, so
   the loader's thread ids must be `cmo_opportunities` ids.
+- `[C → A]` Studio reads uploads live from today's `/api/v1/projects` (U7b parity) and only generated items from the
+  screens route. When the studio loader goes live, give upload items `projectId` = the project id: Studio drops
+  screen items whose `projectId` it already has, so nothing shows twice. "Mark finished" needs a route (an edit
+  marked finished, so Shorts can be cut from it); disabled with a reason until then.
 
 - `[A → B]` A0 landed (W1-2): the Dashboard `queue` is live from `approvals`, and every card has `contentHash`.
   Decide a card with `POST /api/v1/approvals/[id]` `{ action, contentHash, text?, reason?, goal?, target? }`
