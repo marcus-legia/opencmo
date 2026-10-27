@@ -5,10 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/components/clipping/api";
 import { createBlankEdit } from "@/components/editor/ClipPicker";
+import { Button, ButtonLink, EmptyState, SampleTag, Tabs } from "@/components/ui";
 import type { Project } from "@/lib/clipping-types";
 import { STUDIO_KINDS, type StudioScreen as Data } from "@/lib/screens/studio";
 
-import { Button, EmptyState, ErrorNote, LinkButton, PageHeader, Panel, SampleTag, Screen, SkeletonBlocks, Tabs } from "../kit";
+import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { useScreen } from "../useScreen";
 import { StudioCard, type CardActions } from "./StudioCard";
@@ -119,9 +120,9 @@ export function StudioScreen() {
         sub="Everything here opens in the editor. Shorts are cut only from edits you marked finished."
         actions={
           <>
-            <LinkButton href="/app/editor?panel=upload" variant="ghost">
+            <ButtonLink href="/app/editor?panel=upload" variant="secondary">
               Upload your video
-            </LinkButton>
+            </ButtonLink>
             <Button
               variant="primary"
               data-testid="studio-new"
@@ -137,7 +138,7 @@ export function StudioScreen() {
           </>
         }
       />
-      <Tabs label="Kind" tabs={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
+      <Tabs<Tab> label="Kind" idBase="studio-kind" items={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
       <div className="scr-studio-tools">
         <label className="scr-search">
           <span aria-hidden="true">⌕</span>
@@ -155,7 +156,7 @@ export function StudioScreen() {
         </button>
         <label className="scr-sort">
           <span className="scr-small scr-muted">Sort</span>
-          <select className="scr-select" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+          <select className="v2-input" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
@@ -177,19 +178,20 @@ export function StudioScreen() {
             <SkeletonBlocks rows={2} />
           ) : visible.length === 0 ? (
             <EmptyState
+              title={needle || favorites ? "Nothing matches." : "Nothing here yet."}
               action={
                 needle || favorites ? (
-                  <Button variant="ghost" onClick={() => { setQuery(""); setFavorites(false); }}>
+                  <Button variant="secondary" onClick={() => { setQuery(""); setFavorites(false); }}>
                     Clear filters
                   </Button>
                 ) : (
-                  <LinkButton href="/app/editor?panel=upload" variant="primary">
+                  <ButtonLink href="/app/editor?panel=upload" variant="primary">
                     Upload your video
-                  </LinkButton>
+                  </ButtonLink>
                 )
               }
             >
-              {needle || favorites ? "Nothing matches." : "Nothing here yet. Upload a video you made, or start a new edit."}
+              {needle || favorites ? "Clear the search or the favorites filter to see everything." : "Upload a video you made, or start a new edit."}
             </EmptyState>
           ) : (
             <div className="scr-grid">
@@ -199,7 +201,7 @@ export function StudioScreen() {
             </div>
           )}
           {projects.hasMore && (
-            <Button variant="ghost" disabled={projects.loading} onClick={projects.loadMore}>
+            <Button variant="secondary" disabled={projects.loading} onClick={projects.loadMore}>
               {projects.loading ? "Loading…" : "Load more"}
             </Button>
           )}
@@ -221,7 +223,7 @@ export function StudioScreen() {
 
 function TeamPanel({ team, sample }: { team: NonNullable<Data["team"]>; sample: boolean }) {
   return (
-    <Panel as="aside" className="scr-side" title={<>Video team · now {sample && <SampleTag />}</>} sub={team.title}>
+    <Panel id="studio-video-team-now" className="scr-side" title={<>Video team · now {sample && <SampleTag />}</>} sub={team.title}>
       <ol className="scr-team">
         {team.steps.map((step, i) => (
           <li key={step.label} className={`is-${step.state}`}>

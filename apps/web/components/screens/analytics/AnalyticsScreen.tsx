@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 
+import { ButtonLink, EmptyState, Kpi, KpiStrip, Segmented } from "@/components/ui";
 import type { AnalyticsScreen as Data } from "@/lib/screens/analytics";
 import { PLATFORM_LABEL, type Account, type Platform } from "@/lib/screens/common";
 
 import { ago, compact, DASH, int, percent, shortDate, signed, times } from "../format";
-import { EmptyState, ErrorNote, Kpi, LinkButton, PageHeader, Panel, Screen, Segmented, SkeletonBlocks } from "../kit";
+import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
 
 const RANGES = [
@@ -53,7 +54,7 @@ export function AnalyticsScreen() {
         title="What worked, and what didn't."
         sub="The Brain reads the same numbers every Sunday and before every plan."
         sample={state.status === "ready" && isSample(state.live)}
-        actions={<Segmented label="Range" options={[...RANGES]} value={range} onChange={setRange} />}
+        actions={<Segmented<Range> label="Range" items={[...RANGES]} value={range} onChange={setRange} />}
       />
       {state.status === "loading" && <SkeletonBlocks />}
       {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
@@ -69,8 +70,8 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
 
   if (!data.accounts.length) {
     return (
-      <EmptyState action={<LinkButton href="/app/settings" variant="primary">Connect an account</LinkButton>}>
-        No accounts connected yet. Numbers show here after your first posts go out.
+      <EmptyState title="No accounts connected yet." action={<ButtonLink href="/app/settings" variant="primary">Connect an account</ButtonLink>}>
+        Numbers show here after your first posts go out.
       </EmptyState>
     );
   }
@@ -94,24 +95,24 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
             </b>{" "}
             Its numbers after that date are missing, and the Brain knows they are missing (not zero).
           </p>
-          <LinkButton href="/app/settings" variant="primary">
+          <ButtonLink href="/app/settings" variant="primary">
             Reconnect {PLATFORM_LABEL[a.platform]}
-          </LinkButton>
+          </ButtonLink>
         </div>
       ))}
 
-      <section aria-label="Totals" className="scr-kpis">
+      <KpiStrip label="Totals">
         {data.kpis.map((k) => (
           <Kpi key={k.key} label={KPI_LABEL[k.key]} {...kpiText(k)} />
         ))}
-      </section>
+      </KpiStrip>
 
       <div className="scr-split">
-        <Panel className="scr-main scr-chart-panel" title="Impressions per day" aside={<Legend />}>
+        <Panel id="analytics-impressions-per-day" className="scr-main scr-chart-panel" title="Impressions per day" actions={<Legend />}>
           <DayChart daily={data.daily} days={days} platform={picked?.platform ?? null} />
         </Panel>
         {data.brainReads.length > 0 && (
-          <aside aria-labelledby="learn-title" className="scr-side scr-panel is-dark scr-takeaways">
+          <aside aria-labelledby="learn-title" className="scr-side v2-panel scr-dark scr-takeaways">
             <h2 id="learn-title" className="scr-mono">
               What the Brain takes from this
             </h2>
@@ -130,9 +131,9 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
         )}
       </div>
 
-      <Panel title="By account" foot="Some platforms don't report every number; a dash means not reported, never zero.">
-        <div className="scr-table-wrap">
-          <table className="scr-table">
+      <Panel id="analytics-by-account" title="By account" foot="Some platforms don't report every number; a dash means not reported, never zero.">
+        <div className="v2-table-wrap">
+          <table className="v2-table">
             <thead>
               <tr>
                 <th>Account</th>
@@ -169,12 +170,12 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
       </Panel>
 
       {data.posts.length > 0 && (
-        <Panel
+        <Panel id="analytics-posts-against-your-own-median"
           title="Posts against your own median"
-          aside={<span className="scr-small scr-muted">Best and worst first; every row opens the post</span>}
+          actions={<span className="scr-small scr-muted">Best and worst first; every row opens the post</span>}
         >
-          <div className="scr-table-wrap">
-            <table className="scr-table">
+          <div className="v2-table-wrap">
+            <table className="v2-table">
               <thead>
                 <tr>
                   <th>Post</th>
@@ -201,7 +202,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
                     <td className="scr-num">{int(post.impressions)}</td>
                     <td className="scr-num">{percent(post.engagementRate)}</td>
                     <td>
-                      <span className={`scr-chip ${medianTone(post.vsMedian)}`}>{times(post.vsMedian)}</span>
+                      <span className={`v2-chip ${medianTone(post.vsMedian)}`}>{times(post.vsMedian)}</span>
                     </td>
                     <td>{post.read ?? DASH}</td>
                   </tr>
@@ -228,7 +229,9 @@ function AccountPill({ account, pressed, onPick }: { account: Account; pressed: 
   );
 }
 
-function kpiText(k: Data["kpis"][number]): { value: string; note?: string; trend?: "up" | "down" } {
+type KpiDelta = { label: string; direction: "up" | "down" | "flat" };
+
+function kpiText(k: Data["kpis"][number]): { value: string; delta?: KpiDelta } {
   const value =
     k.key === "engagement_rate"
       ? percent(k.value)
@@ -242,10 +245,11 @@ function kpiText(k: Data["kpis"][number]): { value: string; note?: string; trend
   if (k.change != null) {
     const note =
       k.changeUnit === "points" ? `${signed(k.change, (n) => n.toFixed(1))} pts` : `${signed(k.change)}%${k.key === "impressions" ? " vs previous" : ""}`;
-    return { value, note, trend: k.change > 0 ? "up" : k.change < 0 ? "down" : undefined };
+    return { value, delta: { label: note, direction: k.change > 0 ? "up" : k.change < 0 ? "down" : "flat" } };
   }
+  if (!k.note) return { value };
   // A note about missing data is a warning; any other note is neutral.
-  return { value, note: k.note ?? undefined, trend: k.note && /without data|missing/.test(k.note) ? "down" : undefined };
+  return { value, delta: { label: k.note, direction: /without data|missing/.test(k.note) ? "down" : "flat" } };
 }
 
 function medianTone(vs: number | null): string {
@@ -293,7 +297,7 @@ function DayChart({ daily, days, platform }: { daily: Data["daily"]; days: numbe
     return rows.map((r) => ({ ...r, gap: r.missing.length ? gap : 0, top }));
   }, [daily, days, platform]);
 
-  if (!bars.length) return <p className="scr-panel-body scr-muted">No numbers in this range yet.</p>;
+  if (!bars.length) return <p className="v2-panel-body scr-muted">No numbers in this range yet.</p>;
 
   const total = bars.reduce((sum, b) => sum + b.total, 0);
   const missingDays = bars.filter((b) => b.missing.length).length;

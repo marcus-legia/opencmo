@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 
+import { Button, Segmented } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform, type SlotStatus } from "@/lib/screens/common";
 import type { ScheduleScreen as Data } from "@/lib/screens/schedule";
 
-import { Button, ErrorNote, PageHeader, Panel, Pills, Screen, Segmented, SkeletonBlocks, cx } from "../kit";
+import { cx, ErrorNote, PageHeader, Panel, Pills, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { isSample, useScreen } from "../useScreen";
 
@@ -74,11 +75,11 @@ export function ScheduleScreen() {
         sample={state.status === "ready" && isSample(state.live)}
         actions={
           <>
-            <Segmented label="View" options={[...VIEWS]} value={view} onChange={setView} />
-            <Button variant="ghost" className="scr-icon-btn" aria-label="Previous" onClick={() => step(-1)}>
+            <Segmented<View> label="View" items={[...VIEWS]} value={view} onChange={setView} />
+            <Button variant="secondary" icon aria-label="Previous" onClick={() => step(-1)}>
               ‹
             </Button>
-            <Button variant="ghost" className="scr-icon-btn" aria-label="Next" onClick={() => step(1)}>
+            <Button variant="secondary" icon aria-label="Next" onClick={() => step(1)}>
               ›
             </Button>
           </>
@@ -104,7 +105,7 @@ export function ScheduleScreen() {
             />
           </div>
           <div className="scr-side">
-            <Panel title="Accounts">
+            <Panel id="schedule-accounts" title="Accounts">
               <div className="scr-rows">
                 {data.accounts.length === 0 && <p className="scr-row scr-muted">No accounts yet.</p>}
                 {data.accounts.map((a) => (
@@ -125,8 +126,8 @@ export function ScheduleScreen() {
               </div>
             </Panel>
             {data.rules.length > 0 && (
-              <Panel title="Posting rules">
-                <div className="scr-panel-body scr-rules">
+              <Panel id="schedule-posting-rules" title="Posting rules">
+                <div className="v2-panel-body scr-rules">
                   {data.rules.map((rule, i) => (
                     <p key={rule} className={i === data.rules.length - 1 ? "scr-muted" : undefined}>
                       {rule}
@@ -158,7 +159,7 @@ function Calendar({ view, slots, start, end, zone }: { view: View; slots: Slot[]
   if (view === "list") {
     const keys = [...byDay.keys()].sort();
     return (
-      <Panel title="Every slot in this range">
+      <Panel id="schedule-every-slot-in-this-range" title="Every slot in this range">
         <div className="scr-rows">
           {keys.length === 0 && <p className="scr-row scr-muted">Nothing scheduled in this range.</p>}
           {keys.map((key) => (

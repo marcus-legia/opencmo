@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Button, Chip, LinkButton, cx } from "../kit";
+import { Button, ButtonLink, Chip } from "@/components/ui";
+
+import { cx } from "../parts";
 import type { Card } from "./model";
 
 export type CardActions = {
@@ -192,12 +194,12 @@ export function StudioCard({ card, busy, actions }: { card: Card; busy: boolean;
               setRenaming(null);
             }}
           >
-            <input aria-label="Title" className="scr-input" value={renaming} maxLength={120} autoFocus onChange={(e) => setRenaming(e.target.value)} />
-            <span className="scr-dialog-actions">
-              <Button small variant="dark" type="submit" disabled={!renaming.trim() || busy}>
+            <input aria-label="Title" className="v2-input" value={renaming} maxLength={120} autoFocus onChange={(e) => setRenaming(e.target.value)} />
+            <span className="v2-actions">
+              <Button compact variant="on-dark" type="submit" disabled={!renaming.trim() || busy}>
                 Save
               </Button>
-              <Button small variant="quiet" onClick={() => setRenaming(null)}>
+              <Button compact variant="quiet" onClick={() => setRenaming(null)}>
                 Cancel
               </Button>
             </span>
@@ -227,7 +229,7 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
       return null;
     case "processing":
       return card.project ? (
-        <Button small variant="ghost" disabled={busy} onClick={() => actions.cancel(card)}>
+        <Button compact variant="secondary" disabled={busy} onClick={() => actions.cancel(card)}>
           Cancel
         </Button>
       ) : null;
@@ -250,30 +252,30 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
     case "failed":
     case "cancelled":
       return card.project ? (
-        <span className="scr-dialog-actions">
-          <Button small variant="dark" disabled={busy} onClick={() => actions.retry(card)}>
+        <span className="v2-actions">
+          <Button compact variant="on-dark" disabled={busy} onClick={() => actions.retry(card)}>
             Process again
           </Button>
-          <LinkButton small variant="ghost" href="/app/editor?panel=upload">
+          <ButtonLink compact variant="secondary" href="/app/editor?panel=upload">
             Use another video
-          </LinkButton>
+          </ButtonLink>
         </span>
       ) : card.kind === "post_image" ? (
-        <LinkButton small variant="ghost" href="/app/editor">
+        <ButtonLink compact variant="secondary" href="/app/editor">
           Try another prompt
-        </LinkButton>
+        </ButtonLink>
       ) : null;
     case "ready":
     case "finished":
       return (
         <span className="scr-card-actions">
           {(card.project || card.editorHref) && (
-            <Button small variant="ghost" onClick={() => actions.openInEditor(card)} disabled={busy}>
+            <Button compact variant="secondary" onClick={() => actions.openInEditor(card)} disabled={busy}>
               Open in editor
             </Button>
           )}
           {card.canMarkFinished && (
-            <Button small variant="dark" disabled title="Marking an edit finished arrives with Studio's shorts">
+            <Button compact variant="on-dark" disabled title="Marking an edit finished arrives with Studio's shorts">
               Mark finished
             </Button>
           )}

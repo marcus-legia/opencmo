@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 
+import { ButtonLink } from "@/components/ui";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { ResearchScreen as Data } from "@/lib/screens/research";
 
 import { int } from "../format";
-import { ErrorNote, LinkButton, PageHeader, Panel, Pills, Screen, SkeletonBlocks } from "../kit";
+import { ErrorNote, PageHeader, Panel, Pills, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
 
 const FILTERS = [
@@ -44,7 +45,7 @@ export function ResearchScreen() {
           </>
         }
         sample={state.status === "ready" && isSample(state.live)}
-        actions={<LinkButton href="/app/library?edit=competitors">Add a competitor</LinkButton>}
+        actions={<ButtonLink href="/app/library?edit=competitors">Add a competitor</ButtonLink>}
       />
       <div className="scr-banner">
         <p className="scr-small">
@@ -67,10 +68,10 @@ function ResearchBody({ data }: { data: Data }) {
 
   return (
     <div className="scr-split">
-      <Panel
+      <Panel id="research-this-week-s-insights"
         className="scr-main"
         title="This week's insights"
-        aside={<Pills label="Insight type" options={[...FILTERS]} value={filter} onChange={setFilter} />}
+        actions={<Pills label="Insight type" options={[...FILTERS]} value={filter} onChange={setFilter} />}
         foot={
           data.dropped > 0
             ? `${data.dropped} ${data.dropped === 1 ? "insight" : "insights"} dropped this week: no source link in the data read.`
@@ -105,10 +106,10 @@ function ResearchBody({ data }: { data: Data }) {
           ))}
         </div>
       </Panel>
-      <Panel as="aside" className="scr-side" title="Your results · 24 h after posting" foot="Results go to memory for Sunday's review.">
+      <Panel id="research-your-results-24-h-after-posting" className="scr-side" title="Your results · 24 h after posting" foot="Results go to memory for Sunday's review.">
         {data.results.length ? (
-          <div className="scr-table-wrap">
-            <table className="scr-table scr-table-compact">
+          <div className="v2-table-wrap">
+            <table className="v2-table scr-table-compact">
               <thead>
                 <tr>
                   <th>Post</th>
@@ -130,7 +131,7 @@ function ResearchBody({ data }: { data: Data }) {
             </table>
           </div>
         ) : (
-          <p className="scr-panel-body scr-muted">Your posts show here a day after they go out.</p>
+          <p className="v2-panel-body scr-muted">Your posts show here a day after they go out.</p>
         )}
       </Panel>
     </div>

@@ -1,5 +1,5 @@
 import { SettingsView } from "@/components/clipping/web/SettingsView";
-import { UI_V2 } from "@/components/screens/flag";
+import { UI_V2 } from "@/components/ui/flag";
 import { SettingsScreen } from "@/components/screens/settings/SettingsScreen";
 import { mcpEndpoint } from "@/lib/cmo/connect";
 import { isPaidPlan } from "@/lib/pricing";

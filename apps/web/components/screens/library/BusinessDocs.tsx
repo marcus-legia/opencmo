@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
 import { DocumentForm, type Body } from "@/components/cmo/DocumentFields";
+import { Button, ButtonLink, EmptyState } from "@/components/ui";
 import { DOCUMENT_KINDS, DOCUMENTS, type DocumentKind } from "@/lib/cmo/documents";
 import type { CmoState, DocumentRow } from "@/lib/cmo/state";
 
-import { Button, EmptyState, ErrorNote, LinkButton, SkeletonBlocks } from "../kit";
+import { ErrorNote, SkeletonBlocks } from "../parts";
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const count = (v: unknown) => (Array.isArray(v) ? v.length : 0);
@@ -64,8 +65,8 @@ export function BusinessDocs() {
   const any = DOCUMENT_KINDS.some((kind) => state.documents[kind]);
   if (!any) {
     return (
-      <EmptyState action={<LinkButton href="/app/setup" variant="primary">Start setup</LinkButton>}>
-        No documents yet. Setup reads your website and drafts all four.
+      <EmptyState title="No documents yet." action={<ButtonLink href="/app/setup" variant="primary">Start setup</ButtonLink>}>
+        Setup reads your website and drafts all four.
       </EmptyState>
     );
   }
@@ -83,7 +84,7 @@ export function BusinessDocs() {
               <h3>{DOCUMENTS[kind].title}</h3>
               <p className="scr-small">{row ? documentGist(kind, row.body) : DOCUMENTS[kind].summary}</p>
               <span className="scr-tiny scr-muted">{row ? provenance(kind, row) : "Not written yet"}</span>
-              <Button small variant="ghost" onClick={() => setEditing(kind)} aria-label={`Edit ${DOCUMENTS[kind].title}`}>
+              <Button compact variant="secondary" onClick={() => setEditing(kind)} aria-label={`Edit ${DOCUMENTS[kind].title}`}>
                 Edit
               </Button>
             </article>
@@ -147,12 +148,12 @@ export function DocumentEditor({
 
   return (
     <dialog ref={ref} className="scr-dialog" aria-labelledby="scr-doc-title" onClose={onClose}>
-      <div className="scr scr-dialog-body">
+      <div className="scr-dialog-body">
         {kind && (
           <>
             <div className="scr-dialog-head">
               <h2 id="scr-doc-title">{DOCUMENTS[kind].title}</h2>
-              <Button variant="quiet" small onClick={onClose}>
+              <Button variant="quiet" compact onClick={onClose}>
                 Close
               </Button>
             </div>
@@ -161,7 +162,7 @@ export function DocumentEditor({
             </p>
             <DocumentForm fields={DOCUMENTS[kind].fields} value={draft} onChange={setDraft} idPrefix={`lib-${kind}`} />
             {error && <ErrorNote>{error}</ErrorNote>}
-            <div className="scr-dialog-actions">
+            <div className="v2-actions">
               <Button variant="primary" onClick={() => void save()} disabled={saving}>
                 {saving ? "Saving…" : "Save"}
               </Button>

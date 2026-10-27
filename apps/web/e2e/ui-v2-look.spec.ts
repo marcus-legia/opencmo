@@ -20,6 +20,12 @@ const SCREENS: { name: string; path: string; ready: string }[] = [
   { name: "design", path: "/app/design", ready: "v2-design" },
   { name: "inbox", path: "/app/inbox", ready: "approval-queue" },
   { name: "inbox-card", path: "/app/inbox/sample-post", ready: "inbox-card-page" },
+  // Session C's pages on their fixtures (`?sample=1`), so the screenshots compare with the frames.
+  ...["analytics", "brain", "library", "research", "writer", "studio", "sales", "schedule", "settings", "setup"].map((name) => ({
+    name,
+    path: `/app/${name}?sample=1`,
+    ready: `v2-${name}`,
+  })),
 ];
 
 for (const screen of SCREENS) {

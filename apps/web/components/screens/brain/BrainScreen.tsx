@@ -2,11 +2,12 @@
 
 import { Fragment, useState } from "react";
 
+import { Button, ButtonLink, Chip, type ChipTone, Tabs } from "@/components/ui";
 import type { BrainScreen as Data, Learned, OrderRow } from "@/lib/screens/brain";
 import { DEPARTMENT_LABEL } from "@/lib/screens/common";
 
 import { shortDate } from "../format";
-import { Button, Chip, ErrorNote, LinkButton, PageHeader, Panel, Screen, SkeletonBlocks, Tabs, type ChipTone } from "../kit";
+import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { isSample, useScreen } from "../useScreen";
 import { PauseButton } from "./PauseButton";
@@ -53,15 +54,17 @@ export function BrainScreen() {
         sample={state.status === "ready" && isSample(state.live)}
         actions={
           <>
-            <LinkButton href="/app?ask=1">Ask your CMO</LinkButton>
+            <ButtonLink href="/app?ask=1">Ask your CMO</ButtonLink>
             {state.status === "ready" && <PauseButton pausedAt={pausedAt} live={state.live.cmo} onChange={setPausedOverride} />}
           </>
         }
       />
-      <Tabs label="Brain views" tabs={[...TABS]} value={tab} onChange={setTab} />
-      {state.status === "loading" && <SkeletonBlocks />}
-      {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
-      {state.status === "ready" && <BrainBody data={state.data} tab={tab} />}
+      <Tabs<Tab> label="Brain views" idBase="brain-tab" items={[...TABS]} value={tab} onChange={setTab} />
+      <div role="tabpanel" id="brain-tab-panel" aria-labelledby={`brain-tab-${tab}`} className="scr-tabpanel">
+        {state.status === "loading" && <SkeletonBlocks />}
+        {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
+        {state.status === "ready" && <BrainBody data={state.data} tab={tab} />}
+      </div>
     </Screen>
   );
 }
@@ -78,10 +81,10 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
   if (tab === "week") {
     return (
       <div className="scr-split">
-        <Panel
+        <Panel id="brain-orders"
           className="scr-main"
           title={week.goal ? `Orders · goal: ${week.goal}` : "Orders"}
-          aside={
+          actions={
             <span className="scr-small scr-muted">
               {week.done} of {week.total} done · {week.credits.used} of {week.credits.budget} credits
             </span>
@@ -91,10 +94,10 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
           {data.orders.length ? (
             <OrdersTable orders={data.orders} />
           ) : (
-            <p className="scr-panel-body scr-muted">No orders yet. The Brain plans the week on Monday, or when you set a goal.</p>
+            <p className="v2-panel-body scr-muted">No orders yet. The Brain plans the week on Monday, or when you set a goal.</p>
           )}
         </Panel>
-        <Panel as="aside" className="scr-side" title="Learned lately" sub="Each note shows where it came from. Delete any.">
+        <Panel id="brain-learned-lately" className="scr-side" title="Learned lately" sub="Each note shows where it came from. Delete any.">
           <MemoryList notes={learned.slice(0, 4)} onForget={forget} />
         </Panel>
       </div>
@@ -103,24 +106,24 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
 
   if (tab === "memory") {
     return (
-      <Panel
+      <Panel id="brain-memory"
         title="Memory"
         sub="Lessons from results, rules from your edits, reasons you skipped things. Newer notes win; delete any you don't agree with."
       >
         {learned.length ? (
           <MemoryList notes={learned} onForget={forget} />
         ) : (
-          <p className="scr-panel-body scr-muted">Nothing learned yet. Notes appear after your first week of approvals.</p>
+          <p className="v2-panel-body scr-muted">Nothing learned yet. Notes appear after your first week of approvals.</p>
         )}
       </Panel>
     );
   }
 
   return (
-    <Panel title="Past weeks" sub="Each Sunday the Brain closes the week against its goal.">
+    <Panel id="brain-past-weeks" title="Past weeks" sub="Each Sunday the Brain closes the week against its goal.">
       {data.pastWeeks.length ? (
-        <div className="scr-table-wrap">
-          <table className="scr-table">
+        <div className="v2-table-wrap">
+          <table className="v2-table">
             <thead>
               <tr>
                 <th>Week of</th>
@@ -150,7 +153,7 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
           </table>
         </div>
       ) : (
-        <p className="scr-panel-body scr-muted">Your first week closes on Sunday.</p>
+        <p className="v2-panel-body scr-muted">Your first week closes on Sunday.</p>
       )}
     </Panel>
   );
@@ -205,8 +208,8 @@ function OrdersTable({ orders }: { orders: OrderRow[] }) {
       );
     });
   return (
-    <div className="scr-table-wrap">
-      <table className="scr-table scr-orders">
+    <div className="v2-table-wrap">
+      <table className="v2-table scr-orders">
         <thead>
           <tr>
             <th>Order</th>
@@ -233,7 +236,7 @@ function MemoryList({ notes, onForget }: { notes: Learned[]; onForget: (id: stri
           <b>{note.text}</b>
           <span className="scr-small scr-muted">{note.source}</span>
           {note.deletable && (
-            <Button small variant="quiet" className="scr-memory-forget" aria-label={`Delete note: ${note.text}`} onClick={() => onForget(note.id)}>
+            <Button compact variant="quiet" className="scr-memory-forget" aria-label={`Delete note: ${note.text}`} onClick={() => onForget(note.id)}>
               Delete
             </Button>
           )}

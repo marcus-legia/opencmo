@@ -6,10 +6,11 @@ import { Elapsed } from "@/components/Elapsed";
 import { ApiError, api } from "@/components/clipping/api";
 import { stageLabel } from "@/components/clipping/ProcessingView";
 import { useLive } from "@/components/clipping/useLive";
+import { Button, ButtonLink, MonoLabel } from "@/components/ui";
 import type { Project } from "@/lib/clipping-types";
 
 import { shortDate } from "../format";
-import { Button, ErrorNote, LinkButton, MonoLabel } from "../kit";
+import { ErrorNote } from "../parts";
 import type { CardActions } from "./StudioCard";
 import type { Card } from "./model";
 
@@ -89,19 +90,19 @@ export function StudioDrawer({
 
   return (
     <dialog ref={ref} className="scr-dialog scr-drawer" aria-labelledby="studio-item-title" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()}>
-      <div className="scr scr-dialog-body">
+      <div className="scr-dialog-body">
         <div className="scr-dialog-head">
           <MonoLabel small>{projectId ? "Your upload" : view ? view.kind.replace("_", " ") : ""}</MonoLabel>
-          <Button variant="quiet" small onClick={onClose}>
+          <Button variant="quiet" compact onClick={onClose}>
             Close
           </Button>
         </div>
         {gone ? (
           <>
             <h2 id="studio-item-title" className="scr-dialog-title">This item is no longer in Studio.</h2>
-            <LinkButton href="/app/editor?panel=upload" variant="primary">
+            <ButtonLink href="/app/editor?panel=upload" variant="primary">
               Upload a video
-            </LinkButton>
+            </ButtonLink>
           </>
         ) : (
           <>
@@ -121,7 +122,7 @@ export function StudioDrawer({
                     <b>{stageLabel(project)}</b>
                     <span className="scr-small scr-muted">It opens in the editor when it is ready.</span>
                     <Elapsed since={project.attempt_started_at ?? project.created_at} />
-                    <Button small variant="ghost" disabled={busy} onClick={() => card && actions.cancel(card)}>
+                    <Button compact variant="secondary" disabled={busy} onClick={() => card && actions.cancel(card)}>
                       Cancel processing
                     </Button>
                   </div>
@@ -130,13 +131,13 @@ export function StudioDrawer({
                   <div className="scr-drawer-block is-failed">
                     <b>{project.status === "failed" ? "We couldn’t finish this video" : "Processing was cancelled"}</b>
                     {project.error && <span className="scr-small">{project.error}</span>}
-                    <span className="scr-dialog-actions">
-                      <Button small variant="dark" disabled={busy || !card} onClick={() => card && actions.retry(card)}>
+                    <span className="v2-actions">
+                      <Button compact variant="on-dark" disabled={busy || !card} onClick={() => card && actions.retry(card)}>
                         Process again
                       </Button>
-                      <LinkButton small variant="ghost" href="/app/editor?panel=upload">
+                      <ButtonLink compact variant="secondary" href="/app/editor?panel=upload">
                         Use another video
-                      </LinkButton>
+                      </ButtonLink>
                     </span>
                   </div>
                 )}
@@ -183,11 +184,11 @@ export function StudioDrawer({
                   </div>
                 )}
                 {view.editorHref && (
-                  <LinkButton href={view.editorHref} variant="primary">
+                  <ButtonLink href={view.editorHref} variant="primary">
                     Open in editor
-                  </LinkButton>
+                  </ButtonLink>
                 )}
-                {view.approvalId && <LinkButton href={`/app/inbox/${encodeURIComponent(view.approvalId)}`}>Open the approval</LinkButton>}
+                {view.approvalId && <ButtonLink href={`/app/inbox/${encodeURIComponent(view.approvalId)}`}>Open the approval</ButtonLink>}
               </>
             )}
 
@@ -202,24 +203,24 @@ export function StudioDrawer({
                   setRenaming(null);
                 }}
               >
-                <input aria-label="Title" className="scr-input" value={renaming} maxLength={120} autoFocus onChange={(e) => setRenaming(e.target.value)} />
-                <span className="scr-dialog-actions">
-                  <Button small variant="dark" type="submit" disabled={!renaming.trim() || busy}>
+                <input aria-label="Title" className="v2-input" value={renaming} maxLength={120} autoFocus onChange={(e) => setRenaming(e.target.value)} />
+                <span className="v2-actions">
+                  <Button compact variant="on-dark" type="submit" disabled={!renaming.trim() || busy}>
                     Save
                   </Button>
-                  <Button small variant="quiet" onClick={() => setRenaming(null)}>
+                  <Button compact variant="quiet" onClick={() => setRenaming(null)}>
                     Cancel
                   </Button>
                 </span>
               </form>
             )}
             {card?.project && renaming === null && (
-              <div className="scr-dialog-actions scr-drawer-foot">
-                <Button small variant="ghost" onClick={() => setRenaming(title)}>
+              <div className="v2-actions scr-drawer-foot">
+                <Button compact variant="secondary" onClick={() => setRenaming(title)}>
                   Rename
                 </Button>
                 <Button
-                  small
+                  compact
                   variant="danger"
                   disabled={busy}
                   data-confirming={confirming || undefined}

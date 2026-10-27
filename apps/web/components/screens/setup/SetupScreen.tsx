@@ -5,12 +5,13 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { DocumentForm, type Body } from "@/components/cmo/DocumentFields";
+import { Button, ButtonLink, MonoLabel, SampleTag } from "@/components/ui";
 import { DOCUMENT_KINDS, DOCUMENTS, type DocumentKind } from "@/lib/cmo/documents";
 import type { CmoState, DocumentRow } from "@/lib/cmo/state";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import { SETUP_STEPS, type SetupScreen as Data } from "@/lib/screens/setup";
 
-import { Button, ErrorNote, LinkButton, MonoLabel, Screen, SampleTag, SkeletonBlocks, cx } from "../kit";
+import { cx, ErrorNote, Screen, SkeletonBlocks } from "../parts";
 import { useScreen } from "../useScreen";
 
 type Step = (typeof SETUP_STEPS)[number];
@@ -116,7 +117,7 @@ function StepFoot({ note, children }: { note: string; children: React.ReactNode 
   return (
     <div className="scr-setup-foot">
       <span className="scr-small scr-muted">{note}</span>
-      <span className="scr-dialog-actions">{children}</span>
+      <span className="v2-actions">{children}</span>
     </div>
   );
 }
@@ -152,9 +153,9 @@ function WebsiteStep({ initial, onDone }: { initial: string; onDone: (state: Cmo
         title="Start with your website."
         sub="OpenCMO reads it and drafts the four documents every department works from: what you sell, who it is for, who you compete with and what to post. You can edit every word."
       />
-      <label className="scr-field" htmlFor="setup-site">
+      <label className="v2-field" htmlFor="setup-site">
         Your website
-        <input id="setup-site" className="scr-input" type="text" inputMode="url" placeholder="yourproduct.com" value={value} onChange={(e) => setValue(e.target.value)} />
+        <input id="setup-site" className="v2-input" type="text" inputMode="url" placeholder="yourproduct.com" value={value} onChange={(e) => setValue(e.target.value)} />
       </label>
       {busy && (
         <p role="status" className="scr-small scr-muted">
@@ -260,7 +261,7 @@ function AccountsStep({ data, sample, onDone }: { data: Data; sample: boolean; o
     <div className="scr-setup-body">
       <StepHead title="Connect the accounts you post from." sub="Posts go out on your own accounts, only at times you approved. You can connect more later in Settings." />
       {sample && <SampleTag />}
-      <div className="scr-panel">
+      <div className="v2-panel">
         <div className="scr-rows">
           {data.accounts.length === 0 && <p className="scr-row scr-muted">No accounts connected yet.</p>}
           {data.accounts.map((a) => (
@@ -272,7 +273,7 @@ function AccountsStep({ data, sample, onDone }: { data: Data; sample: boolean; o
               {a.status === "connected" ? (
                 <span className="scr-status is-ok">Connected</span>
               ) : (
-                <Button small variant="ghost" disabled title="Connecting accounts arrives with Schedule's publishing">
+                <Button compact variant="secondary" disabled title="Connecting accounts arrives with Schedule's publishing">
                   {a.status === "reconnect" ? "Reconnect" : "Connect"}
                 </Button>
               )}
@@ -297,11 +298,11 @@ function BrandStep({ has, sample, onDone }: { has: boolean; sample: boolean; onD
         sub="Colours, fonts, captions and logo, once. Studio and the editor use them on every video."
       />
       {sample && <SampleTag />}
-      <div className="scr-panel scr-panel-body scr-row-inline scr-setup-brand">
+      <div className="v2-panel v2-panel-body scr-row-inline scr-setup-brand">
         <span>{has ? "Your Brand Kit is set. Check it any time in Library." : "No Brand Kit yet. It takes a minute."}</span>
-        <LinkButton href="/app/library?tab=brand" variant="ghost">
+        <ButtonLink href="/app/library?tab=brand" variant="secondary">
           {has ? "Open Brand Kit" : "Set up Brand Kit"}
-        </LinkButton>
+        </ButtonLink>
       </div>
       <StepFoot note="You can skip this; videos use OpenCMO's default look until you set yours.">
         <Button variant="primary" onClick={onDone}>
@@ -341,9 +342,9 @@ function GoalStep({ goal, sample, onDone }: { goal: Data["goal"]; sample: boolea
       <StepHead title="Pick this week's goal." sub="The Brain plans the week around one goal. Change the words if they are not yours." />
       {sample && <SampleTag />}
       {goal ? (
-        <label className="scr-field" htmlFor="setup-goal">
+        <label className="v2-field" htmlFor="setup-goal">
           {goal.status === "approved" ? "Your goal" : "Your CMO proposes"}
-          <input id="setup-goal" className="scr-input" value={text} maxLength={200} onChange={(e) => setText(e.target.value)} disabled={goal.status === "approved"} />
+          <input id="setup-goal" className="v2-input" value={text} maxLength={200} onChange={(e) => setText(e.target.value)} disabled={goal.status === "approved"} />
         </label>
       ) : (
         <p className="scr-muted">Your CMO proposes a goal from your documents on its first plan; it shows on the Dashboard.</p>

@@ -1,7 +1,7 @@
 import { permanentRedirect } from "next/navigation";
 
 import { ProjectView } from "@/components/clipping/web/ProjectView";
-import { UI_V2 } from "@/components/screens/flag";
+import { UI_V2 } from "@/components/ui/flag";
 import { studioItemHref } from "@/components/screens/studio/href";
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {

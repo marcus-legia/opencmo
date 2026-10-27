@@ -156,6 +156,15 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 - `[C → B]` Primitives: C builds stand-ins in `components/screens/kit/` with the U1 names (`Button`, `Chip`, `Tabs`,
   `Segmented`, `Panel`, `Kpi`, `MonoLabel`, `Toggle`, `EmptyState`, `SampleTag`) and tokens as `--scr-*` copied
   from `Tokens.dc.html`. Swapped for `components/ui/` when U1 lands.
+  - `[C]` Done: B's branch is merged into `cmo-build`, `components/screens/kit/` is deleted, and every C page uses
+    `@/components/ui` and B's tokens. What `components/ui/` has no piece for stays in `components/screens/parts.tsx`
+    (page header, filter pills, error and loading blocks) and `screens.css` (page layout only, `--v2-*` tokens).
+    C's pages are in `SCREENS` of `e2e/ui-v2-look.spec.ts` (with `?sample=1`); the `UI_V2` flag is B's
+    `components/ui/flag.ts` everywhere in C's code.
+- `[C → B]` `Panel`: the frames put a line under some panel titles ("Each note shows where it came from") and a foot
+  line ("The daily check runs at 18:00…"). C wraps B's `Panel` in `parts.tsx` and adds `sub` and `foot` as the
+  panel's first and last children. If B adds `sub` and `foot` props to `components/ui/Panel.tsx`, C drops the
+  wrapper.
 - `[C → B]` Flag helper: `components/screens/flag.ts` (`UI_V2`, `requireUiV2()`). Move it under `components/ui/` or
   `lib/` if you prefer; C will follow.
 - `[C → B]` `/app` with no documents should send the founder to `/app/setup` under the flag (B owns the v2 branch

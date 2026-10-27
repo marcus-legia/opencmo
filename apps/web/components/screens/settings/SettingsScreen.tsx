@@ -6,12 +6,13 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { AccountSummary } from "@/components/clipping/web/AccountUsage";
 import { ApiKeys } from "@/components/clipping/web/ApiKeys";
 import { ConnectedApps } from "@/components/clipping/web/ConnectedApps";
+import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/screens/settings";
 
 import { PauseButton } from "../brain/PauseButton";
-import { Button, ErrorNote, MonoLabel, PageHeader, Panel, Screen, SkeletonBlocks, cx } from "../kit";
+import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
 
 const DIGEST_HOURS = [6, 7, 8, 9, 10, 12, 18];
@@ -84,17 +85,17 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
 
   return (
     <>
-      <Panel
+      <Panel id="settings-connected-accounts"
         title="Connected accounts"
         sub="Posts go out on your own accounts, only at times you approved."
-        aside={
+        actions={
           <Button variant="primary" disabled title="Connecting accounts arrives with Schedule's publishing">
             Connect an account
           </Button>
         }
       >
         {data.accounts.length === 0 ? (
-          <p className="scr-panel-body scr-muted">No accounts connected yet.</p>
+          <p className="v2-panel-body scr-muted">No accounts connected yet.</p>
         ) : (
           <div className="scr-accounts">
             {data.accounts.map((a) => (
@@ -106,7 +107,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                 {a.status === "connected" ? (
                   <span className="scr-status is-ok">Connected</span>
                 ) : (
-                  <Button small variant="danger" disabled title="Reconnecting arrives with Schedule's publishing">
+                  <Button compact variant="danger" disabled title="Reconnecting arrives with Schedule's publishing">
                     {a.status === "reconnect" ? "Reconnect" : "Connect"}
                   </Button>
                 )}
@@ -117,20 +118,20 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
       </Panel>
 
       <div className="scr-settings-grid">
-        <Panel title="Your CMO" className="scr-settings-cmo">
+        <Panel id="settings-your-cmo" title="Your CMO" className="scr-settings-cmo">
           <form
-            className="scr-panel-body scr-form"
+            className="v2-panel-body scr-form"
             onSubmit={(event) => {
               event.preventDefault();
               void save();
             }}
           >
-            <label className="scr-field" htmlFor="budget">
+            <label className="v2-field" htmlFor="budget">
               Weekly credit budget
               <span className="scr-inline-field">
                 <input
                   id="budget"
-                  className="scr-input scr-input-short scr-num"
+                  className="v2-input scr-input-short scr-num"
                   inputMode="numeric"
                   value={budget}
                   aria-invalid={!budgetOk}
@@ -146,11 +147,11 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
               </span>
             </label>
             {!budgetOk && <span className="scr-tiny scr-stuck-text">Use a whole number from {BUDGET_MIN} to {BUDGET_MAX.toLocaleString("en-US")}.</span>}
-            <label className="scr-field" htmlFor="timezone">
+            <label className="v2-field" htmlFor="timezone">
               Your time zone
               <select
                 id="timezone"
-                className="scr-select"
+                className="v2-input"
                 value={timezone}
                 onChange={(e) => {
                   setTimezone(e.target.value);
@@ -165,11 +166,11 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                 ))}
               </select>
             </label>
-            <label className="scr-field" htmlFor="digest">
+            <label className="v2-field" htmlFor="digest">
               Morning email
               <select
                 id="digest"
-                className="scr-select"
+                className="v2-input"
                 value={digestHour === null ? "off" : String(digestHour)}
                 onChange={(e) => {
                   setDigestHour(e.target.value === "off" ? null : Number(e.target.value));
@@ -186,7 +187,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                 <option value="off">Off · the digest stays in the app</option>
               </select>
             </label>
-            <fieldset className="scr-field scr-radios">
+            <fieldset className="v2-field scr-radios">
               <legend>Who does the thinking</legend>
               <label className={cx("scr-radio", data.cmo.mode === "opencmo" && "is-on")}>
                 <input type="radio" name="mode" checked={data.cmo.mode === "opencmo"} disabled readOnly />
@@ -207,8 +208,8 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
               </span>
             </fieldset>
             {error && <ErrorNote>{error}</ErrorNote>}
-            <span className="scr-dialog-actions">
-              <Button type="submit" variant="dark" disabled={!dirty || !budgetOk || saving}>
+            <span className="v2-actions">
+              <Button type="submit" variant="on-dark" disabled={!dirty || !budgetOk || saving}>
                 {saving ? "Saving…" : "Save"}
               </Button>
               {saved && (
@@ -220,7 +221,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
           </form>
         </Panel>
 
-        <section aria-labelledby="off-title" className="scr-panel is-dark scr-off">
+        <section aria-labelledby="off-title" className="v2-panel scr-dark scr-off">
           <MonoLabel small>Off switch</MonoLabel>
           <h2 id="off-title">
             {pausedAt ? "Your CMO is paused. Nothing runs and nothing posts." : "Pause stops every order and every scheduled post within a minute."}
@@ -262,18 +263,18 @@ function AccountPanel() {
     };
   }, []);
   return (
-    <Panel
+    <Panel id="settings-account"
       title="Account"
-      aside={
+      actions={
         <form action="/auth/signout" method="post">
-          <Button type="submit" small variant="ghost">
+          <Button type="submit" compact variant="secondary">
             Sign out
           </Button>
         </form>
       }
       foot="Clips and uploads are removed 7 days after a project finishes; downloads of whole videos are removed after 24 hours. Export what you want to keep before then. You are responsible for the rights to the videos you submit."
     >
-      <div className="scr-panel-body scr-small">
+      <div className="v2-panel-body scr-small">
         {error ? (
           <ErrorNote>{error}</ErrorNote>
         ) : !account ? (

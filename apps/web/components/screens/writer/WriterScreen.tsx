@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 
+import { ButtonLink, Tabs } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 import { WRITER_COLUMNS, WRITER_KINDS, type WriterScreen as Data } from "@/lib/screens/writer";
 
-import { ErrorNote, LinkButton, PageHeader, Panel, Pills, Screen, SkeletonBlocks, Tabs } from "../kit";
+import { ErrorNote, PageHeader, Panel, Pills, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { isSample, useScreen } from "../useScreen";
 
@@ -47,10 +48,10 @@ export function WriterScreen() {
         title="Words, in your voice."
         sub="Posts, captions, video briefs and slide text. Drafts only: nothing goes out until you approve it."
         sample={state.status === "ready" && isSample(state.live)}
-        actions={<LinkButton href="/app?ask=1">Ask for a post</LinkButton>}
+        actions={<ButtonLink href="/app?ask=1">Ask for a post</ButtonLink>}
       />
       <div className="scr-toolbar">
-        <Tabs label="Kind" tabs={WRITER_KINDS.map((k) => ({ id: k, label: `${KIND_LABEL[k]} · ${count(k)}` }))} value={kind} onChange={setKind} />
+        <Tabs<Kind> label="Kind" idBase="writer-kind" items={WRITER_KINDS.map((k) => ({ id: k, label: `${KIND_LABEL[k]} · ${count(k)}` }))} value={kind} onChange={setKind} />
         <Pills
           label="Platform"
           options={PLATFORM_FILTERS.map((p) => ({ id: p, label: p === "all" ? "All" : PLATFORM_LABEL[p as Platform] }))}
@@ -65,8 +66,7 @@ export function WriterScreen() {
           <div className="scr-main">
             <Board drafts={data.drafts.filter((d) => d.kind === kind && (platform === "all" || d.platform === platform))} />
           </div>
-          <Panel
-            as="aside"
+          <Panel id="writer-your-voice"
             className="scr-side"
             title="Your voice"
             sub={

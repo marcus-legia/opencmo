@@ -4,9 +4,10 @@ import { useState } from "react";
 
 import { BrandView } from "@/components/clipping/web/BrandView";
 
+import { Button, SampleTag, Tabs, Toggle } from "@/components/ui";
 import type { LibraryScreen as Data } from "@/lib/screens/library";
 
-import { Button, ErrorNote, PageHeader, Panel, SampleTag, Screen, SkeletonBlocks, Tabs, Toggle } from "../kit";
+import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { useScreen, type ScreenState } from "../useScreen";
 import { BusinessDocs } from "./BusinessDocs";
@@ -43,9 +44,9 @@ export function LibraryScreen() {
         title="What your team knows about your business."
         sub="One copy of each thing. Change it here and every department uses the new version, including the editor and your own Claude through MCP."
       />
-      <Tabs label="Library" tabs={[...TABS]} value={tab} onChange={setTab} />
+      <Tabs<Tab> label="Library" idBase="library-tab" items={[...TABS]} value={tab} onChange={setTab} />
       <div className="scr-split">
-        <div className="scr-main" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        <div className="scr-main" role="tabpanel" id="library-tab-panel" aria-labelledby={`library-tab-${tab}`}>
           {tab === "business" && <BusinessDocs />}
           {tab === "brand" && (
             // Today's kit editor, restyled by `screens.css`: one editor, so the kit the founder
@@ -57,7 +58,7 @@ export function LibraryScreen() {
           {tab === "voice" && <Gate screen={screen}>{(data, sample) => <VoiceTab voice={data.voice} sample={sample} />}</Gate>}
           {tab === "skills" && <Gate screen={screen}>{(data, sample) => <SkillsTab skills={data.skills} sample={sample} />}</Gate>}
         </div>
-        <Panel as="aside" title="Who reads what" className="scr-side">
+        <Panel id="library-who-reads-what" title="Who reads what" className="scr-side">
           <div className="scr-rows">
             {WHO_READS.map((row) => (
               <div key={row.who} className="scr-row">
@@ -94,12 +95,12 @@ function Gate({
 function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: boolean } }) {
   const [notes, setNotes] = useState(voice.notes);
   return (
-    <Panel
-      tone="white"
+    <Panel id="library-voice"
+      white
       title={<>Voice {sample.voice && <SampleTag />}</>}
       sub="Learned from your edits; newer notes win when two disagree. Delete any you don't agree with."
-      aside={
-        <Button small disabled title="Notes are added from your edits for now">
+      actions={
+        <Button compact disabled title="Notes are added from your edits for now">
           Add a note
         </Button>
       }
@@ -117,7 +118,7 @@ function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: bo
               </span>
             </span>
             <Button
-              small
+              compact
               variant="quiet"
               aria-label={`Delete note: ${note.text}`}
               onClick={() => setNotes((all) => all.filter((n) => n.id !== note.id))}
@@ -144,16 +145,16 @@ function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: bo
 function SkillsTab({ skills, sample }: { skills: Data["skills"]; sample: { skills: boolean } }) {
   return (
     <>
-      <SkillList title="Writing skills · used by Writer and Sales" items={skills.writing} sample={sample.skills} />
-      <SkillList title="Video skills · used by Studio and the editor" items={skills.video} sample={sample.skills} />
+      <SkillList id="library-writing-skills" title="Writing skills · used by Writer and Sales" items={skills.writing} sample={sample.skills} />
+      <SkillList id="library-video-skills" title="Video skills · used by Studio and the editor" items={skills.video} sample={sample.skills} />
     </>
   );
 }
 
-function SkillList({ title, items, sample }: { title: string; items: Skill[]; sample: boolean }) {
+function SkillList({ id, title, items, sample }: { id: string; title: string; items: Skill[]; sample: boolean }) {
   const [on, setOn] = useState(() => new Map(items.map((item) => [item.id, item.enabled])));
   return (
-    <Panel tone="white" title={<>{title} {sample && <SampleTag />}</>}>
+    <Panel id={id} white title={<>{title} {sample && <SampleTag />}</>}>
       <div className="scr-rows">
         {items.length === 0 && <p className="scr-row scr-muted">None yet. Ask the editor Assistant to remember a recipe and it shows here.</p>}
         {items.map((item) => (
@@ -163,11 +164,9 @@ function SkillList({ title, items, sample }: { title: string; items: Skill[]; sa
               <br />
               <span className="scr-tiny scr-muted">{item.note}</span>
             </span>
-            <Toggle
-              checked={on.get(item.id) ?? false}
-              label={item.name}
-              onChange={(next) => setOn((map) => new Map(map).set(item.id, next))}
-            />
+            <Toggle checked={on.get(item.id) ?? false} onChange={(next) => setOn((map) => new Map(map).set(item.id, next))}>
+              <span className="scr-sr-only">{item.name}</span>
+            </Toggle>
           </div>
         ))}
       </div>

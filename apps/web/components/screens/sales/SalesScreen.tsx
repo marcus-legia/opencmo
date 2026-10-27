@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
+import { Button, ButtonLink, MonoLabel } from "@/components/ui";
 import type { SalesScreen as Data } from "@/lib/screens/sales";
 
 import { ago } from "../format";
-import { Button, ErrorNote, LinkButton, MonoLabel, PageHeader, Screen, SkeletonBlocks, cx } from "../kit";
+import { cx, ErrorNote, PageHeader, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
 
 type Thread = Data["threads"][number];
@@ -96,7 +97,7 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
             <Button variant="primary" disabled title="Raising the week's budget arrives with the brain's budget controls">
               Add {stuck.creditsToFinish} credits and finish
             </Button>
-            <Button variant="ghost" onClick={() => setStuck(null)}>
+            <Button variant="secondary" onClick={() => setStuck(null)}>
               Wait for Monday
             </Button>
           </span>
@@ -107,7 +108,7 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
         <p className="scr-muted">No threads yet. Sales scans the communities your customers use and scores what it finds.</p>
       ) : (
         <div className="scr-sales">
-          <div className="scr-panel scr-thread-list">
+          <div className="v2-panel scr-thread-list">
             <ul aria-label="Threads">
               {threads.map((t) => (
                 <li key={t.id}>
@@ -136,7 +137,7 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
                 </li>
               ))}
             </ul>
-            <div className="scr-panel-foot">
+            <div className="v2-panel-foot">
               <span>
                 Replied this week: {week.replied} · dismissed: {week.dismissed}
               </span>
@@ -145,7 +146,7 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
           {selected ? (
             <ThreadDetail key={selected.id} thread={selected} onDecide={decide} />
           ) : (
-            <div className="scr-panel scr-panel-body scr-muted">All threads handled. New ones come with the next scan.</div>
+            <div className="v2-panel v2-panel-body scr-muted">All threads handled. New ones come with the next scan.</div>
           )}
         </div>
       )}
@@ -192,7 +193,7 @@ function ThreadDetail({
   }
 
   return (
-    <section className="scr-panel is-white scr-thread-detail" aria-labelledby="thread-title">
+    <section className="v2-panel scr-white scr-thread-detail" aria-labelledby="thread-title">
       <MonoLabel small>
         {thread.community}
         {thread.postedAt ? ` · posted ${ago(thread.postedAt)}` : ""}
@@ -230,22 +231,22 @@ function ThreadDetail({
         <p className="scr-muted">No draft yet. Sales drafts replies for the highest-scored threads first.</p>
       ) : (
         <>
-          <label className="scr-field" htmlFor="reply-draft">
+          <label className="v2-field" htmlFor="reply-draft">
             <MonoLabel small>Reply draft · {words} words</MonoLabel>
-            <textarea id="reply-draft" className="scr-textarea" rows={6} value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} />
+            <textarea id="reply-draft" className="v2-input" rows={6} value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} />
           </label>
           {thread.draftChecks && <p className="scr-tiny scr-muted">{thread.draftChecks}</p>}
         </>
       )}
       {!done && (
-        <div className="scr-dialog-actions">
+        <div className="v2-actions">
           {!skipped && thread.draft !== null && (
             <Button variant="primary" onClick={() => void copyAndOpen()} disabled={!draft.trim()}>
               {copied ? "Copied · thread opened" : "Copy and open thread"}
             </Button>
           )}
           {!skipped && (
-            <Button variant="ghost" onClick={() => void run("replied")} disabled={busy}>
+            <Button variant="secondary" onClick={() => void run("replied")} disabled={busy}>
               I replied
             </Button>
           )}
@@ -258,19 +259,19 @@ function ThreadDetail({
               <label className="scr-sr-only" htmlFor="dismiss-reason">
                 Reason
               </label>
-              <select id="dismiss-reason" className="scr-select" value={reason} onChange={(e) => setReason(e.target.value)}>
+              <select id="dismiss-reason" className="v2-input" value={reason} onChange={(e) => setReason(e.target.value)}>
                 {DISMISS_REASONS.map((r) => (
                   <option key={r}>{r}</option>
                 ))}
               </select>
-              <Button variant="danger" small onClick={() => void run("dismissed", reason)} disabled={busy}>
+              <Button variant="danger" compact onClick={() => void run("dismissed", reason)} disabled={busy}>
                 Dismiss
               </Button>
             </span>
           )}
         </div>
       )}
-      {done && <LinkButton href={thread.url} external small>Open thread</LinkButton>}
+      {done && <ButtonLink href={thread.url} target="_blank" rel="noopener noreferrer" compact>Open thread</ButtonLink>}
     </section>
   );
 }

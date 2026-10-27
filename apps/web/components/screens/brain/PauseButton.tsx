@@ -3,8 +3,9 @@
 import { useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
+import { Button } from "@/components/ui";
 
-import { Button, ErrorNote } from "../kit";
+import { ErrorNote } from "../parts";
 
 /**
  * Pause CMO with a confirm step, or Resume when paused (`POST /api/v1/cmo/pause`, brain B2). Pausing asks first
@@ -46,7 +47,7 @@ export function PauseButton({
   if (pausedAt) {
     return (
       <span className="scr-pause">
-        <Button variant={variant === "on-dark" ? "secondary" : "dark"} className={cls} disabled={busy || !live} onClick={() => void set(false)}>
+        <Button variant={variant === "on-dark" ? "secondary" : "on-dark"} className={cls} disabled={busy || !live} onClick={() => void set(false)}>
           {busy ? "Resuming…" : "Resume CMO"}
         </Button>
         {error && <ErrorNote>{error}</ErrorNote>}
@@ -59,9 +60,9 @@ export function PauseButton({
       <Button variant={variant === "on-dark" ? "secondary" : "danger"} className={cls} onClick={() => ref.current?.showModal()}>
         Pause CMO
       </Button>
-      <dialog ref={ref} className="scr-dialog" aria-labelledby="scr-pause-title">
-        <div className="scr scr-dialog-body">
-          <h2 id="scr-pause-title" className="scr-dialog-title">
+      <dialog ref={ref} className="v2-dialog" aria-labelledby="scr-pause-title">
+        <div className="v2-dialog-body">
+          <h2 id="scr-pause-title" className="v2-dialog-title">
             Pause your CMO?
           </h2>
           <p>
@@ -70,7 +71,7 @@ export function PauseButton({
           </p>
           {!live && <p className="scr-small scr-muted">This page shows sample data, so there is nothing to pause yet.</p>}
           {error && <ErrorNote>{error}</ErrorNote>}
-          <div className="scr-dialog-actions">
+          <div className="v2-actions">
             <Button variant="danger" onClick={() => void set(true)} disabled={!live || busy}>
               {busy ? "Pausing…" : "Pause CMO"}
             </Button>
