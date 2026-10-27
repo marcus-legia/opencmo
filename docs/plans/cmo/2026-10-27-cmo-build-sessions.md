@@ -127,7 +127,7 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 - [x] U5 Analytics, Brain
 - [x] U7 department pages
 - [x] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
-- [ ] U8 Settings, Setup
+- [x] U8 Settings, Setup
 
 ## Shared (named blocks only)
 
@@ -172,6 +172,13 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   screens route. When the studio loader goes live, give upload items `projectId` = the project id: Studio drops
   screen items whose `projectId` it already has, so nothing shows twice. "Mark finished" needs a route (an edit
   marked finished, so Shorts can be cut from it); disabled with a reason until then.
+- `[C → A]` Settings saves with `PUT /api/v1/cmo/settings` and body `{ weeklyCreditBudget, timezone, digestHour }`
+  (the `save_cmo_settings` RPC from W1-1, 422 text from the RPC shown as is). C calls it only when the screen's
+  `weeklyCreditBudget`, `timezone` and `digestHour` are live, so the route can land with W1-5. "Who does the
+  thinking" is drawn read-only from `cmo.mode` (today `brainMode` decides it from credits); say if the founder
+  should get a real choice and C wires it.
+- `[C → B]` Setup (`/app/setup`) renders inside the shell; the frame draws it without the rail. If the v2 layout
+  can hide the rail for `setup`, Setup needs nothing else.
 
 - `[A → B]` A0 landed (W1-2): the Dashboard `queue` is live from `approvals`, and every card has `contentHash`.
   Decide a card with `POST /api/v1/approvals/[id]` `{ action, contentHash, text?, reason?, goal?, target? }`

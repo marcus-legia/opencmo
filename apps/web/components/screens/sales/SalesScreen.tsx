@@ -62,6 +62,13 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(open[0]?.id ?? null);
   const selected = threads.find((t) => t.id === selectedId) ?? null;
   const [error, setError] = useState<string | null>(null);
+  const [picked, setPicked] = useState(0);
+
+  // On a phone the detail sits under the list: bring it into view when the founder picks a thread.
+  useEffect(() => {
+    if (!picked || window.matchMedia("(min-width: 900px)").matches) return;
+    document.getElementById("thread-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [picked]);
 
   async function decide(thread: Thread, action: "replied" | "dismissed", reason?: string) {
     setError(null);
@@ -108,7 +115,10 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
                     type="button"
                     aria-current={t.id === selectedId || undefined}
                     className={cx("scr-thread", t.status !== "open" && "is-done", t.rule.kind === "skipped" && "is-skipped")}
-                    onClick={() => setSelectedId(t.id)}
+                    onClick={() => {
+                      setSelectedId(t.id);
+                      setPicked((n) => n + 1);
+                    }}
                   >
                     <span className="scr-thread-score">{t.score}</span>
                     <span className="scr-thread-text">
