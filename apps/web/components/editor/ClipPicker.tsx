@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { EditorClip } from "@/app/api/v1/editor/clips/route";
+import { studioItemHref } from "@/components/screens/studio/href";
 
 export async function loadEditorClips(): Promise<EditorClip[]> {
   const response = await fetch("/api/v1/editor/clips").catch(() => null);
@@ -169,7 +170,7 @@ export function ClipPicker({ clipId, projectId, onOpen }: { clipId: string; proj
               </button>
             ) : null}
             {current && current.kind !== "blank" ? (
-              <button type="button" className="ed2-link" onClick={() => onOpen(`/app/projects/${projectId}`)}>
+              <button type="button" className="ed2-link" onClick={() => onOpen(studioItemHref(projectId))}>
                 Open project page
               </button>
             ) : null}

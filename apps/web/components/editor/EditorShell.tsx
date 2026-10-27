@@ -64,6 +64,7 @@ import { PanelToggles } from "./PanelToggles";
 import { Splitter } from "./Splitter";
 import { Soundboard } from "./soundboard/Soundboard";
 import { Timeline } from "./timeline/Timeline";
+import { studioItemHref } from "@/components/screens/studio/href";
 
 /** Trần chờ một lượt export: worker có trần 30 phút cho exporter, cộng xếp hàng. */
 const EXPORT_WAIT_MS = 40 * 60_000;
@@ -143,7 +144,7 @@ export function EditorShell({ projectId, clipId }: { projectId: string; clipId: 
     return (
       <div className="ed2 ed2-center" role="alert">
         <p>{failure}</p>
-        <a className="ed2-link" href={`/app/projects/${projectId}`}>
+        <a className="ed2-link" href={studioItemHref(projectId)}>
           Back to project
         </a>
       </div>
@@ -679,7 +680,7 @@ function Workspace({
     }
     router.push(href);
   };
-  const back = () => leave(`/app/projects/${projectId}`);
+  const back = () => leave(studioItemHref(projectId));
 
   const copyUserId = async () => {
     if (!userId) return;

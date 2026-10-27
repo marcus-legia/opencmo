@@ -126,7 +126,7 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 - [x] U6 Library
 - [x] U5 Analytics, Brain
 - [x] U7 department pages
-- [ ] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
+- [x] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
 - [ ] U8 Settings, Setup
 
 ## Shared (named blocks only)
