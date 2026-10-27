@@ -12,8 +12,9 @@ export function LiveLog({ events, timezone }: { events: LogEvent[]; timezone: st
     <div className="v2-log">
       <span className="v2-mono is-small is-muted">Live log</span>
       <ol aria-live="polite" aria-relevant="additions" className="v2-log-list" data-testid="live-log">
-        {newest.map((event, index) => (
-          <li key={event.id} style={{ opacity: 1 - index * 0.14 }}>
+        {/* No fade on older lines (the frame has one): faded label text drops under 4.5:1. */}
+        {newest.map((event) => (
+          <li key={event.id}>
             <time dateTime={event.at} className="v2-log-time">
               {time.format(new Date(event.at))}
             </time>

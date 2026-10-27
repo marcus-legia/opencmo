@@ -32,7 +32,7 @@ const COLOURS: [string, string, string][] = [
   ["brand-deep", "--v2-brand-deep", "#c93a0f · buttons, links"],
   ["brand-soft", "--v2-brand-soft", "#ffd8c6 · waiting on you"],
   ["waiting text", "--v2-waiting", "#a9420f on soft"],
-  ["ok", "--v2-ok", "#2f7d57 on #e6f1eb"],
+  ["ok", "--v2-ok", "#2b7550 on #e6f1eb"],
   ["stuck", "--v2-stuck", "#b23a2e on #fbeeea"],
   ["card", "--v2-card", "#ffffff · approval cards"],
 ];
@@ -139,7 +139,7 @@ export function DesignSheet() {
         <Kpi label="Followers" value={null} delta={{ label: "not reported", direction: "flat" }} />
       </KpiStrip>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: 24, alignItems: "start" }}>
         <Panel id="design-panel" title="Results · last 7 days" sample link={{ href: "/app/analytics", label: "Analytics" }}>
           <div className="v2-panel-body" style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Sparkline label="Rising" values={[30, 45, 40, 60, 100, 70, 85]} />

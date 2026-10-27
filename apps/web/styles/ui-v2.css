@@ -23,7 +23,8 @@ html[data-ui="v2"] {
   --v2-brand-deep: #c93a0f;
   --v2-brand-soft: #ffd8c6;
   --v2-waiting: #a9420f;
-  --v2-ok: #2f7d57;
+  /* The frame's #2f7d57 is 4.3:1 on ok-soft at chip size; one step darker passes 4.5:1. */
+  --v2-ok: #2b7550;
   --v2-ok-soft: #e6f1eb;
   --v2-stuck: #b23a2e;
   --v2-stuck-soft: #fbeeea;
@@ -94,7 +95,7 @@ html[data-ui="v2"] {
 .v2-tab { min-height: 36px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--v2-ink2); font: 500 12px var(--v2-sans); cursor: pointer; white-space: nowrap; }
 .v2-tab[aria-selected="true"] { border-bottom-color: var(--v2-ink); color: var(--v2-ink); }
 .v2-tabs.is-large .v2-tab { min-height: var(--v2-target); font-size: 14px; }
-.v2-segmented { display: inline-flex; padding: 2px; border: 1px solid var(--v2-line2); border-radius: var(--v2-pill); background: var(--v2-paper2); }
+.v2-segmented { align-self: flex-start; display: inline-flex; padding: 2px; border: 1px solid var(--v2-line2); border-radius: var(--v2-pill); background: var(--v2-paper2); }
 .v2-segment { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--v2-pill); background: transparent; color: var(--v2-ink2); font: 500 12px var(--v2-mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .v2-segment[aria-pressed="true"] { background: var(--v2-ink); color: var(--v2-paper); }
 
@@ -403,3 +404,4 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
   .v2-dash > * { min-width: 0; }
   .v2-card-body { padding: 0 14px 14px; }
 }
+.v2 .v2-card-state.is-needs_credits a { color: var(--v2-waiting); text-decoration: underline; text-underline-offset: 2px; }
