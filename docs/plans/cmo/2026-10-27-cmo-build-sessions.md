@@ -123,7 +123,7 @@ the owner forwards it to the planner session.
 today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule → U7b Studio replaces My projects → U8 Settings, Setup.
 
 - [x] Skeleton routes
-- [ ] U6 Library
+- [x] U6 Library
 - [ ] U5 Analytics, Brain
 - [ ] U7 department pages
 - [ ] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
