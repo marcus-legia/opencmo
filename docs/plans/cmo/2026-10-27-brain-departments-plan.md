@@ -77,16 +77,16 @@ them; it orders the work and names the files.
 
 ### Task W1-3: B1 work orders and deliverables (Session A)
 
-- [ ] Migration `*_work_orders.sql`: `work_orders` (id, user, root_id, parent_id, depends_on uuid[], department
+- [x] Migration `*_work_orders.sql`: `work_orders` (id, user, root_id, parent_id, depends_on uuid[], department
   `research|writer|studio|sales|schedule|publish`, kind, brief jsonb `{objective, output, sources, boundaries,
   done_when}`, budget_credits, spent_credits, due_at, status `queued|running|waiting_founder|waiting_order|deferred|
   done|failed|cancelled`, error jsonb `{code, message, retryable, repair_hint}`, run_id → `cmo_runs`).
   `deliverables` (id, user, order_id, kind `post|caption|video|short|slideshow|reply|insight|metric`, ref_kind,
   ref_id, status). RLS read-own; Realtime on both.
-- [ ] `plan_week` writes a tree of orders (root = the week); each order that maps to an existing kind enqueues its
+- [x] `plan_week` writes a tree of orders (root = the week); each order that maps to an existing kind enqueues its
   `cmo_runs` row through `cmo_enqueue`; the run's finish updates the order (one trigger or the runner).
-- [ ] `work_order_events` (append-only: order, at, kind, text ≤ 200) for the live log.
-- [ ] pgTAP: transitions, `depends_on` blocks start, spent never exceeds budget without a card.
+- [x] `work_order_events` (append-only: order, at, kind, text ≤ 200) for the live log.
+- [x] pgTAP: transitions, `depends_on` blocks start, spent never exceeds budget without a card.
 
 ### Task W1-4: B2 progress check, kill switch, digest (Session A)
 

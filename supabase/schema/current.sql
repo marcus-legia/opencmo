@@ -3184,6 +3184,12 @@ begin
     );
     v_count := v_count + 1;
   end loop;
+  -- The tree only tracks the plan: a fault in it must not lose the calendar.
+  begin
+    perform public.work_orders_plan_week(p_user, p_run);
+  exception when others then
+    raise warning 'work_orders_plan_week failed for run %: %', p_run, sqlerrm;
+  end;
   return v_count;
 end;
 $$;
@@ -8426,6 +8432,482 @@ $$;
 
 
 --
+-- Name: work_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    root_id uuid,
+    parent_id uuid,
+    week date NOT NULL,
+    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    department text NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
+    budget_credits integer DEFAULT 0 NOT NULL,
+    spent_credits integer DEFAULT 0 NOT NULL,
+    due_at timestamp with time zone,
+    status text DEFAULT 'queued'::text NOT NULL,
+    error jsonb,
+    done_reason text,
+    run_id uuid,
+    item_id uuid,
+    created_by text DEFAULT 'loop'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
+    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
+    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
+    CONSTRAINT work_orders_check1 CHECK ((spent_credits <= budget_credits)),
+    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
+    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
+    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
+    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
+    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
+    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
+);
+
+
+--
+-- Name: work_order_create(uuid, date, uuid, text, text, jsonb, integer, timestamp with time zone, uuid[], text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_create(p_user uuid, p_week date, p_parent uuid, p_kind text, p_title text, p_brief jsonb DEFAULT '{}'::jsonb, p_budget integer DEFAULT 0, p_due timestamp with time zone DEFAULT NULL::timestamp with time zone, p_depends_on uuid[] DEFAULT '{}'::uuid[], p_created_by text DEFAULT 'loop'::text, p_item uuid DEFAULT NULL::uuid, p_department text DEFAULT NULL::text) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_parent public.work_orders;
+  v_row public.work_orders;
+  v_free integer;
+begin
+  if p_parent is not null then
+    select * into v_parent from public.work_orders where id = p_parent and user_id = p_user for update;
+    if not found then
+      raise exception 'Parent order not found.' using errcode = 'P0002';
+    end if;
+    v_free := v_parent.budget_credits - v_parent.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = p_parent and status not in ('done', 'failed', 'cancelled')), 0);
+    if coalesce(p_budget, 0) > v_free then
+      raise exception 'The parent order has % credits left to hand out.', greatest(v_free, 0) using errcode = 'P0001';
+    end if;
+  end if;
+  if exists (select 1 from unnest(coalesce(p_depends_on, '{}')) d(id)
+             where not exists (select 1 from public.work_orders o where o.id = d.id and o.user_id = p_user)) then
+    raise exception 'An order can only wait on the founder''s own orders.' using errcode = '22023';
+  end if;
+  insert into public.work_orders (user_id, root_id, parent_id, week, depends_on, department, kind, title, brief,
+    budget_credits, due_at, created_by, item_id)
+  values (p_user, coalesce(v_parent.root_id, v_parent.id), p_parent, coalesce(v_parent.week, p_week),
+    coalesce(p_depends_on, '{}'), coalesce(p_department, public.work_order_department(p_kind)), p_kind,
+    left(coalesce(nullif(trim(p_title), ''), p_kind), 200), coalesce(p_brief, '{}'::jsonb), coalesce(p_budget, 0),
+    p_due, p_created_by, p_item)
+  returning * into v_row;
+  if p_parent is null then
+    update public.work_orders set root_id = id where id = v_row.id returning * into v_row;
+  end if;
+  perform public.work_order_event(v_row, 'created', 'Planned “' || v_row.title || '”');
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: work_order_department(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_kind
+    when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
+    when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
+    else 'brain' end
+$$;
+
+
+--
+-- Name: work_order_event(public.work_orders, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_event(p_order public.work_orders, p_kind text, p_text text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  insert into public.work_order_events (user_id, order_id, department, kind, text)
+  values (p_order.user_id, p_order.id, p_order.department, p_kind, left(p_text, 200))
+$$;
+
+
+--
+-- Name: work_order_finish_run(public.cmo_runs, public.work_orders); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_finish_run(p_run public.cmo_runs, p_order public.work_orders) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_ref record;
+  v_target public.work_orders;
+  v_targets uuid[] := array[p_order.id];
+  v_refunded boolean := coalesce((p_run.output->>'refund')::boolean, false);
+begin
+  if p_run.status = 'failed' then
+    perform public.work_order_move(p_order.id, 'failed', null,
+      jsonb_build_object('code', 'run_failed', 'message', left(coalesce(p_run.error, 'Something went wrong.'), 300),
+        'retryable', true, 'repair_hint', null));
+    return;
+  end if;
+  for v_ref in
+    select 'post' as kind, 'content_item' as ref_kind, id, status = 'in_review' as waiting, id as item_id
+      from public.content_items where run_id = p_run.id and department = 'post' and status <> 'planned'
+    union all select 'reply', 'opportunity', id, status = 'in_review', null::uuid from public.opportunities where run_id = p_run.id
+    union all select 'insight', 'insight', id, false, null::uuid from public.cmo_insights where run_id = p_run.id
+  loop
+    select * into v_target from public.work_orders where item_id = v_ref.item_id and v_ref.item_id is not null limit 1;
+    if not found then
+      v_target := p_order;
+    end if;
+    insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+    values (p_run.user_id, v_target.id, v_ref.kind, v_ref.ref_kind, v_ref.id, case when v_ref.waiting then 'waiting_founder' else 'ready' end)
+    on conflict (ref_kind, ref_id) do nothing;
+    if v_target.id <> p_order.id then
+      update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_target.id and run_id is null;
+      v_targets := v_targets || v_target.id;
+    end if;
+  end loop;
+  if not v_refunded and p_run.credits > 0 then
+    begin
+      perform public.work_order_spend(p_order.id, p_run.credits);
+    exception when sqlstate 'P0001' then
+      -- The credits are already settled on the run; the tree records the overrun for the progress check.
+      perform public.work_order_event(p_order, 'note', 'Spent ' || p_run.credits || ' credits over the budget of “' || p_order.title || '”');
+    end;
+  end if;
+  for v_target in select * from public.work_orders where id = any(v_targets) and status not in ('done', 'failed', 'cancelled') loop
+    if v_target.status = 'queued' and exists (select 1 from public.deliverables where order_id = v_target.id) then
+      v_target := public.work_order_move(v_target.id, 'running');
+    end if;
+    if exists (select 1 from public.deliverables where order_id = v_target.id and status = 'waiting_founder') then
+      perform public.work_order_move(v_target.id, 'waiting_founder');
+    elsif exists (select 1 from public.deliverables where order_id = v_target.id) then
+      perform public.work_order_move(v_target.id, 'done');
+    elsif v_target.id = p_order.id and cardinality(v_targets) = 1 then
+      perform public.work_order_move(v_target.id, 'done', null, null,
+        coalesce(left(p_run.output->>'reason', 200), 'Finished with nothing to approve this time.'));
+    end if;
+  end loop;
+  -- The guess went to another order: this one is free for the next run of its kind.
+  if exists (select 1 from public.work_orders where id = p_order.id and status = 'running') then
+    update public.work_orders set run_id = null where id = p_order.id;
+    perform public.work_order_move(p_order.id, 'queued');
+  end if;
+end;
+$$;
+
+
+--
+-- Name: work_order_for_run(public.cmo_runs); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_for_run(p_run public.cmo_runs) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.work_orders;
+  v_root public.work_orders;
+  v_source text := p_run.input->>'source';
+begin
+  select * into v_row from public.work_orders where run_id = p_run.id limit 1;
+  if found or p_run.kind in ('onboard', 'plan_week') then
+    return v_row;
+  end if;
+  select * into v_root from public.work_orders
+  where user_id = p_run.user_id and parent_id is null and week = date_trunc('week', current_date)::date;
+  if not found then
+    return null;
+  end if;
+  select * into v_row from public.work_orders
+  where root_id = v_root.id and kind = p_run.kind and run_id is null and status in ('queued', 'deferred')
+  order by due_at nulls last, created_at
+  limit 1
+  for update skip locked;
+  if not found then
+    v_row := public.work_order_create(p_run.user_id, v_root.week, v_root.id, p_run.kind,
+      case p_run.kind
+        when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Scan Reddit')
+        when 'competitor_research' then 'Competitor research' when 'pull_metrics' then 'Pull post metrics'
+        when 'summarize_memory' then 'Weekly memory' when 'review_week' then 'Sunday review' else p_run.kind end,
+      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), 0, null, '{}',
+      case when v_source in ('chat', 'mcp') then v_source when v_source = 'schedule' then 'loop' else 'founder' end);
+  end if;
+  update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_row.id returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: work_order_move(uuid, text, text, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_move(p_id uuid, p_to text, p_text text DEFAULT NULL::text, p_error jsonb DEFAULT NULL::jsonb, p_reason text DEFAULT NULL::text) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.work_orders;
+  v_ok boolean;
+begin
+  select * into v_row from public.work_orders where id = p_id for update;
+  if not found then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = p_to then
+    return v_row;
+  end if;
+  v_ok := case v_row.status
+    when 'queued' then p_to in ('running', 'deferred', 'waiting_order', 'cancelled')
+    when 'running' then p_to in ('waiting_founder', 'waiting_order', 'deferred', 'queued', 'done', 'failed', 'cancelled')
+    when 'waiting_founder' then p_to in ('queued', 'running', 'done', 'failed', 'cancelled')
+    when 'waiting_order' then p_to in ('queued', 'running', 'done', 'failed', 'cancelled')
+    when 'deferred' then p_to in ('queued', 'running', 'done', 'failed', 'cancelled')
+    else false end;
+  if not v_ok then
+    raise exception 'An order cannot go from % to %.', v_row.status, p_to using errcode = 'P0001';
+  end if;
+  if p_to = 'running' and exists (
+    select 1 from unnest(v_row.depends_on) d(id)
+    left join public.work_orders o on o.id = d.id
+    where o.status is distinct from 'done') then
+    raise exception 'This order waits on another order.' using errcode = 'P0001';
+  end if;
+  if p_to = 'done' and nullif(trim(coalesce(p_reason, '')), '') is null
+     and not exists (select 1 from public.deliverables where order_id = p_id) then
+    raise exception 'An order is done only with a deliverable or a reason.' using errcode = 'P0001';
+  end if;
+  if p_to = 'failed' and (p_error is null or not (p_error ? 'code' and p_error ? 'message')) then
+    raise exception 'A failed order needs an error code and message.' using errcode = '22023';
+  end if;
+  update public.work_orders
+  set status = p_to,
+      error = case when p_to = 'failed' then p_error when p_to in ('queued', 'running') then null else error end,
+      done_reason = case when p_to = 'done' then left(nullif(trim(coalesce(p_reason, '')), ''), 200) else done_reason end,
+      finished_at = case when p_to in ('done', 'failed', 'cancelled') then now() else null end,
+      updated_at = now()
+  where id = p_id
+  returning * into v_row;
+  perform public.work_order_event(v_row, p_to, coalesce(p_text, case p_to
+    when 'running' then 'Started “' || v_row.title || '”'
+    when 'waiting_founder' then '“' || v_row.title || '” waits on you'
+    when 'waiting_order' then '“' || v_row.title || '” waits on another order'
+    when 'deferred' then '“' || v_row.title || '” continues later'
+    when 'queued' then '“' || v_row.title || '” is queued again'
+    when 'done' then 'Finished “' || v_row.title || '”'
+    when 'failed' then '“' || v_row.title || '” failed: ' || (p_error->>'message')
+    else 'Cancelled “' || v_row.title || '”' end));
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: work_order_spend(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_spend(p_id uuid, p_credits integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_over text;
+begin
+  if p_credits is null or p_credits <= 0 then
+    return;
+  end if;
+  with recursive up as (
+    select * from public.work_orders where id = p_id
+    union all
+    select o.* from public.work_orders o join up on o.id = up.parent_id
+  )
+  select title into v_over from up where spent_credits + p_credits > budget_credits limit 1;
+  if v_over is not null then
+    raise exception 'Over budget: “%” has no credits left for this.', v_over using errcode = 'P0001';
+  end if;
+  with recursive up as (
+    select id, parent_id from public.work_orders where id = p_id
+    union all
+    select o.id, o.parent_id from public.work_orders o join up on o.id = up.parent_id
+  )
+  update public.work_orders set spent_credits = spent_credits + p_credits, updated_at = now()
+  where id in (select id from up);
+end;
+$$;
+
+
+--
+-- Name: work_orders_follow_approval(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_orders_follow_approval() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_order public.work_orders;
+  v_ref_kind text := case new.ref_kind when 'content_item' then 'content_item' when 'opportunity' then 'opportunity' end;
+begin
+  if old.status <> 'waiting' or new.status = 'waiting' or v_ref_kind is null then
+    return new;
+  end if;
+  -- A superseded card is replaced by a new waiting one: the deliverable still waits.
+  if new.status = 'cancelled' and exists (select 1 from public.approvals
+      where ref_kind = new.ref_kind and ref_id = new.ref_id and status = 'waiting') then
+    return new;
+  end if;
+  begin
+    update public.deliverables set status = 'decided' where ref_kind = v_ref_kind and ref_id = new.ref_id;
+    for v_order in
+      select o.* from public.work_orders o join public.deliverables d on d.order_id = o.id
+      where d.ref_kind = v_ref_kind and d.ref_id = new.ref_id and o.status = 'waiting_founder'
+    loop
+      if not exists (select 1 from public.deliverables where order_id = v_order.id and status = 'waiting_founder') then
+        perform public.work_order_move(v_order.id, 'done', case new.status
+          when 'approved' then 'You approved “' || v_order.title || '”'
+          when 'edited' then 'You edited and approved “' || v_order.title || '”'
+          when 'skipped' then 'You skipped “' || v_order.title || '”'
+          else 'Finished “' || v_order.title || '”' end);
+      end if;
+    end loop;
+  exception when others then
+    raise warning 'work orders did not follow card %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: work_orders_follow_run(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_orders_follow_run() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_order public.work_orders;
+begin
+  if tg_op = 'UPDATE' and old.status = new.status then
+    return new;
+  end if;
+  -- Orders follow runs; they never hold one back. A fault rolls back only the tree's change.
+  begin
+    v_order := public.work_order_for_run(new);
+    if v_order.id is null or new.kind = 'plan_week' then
+      return new;
+    end if;
+    if new.status = 'running' then
+      perform public.work_order_move(v_order.id, 'running');
+    elsif new.status = 'queued' and tg_op = 'UPDATE' then
+      -- Deferred by the runner (`cmo_defer_run`) or put back after a lost lease.
+      if v_order.status = 'running' then
+        perform public.work_order_move(v_order.id, 'deferred');
+      end if;
+    elsif new.status in ('done', 'failed') then
+      if v_order.status = 'queued' then
+        perform public.work_order_move(v_order.id, 'running');
+        v_order.status := 'running';
+      end if;
+      perform public.work_order_finish_run(new, v_order);
+    end if;
+  exception when others then
+    raise warning 'work orders did not follow run %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: work_orders_plan_week(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_orders_plan_week(p_user uuid, p_run uuid) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_week date := date_trunc('week', current_date)::date;
+  v_root public.work_orders;
+  v_goal text;
+  v_budget integer;
+  v_item record;
+  v_free integer;
+  v_price integer;
+begin
+  select * into v_root from public.work_orders where user_id = p_user and week = v_week and parent_id is null for update;
+  if not found then
+    select goal into v_goal from public.cmo_goals where user_id = p_user and week = v_week and status = 'approved';
+    select weekly_credit_budget into v_budget from public.profiles where id = p_user;
+    v_root := public.work_order_create(p_user, v_week, null, 'plan_week',
+      coalesce('Week of ' || to_char(v_week, 'Mon DD') || ': ' || v_goal, 'Week of ' || to_char(v_week, 'Mon DD')),
+      jsonb_build_object('objective', coalesce(v_goal, 'Plan and run this week''s marketing.')),
+      coalesce(v_budget, 0), (v_week + 7)::timestamptz);
+  end if;
+  update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
+  if v_root.status = 'queued' then
+    v_root := public.work_order_move(v_root.id, 'running', 'Planned the week');
+  end if;
+
+  -- Orders whose calendar item the new plan deleted.
+  for v_item in
+    select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
+      and kind in ('post_draft', 'sales_scan') and status = 'queued' and created_by = 'loop' and id <> v_root.id
+  loop
+    perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
+  end loop;
+
+  for v_item in
+    select c.id, c.department, c.idea, c.day from public.content_items c
+    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales')
+      and not exists (select 1 from public.work_orders o where o.item_id = c.id)
+    order by c.day, c.created_at
+  loop
+    v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
+    v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    -- Past the weekly budget the order is still planned, with nothing to spend: it shows as over budget.
+    perform public.work_order_create(p_user, v_week, v_root.id,
+      case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
+      jsonb_build_object('objective', v_item.idea, 'done_when',
+        case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
+      least(v_price, greatest(v_free, 0)), (v_item.day + 1)::timestamptz, '{}', 'loop', v_item.id);
+  end loop;
+
+  if not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'review_week') then
+    perform public.work_order_create(p_user, v_week, v_root.id, 'review_week', 'Sunday review',
+      jsonb_build_object('objective', 'Measure the week against its goal and propose the next one.'),
+      0, (v_week + 6)::timestamptz + interval '12 hours');
+  end if;
+  return v_root;
+end;
+$$;
+
+
+--
 -- Name: write_budget_bytes(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8648,6 +9130,25 @@ CREATE TABLE public.credit_ledger (
     ref_id uuid,
     CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text]))),
     CONSTRAINT credit_ledger_ref_pair CHECK (((ref_kind IS NULL) = (ref_id IS NULL)))
+);
+
+
+--
+-- Name: deliverables; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.deliverables (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    kind text NOT NULL,
+    ref_kind text NOT NULL,
+    ref_id uuid NOT NULL,
+    status text DEFAULT 'ready'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
+    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text]))),
+    CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
 
 
@@ -9043,6 +9544,37 @@ CREATE TABLE public.upload_reservations (
 
 
 --
+-- Name: work_order_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_order_events (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    department text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    kind text NOT NULL,
+    text text NOT NULL,
+    CONSTRAINT work_order_events_kind_check CHECK ((kind = ANY (ARRAY['created'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'queued'::text, 'done'::text, 'failed'::text, 'cancelled'::text, 'note'::text]))),
+    CONSTRAINT work_order_events_text_check CHECK (((char_length(text) >= 1) AND (char_length(text) <= 200)))
+);
+
+
+--
+-- Name: work_order_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_order_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.work_order_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: worker_draft_initializations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9323,6 +9855,22 @@ ALTER TABLE ONLY public.content_items
 
 ALTER TABLE ONLY public.credit_ledger
     ADD CONSTRAINT credit_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: deliverables deliverables_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: deliverables deliverables_ref_kind_ref_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_ref_kind_ref_id_key UNIQUE (ref_kind, ref_id);
 
 
 --
@@ -9630,6 +10178,22 @@ ALTER TABLE ONLY public.upload_reservations
 
 
 --
+-- Name: work_order_events work_order_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_events
+    ADD CONSTRAINT work_order_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: work_orders work_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: worker_draft_initializations worker_draft_initializations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9825,6 +10389,13 @@ CREATE INDEX credit_ledger_ref_idx ON public.credit_ledger USING btree (ref_kind
 --
 
 CREATE INDEX credit_ledger_user_idx ON public.credit_ledger USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: deliverables_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX deliverables_order_idx ON public.deliverables USING btree (order_id);
 
 
 --
@@ -10080,6 +10651,48 @@ CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations U
 
 
 --
+-- Name: work_order_events_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_events_user_idx ON public.work_order_events USING btree (user_id, at DESC);
+
+
+--
+-- Name: work_orders_item_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_item_idx ON public.work_orders USING btree (item_id) WHERE (item_id IS NOT NULL);
+
+
+--
+-- Name: work_orders_one_root; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX work_orders_one_root ON public.work_orders USING btree (user_id, week) WHERE (parent_id IS NULL);
+
+
+--
+-- Name: work_orders_root_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_root_idx ON public.work_orders USING btree (root_id);
+
+
+--
+-- Name: work_orders_run_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_run_idx ON public.work_orders USING btree (run_id) WHERE (run_id IS NOT NULL);
+
+
+--
+-- Name: work_orders_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_user_idx ON public.work_orders USING btree (user_id, week, status);
+
+
+--
 -- Name: write_budget_ledger_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10238,6 +10851,20 @@ CREATE TRIGGER tasks_sync_generation AFTER UPDATE OF status ON public.tasks FOR 
 --
 
 CREATE TRIGGER tasks_sync_page_capture AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.sync_page_capture_from_task();
+
+
+--
+-- Name: approvals work_orders_follow_approval; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER work_orders_follow_approval AFTER UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.work_orders_follow_approval();
+
+
+--
+-- Name: cmo_runs work_orders_follow_run; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER work_orders_follow_run AFTER INSERT OR UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.work_orders_follow_run();
 
 
 --
@@ -10494,6 +11121,22 @@ ALTER TABLE ONLY public.content_items
 
 ALTER TABLE ONLY public.credit_ledger
     ADD CONSTRAINT credit_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: deliverables deliverables_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: deliverables deliverables_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -10833,6 +11476,62 @@ ALTER TABLE ONLY public.upload_reservations
 
 
 --
+-- Name: work_order_events work_order_events_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_events
+    ADD CONSTRAINT work_order_events_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_order_events work_order_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_events
+    ADD CONSTRAINT work_order_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_orders work_orders_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.content_items(id) ON DELETE SET NULL;
+
+
+--
+-- Name: work_orders work_orders_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_orders work_orders_root_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_root_id_fkey FOREIGN KEY (root_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_orders work_orders_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.cmo_runs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: work_orders work_orders_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_orders
+    ADD CONSTRAINT work_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: worker_draft_initializations worker_draft_initializations_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10993,6 +11692,12 @@ ALTER TABLE public.content_items ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.credit_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: deliverables; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.deliverables ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: editor_feedback; Type: ROW SECURITY; Schema: public; Owner: -
@@ -11174,6 +11879,13 @@ CREATE POLICY "read own corrections" ON public.cmo_corrections FOR SELECT TO aut
 
 
 --
+-- Name: deliverables read own deliverables; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own deliverables" ON public.deliverables FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: cmo_draft_outcomes read own draft outcomes; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -11195,10 +11907,24 @@ CREATE POLICY "read own media transcripts" ON public.media_transcripts FOR SELEC
 
 
 --
+-- Name: work_order_events read own order events; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own order events" ON public.work_order_events FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: page_captures read own page captures; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: work_orders read own work orders; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own work orders" ON public.work_orders FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -11224,6 +11950,18 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.upload_reservations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_order_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_order_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_orders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_orders ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: worker_draft_initializations; Type: ROW SECURITY; Schema: public; Owner: -

@@ -85,7 +85,7 @@ the owner forwards it to the planner session.
 - [x] U0 contracts, fixtures, screens route, contract doc
 - [x] W1-1 B0 corrections and budget
 - [x] W1-2 A0 approvals table
-- [ ] W1-3 B1 work orders, deliverables, events
+- [x] W1-3 B1 work orders, deliverables, events
 - [ ] W1-4 B2 progress check, pause, digest
 - [ ] W1-5 loaders live: Dashboard, Brain, Library, Settings
 - [ ] W1-6 acceptance run
