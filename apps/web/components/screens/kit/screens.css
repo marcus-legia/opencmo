@@ -434,3 +434,39 @@
 .scr-dismiss { display: inline-flex; gap: 8px; align-items: center; }
 .scr-dismiss .scr-select { width: auto; }
 .scr-thread-meta { font: 400 11px var(--scr-mono); color: var(--scr-ink2); }
+
+/* ---------------------------------------------------------------- Schedule */
+.scr .scr-icon-btn { width: 44px; padding: 0; font: 400 18px var(--scr-sans); }
+.scr-week-wrap { overflow-x: auto; border: 1px solid var(--scr-line); border-radius: 4px; background: var(--scr-paper2); }
+.scr-week { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); min-width: 770px; min-height: 620px; }
+.scr-week-day { border-right: 1px solid var(--scr-line); display: flex; flex-direction: column; }
+.scr-week-day:last-child { border-right: 0; }
+.scr-week-day.is-today { background: var(--scr-card); }
+.scr .scr-week-head { padding: 14px 12px; border-bottom: 1px solid var(--scr-line); min-height: 54px; }
+.scr .is-today .scr-week-head { color: var(--scr-ink); border-bottom: 2px solid var(--scr-brand-deep); }
+.scr-week-slots { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.scr .scr-slot { display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--scr-card); border: 1px solid var(--scr-line); font: 400 12px var(--scr-mono); color: var(--scr-ink); line-height: 1.5; }
+.scr .scr-slot > span:nth-child(2) { font-family: var(--scr-sans); font-size: 13px; }
+.scr .scr-slot.is-scheduled { border-color: var(--scr-ink); }
+.scr .scr-slot.is-failed { background: var(--scr-stuck-soft); border-color: var(--scr-stuck); }
+.scr .scr-slot.is-proposed, .scr .scr-slot.is-waiting_founder { background: var(--scr-brand-soft); border: 1px dashed var(--scr-brand-deep); }
+.scr .scr-slot.is-note { border: 1px dashed var(--scr-line2); background: transparent; color: var(--scr-ink2); font-family: var(--scr-sans); }
+.scr .scr-slot.is-inline { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.scr-slot-status { font: 500 10px var(--scr-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--scr-ink); }
+.is-posted .scr-slot-status { color: var(--scr-ok); }
+.is-failed .scr-slot-status { color: var(--scr-stuck); }
+.is-proposed .scr-slot-status, .is-waiting_founder .scr-slot-status { color: var(--scr-waiting); }
+.scr-list-day { padding: 12px 20px; display: flex; flex-direction: column; gap: 6px; }
+.scr-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--scr-line); border-radius: 4px; background: var(--scr-paper2); }
+.scr .scr-month-head { padding: 10px 8px; border-bottom: 1px solid var(--scr-line); }
+.scr-month-day { min-height: 92px; padding: 6px; border-right: 1px solid var(--scr-line); border-bottom: 1px solid var(--scr-line); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.scr-month-day:nth-child(7n) { border-right: 0; }
+.scr-month-day.is-out { color: var(--scr-line2); background: transparent; }
+.scr-month-day.is-today { background: var(--scr-card); box-shadow: inset 0 2px 0 var(--scr-brand-deep); }
+.scr-month-slot { font: 400 10px var(--scr-mono); padding: 1px 4px; background: var(--scr-card); border: 1px solid var(--scr-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scr-month-slot.is-failed { background: var(--scr-stuck-soft); border-color: var(--scr-stuck); }
+.scr-month-slot.is-proposed, .scr-month-slot.is-waiting_founder { background: var(--scr-brand-soft); border-style: dashed; border-color: var(--scr-brand-deep); }
+.scr-status { font: 500 11px var(--scr-mono); }
+.scr-status.is-ok { color: var(--scr-ok); }
+.scr .scr-status.is-stuck { color: var(--scr-stuck); }
+.scr-rules { display: flex; flex-direction: column; gap: 10px; }
