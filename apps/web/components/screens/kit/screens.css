@@ -375,3 +375,31 @@
 .scr-memory:hover .scr-memory-forget, .scr-memory-forget:focus-visible { opacity: 1; }
 @media (hover: none) { .scr-memory { padding-right: 88px; } .scr-memory-forget { opacity: 1; } }
 .scr .scr-pause-on-dark { background: var(--scr-paper); border-color: var(--scr-paper); color: var(--scr-stuck); }
+
+/* ---------------------------------------------------------------- Research */
+.scr .scr-mono-link { font: 500 11px var(--scr-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--scr-brand-deep); white-space: nowrap; }
+.scr-insight { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 16px; padding: 16px 20px; align-items: start; }
+.scr-insight > div { display: flex; flex-direction: column; gap: 4px; }
+.scr-insight b { font-weight: 600; }
+.scr-insight-sources { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+@media (max-width: 600px) {
+  .scr-insight { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .scr-insight-sources { flex-direction: row; align-items: flex-start; gap: 12px; }
+}
+.scr-table.scr-table-compact { min-width: 0; }
+.scr-table-compact th, .scr-table-compact td { padding: 12px 16px; }
+
+/* ---------------------------------------------------------------- Writer */
+.scr-toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; }
+.scr-toolbar > .scr-tabs { flex: 1 1 auto; }
+.scr-board-wrap { overflow-x: auto; }
+.scr-board { display: grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap: 12px; min-width: 840px; }
+.scr-board-col { display: flex; flex-direction: column; gap: 8px; }
+.scr .scr-board-head { display: flex; justify-content: space-between; padding: 0 2px; font: 500 11px var(--scr-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--scr-ink2); }
+.scr .is-waiting .scr-board-head { color: var(--scr-waiting); }
+.scr .scr-board-card { padding: 12px; background: var(--scr-card); border: 1px solid var(--scr-line); border-radius: 4px; font-size: 13px; color: var(--scr-ink); display: flex; flex-direction: column; gap: 6px; }
+.scr .is-drafting .scr-board-card { background: var(--scr-paper2); border: 1px dashed var(--scr-line2); }
+.scr .is-waiting .scr-board-card { border-color: var(--scr-waiting); }
+.scr a.scr-board-card:hover { color: var(--scr-ink); border-color: var(--scr-brand-deep); }
+.scr-board-meta { font: 500 10px var(--scr-mono); text-transform: uppercase; color: var(--scr-ink2); }
+.scr-board-cta { font: 500 11px var(--scr-mono); text-transform: uppercase; color: var(--scr-brand-deep); }
