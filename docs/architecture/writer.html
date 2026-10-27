@@ -183,9 +183,9 @@ body{margin:0}
       </div>
       <div class="card r"><span class="k">What to add, in order</span>
         <ul>
-          <li><b>No AI Slop</b> and the fix to <code>x-writing.md</code>, which teaches the hooks No AI Slop bans.</li>
+          <li><b>No AI Slop as writing guidance</b> (a skill, not a code rule) and the fix to <code>x-writing.md</code>, which teaches the hooks No AI Slop warns against.</li>
           <li><b>Platform profiles as data</b>, so one idea becomes a post for X, Threads and LinkedIn.</li>
-          <li><b>Voice samples from the founder's own approved posts</b>, the best voice data we will ever have.</li>
+          <li><b>Voice learned into memory</b> from the founder's recent posts and edits, so it follows the founder when their style changes.</li>
           <li><b>Captions and video words</b> for Studio: captions per platform, YouTube title and description, the video brief, slide text.</li>
         </ul>
       </div>
@@ -219,10 +219,10 @@ body{margin:0}
       <table>
         <thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead>
         <tbody>
-          <tr><td>No AI Slop (petergyang, MIT, attached repo)</td><td>Edit and detect modes; preserve the writer's voice; minimum effective edit; 20+ named patterns; a banned word list; an eval checklist</td><td>The rules as Writer's skill; the banned list as a code check; named patterns as checker criteria (section 5)</td><td>Its chat questions and output format; scoring (its detect mode forbids it)</td></tr>
+          <tr><td>No AI Slop (petergyang, MIT, attached repo)</td><td>Edit and detect modes; preserve the writer's voice; minimum effective edit; 20+ named patterns; a banned word list; an eval checklist</td><td>The rules as Writer's guidance (section 5), never as code<td>Its chat questions and output format; scoring (its detect mode forbids it)</td></tr>
           <tr><td>Wikipedia "Signs of AI writing"</td><td>WikiProject AI Cleanup's catalog: negative parallelism, rule of three, summarizing, vague analysis, heavy bolding…; no single sign proves AI</td><td>A second source for the pattern list; treat signs as things to fix, not as an AI detector</td><td>An "AI score"</td></tr>
           <tr><td>Writer.com</td><td>Brand style guide enforced during generation: approved terms, restricted terms rewritten before review, a content score per style guide</td><td>Words to avoid and approved terms in data, applied before the founder sees a draft (we already check; add approved terms and rewrites)</td><td>A content score as a number</td></tr>
-          <tr><td>SuperX, Postory, VoiceMoat</td><td>X tools that learn the founder's style from past posts</td><td>Voice from the founder's own posts (section 6)</td><td>Training a model per user</td></tr>
+          <tr><td>SuperX, Postory, VoiceMoat</td><td>X tools that learn the founder's style from past posts</td><td>Learning voice from the founder's own posts, kept in memory (section 6)</td><td>A fixed voice model per user</td></tr>
           <tr><td>Tweet Hunter</td><td>AI writing next to a library of ~3 million high-performing tweets</td><td>Proof as inspiration: our outlier research does this from the founder's own niche</td><td>A generic viral library</td></tr>
           <tr><td>Typefully, Hypefury</td><td>Mostly scheduling; generic AI or templates and viral hooks</td><td>—</td><td>Hook templates (they are what No AI Slop removes)</td></tr>
           <tr><td>Platform limits (2026 roundups)</td><td>LinkedIn 3,000 (≈210 visible), Instagram 2,200 (≈125 visible), TikTok 2,200 safe through APIs, YouTube title 100 and description 5,000, Threads 500</td><td>Platform profiles as data with headroom (section 7)</td><td>—</td></tr>
@@ -233,10 +233,10 @@ body{margin:0}
 
   <section class="sec" id="design">
     <div class="sec-head"><p class="eyebrow">4</p><h2>Design: one pipeline, many platforms and kinds</h2>
-      <p class="lede">Keep the X pipeline's shape for every kind of text. What changes per platform is data (the platform profile); what changes per founder is data too (voice samples, corrections). The prompt stays stable, which keeps the prompt cache warm.</p></div>
+      <p class="lede">Keep the X pipeline's shape for every kind of text. What changes per platform is data (the platform profile); what changes per founder lives in memory (voice notes, corrections). The prompt stays stable, which keeps the prompt cache warm.</p></div>
     <p class="hint">Scroll sideways to see the whole diagram.</p>
     <div class="diagram">
-<svg class="wide" viewBox="0 0 1200 470" role="img" aria-label="Writer pipeline: inputs (brief, documents, voice samples, corrections, platform profile) feed the writer model, which drafts versions per platform; code checks, then a checker on another provider, then one fix, then a card; the founder's decision feeds voice samples and corrections back.">
+<svg class="wide" viewBox="0 0 1200 470" role="img" aria-label="Writer pipeline: inputs (brief, documents, voice memory, corrections, platform profile) feed the writer model, which drafts versions per platform; code checks, then a checker on another provider, then one fix, then a card; the founder's decision feeds voice samples and corrections back.">
 <defs><marker id="wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
 <marker id="wrn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
 <text class="t-eye" x="20" y="22">INPUTS</text>
@@ -244,18 +244,18 @@ body{margin:0}
 <path class="e" d="M126 96V110"/>
 <rect class="n-in" x="257" y="32" width="212" height="64" rx="8"/><text class="t-b" x="267" y="52">Documents</text><text class="t-s" x="267" y="70">product, strategy (voice,</text><text class="t-s" x="267" y="85">words to avoid), competitors</text>
 <path class="e" d="M363 96V110"/>
-<rect class="n-new" x="494" y="32" width="212" height="64" rx="8"/><text class="t-b" x="504" y="52">Voice samples</text><text class="t-s" x="504" y="70">the founder&#x27;s own approved</text><text class="t-s" x="504" y="85">and edited posts</text>
+<rect class="n-new" x="494" y="32" width="212" height="64" rx="8"/><text class="t-b" x="504" y="52">Voice memory</text><text class="t-s" x="504" y="70">style learned from recent</text><text class="t-s" x="504" y="85">posts; newer wins</text>
 <path class="e" d="M600 96V110"/>
 <rect class="n-new" x="731" y="32" width="212" height="64" rx="8"/><text class="t-b" x="741" y="52">Corrections</text><text class="t-s" x="741" y="70">tier 0 memory, approved</text><text class="t-s" x="741" y="85">rules from edits</text>
 <path class="e" d="M837 96V110"/>
-<rect class="n-new" x="968" y="32" width="212" height="64" rx="8"/><text class="t-b" x="978" y="52">Platform profile</text><text class="t-s" x="978" y="70">limits, hashtags, links,</text><text class="t-s" x="978" y="85">tone (data file)</text>
+<rect class="n-new" x="968" y="32" width="212" height="64" rx="8"/><text class="t-b" x="978" y="52">Platform profile</text><text class="t-s" x="978" y="70">limits, visible length,</text><text class="t-s" x="978" y="85">tone (data file)</text>
 <path class="e" d="M1074 96V110"/>
 <line class="bus" x1="126" y1="110" x2="1074" y2="110"/><path class="e" d="M151 110V124" marker-end="url(#wr)"/><text class="t-edge" x="170" y="122">all inputs feed the writer</text>
 <rect class="n-user" x="20" y="128" width="262" height="84" rx="8"/><text class="t-b" x="30" y="148">Writer</text><text class="t-s" x="30" y="166">x_writer today; one</text><text class="t-s" x="30" y="181">agent per platform</text><text class="t-s" x="30" y="196">profile, 3 versions</text><text class="t-chip" x="274" y="148" text-anchor="end">LLM</text>
 <path class="e" d="M282 170H315" marker-end="url(#wr)"/>
-<rect class="n-in" x="319" y="128" width="262" height="84" rx="8"/><text class="t-b" x="329" y="148">Code checks</text><text class="t-s" x="329" y="166">length, banned words</text><text class="t-s" x="329" y="181">(strategy + No AI Slop),</text><text class="t-s" x="329" y="196">numbers, hashtags, links</text><text class="t-chip" x="573" y="148" text-anchor="end">CODE</text>
+<rect class="n-in" x="319" y="128" width="262" height="84" rx="8"/><text class="t-b" x="329" y="148">Code checks</text><text class="t-s" x="329" y="166">length, words to avoid,</text><text class="t-s" x="329" y="181">numbers; no links, no</text><text class="t-s" x="329" y="196">hashtags in posts</text><text class="t-chip" x="573" y="148" text-anchor="end">CODE</text>
 <path class="e" d="M581 170H614" marker-end="url(#wr)"/>
-<rect class="n-in" x="619" y="128" width="262" height="84" rx="8"/><text class="t-b" x="629" y="148">Checker</text><text class="t-s" x="629" y="166">other provider; binary</text><text class="t-s" x="629" y="181">criteria incl. slop</text><text class="t-s" x="629" y="196">patterns; one fix</text><text class="t-chip" x="873" y="148" text-anchor="end">LLM</text>
+<rect class="n-in" x="619" y="128" width="262" height="84" rx="8"/><text class="t-b" x="629" y="148">Checker</text><text class="t-s" x="629" y="166">other provider; facts,</text><text class="t-s" x="629" y="181">voice; No AI Slop as</text><text class="t-s" x="629" y="196">advice, not a gate</text><text class="t-chip" x="873" y="148" text-anchor="end">LLM</text>
 <path class="e" d="M881 170H914" marker-end="url(#wr)"/>
 <rect class="n-user" x="918" y="128" width="262" height="84" rx="8"/><text class="t-b" x="928" y="148">Card</text><text class="t-s" x="928" y="166">versions side by side;</text><text class="t-s" x="928" y="181">approve, edit, skip</text><text class="t-s" x="928" y="196">(Approval)</text><text class="t-chip" x="1172" y="148" text-anchor="end">YOU</text>
 <path class="e-dash" d="M750 212V250H151V216" marker-end="url(#wr)"/><text class="t-edge" x="450" y="244" text-anchor="middle">a failed check sends it back to the writer once</text>
@@ -266,7 +266,7 @@ body{margin:0}
 <rect class="n-new" x="608" y="292" width="180" height="64" rx="8"/><text class="t-b" x="618" y="312">video brief</text><text class="t-s" x="618" y="330">angle, hook options, key</text><text class="t-s" x="618" y="345">points for Studio</text>
 <rect class="n-new" x="804" y="292" width="180" height="64" rx="8"/><text class="t-b" x="814" y="312">slide text</text><text class="t-s" x="814" y="330">for the Slideshow squad</text><text class="t-s" x="814" y="345">(Studio calls Writer)</text>
 <rect class="n-new" x="1000" y="292" width="180" height="64" rx="8"/><text class="t-b" x="1010" y="312">thread, article</text><text class="t-s" x="1010" y="330">X threads, long</text><text class="t-s" x="1010" y="345">drafts; later</text>
-<rect class="n-in" x="20" y="380" width="1160" height="70" rx="10"/><text class="t-b" x="38" y="404">Learning loop (built for X, extend to every kind)</text><text class="t-s" x="38" y="426">approved as is → a voice sample · edited → similarity + edit mode (TOO_SALESY, WRONG_VOICE, INVENTED_CLAIM, TOO_LONG, HOOK_REWRITTEN, CTA_REMOVED, FULL_REWRITE)</text><text class="t-s" x="38" y="442">skipped → memory · repeated edit modes → a correction card on Sunday → tier 0 memory read first next time</text>
+<rect class="n-in" x="20" y="380" width="1160" height="70" rx="10"/><text class="t-b" x="38" y="404">Learning loop (built for X, extend to every kind)</text><text class="t-s" x="38" y="426">approved as is → a voice note in memory · edited → similarity + edit mode (TOO_SALESY, WRONG_VOICE, INVENTED_CLAIM, TOO_LONG, HOOK_REWRITTEN, CTA_REMOVED, FULL_REWRITE)</text><text class="t-s" x="38" y="442">skipped → memory · repeated edit modes → a correction card on Sunday → tier 0 memory read first next time</text>
 </svg>
 
     </div>
@@ -277,37 +277,39 @@ body{margin:0}
   </section>
 
   <section class="sec" id="slop">
-    <div class="sec-head"><p class="eyebrow">5</p><h2>No AI Slop in Writer</h2></div>
+    <div class="sec-head"><p class="eyebrow">5</p><h2>No AI Slop in Writer: guidance, not a rule</h2>
+      <p class="lede">Decided 2026-10-26: style changes, and a founder's own voice may use a phrase the list warns against. So No AI Slop is advice the writer reads, never a code check and never a gate that drops a draft.</p></div>
     <div class="tbl">
       <table>
-        <thead><tr><th>Layer</th><th>What</th><th>Cost</th></tr></thead>
+        <thead><tr><th>Layer</th><th>What</th></tr></thead>
         <tbody>
-          <tr><td>Skill</td><td><code>lib/cmo/skills/no-ai-slop.md</code> (MIT notice in <code>LICENSE.md</code> and <code>THIRD_PARTY_NOTICES.md</code>): editing principles, words to cut, patterns to cut. Not its chat questions or output format. Loaded by <code>x_writer</code>, <code>sales</code>, <code>checker</code> and the CMO chat</td><td>~1,700 words per prompt, cached</td></tr>
-          <tr><td>Code check</td><td>"Banned outright" words and a few phrases ("Here's the thing", "What nobody tells you") as a list next to the strategy's words to avoid, in <code>checkPost</code> and its platform versions</td><td>free</td></tr>
-          <tr><td>Checker criteria</td><td>Binary questions: no binary contrast ("not X, it's Y"); no throat-clearing opener; no colon reveal; no fake-profound ending or recap; no invented authority ("experts agree")</td><td>part of the checker call</td></tr>
-          <tr><td>Measure</td><td>Approve-as-is rate and edit modes before and after, on <code>cmo:eval</code> and in production</td><td>—</td></tr>
+          <tr><td>Skill</td><td><code>lib/cmo/skills/no-ai-slop.md</code> (MIT notice in <code>LICENSE.md</code> and <code>THIRD_PARTY_NOTICES.md</code>): editing principles and the patterns to watch, without its chat questions or output format. Loaded by <code>x_writer</code>, <code>sales</code> and the CMO chat; about 1,700 words, cached</td></tr>
+          <tr><td>Checker</td><td>Reads the same skill as advice: it may suggest a fix in its one round, but a pattern alone never drops a version</td></tr>
+          <tr><td>Founder's voice wins</td><td>When voice memory shows the founder writes a certain way, that beats the skill</td></tr>
+          <tr><td>Measure</td><td>Approve-as-is rate and edit modes before and after, on <code>cmo:eval</code> and in production</td></tr>
         </tbody>
       </table>
     </div>
+    <p class="prose-note">Code checks stay only for facts and product rules: length, the strategy's words to avoid, numbers that must be in the documents, no links and no hashtags in posts.</p>
   </section>
 
   <section class="sec" id="voice">
-    <div class="sec-head"><p class="eyebrow">6</p><h2>Voice</h2></div>
+    <div class="sec-head"><p class="eyebrow">6</p><h2>Voice: learned into memory, not fixed</h2>
+      <p class="lede">Decided 2026-10-26: no fixed "write like you" profile and no samples asked at onboarding. A founder's style changes; the brain keeps learning it from what the founder approves and how they edit, and newer notes outweigh older ones.</p></div>
     <div class="grid2">
-      <div class="card b"><span class="k">Sources, best first</span>
-        <ol>
-          <li><b>Approved as is</b> (similarity ≥ 0.95): the founder chose these words.</li>
-          <li><b>Edited, then approved</b>: the final text is the founder's own writing; the edit mode says what was wrong.</li>
-          <li><b>Pasted samples</b> at onboarding (optional): a few posts or paragraphs, as humanizer suggests.</li>
-          <li><b>The strategy's voice sentence and words to avoid</b> (today).</li>
-        </ol>
-      </div>
-      <div class="card b"><span class="k">How they are used</span>
+      <div class="card b"><span class="k">What feeds voice memory</span>
         <ul>
-          <li>The 5–8 most recent samples for the target platform go into the prompt as examples of voice, never as text to copy.</li>
-          <li>Samples are data inside tags, like documents (<code>lib/cmo/untrusted.ts</code>).</li>
-          <li>The founder sees and can remove samples on the Brand page.</li>
-          <li>No fine-tuning: few-shot examples from the founder's own words are enough and stay current.</li>
+          <li>Posts approved as is (similarity ≥ 0.95): what the founder accepts now.</li>
+          <li>Edits before approval: the final text and its edit mode (<code>WRONG_VOICE</code>, <code>TOO_SALESY</code>…) say what to change.</li>
+          <li>Skip reasons, as today.</li>
+        </ul>
+      </div>
+      <div class="card b"><span class="k">How it is kept</span>
+        <ul>
+          <li>Short voice notes in <code>cmo_memories</code> with the <code>post</code> topic and an importance, and the Sunday lesson for <code>post</code> (<code>cmo_lessons</code>), both already built.</li>
+          <li>Newer wins: notes expire or lose weight over time, so a new style replaces an old one within a few weeks.</li>
+          <li>A repeated change becomes a correction card the founder approves (brain tier 0).</li>
+          <li>No fine-tuning and no fixed sample set.</li>
         </ul>
       </div>
     </div>
@@ -316,16 +318,17 @@ body{margin:0}
   <section class="sec" id="platforms">
     <div class="sec-head"><p class="eyebrow">7</p><h2>Platform profiles</h2>
       <p class="lede">One data file, for example <code>packages/contracts/platforms.json</code>, read by Writer's prompt, the code checks, Schedule and the cards. Numbers carry headroom; platforms change them.</p></div>
+    <div class="card g"><span class="k">Decided 2026-10-26</span><p><b>No links in any post. No hashtags in posts;</b> hashtags go only on videos (captions for a video, short or slideshow on TikTok, Instagram, YouTube).</p></div>
     <div class="tbl">
       <table>
-        <thead><tr><th>Platform</th><th>Limit</th><th>Visible before "more"</th><th>Hashtags</th><th>Links</th><th>Tone</th></tr></thead>
+        <thead><tr><th>Platform</th><th>Limit</th><th>Visible before "more"</th><th>Tone</th></tr></thead>
         <tbody>
-          <tr><td>X</td><td>280</td><td>all</td><td>0–2, usually none</td><td>avoid by default (posting a link through the API costs ~$0.20 instead of ~$0.015)</td><td>one idea, a clear first line</td></tr>
-          <tr><td>Threads</td><td>500</td><td>all</td><td>none</td><td>allowed</td><td>conversational</td></tr>
-          <tr><td>LinkedIn</td><td>3,000</td><td>≈210 desktop, ≈140 phone</td><td>0–3</td><td>allowed</td><td>longer, short paragraphs, the hook before the cut</td></tr>
-          <tr><td>Instagram caption</td><td>2,200</td><td>≈125</td><td>3–5</td><td>not clickable</td><td>the hook in the first line</td></tr>
-          <tr><td>TikTok caption</td><td>2,200 (safe through APIs)</td><td>short</td><td>3–5</td><td>not clickable</td><td>short, matches the video's hook</td></tr>
-          <tr><td>YouTube</td><td>title 100, description 5,000</td><td>title</td><td>a few in the description</td><td>in the description</td><td>searchable title, chapters later</td></tr>
+          <tr><td>X</td><td>280</td><td>all</td><td>one idea, a clear first line</td></tr>
+          <tr><td>Threads</td><td>500</td><td>all</td><td>conversational</td></tr>
+          <tr><td>LinkedIn</td><td>3,000</td><td>≈210 desktop, ≈140 phone</td><td>longer, short paragraphs, the hook before the cut</td></tr>
+          <tr><td>Instagram caption (video)</td><td>2,200</td><td>≈125</td><td>the hook in the first line</td></tr>
+          <tr><td>TikTok caption (video)</td><td>2,200 (safe through APIs)</td><td>short</td><td>short, matches the video's hook</td></tr>
+          <tr><td>YouTube</td><td>title 100, description 5,000</td><td>title</td><td>searchable title, chapters later</td></tr>
         </tbody>
       </table>
     </div>
@@ -355,9 +358,9 @@ body{margin:0}
         <thead><tr><th>Measure</th><th>From</th></tr></thead>
         <tbody>
           <tr><td>Approved as is, per platform and kind</td><td><code>cmo_draft_outcomes</code>, extended to every kind</td></tr>
-          <tr><td>Edit mode mix</td><td><code>classify-edits.ts</code>; fewer WRONG_VOICE and TOO_SALESY after voice samples and No AI Slop</td></tr>
+          <tr><td>Edit mode mix</td><td><code>classify-edits.ts</code>; fewer WRONG_VOICE and TOO_SALESY as voice memory grows</td></tr>
           <tr><td>Code-check pass rate per platform</td><td>versions dropped by checks</td></tr>
-          <tr><td>Eval cases per platform</td><td><code>lib/cmo/jobs/eval</code>: add Threads, LinkedIn, captions; the cascade judge's criteria gain the slop questions</td></tr>
+          <tr><td>Eval cases per platform</td><td><code>lib/cmo/jobs/eval</code>: add Threads, LinkedIn, captions</td></tr>
           <tr><td>Views per post</td><td><code>post_metrics</code>, per platform and hook type</td></tr>
         </tbody>
       </table>
@@ -367,9 +370,9 @@ body{margin:0}
   <section class="sec" id="phases">
     <div class="sec-head"><p class="eyebrow">10</p><h2>Build phases</h2></div>
     <ol class="order">
-      <li><span><b>W0 · No AI Slop.</b> The skill, the banned list in code, the checker criteria, the <code>x-writing.md</code> and fake-draft fixes, evals before and after. Small, no migration.</span></li>
+      <li><span><b>W0 · No AI Slop as guidance + post rules.</b> The skill, the <code>x-writing.md</code> and fake-draft fixes, no links and no hashtags in posts as code checks, evals before and after. Small, no migration.</span></li>
       <li><span><b>W1 · Platform profiles + Threads and LinkedIn posts.</b> The data file; one idea becomes per-platform versions; checks per profile.</span></li>
-      <li><span><b>W2 · Voice samples.</b> From approved and edited posts; optional pasted samples; shown on the Brand page.</span></li>
+      <li><span><b>W2 · Voice memory.</b> Voice notes from approvals and edits in <code>cmo_memories</code>, newer wins; the Sunday lesson; corrections from repeated edits.</span></li>
       <li><span><b>W3 · Words for Studio.</b> Captions per platform, YouTube title and description, the video brief, slide text, as Studio's Shorts and Slideshow squads arrive.</span></li>
       <li><span><b>W4 · Threads on X and long drafts.</b> When a founder asks for them.</span></li>
     </ol>
@@ -381,12 +384,13 @@ body{margin:0}
       <table>
         <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td>Use the founder's approved posts as voice samples automatically?</td><td>Yes; the founder can see and remove them</td></tr>
-          <tr><td>2</td><td>Ask for writing samples at onboarding?</td><td>Optional, with a skip; onboarding must stay cheap and short</td></tr>
-          <tr><td>3</td><td>Links in X posts</td><td>Avoid by default (cost and reach); the founder can add one</td></tr>
-          <tr><td>4</td><td>Hashtags</td><td>Per platform profile: X 0–2, Threads none, LinkedIn 0–3, Instagram and TikTok 3–5</td></tr>
-          <tr><td>5</td><td>Who writes the video script?</td><td>Studio's Director; Writer writes the brief before and the captions after</td></tr>
-          <tr><td>6</td><td>Articles</td><td>Later (W4)</td></tr>
+          <tr><td>1</td><td>Voice</td><td><b>Decided 2026-10-26:</b> no fixed voice profile; voice is learned into memory from recent approvals and edits, newer wins</td></tr>
+          <tr><td>2</td><td>Writing samples at onboarding</td><td><b>Decided:</b> no</td></tr>
+          <tr><td>3</td><td>Links in posts</td><td><b>Decided:</b> never</td></tr>
+          <tr><td>4</td><td>Hashtags</td><td><b>Decided:</b> none in posts; only on video captions</td></tr>
+          <tr><td>5</td><td>No AI Slop</td><td><b>Decided:</b> guidance in a skill, not code and not a gate</td></tr>
+          <tr><td>6</td><td>Who writes the video script?</td><td>Recommendation: Studio's Director; Writer writes the brief before and the captions after</td></tr>
+          <tr><td>7</td><td>Articles</td><td>Recommendation: later (W4)</td></tr>
         </tbody>
       </table>
     </div>

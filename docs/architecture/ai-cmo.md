@@ -196,7 +196,7 @@ https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 | Brain cannot reach Studio | `lib/agent/cmo-tools.ts` has no editor tool; `cmo_video_briefs` removed with clipping (2026-10-20) | changes 3, 4; v1 "Build" button opens the Assistant with the script |
 | Video has no approval state | `lib/cmo/pending.ts` counts X posts and Reddit only | changes 2, 6 |
 | Writer posts only to X | `plan-week.ts:47`; `check-post.ts` knows 280 characters | per-platform rules |
-| No AI Slop sources conflict | the attached `no-ai-slop` (MIT, Peter Yang) forbids scoring; PR #117 proposed stop-slop's 50-point score | use `no-ai-slop`, binary checker criteria |
+| No AI Slop sources conflict | the attached `no-ai-slop` (MIT, Peter Yang) forbids scoring; PR #117 proposed stop-slop's 50-point score | use `no-ai-slop` as writing guidance only, not code (owner, 2026-10-26; `writer.md`) |
 | `x-writing` teaches banned patterns | `lib/cmo/skills/x-writing.md` lines 13, 16, 23 | rewrite in the same PR |
 | Hashtag rule conflict | PR #117 vs `x-writing.md:32`, `check-post.ts` | per-platform rules |
 | Brand Kit has no voice | `editor-core/src/brand.ts`; voice in `documents.ts:36` | `strategy.voice` + the founder's own posts |

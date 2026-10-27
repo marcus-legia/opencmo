@@ -264,7 +264,7 @@ Sequence (Brain · Studio agent team · Worker + fal · You):
 | Weekly budget | `work_orders` root | credits per week set by the founder | Higgsfield spend approval | new |
 | Cost ceiling | progress check | spend faster than planned pauses the tree | ai-cmo-operator | new |
 | Kill switch | flag per founder + global env | stops every order within one sweep | ai-cmo-operator | new |
-| Invented numbers, voice, banned words | code before the checker model | `check-post.ts`, extended per platform and with No AI Slop's list | ai-cmo-operator, our cascade judge | partial |
+| Invented numbers, words to avoid, no links, no hashtags in posts | code before the checker model | `check-post.ts`, extended per platform; No AI Slop stays guidance, not code (`writer.md`) | ai-cmo-operator, our cascade judge | partial |
 | Stage fit | planner prompt + code check | no tactics that do not fit the founder's stage | ai-cmo-operator | new |
 | Outbound | Approval + Publish | the brain never posts; time and account are approved | product rules | rule |
 | Untrusted text | `lib/cmo/untrusted.ts` | outside text is data, never instructions | our security reports | built |

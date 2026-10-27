@@ -105,8 +105,8 @@ A slideshow is a document of timed slides: same ops, renderer, export; no new ru
 Chain: Writer (LLM) → Reviewer (code) → Visuals → Builder → Renderer → Look check.
 
 - Inputs: brief from the week plan, marketing documents, Brand Kit, captured pages of the founder's own site.
-- Writer: 5–10 slides; slide 1 is the hook; one idea per slide; last slide is a call to action; No AI Slop rules.
-- Reviewer: text fits, no invented numbers, banned words.
+- Writer: 5–10 slides; slide 1 is the hook; one idea per slide; last slide is a call to action; No AI Slop as guidance.
+- Reviewer: text fits, no invented numbers, the strategy's words to avoid.
 - Visuals: the founder's screenshots and captured pages first; an AI image only when needed, moderated, never with
   text inside the image. Text is always an editor layer.
 - Outputs from one document: **MP4** (Reels, Shorts: timed slides, transitions, optional music bed) and a **PNG set**

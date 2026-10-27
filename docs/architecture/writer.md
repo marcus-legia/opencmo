@@ -15,8 +15,9 @@ not draft → one fix → a card (`draft-post.ts`); code checks (280 characters,
 be in the documents, at most two hashtags; `check-post.ts`); a learning loop (version chosen, similarity, edit mode;
 `edit-taxonomy.ts`, `classify-edits.ts`); evals with a cascade judge (`lib/cmo/jobs/eval`).
 
-**Add, in order:** No AI Slop and the fix to `x-writing.md`; platform profiles as data (one idea → X, Threads,
-LinkedIn); voice samples from the founder's own approved posts; captions and video words for Studio.
+**Add, in order:** No AI Slop as writing guidance (a skill, not a code rule) and the fix to `x-writing.md`; platform
+profiles as data (one idea → X, Threads, LinkedIn); voice learned into memory from recent posts and edits (it follows
+the founder when their style changes); captions and video words for Studio.
 
 ## 2. Writer today (`main`, `eb858ca`)
 
@@ -39,10 +40,10 @@ this:" (faux-insight setup); change them too.
 
 | Source | What it is | Take | Leave |
 |---|---|---|---|
-| No AI Slop (petergyang, MIT, attached repo) | edit and detect modes; preserve voice; minimum effective edit; 20+ named patterns; banned words; eval checklist | rules as Writer's skill; banned list as a code check; patterns as checker criteria | its chat questions and output format; scoring |
+| No AI Slop (petergyang, MIT, attached repo) | edit and detect modes; preserve voice; minimum effective edit; 20+ named patterns; banned words; eval checklist | the rules as Writer's guidance, never as code | its chat questions and output format; scoring |
 | Wikipedia "Signs of AI writing" | WikiProject AI Cleanup catalog: negative parallelism, rule of three, summarizing, vague analysis, heavy bolding…; no single sign proves AI | a second source for the pattern list; signs are things to fix, not a detector | an "AI score" |
 | Writer.com | style guide enforced during generation: approved terms, restricted terms rewritten before review, a content score | words to avoid and approved terms as data, applied before the founder sees a draft | a content score number |
-| SuperX, Postory, VoiceMoat | X tools that learn style from past posts | voice from the founder's own posts | training a model per user |
+| SuperX, Postory, VoiceMoat | X tools that learn style from past posts | learning voice from the founder's own posts, kept in memory | a fixed voice model per user |
 | Tweet Hunter | AI writing next to ~3 million high-performing tweets | inspiration from proof; our outlier research does it from the founder's niche | a generic viral library |
 | Typefully, Hypefury | mostly scheduling; generic AI or templates and viral hooks | — | hook templates |
 | Platform limits (2026 roundups) | LinkedIn 3,000 (≈210 visible), Instagram 2,200 (≈125 visible), TikTok 2,200 safe through APIs, YouTube title 100 / description 5,000, Threads 500 | platform profiles as data with headroom | — |
@@ -50,12 +51,12 @@ this:" (faux-insight setup); change them too.
 ## 4. Design: one pipeline, many platforms and kinds
 
 - **Inputs, all feeding the writer:** brief (work order: idea, angle, platforms, due day); documents (product,
-  strategy with voice and words to avoid, competitors); voice samples (new); corrections (tier 0 memory, new); platform
+  strategy with voice and words to avoid, competitors); voice memory (new); corrections (tier 0 memory, new); platform
   profile (data, new).
-- **Chain:** Writer (LLM; `x_writer` today; one agent per platform profile; 3 versions) → code checks (length, banned
-  words from strategy + No AI Slop, numbers, hashtags, links) → checker (other provider; binary criteria incl. slop
-  patterns) → a failed check goes back to the writer once → card (versions side by side; approve, edit, skip).
-- **Learning loop** (built for X, extend to every kind): approved as is → a voice sample; edited → similarity + edit
+- **Chain:** Writer (LLM; `x_writer` today; one agent per platform profile; 3 versions) → code checks (length, words
+  to avoid, numbers; no links and no hashtags in posts) → checker (other provider; facts and voice; No AI Slop as
+  advice, not a gate) → a failed check goes back to the writer once → card (versions side by side; approve, edit, skip).
+- **Learning loop** (built for X, extend to every kind): approved as is → a voice note in memory; edited → similarity + edit
   mode; skipped → memory; repeated edit modes → a correction card on Sunday → tier 0 memory read first next time.
 - Per-platform and per-founder differences are data; the prompt stays stable (prompt cache).
 - **Who writes the video script:** Writer owns words that go out as text; Studio's Director owns long-take beats. For a
@@ -64,38 +65,48 @@ this:" (faux-insight setup); change them too.
   `write_slides` capability.
 - **Over MCP** the founder's Claude can write instead (`checkRubric()` in `steps.ts`); code checks stay the last gate.
 
-## 5. No AI Slop in Writer
+## 5. No AI Slop in Writer: guidance, not a rule
 
-| Layer | What | Cost |
-|---|---|---|
-| Skill | `lib/cmo/skills/no-ai-slop.md` (MIT notice in `LICENSE.md` and `THIRD_PARTY_NOTICES.md`): editing principles, words to cut, patterns to cut; not its chat questions or output format; loaded by `x_writer`, `sales`, `checker`, CMO chat | ~1,700 words per prompt, cached |
-| Code check | "banned outright" words and a few phrases ("Here's the thing", "What nobody tells you") next to the strategy's words to avoid, in `checkPost` and its platform versions | free |
-| Checker criteria | binary: no binary contrast; no throat-clearing opener; no colon reveal; no fake-profound ending or recap; no invented authority | part of the checker call |
-| Measure | approve-as-is rate and edit modes before and after (`cmo:eval`, production) | — |
+Decided 2026-10-26: style changes, and a founder's own voice may use a phrase the list warns against. No AI Slop is
+advice the writer reads, never a code check and never a gate that drops a draft.
 
-## 6. Voice
+| Layer | What |
+|---|---|
+| Skill | `lib/cmo/skills/no-ai-slop.md` (MIT notice in `LICENSE.md` and `THIRD_PARTY_NOTICES.md`): editing principles and patterns to watch, without its chat questions or output format; loaded by `x_writer`, `sales`, CMO chat; ~1,700 words, cached |
+| Checker | reads the same skill as advice; may suggest a fix in its one round; a pattern alone never drops a version |
+| Founder's voice wins | when voice memory shows the founder writes a certain way, that beats the skill |
+| Measure | approve-as-is rate and edit modes before and after (`cmo:eval`, production) |
 
-Sources, best first: (1) approved as is (similarity ≥ 0.95); (2) edited then approved (the final text is the founder's
-own; the edit mode says what was wrong); (3) pasted samples at onboarding (optional); (4) the strategy's voice
-sentence and words to avoid (today).
+Code checks stay only for facts and product rules: length, the strategy's words to avoid, numbers that must be in the
+documents, no links and no hashtags in posts.
 
-Use: the 5–8 most recent samples for the target platform go into the prompt as voice examples, never as text to copy;
-samples are data inside tags (`lib/cmo/untrusted.ts`); the founder sees and removes samples on the Brand page; no
-fine-tuning.
+## 6. Voice: learned into memory, not fixed
+
+Decided 2026-10-26: no fixed "write like you" profile and no samples at onboarding. A founder's style changes; the
+brain keeps learning it from what the founder approves and how they edit, and newer notes outweigh older ones.
+
+- Feeds: posts approved as is (similarity ≥ 0.95); edits before approval (final text + edit mode such as
+  `WRONG_VOICE`, `TOO_SALESY`); skip reasons.
+- Kept as short voice notes in `cmo_memories` (topic `post`, with importance) and the Sunday `post` lesson
+  (`cmo_lessons`), both built; notes expire or lose weight so a new style replaces an old one within weeks; a repeated
+  change becomes a correction card (brain tier 0); no fine-tuning, no fixed sample set.
 
 ## 7. Platform profiles
 
 One data file (for example `packages/contracts/platforms.json`) read by Writer's prompt, the code checks, Schedule and
 the cards; numbers carry headroom.
 
-| Platform | Limit | Visible before "more" | Hashtags | Links | Tone |
-|---|---|---|---|---|---|
-| X | 280 | all | 0–2, usually none | avoid by default (API post with a link ~$0.20 vs ~$0.015) | one idea, a clear first line |
-| Threads | 500 | all | none | allowed | conversational |
-| LinkedIn | 3,000 | ≈210 desktop, ≈140 phone | 0–3 | allowed | longer, short paragraphs, hook before the cut |
-| Instagram caption | 2,200 | ≈125 | 3–5 | not clickable | hook in the first line |
-| TikTok caption | 2,200 (safe through APIs) | short | 3–5 | not clickable | short, matches the video's hook |
-| YouTube | title 100, description 5,000 | title | a few in the description | in the description | searchable title; chapters later |
+**Decided 2026-10-26: no links in any post; no hashtags in posts.** Hashtags go only on videos (captions for a video,
+short or slideshow on TikTok, Instagram, YouTube).
+
+| Platform | Limit | Visible before "more" | Tone |
+|---|---|---|---|
+| X | 280 | all | one idea, a clear first line |
+| Threads | 500 | all | conversational |
+| LinkedIn | 3,000 | ≈210 desktop, ≈140 phone | longer, short paragraphs, hook before the cut |
+| Instagram caption (video) | 2,200 | ≈125 | hook in the first line |
+| TikTok caption (video) | 2,200 (safe through APIs) | short | short, matches the video's hook |
+| YouTube | title 100, description 5,000 | title | searchable title; chapters later |
 
 ## 8. What Writer makes
 
@@ -111,29 +122,31 @@ the cards; numbers carry headroom.
 ## 9. Evals
 
 Approved as is per platform and kind (`cmo_draft_outcomes`, extended) · edit mode mix (fewer WRONG_VOICE and
-TOO_SALESY after voice samples and No AI Slop) · code-check pass rate per platform · eval cases per platform in
-`lib/cmo/jobs/eval` (Threads, LinkedIn, captions; slop questions in the judge) · views per post per platform and hook
+TOO_SALESY as voice memory grows) · code-check pass rate per platform · eval cases per platform in
+`lib/cmo/jobs/eval` (Threads, LinkedIn, captions) · views per post per platform and hook
 type (`post_metrics`).
 
 ## 10. Build phases
 
-- **W0** No AI Slop: skill, banned list in code, checker criteria, `x-writing.md` and fake-draft fixes, evals before
-  and after. Small, no migration.
+- **W0** No AI Slop as guidance + post rules: the skill, `x-writing.md` and fake-draft fixes, no links and no hashtags
+  in posts as code checks, evals before and after. Small, no migration.
 - **W1** Platform profiles + Threads and LinkedIn posts: the data file; per-platform versions; checks per profile.
-- **W2** Voice samples: from approved and edited posts; optional pasted samples; on the Brand page.
+- **W2** Voice memory: voice notes from approvals and edits in `cmo_memories`, newer wins; the Sunday lesson;
+  corrections from repeated edits.
 - **W3** Words for Studio: captions per platform, YouTube title and description, video brief, slide text.
 - **W4** Threads on X and long drafts, when founders ask.
 
 ## 11. Decisions for the owner
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| 1 | Use approved posts as voice samples automatically? | yes; the founder can see and remove them |
-| 2 | Ask for writing samples at onboarding? | optional, with a skip |
-| 3 | Links in X posts | avoid by default (cost and reach); the founder can add one |
-| 4 | Hashtags | per platform profile: X 0–2, Threads none, LinkedIn 0–3, Instagram and TikTok 3–5 |
-| 5 | Who writes the video script? | Studio's Director; Writer writes the brief before and the captions after |
-| 6 | Articles | later (W4) |
+| 1 | Voice | **decided 2026-10-26**: no fixed voice profile; learned into memory from recent approvals and edits, newer wins |
+| 2 | Writing samples at onboarding | **decided**: no |
+| 3 | Links in posts | **decided**: never |
+| 4 | Hashtags | **decided**: none in posts; only on video captions |
+| 5 | No AI Slop | **decided**: guidance in a skill, not code and not a gate |
+| 6 | Who writes the video script? | recommendation: Studio's Director; Writer writes the brief before and the captions after |
+| 7 | Articles | recommendation: later (W4) |
 
 ## Sources
 
