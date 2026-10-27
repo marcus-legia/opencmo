@@ -28,6 +28,24 @@ most, mostly on the phone.
 
 ## 3. Sitemap
 
+Updated 2026-10-27 after the first design round: Home and Inbox became one **Dashboard** (the team as a live graph of
+pixel robots, results of the last 7 days, and the only approval queue); the Week calendar moved to **Schedule**;
+**Analytics** shows data from every connected account (through Zernio) and what the brain learns from it; the
+**Library** holds documents, Brand Kit, voice and skills (see `docs/architecture/brain.md` section 8b). The canvas is
+the source of truth for layout (https://claude.ai/artifact/QqAc6RuZi44osR3YAXAuNw); the first sitemap below is kept
+for the record.
+
+```
+Dashboard ─ Analytics ─ Brain ─ Library ┬ Business (4 documents)
+                                        ├ Brand Kit
+                                        ├ Voice
+                                        └ Skills
+Departments: Research · Writer · Studio (→ Editor) · Sales · Schedule (calendar)
+Settings · Setup (first run)
+```
+
+First version:
+
 ```
 Home (Today) ─ Inbox ─ Week ─ Departments ┬ Writer
                                           ├ Studio  → opens the Editor (existing, not redesigned)

@@ -24,7 +24,7 @@ flowchart TB
 
 | Part | Capabilities |
 |---|---|
-| Brain | ✅ context (documents, Brand Kit, memories, lessons) · ✅ planning (`plan_week`, `review_week`, `cmo_goals`) · 🟡 dispatch (`cmo_runs`) · 🟡 shared gates (credit, moderation, approval, limits) |
+| Brain | ✅ context (memories, lessons; reads the Library) · ✅ planning (`plan_week`, `review_week`, `cmo_goals`) · 🟡 dispatch (`cmo_runs`) · 🟡 shared gates (credit, moderation, approval, limits) |
 | 1 Research | ✅ competitors, outlier posts · ✅ Reddit, X, short video · ✅ metrics after posting |
 | 2 Writer | ✅ X posts · 🟡 per-platform caption + tags · 🟡 script + storyboard (`director`) · ❌ article · ❌ No AI Slop |
 | 3 Sales | ✅ find Reddit threads · ✅ scored with evidence · ✅ reply drafts, the founder posts |
@@ -32,6 +32,11 @@ flowchart TB
 | 5 Schedule (new) | 🟡 day in the week plan · ❌ approved time · ❌ reminders, publish trigger |
 | 6 Publish | ✅ X intent link · ❌ Threads, LinkedIn intent · ❌ TikTok, IG, YouTube (Zernio) |
 | 7 Approval | ✅ X posts, Reddit replies · ❌ script before the build · ❌ finished videos · ❌ time + account |
+| Library (shared) | ✅ four documents · ✅ Brand Kit · 🟡 voice (in the strategy document; learned notes ❌) · 🟡 skills (video ✅, writing ❌) |
+
+**Library (owner decision, 2026-10-27).** Documents, Brand Kit, voice and the founder's skills are not brain state. They
+live in one shared Library that the brain and every department read; the brain keeps only its plan, orders and what it
+learns. Details: [`brain.md`](brain.md) section 8b.
 
 ## 2. How work flows
 

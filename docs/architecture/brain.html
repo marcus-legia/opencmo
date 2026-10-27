@@ -166,7 +166,7 @@ body{margin:0}
     <h1>The CMO brain</h1>
     <p class="lede">What the brain is today, what nine outside systems teach us, and the design we propose: a small LLM planner on top of deterministic code that owns dispatch, budgets and approval. Markdown twin for agents: <code>brain.md</code>. Parent page: <code>ai-cmo.html</code>. Status: proposed, nothing here is built yet.</p>
     <nav class="toc" aria-label="Sections">
-      <a href="#verdict">1 Verdict</a><a href="#today">2 Brain today</a><a href="#learn">3 What others teach</a><a href="#design">4 Design</a><a href="#runtime">4b Runtime</a><a href="#cycle">5 Weekly cycle</a><a href="#orders">6 Work orders</a><a href="#registry">7 Registry</a><a href="#studio">7b Studio</a><a href="#memory">8 Memory</a><a href="#safety">9 Budgets and gates</a><a href="#evals">10 Evals</a><a href="#phases">11 Build phases</a><a href="#decide">12 Decisions</a><a href="#sources">Sources</a>
+      <a href="#verdict">1 Verdict</a><a href="#today">2 Brain today</a><a href="#learn">3 What others teach</a><a href="#design">4 Design</a><a href="#runtime">4b Runtime</a><a href="#cycle">5 Weekly cycle</a><a href="#orders">6 Work orders</a><a href="#registry">7 Registry</a><a href="#studio">7b Studio</a><a href="#memory">8 Memory</a><a href="#library">8b Library</a><a href="#safety">9 Budgets and gates</a><a href="#evals">10 Evals</a><a href="#phases">11 Build phases</a><a href="#decide">12 Decisions</a><a href="#sources">Sources</a>
     </nav>
   </header>
 
@@ -636,7 +636,7 @@ error           { code, message, retryable,
         <thead><tr><th>Tier</th><th>Holds</th><th>Loaded</th><th>Comparable to</th><th>State</th></tr></thead>
         <tbody>
           <tr><td>0 · Corrections</td><td>Short rules learned from the founder's edits and skip reasons ("never open with a question", "no emojis"), append-only, each with its source edit</td><td>Always, first</td><td>ai-cmo-operator <code>CORRECTIONS</code> log</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>1 · Profile</td><td>The four <code>marketing_documents</code> + the weekly goal</td><td>Always</td><td>Letta core memory blocks</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>1 · Profile</td><td>The four <code>marketing_documents</code> (read from the Library, section 8b) + the weekly goal</td><td>Always</td><td>Letta core memory blocks</td><td><span class="st ok">built</span></td></tr>
           <tr><td>2 · Events</td><td><code>cmo_memories</code> by topic, importance, expiry</td><td>The job's topic + <code>general</code></td><td>Letta archival memory</td><td><span class="st ok">built</span></td></tr>
           <tr><td>3 · Lessons</td><td><code>cmo_lessons</code>, one per topic per week</td><td>Before events</td><td>Letta sleep-time agents</td><td><span class="st ok">built</span></td></tr>
         </tbody>
@@ -646,6 +646,40 @@ error           { code, message, retryable,
       <p><b>Loading rule:</b> a work order's brief names the documents and topics it needs, and the job loads only those (ai-cmo-operator loads 2–5 of 10 files; Anthropic calls this just-in-time retrieval). Corrections and the profile are the only tiers every job reads.</p>
       <p><b>Where corrections come from:</b> <code>classify-edits.ts</code> already labels each edited approval. The Sunday summary turns repeated labels into a proposed correction; the founder approves it as a card. Hermes Agent lets skills rewrite themselves; we keep that behind approval.</p>
       <p><b>Not now:</b> vector search. Topic filtering is enough until a founder passes about 200 memory rows (the old handoff doc set this threshold).</p>
+    </div>
+  </section>
+
+  <section class="sec" id="library">
+    <div class="sec-head"><p class="eyebrow">8b</p><h2>The Library: shared knowledge the brain reads but does not own</h2>
+      <p class="lede">Owner decision, 2026-10-27. What belongs to the business lives in one Library that the brain and every department read. The brain keeps only what it produces itself.</p></div>
+    <div class="prose">
+      <p>Reasons: departments also run without the brain (the editor, the founder's own Claude through MCP), each thing has one copy the founder edits in one place, and briefs stay small because a brief names what to load.</p>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>In the Library</th><th>Today in code</th><th>Drafted by</th><th>Edited by</th><th>Read by</th></tr></thead>
+        <tbody>
+          <tr><td>Business: the four marketing documents</td><td><code>marketing_documents</code>, <code>lib/cmo/documents.ts</code></td><td>Research at onboarding</td><td>Founder</td><td>Every department; the brain as memory tier 1</td></tr>
+          <tr><td>Brand Kit: colours, fonts, captions, frame, logo</td><td><code>brand_kits</code>, <code>lib/brand.ts</code>, <code>editor-core/src/brand.ts</code></td><td>Founder</td><td>Founder</td><td>Studio, the editor, Slideshow</td></tr>
+          <tr><td>Voice: notes learned from edits, words the founder cuts</td><td>Voice in <code>marketing_documents</code> (<code>strategy.voice</code>, <code>avoid</code>); learned notes <span class="st miss">new</span></td><td>The brain, from edits</td><td>Founder deletes or edits</td><td>Writer, Sales</td></tr>
+          <tr><td>Writing skills: No AI Slop guidance, platform profiles, the founder's own</td><td>Platform rules inside <code>lib/cmo/skills/x-writing.md</code>; No AI Slop and profiles <span class="st miss">new</span>; founder skills via <code>editor_skills</code></td><td>Built in, or saved by the founder</td><td>Founder turns them on or off</td><td>Writer, Sales</td></tr>
+          <tr><td>Video skills: style skills, the founder's own</td><td><code>packages/skills</code>, <code>editor_skills</code></td><td>Built in, or saved from the Assistant</td><td>Founder</td><td>Studio, the editor</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>In the brain</th><th>Why it stays there</th></tr></thead>
+        <tbody>
+          <tr><td>Goal, week plan, work orders, budgets</td><td>The brain's own decisions</td></tr>
+          <tr><td>Events, lessons, corrections (memory tiers 0, 2, 3)</td><td>Learned by the Reviewer; corrections need the founder's approval card</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><b>Not in the Library:</b> the department playbooks in <code>lib/cmo/skills/</code> (<code>x-writing.md</code>, <code>reddit-listening.md</code>, <code>short-video.md</code>, the marketingskills <code>library/</code> folder…). They are how each department does its job, shipped and versioned by us, so they stay with the department; the Library shows only what the founder can change. (The folder name <code>lib/cmo/skills/library/</code> predates this page and means the marketingskills set, not this Library.)</p>
+      <p><b>Rules:</b> the brain never copies Library content into its own tables; a brief names Library items and the job loads them (section 8, loading rule). A voice note learned from edits is written to the Library, not to brain memory, so Writer uses it even when the brain is off; newer notes win when two disagree.</p>
+      <p><b>UI:</b> one Library page with four tabs (Business, Brand Kit, Voice, Skills). Research keeps insights; Writer shows the voice it uses and links to the Library.</p>
     </div>
   </section>
 

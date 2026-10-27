@@ -70,7 +70,7 @@ Only the **Planner** and the **Reviewer** call a model. Everything else is code.
 | Dispatcher | brief → `work_order`: department, kind, `depends_on`, budget, capabilities from the registry | no | new |
 | Event rules | approved → Schedule order; due → Publish order; posted + 24 h → measure | no | new |
 | Gatekeeper | weekly budget, cost ceiling, kill switch, paid or outbound → approval; RPC gates underneath (`cmo_enqueue`, `credit_hold`); the brain never posts | no | new on top of built RPCs |
-| Memory | core (documents + goal), archive by topic, lessons, corrections log (new) | — | mostly built |
+| Memory | what the brain learns: archive by topic, lessons, corrections log (new); reads the Library (section 8b) for documents, brand, voice and skills | — | mostly built |
 | Think router | `think()`: `opencmo` → registry models; `claude` → founder's inbox | — | built |
 
 Output: work orders to Research, Writer, Sales (built), Studio, Schedule, Publish (new), Approval (the founder).
@@ -248,13 +248,46 @@ Sequence (Brain · Studio agent team · Worker + fal · You):
 | Tier | Holds | Loaded | Comparable to | State |
 |---|---|---|---|---|
 | 0 Corrections | short rules from the founder's edits and skip reasons, append-only, each with its source | always, first | ai-cmo-operator corrections log | new |
-| 1 Profile | four `marketing_documents` + weekly goal | always | Letta core blocks | built |
+| 1 Profile | four `marketing_documents` (read from the Library, section 8b) + weekly goal | always | Letta core blocks | built |
 | 2 Events | `cmo_memories` by topic, importance, expiry | the job's topic + `general` | Letta archival memory | built |
 | 3 Lessons | `cmo_lessons`, one per topic per week | before events | Letta sleep-time agents | built |
 
 - Loading rule: a brief names the documents and topics it needs; the job loads only those.
 - Corrections come from `classify-edits.ts` labels; the Sunday summary proposes a correction, the founder approves the card.
 - Not now: vector search, until a founder passes about 200 memory rows.
+
+## 8b. The Library: shared knowledge the brain reads but does not own
+
+Owner decision, 2026-10-27. What belongs to the business lives in one **Library** that the brain and every department
+read. The brain keeps only what it produces itself. Reasons: departments also run without the brain (the editor, the
+founder's own Claude through MCP), each thing has one copy the founder edits in one place, and briefs stay small
+because a brief names what to load.
+
+| In the Library | Today in code | Drafted by | Edited by | Read by |
+|---|---|---|---|---|
+| Business: the four marketing documents | `marketing_documents`, `lib/cmo/documents.ts` | Research at onboarding | founder | every department; the brain as memory tier 1 |
+| Brand Kit: colours, fonts, captions, frame, logo | `brand_kits`, `lib/brand.ts`, `editor-core/src/brand.ts` | founder | founder | Studio, the editor, Slideshow |
+| Voice: notes learned from edits, words the founder cuts | voice in `marketing_documents` (`strategy.voice`, `avoid`); learned notes new | the brain, from edits | founder deletes or edits | Writer, Sales |
+| Writing skills: No AI Slop guidance, platform profiles, the founder's own | platform rules inside `lib/cmo/skills/x-writing.md`; No AI Slop and profiles new; founder skills via `editor_skills` | built in, or saved by the founder | founder turns them on or off | Writer, Sales |
+| Video skills: style skills, the founder's own | `packages/skills`, `editor_skills` | built in, or saved from the Assistant | founder | Studio, the editor |
+
+| In the brain | Why it stays there |
+|---|---|
+| Goal, week plan, work orders, budgets | the brain's own decisions |
+| Events, lessons, corrections (memory tiers 0, 2, 3) | learned by the Reviewer; corrections need the founder's approval card |
+
+Not in the Library: the department playbooks in `lib/cmo/skills/` (`x-writing.md`, `reddit-listening.md`,
+`short-video.md`, the marketingskills `library/` folder…). They are how each department does its job, shipped and
+versioned by us, so they stay with the department; the Library shows only what the founder can change. (The folder name
+`lib/cmo/skills/library/` predates this page and means the marketingskills set, not this Library.)
+
+Rules:
+- The brain never copies Library content into its own tables; a brief names Library items and the job loads them
+  (section 8, loading rule).
+- A voice note learned from edits is written to the Library, not to brain memory, so Writer uses it even when the brain
+  is off; newer notes win when two disagree.
+- UI: one Library page with four tabs (Business, Brand Kit, Voice, Skills). Research keeps insights; Writer shows the
+  voice it uses and links to the Library.
 
 ## 9. Budgets and gates
 
