@@ -32,7 +32,8 @@ screen at a time without changing the UI.
 
 **Design source of truth:** the canvas https://claude.ai/artifact/QqAc6RuZi44osR3YAXAuNw, copied into
 [`2026-10-27-app-redesign-frames/`](2026-10-27-app-redesign-frames/) (one `.dc.html` per artboard, plus
-`canvas.json`). Copy exact values (sizes, colours, spacing) from those files; do not round them. The sample numbers in
+`canvas.json`). Copy exact values (sizes, colours, spacing) from those files; do not round them. To look at a screen, open `2026-10-27-app-redesign-frames/static/index.html` in a browser (plain HTML copies at
+the initial state). The sample numbers in
 the frames are not product data.
 
 ## 2. Screen list

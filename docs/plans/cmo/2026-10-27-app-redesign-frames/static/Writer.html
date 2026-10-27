@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Writer · OpenCMO redesign</title>
+<!-- Static export of Writer.dc.html from the design canvas, initial state only. Source of truth: the canvas and the .dc.html file. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#c93a0f;text-decoration:none}a:hover{color:#2b2723}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f3f3ee; color: #2b2723; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+<nav aria-label="Main" style="flex: 1 1 232px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 20px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #2b2723"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="#2b2723" stroke-width="8"></path><circle cx="49" cy="32" r="5" fill="#ef4a1a"></circle></svg><span style="font-weight: 600; font-size: 19px; letter-spacing: -0.04em">OpenCMO</span></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; color: #2b2723"><span style="flex: 1">Dashboard</span><span style="padding: 1px 7px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 11px 'Source Code Pro', monospace">5</span></a>
+<a href="Analytics.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Analytics</a>
+<a href="Brain.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Brain</a>
+<a href="Library.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Library</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 0 10px 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Departments</span>
+<a href="Research.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Research</a>
+<a href="Writer.html" aria-current="page" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 4px; background: #2b2723; color: #f3f3ee; font-weight: 500">Writer</a>
+<a href="Studio.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Studio</a>
+<a href="Sales.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Sales</a>
+<a href="Schedule.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Schedule</a>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #d6d6c9; padding-top: 14px">
+<a href="Settings.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Settings</a>
+<span style="display: flex; justify-content: space-between; padding: 8px 10px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Credits</span><span style="font: 500 13px 'Source Code Pro', monospace">312</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #c93a0f">II · Writer</span>
+<h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.045em">Words, in your voice.</h1>
+<span style="font-size: 13px; color: #69695d">Posts, captions, video briefs and slide text. Drafts only: nothing goes out until you approve it.</span>
+</div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Ask for a post</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px">
+<div role="tablist" aria-label="Kind" style="display: flex; gap: 4px; border-bottom: 1px solid #d6d6c9">
+<button type="button" role="tab" aria-selected="true" style="min-height: 40px; padding: 0 14px; border: 0; border-bottom: 2px solid #2b2723; background: transparent; color: #2b2723; font: 500 13px Inter, sans-serif">Posts · 9</button>
+<button type="button" role="tab" aria-selected="false" style="min-height: 40px; padding: 0 14px; border: 0; background: transparent; color: #69695d; font: 500 13px Inter, sans-serif">Captions · 3</button>
+<button type="button" role="tab" aria-selected="false" style="min-height: 40px; padding: 0 14px; border: 0; background: transparent; color: #69695d; font: 500 13px Inter, sans-serif">Video briefs · 1</button>
+<button type="button" role="tab" aria-selected="false" style="min-height: 40px; padding: 0 14px; border: 0; background: transparent; color: #69695d; font: 500 13px Inter, sans-serif">Slide text · 1</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<button type="button" aria-pressed="true" style="min-height: 32px; padding: 0 12px; border: 1px solid #2b2723; border-radius: 999px; background: #2b2723; color: #f3f3ee; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">All</button>
+<button type="button" aria-pressed="false" style="min-height: 32px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 999px; background: transparent; color: #2b2723; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">X</button>
+<button type="button" aria-pressed="false" style="min-height: 32px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 999px; background: transparent; color: #2b2723; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Threads</button>
+<button type="button" aria-pressed="false" style="min-height: 32px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 999px; background: transparent; color: #2b2723; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">LinkedIn</button>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<div style="flex: 999 1 640px; min-width: 0; overflow-x: auto">
+<div style="display: grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap: 12px; min-width: 840px">
+
+<section aria-label="Drafting" style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; justify-content: space-between; padding: 0 2px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d"><span>Drafting</span><span>2</span></span>
+<div style="padding: 12px; background: #fafaf8; border: 1px dashed #b9b9aa; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">LinkedIn · Fri</span><span>Lesson from week 1 of the CMO running on itself</span><span style="height: 4px; background: #e8e8de; display: flex"><span style="width: 40%; background: #2b2723"></span></span></div>
+<div style="padding: 12px; background: #fafaf8; border: 1px dashed #b9b9aa; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">LinkedIn · Sat</span><span>Approving 10 cards a day from a phone</span><span style="height: 4px; background: #e8e8de; display: flex"><span style="width: 15%; background: #2b2723"></span></span></div>
+</section>
+
+<section aria-label="Waiting on you" style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; justify-content: space-between; padding: 0 2px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #a9420f"><span>Waiting on you</span><span>1</span></span>
+<a href="Cards.html" style="padding: 12px; background: #ffffff; border: 1px solid #a9420f; border-radius: 4px; font-size: 13px; color: #2b2723; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">X · Thu 09:10 · 3 versions</span><span>Most AI video tools stop at the first draft. We built the editor first…</span><span style="font: 500 11px 'Source Code Pro', monospace; color: #c93a0f; text-transform: uppercase">Review →</span></a>
+</section>
+
+<section aria-label="Scheduled" style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; justify-content: space-between; padding: 0 2px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d"><span>Scheduled</span><span>2</span></span>
+<div style="padding: 12px; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">LinkedIn · Thu 14:30</span><span>What a week of approving cards taught me</span></div>
+<div style="padding: 12px; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">X · Fri 09:10</span><span>Thread: building an editor as a marketing team of one</span></div>
+</section>
+
+<section aria-label="Posted" style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; justify-content: space-between; padding: 0 2px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d"><span>Posted</span><span>4</span></span>
+<div style="padding: 12px; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">X · Mon 09:00</span><span>Editor launch teaser</span><span style="font-size: 12px; color: #69695d">You edited 2 lines · results tomorrow</span></div>
+<div style="padding: 12px; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">LinkedIn · Mon 16:00</span><span>Why we built the editor first</span><span style="font-size: 12px; color: #69695d">Approved as drafted</span></div>
+<div style="padding: 12px; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; font-size: 13px; display: flex; flex-direction: column; gap: 6px"><span style="font: 500 10px 'Source Code Pro', monospace; text-transform: uppercase; color: #69695d">X · Tue 09:10</span><span>Cut by words, a 20 s demo</span></div>
+</section>
+</div>
+</div>
+
+<aside aria-labelledby="voice-title" style="flex: 1 1 300px; min-width: 0; background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<div style="padding: 14px 16px; border-bottom: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 4px">
+<h2 id="voice-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Your voice</h2>
+<span style="font-size: 12px; color: #69695d">What Writer uses right now. Learned from your edits; newer notes win. <a href="Library.html">Edit in Library →</a></span>
+</div>
+<div style="display: flex; flex-direction: column; font-size: 13px">
+<span style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid #e8e8de"><b style="font-weight: 600">Short sentences, one idea each.</b><span style="font-size: 12px; color: #69695d">From 6 edits · last Tue</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid #e8e8de"><b style="font-weight: 600">Don't open with a question.</b><span style="font-size: 12px; color: #69695d">Rule you approved · Sun</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid #e8e8de"><b style="font-weight: 600">“We” on X, “I” on LinkedIn.</b><span style="font-size: 12px; color: #69695d">From 4 edits</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-bottom: 1px solid #e8e8de"><b style="font-weight: 600">No links, no hashtags in posts.</b><span style="font-size: 12px; color: #69695d">Product rule · hashtags only on videos</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding: 12px 16px"><b style="font-weight: 600">Words you cut:</b><span style="font-size: 12px; color: #69695d">game-changer, unlock, seamless, leverage</span></span>
+</div>
+</aside>
+</div>
+</main>
+</div>
+</body>
+</html>
