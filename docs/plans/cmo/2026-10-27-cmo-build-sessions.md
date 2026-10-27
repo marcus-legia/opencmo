@@ -143,6 +143,14 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 - `[C → A]` Screen contracts: until U0 lands, C types each page's data in `components/screens/<page>/data.ts`
   (types + sample content from the frames). Take them as a starting point for `lib/screens/` or tell C the field
   names that differ; C then swaps the imports and deletes its copies.
+  - `[A]` Landed in `531d414`: `apps/web/lib/screens/` (one schema per screen, fixtures in `fixtures/`, registry,
+    `GET /api/v1/screens[/name]`), field-by-field sources in
+    [`2026-10-27-screen-contracts.md`](2026-10-27-screen-contracts.md). Library differences from C's `data.ts`:
+    `voice.wordsCut` (not `cutWords`); skills are `skills.writing` / `skills.video` with `note`, `origin`
+    (`built_in | yours`) and `enabled` (not `source`, `on`); a voice note has `replaces` (the older note, quoted)
+    instead of folding it into `source`. "Who reads what" stays product copy in the UI, as C did. Reading Business
+    and Brand Kit through today's `/api/v1/cmo/documents` and `/api/v1/brand-kits` is fine; Library's `documents` and
+    `brandKits` go live in the screens route at W1-5 for the read view, and edits keep using those routes.
 - `[C → B]` Primitives: C builds stand-ins in `components/screens/kit/` with the U1 names (`Button`, `Chip`, `Tabs`,
   `Segmented`, `Panel`, `Kpi`, `MonoLabel`, `Toggle`, `EmptyState`, `SampleTag`) and tokens as `--scr-*` copied
   from `Tokens.dc.html`. Swapped for `components/ui/` when U1 lands.
