@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { cronAuthorized } from "@/lib/cron-auth";
 import { kickCmoQueue } from "@/lib/cmo/jobs/start";
+import { cmoPausedEverywhere } from "@/lib/cmo/pause";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -17,6 +18,6 @@ export async function POST(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo-run")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
-  kickCmoQueue(undefined, (maxDuration - 40) * 1000);
+  if (!cmoPausedEverywhere()) kickCmoQueue(undefined, (maxDuration - 40) * 1000);
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

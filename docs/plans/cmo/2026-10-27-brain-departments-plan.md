@@ -90,15 +90,15 @@ them; it orders the work and names the files.
 
 ### Task W1-4: B2 progress check, kill switch, digest (Session A)
 
-- [ ] Daily progress check (code only, from the existing Modal clock): done / stuck / over budget / waiting on the
+- [x] Daily progress check (code only, from the existing Modal clock): done / stuck / over budget / waiting on the
   founder; a stuck order gets one replan through the Planner, never a loop.
-- [ ] Kill switch: `profiles.cmo_paused_at`; `cmo_enqueue` and the runner refuse while paused; Pause/Resume RPCs; every
+- [x] Kill switch: `profiles.cmo_paused_at`; `cmo_enqueue` and the runner refuse while paused; Pause/Resume RPCs; every
   waiting order and run stops within a minute (the sweep reads the flag).
-- [ ] Morning digest content at `digest_hour` local time: what waits (links open `/app/inbox/[id]`, never decide),
+- [x] Morning digest content at `digest_hour` local time: what waits (links open `/app/inbox/[id]`, never decide),
   what went out, what is stuck. Wave 1 shows it in the app (Dashboard) and in Inbucket locally through a
   `sendDigest` interface; the real email provider is chosen in A2 (there is no email provider in the stack today
   besides Supabase Auth mail), so production email waits for the owner's account.
-- [ ] pgTAP for pause; a unit check for the progress classifier.
+- [x] pgTAP for pause; a unit check for the progress classifier.
 
 ### Task W1-5: Screen loaders (Session A, after each task above)
 

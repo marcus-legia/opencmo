@@ -62,6 +62,14 @@ export const OutTodaySchema = z.object({
   approvalId: z.string().nullable(),
 });
 
+/** The morning digest, shown at the top of the queue (the same content the email carries; `lib/cmo/digest.ts`). */
+export const DigestSchema = z.object({
+  dateLabel: z.string().max(40),
+  waiting: z.array(z.object({ id: z.string(), title: z.string().max(200), department: DepartmentSchema })),
+  wentOut: z.array(z.object({ title: z.string().max(200), where: z.string().max(40) })),
+  stuck: z.array(z.object({ title: z.string().max(200), department: DepartmentSchema, reason: z.string().max(300) })),
+});
+
 export const DashboardScreenSchema = z.object({
   cmo: CmoStateSchema,
   week: WeekStripSchema,
@@ -74,6 +82,7 @@ export const DashboardScreenSchema = z.object({
     brainUsed: z.object({ lessons: z.number().int().min(0), text: z.string().max(300) }).nullable(),
   }),
   outToday: z.array(OutTodaySchema),
+  digest: DigestSchema.nullable(),
   /** Cards with status `waiting`, oldest first. Its length is the headline, the rail badge and the chips. */
   queue: z.array(ApprovalCardSchema),
 });

@@ -57,6 +57,7 @@ Phases: B0, B1, B2 (brain), A0 (approval) are wave 1 and land in this PR; everyt
 | `results.rows[]` | `post_metrics` (X today), Zernio later | partly (X) | R3 / P3 |
 | `results.brainUsed` | `cmo_lessons` of last week | yes | B1 |
 | `outToday[]` | `content_items` scheduled or posted today; `schedule_slots` later | partly (X) | P1 |
+| `digest` | `lib/cmo/digest.ts` `loadDigestInput` (waiting cards, posts out in 24 h, failed orders) | no | B2 |
 | `queue[]` | `approvals` where `status = waiting` (`ApprovalCard`) | **live** | A0 |
 
 ## S3 Approval card (`approval-card.ts`)
@@ -137,6 +138,11 @@ POST /api/v1/approvals/[id]   { action, contentHash, text?, reason?, goal?, targ
 | Schedule | everything | `schedule_slots`, Zernio accounts | no | P0–P1 |
 
 ## S12 Settings, S13 Setup (`settings.ts`, `setup.ts`)
+
+```
+PUT  /api/v1/cmo/settings   { weeklyCreditBudget, timezone, digestHour | null } → the same, saved (save_cmo_settings)
+POST /api/v1/cmo/pause      { paused: true | false } → { pausedAt }               (cmo_pause / cmo_resume)
+```
 
 | Screen | Field | Source | Live today | Live with |
 |---|---|---|---|---|

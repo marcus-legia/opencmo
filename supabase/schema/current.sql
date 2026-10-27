@@ -2320,12 +2320,14 @@ begin
   loop
     perform public.cmo_refund_run(v_dead);
   end loop;
-  update public.cmo_runs set status = 'queued', lease_until = null
+  update public.cmo_runs set status = 'queued', lease_until = null,
+    not_before = case when public.cmo_paused(user_id) then 'infinity'::timestamptz else not_before end
   where status = 'running' and kind <> 'onboard' and lease_until < now() and attempt < 3;
 
-  select * into v_row from public.cmo_runs
+  select * into v_row from public.cmo_runs r
   where status = 'queued' and (p_run_id is null or id = p_run_id)
     and (not_before is null or not_before <= now())
+    and not public.cmo_paused(r.user_id)
   order by created_at
   for update skip locked
   limit 1;
@@ -2919,6 +2921,9 @@ begin
   if p_input ? 'inbox' then
     raise exception 'This request is not valid.' using errcode = '22023';
   end if;
+  if public.cmo_paused(p_user) then
+    raise exception 'Your CMO is paused. Resume it to start new work.' using errcode = 'P0001';
+  end if;
 
   perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':cmo_run', 1713));
 
@@ -3153,6 +3158,38 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: cmo_pause(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_pause() RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_at timestamptz;
+begin
+  update public.profiles set cmo_paused_at = coalesce(cmo_paused_at, now()) where id = v_user returning cmo_paused_at into v_at;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  update public.cmo_runs set not_before = 'infinity' where user_id = v_user and status = 'queued';
+  return v_at;
+end;
+$$;
+
+
+--
+-- Name: cmo_paused(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_paused(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select coalesce((select cmo_paused_at is not null from public.profiles where id = p_user), false) $$;
 
 
 --
@@ -3431,6 +3468,27 @@ $$;
 
 
 --
+-- Name: cmo_resume(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_resume() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  update public.profiles set cmo_paused_at = null where id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  -- A deferred run resumes a little early; that is harmless, and a paused run must not wait forever.
+  update public.cmo_runs set not_before = null where user_id = v_user and status = 'queued' and not_before = 'infinity';
+end;
+$$;
+
+
+--
 -- Name: cmo_run_step(uuid, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3440,7 +3498,7 @@ CREATE FUNCTION public.cmo_run_step(p_run uuid, p_attempt integer, p_steps jsonb
     AS $$
 begin
   update public.cmo_runs set steps = p_steps, lease_until = now() + interval '300 seconds'
-  where id = p_run and attempt = p_attempt and status = 'running';
+  where id = p_run and attempt = p_attempt and status = 'running' and not public.cmo_paused(user_id);
   return found;
 end;
 $$;
@@ -8659,6 +8717,37 @@ $$;
 
 
 --
+-- Name: work_order_mark_replanned(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_mark_replanned(p_id uuid, p_problem text) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.work_orders;
+begin
+  select * into v_row from public.work_orders where id = p_id for update;
+  if not found then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if v_row.brief ? 'replanned_at' then
+    raise exception 'This order was already replanned once.' using errcode = 'P0001';
+  end if;
+  if v_row.status not in ('failed', 'done', 'cancelled') then
+    v_row := public.work_order_move(p_id, 'failed', null,
+      jsonb_build_object('code', 'stuck', 'message', left(coalesce(p_problem, 'No progress.'), 300), 'retryable', true,
+        'repair_hint', 'Plan around it with a different item.'));
+  end if;
+  update public.work_orders set brief = brief || jsonb_build_object('replanned_at', now()), updated_at = now()
+  where id = p_id returning * into v_row;
+  perform public.work_order_event(v_row, 'note', 'Asked the Planner to replan “' || v_row.title || '”');
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: work_order_move(uuid, text, text, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9438,6 +9527,7 @@ CREATE TABLE public.profiles (
     weekly_credit_budget integer DEFAULT 80 NOT NULL,
     timezone text DEFAULT 'UTC'::text NOT NULL,
     digest_hour smallint DEFAULT 7,
+    cmo_paused_at timestamp with time zone,
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000)))

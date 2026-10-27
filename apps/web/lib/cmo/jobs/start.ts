@@ -12,6 +12,7 @@ import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { PAUSED_EVERYWHERE, cmoPausedEverywhere } from "../pause";
 import { socialReaderReady } from "../social/reddit";
 
 import { drainCmoQueue } from "./runner";
@@ -35,6 +36,7 @@ export function kickCmoQueue(runId?: string, budgetMs = 250_000): void {
 }
 
 export async function startCmoRun(supabase: SupabaseClient, kind: CmoJobKind, input: Record<string, unknown> = {}): Promise<StartedRun> {
+  if (cmoPausedEverywhere()) throw new ApiError(503, PAUSED_EVERYWHERE);
   // Kiểm TRƯỚC khi giữ credit: không có khoá đọc Reddit thì lượt nào cũng hỏng.
   if (kind === "sales_scan" && !socialReaderReady()) throw new ApiError(503, "Reddit scanning is not set up on this server yet.");
   if ((kind === "competitor_research" || kind === "pull_metrics") && !socialReaderReady()) throw new ApiError(503, "Social research is not set up on this server yet.");

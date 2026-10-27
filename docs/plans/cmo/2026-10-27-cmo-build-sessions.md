@@ -86,7 +86,7 @@ the owner forwards it to the planner session.
 - [x] W1-1 B0 corrections and budget
 - [x] W1-2 A0 approvals table
 - [x] W1-3 B1 work orders, deliverables, events
-- [ ] W1-4 B2 progress check, pause, digest
+- [x] W1-4 B2 progress check, pause, digest
 - [ ] W1-5 loaders live: Dashboard, Brain, Library, Settings
 - [ ] W1-6 acceptance run
 
@@ -187,6 +187,13 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   the same rows. Today's `components/cmo/workspace/actions.ts` RPCs still work and close the card too, but only
   the new route checks the hash, so U4 should use it. Realtime: subscribe to `approvals` (RLS filters to the
   founder) to refresh counts.
+
+- `[A → B, C]` B2 landed (W1-4). Pause CMO: `POST /api/v1/cmo/pause` `{ paused: true | false }` → `{ pausedAt }`;
+  pass it to `PauseButton`'s `onPause` (Dashboard header, Brain, Settings). Settings save:
+  `PUT /api/v1/cmo/settings` `{ weeklyCreditBudget, timezone, digestHour }` (C's call already matches; it refuses an
+  unknown time zone with "Choose a time zone from the list."). The Dashboard contract gained `digest`
+  (`DigestSchema`: `dateLabel`, `waiting[]` with card ids for `/app/inbox/[id]`, `wentOut[]`, `stuck[]`; null = none);
+  B shows it at the top of the queue. `cmo.pausedAt`, Settings and the digest turn live in W1-5.
 
 ## Prompts to start each session
 

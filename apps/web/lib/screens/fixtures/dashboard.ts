@@ -46,6 +46,12 @@ export const dashboardFixture: DashboardScreen = {
     { id: "out-3", at: at("2026-10-29", "14:30"), where: { platform: "linkedin", handle: "Marcus" }, text: "What a week of approving cards taught me.", status: "scheduled", problem: null, approvalId: null },
     { id: "out-4", at: at("2026-10-29", "18:00"), where: { platform: "tiktok", handle: "@opencmo" }, text: "Short 1 · “Edit by asking”", status: "waiting_founder", problem: null, approvalId: SCHEDULE_CARD.id },
   ],
+  digest: {
+    dateLabel: "Thursday 29 Oct",
+    waiting: [POST_CARD, PRICE_CARD, SHORTS_CARD, REPLY_CARD, SCHEDULE_CARD].map((c) => ({ id: c.id, title: c.title, department: c.department })),
+    wentOut: [{ title: "Most AI video tools stop at the first draft.", where: "X" }],
+    stuck: [{ title: "2 Reddit replies", department: "sales", reason: "This week's Sales budget is used." }],
+  },
   queue: [POST_CARD, PRICE_CARD, SHORTS_CARD, REPLY_CARD, SCHEDULE_CARD],
 };
 
@@ -60,5 +66,6 @@ export const dashboardEmpty: DashboardScreen = {
   log: [],
   results: { rows: [], brainUsed: null },
   outToday: [],
+  digest: null,
   queue: [],
 };

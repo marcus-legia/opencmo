@@ -312,7 +312,7 @@ end;
 $$;
 revoke all on function public.work_orders_plan_week(uuid, uuid) from public, anon, authenticated;
 
--- Same as 20261108120000 plus the tree: the calendar and its orders are written in one transaction.
+-- Same as 20261014090000 plus the tree: the calendar and its orders are written in one transaction.
 create or replace function public.cmo_plan_week(p_user uuid, p_run uuid, p_items jsonb) returns integer
 language plpgsql security definer set search_path = public
 as $$
