@@ -57,12 +57,12 @@ them; it orders the work and names the files.
 
 ### Task W1-1: B0 corrections and budget (Session A)
 
-- [ ] Migration `*_brain_b0.sql`: `cmo_corrections` (user, rule text ≤ 200, source edits jsonb, status
+- [x] Migration `*_brain_b0.sql`: `cmo_corrections` (user, rule text ≤ 200, source edits jsonb, status
   `proposed|active|rejected`, created_at) with RLS read-own; RPC `cmo_decide_correction(id, action, text)`.
-- [ ] `profiles`: `weekly_credit_budget int` (default from the plan), `timezone text` (IANA, validated),
+- [x] `profiles`: `weekly_credit_budget int` (default from the plan), `timezone text` (IANA, validated),
   `digest_hour smallint`; RPC `save_cmo_settings`.
-- [ ] Every job reads active corrections first, tier 0 of memory (next to the lessons read in `lib/cmo/jobs/store.ts`).
-- [ ] pgTAP: ownership, status transitions, budget bounds, timezone check.
+- [x] Every job reads active corrections first, tier 0 of memory (next to the lessons read in `lib/cmo/jobs/store.ts`).
+- [x] pgTAP: ownership, status transitions, budget bounds, timezone check.
 
 ### Task W1-2: A0 one approvals table (Session A)
 

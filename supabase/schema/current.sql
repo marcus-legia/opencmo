@@ -2287,6 +2287,61 @@ $$;
 
 
 --
+-- Name: cmo_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cmo_corrections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    rule text NOT NULL,
+    source_edits jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'proposed'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT cmo_corrections_rule_check CHECK (((char_length(rule) >= 3) AND (char_length(rule) <= 200))),
+    CONSTRAINT cmo_corrections_source_edits_check CHECK (((jsonb_typeof(source_edits) = 'array'::text) AND (octet_length((source_edits)::text) <= 8192))),
+    CONSTRAINT cmo_corrections_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text])))
+);
+
+
+--
+-- Name: cmo_decide_correction(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_decide_correction(p_id uuid, p_action text, p_text text DEFAULT NULL::text) RETURNS public.cmo_corrections
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.cmo_corrections;
+  v_text text := nullif(trim(coalesce(p_text, '')), '');
+begin
+  if p_action is null or p_action not in ('approve', 'edit', 'reject') then
+    raise exception 'Choose approve, edit or reject.' using errcode = '22023';
+  end if;
+  if p_action = 'edit' and (v_text is null or char_length(v_text) < 3 or char_length(v_text) > 200) then
+    raise exception 'Write the rule in 3 to 200 characters.' using errcode = '22023';
+  end if;
+  select * into v_row from public.cmo_corrections where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Rule not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = 'rejected' or (v_row.status = 'active' and p_action <> 'reject') then
+    raise exception 'This rule was already decided.' using errcode = 'P0001';
+  end if;
+  update public.cmo_corrections
+  set status = case p_action when 'reject' then 'rejected' else 'active' end,
+      rule = case p_action when 'edit' then v_text else rule end,
+      decided_at = now()
+  where id = v_row.id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: cmo_goals; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2826,6 +2881,39 @@ begin
     v_count := v_count + 1;
   end loop;
   return v_count;
+end;
+$$;
+
+
+--
+-- Name: cmo_propose_correction(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_propose_correction(p_user uuid, p_rule text, p_source_edits jsonb DEFAULT '[]'::jsonb) RETURNS public.cmo_corrections
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rule text := trim(coalesce(p_rule, ''));
+  v_row public.cmo_corrections;
+begin
+  if char_length(v_rule) < 3 or char_length(v_rule) > 200 then
+    raise exception 'Write the rule in 3 to 200 characters.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('cmo_corrections:' || p_user::text, 0));
+  select * into v_row from public.cmo_corrections
+  where user_id = p_user and status in ('proposed', 'active') and lower(rule) = lower(v_rule)
+  limit 1;
+  if found then
+    return v_row;
+  end if;
+  if (select count(*) from public.cmo_corrections where user_id = p_user and status = 'proposed') >= 5 then
+    raise exception 'Five rules already wait for a decision.' using errcode = 'P0001';
+  end if;
+  insert into public.cmo_corrections (user_id, rule, source_edits)
+  values (p_user, v_rule, coalesce(p_source_edits, '[]'::jsonb))
+  returning * into v_row;
+  return v_row;
 end;
 $$;
 
@@ -7182,6 +7270,38 @@ $$;
 
 
 --
+-- Name: save_cmo_settings(integer, text, smallint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_cmo_settings(p_weekly_credit_budget integer, p_timezone text, p_digest_hour smallint) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_weekly_credit_budget is null or p_weekly_credit_budget < 0 or p_weekly_credit_budget > 10000 then
+    raise exception 'The weekly budget must be between 0 and 10,000 credits.' using errcode = '22023';
+  end if;
+  -- pg_timezone_names is the list `at time zone` accepts; an unknown name would fail every digest later.
+  if p_timezone is null or not exists (select 1 from pg_catalog.pg_timezone_names where name = p_timezone) then
+    raise exception 'Choose a time zone from the list.' using errcode = '22023';
+  end if;
+  if p_digest_hour is not null and (p_digest_hour < 0 or p_digest_hour > 23) then
+    raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
+  end if;
+  update public.profiles p
+  set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour
+  where p.id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  return query select p.weekly_credit_budget, p.timezone, p.digest_hour from public.profiles p where p.id = v_user;
+end;
+$$;
+
+
+--
 -- Name: save_editor_document(uuid, integer, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8484,7 +8604,13 @@ CREATE TABLE public.profiles (
     polar_customer_id text,
     credit_balance integer DEFAULT 0 NOT NULL,
     retention_from timestamp with time zone DEFAULT now() NOT NULL,
-    retention_exempt boolean DEFAULT false NOT NULL
+    retention_exempt boolean DEFAULT false NOT NULL,
+    weekly_credit_budget integer DEFAULT 80 NOT NULL,
+    timezone text DEFAULT 'UTC'::text NOT NULL,
+    digest_hour smallint DEFAULT 7,
+    CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
+    CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
+    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000)))
 );
 
 
@@ -8756,6 +8882,14 @@ ALTER TABLE ONLY public.clips
 
 ALTER TABLE ONLY public.clips
     ADD CONSTRAINT clips_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cmo_corrections cmo_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_corrections
+    ADD CONSTRAINT cmo_corrections_pkey PRIMARY KEY (id);
 
 
 --
@@ -9228,6 +9362,13 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 --
 
 CREATE INDEX caption_translations_user_idx ON public.caption_translations USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: cmo_corrections_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_corrections_user_idx ON public.cmo_corrections USING btree (user_id, status, created_at DESC);
 
 
 --
@@ -9841,6 +9982,14 @@ ALTER TABLE ONLY public.clips
 
 
 --
+-- Name: cmo_corrections cmo_corrections_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_corrections
+    ADD CONSTRAINT cmo_corrections_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: cmo_draft_outcomes cmo_draft_outcomes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10393,6 +10542,12 @@ ALTER TABLE public.caption_translations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clips ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cmo_corrections; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_corrections ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cmo_draft_outcomes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10609,6 +10764,13 @@ CREATE POLICY "read own CMO goals" ON public.cmo_goals FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: cmo_corrections read own corrections; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own corrections" ON public.cmo_corrections FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

@@ -30,6 +30,15 @@ export function latestPerTopic(rows: Lesson[]): Lesson[] {
   return rows.filter((row) => (seen.has(row.topic) ? false : (seen.add(row.topic), true)));
 }
 
+/**
+ * Memory tier 0: rules the founder approved from their own edits. Read before anything else and stated as rules,
+ * because the founder already decided them; lessons and notes are only evidence.
+ */
+export function correctionsBlock(rules: string[]): string {
+  if (!rules.length) return "";
+  return `<founder_rules approved_by="founder">\n${rules.map((r) => `- ${r}`).join("\n")}\n</founder_rules>`;
+}
+
 /** Weekly lessons (memory tier 3): what the summary learned, read before every plan or draft. */
 export function lessonsBlock(lessons: Lesson[]): string {
   if (!lessons.length) return "";
@@ -37,13 +46,14 @@ export function lessonsBlock(lessons: Lesson[]): string {
 }
 
 /**
- * What a job remembers: the latest lessons for its topic and `general`, then the most important
- * unexpired notes for that topic. Without a topic (the weekly plan) it reads every topic.
+ * What a job remembers: the founder's rules first (every topic: a rule from post edits still binds a reply),
+ * then the latest lessons for its topic and `general`, then the most important unexpired notes for that topic.
+ * Without a topic (the weekly plan) it reads every topic.
  */
 export async function recall(store: CmoStore, userId: string, limit: number, topic?: MemoryTopic): Promise<string> {
-  const [lessons, memories] = await Promise.all([store.lessons(userId), store.memories(userId, limit, topic)]);
+  const [rules, lessons, memories] = await Promise.all([store.corrections(userId), store.lessons(userId), store.memories(userId, limit, topic)]);
   const relevant = topic ? lessons.filter((l) => l.topic === topic || l.topic === "general") : lessons;
-  return [lessonsBlock(relevant), memoriesBlock(memories)].filter(Boolean).join("\n\n");
+  return [correctionsBlock(rules), lessonsBlock(relevant), memoriesBlock(memories)].filter(Boolean).join("\n\n");
 }
 
 /**

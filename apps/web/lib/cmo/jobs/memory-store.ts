@@ -21,7 +21,7 @@ export type InboxItem = {
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
-export function memoryStore(docs: Documents, memories: string[] = ["Skipped the X post \"Pricing\": too salesy"], events: MemoryEvent[] = []) {
+export function memoryStore(docs: Documents, memories: string[] = ["Skipped the X post \"Pricing\": too salesy"], events: MemoryEvent[] = [], corrections: string[] = []) {
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
   const results: WeekResults = { posts: 0, replies: 0, views: 0 };
@@ -57,6 +57,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     documents: async () => docs,
     memories: async () => memories,
     memoryEvents: async () => events,
+    corrections: async () => corrections,
     lessons: async () => latestPerTopic([...lessons].sort((a, b) => b.week.localeCompare(a.week))),
     goal: async (_u, week) => goals.find((g) => g.week === week) ?? null,
     weekResults: async () => ({ ...results }),

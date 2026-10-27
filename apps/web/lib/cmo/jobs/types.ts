@@ -119,6 +119,8 @@ export interface CmoStore {
   memories(userId: string, limit: number, topic?: MemoryTopic): Promise<string[]>;
   /** Every note written since `since` (ISO), newest first, for the weekly summary. */
   memoryEvents(userId: string, since: string): Promise<MemoryEvent[]>;
+  /** Memory tier 0: the founder's active rules (`cmo_corrections`), newest first. */
+  corrections(userId: string): Promise<string[]>;
   /** The latest lesson for each topic. */
   lessons(userId: string): Promise<Lesson[]>;
   saveLessons(userId: string, runId: string, week: string, lessons: { topic: MemoryTopic; body: string }[]): Promise<number>;

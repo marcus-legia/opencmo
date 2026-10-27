@@ -266,6 +266,9 @@ async function main() {
   assert.ok(postRecall.includes("<lessons>") && postRecall.includes("post (week of"), "post jobs read the post lesson");
   assert.ok(!postRecall.includes("sales (week of"), "and not the sales one");
   assert.ok((await recall(mem8.store, "u1", 10)).includes("sales (week of"), "the weekly plan reads every topic");
+  const ruled = await recall(memoryStore(docs, ["A note."], [], ["Don't open posts with a question."]).store, "u1", 10, "sales");
+  assert.ok(ruled.startsWith("<founder_rules") && ruled.includes("Don't open posts with a question."), "the founder's rules come first, on every topic");
+  assert.ok(!(await recall(mem8.store, "u1", 10)).includes("<founder_rules"), "no rules, no block");
   const quiet = memoryStore(docs, [], []);
   const w8q = quiet.enqueue("summarize_memory");
   await drainCmoQueue(quiet.store);

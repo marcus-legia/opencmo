@@ -83,7 +83,7 @@ the owner forwards it to the planner session.
 
 - [x] W1-0 baseline
 - [x] U0 contracts, fixtures, screens route, contract doc
-- [ ] W1-1 B0 corrections and budget
+- [x] W1-1 B0 corrections and budget
 - [ ] W1-2 A0 approvals table
 - [ ] W1-3 B1 work orders, deliverables, events
 - [ ] W1-4 B2 progress check, pause, digest

@@ -59,6 +59,17 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       if (error) throw new Error(`memoryEvents: ${error.message}`);
       return (data ?? []) as MemoryEvent[];
     },
+    async corrections(userId) {
+      const { data, error } = await admin
+        .from("cmo_corrections")
+        .select("rule")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw new Error(`corrections: ${error.message}`);
+      return ((data ?? []) as { rule: string }[]).map((c) => c.rule);
+    },
     async lessons(userId) {
       const { data } = await admin.from("cmo_lessons").select("week, topic, body").eq("user_id", userId).order("week", { ascending: false }).limit(20);
       return latestPerTopic((data ?? []) as Lesson[]);
