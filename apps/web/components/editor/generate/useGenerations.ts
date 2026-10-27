@@ -173,7 +173,7 @@ async function serverSpec(spec: Record<string, unknown>, latest: () => Manifest,
         (item) => isPartial(item) && (item as PartialRecord).state === "error" && generationMatches(input as Record<string, unknown>, item as never),
       );
       if (failed) throw new Error("The image it starts from failed to generate.");
-      if (typeof input === "string") throw new Error("That image was not found in your library.");
+      if (typeof input === "string") throw new Error("That image was not found in your media.");
       if (aborted() || Date.now() - started > WAIT_MS) throw new Error("The image it starts from is still generating. Try again when it is ready.");
       await sleep(POLL_MS);
     }
@@ -436,7 +436,7 @@ export function useGenerations({
             await api(`generations/${encodeURIComponent(view.id)}/cancel`, { method: "POST" }).catch(() => undefined);
             return;
           }
-          if (Date.now() - started > WAIT_MS) throw new StillRunning("This is taking longer than expected. It will appear in your library when it finishes.");
+          if (Date.now() - started > WAIT_MS) throw new StillRunning("This is taking longer than expected. It will appear in your media when it finishes.");
           view = await api<GenerationView>(`generations/${encodeURIComponent(view.id)}`);
         }
         if (view.status !== "done" || !view.asset) {

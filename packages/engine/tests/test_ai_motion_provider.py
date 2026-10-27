@@ -466,7 +466,7 @@ def test_motion_assets_refuse_another_users_path(tmp_path: Path) -> None:
     task = SimpleNamespace(user_id=USER)
     library = _Library({})
     for ref in ("22222222-2222-4222-8222-222222222222/logo.png", f"{USER}/../other/logo.png", f"{USER}\\..\\x.png", 42):
-        with pytest.raises(SpecError, match="not in your library"):
+        with pytest.raises(SpecError, match="not in your media"):
             motion.motion_assets(library, task, {"assets": [{"name": "logo", "ref": ref}]}, tmp_path)
     assert library.asked == [], "nothing is downloaded for a path the task's owner does not own"
     for assets in (
@@ -474,9 +474,9 @@ def test_motion_assets_refuse_another_users_path(tmp_path: Path) -> None:
         [{"name": "Logo", "ref": f"{USER}/a.png"}],
         [{"name": "a", "ref": f"{USER}/a.png"}, {"name": "a", "ref": f"{USER}/b.png"}],
     ):
-        with pytest.raises(SpecError, match="not in your library"):
+        with pytest.raises(SpecError, match="not in your media"):
             motion.motion_assets(library, task, {"assets": assets}, tmp_path)
-    with pytest.raises(SpecError, match="not in your library"):
+    with pytest.raises(SpecError, match="not in your media"):
         motion.motion_assets(library, task, {"assets": [{"name": "gone", "ref": f"{USER}/gone.png"}]}, tmp_path)
 
 

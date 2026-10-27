@@ -493,7 +493,7 @@ function Workspace({
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
     const stem = (input.name ?? `frame-${input.time.toFixed(1)}s`).replace(/[^\w.-]+/g, "-").slice(0, 60);
     const [record] = await library.importFiles([new File([bytes], `${stem}.jpg`, { type: "image/jpeg" })], "Frames");
-    if (!record) return { error: "The frame could not be saved to the library." };
+    if (!record) return { error: "The frame could not be saved to your media." };
     const started = Date.now();
     for (;;) {
       const current = library.latest().assets.find((item) => item.id === record.id) as { path: string; cloud?: { state?: string; mediaId?: string } } | undefined;

@@ -469,7 +469,7 @@ export function explainerCard(prepared: PreparedExplainer, clipId: string) {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       `${prepared.explainer.voice ? "Explainer" : "Motion clip"} “${prepared.explainer.title}” · ${seconds}s · ${prepared.spec.aspectRatio}${look ? ` · ${look}` : ""} · ${prepared.explainer.voice ? `voice ${prepared.explainer.voice}` : "No narration"} · ${credits}`,
-      ...(prepared.explainer.images?.length ? [`Images from your library: ${prepared.explainer.images.join(", ")}`] : []),
+      ...(prepared.explainer.images?.length ? [`Images from your media: ${prepared.explainer.images.join(", ")}`] : []),
       ...prepared.explainer.beats.map(
         (item, index) =>
           `Beat ${index + 1} · ${prepared.explainer.voice ? "Voice" : `${item.seconds ?? 0}s`}: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,

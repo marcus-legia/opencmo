@@ -211,8 +211,8 @@ def _check_scene(model: AiModel, scene: Any, duration: Any = None) -> None:
         raise SpecError(CODE_NOT_FOUND)
 
 
-MEDIA_NOT_FOUND = "That image was not found in your library."
-VIDEO_NOT_FOUND = "Choose a video from your library to edit."
+MEDIA_NOT_FOUND = "That image was not found in your media."
+VIDEO_NOT_FOUND = "Choose a video from your media to edit."
 _MEDIA_REF = re.compile(r"[0-9a-f-]{36}/.+")
 _CLIP_VIDEO_REF = re.compile(r"(?:renders|sources):[0-9a-f-]{36}/.+")
 

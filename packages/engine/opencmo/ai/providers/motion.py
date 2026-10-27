@@ -119,7 +119,7 @@ ASSET_MAX_BYTES = 2_000_000
 ASSET_EDGES = (2048, 1536, 1024, 768)
 #: What a library image may weigh before it is re-encoded (same as generation inputs).
 ASSET_SOURCE_MAX_BYTES = 30 * 1024 * 1024
-ASSET_NOT_FOUND = "An image in this animation is not in your library. Pick it again."
+ASSET_NOT_FOUND = "An image in this animation is not in your media. Pick it again."
 ASSET_UNREADABLE = "An image in this animation could not be read. Pick a PNG, JPEG or WebP of at most 40 megapixels."
 ASSET_TOO_LARGE = "An image in this animation is larger than 30 MB. Pick a smaller one."
 #: Previews: how long one signed-URL download may take.

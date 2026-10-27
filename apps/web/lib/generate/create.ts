@@ -56,7 +56,7 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
         path = linked.data?.storage_path;
       }
     }
-    if (!path) throw new ApiError(422, `That ${noun} was not found in your library.`);
+    if (!path) throw new ApiError(422, `That ${noun} was not found in your media.`);
     return path.replace(/^media\//, "");
   };
   const out: Record<string, unknown> = { ...input };
@@ -69,7 +69,7 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
 type StorageRef = { bucket?: string; object?: string };
 
 async function clipVideoRefs(supabase: SupabaseClient, request: CreateRequest): Promise<string[]> {
-  if (!request.clipId) throw new ApiError(422, "Choose a video from your library to edit.");
+  if (!request.clipId) throw new ApiError(422, "Choose a video from your media to edit.");
   const job = await supabase.from("jobs").select("media_manifest").eq("id", request.jobId).maybeSingle<{ media_manifest: unknown }>();
   const manifest = (job.data?.media_manifest ?? {}) as { masters?: Record<string, StorageRef>; proxies?: Record<string, StorageRef> };
   return [manifest.masters?.[request.clipId], manifest.proxies?.[request.clipId]]

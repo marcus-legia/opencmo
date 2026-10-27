@@ -221,12 +221,12 @@ function script(history: StoredMessage[]): unknown[] {
       const listed = typeof block?.content === "string" ? block.content : undefined;
       const assets = listed ? ((JSON.parse(listed) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? []) : [];
       const media = assets.find((asset) => !asset.role && asset.type === "VIDEO");
-      return media ? [use("place_broll", { beats: [{ path: media.path, quote: "better hooks" }] })] : [text("The library has no B-roll yet.")];
+      return media ? [use("place_broll", { beats: [{ path: media.path, quote: "better hooks" }] })] : [text("Your media has no B-roll yet.")];
     }
     if (/side by side with/.test(asked) && previous.includes("list_library")) {
       const assets = (JSON.parse(raw0) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? [];
       const media = assets.find((asset) => !asset.role && (asset.type === "VIDEO" || asset.type === "IMAGE"));
-      return media ? [use("insert_asset", { path: media.path, start: 1, end: 6 })] : [text("The library has no B-roll yet.")];
+      return media ? [use("insert_asset", { path: media.path, start: 1, end: 6 })] : [text("Your media has no B-roll yet.")];
     }
     if (/side by side with/.test(asked) && previous.includes("insert_asset") && !results.some((block) => block.is_error)) {
       // Id lấy từ <project_state> đi kèm kết quả ghi: video của clip và rect B-roll vừa thêm.
@@ -266,7 +266,7 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("list_library")) {
       const assets = (JSON.parse(raw0) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? [];
       const video = assets.find((asset) => !asset.role && (asset.type === "VIDEO" || asset.type === "IMAGE"));
-      return video ? [use("insert_asset", { path: video.path, start: 1, end: 3 })] : [text("The library has no B-roll yet.")];
+      return video ? [use("insert_asset", { path: video.path, start: 1, end: 3 })] : [text("Your media has no B-roll yet.")];
     }
     if (previous.includes("insert_asset") && !results.some((block) => block.is_error)) return [use("capture", { times: [2] })];
     if (previous.includes("media_waveform")) return [text("I listened to the clip.")];
@@ -310,7 +310,7 @@ function script(history: StoredMessage[]): unknown[] {
     const failed = results.some((block) => block.is_error);
     if (previous.includes("create_video")) {
       if (/"declined":\s*true/.test(raw0)) return [text("No problem, nothing was spent. What should I change: the story, the length or the tone?")];
-      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The keyframes are on their way to your library. Once they are ready I'll show them with the exact price of the video, before anything else is charged.")];
+      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The keyframes are on their way to your media. Once they are ready I'll show them with the exact price of the video, before anything else is charged.")];
       const reason = /"(?:INVALID_INPUT|error)"\s*:\s*"([^"]+)"/.exec(raw0)?.[1];
       return [text(reason ? `I could not make that video: ${reason}` : "That did not work — nothing was changed.")];
     }
@@ -517,7 +517,7 @@ function script(history: StoredMessage[]): unknown[] {
       }),
     ];
   }
-  if (/save a frame/.test(ask)) return [text("Saving a clean frame to the library."), use("save_frame", { time: 1, name: "before-cut" })];
+  if (/save a frame/.test(ask)) return [text("Saving a clean frame to your media."), use("save_frame", { time: 1, name: "before-cut" })];
   if (/generate b-roll:/.test(ask)) {
     // Starter B-roll (guide broll): bỏ câu đầu (hook) và câu cuối, ảnh tĩnh trước, cùng một lượt.
     let picks = lines.slice(1, -1).filter((line) => line.split(" ").length >= 4).slice(0, 3);

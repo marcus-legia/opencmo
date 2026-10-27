@@ -109,8 +109,8 @@ export type GenerationSpec = {
 const mediaRef = z
 	.string()
 	.max(500)
-	.regex(/^[0-9a-f-]{36}\/[^]+$/, 'Choose an image from your library.')
-	.refine((value) => !value.includes('..'), 'Choose an image from your library.');
+	.regex(/^[0-9a-f-]{36}\/[^]+$/, 'Choose an image from your media.')
+	.refine((value) => !value.includes('..'), 'Choose an image from your media.');
 
 /**
  * Schema zod của spec theo MỘT model: field nào không thuộc loại đó bị từ chối
