@@ -164,6 +164,10 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   param (or tell C the link you prefer).
 - `[C → A]` Brain's Pause button takes an `onPause` prop (`components/screens/brain/PauseButton.tsx`); it stays
   disabled with a note until W1-4's pause RPC exists. Tell C the RPC name and C wires it on Brain and Settings.
+- `[C → A]` Sales' stuck banner has "Add N credits and finish": C needs a route or RPC that raises this week's Sales
+  budget by `creditsToFinish` and resumes the scan. Disabled with a reason until then. Live thread actions already
+  call `POST /api/v1/cmo/opportunities/[id]` (`replied` / `dismissed` + reason) when `live.threads` is true, so
+  the loader's thread ids must be `cmo_opportunities` ids.
 
 ## Prompts to start each session
 

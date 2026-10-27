@@ -403,3 +403,34 @@
 .scr a.scr-board-card:hover { color: var(--scr-ink); border-color: var(--scr-brand-deep); }
 .scr-board-meta { font: 500 10px var(--scr-mono); text-transform: uppercase; color: var(--scr-ink2); }
 .scr-board-cta { font: 500 11px var(--scr-mono); text-transform: uppercase; color: var(--scr-brand-deep); }
+
+/* ---------------------------------------------------------------- Sales */
+.scr-meter { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; text-align: right; }
+.scr-meter-cells { display: flex; gap: 3px; }
+.scr-meter-cells i { width: 23px; height: 8px; background: var(--scr-paper3); }
+.scr-meter-cells i.is-used { background: var(--scr-brand-deep); }
+@media (max-width: 600px) { .scr-meter { align-items: flex-start; text-align: left; } }
+.scr-sales { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.scr-thread-list { flex: 1 1 340px; min-width: 0; }
+.scr-thread-list ul { list-style: none; margin: 0; padding: 0; }
+.scr-thread-list li + li { border-top: 1px solid var(--scr-line); }
+.scr-thread { display: flex; gap: 16px; width: 100%; padding: 18px 16px 16px 18px; border: 0; border-left: 3px solid transparent; background: transparent; text-align: left; cursor: pointer; }
+.scr-thread[aria-current="true"] { background: var(--scr-card); border-left-color: var(--scr-ink); }
+.scr-thread-score { font: 500 17px var(--scr-mono); min-width: 28px; }
+.scr-thread-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.scr-thread-text b { font-weight: 600; }
+.scr-thread.is-skipped b, .scr-thread.is-done b { color: var(--scr-ink2); }
+.is-rule-mention_allowed { color: var(--scr-ok); }
+.is-rule-help_only { color: var(--scr-brand-deep); }
+.is-rule-skipped { color: var(--scr-ink2); }
+.scr-thread-detail { flex: 999 1 480px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.scr .scr-thread-title { font-size: 22px; letter-spacing: -0.02em; }
+.scr .scr-thread-title a { color: var(--scr-ink); }
+.scr-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.scr-scores > span { padding: 10px 10px 12px; background: var(--scr-paper3); display: flex; flex-direction: column; }
+.scr-scores b { font-weight: 500; font-size: 15px; }
+.scr-quotes { display: flex; flex-direction: column; gap: 8px; }
+.scr-quotes blockquote { margin: 0; padding: 12px 14px; background: var(--scr-paper3); }
+.scr-dismiss { display: inline-flex; gap: 8px; align-items: center; }
+.scr-dismiss .scr-select { width: auto; }
+.scr-thread-meta { font: 400 11px var(--scr-mono); color: var(--scr-ink2); }
