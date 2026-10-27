@@ -147,7 +147,7 @@ Paste one into a new Claude Code session on this repository.
 **Session A**
 > You are Session A (brain backend and contracts, lead) of `docs/plans/cmo/2026-10-27-cmo-build-sessions.md`. Read
 > that file, `2026-10-27-ui-build-plan.md`, `2026-10-27-brain-departments-plan.md`, `docs/architecture/brain.md`
-> and `approval.md`. Create branch `cmo-build` if it does not exist and open a draft PR.
+> and `approval.md`. Create branch `cmo-build` from `cmo-plan` if it does not exist and open a draft PR into `cmo-plan`.
 > Do W1-0, then U0 and push it first, then W1-1 to W1-6 in order, following the rules in the sessions file.
 
 **Session B**
@@ -159,5 +159,5 @@ Paste one into a new Claude Code session on this repository.
 **Session C**
 > You are Session C (pages) of `docs/plans/cmo/2026-10-27-cmo-build-sessions.md`. Read that file,
 > `2026-10-27-ui-build-plan.md` and the frames in `2026-10-27-app-redesign-frames/`. Work on branch
-> `cmo-build`. Build the skeleton routes first, then U6, U5, U7, U8, using Session B's
+> `cmo-build`. Build the skeleton routes first, then U6, U5, U7, U7b, U8, using Session B's
 > primitives and Session A's screen contracts as they land.
