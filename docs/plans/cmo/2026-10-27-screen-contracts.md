@@ -20,6 +20,8 @@ GET /api/v1/screens/[name]?sample=1   → the pure fixture, every field not live
   data never reaches a production user; `screens.check.ts` asserts it for every screen.
 - In production a screen answers 404 and the rail hides it until every field in its `release` list is live.
 - The UI shows the "Sample data" tag on any part whose `live[field]` is false.
+- A live value that does not match the contract drops back to its non-live value on its own (logged); the other
+  fields of the screen stay live.
 - Loaders run under the founder's RLS session; there is no service-role read.
 - `cd apps/web && npm run check:contracts` runs `screens.check.ts`: every fixture and empty value parses, `live` and
   `release` name real fields, a live field has a loader, and the sample/empty rules hold.
@@ -45,19 +47,19 @@ Phases: B0, B1, B2 (brain), A0 (approval) are wave 1 and land in this PR; everyt
 
 | Field | Source | Live today | Live with |
 |---|---|---|---|
-| `cmo` | `brainMode()` (`lib/cmo/brain.ts`), `profiles.cmo_paused_at` | mode yes | B2 (pause) |
-| `week.goal` | `cmo_goals` (approved, this week) | yes | B1 |
-| `week.deliverables` | `deliverables` of this week's order tree | no | B1 |
-| `week.workingNow` | `work_orders` running, by department | no | B1 |
-| `week.wordsDraftedToday` | `content_items` drafted today | yes | B1 |
-| `week.credits` | `credit_ledger` this week vs `profiles.weekly_credit_budget` | no | B0 |
-| `team.brain` | open `work_orders`, next progress check | no | B1, B2 |
-| `team.nodes[]` | `work_orders` grouped by department + waiting `approvals` | no | B1, A0 |
-| `log[]` | `work_order_events`, newest first | no | B1 |
+| `cmo` | `brainMode()` (`lib/cmo/brain.ts`), `profiles.cmo_paused_at` | **live** | B2 |
+| `week.goal` | `cmo_goals` (approved, this week) | **live** | B1 |
+| `week.deliverables` | this week's orders: done / not cancelled | **live** | B1 |
+| `week.workingNow` | `work_orders` running, by department | **live** | B1 |
+| `week.wordsDraftedToday` | words of X drafts touched today | **live** | B1 |
+| `week.credits` | the week root's `spent_credits` / `budget_credits` (`profiles.weekly_credit_budget` before a plan) | **live** | B0, B1 |
+| `team.brain` | open `work_orders`, paused, next progress check (00:05 UTC) | **live** | B1, B2 |
+| `team.nodes[]` | `work_orders` grouped by department (progress classifier) + waiting `approvals` | **live** | B1, A0 |
+| `log[]` | `work_order_events`, newest first | **live** | B1 |
 | `results.rows[]` | `post_metrics` (X today), Zernio later | partly (X) | R3 / P3 |
 | `results.brainUsed` | `cmo_lessons` of last week | yes | B1 |
-| `outToday[]` | `content_items` scheduled or posted today; `schedule_slots` later | partly (X) | P1 |
-| `digest` | `lib/cmo/digest.ts` `loadDigestInput` (waiting cards, posts out in 24 h, failed orders) | no | B2 |
+| `outToday[]` | X posts approved for today (`scheduled`) or posted today; `schedule_slots` later | **live** (X) | P1 |
+| `digest` | `lib/cmo/digest.ts` `loadDigestInput` (waiting cards, posts out in 24 h, failed orders) | **live** | B2 |
 | `queue[]` | `approvals` where `status = waiting` (`ApprovalCard`) | **live** | A0 |
 
 ## S3 Approval card (`approval-card.ts`)
@@ -103,20 +105,20 @@ POST /api/v1/approvals/[id]   { action, contentHash, text?, reason?, goal?, targ
 
 | Field | Source | Live today | Live with |
 |---|---|---|---|
-| `cmo` | `brainMode()`, `profiles.cmo_paused_at` | mode yes | B2 |
-| `week` | `cmo_goals`, `work_orders` root, `credit_ledger` | goal yes | B1 |
-| `orders[]` | `work_orders` (parents before children, state from `status`) | no | B1 |
-| `learned[]` | `cmo_lessons`, `cmo_memories`, skip reasons, goal results | yes | B1 |
-| `corrections[]` | `cmo_corrections` | no | B0 |
-| `pastWeeks[]` | `cmo_goals` + `review_week` output | yes | B1 |
+| `cmo` | `brainMode()`, `profiles.cmo_paused_at` | **live** | B2 |
+| `week` | `cmo_goals`, the week root | **live** | B1 |
+| `orders[]` | `work_orders` (parents before children; `parentId` null under the week root) | **live** | B1 |
+| `learned[]` | active `cmo_corrections`, latest `cmo_lessons` per topic, recent skip reasons | **live** | B1 |
+| `corrections[]` | `cmo_corrections` with their waiting card | **live** | B0 |
+| `pastWeeks[]` | earlier week roots + their approved `cmo_goals` result | **live** | B1 |
 
 ## S6 Library (`library.ts`)
 
 | Field | Source | Live today | Live with |
 |---|---|---|---|
-| `site` | latest `onboard` run's `cmo_runs.input.site` (`lib/cmo/state.ts`) | yes | W1-5 |
-| `documents[]` | `marketing_documents` (`lib/cmo/documents.ts`) | yes | W1-5 |
-| `brandKits[]` | `brand_kits` (`lib/brand.ts`), logo as a signed URL | yes | W1-5 |
+| `site` | latest `onboard` run's `cmo_runs.input.site` | **live** | W1-5 |
+| `documents[]` | `marketing_documents_latest` + `DOCUMENTS` titles | **live** | W1-5 |
+| `brandKits[]` | `brand_kits`, logo as a signed URL | **live** | W1-5 |
 | `voice` | `marketing_documents.strategy` voice and avoid; learned notes | partly | W0–W1 (Writer) |
 | `skills.writing` | built-in profiles; `editor_skills` | partly | W0–W1 |
 | `skills.video` | `packages/skills`, `editor_skills` | yes | W1-5 |
@@ -147,9 +149,9 @@ POST /api/v1/cmo/pause      { paused: true | false } → { pausedAt }           
 | Screen | Field | Source | Live today | Live with |
 |---|---|---|---|---|
 | Settings | `accounts[]` | Zernio accounts | no | P0 |
-| Settings | `cmo` | `brainMode()`, `profiles.cmo_paused_at` | mode yes | B2 |
-| Settings | `weeklyCreditBudget`, `timezone`, `digestHour` | `profiles` (`save_cmo_settings`) | no | B0 |
-| Settings | `plan` | `profiles.plan`, `credit_balance` | yes | W1-5 |
+| Settings | `cmo` | `brainMode()`, `profiles.cmo_paused_at` | **live** | B2 |
+| Settings | `weeklyCreditBudget`, `timezone`, `digestHour` | `profiles` (`save_cmo_settings`) | **live** | B0 |
+| Settings | `plan` | `profiles.plan`, `credit_balance` | **live** | W1-5 |
 | Setup | `site`, `documents[]`, `step`, `done` | onboarding, `marketing_documents` | yes | W1-5 |
 | Setup | `accounts[]` | Zernio | no | P0 |
 | Setup | `hasBrandKit`, `goal` | `brand_kits`, `cmo_goals` | yes | W1-5 |

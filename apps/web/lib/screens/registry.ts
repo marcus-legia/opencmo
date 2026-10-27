@@ -51,13 +51,25 @@ export const SCREENS = {
     schema: DashboardScreenSchema,
     fixture: dashboardFixture,
     empty: dashboardEmpty,
-    live: ["queue"],
+    live: ["cmo", "week", "team", "log", "outToday", "digest", "queue"],
     // Results waits on Zernio metrics (wave 3); its empty state is honest, so it does not hold the release.
     release: ["cmo", "week", "team", "log", "outToday", "queue"],
   }),
   analytics: entry({ schema: AnalyticsScreenSchema, fixture: analyticsFixture, empty: analyticsEmpty, live: [], release: ["accounts", "kpis", "daily", "byAccount", "posts"] }),
-  brain: entry({ schema: BrainScreenSchema, fixture: brainFixture, empty: brainEmpty, live: [], release: ["cmo", "week", "orders", "learned", "corrections"] }),
-  library: entry({ schema: LibraryScreenSchema, fixture: libraryFixture, empty: libraryEmpty, live: [], release: ["site", "documents", "brandKits"] }),
+  brain: entry({
+    schema: BrainScreenSchema,
+    fixture: brainFixture,
+    empty: brainEmpty,
+    live: ["cmo", "week", "orders", "learned", "corrections", "pastWeeks"],
+    release: ["cmo", "week", "orders", "learned", "corrections"],
+  }),
+  library: entry({
+    schema: LibraryScreenSchema,
+    fixture: libraryFixture,
+    empty: libraryEmpty,
+    live: ["site", "documents", "brandKits"],
+    release: ["site", "documents", "brandKits"],
+  }),
   research: entry({ schema: ResearchScreenSchema, fixture: researchFixture, empty: researchEmpty, live: [], release: ["lastRunAt", "insights", "results"] }),
   writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: [], release: ["drafts"] }),
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: [], release: ["items"] }),
@@ -67,7 +79,7 @@ export const SCREENS = {
     schema: SettingsScreenSchema,
     fixture: settingsFixture,
     empty: settingsEmpty,
-    live: [],
+    live: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
     release: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
   }),
   setup: entry({ schema: SetupScreenSchema, fixture: setupFixture, empty: setupEmpty, live: [], release: ["site", "step", "done", "documents"] }),
@@ -107,10 +119,18 @@ export function compose<N extends ScreenName>(
   const data: Record<string, unknown> = { ...base };
   const live: Record<string, boolean> = {};
   for (const field of Object.keys(base)) {
-    const isLive = !useSample && screen.live.includes(field) && Object.hasOwn(loaded, field);
+    let isLive = !useSample && screen.live.includes(field) && Object.hasOwn(loaded, field);
+    if (isLive) {
+      // A row the contract cannot carry drops only its own field back to the non-live value.
+      const parsed = (screen.schema.shape[field] as z.ZodType).safeParse((loaded as Record<string, unknown>)[field]);
+      if (parsed.success) data[field] = parsed.data;
+      else {
+        isLive = false;
+        console.warn(`[screens] ${name}.${field} did not match the contract`, parsed.error.issues[0]);
+      }
+    }
     live[field] = isLive;
-    if (isLive) data[field] = (loaded as Record<string, unknown>)[field];
-    else if (useSample) data[field] = (screen.fixture as Record<string, unknown>)[field];
+    if (!isLive && useSample) data[field] = (screen.fixture as Record<string, unknown>)[field];
   }
   return { data: screen.schema.parse(data) as ScreenData<N>, live: live as ScreenResponse<N>["live"] };
 }

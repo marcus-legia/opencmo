@@ -87,7 +87,7 @@ the owner forwards it to the planner session.
 - [x] W1-2 A0 approvals table
 - [x] W1-3 B1 work orders, deliverables, events
 - [x] W1-4 B2 progress check, pause, digest
-- [ ] W1-5 loaders live: Dashboard, Brain, Library, Settings
+- [x] W1-5 loaders live: Dashboard, Brain, Library, Settings
 - [ ] W1-6 acceptance run
 
 ## Session B: UI foundation, shell, Dashboard, cards

@@ -140,6 +140,20 @@ check("cards: Studio kinds are not shown before A1; expired and elsewhere states
   assert.equal(viaMcp.problem?.kind, "decided_elsewhere");
 });
 
+check("compose: a live field that breaks the contract drops back alone", () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const out = compose("settings", { timezone: "UTC", weeklyCreditBudget: -5 } as never, { production: true, sample: false });
+    assert.equal(out.live.timezone, true);
+    assert.equal(out.data.timezone, "UTC");
+    assert.equal(out.live.weeklyCreditBudget, false, "an out-of-bounds budget is not shown as live");
+    assert.equal(out.data.weeklyCreditBudget, SCREENS.settings.empty.weeklyCreditBudget);
+  } finally {
+    console.warn = warn;
+  }
+});
+
 if (failures.length) {
   console.error(`screens.check: ${failures.length} failed\n  ${failures.join("\n  ")}`);
   process.exit(1);

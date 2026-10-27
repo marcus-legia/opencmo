@@ -102,10 +102,10 @@ them; it orders the work and names the files.
 
 ### Task W1-5: Screen loaders (Session A, after each task above)
 
-- [ ] Fill `lib/screens` loaders for Dashboard (queue from `approvals`, graph from `work_orders` grouped by
+- [x] Fill `lib/screens` loaders for Dashboard (queue from `approvals`, graph from `work_orders` grouped by
   department, log from `work_order_events`, week strip from `cmo_goals` + orders + credit ledger), Brain (order tree,
   corrections, lessons), Library (documents, `brand_kits`), Settings (budget, timezone, digest, paused).
-- [ ] Flip each field's `live` flag as it reads real rows; the UI does not change.
+- [x] Flip each field's `live` flag as it reads real rows; the UI does not change.
 
 ### Task W1-6: Wave 1 acceptance (lead: Session A; reviewer: the planning session)
 
