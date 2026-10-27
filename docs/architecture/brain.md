@@ -277,9 +277,10 @@ because a brief names what to load.
 | Events, lessons, corrections (memory tiers 0, 2, 3) | learned by the Reviewer; corrections need the founder's approval card |
 
 Not in the Library: the department playbooks in `lib/cmo/skills/` (`x-writing.md`, `reddit-listening.md`,
-`short-video.md`, the marketingskills `library/` folder…). They are how each department does its job, shipped and
-versioned by us, so they stay with the department; the Library shows only what the founder can change. (The folder name
-`lib/cmo/skills/library/` predates this page and means the marketingskills set, not this Library.)
+`short-video.md`, the `marketingskills/` set…). They are how each department does its job, shipped and versioned by
+us, so they stay with the department; the Library shows only what the founder can change. (The set lived in
+`lib/cmo/skills/library/` until 2026-10-27 and was renamed to avoid the clash; its MCP resource URIs keep
+`opencmo://skills/library/` so connected clients do not break.)
 
 Rules:
 - The brain never copies Library content into its own tables; a brief names Library items and the job loads them

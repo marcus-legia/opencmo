@@ -173,14 +173,14 @@ async function main() {
   const { RESEARCH_TOOLS } = await import("../../agent/cmo-research");
   assert.ok(!names.some((n) => !RESEARCH_TOOLS.has(n) && /post|publish|reply|schedule|send|like|follow/.test(n)), "không có tool đăng");
 
-  // Thư viện marketingskills (library/): chỉ CMO chat đọc, có đoạn mở đầu, chỉ mục gọn.
+  // marketingskills/: read only by CMO chat, with the preamble, and a short index.
   const { CMO_SKILLS } = await import("../skills/index.gen");
-  const { skillIndex, skillText, LIBRARY_PREAMBLE } = await import("../skills");
+  const { skillIndex, skillText, MARKETING_PREAMBLE } = await import("../skills");
   const all = Object.values(CMO_SKILLS) as { name: string; kind: string; agents: readonly string[] }[];
-  const lib = all.filter((s) => s.kind === "library");
+  const lib = all.filter((s) => s.kind === "marketing");
   assert.equal(lib.length, 38, "38 skill thư viện");
   assert.ok(lib.every((s) => s.agents.length === 1 && s.agents[0] === "cmo"), "thư viện chỉ cho CMO chat, không lọt vào job");
-  assert.ok(skillText("launch").includes(LIBRARY_PREAMBLE) && !skillText("x-writing").includes(LIBRARY_PREAMBLE));
+  assert.ok(skillText("launch").includes(MARKETING_PREAMBLE) && !skillText("x-writing").includes(MARKETING_PREAMBLE));
   const index = skillIndex("cmo");
   assert.ok(index.length < 12_000, `chỉ mục CMO ${index.length} ký tự`);
   assert.ok(index.indexOf("- x-writing:") < index.indexOf("- social:"), "playbook đứng trước thư viện");

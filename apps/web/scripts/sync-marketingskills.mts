@@ -1,6 +1,6 @@
 /**
  * Chép skill marketing/sales/SEO từ repo marketingskills (MIT, Corey Haines — fork
- * trungthanh01/marketingskills) vào `lib/cmo/skills/library/` làm "thư viện" của CMO chat.
+ * trungthanh01/marketingskills) into `lib/cmo/skills/marketingskills/`, the marketing set CMO chat reads.
  *
  * Chỉ chép SKILL.md: `references/`, `scripts/` là phần nặng nhất và CMO không chạy được script.
  * Không chạy trong CI — chạy tay khi muốn cập nhật từ fork, rồi `build-cmo-skills.mts`.
@@ -68,7 +68,7 @@ if (!repo || !existsSync(join(repo, "skills"))) {
   process.exit(1);
 }
 
-const OUT = join(import.meta.dirname, "..", "lib", "cmo", "skills", "library");
+const OUT = join(import.meta.dirname, "..", "lib", "cmo", "skills", "marketingskills");
 for (const file of readdirSync(OUT)) if (file.endsWith(".md")) rmSync(join(OUT, file));
 
 for (const name of INCLUDE) {
@@ -97,4 +97,4 @@ Chỉ chép SKILL.md của ${INCLUDE.length} skill trong \`INCLUDE\` (scripts/sy
 Đừng sửa tay các file ở đây: chép lại bằng script rồi chạy \`npx tsx scripts/build-cmo-skills.mts\`.
 `,
 );
-console.log(`marketingskills: chép ${INCLUDE.length} skill → lib/cmo/skills/library/`);
+console.log(`marketingskills: chép ${INCLUDE.length} skill → lib/cmo/skills/marketingskills/`);

@@ -68,10 +68,10 @@ for (const prompt of prompts) {
 }
 assert.ok(prompts[1]!.render({ brief: "Launch week" }).includes("\"Launch week\""));
 const resources = CMO_GROUP.resources!;
-const library = Object.values(CMO_SKILLS).filter((s) => s.kind === "library").length;
+const marketing = Object.values(CMO_SKILLS).filter((s) => s.kind === "marketing").length;
 const playbooks = Object.values(CMO_SKILLS).filter((s) => s.kind === "playbook").length;
-assert.equal(resources.length, library + playbooks);
+assert.equal(resources.length, marketing + playbooks);
 assert.equal(new Set(resources.map((r) => r.uri)).size, resources.length, "resource URIs are unique");
 assert.ok(resources.every((r) => /^opencmo:\/\/skills\/(cmo|library)\/[a-z0-9-]+$/.test(r.uri)));
 
-console.log(`mcp.check — ${tools.length} tools, ${prompts.length} prompts, ${resources.length} resources (${playbooks} playbooks, ${library} library).`);
+console.log(`mcp.check — ${tools.length} tools, ${prompts.length} prompts, ${resources.length} resources (${playbooks} playbooks, ${marketing} marketing).`);
