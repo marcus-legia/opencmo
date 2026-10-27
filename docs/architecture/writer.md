@@ -145,8 +145,8 @@ type (`post_metrics`).
 | 3 | Links in posts | **decided**: never |
 | 4 | Hashtags | **decided**: none in posts; only on video captions |
 | 5 | No AI Slop | **decided**: guidance in a skill, not code and not a gate |
-| 6 | Who writes the video script? | recommendation: Studio's Director; Writer writes the brief before and the captions after |
-| 7 | Articles | recommendation: later (W4) |
+| 6 | Who writes the video script? | **decided 2026-10-27**: Studio's Director; Writer writes the brief before and the captions after |
+| 7 | Articles | **decided**: later (W4) |
 
 ## Sources
 

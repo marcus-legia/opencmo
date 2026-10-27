@@ -111,7 +111,7 @@ agreement, or Sales on other sources (Hacker News, X, Threads) first.
 
 ## 10. Decisions for the owner
 
-| # | Question | Recommendation |
+| # | Question | Decision (owner, 2026-10-27: as recommended) |
 |---|---|---|
 | 1 | Check ScrapeCreators' and Reddit's terms before selling Sales? | yes, R0 first |
 | 2 | Product mentions in replies | only where the subreddit allows, about 1 reply in 10 at most; otherwise help only |
