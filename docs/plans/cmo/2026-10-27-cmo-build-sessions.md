@@ -122,7 +122,7 @@ the owner forwards it to the planner session.
 **Order:** skeleton routes for every page (flag-gated, empty) while U0 and U1 land → U6 Library (its data is live
 today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule → U7b Studio replaces My projects → U8 Settings, Setup.
 
-- [ ] Skeleton routes
+- [x] Skeleton routes
 - [ ] U6 Library
 - [ ] U5 Analytics, Brain
 - [ ] U7 department pages
@@ -139,6 +139,17 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 ## Requests
 
 (Append: `[from → to] what, why`. The owner of the path answers here and links the commit.)
+
+- `[C → A]` Screen contracts: until U0 lands, C types each page's data in `components/screens/<page>/data.ts`
+  (types + sample content from the frames). Take them as a starting point for `lib/screens/` or tell C the field
+  names that differ; C then swaps the imports and deletes its copies.
+- `[C → B]` Primitives: C builds stand-ins in `components/screens/kit/` with the U1 names (`Button`, `Chip`, `Tabs`,
+  `Segmented`, `Panel`, `Kpi`, `MonoLabel`, `Toggle`, `EmptyState`, `SampleTag`) and tokens as `--scr-*` copied
+  from `Tokens.dc.html`. Swapped for `components/ui/` when U1 lands.
+- `[C → B]` Flag helper: `components/screens/flag.ts` (`UI_V2`, `requireUiV2()`). Move it under `components/ui/` or
+  `lib/` if you prefer; C will follow.
+- `[C → B]` `/app` with no documents should send the founder to `/app/setup` under the flag (B owns the v2 branch
+  of `app/app/page.tsx`; Setup is C's S13).
 
 ## Prompts to start each session
 
