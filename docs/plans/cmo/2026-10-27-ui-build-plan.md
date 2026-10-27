@@ -44,7 +44,7 @@ the frames are not product data.
 | S6 | Library: Business, Brand Kit, Voice, Skills | `/app/library` | `Library.dc.html` | `LibraryScreen` | U6 (data exists today) |
 | S7 | Research | `/app/research` | `Research.dc.html` | `ResearchScreen` | live today (insights) |
 | S8 | Writer | `/app/writer` | `Writer.dc.html` | `WriterScreen` | live today (X), W1 others |
-| S9 | Studio | `/app/studio` | `Studio.dc.html` | `StudioScreen` | S1 Studio adapter |
+| S9 | Studio (replaces My projects, Task U7b) | `/app/studio`, item drawer `?item=<id>` | `Studio.dc.html` | `StudioScreen` | uploads and edits live today; generated items with S1 |
 | S10 | Sales | `/app/sales` | `Sales.dc.html` | `SalesScreen` | live today (scan), R1 rules |
 | S11 | Schedule: calendar week/month/list, accounts, rules | `/app/schedule` | `Schedule.dc.html` | `ScheduleScreen` | P0–P1 |
 | S12 | Settings: accounts, budget, timezone, email, brain mode, off switch | `/app/settings` (v2 branch) | `Settings.dc.html` | `SettingsScreen` | B0 (budget), P0 (accounts) |
@@ -155,12 +155,35 @@ the frames are not product data.
 
 - [ ] Research: insights with source links and type filter, results table, link to Library documents.
 - [ ] Writer: kind tabs, platform chips, four status columns, voice panel linking to Library.
-- [ ] Studio: kind tabs, media grid (running with progress, price waiting, own edit with Mark finished, shorts batch,
+- [ ] Studio: kind tabs (with Your uploads), search, favorites, sort, media grid (uploading with cancel, the item
+  menu with Rename / Process again / Delete, (running with progress, price waiting, own edit with Mark finished, shorts batch,
   finished, slideshow, failed with refund note), video team progress panel. Open in editor goes to today's editor.
 - [ ] Sales: mention meter, stuck banner, thread list with rule labels, thread detail with scores, quotes, editable
   draft, Copy and open thread / I replied / Dismiss with reason. No post button, ever.
 - [ ] Schedule: Week / Month / List, platform chips, day columns with slots in all states, accounts and rules panels.
   Drag a slot to move it (opens a re-approval, disabled until P1).
+
+### Task U7b: Studio replaces My projects (Session C; owner decision 2026-10-27)
+
+Studio is the one place for everything the founder made or uploaded; the old projects pages go away. Nothing the
+projects pages can do today may be lost.
+
+- [ ] Parity with today's pages (`components/clipping/web/LibraryView.tsx`, `ProjectView.tsx`,
+  `components/clipping/ProjectLibrary.tsx`): search, favorites filter and star, sort, rename, delete with the
+  two-tap confirm, upload with progress and cancel, processing stages (`stageLabel`, `ProcessingView`), failed and
+  cancelled with "Process again" / "Use another video", open in editor. All on the same API (`/api/v1/projects…`).
+- [ ] Item drawer `?item=<id>`: status, the edits made from it, rename, delete, process again. It replaces
+  `/app/projects/[id]`.
+- [ ] Redirects (permanent, kept forever for bookmarks and old emails): `/app/projects` → `/app/studio`;
+  `/app/projects/[id]` → `/app/studio?item=[id]`; `/app/jobs/[id]` → `/app/studio?item=[id]`;
+  `/app/projects/[id]/clips/[clipId]/edit` keeps redirecting to `/app/editor/[clipId]`. Under the flag only until U9.
+- [ ] Every link to the old pages points at Studio: `components/editor/EditorShell.tsx` (back link and `leave`),
+  `components/editor/ClipPicker.tsx`, `components/editor/DeviceCheck.tsx`, `projectHref` in `ProjectLibrary.tsx`
+  (move it to Studio), the `projects` rail entry in `components/clipping/web/WebShell.tsx`.
+- [ ] e2e: port `e2e/projects-delete.spec.ts` and the project case of `e2e/isolation.spec.ts` to Studio.
+- [ ] At release (U9), delete `LibraryView.tsx`, `ProjectView.tsx`, `ProjectLibrary.tsx`, the `library` skeleton
+  variant and the `app/app/projects/` pages except the redirects; keep `ProcessingView`/`stageLabel` only if Studio
+  uses them. Grep for every import before deleting.
 
 ### Task U8: Settings and Setup (Session C)
 

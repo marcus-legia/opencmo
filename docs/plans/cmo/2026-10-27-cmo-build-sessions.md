@@ -12,7 +12,7 @@ Branch: **`plan/cmo/2026-10-27-ui-and-brain`**, cut from `main` after PR #118 (t
 |---|---|---|---|
 | **A** | Brain backend and contracts (lead) | U0, W1-0 to W1-6 | none; owns the data every screen reads |
 | **B** | UI foundation, shell, Dashboard, cards | U1, U2, U3, U4, U9 (lead) | S1, S2, S3 |
-| **C** | Pages | U5, U6, U7, U8 | S4 to S13 |
+| **C** | Pages | U5, U6, U7, U7b, U8 | S4 to S13 |
 | **Planner** | Review (the session that wrote these plans) | reviews at M1, M2, M3 | — |
 
 ## Rules for all sessions
@@ -92,14 +92,19 @@ the owner forwards it to the planner session.
 - `apps/web/app/app/analytics/`, `brain/`, `library/`, `research/`, `writer/`, `studio/`, `sales/`, `schedule/`,
   `setup/` (new), and the v2 branches of `apps/web/app/app/settings/page.tsx` and `apps/web/app/app/brand/page.tsx`
 - `apps/web/e2e/ui-v2-pages.spec.ts`
+- U7b (Studio replaces My projects): `apps/web/app/app/projects/` and `apps/web/app/app/jobs/` (redirects),
+  `apps/web/components/clipping/web/LibraryView.tsx`, `ProjectView.tsx`, `apps/web/components/clipping/ProjectLibrary.tsx`,
+  `apps/web/e2e/projects-delete.spec.ts`; the old-page links in `components/editor/EditorShell.tsx`, `ClipPicker.tsx`,
+  `DeviceCheck.tsx` and the `projects` entry of `components/clipping/web/WebShell.tsx` (those lines only)
 
 **Order:** skeleton routes for every page (flag-gated, empty) while U0 and U1 land → U6 Library (its data is live
-today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule → U8 Settings, Setup.
+today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule → U7b Studio replaces My projects → U8 Settings, Setup.
 
 - [ ] Skeleton routes
 - [ ] U6 Library
 - [ ] U5 Analytics, Brain
 - [ ] U7 department pages
+- [ ] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
 - [ ] U8 Settings, Setup
 
 ## Shared (named blocks only)
