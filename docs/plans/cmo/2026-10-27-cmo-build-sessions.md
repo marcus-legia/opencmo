@@ -5,8 +5,30 @@ Plans: [`2026-10-27-ui-build-plan.md`](2026-10-27-ui-build-plan.md) (UI, tasks U
 Read both first: their todo lists are the source of truth; this file only says who does what, in which order.
 Design frames: [`2026-10-27-app-redesign-frames/`](2026-10-27-app-redesign-frames/).
 
-Branch: **`plan/cmo/2026-10-27-ui-and-brain`**, cut from `main` after PR #118 (these plans) is merged, or from
-`claude/ai-cmo-feasibility-report-0g6pku` before that. Session A opens one draft PR for it; all three sessions share it.
+Branch: **`cmo-build`**, cut from `cmo-plan` (the branch holding these plans, stacked on PR #118's branch
+`claude/ai-cmo-feasibility-report-0g6pku`, which holds the architecture pages they link to). Once both are merged,
+cut it from `main` instead. Session A opens one draft PR for it; all three sessions share it.
+
+## 0. Scope: how much of the system this plan builds
+
+Read this first. **This is not the whole system.** It builds the whole UI and the first quarter of the brain.
+
+| Part | Covered here | Coverage | Not covered here (needs its own plan) |
+|---|---|---|---|
+| **UI** | every screen designed on the canvas (13 screens + the approval card kit, desktop and phone), behind the flag `NEXT_PUBLIC_OPENCMO_UI=v2` | **100% of the designed screens** as UI; data is typed sample data until its backend lands | the inside of the editor (it keeps its current look), landing, blog, billing pages |
+| **Brain** | wave 1: B0 corrections + budget, B1 work orders + deliverables, B2 progress check + pause + digest | **3 of 5 brain phases** (B3 registry + event rules + Studio adapter, B4 evals are wave 2–3) | B3, B4 |
+| **Approval** | A0 one approvals table and decide RPC (post, reply, goal, correction cards) | **1 of 4 phases** | A1 Studio cards, A2 phone + email, A3 schedule cards with expiry |
+| **Departments** | none of their own phases; wave 1 only wires the departments that already run (X posts, Reddit scan, competitor research, metrics) to work orders | **0 of 19 department phases** (Studio S0–S4, Schedule P0–P3, Writer W0–W4, Research/Sales R0–R4) | all of them, waves 2–3 |
+| **Overall backend** | 4 detailed phases (B0, B1, B2, A0) | **4 of 28 phases ≈ 15%** | 24 phases, outlined in the brain plan §6 |
+
+What works for a real founder when this plan is done: one approval queue on the Dashboard for posts, Reddit replies,
+goals and corrections; the week plan as work orders on the Brain page; the team graph and live log moving on real
+orders; Pause CMO; the digest in the app; Library (documents, Brand Kit); Settings (budget, time zone, pause); the
+pages whose data already exists (Research insights, Writer for X, Sales scan, Studio uploads and edits, Setup).
+Everything else on screen is sample data, and those screens stay hidden in production.
+
+Phases and their names come from `docs/architecture/` (`brain.md` §11, `approval.md` §11, `studio.md`,
+`schedule-publish.md`, `writer.md`, `research-sales.md`).
 
 | Session | Name | Tasks | Screens it owns |
 |---|---|---|---|
@@ -19,7 +41,7 @@ Branch: **`plan/cmo/2026-10-27-ui-and-brain`**, cut from `main` after PR #118 (t
 
 1. **Own your paths** (below). A file under "Shared" may be edited by anyone, only in its named block:
    `git pull --rebase` right before editing it, push right after.
-2. **Same branch, no force.** `git pull --rebase origin plan/cmo/2026-10-27-ui-and-brain` before every push. Never
+2. **Same branch, no force.** `git pull --rebase origin cmo-build` before every push. Never
    `--force`, never rebase pushed commits, never push to `main`, never merge the PR.
 3. **Small commits, prefixed** `[A]`, `[B]` or `[C]`, in English, each green on its own (typecheck plus the tests of
    what it touches).
@@ -125,17 +147,17 @@ Paste one into a new Claude Code session on this repository.
 **Session A**
 > You are Session A (brain backend and contracts, lead) of `docs/plans/cmo/2026-10-27-cmo-build-sessions.md`. Read
 > that file, `2026-10-27-ui-build-plan.md`, `2026-10-27-brain-departments-plan.md`, `docs/architecture/brain.md`
-> and `approval.md`. Create branch `plan/cmo/2026-10-27-ui-and-brain` if it does not exist and open a draft PR.
+> and `approval.md`. Create branch `cmo-build` if it does not exist and open a draft PR.
 > Do W1-0, then U0 and push it first, then W1-1 to W1-6 in order, following the rules in the sessions file.
 
 **Session B**
 > You are Session B (UI foundation, shell, Dashboard, cards) of `docs/plans/cmo/2026-10-27-cmo-build-sessions.md`.
 > Read that file, `2026-10-27-ui-build-plan.md` and the frames in `2026-10-27-app-redesign-frames/` (start with
 > `Tokens.dc.html`, `Main.dc.html`, `DashboardPhone.dc.html`, `Cards.dc.html`). Work on branch
-> `plan/cmo/2026-10-27-ui-and-brain`. Do U1 and push the primitives early, then U2, U3, U4, then U9.
+> `cmo-build`. Do U1 and push the primitives early, then U2, U3, U4, then U9.
 
 **Session C**
 > You are Session C (pages) of `docs/plans/cmo/2026-10-27-cmo-build-sessions.md`. Read that file,
 > `2026-10-27-ui-build-plan.md` and the frames in `2026-10-27-app-redesign-frames/`. Work on branch
-> `plan/cmo/2026-10-27-ui-and-brain`. Build the skeleton routes first, then U6, U5, U7, U8, using Session B's
+> `cmo-build`. Build the skeleton routes first, then U6, U5, U7, U8, using Session B's
 > primitives and Session A's screen contracts as they land.

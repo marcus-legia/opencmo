@@ -3,6 +3,9 @@
 > **For agentic workers:** §2 says *what* ships, §5 says *how*, task by task, with checkbox steps. Wave 1 (§5) is built
 > now by three sessions in parallel with the UI plan; waves 2 and 3 (§6) each get their own detailed plan before code,
 > as the repo requires. Work split: [`2026-10-27-cmo-build-sessions.md`](2026-10-27-cmo-build-sessions.md).
+>
+> **Scope:** read §0 of the sessions file first. This plan set builds 100% of the designed UI (sample data until live)
+> and about 15% of the backend (brain B0–B2 and approval A0); it is not the whole system.
 
 ## 1. Goal and decisions
 
