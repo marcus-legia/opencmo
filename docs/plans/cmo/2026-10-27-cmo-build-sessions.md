@@ -124,7 +124,7 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
 
 - [x] Skeleton routes
 - [x] U6 Library
-- [ ] U5 Analytics, Brain
+- [x] U5 Analytics, Brain
 - [ ] U7 department pages
 - [ ] U7b Studio replaces My projects (redirects under the flag; deletion waits for U9)
 - [ ] U8 Settings, Setup
@@ -158,6 +158,10 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   `lib/` if you prefer; C will follow.
 - `[C → B]` `/app` with no documents should send the founder to `/app/setup` under the flag (B owns the v2 branch
   of `app/app/page.tsx`; Setup is C's S13).
+- `[C → B]` "Ask your CMO" on the Brain page links to `/app?ask=1`; please open the Dashboard's ask box on that
+  param (or tell C the link you prefer).
+- `[C → A]` Brain's Pause button takes an `onPause` prop (`components/screens/brain/PauseButton.tsx`); it stays
+  disabled with a note until W1-4's pause RPC exists. Tell C the RPC name and C wires it on Brain and Settings.
 
 ## Prompts to start each session
 

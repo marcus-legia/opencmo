@@ -339,7 +339,7 @@
 .scr-pill[aria-pressed="true"] .scr-pill-note { color: #a8a89a; }
 .scr-pill.is-stuck { border-color: var(--scr-stuck); }
 .scr-pill.is-stuck .scr-pill-note { color: var(--scr-stuck); }
-.scr-strong { font-weight: 500; }
+.scr-strong { font-weight: 600; }
 .scr-ok-text { color: var(--scr-ok); }
 .scr-stuck-text { color: var(--scr-stuck); }
 .scr-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--scr-ink2); }
@@ -361,3 +361,17 @@
 .scr-takeaways p span { color: #a8a89a; }
 .scr .scr-on-dark-link { margin-top: auto; color: var(--scr-paper); font: 500 12px var(--scr-mono); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: underline; }
 .scr .scr-on-dark-link:hover { color: #ffffff; }
+.scr-dialog-title { font-size: 22px; letter-spacing: -0.02em; }
+
+/* ---------------------------------------------------------------- Brain */
+.scr-orders td:first-child { min-width: 260px; }
+.scr-order-child { display: inline-block; }
+.scr-table tr.is-stuck .scr-chip.is-stuck { background: var(--scr-card); }
+.scr-stuck-cell { display: inline-flex; align-items: center; gap: 10px; }
+.scr-memory { position: relative; padding-right: 20px; }
+.scr-memory b { font-weight: 600; }
+.scr-memory-forget { position: absolute; top: 8px; right: 8px; opacity: 0; }
+/* Delete stays reachable: shown on hover and keyboard focus, always on touch screens. */
+.scr-memory:hover .scr-memory-forget, .scr-memory-forget:focus-visible { opacity: 1; }
+@media (hover: none) { .scr-memory { padding-right: 88px; } .scr-memory-forget { opacity: 1; } }
+.scr .scr-pause-on-dark { background: var(--scr-paper); border-color: var(--scr-paper); color: var(--scr-stuck); }
