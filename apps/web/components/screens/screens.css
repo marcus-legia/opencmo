@@ -143,6 +143,23 @@
 .scr-memory { position: relative; padding-right: 20px; }
 .scr-memory b { font-weight: 600; }
 .scr-memory-forget { position: absolute; top: 8px; right: 8px; opacity: 0; }
+/* On a phone the orders table becomes a list: title on its own line, then who · due · credits and the state. */
+@media (max-width: 600px) {
+  .v2-table.scr-orders { min-width: 0; }
+  .scr-orders thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .scr-orders tr { display: grid; grid-template-columns: auto auto auto 1fr; align-items: center; gap: 4px 12px; padding: 12px 20px; border-top: 1px solid var(--v2-paper3); }
+  .scr-orders tbody tr:first-child { border-top: 0; }
+  .v2-table.scr-orders :is(td, td:first-child, td:last-child) { padding: 0; border: 0; font-size: 13px; }
+  .scr-orders td:first-child { grid-column: 1 / -1; font-size: 14px; }
+  .scr-orders td:nth-child(2), .scr-orders td:nth-child(3) { color: var(--v2-ink2); }
+  .scr-orders td[data-label]::after { content: " " attr(data-label); color: var(--v2-ink2); font-family: var(--v2-sans); }
+  .scr-orders td:last-child { justify-self: end; }
+  .scr-orders td:is(:nth-child(2), :nth-child(3), :nth-child(4)) { white-space: nowrap; }
+  .scr-orders td:last-child .scr-stuck-cell { flex-wrap: wrap; justify-content: flex-end; }
+  .scr-orders tr.is-stuck { background: var(--v2-stuck-soft); }
+  .scr-orders tr.is-stuck td { background: transparent; }
+}
+
 /* Delete stays reachable: shown on hover and keyboard focus, always on touch screens. */
 .scr-memory:hover .scr-memory-forget, .scr-memory-forget:focus-visible { opacity: 1; }
 @media (hover: none) { .scr-memory { padding-right: 88px; } .scr-memory-forget { opacity: 1; } }

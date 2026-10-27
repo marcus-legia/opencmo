@@ -191,7 +191,7 @@ function OrdersTable({ orders }: { orders: OrderRow[] }) {
             </td>
             <td>{DEPARTMENT_LABEL[order.department]}</td>
             <td className="scr-num">{due(order)}</td>
-            <td className={`scr-num${stuck ? " scr-stuck-text" : ""}`}>
+            <td className={`scr-num${stuck ? " scr-stuck-text" : ""}`} data-label="credits">
               {order.credits.used} / {order.credits.budget}
             </td>
             <td>

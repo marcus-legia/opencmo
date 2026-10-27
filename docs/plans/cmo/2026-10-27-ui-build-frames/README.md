@@ -13,3 +13,24 @@ Supabase stack. The e2e run replaces them.
 | `kit-1440.png`, `kit-390.png` | S3 every card kind and state | `Cards.dc.html` |
 | `inbox-sample-reply-390.png` | `/app/inbox/[id]` | `Cards.dc.html` |
 | `design-1440.png`, `design-390.png` | `/app/design` primitives | `Tokens.dc.html` |
+
+Session C's pages (U5–U8) were taken the same way: a local preview inside B's `ShellV2`, each page on its
+fixture (`/api/v1/screens/[name]` answered with `compose(name, {}, { sample: true })`), browser time zone
+`Asia/Ho_Chi_Minh` like the frames. Two preview artifacts: the rail highlights Dashboard on every page (the preview
+route has no `/app/<page>` segment), and the round "N" at the bottom left is the Next.js dev badge. Studio's uploads
+use three mocked projects.
+
+| File | Screen | Frame |
+|---|---|---|
+| `analytics-*.png` | S4 Analytics | `Analytics.dc.html` |
+| `brain-*.png` | S5 Brain | `Brain.dc.html` |
+| `library-*.png` | S6 Library (Business tab; documents mocked) | `Library.dc.html` |
+| `research-*.png` | S7 Research | `Research.dc.html` |
+| `writer-*.png` | S8 Writer | `Writer.dc.html` |
+| `studio-*.png` | S9 Studio | `Studio.dc.html` |
+| `sales-*.png` | S10 Sales | `Sales.dc.html` |
+| `schedule-*.png` | S11 Schedule (week) | `Schedule.dc.html` |
+| `settings-*.png` | S12 Settings | `Settings.dc.html` |
+| `setup-*.png` | S13 Setup (documents step) | `Setup.dc.html` |
+
+`<screen>-vs-frame.png` puts the frame (left) and the built page (right) side by side at half size, for the M2 review.
