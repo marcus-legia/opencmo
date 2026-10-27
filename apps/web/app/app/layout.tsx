@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { WebShell } from "@/components/clipping/web/WebShell";
+import { ShellV2 } from "@/components/shell-v2/ShellV2";
+import { UI_V2 } from "@/components/ui/flag";
+import { isProduction } from "@/lib/production";
 import { THEME_BOOT } from "@/lib/theme-boot";
 import { createServerClient } from "@/lib/supabase/server";
+
+import "@/styles/ui-v2.css";
 
 import { shellAccount } from "./shell";
 
@@ -48,6 +53,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   const account = await shellAccount(supabase, user);
+
+  // v2: tokens are scoped to `html[data-ui="v2"]`; set it before the first frame like the rail and theme.
+  if (UI_V2) {
+    return (
+      <>
+        <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT + "document.documentElement.dataset.ui='v2';" }} />
+        <ShellV2 {...account} hideSample={isProduction()}>
+          {children}
+        </ShellV2>
+      </>
+    );
+  }
 
   return (
     <>

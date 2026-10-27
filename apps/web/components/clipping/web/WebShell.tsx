@@ -63,14 +63,15 @@ function navViewFor(segment: string | null, doc: string | null): WorkspaceNavVie
 }
 
 /** Chỉ `credits` và `plan` đổi trong một phiên; email và userId thì không. */
-type ShellAccountState = {
+export type ShellAccountState = {
   credits: number | null;
   plan: string | null;
   userId: string | null;
   refreshAccount: () => void;
 };
 
-const ShellAccountContext = createContext<ShellAccountState | null>(null);
+// Exported for the v2 shell (`components/shell-v2/`), so pages read the account the same way under both shells.
+export const ShellAccountContext = createContext<ShellAccountState | null>(null);
 
 /** Dùng ở màn tạo job để số credit trừ ngay, không đợi tới lần điều hướng sau. */
 export function useShellAccount(): ShellAccountState {
@@ -79,7 +80,7 @@ export function useShellAccount(): ShellAccountState {
   return value;
 }
 
-type AccountSummary = { credits: number; plan: string; cmo_pending: number | null };
+export type AccountSummary = { credits: number; plan: string; cmo_pending: number | null };
 
 export function WebShell({
   credits,
