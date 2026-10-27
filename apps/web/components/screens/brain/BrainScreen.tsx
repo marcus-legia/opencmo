@@ -40,17 +40,21 @@ const STATE_TONE: Record<OrderRow["state"], ChipTone> = {
 export function BrainScreen() {
   const [tab, setTab] = useTabParam<Tab>("tab", TABS.map((t) => t.id), "week");
   const [state] = useScreen("brain");
+  // The founder's own pause or resume wins over what the page loaded with.
+  const [pausedOverride, setPausedOverride] = useState<string | null | undefined>(undefined);
+  const pausedAt = pausedOverride !== undefined ? pausedOverride : state.status === "ready" ? state.data.cmo.pausedAt : null;
 
   return (
     <Screen label="Brain">
       <PageHeader
         eyebrow="Brain · thinks with OpenCMO's model"
         title="The plan, the orders, what it learned."
+        sub={pausedAt ? `Paused since ${new Date(pausedAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}. Nothing runs until you resume.` : undefined}
         sample={state.status === "ready" && isSample(state.live)}
         actions={
           <>
             <LinkButton href="/app?ask=1">Ask your CMO</LinkButton>
-            <PauseButton />
+            {state.status === "ready" && <PauseButton pausedAt={pausedAt} live={state.live.cmo} onChange={setPausedOverride} />}
           </>
         }
       />

@@ -59,6 +59,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pausedAt, setPausedAt] = useState(data.cmo.pausedAt);
   const zoneList = useMemo(() => zones(data.timezone), [data.timezone]);
   const savesForReal = live.weeklyCreditBudget && live.timezone && live.digestHour;
   const budgetNumber = Number(budget);
@@ -221,10 +222,12 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
 
         <section aria-labelledby="off-title" className="scr-panel is-dark scr-off">
           <MonoLabel small>Off switch</MonoLabel>
-          <h2 id="off-title">Pause stops every order and every scheduled post within a minute.</h2>
+          <h2 id="off-title">
+            {pausedAt ? "Your CMO is paused. Nothing runs and nothing posts." : "Pause stops every order and every scheduled post within a minute."}
+          </h2>
           <p>Nothing is deleted. Resume picks up where it stopped; posts whose time passed ask you again.</p>
           <span>
-            <PauseButton variant="on-dark" />
+            <PauseButton variant="on-dark" pausedAt={pausedAt} live={live.cmo} onChange={setPausedAt} />
           </span>
           <div className="scr-off-foot">
             <span className="scr-off-plan">
