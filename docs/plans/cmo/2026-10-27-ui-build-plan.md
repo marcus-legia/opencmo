@@ -86,13 +86,13 @@ the frames are not product data.
 
 ### Task U0: Screen contracts and fixtures (Session A lands it; everyone codes against it)
 
-- [ ] `apps/web/lib/screens/` with one file per screen: zod schema + TS type + `live` flags. Start from the frames:
+- [x] `apps/web/lib/screens/` with one file per screen: zod schema + TS type + `live` flags. Start from the frames:
   every number, label and list on a frame is a field.
-- [ ] `apps/web/lib/screens/fixtures/` with one fixture per screen, built from the frames' sample content.
-- [ ] `apps/web/lib/screens/screens.check.ts`: every fixture parses; added to `check:contracts`.
-- [ ] `GET /api/v1/screens/[name]` returns `{ data, live }`: fixture when the flag is on and nothing is live, live data
+- [x] `apps/web/lib/screens/fixtures/` with one fixture per screen, built from the frames' sample content.
+- [x] `apps/web/lib/screens/screens.check.ts`: every fixture parses; added to `check:contracts`.
+- [x] `GET /api/v1/screens/[name]` returns `{ data, live }`: fixture when the flag is on and nothing is live, live data
   per field as loaders land. One route handler, a loader table keyed by screen name.
-- [ ] Contract doc: `docs/plans/cmo/2026-10-27-screen-contracts.md`, a table per screen of field, source table/RPC,
+- [x] Contract doc: `docs/plans/cmo/2026-10-27-screen-contracts.md`, a table per screen of field, source table/RPC,
   live today (yes/no), brain phase that makes it live.
 
 ### Task U1: Tokens and primitives (Session B)

@@ -82,7 +82,7 @@ the owner forwards it to the planner session.
 → W1-4 → W1-5 after each, flipping `live` flags → W1-6.
 
 - [x] W1-0 baseline
-- [ ] U0 contracts, fixtures, screens route, contract doc
+- [x] U0 contracts, fixtures, screens route, contract doc
 - [ ] W1-1 B0 corrections and budget
 - [ ] W1-2 A0 approvals table
 - [ ] W1-3 B1 work orders, deliverables, events
