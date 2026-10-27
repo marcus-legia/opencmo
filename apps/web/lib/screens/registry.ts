@@ -51,7 +51,7 @@ export const SCREENS = {
     schema: DashboardScreenSchema,
     fixture: dashboardFixture,
     empty: dashboardEmpty,
-    live: [],
+    live: ["queue"],
     // Results waits on Zernio metrics (wave 3); its empty state is honest, so it does not hold the release.
     release: ["cmo", "week", "team", "log", "outToday", "queue"],
   }),

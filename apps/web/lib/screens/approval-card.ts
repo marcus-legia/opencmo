@@ -167,6 +167,8 @@ export const ApprovalCardSchema = z
     decidedAt: iso.nullable(),
     decidedVia: z.enum(["app", "email", "push", "mcp"]).nullable(),
     problem: CardProblemSchema.nullable(),
+    /** What the founder sees, hashed (JCS + sha256). Sent back with the decision; a changed card refuses it. */
+    contentHash: z.string().regex(/^[0-9a-f]{64}$/),
     body: CardBodySchema,
   })
   .refine((card) => card.body.kind === card.kind, { message: "The body kind must match the card kind.", path: ["body"] });

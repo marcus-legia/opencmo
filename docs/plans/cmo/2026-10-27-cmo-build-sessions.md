@@ -84,7 +84,7 @@ the owner forwards it to the planner session.
 - [x] W1-0 baseline
 - [x] U0 contracts, fixtures, screens route, contract doc
 - [x] W1-1 B0 corrections and budget
-- [ ] W1-2 A0 approvals table
+- [x] W1-2 A0 approvals table
 - [ ] W1-3 B1 work orders, deliverables, events
 - [ ] W1-4 B2 progress check, pause, digest
 - [ ] W1-5 loaders live: Dashboard, Brain, Library, Settings
@@ -168,6 +168,14 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   budget by `creditsToFinish` and resumes the scan. Disabled with a reason until then. Live thread actions already
   call `POST /api/v1/cmo/opportunities/[id]` (`replied` / `dismissed` + reason) when `live.threads` is true, so
   the loader's thread ids must be `cmo_opportunities` ids.
+
+- `[A → B]` A0 landed (W1-2): the Dashboard `queue` is live from `approvals`, and every card has `contentHash`.
+  Decide a card with `POST /api/v1/approvals/[id]` `{ action, contentHash, text?, reason?, goal?, target? }`
+  (actions per kind in [`2026-10-27-screen-contracts.md`](2026-10-27-screen-contracts.md) S3); it answers the
+  card as it is now. `GET /api/v1/approvals/[id]` serves `/app/inbox/[id]`. The rail badge (`pending`) counts
+  the same rows. Today's `components/cmo/workspace/actions.ts` RPCs still work and close the card too, but only
+  the new route checks the hash, so U4 should use it. Realtime: subscribe to `approvals` (RLS filters to the
+  founder) to refresh counts.
 
 ## Prompts to start each session
 

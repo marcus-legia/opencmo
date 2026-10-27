@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 
 import { ApprovalCardSchema, CARD_KINDS } from "./approval-card";
+import { approvalToCard, type ApprovalRow } from "./cards";
 import { ALL_KINDS, STATE_CARDS } from "./fixtures/cards";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
@@ -79,6 +80,64 @@ check("dashboard: queue holds only waiting cards, team has six nodes", () => {
   const { queue, team } = SCREENS.dashboard.fixture;
   assert.ok(queue.every((c) => c.status === "waiting"));
   assert.equal(team.nodes.length, 6);
+});
+
+const row = (kind: ApprovalRow["kind"], snapshot: Record<string, unknown>, extra: Partial<ApprovalRow> = {}): ApprovalRow => ({
+  id: "a1",
+  kind,
+  department: "writer",
+  ref_kind: "content_item",
+  ref_id: "r1",
+  status: "waiting",
+  snapshot,
+  content_hash: "a".repeat(64),
+  price_credits: null,
+  post_at: null,
+  account: null,
+  expires_at: null,
+  created_at: "2026-10-29T03:42:00.123456+00:00",
+  decided_at: null,
+  decided_via: null,
+  ...extra,
+});
+
+check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
+  const rows = [
+    row("post", { kind: "post", text: "Most AI video tools stop at the first draft. We built the editor first.", alternates: ["Alt one."], rationale: "Tuesday's insight", idea: "x" }),
+    row("reply", {
+      kind: "reply",
+      url: "https://www.reddit.com/r/SaaS/comments/x/",
+      community: "r/SaaS",
+      title: "What do you use?",
+      reply: "Same here.",
+      score: 78,
+      score_parts: [{ label: "Pain", score: 22, max: 25, evidence: "I spend more time cutting." }, { label: "Bogus" }],
+    }, { department: "sales", ref_kind: "opportunity" }),
+    row("goal", { kind: "goal", week: "2026-10-26", goal: "Publish 3 posts", metric: "posts", target: 3 }, { department: "brain", ref_kind: "goal" }),
+    row("correction", { kind: "correction", rule: "No question openers.", source_edits: [{ before: "Tired?", after: "Editing takes long." }] }, { department: "brain", ref_kind: "correction" }),
+  ];
+  for (const r of rows) {
+    const card = approvalToCard(r);
+    assert.ok(card, r.kind);
+    ApprovalCardSchema.parse(card);
+    assert.equal(card.contentHash, r.content_hash, "the card carries the hash to send back");
+  }
+  const post = approvalToCard(rows[0]!)!;
+  assert.equal(post.title, "Most AI video tools stop at the first draft.");
+  assert.deepEqual(post.body.kind === "post" && post.body.platforms[0]!.versions, [
+    "Most AI video tools stop at the first draft. We built the editor first.",
+    "Alt one.",
+  ]);
+  const reply = approvalToCard(rows[1]!)!;
+  assert.equal(reply.body.kind === "reply" && reply.body.parts.length, 1, "a malformed score part is dropped");
+});
+
+check("cards: Studio kinds are not shown before A1; expired and elsewhere states", () => {
+  assert.equal(approvalToCard(row("price", { kind: "price" })), null);
+  const past = approvalToCard(row("goal", { kind: "goal", week: "2026-10-26", goal: "Goal", metric: "posts", target: 3 }, { expires_at: "2026-10-01T00:00:00+00:00" }))!;
+  assert.equal(past.problem?.kind, "expired");
+  const viaMcp = approvalToCard(row("goal", { kind: "goal", week: "2026-10-26", goal: "Goal", metric: "posts", target: 3 }, { status: "approved", decided_via: "mcp", decided_at: "2026-10-29T01:00:00+00:00" }))!;
+  assert.equal(viaMcp.problem?.kind, "decided_elsewhere");
 });
 
 if (failures.length) {

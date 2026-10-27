@@ -38,7 +38,7 @@ Phases: B0, B1, B2 (brain), A0 (approval) are wave 1 and land in this PR; everyt
 | Field | Source | Live today | Live with |
 |---|---|---|---|
 | credits, plan, email, userId | `credit_balance`, `profiles.plan` (`ShellAccount`, `app/app/shell.ts`) | yes | — |
-| pending | `lib/cmo/pending.ts` (`content_items` + `opportunities` in review) | yes | A0 (counts `approvals` waiting) |
+| pending | `lib/cmo/pending.ts`: `approvals` where `status = waiting` | yes | — |
 | rail availability | `GET /api/v1/screens` | yes | — |
 
 ## S2 Dashboard (`dashboard.ts`)
@@ -57,7 +57,7 @@ Phases: B0, B1, B2 (brain), A0 (approval) are wave 1 and land in this PR; everyt
 | `results.rows[]` | `post_metrics` (X today), Zernio later | partly (X) | R3 / P3 |
 | `results.brainUsed` | `cmo_lessons` of last week | yes | B1 |
 | `outToday[]` | `content_items` scheduled or posted today; `schedule_slots` later | partly (X) | P1 |
-| `queue[]` | `approvals` where `status = waiting` (`ApprovalCard`) | no | A0 |
+| `queue[]` | `approvals` where `status = waiting` (`ApprovalCard`) | **live** | A0 |
 
 ## S3 Approval card (`approval-card.ts`)
 
@@ -65,7 +65,17 @@ Ten kinds: `post`, `reply`, `goal`, `script`, `price`, `finished_video`, `shorts
 `correction`. Common fields: `id`, `kind`, `department`, `status` (`waiting | approved | edited | skipped | expired |
 cancelled`), `title`, `summary`, `meta`, `priceCredits`, `postAt`, `account`, `raisedAt`, `expiresAt`, `decidedAt`,
 `decidedVia` (`app | email | push | mcp`), `problem` (`expired | decided_elsewhere | needs_credits | failed` + text),
-`body` (one shape per kind, `body.kind === kind`). `PRIMARY_ACTION` names each kind's one filled button;
+`contentHash` (sha256 of the JCS snapshot the card shows; sent back with the decision), `body` (one shape per kind,
+`body.kind === kind`). A live card is built from the `approvals` row's snapshot only (`lib/screens/cards.ts`), so it
+shows exactly what the hash covers.
+
+```
+GET  /api/v1/approvals/[id]   → ApprovalCard                     (/app/inbox/[id]; reminders link here)
+POST /api/v1/approvals/[id]   { action, contentHash, text?, reason?, goal?, target? } → ApprovalCard
+     post: approve | skip · reply: replied | dismissed · goal: approve | reject · correction: approve | edit | reject
+     409-style refusals come back as `{ detail }`: "This card changed. Look at it again before deciding.",
+     "This card was already decided.", "This card expired. A new one will ask again."
+``` `PRIMARY_ACTION` names each kind's one filled button;
 `DECIDABLE_IN_WAVE_1` lists the kinds whose decision works in this PR.
 
 | Kind | Body source | Live with |

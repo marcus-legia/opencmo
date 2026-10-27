@@ -36,6 +36,7 @@ insert into allowed values
   ('agent_stop(uuid)'),
   ('ai_check_spec(ai_models,jsonb)'),
   ('ai_price(ai_models,jsonb)'),
+  ('approval_decide(uuid,text,jsonb)'),
   ('auto_transcript_daily_seconds()'),
   ('brand_logo_allows(text)'),
   ('cancel_export(uuid)'),

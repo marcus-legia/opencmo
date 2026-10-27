@@ -66,14 +66,14 @@ them; it orders the work and names the files.
 
 ### Task W1-2: A0 one approvals table (Session A)
 
-- [ ] Migration `*_approvals.sql`: `approvals` (id, user, kind enum of the 10 card kinds, ref_kind, ref_id, status
+- [x] Migration `*_approvals.sql`: `approvals` (id, user, kind enum of the 10 card kinds, ref_kind, ref_id, status
   `waiting|approved|edited|skipped|expired|cancelled`, snapshot jsonb with JCS `content_hash`, `price_credits`,
   `post_at`, `account`, created_at, decided_at, decided_via `app|email|push|mcp`).
-- [ ] `approval_decide(id, action, payload)`: checks owner and snapshot hash, then calls `cmo_decide_post` /
+- [x] `approval_decide(id, action, payload)`: checks owner and snapshot hash, then calls `cmo_decide_post` /
   `cmo_decide_opportunity` / `cmo_decide_goal` / `cmo_decide_correction` in the same transaction.
-- [ ] Today's post, reply and goal writers insert an approval row (backfill the waiting ones in the migration).
-- [ ] `pending.ts` counts `approvals` where waiting; Realtime on `approvals`.
-- [ ] pgTAP per transition; a decided card cannot be decided twice; a changed snapshot refuses.
+- [x] Today's post, reply and goal writers insert an approval row (backfill the waiting ones in the migration).
+- [x] `pending.ts` counts `approvals` where waiting; Realtime on `approvals`.
+- [x] pgTAP per transition; a decided card cannot be decided twice; a changed snapshot refuses.
 
 ### Task W1-3: B1 work orders and deliverables (Session A)
 

@@ -1507,6 +1507,310 @@ $$;
 
 
 --
+-- Name: approval_close(text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_close(p_ref_kind text, p_ref_id uuid, p_status text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.approvals
+  set status = p_status,
+      decided_at = now(),
+      decided_via = case when p_status in ('approved', 'edited', 'skipped')
+        then coalesce(nullif(current_setting('opencmo.decided_via', true), ''), 'app') end
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
+end;
+$$;
+
+
+--
+-- Name: approvals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approvals (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    department text NOT NULL,
+    ref_kind text NOT NULL,
+    ref_id uuid NOT NULL,
+    status text DEFAULT 'waiting'::text NOT NULL,
+    snapshot jsonb NOT NULL,
+    content_hash text NOT NULL,
+    price_credits integer,
+    post_at timestamp with time zone,
+    account text,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    decided_via text,
+    CONSTRAINT approvals_account_check CHECK ((char_length(account) <= 100)),
+    CONSTRAINT approvals_content_hash_check CHECK ((content_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
+    CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
+    CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text]))),
+    CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
+    CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: approval_decide(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_decide(p_id uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.approvals;
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_via text := coalesce(nullif(v_payload->>'via', ''), 'app');
+  v_target integer;
+begin
+  if jsonb_typeof(v_payload) <> 'object' then
+    raise exception 'The decision is malformed.' using errcode = '22023';
+  end if;
+  if v_via not in ('app', 'mcp') then
+    raise exception 'Cards are decided in the app or through MCP.' using errcode = '22023';
+  end if;
+  select * into v_row from public.approvals where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Card not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status <> 'waiting' then
+    raise exception 'This card was already decided.' using errcode = 'P0001';
+  end if;
+  if v_row.expires_at is not null and v_row.expires_at <= now() then
+    raise exception 'This card expired. A new one will ask again.' using errcode = 'P0001';
+  end if;
+  if v_payload->>'content_hash' is distinct from v_row.content_hash
+     or public.approval_hash(public.approval_snapshot(v_row.ref_kind, v_row.ref_id)) is distinct from v_row.content_hash then
+    raise exception 'This card changed. Look at it again before deciding.' using errcode = 'P0001';
+  end if;
+
+  perform set_config('opencmo.decided_via', v_via, true);
+  case v_row.kind
+    when 'post' then
+      if p_action not in ('approve', 'skip') then
+        raise exception 'Choose approve or skip.' using errcode = '22023';
+      end if;
+      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', v_payload->>'reason');
+    when 'reply' then
+      if p_action not in ('replied', 'dismissed') then
+        raise exception 'Choose replied or dismissed.' using errcode = '22023';
+      end if;
+      perform public.cmo_decide_opportunity(v_row.ref_id, p_action, v_payload->>'reason');
+    when 'goal' then
+      if p_action not in ('approve', 'reject') then
+        raise exception 'Choose approve or reject.' using errcode = '22023';
+      end if;
+      if v_payload ? 'target' then
+        if jsonb_typeof(v_payload->'target') <> 'number' then
+          raise exception 'The target must be a whole number.' using errcode = '22023';
+        end if;
+        v_target := (v_payload->>'target')::numeric::integer;
+      end if;
+      perform public.cmo_decide_goal(v_row.ref_id, p_action, v_payload->>'goal', v_target);
+    when 'correction' then
+      perform public.cmo_decide_correction(v_row.ref_id, p_action, v_payload->>'text');
+    else
+      raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
+  end case;
+  perform set_config('opencmo.decided_via', '', true);
+
+  select * into v_row from public.approvals where id = p_id;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: approval_hash(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_hash(p_snapshot jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT
+    SET search_path TO 'public'
+    AS $$ select encode(extensions.digest(convert_to(public.jcs(p_snapshot), 'UTF8'), 'sha256'), 'hex') $$;
+
+
+--
+-- Name: approval_raise(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_raise(p_user uuid, p_ref_kind text, p_ref_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_snapshot jsonb := public.approval_snapshot(p_ref_kind, p_ref_id);
+  v_hash text;
+  v_kind text;
+begin
+  if v_snapshot is null then
+    return;
+  end if;
+  v_hash := public.approval_hash(v_snapshot);
+  if exists (select 1 from public.approvals
+             where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting' and content_hash = v_hash) then
+    return;
+  end if;
+  update public.approvals set status = 'cancelled', decided_at = now()
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
+  v_kind := v_snapshot->>'kind';
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash)
+  values (p_user, v_kind,
+    case v_kind when 'post' then 'writer' when 'reply' then 'sales' else 'brain' end,
+    p_ref_kind, p_ref_id, v_snapshot, v_hash);
+end;
+$$;
+
+
+--
+-- Name: approval_snapshot(text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_snapshot(p_ref_kind text, p_ref_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v jsonb;
+begin
+  case p_ref_kind
+    when 'content_item' then
+      select jsonb_build_object('kind', 'post', 'platform', platform, 'day', day, 'idea', idea,
+        'text', coalesce(body->>'text', ''),
+        'alternates', case when jsonb_typeof(body->'alternates') = 'array' then body->'alternates' else '[]'::jsonb end,
+        'rationale', coalesce(body->>'rationale', reason))
+      into v from public.content_items where id = p_ref_id;
+    when 'opportunity' then
+      select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
+        'reply', reply, 'score', score, 'score_parts', score_parts)
+      into v from public.opportunities where id = p_ref_id;
+    when 'goal' then
+      select jsonb_build_object('kind', 'goal', 'week', week, 'goal', goal, 'metric', metric, 'target', target)
+      into v from public.cmo_goals where id = p_ref_id;
+    when 'correction' then
+      select jsonb_build_object('kind', 'correction', 'rule', rule, 'source_edits', source_edits)
+      into v from public.cmo_corrections where id = p_ref_id;
+    else
+      raise exception 'Unknown card source.' using errcode = '22023';
+  end case;
+  return v;
+end;
+$$;
+
+
+--
+-- Name: approvals_backfill(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_backfill() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_before integer := (select count(*) from public.approvals);
+  r record;
+begin
+  for r in
+    select user_id, 'content_item' as ref_kind, id from public.content_items where department = 'post' and status = 'in_review'
+    union all select user_id, 'opportunity', id from public.opportunities where status = 'in_review'
+    union all select user_id, 'goal', id from public.cmo_goals where status = 'proposed'
+    union all select user_id, 'correction', id from public.cmo_corrections where status = 'proposed'
+  loop
+    perform public.approval_raise(r.user_id, r.ref_kind, r.id);
+  end loop;
+  return (select count(*) from public.approvals) - v_before;
+end;
+$$;
+
+
+--
+-- Name: approvals_sync(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_sync() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_ref_kind text := tg_argv[0];
+  v_status text;
+begin
+  if tg_op = 'DELETE' then
+    perform public.approval_close(v_ref_kind, old.id, 'cancelled');
+    return old;
+  end if;
+  -- One branch per table: a plpgsql expression may only name fields its row has.
+  if v_ref_kind = 'content_item' then
+    if new.department <> 'post' then
+      return new;
+    end if;
+    if new.status = 'in_review' then
+      perform public.approval_raise(new.user_id, v_ref_kind, new.id);
+      return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status = new.status then
+      return new;
+    end if;
+    -- Picking an alternate as written is not an edit; changing the words is.
+    v_status := case new.status
+      when 'approved' then case
+        when new.final_text is null or new.final_text = new.body->>'text'
+          or (jsonb_typeof(new.body->'alternates') = 'array' and new.body->'alternates' ? new.final_text) then 'approved'
+        else 'edited' end
+      when 'published' then 'approved'
+      when 'skipped' then 'skipped'
+      else 'cancelled' end;
+  elsif v_ref_kind = 'opportunity' then
+    if new.status = 'in_review' then
+      perform public.approval_raise(new.user_id, v_ref_kind, new.id);
+      return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status = new.status then
+      return new;
+    end if;
+    v_status := case new.status when 'replied' then 'approved' else 'skipped' end;
+  elsif v_ref_kind = 'goal' then
+    if new.status = 'proposed' then
+      perform public.approval_raise(new.user_id, v_ref_kind, new.id);
+      return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status = new.status then
+      return new;
+    end if;
+    v_status := case
+      when new.status <> 'approved' then 'skipped'
+      when tg_op = 'UPDATE' and (new.goal is distinct from old.goal or new.target is distinct from old.target) then 'edited'
+      else 'approved' end;
+  else
+    if new.status = 'proposed' then
+      perform public.approval_raise(new.user_id, v_ref_kind, new.id);
+      return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status = new.status then
+      return new;
+    end if;
+    v_status := case
+      when new.status <> 'active' then 'skipped'
+      when tg_op = 'UPDATE' and new.rule is distinct from old.rule then 'edited'
+      else 'approved' end;
+  end if;
+  perform public.approval_close(v_ref_kind, new.id, v_status);
+  return new;
+end;
+$$;
+
+
+--
 -- Name: auto_transcript_daily_seconds(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5223,6 +5527,31 @@ $$;
 
 
 --
+-- Name: jcs(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.jcs(p jsonb) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    SET search_path TO 'public'
+    AS $$
+begin
+  case jsonb_typeof(p)
+    when 'object' then
+      return '{' || coalesce((
+        select string_agg(to_jsonb(k)::text || ':' || public.jcs(v), ',' order by k collate "C")
+        from jsonb_each(p) as e(k, v)), '') || '}';
+    when 'array' then
+      return '[' || coalesce((
+        select string_agg(public.jcs(v), ',' order by i)
+        from jsonb_array_elements(p) with ordinality as a(v, i)), '') || ']';
+    else
+      return p::text;
+  end case;
+end;
+$$;
+
+
+--
 -- Name: job_credits_spent(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8845,6 +9174,14 @@ ALTER TABLE ONLY public.api_keys
 
 
 --
+-- Name: approvals approvals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approvals
+    ADD CONSTRAINT approvals_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: artifacts artifacts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9337,6 +9674,20 @@ CREATE INDEX api_keys_user_idx ON public.api_keys USING btree (user_id, created_
 
 
 --
+-- Name: approvals_one_waiting; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX approvals_one_waiting ON public.approvals USING btree (ref_kind, ref_id) WHERE (status = 'waiting'::text);
+
+
+--
+-- Name: approvals_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX approvals_user_idx ON public.approvals USING btree (user_id, status, created_at);
+
+
+--
 -- Name: artifacts_attempt_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9750,6 +10101,34 @@ CREATE TRIGGER apply_credit_ledger_insert AFTER INSERT ON public.credit_ledger F
 
 
 --
+-- Name: cmo_corrections approvals_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.cmo_corrections FOR EACH ROW EXECUTE FUNCTION public.approvals_sync('correction');
+
+
+--
+-- Name: cmo_goals approvals_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.cmo_goals FOR EACH ROW EXECUTE FUNCTION public.approvals_sync('goal');
+
+
+--
+-- Name: content_items approvals_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.approvals_sync('content_item');
+
+
+--
+-- Name: opportunities approvals_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.approvals_sync('opportunity');
+
+
+--
 -- Name: clips clips_record_storage_deletions; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9939,6 +10318,14 @@ ALTER TABLE ONLY public.agent_usage
 
 ALTER TABLE ONLY public.api_keys
     ADD CONSTRAINT api_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: approvals approvals_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approvals
+    ADD CONSTRAINT approvals_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -10518,6 +10905,12 @@ ALTER TABLE public.ai_models ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: approvals; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approvals ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: artifacts; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10764,6 +11157,13 @@ CREATE POLICY "read own CMO goals" ON public.cmo_goals FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: approvals read own approvals; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own approvals" ON public.approvals FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

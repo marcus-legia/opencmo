@@ -16,6 +16,7 @@ const base = {
   decidedAt: null,
   decidedVia: null,
   problem: null,
+  contentHash: "0".repeat(64),
 } as const;
 
 export const POST_CARD: ApprovalCard = {

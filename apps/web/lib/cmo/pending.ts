@@ -1,17 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * How many items wait for the user's decision: the "N waiting" line under Dashboard on the rail.
+ * How many cards wait for the founder's decision: the badge next to Dashboard on the rail.
  *
- * Same rule as "Awaiting your approval" in `loadWorkspace()`: X posts and Reddit threads
- * `in_review`. Approved posts (waiting to be posted) do not count: nothing is left to decide.
+ * One rule for every surface since A0: `approvals` rows with status `waiting` (the Dashboard queue counts the same
+ * rows). Approved posts waiting to be posted do not count: nothing is left to decide.
  *
  * Read under RLS with the session's client, counting only (`head: true`). Errors return null:
  * this is a hint on the rail and must not break the shell.
  */
 export async function cmoPending(supabase: SupabaseClient): Promise<number | null> {
-  const count = (table: string) => supabase.from(table).select("id", { count: "exact", head: true }).eq("status", "in_review");
-  const [posts, threads] = await Promise.all([count("content_items").eq("department", "post"), count("opportunities")]);
-  if (posts.error || threads.error) return null;
-  return (posts.count ?? 0) + (threads.count ?? 0);
+  const { count, error } = await supabase.from("approvals").select("id", { count: "exact", head: true }).eq("status", "waiting");
+  if (error) return null;
+  return count ?? 0;
 }
