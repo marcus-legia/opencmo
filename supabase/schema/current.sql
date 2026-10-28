@@ -1575,6 +1575,8 @@ declare
   v_via text := coalesce(nullif(v_payload->>'via', ''), 'app');
   v_target integer;
   v_step public.studio_steps;
+  v_batch public.short_batches;
+  v_order uuid;
   v_n integer;
   v_text text;
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
@@ -1664,7 +1666,6 @@ begin
         where id = v_step.id;
       elsif p_action = 'cancel' then
         update public.studio_steps set status = 'cancelled', decision = 'cancel', decided_at = now() where id = v_step.id;
-        -- Cancelling a card stops the video it belongs to.
         if v_step.order_id is not null and exists (select 1 from public.work_orders
             where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
           perform public.work_order_move(v_step.order_id, 'cancelled', 'You cancelled the video');
@@ -1678,9 +1679,52 @@ begin
       end if;
       if p_action = 'approve' then
         perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
+        -- A video order's edit is its deliverable; the order is done.
+        select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+        where s.clip_id = v_row.ref_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+        order by s.created_at desc limit 1;
+        if v_order is not null then
+          insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+          values (v_user, v_order, 'video', 'clip', v_row.ref_id, 'decided')
+          on conflict (ref_kind, ref_id) do nothing;
+          perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif(v_row.snapshot->>'title', ''), 'the video') || '”');
+        end if;
       else
-        -- The edit stays open: the founder tweaks it in the editor, and the next render raises a new card.
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+      end if;
+    when 'shorts_batch' then
+      if p_action not in ('approve', 'send_back') then
+        raise exception 'Choose approve or send back.' using errcode = '22023';
+      end if;
+      select * into v_batch from public.short_batches where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_batch.status <> 'waiting_founder' then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'approve' then
+        update public.short_batches set status = 'approved', decided_at = now() where id = v_batch.id;
+        update public.shorts set status = 'approved' where batch_id = v_batch.id and status = 'ready';
+        -- Each short is its own deliverable, ready for Schedule (P4).
+        if v_batch.order_id is not null then
+          insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+          select v_user, v_batch.order_id, 'short', 'clip', s.short_clip_id, 'ready'
+          from public.shorts s where s.batch_id = v_batch.id and s.status = 'approved' and s.short_clip_id is not null
+          on conflict (ref_kind, ref_id) do nothing;
+          if exists (select 1 from public.work_orders where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+            perform public.work_order_move(v_batch.order_id, 'done', 'Shorts approved');
+          end if;
+        end if;
+        perform public.approval_close('short_batch', v_batch.id, 'approved');
+      else
+        update public.short_batches set status = 'sent_back', decided_at = now() where id = v_batch.id;
+        update public.shorts set status = 'sent_back' where batch_id = v_batch.id and status = 'ready';
+        -- A failure is data: the replan reads the reason and may not cut the same shorts again (brain.md §6).
+        if v_batch.order_id is not null and exists (select 1 from public.work_orders
+            where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+          perform public.work_order_move(v_batch.order_id, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the shorts back.'), 'retryable', true,
+            'repair_hint', 'Cut different ranges from the same finished edit.'));
+        end if;
+        perform public.approval_close('short_batch', v_batch.id, 'skipped');
       end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
@@ -1770,8 +1814,6 @@ begin
       select jsonb_build_object('kind', 'correction', 'rule', rule, 'source_edits', source_edits)
       into v from public.cmo_corrections where id = p_ref_id;
     when 'studio_step' then
-      -- Card 1 (`script`): the storyboard and the keyframe price. Card 2 and a redone keyframe (`price`): the
-      -- keyframes (contact sheet) or the shots, the wait and the exact price.
       select case s.kind
         when 'script' then jsonb_build_object('kind', 'script', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
           'title', coalesce(s.card->>'title', ''), 'seconds', s.card->'seconds', 'aspect', s.card->'aspect',
@@ -1785,8 +1827,6 @@ begin
         end
       into v from public.studio_steps s where s.id = p_ref_id;
     when 'editor_project' then
-      -- The finished-video card shows the render of the document as it is now; a render of an older document is
-      -- not this video, so it shows none.
       select jsonb_build_object('kind', 'finished_video', 'clip_id', c.id, 'title', coalesce(c.hook, ''),
         'document_hash', public.editor_document_hash(p.document),
         'render_task_id', r.id, 'render_path', r.output_path, 'seconds', r.duration)
@@ -1808,7 +1848,7 @@ begin
           select jsonb_agg(jsonb_build_object('short_id', s.id, 'short_clip_id', s.short_clip_id,
             'start', s.source_start, 'end', s.source_end, 'hook', s.hook, 'reason', s.reason)
             order by s.source_start, s.id)
-          from public.shorts s where s.batch_id = b.id), '[]'::jsonb))
+          from public.shorts s where s.batch_id = b.id and s.status <> 'failed'), '[]'::jsonb))
       into v
       from public.short_batches b
       left join public.clips c on c.id = b.parent_clip_id
@@ -4888,6 +4928,63 @@ $$;
 
 
 --
+-- Name: cut_shorts_order(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cut_shorts_order(p_clip_id uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  return public.cut_shorts_order_for(public.require_user(), p_clip_id, 'founder');
+end;
+$$;
+
+
+--
+-- Name: cut_shorts_order_for(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cut_shorts_order_for(p_user uuid, p_clip_id uuid, p_created_by text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_clip public.clips := public.owned_clip(p_clip_id, p_user);
+  v_project public.editor_projects;
+  v_root public.work_orders;
+  v_id uuid;
+begin
+  if v_clip.kind = 'short' then
+    raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
+  end if;
+  select * into v_project from public.editor_projects where clip_id = p_clip_id for update;
+  if not found or v_project.finished_hash is null
+     or v_project.finished_hash is distinct from public.editor_document_hash(v_project.document) then
+    raise exception 'Mark this edit finished first: shorts are cut only from a finished edit.' using errcode = 'P0001';
+  end if;
+  if public.cmo_paused(p_user) then
+    raise exception 'Your CMO is paused. Resume it to start new work.' using errcode = 'P0001';
+  end if;
+  select id into v_id from public.work_orders
+  where user_id = p_user and kind = 'cut_shorts' and brief->>'clip_id' = p_clip_id::text
+    and brief->>'finished_hash' = v_project.finished_hash and status not in ('failed', 'cancelled')
+  limit 1;
+  if found then
+    return v_id;
+  end if;
+  v_root := public.work_order_week_root(p_user);
+  select id into v_id from public.work_order_create(p_user, v_root.week, v_root.id, 'cut_shorts',
+    left('Shorts from “' || coalesce(nullif(v_clip.hook, ''), 'your video') || '”', 200),
+    jsonb_build_object('objective', 'Cut 3 shorts from the finished edit.', 'clip_id', p_clip_id,
+      'finished_hash', v_project.finished_hash, 'done_when', 'The founder approved the shorts batch.'),
+    0, null, '{}', p_created_by);
+  return v_id;
+end;
+$$;
+
+
+--
 -- Name: defer_object_deletions(bigint[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5091,6 +5188,55 @@ CREATE FUNCTION public.editor_json(p_clip_id uuid) RETURNS jsonb
   )
   from public.editor_projects p
   where p.clip_id = p_clip_id;
+$$;
+
+
+--
+-- Name: editor_projects_clear_finished(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.editor_projects_clear_finished() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.finished_hash is not null and new.document is distinct from old.document
+     and public.editor_document_hash(new.document) is distinct from new.finished_hash then
+    new.finished_at := null;
+    new.finished_hash := null;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: editor_projects_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.editor_projects_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid;
+begin
+  if new.document is distinct from old.document then
+    perform public.approval_close('editor_project', new.clip_id, 'cancelled');
+  end if;
+  if new.finished_hash is not null and new.finished_hash is distinct from old.finished_hash then
+    select j.user_id into v_user from public.clips c join public.jobs j on j.id = c.job_id
+    where c.id = new.clip_id and c.kind <> 'short';
+    if v_user is not null and not public.cmo_paused(v_user) then
+      begin
+        perform public.cut_shorts_order_for(v_user, new.clip_id, 'event');
+      exception when others then
+        raise warning 'cut_shorts rule failed for clip %: %', new.clip_id, sqlerrm;
+      end;
+    end if;
+  end if;
+  return new;
+end;
 $$;
 
 
@@ -8200,6 +8346,77 @@ $$;
 
 
 --
+-- Name: short_batch_create(uuid, text, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_batch_create(p_parent_clip_id uuid, p_parent_hash text, p_order_id uuid, p_shorts jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_parent public.clips := public.owned_clip(p_parent_clip_id, v_user);
+  v_project public.editor_projects;
+  v_batch uuid;
+  v_item jsonb;
+  v_clip uuid;
+  v_short uuid;
+  v_idx integer;
+  v_out jsonb := '[]'::jsonb;
+  v_start numeric;
+  v_end numeric;
+begin
+  if v_parent.kind = 'short' then
+    raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
+  end if;
+  select * into v_project from public.editor_projects where clip_id = p_parent_clip_id for update;
+  if not found or p_parent_hash is null or v_project.finished_hash is distinct from p_parent_hash
+     or p_parent_hash is distinct from public.editor_document_hash(v_project.document) then
+    raise exception 'This edit changed after it was marked finished. Mark it finished again to cut shorts.' using errcode = 'P0001';
+  end if;
+  if p_order_id is not null and not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_shorts is null or jsonb_typeof(p_shorts) <> 'array' or jsonb_array_length(p_shorts) not between 1 and 3 then
+    raise exception 'A batch has 1 to 3 shorts.' using errcode = '22023';
+  end if;
+  -- One batch at a time per finished version: a retry of the same cut does not double it.
+  if exists (select 1 from public.short_batches where parent_clip_id = p_parent_clip_id and parent_hash = p_parent_hash
+             and status not in ('sent_back', 'failed', 'cancelled')) then
+    raise exception 'Shorts are already being cut from this version.' using errcode = 'P0001';
+  end if;
+  -- Short edits take the next free negative index of the parent's job (uploads use 0 and up, blank edits -1).
+  perform 1 from public.jobs where id = v_parent.job_id for update;
+  insert into public.short_batches (user_id, parent_clip_id, parent_hash, order_id, status)
+  values (v_user, p_parent_clip_id, p_parent_hash, p_order_id, 'rendering')
+  returning id into v_batch;
+  for v_item in select * from jsonb_array_elements(p_shorts) loop
+    if jsonb_typeof(v_item) <> 'object' or jsonb_typeof(v_item->'document') is distinct from 'object'
+       or jsonb_typeof(v_item->'source_start') is distinct from 'number' or jsonb_typeof(v_item->'source_end') is distinct from 'number'
+       or char_length(coalesce(v_item->>'hook', '')) not between 1 and 120
+       or char_length(coalesce(v_item->>'title', '')) not between 1 and 60
+       or char_length(coalesce(v_item->>'reason', '')) not between 1 and 300 then
+      raise exception 'A short needs its range, hook, title, reason and edit.' using errcode = '22023';
+    end if;
+    v_start := (v_item->>'source_start')::numeric;
+    v_end := (v_item->>'source_end')::numeric;
+    v_idx := (select least(coalesce(min(idx), 0), -1) - 1 from public.clips where job_id = v_parent.job_id);
+    insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, kind, parent_clip_id)
+    values (v_parent.job_id, v_idx, v_item->>'title', 0, v_end - v_start, 'short', p_parent_clip_id)
+    returning id into v_clip;
+    insert into public.editor_projects (clip_id, document, manifest)
+    values (v_clip, v_item->'document', v_project.manifest);
+    insert into public.shorts (user_id, batch_id, parent_clip_id, short_clip_id, source_start, source_end, hook, reason, status)
+    values (v_user, v_batch, p_parent_clip_id, v_clip, v_start, v_end, v_item->>'hook', v_item->>'reason', 'rendering')
+    returning id into v_short;
+    v_out := v_out || jsonb_build_array(jsonb_build_object('short_id', v_short, 'short_clip_id', v_clip));
+  end loop;
+  return jsonb_build_object('batch_id', v_batch, 'shorts', v_out);
+end;
+$$;
+
+
+--
 -- Name: signup_credits(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8702,6 +8919,75 @@ $$;
 
 
 --
+-- Name: tasks_studio_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.tasks_studio_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_short public.shorts;
+  v_batch public.short_batches;
+  v_order uuid;
+  v_user uuid;
+begin
+  if new.kind <> 'render_document' or new.status not in ('done', 'failed') or old.status = new.status or new.clip_id is null then
+    return new;
+  end if;
+  begin
+    select * into v_short from public.shorts where short_clip_id = new.clip_id;
+    if found then
+      if v_short.status = 'rendering' then
+        update public.shorts set status = case new.status when 'done' then 'ready' else 'failed' end where id = v_short.id;
+      end if;
+      select * into v_batch from public.short_batches where id = v_short.batch_id for update;
+      if v_batch.status = 'rendering' and not exists (
+          select 1 from public.shorts where batch_id = v_batch.id and status in ('building', 'rendering')) then
+        if exists (select 1 from public.shorts where batch_id = v_batch.id and status = 'ready') then
+          update public.short_batches set status = 'waiting_founder' where id = v_batch.id;
+          perform public.approval_raise(v_batch.user_id, 'short_batch', v_batch.id);
+          if v_batch.order_id is not null then
+            perform public.work_order_wait_founder(v_batch.order_id, 'Shorts are ready for you');
+          end if;
+        else
+          update public.short_batches set status = 'failed', error = 'Every short failed to render.' where id = v_batch.id;
+          if v_batch.order_id is not null and exists (select 1 from public.work_orders
+              where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+            perform public.work_order_move(v_batch.order_id, 'failed', null,
+              jsonb_build_object('code', 'render_failed', 'message', 'Every short failed to render.', 'retryable', true));
+          end if;
+        end if;
+      end if;
+      return new;
+    end if;
+
+    -- A long video an order is making: its steps name the edit.
+    select s.order_id, s.user_id into v_order, v_user from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.clip_id = new.clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+    order by s.created_at desc limit 1;
+    if v_order is null then
+      return new;
+    end if;
+    if new.status = 'done' then
+      if new.settings_hash = (select public.editor_document_hash(document) from public.editor_projects where clip_id = new.clip_id) then
+        perform public.approval_raise(v_user, 'editor_project', new.clip_id);
+        perform public.work_order_wait_founder(v_order, 'Your video is rendered');
+      end if;
+    else
+      perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'render_failed',
+        'message', left(coalesce(nullif(new.error, ''), 'The render failed.'), 200), 'retryable', true));
+    end if;
+  exception when others then
+    raise warning 'studio render rule failed for task %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: upload_reservation_allows(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8902,6 +9188,7 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
   select case p_kind
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
+    when 'build_video' then 'studio' when 'cut_shorts' then 'studio'
     else 'brain' end
 $$;
 
@@ -9169,6 +9456,56 @@ begin
     v_within := v_within and v_row.spent_credits <= v_row.budget_credits;
   end loop;
   return v_within;
+end;
+$$;
+
+
+--
+-- Name: work_order_wait_founder(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_wait_founder(p_id uuid, p_text text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_status text := (select status from public.work_orders where id = p_id);
+begin
+  if v_status is null or v_status in ('waiting_founder', 'done', 'failed', 'cancelled') then
+    return;
+  end if;
+  if v_status = 'queued' then
+    perform public.work_order_move(p_id, 'running');
+  end if;
+  perform public.work_order_move(p_id, 'waiting_founder', p_text);
+end;
+$$;
+
+
+--
+-- Name: work_order_week_root(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_week_root(p_user uuid) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_week date := date_trunc('week', current_date)::date;
+  v_root public.work_orders;
+  v_goal text;
+  v_budget integer;
+begin
+  select * into v_root from public.work_orders where user_id = p_user and week = v_week and parent_id is null for update;
+  if found then
+    return v_root;
+  end if;
+  select goal into v_goal from public.cmo_goals where user_id = p_user and week = v_week and status = 'approved';
+  select weekly_credit_budget into v_budget from public.profiles where id = p_user;
+  return public.work_order_create(p_user, v_week, null, 'plan_week',
+    coalesce('Week of ' || to_char(v_week, 'Mon DD') || ': ' || v_goal, 'Week of ' || to_char(v_week, 'Mon DD')),
+    jsonb_build_object('objective', coalesce(v_goal, 'Plan and run this week''s marketing.')),
+    coalesce(v_budget, 0), (v_week + 7)::timestamptz);
 end;
 $$;
 
@@ -9600,7 +9937,7 @@ CREATE TABLE public.deliverables (
     status text DEFAULT 'ready'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
-    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text]))),
+    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
 
@@ -11342,6 +11679,20 @@ CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EA
 
 
 --
+-- Name: editor_projects editor_projects_clear_finished; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_projects_clear_finished BEFORE UPDATE OF document ON public.editor_projects FOR EACH ROW EXECUTE FUNCTION public.editor_projects_clear_finished();
+
+
+--
+-- Name: editor_projects editor_projects_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_projects_rules AFTER UPDATE ON public.editor_projects FOR EACH ROW EXECUTE FUNCTION public.editor_projects_rules();
+
+
+--
 -- Name: editor_revisions editor_revisions_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -11423,6 +11774,13 @@ CREATE TRIGGER tasks_record_storage_deletions BEFORE DELETE ON public.tasks FOR 
 --
 
 CREATE TRIGGER tasks_refund_media_captions AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.refund_media_captions_from_task();
+
+
+--
+-- Name: tasks tasks_studio_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tasks_studio_rules AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.tasks_studio_rules();
 
 
 --

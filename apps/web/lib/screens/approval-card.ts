@@ -323,7 +323,7 @@ export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "sho
 };
 
 /**
- * Kinds whose decision works now (wave 1 A0, P2 A1 for Studio steps and the finished video); the others show their
+ * Kinds whose decision works now (wave 1 A0; P2 A1 Studio steps and the finished video, A3 the shorts batch); the others show their
  * button disabled with the reason. The name stays so `components/cards/decide.ts` keeps reading it.
  */
-export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video"]);
+export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video", "shorts_batch"]);

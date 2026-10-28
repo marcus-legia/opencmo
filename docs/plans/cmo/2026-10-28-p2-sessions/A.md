@@ -35,7 +35,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
       cases for `script`/`price` (approve → the adapter's `decide`; `redo` raises a new card, keeps the order waiting;
       cancel releases any hold) and `finished_video` (approve = `mark_finished`; send back keeps it open). pgTAP per
       transition, including a stale hash.
-- [ ] **A3 Finished state and event rules**: `mark_finished(clip_id, document_hash)`; `save_editor_document` clears
+- [x] **A3 Finished state and event rules**: `mark_finished(clip_id, document_hash)`; `save_editor_document` clears
       it when the hash changes; rules: finished → `cut_shorts` order; batch approved → one `short` deliverable per
       short, status ready for Schedule (P4); render done/failed → order state. pgTAP for each rule.
 - [ ] **A2 Video orders**: `plan_week` may plan one video item (strategy + week goal decide; at most one per week
@@ -147,3 +147,15 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   adapter (`caller: "ui"`) and reports with `studio_step_finish`. Cards build from snapshots (`cards.ts`) and the
   loader signs keyframes, renders and short previews (`studio-sign.ts`). `DECIDABLE_IN_WAVE_1` now includes script,
   price, finished_video. Cancel moves the step's order to `cancelled`; everything else about order states is A2.
+- A3 (`20261228110000_p2_finished_shorts.sql`, `207_p2_finished_shorts.test.sql`): a BEFORE trigger on
+  `editor_projects` clears the finished mark on any document change (every write path, not only
+  `save_editor_document`); `cut_shorts_order(p_clip_id)` (founder) and the rule on a newly finished edit
+  (`created_by = 'event'`, skipped while paused) make one `cut_shorts` order per (edit, finished hash), under the week's
+  root (made if the plan has not run yet); `short_batch_create` as B asked (parent's job, next negative `idx`, the
+  parent's manifest, refused unless finished at `p_parent_hash` = current hash, one live batch per version). Rules on
+  `tasks` (render_document done/failed): shorts → ready/failed, batch → `waiting_founder` + card (failed shorts left
+  off the card) or failed; a video order's edit rendered at its current hash → card 3 + order `waiting_founder`, a
+  failed render fails the order. `approval_decide`: card 3 approve also writes the `video` deliverable and finishes a
+  `build_video` order (which then orders its shorts); `shorts_batch` approve → a `short` deliverable per short
+  (`ref_kind = 'clip'`, status `ready` for P4) and the order done; send back → the order fails with `code = 'sent_back'`
+  and the reason. `work_order_department` maps `build_video` and `cut_shorts` to Studio.

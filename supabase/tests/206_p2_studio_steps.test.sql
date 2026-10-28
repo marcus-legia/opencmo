@@ -154,7 +154,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select throws_ok($$ select public.approval_decide((select id from t where name = 'f1'), 'approve',
   jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select id from t where name = 'f1')))) $$,
-  'P0001', 'This card changed. Look at it again before deciding.', 'card 3 of an older document is refused');
+  'P0001', null, 'card 3 of an older document is refused (A3 also closes it when the document changes)');
 reset role;
 select public.approval_raise('e2060000-0000-4000-8000-00000000000a', 'editor_project', 'e2062000-0000-4000-8000-00000000000a');
 set local role authenticated;
