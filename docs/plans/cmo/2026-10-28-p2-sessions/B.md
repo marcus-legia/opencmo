@@ -23,7 +23,7 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
       `decide(stepId, action)`, `buildVideo(brief)`, `cutShorts(clipId)`, `markFinished(clipId, hash)`,
       `renderShort(shortClipId)`, their input and output types (the video brief: objective, angle, hooks, key points,
       seconds, aspect, voice), and who may call each (brain, Assistant, MCP, UI). No implementation yet.
-- [ ] **B1 Extract**: move what MCP's studio group does (clip scope, `scope.plan`, the signed step, `scope.decide`)
+- [x] **B1 Extract**: move what MCP's studio group does (clip scope, `scope.plan`, the signed step, `scope.decide`)
       into the adapter; MCP calls it. Every existing MCP check passes unchanged (`packages/mcp-server/src/*.check.ts`
       and `apps/web/lib/mcp/*.check.ts`); same tools, same signed steps, same results.
 - [ ] **B3 Short render**: `renderShort` queues `render_document` for a short's own edit from a brain order, with no

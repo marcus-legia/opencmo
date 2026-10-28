@@ -98,8 +98,8 @@ export type StudioDecision = {
   outcome: ToolOutcome;
   /** Set when the step queued a generation: poll it (or the order waits on it). */
   generationId?: string;
-  /** Set when the step queued an export (`request_export`): one per file. */
-  exports?: { taskId: string; [key: string]: unknown }[];
+  /** Set when the step queued exports (`request_export`): one `{ frame, task_id }` per file. */
+  exports?: Record<string, unknown>[];
   /** True when the step changed the edit's document. */
   wrote: boolean;
 };
