@@ -1,0 +1,31 @@
+# Session C: slideshow and Sales cards, Slides view, Sales and Research live
+
+Plan: [`../2026-10-28-p5-research-sales-slides-plan.md`](../2026-10-28-p5-research-sales-slides-plan.md) · rules: [`README.md`](README.md).
+
+## You own
+
+- `apps/web/components/cards/` (slideshow, Sales help-only and skipped states)
+- `apps/web/components/editor/slides/` (new) and the New menu entry
+- `apps/web/components/screens/sales/`, `apps/web/components/screens/research/`
+- `apps/web/e2e/ui-v2-slides.spec.ts` (new), the e2e list in `apps/web/package.json`
+
+## Order
+
+Read the frames while A0 and B0 land → C0 → C1 (after B1) → C2 (after A3) → C3.
+
+## Todo
+
+- [ ] **C0 Card bodies** on A0's types with fixtures: slideshow (slides strip, quick text edit per slide, MP4 preview,
+      PNG set download, Open in Slides, approve, send back) and Sales states (help only and why, skipped and why).
+      Axe clean at 1440 and 390.
+- [ ] **C1 Slides view**: "New" offers New video and New slideshow; strip on the left (add, delete, drag), frame in the
+      middle, text/image/colour/duration on the right, timeline hidden, "Timeline" switches to the full editor;
+      every change through B's slide ops.
+- [ ] **C2 Sales and Research live**: Sales settings (excluded subreddits, co-occurrence pairs), the mention counter and
+      stuck banner; Research → "What works on video in your niche" with hook, length, format and URL.
+- [ ] **C3 e2e**: build a 5-slide slideshow in the Slides view, approve a slideshow card, a help-only Sales card shows
+      why and has no post button.
+
+## Requests
+
+(Others append `[from → C] what, why`; answer here with the commit.)
