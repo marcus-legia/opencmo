@@ -19,7 +19,7 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 
 ## Todo
 
-- [ ] **B0 Adapter interface (push first)**: `lib/departments/studio/types.ts` with `plan(clipId, tool, input)`,
+- [x] **B0 Adapter interface (push first)**: `lib/departments/studio/types.ts` with `plan(clipId, tool, input)`,
       `decide(stepId, action)`, `buildVideo(brief)`, `cutShorts(clipId)`, `markFinished(clipId, hash)`,
       `renderShort(shortClipId)`, their input and output types (the video brief: objective, angle, hooks, key points,
       seconds, aspect, voice), and who may call each (brain, Assistant, MCP, UI). No implementation yet.
