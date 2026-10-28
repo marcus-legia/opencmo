@@ -99,12 +99,29 @@ export async function run(): Promise<void> {
   step(`card 1: ${card1.body.kind === "script" ? card1.body.beats.length : 0} beats, keyframes ${card1.priceCredits ?? 0} credits`);
   const stale = await me.rpc("approval_decide", { p_id: card1.id, p_action: "approve", p_payload: { content_hash: "0".repeat(64), via: "app" } });
   assert.match(stale.error?.message ?? "", /changed/, "a stale card is refused");
-  await decide(card1, "approve");
+
+  // Edit a beat: card 1 closes as edited and comes back with the founder's words (no Director runs).
+  const words = "Cut a demo video by deleting the words you do not want.";
+  await decide(card1, "edit", { beat: 0, text: words });
+  const edited = await until("card 1 edited", userId, async () => {
+    const card = await waitingCard(userId, "script");
+    return card && card.id !== card1.id ? card : null;
+  });
+  assert.ok(edited.body.kind === "script" && edited.body.beats[0]?.words === words, "the new card 1 has the edited beat");
+  step("edited a beat: card 1 came back with the founder's words");
+  await decide(edited, "approve");
   step("approved card 1 (a stale hash was refused first)");
 
-  // Card 2 once the keyframes are made.
-  const card2 = await until("card 2", userId, () => waitingCard(userId, "price"), minutes(10));
-  assert.ok(card2.body.kind === "price" && card2.body.keyframes.length > 0, "card 2 shows the contact sheet");
+  // Card 2 once the keyframes are made; redo one keyframe, then the new contact sheet.
+  const sheet = await until("card 2", userId, () => waitingCard(userId, "price"), minutes(10));
+  assert.ok(sheet.body.kind === "price" && sheet.body.keyframes.length > 0, "card 2 shows the contact sheet");
+  await decide(sheet, "redo", { index: 1 });
+  const card2 = await until("card 2 after a redo", userId, async () => {
+    const card = await waitingCard(userId, "price");
+    return card && card.id !== sheet.id ? card : null;
+  }, minutes(10));
+  assert.ok(card2.body.kind === "price" && card2.body.keyframes.length === (sheet.body.kind === "price" ? sheet.body.keyframes.length : 0), "the same sheet, one keyframe made again");
+  step("redid keyframe 2: a new contact sheet");
   step(`card 2: ${card2.body.kind === "price" ? card2.body.keyframes.length : 0} keyframes, video ${card2.priceCredits ?? 0} credits`);
   await decide(card2, "approve");
   step("approved card 2");

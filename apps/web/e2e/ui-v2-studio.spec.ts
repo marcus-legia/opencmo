@@ -41,7 +41,8 @@ async function edit(db: SupabaseClient, userId: string, name: string) {
   const jobId = randomUUID();
   const clipId = randomUUID();
   const document = { version: 1, stage: { name } };
-  expect((await db.from("jobs").insert({ id: jobId, user_id: userId, source_url: `https://e2e.local/${name}`, duration_seconds: 60, status: "done" })).error).toBeNull();
+  // A blank edit's job, as `create_blank_edit` makes it.
+  expect((await db.from("jobs").insert({ id: jobId, user_id: userId, kind: "edit", source_url: "editor://blank", duration_seconds: 60, status: "done" })).error).toBeNull();
   expect((await db.from("clips").insert({ id: clipId, job_id: jobId, idx: -1, hook: name, start_seconds: 0, end_seconds: 0, kind: "blank" })).error).toBeNull();
   expect((await db.from("editor_projects").insert({ clip_id: clipId, document })).error).toBeNull();
   return { jobId, clipId, hash: await hashOf(db, document) };
@@ -92,6 +93,9 @@ async function cardPage(page: Page, id: string) {
 test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited, a keyframe redone, the video finished", async ({ page }) => {
   const db = admin();
   const { user, me } = await founder(db);
+  // The cards decide live; the steps behind them are this test's own rows, which the order runner the approvals
+  // route kicks cannot carry out. Paused, the runner leaves them alone (the cards still decide).
+  expect((await db.from("profiles").update({ cmo_paused_at: new Date().toISOString() }).eq("id", user.id)).error).toBeNull();
   const video = await edit(db, user.id, "How the CMO plans a week");
   const orderId = await videoOrder(db, user.id, "How the CMO plans a week");
 
@@ -183,6 +187,8 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
     order_id: orderId,
     status: "done",
     decision: "approve",
+    // What the order runner records once the shots are made: the render comes next.
+    next: { tool: "render" },
   });
   const taskId = randomUUID();
   expect(
@@ -228,6 +234,8 @@ test("Mark finished on Studio shows the badge; an edit after it clears it", asyn
     order_id: orderId,
     status: "done",
     decision: "approve",
+    // The video is built: its render comes next, so Studio offers Mark finished.
+    next: { tool: "render" },
   });
 
   await signIn(page, user);

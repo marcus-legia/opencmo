@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(46);
+select plan(47);
 
 select ok(has_function_privilege('authenticated', 'public.studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)', 'execute'),
   'the adapter raises steps under the founder''s session');
@@ -88,6 +88,8 @@ select is((select status || ' ' || decision || ' ' || (decision_payload->>'beat'
 select is((pg_temp.card((select id from t where name = 's1'))).reason, 'Shorter line', 'with the founder''s reason');
 reset role;
 select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'waiting_founder', 'the order keeps waiting');
+select is((select count(*)::int from public.studio_steps_ready(10) where id = (select id from t where name = 's1') and next->>'tool' = 'replan'), 1,
+  'the order runner picks up the re-plan');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
 

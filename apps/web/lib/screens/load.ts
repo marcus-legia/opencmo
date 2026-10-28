@@ -665,7 +665,8 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
           projectId: null,
           editorHref: clipId ? `/app/editor/${clipId}` : null,
           approvalId,
-          canMarkFinished: !!edit && !finished && o.status !== "failed",
+          // Only a built video is finished: once the order reached its render, Mark finished is card 3's approval.
+          canMarkFinished: !!edit && !finished && o.status !== "failed" && (o.status === "done" || mine.some((r) => r.next?.tool === "render")),
           clipId,
           documentHash: edit?.document_hash ?? null,
           canCutShorts: finished,

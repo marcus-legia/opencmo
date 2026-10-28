@@ -1648,8 +1648,11 @@ begin
         if char_length(v_text) not between 1 and 300 then
           raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
         end if;
+        -- The order runner plans the storyboard again with these words (`next`, added in 20261228120000): queued
+        -- like any other Studio step, so it waits while the founder's CMO is paused and is retried.
         update public.studio_steps set status = 'cancelled', decision = 'edit', decided_at = now(),
-          decision_payload = jsonb_build_object('beat', v_n, 'text', v_text)
+          decision_payload = jsonb_build_object('beat', v_n, 'text', v_text),
+          next = '{"tool": "replan"}'::jsonb, next_done_at = null
         where id = v_step.id;
       elsif p_action = 'redo' then
         if jsonb_typeof(v_payload->'index') is distinct from 'number' then

@@ -168,6 +168,13 @@ async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
       }
     }
     const next = step.next!;
+    if (next.tool === "replan") {
+      // "Edit a beat" on card 1: the storyboard again with the founder's words (a finished plan, no Director).
+      const planned = await adapter.plan(step.clip_id, "create_video", null, { store: true, editOf: step.id });
+      if (planned.kind === "short") return move(admin, step.order_id, "failed", "", { code: "needs_credits", message: planned.message });
+      if (planned.kind === "invalid") return move(admin, step.order_id, "failed", "", { code: "invalid_step", message: planned.message });
+      return move(admin, step.order_id, "waiting_founder", "The edited storyboard waits on you");
+    }
     if (next.tool === "render") {
       // What the open editor would have done when the voice arrived: captions and the squad's words.
       const finished = await finishVideo(ctx, step.clip_id);
@@ -186,37 +193,6 @@ async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
     console.error("[studio-orders] next", step.id, error);
     await move(admin, step.order_id, "failed", "", { code: "studio_error", message: message(error) });
   }
-}
-
-/**
- * "Edit a beat" on card 1: `approval_decide` closed the step as `edited`; the storyboard is planned again with the
- * founder's words (a finished plan, so no Director runs) and card 1 is raised anew under the same order.
- */
-export async function replanEdited(admin: SupabaseClient, stepId: string): Promise<void> {
-  const { data, error } = await admin.from("studio_steps").select("user_id, clip_id, order_id, decision").eq("id", stepId).maybeSingle<{ user_id: string; clip_id: string; order_id: string | null; decision: string | null }>();
-  if (error) throw new Error(`studio_steps read: ${error.message}`);
-  if (!data?.order_id || data.decision !== "edit") return;
-  const { adapter } = brainStudio(data.user_id, data.order_id);
-  try {
-    const planned = await adapter.plan(data.clip_id, "create_video", null, { store: true, editOf: stepId });
-    if (planned.kind === "short") return move(admin, data.order_id, "failed", "", { code: "needs_credits", message: planned.message });
-    if (planned.kind === "invalid") return move(admin, data.order_id, "failed", "", { code: "invalid_step", message: planned.message });
-    return move(admin, data.order_id, "waiting_founder", "The edited storyboard waits on you");
-  } catch (err) {
-    console.error("[studio-orders] replan", stepId, err);
-    await move(admin, data.order_id, "failed", "", { code: "studio_error", message: message(err) });
-  }
-}
-
-/** Re-plans an edited storyboard after the response is sent. */
-export function kickReplan(stepId: string): void {
-  after(async () => {
-    try {
-      await replanEdited(createAdminClient(), stepId);
-    } catch (error) {
-      console.error("[studio-orders] replan", error);
-    }
-  });
 }
 
 /**
