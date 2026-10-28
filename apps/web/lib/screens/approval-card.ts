@@ -80,16 +80,121 @@ const GoalBody = z.object({
   budgetCredits: z.number().int().min(0).nullable(),
 });
 
+/**
+ * Studio snapshots: what `approval_snapshot` (SQL, 20261228090000) stores for the four Studio kinds, field for
+ * field, so the hash the founder approves covers exactly this. Paths and ids only, never signed URLs (a URL changes
+ * on every read). The bodies below are what the card renders, built from a snapshot plus signed URLs.
+ */
+const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** One beat of the storyboard: the voice line, the keyframe (picture) and what moves during the beat. */
+export const StoryBeatSchema = z.object({ words: z.string().max(300), picture: z.string().max(300), motion: z.string().max(300).nullable() });
+
+/** One keyframe on the contact sheet (card 2) or the one being redone. */
+const SheetKeyframeSnapshot = z.object({
+  index: z.number().int().min(0),
+  words: z.string().max(300),
+  /** `media` bucket path of the keyframe image; null while it is not made yet. */
+  path: z.string().max(500).nullable(),
+  /** The text checker's badge: the keyframe may show garbled text. */
+  garbled: z.boolean(),
+  credits: z.number().int().min(0),
+});
+
+/** Card 1: storyboard + keyframe price (`studio_steps.kind = 'script'`). */
+export const ScriptSnapshotSchema = z.object({
+  kind: z.literal("script"),
+  step_id: z.string(),
+  clip_id: z.string(),
+  tool: z.string(),
+  title: z.string().max(200),
+  seconds: z.number().positive().nullable(),
+  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
+  beats: z.array(StoryBeatSchema).max(40),
+  /** Price of the keyframes, held when the founder approves. */
+  price_credits: z.number().int().min(0),
+});
+
+/** Card 2 (contact sheet + video price) and a redone keyframe (`studio_steps.kind = 'price'`). */
+export const PriceSnapshotSchema = z.object({
+  kind: z.literal("price"),
+  step_id: z.string(),
+  clip_id: z.string(),
+  tool: z.string(),
+  title: z.string().max(200),
+  what: z.string().max(200),
+  seconds: z.number().positive().nullable(),
+  wait_minutes: z.number().int().positive().nullable(),
+  /** The contact sheet (card 2) or the one keyframe redone; empty when the price is for shots only. */
+  keyframes: z.array(SheetKeyframeSnapshot).max(40),
+  shots: z.number().int().min(0),
+  price_credits: z.number().int().min(0),
+});
+
+/** Card 3: the render of the edit as it is now (`ref_kind = 'editor_project'`, `ref_id` = clip id). */
+export const FinishedVideoSnapshotSchema = z.object({
+  kind: z.literal("finished_video"),
+  clip_id: z.string(),
+  title: z.string().max(200),
+  /** The document hash approving marks finished; any edit after it changes the hash and supersedes the card. */
+  document_hash: sha256,
+  /** The `render_document` task of this exact document; null while none is done. */
+  render_task_id: z.string().nullable(),
+  render_path: z.string().max(500).nullable(),
+  seconds: z.number().positive().nullable(),
+});
+
+/** Card 4: the shorts cut from one finished edit, approved together (`ref_kind = 'short_batch'`). */
+export const ShortsBatchSnapshotSchema = z.object({
+  kind: z.literal("shorts_batch"),
+  batch_id: z.string(),
+  parent_clip_id: z.string(),
+  title: z.string().max(200),
+  parent_hash: sha256,
+  shorts: z
+    .array(
+      z.object({
+        short_id: z.string(),
+        /** The short's own edit (`clips.kind = 'short'`); null until the Builder made it. */
+        short_clip_id: z.string().nullable(),
+        start: z.number().min(0),
+        end: z.number().positive(),
+        hook: z.string().max(120),
+        reason: z.string().max(300),
+      }),
+    )
+    .max(3),
+});
+
+export const StudioSnapshotSchema = z.discriminatedUnion("kind", [
+  ScriptSnapshotSchema,
+  PriceSnapshotSchema,
+  FinishedVideoSnapshotSchema,
+  ShortsBatchSnapshotSchema,
+]);
+export type StudioSnapshot = z.infer<typeof StudioSnapshotSchema>;
+
+/** `approvals.ref_kind` per Studio card kind. */
+export const STUDIO_REF_KIND = { script: "studio_step", price: "studio_step", finished_video: "editor_project", shorts_batch: "short_batch" } as const;
+
 const ScriptBody = z.object({
   kind: z.literal("script"),
-  beats: z.array(z.object({ words: z.string().max(300), picture: z.string().max(300) })).min(1),
+  stepId: z.string(),
+  seconds: z.number().positive().nullable(),
+  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
+  beats: z.array(StoryBeatSchema).min(1),
   /** Price of the next stage (keyframes), shown before anything is spent. */
   nextPriceCredits: z.number().int().min(0).nullable(),
 });
 
 const PriceBody = z.object({
   kind: z.literal("price"),
+  stepId: z.string(),
   what: z.string().max(200),
+  /** Contact sheet tiles; each has its own Redo (a new `price` card for that keyframe). Empty for shots only. */
+  keyframes: z.array(
+    z.object({ index: z.number().int().min(0), label: z.string().max(300), thumbUrl: z.url().nullable(), garbled: z.boolean(), credits: z.number().int().min(0) }),
+  ),
   shots: z.number().int().min(0),
   seconds: z.number().positive(),
   readyInMinutes: z.number().int().positive().nullable(),
@@ -98,17 +203,34 @@ const PriceBody = z.object({
 const FinishedVideoBody = z.object({
   kind: z.literal("finished_video"),
   clipId: z.string(),
+  /** Sent back with "Mark finished": a later edit refuses it. */
+  documentHash: sha256,
   seconds: z.number().positive(),
-  /** Signed URL of the preview file; null until the render is done. */
+  /** Signed URL of the render; null until the render is done. */
   previewUrl: z.url().nullable(),
+  /** Seconds into the render shown as the still before it plays. */
+  frameAt: z.number().min(0),
 });
 
 const ShortsBatchBody = z.object({
   kind: z.literal("shorts_batch"),
+  batchId: z.string(),
+  parentClipId: z.string(),
   source: z.string().max(200),
+  /** The squad cuts 3; fewer only when the reviewer found fewer good ranges. */
   shorts: z
-    .array(z.object({ start: z.number().min(0), end: z.number().positive(), hook: z.string().max(120), previewUrl: z.url().nullable() }))
-    .min(1),
+    .array(
+      z.object({
+        shortClipId: z.string().nullable(),
+        start: z.number().min(0),
+        end: z.number().positive(),
+        hook: z.string().max(120),
+        reason: z.string().max(300),
+        previewUrl: z.url().nullable(),
+      }),
+    )
+    .min(1)
+    .max(3),
 });
 
 const SlideshowBody = z.object({
@@ -186,6 +308,18 @@ export const PRIMARY_ACTION: Record<CardKind, string> = {
   slideshow: "Approve",
   schedule: "Approve time",
   correction: "Keep as a rule",
+};
+
+/**
+ * Studio actions (`approval_decide`, A1), named as `components/cards/decide.ts` sends them: redo one keyframe on a
+ * contact sheet, cancel a script or a price (releases any hold), send back a finished video or a shorts batch.
+ * Editing a beat (`edit {beat, text}`) re-plans the script and raises a new card.
+ */
+export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch", readonly string[]> = {
+  script: ["approve", "edit", "cancel"],
+  price: ["approve", "redo", "cancel"],
+  finished_video: ["approve", "send_back"],
+  shorts_batch: ["approve", "send_back"],
 };
 
 /** Kinds whose decision works in wave 1 (A0); the others show their button disabled with the reason. */

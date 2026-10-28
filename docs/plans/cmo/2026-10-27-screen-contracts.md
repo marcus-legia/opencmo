@@ -81,13 +81,22 @@ POST /api/v1/approvals/[id]   { action, contentHash, text?, reason?, goal?, targ
 ``` `PRIMARY_ACTION` names each kind's one filled button;
 `DECIDABLE_IN_WAVE_1` lists the kinds whose decision works in this PR.
 
+Studio cards (P2): the snapshot shapes `approval_snapshot` writes are `ScriptSnapshotSchema`, `PriceSnapshotSchema`,
+`FinishedVideoSnapshotSchema` and `ShortsBatchSnapshotSchema` (snake_case, field for field with the SQL; paths and ids,
+never signed URLs). The body adds signed URLs. Studio actions (`STUDIO_ACTIONS`): script approve | edit (beat, text) | cancel ·
+price approve | redo (a keyframe index) | cancel · finished_video approve | send_back · shorts_batch approve | send_back.
+
 | Kind | Body source | Live with |
 |---|---|---|
 | post | `content_items` (text, alternates, checks, rationale) | A0 |
 | reply | `opportunities` (thread, score parts, quotes, reply) | A0 |
 | goal | `cmo_goals` + the week's order tree | A0 |
 | correction | `cmo_corrections` | B0 + A0 |
-| script, price, finished_video, shorts_batch, slideshow | Studio team cards | A1 |
+| script | `studio_steps` (`kind = 'script'`): storyboard beats (words, picture, motion), keyframe price | P2 A1 |
+| price | `studio_steps` (`kind = 'price'`): contact-sheet keyframes or shots, wait, exact price | P2 A1 |
+| finished_video | `editor_projects` + the `render_document` task of the current document hash | P2 A3 |
+| shorts_batch | `short_batches` + `shorts` (range, hook, reason; each short its own `clips` row, kind `short`) | P2 A3 |
+| slideshow | Studio Slideshow | P5 |
 | schedule | `schedule_slots` | A3 |
 
 ## S4 Analytics (`analytics.ts`)

@@ -1,0 +1,14 @@
+{
+  "$schema": "./capabilities.schema.json",
+  "$comment": "The capability registry (docs/architecture/brain.md §7, P2 F1). Tools stay where they are; this only lists them. Credits match cmo_job_price in SQL; check:contracts (apps/web/lib/cmo/capabilities.check.ts) holds both. Studio entry points arrive with A4.",
+  "capabilities": [
+    { "name": "onboard", "department": "brain", "effect": "write", "approval": "none", "callers": ["ui"], "order_kind": null, "max_steps": 10, "credits": 0, "input": "OnboardInput" },
+    { "name": "plan_week", "department": "brain", "effect": "spend", "approval": "founder", "callers": ["brain", "assistant", "mcp", "ui"], "order_kind": "plan_week", "max_steps": 10, "credits": 1, "input": "PlanWeekInput" },
+    { "name": "post_draft", "department": "writer", "effect": "spend", "approval": "founder", "callers": ["brain", "assistant", "mcp", "ui"], "order_kind": "post_draft", "max_steps": 12, "credits": 1, "input": "DraftPostInput" },
+    { "name": "sales_scan", "department": "sales", "effect": "spend", "approval": "founder", "callers": ["brain", "assistant", "mcp", "ui"], "order_kind": "sales_scan", "max_steps": 30, "credits": 5, "input": "SalesScanInput" },
+    { "name": "competitor_research", "department": "research", "effect": "spend", "approval": "none", "callers": ["brain", "assistant", "mcp"], "order_kind": "competitor_research", "max_steps": 15, "credits": 2, "input": "CompetitorResearchInput" },
+    { "name": "pull_metrics", "department": "research", "effect": "read", "approval": "none", "callers": ["brain"], "order_kind": "pull_metrics", "max_steps": 10, "credits": 0, "input": "PullMetricsInput" },
+    { "name": "summarize_memory", "department": "brain", "effect": "write", "approval": "none", "callers": ["brain"], "order_kind": "summarize_memory", "max_steps": 10, "credits": 0, "input": "SummarizeMemoryInput" },
+    { "name": "review_week", "department": "research", "effect": "write", "approval": "founder", "callers": ["brain"], "order_kind": "review_week", "max_steps": 10, "credits": 0, "input": "ReviewWeekInput" }
+  ]
+}

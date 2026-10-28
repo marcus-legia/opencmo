@@ -1552,7 +1552,7 @@ CREATE TABLE public.approvals (
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
-    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text]))),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
@@ -1664,10 +1664,13 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
   v_kind := v_snapshot->>'kind';
-  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash)
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits)
   values (p_user, v_kind,
-    case v_kind when 'post' then 'writer' when 'reply' then 'sales' else 'brain' end,
-    p_ref_kind, p_ref_id, v_snapshot, v_hash);
+    case v_kind when 'post' then 'writer' when 'reply' then 'sales'
+      when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
+      when 'shorts_batch' then 'studio' else 'brain' end,
+    p_ref_kind, p_ref_id, v_snapshot, v_hash,
+    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end);
 end;
 $$;
 
@@ -1700,6 +1703,50 @@ begin
     when 'correction' then
       select jsonb_build_object('kind', 'correction', 'rule', rule, 'source_edits', source_edits)
       into v from public.cmo_corrections where id = p_ref_id;
+    when 'studio_step' then
+      -- Card 1 (`script`): the storyboard and the keyframe price. Card 2 and a redone keyframe (`price`): the
+      -- keyframes (contact sheet) or the shots, the wait and the exact price.
+      select case s.kind
+        when 'script' then jsonb_build_object('kind', 'script', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
+          'title', coalesce(s.card->>'title', ''), 'seconds', s.card->'seconds', 'aspect', s.card->'aspect',
+          'beats', case when jsonb_typeof(s.card->'beats') = 'array' then s.card->'beats' else '[]'::jsonb end,
+          'price_credits', s.price_credits)
+        else jsonb_build_object('kind', 'price', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
+          'title', coalesce(s.card->>'title', ''), 'what', coalesce(s.card->>'what', ''), 'seconds', s.card->'seconds',
+          'wait_minutes', s.card->'wait_minutes',
+          'keyframes', case when jsonb_typeof(s.card->'keyframes') = 'array' then s.card->'keyframes' else '[]'::jsonb end,
+          'shots', coalesce(s.card->'shots', '0'::jsonb), 'price_credits', s.price_credits)
+        end
+      into v from public.studio_steps s where s.id = p_ref_id;
+    when 'editor_project' then
+      -- The finished-video card shows the render of the document as it is now; a render of an older document is
+      -- not this video, so it shows none.
+      select jsonb_build_object('kind', 'finished_video', 'clip_id', c.id, 'title', coalesce(c.hook, ''),
+        'document_hash', public.editor_document_hash(p.document),
+        'render_task_id', r.id, 'render_path', r.output_path, 'seconds', r.duration)
+      into v
+      from public.editor_projects p
+      join public.clips c on c.id = p.clip_id
+      left join lateral (
+        select t.id, t.output_path, t.duration from public.tasks t
+        where t.clip_id = p.clip_id and t.kind = 'render_document' and t.status = 'done'
+          and t.settings_hash = public.editor_document_hash(p.document)
+        order by t.finished_at desc nulls last, t.created_at desc
+        limit 1
+      ) r on true
+      where p.clip_id = p_ref_id;
+    when 'short_batch' then
+      select jsonb_build_object('kind', 'shorts_batch', 'batch_id', b.id, 'parent_clip_id', b.parent_clip_id,
+        'title', coalesce(c.hook, ''), 'parent_hash', b.parent_hash,
+        'shorts', coalesce((
+          select jsonb_agg(jsonb_build_object('short_id', s.id, 'short_clip_id', s.short_clip_id,
+            'start', s.source_start, 'end', s.source_end, 'hook', s.hook, 'reason', s.reason)
+            order by s.source_start, s.id)
+          from public.shorts s where s.batch_id = b.id), '[]'::jsonb))
+      into v
+      from public.short_batches b
+      left join public.clips c on c.id = b.parent_clip_id
+      where b.id = p_ref_id;
     else
       raise exception 'Unknown card source.' using errcode = '22023';
   end case;
@@ -4906,7 +4953,11 @@ CREATE TABLE public.editor_projects (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     document jsonb NOT NULL,
     generated_document jsonb,
+    finished_at timestamp with time zone,
+    finished_hash text,
     CONSTRAINT editor_projects_document_check CHECK (((document IS NULL) OR (octet_length((document)::text) < 262144))),
+    CONSTRAINT editor_projects_finished_check CHECK (((finished_at IS NULL) = (finished_hash IS NULL))),
+    CONSTRAINT editor_projects_finished_hash_check CHECK ((finished_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT editor_projects_generated_document_check CHECK (((generated_document IS NULL) OR (octet_length((generated_document)::text) < 262144))),
     CONSTRAINT editor_projects_manifest_check CHECK ((pg_column_size(manifest) < 65536))
 );
@@ -6013,7 +6064,9 @@ CREATE TABLE public.clips (
     kind text DEFAULT 'full'::text NOT NULL,
     settings jsonb,
     settings_hash text,
-    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text]))),
+    parent_clip_id uuid,
+    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text, 'short'::text]))),
+    CONSTRAINT clips_parent_short_check CHECK (((parent_clip_id IS NULL) OR (kind = 'short'::text))),
     CONSTRAINT clips_settings_hash_check CHECK ((((settings IS NULL) AND (settings_hash IS NULL)) OR ((jsonb_typeof(settings) = 'object'::text) AND COALESCE((settings_hash ~ '^[0-9a-f]{64}$'::text), false)))),
     CONSTRAINT clips_settings_size_check CHECK (((settings IS NULL) OR (pg_column_size(settings) < 65536))),
     CONSTRAINT clips_source_range_check CHECK ((source_end > source_start))
@@ -9629,6 +9682,50 @@ CREATE TABLE public.scene_codes (
 
 
 --
+-- Name: short_batches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.short_batches (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    parent_clip_id uuid NOT NULL,
+    parent_hash text NOT NULL,
+    order_id uuid,
+    status text DEFAULT 'picking'::text NOT NULL,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT short_batches_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT short_batches_parent_hash_check CHECK ((parent_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT short_batches_status_check CHECK ((status = ANY (ARRAY['picking'::text, 'building'::text, 'rendering'::text, 'waiting_founder'::text, 'approved'::text, 'sent_back'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: shorts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shorts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    parent_clip_id uuid,
+    short_clip_id uuid,
+    source_start numeric NOT NULL,
+    source_end numeric NOT NULL,
+    hook text NOT NULL,
+    reason text NOT NULL,
+    status text DEFAULT 'building'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT shorts_check CHECK (((source_end > source_start) AND ((source_end - source_start) <= (180)::numeric))),
+    CONSTRAINT shorts_hook_check CHECK (((char_length(hook) >= 1) AND (char_length(hook) <= 120))),
+    CONSTRAINT shorts_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 300))),
+    CONSTRAINT shorts_source_start_check CHECK ((source_start >= (0)::numeric)),
+    CONSTRAINT shorts_status_check CHECK ((status = ANY (ARRAY['building'::text, 'rendering'::text, 'ready'::text, 'approved'::text, 'sent_back'::text, 'failed'::text])))
+);
+
+
+--
 -- Name: storage_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9663,6 +9760,35 @@ CREATE SEQUENCE public.storage_deletions_id_seq
 --
 
 ALTER SEQUENCE public.storage_deletions_id_seq OWNED BY public.storage_deletions.id;
+
+
+--
+-- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.studio_steps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    clip_id uuid NOT NULL,
+    tool text NOT NULL,
+    kind text NOT NULL,
+    input jsonb NOT NULL,
+    card jsonb NOT NULL,
+    price_credits integer NOT NULL,
+    status text DEFAULT 'waiting'::text NOT NULL,
+    order_id uuid,
+    redo_of uuid,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT studio_steps_card_check CHECK (((jsonb_typeof(card) = 'object'::text) AND (octet_length((card)::text) <= 32768))),
+    CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
+    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
+    CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
+    CONSTRAINT studio_steps_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'running'::text, 'done'::text, 'cancelled'::text, 'failed'::text]))),
+    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text))
+);
 
 
 --
@@ -10274,6 +10400,30 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: short_batches short_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shorts shorts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shorts shorts_short_clip_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_short_clip_id_key UNIQUE (short_clip_id);
+
+
+--
 -- Name: storage_deletions storage_deletions_bucket_path_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10287,6 +10437,14 @@ ALTER TABLE ONLY public.storage_deletions
 
 ALTER TABLE ONLY public.storage_deletions
     ADD CONSTRAINT storage_deletions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: studio_steps studio_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_pkey PRIMARY KEY (id);
 
 
 --
@@ -10421,6 +10579,13 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 --
 
 CREATE INDEX caption_translations_user_idx ON public.caption_translations USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: clips_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clips_parent_idx ON public.clips USING btree (parent_clip_id) WHERE (parent_clip_id IS NOT NULL);
 
 
 --
@@ -10746,6 +10911,34 @@ CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, 
 
 
 --
+-- Name: short_batches_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_parent_idx ON public.short_batches USING btree (parent_clip_id);
+
+
+--
+-- Name: short_batches_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_user_idx ON public.short_batches USING btree (user_id, status, created_at);
+
+
+--
+-- Name: shorts_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_batch_idx ON public.shorts USING btree (batch_id);
+
+
+--
+-- Name: shorts_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_user_idx ON public.shorts USING btree (user_id, created_at);
+
+
+--
 -- Name: storage_deletions_job_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10757,6 +10950,27 @@ CREATE INDEX storage_deletions_job_idx ON public.storage_deletions USING btree (
 --
 
 CREATE INDEX storage_deletions_work_idx ON public.storage_deletions USING btree (attempts, id);
+
+
+--
+-- Name: studio_steps_clip_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_clip_idx ON public.studio_steps USING btree (clip_id);
+
+
+--
+-- Name: studio_steps_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_order_idx ON public.studio_steps USING btree (order_id) WHERE (order_id IS NOT NULL);
+
+
+--
+-- Name: studio_steps_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_user_idx ON public.studio_steps USING btree (user_id, status, created_at);
 
 
 --
@@ -11137,6 +11351,14 @@ ALTER TABLE ONLY public.caption_translations
 
 ALTER TABLE ONLY public.clips
     ADD CONSTRAINT clips_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: clips clips_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clips
+    ADD CONSTRAINT clips_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
 
 
 --
@@ -11561,6 +11783,94 @@ ALTER TABLE ONLY public.projects
 
 ALTER TABLE ONLY public.scene_codes
     ADD CONSTRAINT scene_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: short_batches short_batches_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: short_batches short_batches_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
+
+
+--
+-- Name: short_batches short_batches_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shorts shorts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.short_batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shorts shorts_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
+
+
+--
+-- Name: shorts shorts_short_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_short_clip_id_fkey FOREIGN KEY (short_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
+
+
+--
+-- Name: shorts shorts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: studio_steps studio_steps_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_clip_id_fkey FOREIGN KEY (clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
+
+
+--
+-- Name: studio_steps studio_steps_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: studio_steps studio_steps_redo_of_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_redo_of_fkey FOREIGN KEY (redo_of) REFERENCES public.studio_steps(id) ON DELETE SET NULL;
+
+
+--
+-- Name: studio_steps studio_steps_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -12065,6 +12375,27 @@ CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO aut
 
 
 --
+-- Name: short_batches read own short batches; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own short batches" ON public.short_batches FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: shorts read own shorts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own shorts" ON public.shorts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: studio_steps read own studio steps; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own studio steps" ON public.studio_steps FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: work_orders read own work orders; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -12078,10 +12409,28 @@ CREATE POLICY "read own work orders" ON public.work_orders FOR SELECT TO authent
 ALTER TABLE public.scene_codes ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: short_batches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.short_batches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: shorts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: storage_deletions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.storage_deletions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: studio_steps; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.studio_steps ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: tasks; Type: ROW SECURITY; Schema: public; Owner: -

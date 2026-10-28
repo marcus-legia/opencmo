@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencmo.io/contracts/capabilities.schema.json",
+  "title": "OpenCMO capability registry",
+  "description": "Every Studio entry point and every CMO job, with what it does, who approves it and who may call it (docs/architecture/brain.md §7). apps/web/lib/cmo/capabilities.check.ts validates capabilities.json against the same rules in check:contracts.",
+  "type": "object",
+  "required": ["capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "required": ["name", "department", "effect", "approval", "callers", "order_kind", "max_steps", "credits", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z_]{1,40}$", "description": "The tool, op or job name as the code calls it." },
+        "department": { "enum": ["brain", "research", "writer", "studio", "sales", "schedule", "publish"] },
+        "effect": {
+          "enum": ["read", "write", "spend", "outbound"],
+          "description": "read: changes nothing; write: changes the founder's own data; spend: holds credits; outbound: reaches a platform."
+        },
+        "approval": {
+          "enum": ["none", "founder", "price"],
+          "description": "none: runs as asked; founder: a card the founder decides; price: a card that shows the price before anything is spent."
+        },
+        "callers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["brain", "assistant", "mcp", "ui"] },
+          "description": "Who may call it. The brain gets no private path: a caller not listed here is refused by check:contracts."
+        },
+        "order_kind": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z_]{1,40}$",
+          "description": "The work_orders.kind it runs under; null when it never runs as an order."
+        },
+        "max_steps": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Effort budget: steps one run may take." },
+        "credits": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "const": "quote" }],
+          "description": "The fixed price, or quote when the price comes from the plan (shown on the card)."
+        },
+        "input": { "type": "string", "minLength": 1, "maxLength": 80, "description": "The name of the input type or schema in code." },
+        "$comment": { "type": "string" }
+      }
+    }
+  }
+}

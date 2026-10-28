@@ -8,9 +8,9 @@
  */
 import assert from "node:assert/strict";
 
-import { ApprovalCardSchema, CARD_KINDS } from "./approval-card";
+import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
-import { ALL_KINDS, STATE_CARDS } from "./fixtures/cards";
+import { ALL_KINDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
 
@@ -152,6 +152,17 @@ check("compose: a live field that breaks the contract drops back alone", () => {
   } finally {
     console.warn = warn;
   }
+});
+
+// P2 A0: the Studio snapshots (SQL `approval_snapshot`) parse, and every Studio kind has one.
+for (const snapshot of STUDIO_SNAPSHOTS) {
+  check(`studio snapshot ${snapshot.kind} parses`, () => void StudioSnapshotSchema.parse(snapshot));
+}
+check("every Studio kind has a snapshot and a source", () => {
+  for (const kind of Object.keys(STUDIO_REF_KIND)) assert.ok(STUDIO_SNAPSHOTS.some((s) => s.kind === kind), kind);
+});
+check("a snapshot never holds a signed URL", () => {
+  for (const snapshot of STUDIO_SNAPSHOTS) assert.doesNotMatch(JSON.stringify(snapshot), /https?:\/\//, snapshot.kind);
 });
 
 if (failures.length) {

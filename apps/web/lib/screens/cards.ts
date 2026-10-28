@@ -16,7 +16,7 @@ export type ApprovalRow = {
   id: string;
   kind: CardKind;
   department: Department;
-  ref_kind: "content_item" | "opportunity" | "goal" | "correction";
+  ref_kind: "content_item" | "opportunity" | "goal" | "correction" | "studio_step" | "editor_project" | "short_batch";
   ref_id: string;
   status: ApprovalCard["status"];
   snapshot: Record<string, unknown>;

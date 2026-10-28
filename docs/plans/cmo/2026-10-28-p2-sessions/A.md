@@ -17,18 +17,18 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 
 ## Todo
 
-- [ ] **A0 Contracts (push first)**
-  - [ ] 1. Migration `*_p2_studio.sql` skeleton with grants, RLS read-own and pgTAP: `studio_steps` (id, user,
+- [x] **A0 Contracts (push first)**
+  - [x] 1. Migration `*_p2_studio.sql` skeleton with grants, RLS read-own and pgTAP: `studio_steps` (id, user,
         clip_id, tool, input jsonb, price_credits, status `waiting|approved|running|done|cancelled|failed`, order_id,
         created_at, decided_at), `shorts` (id, user, parent_clip_id, short_clip_id, source_start, source_end, hook,
         reason, batch_id, status), `short_batches` (id, user, parent_clip_id, order_id, status), `clips.kind` gains
         `short` (with `parent_clip_id`), `editor_projects.finished_at` + `finished_hash`.
-  - [ ] 2. `approvals.ref_kind` gains `studio_step`, `editor_project`, `short_batch`; `approval_snapshot` cases for
+  - [x] 2. `approvals.ref_kind` gains `studio_step`, `editor_project`, `short_batch`; `approval_snapshot` cases for
         them (fields below).
-  - [ ] 3. `lib/screens/approval-card.ts`: snapshot types for `script` (beats: words, picture, motion), `price`
+  - [x] 3. `lib/screens/approval-card.ts`: snapshot types for `script` (beats: words, picture, motion), `price`
         (credits, wait, keyframes or shots), `finished_video` (clip id, length, frame, document hash) and
         `shorts_batch` (3 × range, hook, reason, preview); fixtures for each.
-  - [ ] 4. `packages/contracts/capabilities.json` JSON schema (fields from `brain.md` §7) with today's CMO jobs.
+  - [x] 4. `packages/contracts/capabilities.json` JSON schema (fields from `brain.md` §7) with today's CMO jobs.
 - [ ] **A4 Registry**: every Studio entry point and CMO job listed; `check:contracts` fails on a caller path the
       registry does not list (the brain, the Assistant, MCP, the UI).
 - [ ] **A1 Studio steps**: RPCs `studio_step_raise` (from the adapter's `plan`, holds nothing), `approval_decide`
@@ -70,3 +70,25 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 - [from C → A] **A5 Studio item fields for C2/C3.** `StudioItem` needs `clipId` (the edit Mark finished and Cut shorts
   act on), `documentHash` (the hash the founder sees, sent with Mark finished from the Studio grid) and `canCutShorts`
   (finished at the current document). `canMarkFinished` stays as is.
+  - [A] Answered in the A0 commit: `price.keyframes` is `{ index, label, thumbUrl | null, garbled, credits }[]` (empty
+    when the price is for shots only), `script.beats[].motion` (nullable), `finished_video.documentHash`, and
+    `frameAt` (seconds into the render to show as the still: there is no poster image, so C seeks the preview there),
+    `shorts_batch.shorts[].reason` and `shortClipId` (plus `batchId`, `parentClipId`). The SQL snapshots keep the
+    card's own names (`words`, `path`); the loader maps them.
+  - [A] Accepted as named: `redo {index}`, `cancel {reason?}` (script and price), `send_back {reason?}` (finished
+    video and shorts batch), `edit {beat, text}` (script). `STUDIO_ACTIONS` in `approval-card.ts` lists them per kind.
+    The route schema, `approval_decide` and the decidable set come with A1; a decline on a `needs_credits` card will be
+    accepted there.
+  - [A] Noted for A5: `clipId`, `documentHash`, `canCutShorts` on `StudioItem`.
+
+## Notes
+
+- A0 (`20261228090000_p2_studio.sql`, `205_p2_studio.test.sql`): `studio_steps.card` is what the adapter's `plan`
+  returns for the card; `approval_snapshot` reads only these fields of it. Script: `title`, `seconds`, `aspect`,
+  `beats[] {words, picture, motion}`. Price: `title`, `what`, `seconds`, `wait_minutes`, `keyframes[] {index, words,
+  path, garbled, credits}`, `shots`. Snapshots hold storage paths, never signed URLs. Shapes in TS:
+  `ScriptSnapshotSchema`, `PriceSnapshotSchema`, `FinishedVideoSnapshotSchema`, `ShortsBatchSnapshotSchema`
+  (`lib/screens/approval-card.ts`). `studio_steps.redo_of` links a redone keyframe to the step it replaces.
+- pgTAP was run in a cloud session against `supabase/postgres:17.6.1.054` without GoTrue or storage-api: 112 files
+  pass, the same 4 fail as on `7664261` (`010_rls`, `040_worker_d2_publication`, `055_web_d3_security_completion`,
+  `090_exports_bucket`: storage and Realtime pieces that container does not have). CI's run is the one that counts.
