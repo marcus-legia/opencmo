@@ -104,6 +104,9 @@ html[data-ui="v2"] {
 .v2-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 12px; padding: 16px 20px; border-bottom: 1px solid var(--v2-line); }
 .v2-panel-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font: 500 12px var(--v2-mono); letter-spacing: .12em; text-transform: uppercase; }
 .v2-panel-link { font: 500 12px var(--v2-mono); letter-spacing: .08em; text-transform: uppercase; }
+.v2-panel.is-white { background: var(--v2-card); }
+.v2-panel-head.has-sub { border-bottom: 0; padding-bottom: 4px; }
+.v2-panel-sub { padding: 0 20px 14px; border-bottom: 1px solid var(--v2-line); font-size: 13px; color: var(--v2-ink2); }
 .v2-panel-body { padding: 16px 20px; }
 .v2-panel-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--v2-paper3); font-size: 13px; }
 
@@ -187,6 +190,8 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-shell { min-height: 100vh; display: flex; background: var(--v2-paper); }
 .v2-main { flex: 1 1 auto; min-width: 0; border-left: 1px solid var(--v2-line); }
 /* The rail is sticky (shorter than a long page), so the dividing rule sits on the main column. */
+.v2-shell.is-bare .v2-main { border-left: 0; }
+.v2-bare-brand { max-width: 920px; margin: 0 auto; padding: 28px 16px 0; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; letter-spacing: -.04em; }
 
 .v2-rail {
   position: sticky; top: 0; flex: 0 0 232px; height: 100vh; overflow-y: auto;
@@ -417,3 +422,13 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
   .v2-card-body { padding: 0 14px 14px; }
 }
 .v2 .v2-card-state.is-needs_credits a { color: var(--v2-waiting); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Ask your CMO: the chat in a sheet on the right (desktop) or from the bottom (phone) */
+.v2-ask { margin: 0 0 0 auto; width: min(480px, 100vw); max-width: none; height: 100vh; max-height: none; padding: 0; border: 0; border-left: 1px solid var(--v2-line); background: var(--v2-paper2); color: var(--v2-ink); }
+.v2-ask::backdrop { background: rgb(43 39 35 / .4); }
+.v2-ask-body { height: 100%; display: flex; flex-direction: column; }
+.v2-ask-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--v2-line); }
+.v2-ask-body > .cmo-chat { flex: 1; min-height: 0; }
+@media (max-width: 760px) {
+  .v2-ask { margin: auto 0 0; width: 100vw; height: 88vh; border-left: 0; border-top: 1px solid var(--v2-line); }
+}

@@ -53,7 +53,10 @@ function workingLabel(tool: string): string {
 // Tools whose result is a new card, calendar item or document version; the workspace reloads so it shows up.
 const CARD_TOOLS = new Set(["create_task", "set_week_goal", "update_document"]);
 
-export function ChatPanel({ ws, onToast, onWorkStarted }: { ws: Workspace; onToast: (message: string) => void; onWorkStarted: () => void | Promise<void> }) {
+/** What the chat reads of the workspace; the v2 Dashboard's ask sheet passes only this. */
+export type ChatSource = Pick<Workspace, "chat" | "chatTitle" | "demo"> & { live: Pick<Workspace["live"], "chat"> };
+
+export function ChatPanel({ ws, onToast, onWorkStarted }: { ws: ChatSource; onToast: (message: string) => void; onWorkStarted: () => void | Promise<void> }) {
   const live = ws.live.chat;
   const [messages, setMessages] = useState<ChatMessage[]>(ws.chat);
   const [title, setTitle] = useState(ws.chatTitle);

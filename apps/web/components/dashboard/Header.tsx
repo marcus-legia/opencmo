@@ -12,7 +12,6 @@ export function headline(count: number): string {
   return count === 1 ? "1 thing waits on you." : `${count} things wait on you.`;
 }
 
-const ASK_LATER = "Asking your CMO from the Dashboard opens with the brain chat.";
 
 /** The viewer's own clock: the Dashboard has no time zone field, and the browser's is the one the founder reads. */
 function useClock() {
@@ -38,12 +37,14 @@ export function DashboardHeader({
   pausedAt,
   pauseLive,
   onPaused,
+  onAsk,
 }: {
   count: number;
   goal: { done: number; total: number };
   pausedAt: string | null;
   pauseLive: boolean;
   onPaused: (pausedAt: string | null) => void;
+  onAsk: () => void;
 }) {
   const { clock, day, short } = useClock();
   const pct = goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
@@ -56,7 +57,7 @@ export function DashboardHeader({
             <span>OpenCMO</span>
           </span>
           <span className="v2-actions">
-            <Button variant="secondary" icon aria-label="Ask your CMO" disabled title={ASK_LATER}>
+            <Button variant="secondary" icon aria-label="Ask your CMO" onClick={onAsk}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                 <path d="M4 5h16v11H9l-5 4z" />
               </svg>
@@ -85,7 +86,7 @@ export function DashboardHeader({
 
         <div className="v2-actions v2-dash-buttons">
           <span className="v2-dash-wide">
-            <Button variant="secondary" disabled title={ASK_LATER}>
+            <Button variant="secondary" onClick={onAsk}>
               Ask your CMO
             </Button>
           </span>

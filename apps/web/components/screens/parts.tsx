@@ -1,11 +1,11 @@
 /**
  * Page-level pieces of Session C's screens that `components/ui/` (Session B, U1) does not have: the page
- * wrapper and header, filter pills, a panel subtitle and foot, error and loading blocks. The primitives
+ * wrapper and header, filter pills, error and loading blocks. The primitives
  * themselves come from `@/components/ui`.
  */
 import type { ReactNode } from "react";
 
-import { MonoLabel, Panel as UiPanel, SampleTag } from "@/components/ui";
+import { MonoLabel, SampleTag } from "@/components/ui";
 
 import "./screens.css";
 
@@ -53,40 +53,8 @@ export function PageHeader({
   );
 }
 
-/**
- * B's `Panel` with what the frames add on some panels: a line under the title (`sub`) and a foot. Asked of B in
- * the sessions file's Requests; until then the extras render as the panel's first and last children.
- */
-export function Panel({
-  id,
-  title,
-  sub,
-  sample,
-  actions,
-  foot,
-  white,
-  className,
-  children,
-}: {
-  id: string;
-  title: ReactNode;
-  sub?: ReactNode;
-  sample?: boolean;
-  actions?: ReactNode;
-  foot?: ReactNode;
-  /** Card white instead of paper2 (Voice, Skills, the thread detail). */
-  white?: boolean;
-  className?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <UiPanel id={id} title={title} sample={sample} actions={actions} className={cx(white && "scr-white", className)}>
-      {sub ? <p className="scr-panel-sub">{sub}</p> : null}
-      {children}
-      {foot ? <div className="v2-panel-foot v2-muted">{foot}</div> : null}
-    </UiPanel>
-  );
-}
+/** B's `Panel` now carries `sub`, `foot` and `white` itself; pages keep importing it from here. */
+export { Panel } from "@/components/ui";
 
 /** Filter chips that act as a one-of choice (platforms, insight types). */
 export function Pills<T extends string>({

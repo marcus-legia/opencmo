@@ -6,17 +6,31 @@
  * Data: `DashboardScreen` from `/api/v1/screens/dashboard`; a block whose `live` flag is false shows "Sample data".
  */
 
+import { useSearchParams } from "next/navigation";
+
+import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, Kpi, KpiStrip, Panel } from "@/components/ui";
 
 import { ApprovalQueue } from "./ApprovalQueue";
+import { AskSheet } from "./AskSheet";
 import { DashboardHeader } from "./Header";
 import { LiveLog } from "./LiveLog";
 import { ResultsPanel, TodayPanel } from "./Tables";
 import { TeamGraph, TeamList } from "./TeamGraph";
 import { useDashboard } from "./useDashboard";
 
-export function Dashboard() {
+export function Dashboard({ chatLive }: { chatLive: boolean }) {
   const { state, decideCard, waiting, setPausedAt, reload } = useDashboard();
+  const { toast } = useShellState();
+  // `?ask=1` is the sheet's own address (the Brain page links to it). The History API, not the router: Next keeps
+  // useSearchParams in sync with it, and a router change would render this dynamic page again on the server.
+  const asking = useSearchParams().get("ask") === "1";
+  const setAsking = (open: boolean) => {
+    const url = new URL(window.location.href);
+    if (open) url.searchParams.set("ask", "1");
+    else url.searchParams.delete("ask");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  };
 
   if (state.status === "loading") {
     return (
@@ -48,7 +62,8 @@ export function Dashboard() {
 
   return (
     <div className="v2-dash" data-testid="v2-dashboard">
-      <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} />
+      <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} onAsk={() => setAsking(true)} />
+      <AskSheet open={asking} chatLive={chatLive} onClose={() => setAsking(false)} onWorkStarted={() => void reload()} onToast={toast} />
 
       <div className="v2-dash-week">
         <KpiStrip label="This week, live">

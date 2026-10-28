@@ -12,8 +12,6 @@
 .scr .scr-mono { font: 500 11px var(--v2-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--v2-ink2); }
 
 /* Panel extras (`parts.tsx` Panel): the line under the title belongs to the head, as on the frames. */
-.v2-panel-head:has(+ .scr-panel-sub) { border-bottom: 0; padding-bottom: 4px; }
-.scr-panel-sub { padding: 0 20px 14px; border-bottom: 1px solid var(--v2-line); font-size: 13px; color: var(--v2-ink2); }
 .v2-panel.scr-white { background: var(--v2-card); }
 .v2-panel.scr-dark { background: var(--v2-char); border-color: var(--v2-char); color: var(--v2-char-ink); }
 .scr .scr-dark .scr-mono { color: var(--v2-char-mute); }

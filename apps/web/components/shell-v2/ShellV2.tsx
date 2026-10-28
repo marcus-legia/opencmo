@@ -15,8 +15,15 @@ import type { ReactNode } from "react";
 import { api } from "@/components/clipping/api";
 import { useActiveJobs } from "@/components/clipping/ActiveJobs";
 import { Toast } from "@/components/clipping/ui";
-import { ShellAccountContext, WebShell, type AccountSummary } from "@/components/clipping/web/WebShell";
+import {
+  ShellAccountContext,
+  WebShell,
+  type AccountSummary,
+} from "@/components/clipping/web/WebShell";
 
+import { studioItemHref } from "@/components/screens/studio/href";
+
+import { Logo } from "./Logo";
 import { isShown, type DepartmentName, type NavEntry } from "./nav";
 import { Rail } from "./Rail";
 import { ShellStateContext, type ShellState } from "./ShellState";
@@ -36,6 +43,8 @@ type Props = {
 
 /** Segments that keep today's shell: the editor needs the whole width and keeps its current look. */
 const CLASSIC: ReadonlySet<string> = new Set(["editor", "video"]);
+/** Segments drawn without the rail and tab bar (Setup.dc.html): first run has nothing to navigate to yet. */
+const BARE: ReadonlySet<string> = new Set(["setup"]);
 
 export function ShellV2(props: Props) {
   const segment = useSelectedLayoutSegment();
@@ -46,11 +55,27 @@ export function ShellV2(props: Props) {
   return <V2Frame {...props} segment={segment} />;
 }
 
-function V2Frame({ credits, plan, email, userId, pending, hideSample, children, segment }: Props & { segment: string | null }) {
+function V2Frame({
+  credits,
+  plan,
+  email,
+  userId,
+  pending,
+  hideSample,
+  children,
+  segment,
+}: Props & { segment: string | null }) {
   const router = useRouter();
-  const [account, setAccount] = useState({ credits: credits ?? null, plan: plan ?? null, pending: pending ?? null });
+  const [account, setAccount] = useState({
+    credits: credits ?? null,
+    plan: plan ?? null,
+    pending: pending ?? null,
+  });
   // The Dashboard's queue, once it has reported one: it wins over the server count so every number on screen agrees.
-  const [queue, setQueue] = useState<{ pending: number; stuck: DepartmentName[] } | null>(null);
+  const [queue, setQueue] = useState<{
+    pending: number;
+    stuck: DepartmentName[];
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const reading = useRef(false);
 
@@ -58,7 +83,13 @@ function V2Frame({ credits, plan, email, userId, pending, hideSample, children, 
     if (reading.current) return;
     reading.current = true;
     void api<AccountSummary>("/account")
-      .then((summary) => setAccount({ credits: summary.credits, plan: summary.plan, pending: summary.cmo_pending }))
+      .then((summary) =>
+        setAccount({
+          credits: summary.credits,
+          plan: summary.plan,
+          pending: summary.cmo_pending,
+        }),
+      )
       .catch(() => {
         // A hint in the frame only: keep the old numbers rather than cover the page's own errors.
       })
@@ -84,40 +115,87 @@ function V2Frame({ credits, plan, email, userId, pending, hideSample, children, 
     document.documentElement.dataset.ui = "v2";
   }, []);
 
-  const { active, toast: jobToast, clearToast } = useActiveJobs(userId ?? null, refreshAccount);
+  const {
+    active,
+    toast: jobToast,
+    clearToast,
+  } = useActiveJobs(userId ?? null, refreshAccount);
   const available = useScreensAvailable();
-  const entries = useCallback((list: NavEntry[]) => list.filter((entry) => isShown(entry, hideSample, available)), [hideSample, available]);
+  const entries = useCallback(
+    (list: NavEntry[]) =>
+      list.filter((entry) => isShown(entry, hideSample, available)),
+    [hideSample, available],
+  );
 
   const reportQueue = useCallback((count: number, stuck: DepartmentName[]) => {
-    setQueue((was) => (was && was.pending === count && was.stuck.join() === stuck.join() ? was : { pending: count, stuck }));
+    setQueue((was) =>
+      was && was.pending === count && was.stuck.join() === stuck.join()
+        ? was
+        : { pending: count, stuck },
+    );
   }, []);
   const state = useMemo<ShellState>(
-    () => ({ pending: queue?.pending ?? account.pending, stuck: queue?.stuck ?? [], reportQueue, toast: setMessage }),
+    () => ({
+      pending: queue?.pending ?? account.pending,
+      stuck: queue?.stuck ?? [],
+      reportQueue,
+      toast: setMessage,
+    }),
     [queue, account.pending, reportQueue],
   );
 
   const shown = message ?? jobToast?.text ?? null;
   const jobAction = useMemo(
-    () => (!message && jobToast ? { label: "Open", onClick: () => router.push(`/app/projects/${jobToast.projectId}`) } : undefined),
+    () =>
+      !message && jobToast
+        ? {
+            label: "Open",
+            onClick: () => router.push(studioItemHref(jobToast.projectId)),
+          }
+        : undefined,
     [message, jobToast, router],
   );
 
   return (
-    <ShellAccountContext.Provider value={{ credits: account.credits, plan: account.plan, userId: userId ?? null, refreshAccount }}>
+    <ShellAccountContext.Provider
+      value={{
+        credits: account.credits,
+        plan: account.plan,
+        userId: userId ?? null,
+        refreshAccount,
+      }}
+    >
       <ShellStateContext.Provider value={state}>
-        <div className="v2 v2-shell">
-          <Rail
-            segment={segment}
-            entries={entries}
-            pending={state.pending}
-            stuck={state.stuck}
-            processing={active.length}
-            credits={account.credits}
-            email={email ?? null}
-          />
-          <main className="v2-main">{children}</main>
-          <TabBar segment={segment} entries={entries} pending={state.pending} credits={account.credits} />
-        </div>
+        {segment !== null && BARE.has(segment) ? (
+          <div className="v2 v2-shell is-bare">
+            <main className="v2-main">
+              <div className="v2-bare-brand">
+                <Logo />
+                <span>OpenCMO</span>
+              </div>
+              {children}
+            </main>
+          </div>
+        ) : (
+          <div className="v2 v2-shell">
+            <Rail
+              segment={segment}
+              entries={entries}
+              pending={state.pending}
+              stuck={state.stuck}
+              processing={active.length}
+              credits={account.credits}
+              email={email ?? null}
+            />
+            <main className="v2-main">{children}</main>
+            <TabBar
+              segment={segment}
+              entries={entries}
+              pending={state.pending}
+              credits={account.credits}
+            />
+          </div>
+        )}
         <Toast
           message={shown}
           onDone={() => (message ? setMessage(null) : clearToast())}
