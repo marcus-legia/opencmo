@@ -129,7 +129,7 @@ insert into allowed values
   ('snapshot_editor_revision(uuid,text)'),
   ('snapshot_editor_variant(uuid,text,jsonb,text)'),
   ('start_cmo_run(text,jsonb)'),
-  ('studio_step_finish(uuid,text,text,uuid)'),
+  ('studio_step_finish(uuid,text,text,uuid,jsonb,uuid[])'),
   ('studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)'),
   ('upload_reservation_allows(text,text,jsonb)'),
   ('upload_usage()'),

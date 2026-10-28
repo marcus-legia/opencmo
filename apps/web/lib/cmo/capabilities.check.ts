@@ -202,8 +202,8 @@ export const CALLER_PATHS: Record<string, CallerPath> = {
   // The brain's loops: the daily schedule runs the kinds `loops.ts` names; the progress check replans the week.
   "apps/web/lib/cmo/schedule.ts": { callers: ["brain"], reaches: () => literals(source("apps", "web", "lib", "cmo", "loops.ts"), /kind: "([a-z_]+)"/g) },
   "apps/web/lib/cmo/jobs/progress-run.ts": { callers: ["brain"], reaches: (t) => literals(t, /p_kind: "([a-z_]+)"/g) },
-  // The founder deciding a Studio card in the inbox: the approved step runs through the adapter.
-  "apps/web/app/api/v1/approvals/[id]/route.ts": { callers: ["ui"], reaches: studioEntries },
+  // The brain's Studio order runner (P2 A2): build_video and cut_shorts orders, approved steps, card 2.
+  "apps/web/lib/cmo/jobs/studio-orders.ts": { callers: ["brain"], reaches: studioEntries },
   // B5: the founder's Mark finished and Cut shorts buttons.
   "apps/web/app/api/v1/studio/[clipId]/finished/route.ts": { callers: ["ui"], reaches: studioEntries },
   "apps/web/app/api/v1/studio/[clipId]/shorts/route.ts": { callers: ["ui"], reaches: studioEntries },

@@ -8617,6 +8617,106 @@ $$;
 
 
 --
+-- Name: studio_order_move(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_order_move(p_id uuid, p_to text, p_text text DEFAULT NULL::text, p_error jsonb DEFAULT NULL::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_status text := (select status from public.work_orders where id = p_id and kind in ('build_video', 'cut_shorts'));
+begin
+  if v_status is null or v_status in ('done', 'failed', 'cancelled') or v_status = p_to then
+    return;
+  end if;
+  if p_to = 'waiting_founder' then
+    perform public.work_order_wait_founder(p_id, p_text);
+  elsif p_to in ('waiting_order', 'running') then
+    if v_status <> 'running' then
+      perform public.work_order_move(p_id, 'running');
+    end if;
+    if p_to = 'waiting_order' then
+      perform public.work_order_move(p_id, 'waiting_order', p_text);
+    end if;
+  elsif p_to = 'failed' then
+    perform public.work_order_move(p_id, 'failed', p_text, p_error);
+  else
+    raise exception 'The order runner cannot move an order to %.', p_to using errcode = '22023';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: work_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    root_id uuid,
+    parent_id uuid,
+    week date NOT NULL,
+    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    department text NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
+    budget_credits integer DEFAULT 0 NOT NULL,
+    spent_credits integer DEFAULT 0 NOT NULL,
+    due_at timestamp with time zone,
+    status text DEFAULT 'queued'::text NOT NULL,
+    error jsonb,
+    done_reason text,
+    run_id uuid,
+    item_id uuid,
+    created_by text DEFAULT 'loop'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
+    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
+    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
+    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
+    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
+    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
+    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
+    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
+    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
+);
+
+
+--
+-- Name: studio_orders_claim(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_orders_claim(p_order uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 3) RETURNS SETOF public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  for v_id in
+    select o.id from public.work_orders o
+    where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts') and (p_order is null or o.id = p_order)
+      and not public.cmo_paused(o.user_id)
+    order by o.created_at
+    limit greatest(1, least(coalesce(p_limit, 3), 10))
+    for update skip locked
+  loop
+    return next public.work_order_move(v_id, 'running');
+  end loop;
+end;
+$$;
+
+
+--
 -- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8638,23 +8738,31 @@ CREATE TABLE public.studio_steps (
     decision text,
     decision_payload jsonb,
     generation_id uuid,
+    next jsonb,
+    wait_for uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    next_done_at timestamp with time zone,
+    plan_input jsonb,
+    claimed_at timestamp with time zone,
     CONSTRAINT studio_steps_card_check CHECK (((jsonb_typeof(card) = 'object'::text) AND (octet_length((card)::text) <= 32768))),
     CONSTRAINT studio_steps_decision_check CHECK ((decision = ANY (ARRAY['approve'::text, 'edit'::text, 'redo'::text, 'cancel'::text]))),
     CONSTRAINT studio_steps_decision_payload_check CHECK (((decision_payload IS NULL) OR ((jsonb_typeof(decision_payload) = 'object'::text) AND (octet_length((decision_payload)::text) <= 2048)))),
     CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
     CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
+    CONSTRAINT studio_steps_next_check CHECK (((next IS NULL) OR ((jsonb_typeof(next) = 'object'::text) AND (next ? 'tool'::text) AND (octet_length((next)::text) <= 65536)))),
+    CONSTRAINT studio_steps_plan_input_check CHECK (((plan_input IS NULL) OR ((jsonb_typeof(plan_input) = 'object'::text) AND (octet_length((plan_input)::text) <= 65536)))),
     CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
     CONSTRAINT studio_steps_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'running'::text, 'done'::text, 'cancelled'::text, 'failed'::text]))),
-    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text))
+    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT studio_steps_wait_for_check CHECK ((cardinality(wait_for) <= 60))
 );
 
 
 --
--- Name: studio_step_finish(uuid, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: studio_step_finish(uuid, text, text, uuid, jsonb, uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.studio_step_finish(p_id uuid, p_status text, p_error text DEFAULT NULL::text, p_generation_id uuid DEFAULT NULL::uuid) RETURNS public.studio_steps
+CREATE FUNCTION public.studio_step_finish(p_id uuid, p_status text, p_error text DEFAULT NULL::text, p_generation_id uuid DEFAULT NULL::uuid, p_next jsonb DEFAULT NULL::jsonb, p_wait_for uuid[] DEFAULT NULL::uuid[]) RETURNS public.studio_steps
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -8667,10 +8775,10 @@ begin
   if not found then
     raise exception 'Step not found.' using errcode = 'P0002';
   end if;
-  if v_row.status = p_status then
+  if v_row.status = p_status and p_next is null then
     return v_row;
   end if;
-  v_ok := case v_row.status
+  v_ok := v_row.status = p_status or case v_row.status
     when 'waiting' then p_status = 'cancelled'
     when 'approved' then p_status in ('running', 'done', 'failed', 'cancelled')
     when 'running' then p_status in ('done', 'failed', 'cancelled')
@@ -8681,17 +8789,37 @@ begin
   if p_status = 'failed' and nullif(trim(coalesce(p_error, '')), '') is null then
     raise exception 'A failed step needs its error.' using errcode = '22023';
   end if;
+  if p_next is not null and (jsonb_typeof(p_next) <> 'object' or not p_next ? 'tool') then
+    raise exception 'The next step is malformed.' using errcode = '22023';
+  end if;
+  if p_wait_for is not null and exists (select 1 from unnest(p_wait_for) w(id)
+      where not exists (select 1 from public.generations g where g.id = w.id and g.user_id = v_user)) then
+    raise exception 'A step only waits on the founder''s own generations.' using errcode = '22023';
+  end if;
   update public.studio_steps
   set status = p_status,
       decision = case when v_row.status = 'waiting' then 'cancel' else decision end,
       decided_at = coalesce(decided_at, now()),
       error = case when p_status = 'failed' then left(p_error, 500) else error end,
-      generation_id = coalesce(p_generation_id, generation_id)
+      generation_id = coalesce(p_generation_id, generation_id),
+      next = coalesce(p_next, next),
+      wait_for = coalesce(p_wait_for, wait_for),
+      next_done_at = case when p_next is not null then null else next_done_at end
   where id = p_id
   returning * into v_row;
   return v_row;
 end;
 $$;
+
+
+--
+-- Name: studio_step_plan_input(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_plan_input(p_id uuid, p_input jsonb) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ update public.studio_steps set plan_input = p_input where id = p_id and plan_input is null $$;
 
 
 --
@@ -8747,6 +8875,67 @@ $$;
 
 
 --
+-- Name: studio_steps_claim(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_claim(p_limit integer DEFAULT 5) RETURNS SETOF public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.studio_steps;
+begin
+  for v_row in
+    select s.* from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
+      and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes')
+    order by s.decided_at
+    limit greatest(1, least(coalesce(p_limit, 5), 10))
+    for update of s skip locked
+  loop
+    if v_row.claimed_at is null and v_row.decision = 'approve' then
+      perform public.work_order_spend(v_row.order_id, v_row.price_credits);
+    end if;
+    update public.studio_steps set claimed_at = now() where id = v_row.id returning * into v_row;
+    perform public.studio_order_move(v_row.order_id, 'running');
+    return next v_row;
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: studio_steps_ready(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_ready(p_limit integer DEFAULT 5) RETURNS SETOF public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.studio_steps;
+begin
+  for v_row in
+    select s.* from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+      and not public.cmo_paused(s.user_id)
+      and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
+                      where g.status in ('queued', 'running'))
+    order by s.decided_at
+    limit greatest(1, least(coalesce(p_limit, 5), 10))
+    for update of s skip locked
+  loop
+    update public.studio_steps set next_done_at = now(), status = case when status = 'running' then 'done' else status end
+    where id = v_row.id returning * into v_row;
+    return next v_row;
+  end loop;
+end;
+$$;
+
+
+--
 -- Name: studio_steps_sync(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8771,6 +8960,37 @@ begin
     else 'cancelled' end);
   return new;
 end;
+$$;
+
+
+--
+-- Name: studio_video_budget(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_video_budget() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 60 $$;
+
+
+--
+-- Name: studio_work_count(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_work_count() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select (
+    (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
+       and not public.cmo_paused(o.user_id))
+    + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
+       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled')
+         and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes'))
+    + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
+       where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+         and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
+                         where g.status in ('queued', 'running')))
+  )::integer
 $$;
 
 
@@ -9087,49 +9307,6 @@ begin
   return new;
 end;
 $$;
-
-
---
--- Name: work_orders; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.work_orders (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    root_id uuid,
-    parent_id uuid,
-    week date NOT NULL,
-    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    department text NOT NULL,
-    kind text NOT NULL,
-    title text NOT NULL,
-    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
-    budget_credits integer DEFAULT 0 NOT NULL,
-    spent_credits integer DEFAULT 0 NOT NULL,
-    due_at timestamp with time zone,
-    status text DEFAULT 'queued'::text NOT NULL,
-    error jsonb,
-    done_reason text,
-    run_id uuid,
-    item_id uuid,
-    created_by text DEFAULT 'loop'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    finished_at timestamp with time zone,
-    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
-    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
-    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
-    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
-    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
-    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
-    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
-    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
-    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
-    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
-    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
-    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
-    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
-);
 
 
 --
@@ -9474,7 +9651,7 @@ begin
   if v_status is null or v_status in ('waiting_founder', 'done', 'failed', 'cancelled') then
     return;
   end if;
-  if v_status = 'queued' then
+  if v_status <> 'running' then
     perform public.work_order_move(p_id, 'running');
   end if;
   perform public.work_order_move(p_id, 'waiting_founder', p_text);
@@ -9640,21 +9817,11 @@ CREATE FUNCTION public.work_orders_plan_week(p_user uuid, p_run uuid) RETURNS pu
 declare
   v_week date := date_trunc('week', current_date)::date;
   v_root public.work_orders;
-  v_goal text;
-  v_budget integer;
   v_item record;
   v_free integer;
   v_price integer;
 begin
-  select * into v_root from public.work_orders where user_id = p_user and week = v_week and parent_id is null for update;
-  if not found then
-    select goal into v_goal from public.cmo_goals where user_id = p_user and week = v_week and status = 'approved';
-    select weekly_credit_budget into v_budget from public.profiles where id = p_user;
-    v_root := public.work_order_create(p_user, v_week, null, 'plan_week',
-      coalesce('Week of ' || to_char(v_week, 'Mon DD') || ': ' || v_goal, 'Week of ' || to_char(v_week, 'Mon DD')),
-      jsonb_build_object('objective', coalesce(v_goal, 'Plan and run this week''s marketing.')),
-      coalesce(v_budget, 0), (v_week + 7)::timestamptz);
-  end if;
+  v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
   if v_root.status = 'queued' then
     v_root := public.work_order_move(v_root.id, 'running', 'Planned the week');
@@ -9663,27 +9830,34 @@ begin
   -- Orders whose calendar item the new plan deleted.
   for v_item in
     select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
-      and kind in ('post_draft', 'sales_scan') and status = 'queued' and created_by = 'loop' and id <> v_root.id
+      and kind in ('post_draft', 'sales_scan', 'build_video') and status = 'queued' and created_by = 'loop' and id <> v_root.id
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
 
   for v_item in
-    select c.id, c.department, c.idea, c.day from public.content_items c
-    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales')
+    select c.id, c.department, c.idea, c.reason, c.platform, c.day from public.content_items c
+    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales', 'video')
       and not exists (select 1 from public.work_orders o where o.item_id = c.id)
     order by c.day, c.created_at
   loop
-    v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
     v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    if v_item.department = 'video' then
+      perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
+        jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
+          'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
+        least(public.studio_video_budget(), greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC',
+        '{}', 'loop', v_item.id);
+      continue;
+    end if;
+    v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
     -- Past the weekly budget the order is still planned, with nothing to spend: it shows as over budget.
     perform public.work_order_create(p_user, v_week, v_root.id,
       case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
       jsonb_build_object('objective', v_item.idea, 'done_when',
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
-      -- Due by the end of the item's own day (UTC, the calendar's day), so the page shows the day it was planned for.
       least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'loop', v_item.id);
   end loop;
 

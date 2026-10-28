@@ -682,9 +682,9 @@ def _dispatch_cmo() -> None:
         log.info("OPENCMO_WEB_URL or CRON_SECRET missing: AI CMO runs are not dispatched")
         return
     try:
-        waiting = cmo_dispatch.count_dispatchable(
-            os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-        )
+        db = (os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        # One route runs both queues; Studio's orders (P2 A2) are counted apart and capped by `dispatch`.
+        waiting = cmo_dispatch.count_dispatchable(*db) + cmo_dispatch.count_studio_work(*db)
         if waiting:
             sent = cmo_dispatch.dispatch(*web, waiting)
             log.info("AI CMO: %s waiting, %s dispatched", waiting, sent)

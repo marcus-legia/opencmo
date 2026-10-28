@@ -23,9 +23,10 @@ export type OrderLedgerRow = {
 
 /**
  * What each order kind costs, the same table as `cmo_job_price` in SQL (pgTAP `203_work_orders` pins both). An order
- * that needs credits and was given none is over budget.
+ * that needs credits and was given none is over budget. `build_video` is `studio_video_budget()`: what a video order
+ * budgets before its cards price it (P2 A2).
  */
-export const JOB_PRICES: Readonly<Record<string, number>> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2 };
+export const JOB_PRICES: Readonly<Record<string, number>> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2, build_video: 60 };
 
 export type Verdict = "done" | "on_track" | "waiting_founder" | "over_budget" | "stuck";
 

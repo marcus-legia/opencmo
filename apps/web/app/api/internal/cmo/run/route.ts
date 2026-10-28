@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { cronAuthorized } from "@/lib/cron-auth";
 import { kickCmoQueue } from "@/lib/cmo/jobs/start";
+import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
 import { cmoPausedEverywhere } from "@/lib/cmo/pause";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,10 @@ export async function POST(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo-run")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
-  if (!cmoPausedEverywhere()) kickCmoQueue(undefined, (maxDuration - 40) * 1000);
+  if (!cmoPausedEverywhere()) {
+    kickCmoQueue(undefined, (maxDuration - 40) * 1000);
+    // Studio's orders (P2 A2) are not `cmo_runs`; the sweep counts them with `studio_work_count`.
+    kickStudioOrders(undefined, (maxDuration - 40) * 1000);
+  }
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

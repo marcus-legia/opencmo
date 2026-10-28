@@ -38,7 +38,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 - [x] **A3 Finished state and event rules**: `mark_finished(clip_id, document_hash)`; `save_editor_document` clears
       it when the hash changes; rules: finished → `cut_shorts` order; batch approved → one `short` deliverable per
       short, status ready for Schedule (P4); render done/failed → order state. pgTAP for each rule.
-- [ ] **A2 Video orders**: `plan_week` may plan one video item (strategy + week goal decide; at most one per week
+- [x] **A2 Video orders**: `plan_week` may plan one video item (strategy + week goal decide; at most one per week
       unless the founder asks); order kinds `build_video` and `cut_shorts`; the runner hands them to B's adapter
       (`buildVideo`, `cutShorts`); order states follow steps, generations and renders; budget from `JOB_PRICES` plus
       the card's price.
@@ -159,3 +159,16 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   `build_video` order (which then orders its shorts); `shorts_batch` approve → a `short` deliverable per short
   (`ref_kind = 'clip'`, status `ready` for P4) and the order done; send back → the order fails with `code = 'sent_back'`
   and the reason. `work_order_department` maps `build_video` and `cut_shorts` to Studio.
+- A2 (`20261228120000_p2_video_orders.sql`, `208_p2_video_orders.test.sql`, `lib/cmo/jobs/studio-orders.ts`): a video
+  item becomes a `build_video` order (Studio, brief from the item, budget `studio_video_budget()` = 60, also in
+  `JOB_PRICES`); `plan-week.ts` keeps one video a week unless the brief asks ("2 videos"), and the fake plan adds one
+  when the brief asks for a video. The runner (brain, `clientFor`) claims queued `build_video`/`cut_shorts` orders,
+  approved steps (spend recorded once) and steps whose `wait_for` generations finished (`studio_steps_ready`), then:
+  `buildVideo` → card 1; `decide` → store `next` + `wait_for`; card 2 by `plan(…, { store: true })` (raw input kept in
+  `plan_input` for redo); after card 2, wait on the edit's generations, then render the long video (same
+  `render_document` path as Export); `cutShorts` → renders. A failed generation, step or brief fails the order with a
+  code. The approvals route no longer calls the adapter: it records the decision and kicks the runner
+  (`kickStudioOrders`); `/api/internal/cmo/run` drains both queues and Modal's sweep adds `studio_work_count` to what
+  it dispatches (`cmo_dispatch.count_studio_work`, engine test).
+- **Open (A2):** the brain-mode Director and Clip editor model calls are not charged yet (`recordUsage` only logs);
+  "edit a beat" waits on B's re-plan entry (request in `B.md`); `stepCard` must send `seconds` for `redo_keyframe`.
