@@ -39,6 +39,8 @@ html[data-ui="v2"] {
 .v2 *, .v2 *::before, .v2 *::after { box-sizing: border-box; }
 .v2 a { color: var(--v2-brand-deep); text-decoration: none; }
 .v2 a:hover { color: var(--v2-ink); }
+/* A link inside a sentence is underlined: colour alone does not set it apart from the text (WCAG 1.4.1). */
+.v2 :is(p, .field-hint, .scr-small) a:not(.v2-button) { text-decoration: underline; text-underline-offset: 2px; }
 .v2 :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--v2-brand-deep); outline-offset: 2px; }
 .v2 h1, .v2 h2, .v2 h3, .v2 p { margin: 0; }
 .v2 h1, .v2 h2, .v2 h3 { font-family: var(--v2-sans); font-weight: 500; }

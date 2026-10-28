@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { ButtonLink, EmptyState, Kpi, KpiStrip, Segmented } from "@/components/ui";
+import { ButtonLink, EmptyState, Kpi, KpiStrip, Segmented, TableWrap } from "@/components/ui";
 import type { AnalyticsScreen as Data } from "@/lib/screens/analytics";
 import { PLATFORM_LABEL, type Account, type Platform } from "@/lib/screens/common";
 
@@ -132,7 +132,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
       </div>
 
       <Panel id="analytics-by-account" title="By account" foot="Some platforms don't report every number; a dash means not reported, never zero.">
-        <div className="v2-table-wrap">
+        <TableWrap label="By account">
           <table className="v2-table">
             <thead>
               <tr>
@@ -166,7 +166,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
               })}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Panel>
 
       {data.posts.length > 0 && (
@@ -174,7 +174,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
           title="Posts against your own median"
           actions={<span className="scr-small scr-muted">Best and worst first; every row opens the post</span>}
         >
-          <div className="v2-table-wrap">
+          <TableWrap label="Posts against your own median">
             <table className="v2-table">
               <thead>
                 <tr>
@@ -209,7 +209,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         </Panel>
       )}
     </>

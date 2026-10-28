@@ -3,9 +3,11 @@
 Screenshots of the built v2 screens, to compare side by side with their frames in
 [`../2026-10-27-app-redesign-frames/`](../2026-10-27-app-redesign-frames/static/index.html).
 
-`apps/web/e2e/ui-v2-look.spec.ts` writes them here (`npm run test:e2e:v2`). The current files were taken on
-2026-10-27 with a local preview of the same components on the Dashboard fixture, because that session had no local
-Supabase stack. The e2e run replaces them.
+`apps/web/e2e/ui-v2-look.spec.ts` writes `<screen>-1440.png` and `<screen>-390.png` here (`npm run test:e2e:v2`).
+The current ones come from that run on 2026-10-28: the production build with `NEXT_PUBLIC_OPENCMO_UI=v2` against
+a fresh local Supabase, signed in as the e2e founder, every screen on its fixture (`?sample=1`), with reduced motion
+and after loading ends. The same run passed axe (no serious violation) on every screen at both widths. Times show in
+the test machine's zone (UTC), not the frames' `Asia/Ho_Chi_Minh`.
 
 | File | Screen | Frame |
 |---|---|---|
@@ -14,7 +16,8 @@ Supabase stack. The e2e run replaces them.
 | `inbox-sample-reply-390.png` | `/app/inbox/[id]` | `Cards.dc.html` |
 | `design-1440.png`, `design-390.png` | `/app/design` primitives | `Tokens.dc.html` |
 
-Session C's pages (U5–U8) were taken the same way: a local preview inside B's `ShellV2`, each page on its
+`kit-*.png`, `inbox-sample-reply-390.png` and the `*-vs-frame.png` pairs were made earlier from a local preview
+inside B's `ShellV2`, each page on its
 fixture (`/api/v1/screens/[name]` answered with `compose(name, {}, { sample: true })`), browser time zone
 `Asia/Ho_Chi_Minh` like the frames. Two preview artifacts: the rail highlights Dashboard on every page (the preview
 route has no `/app/<page>` segment), and the round "N" at the bottom left is the Next.js dev badge. Studio's uploads

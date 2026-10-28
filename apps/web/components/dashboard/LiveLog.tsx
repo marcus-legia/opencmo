@@ -3,10 +3,10 @@ import type { LogLine } from "@/lib/screens/common";
 
 const whoLabel = (who: LogLine["who"]) => (who === "you" ? "You" : DEPARTMENT_LABEL[who]);
 
-/** Newest five events. The list is a polite live region: a new line is read out without stealing focus. */
+/** Newest five events, in the contract's order (newest first). A polite live region: a new line is read out without stealing focus. */
 export function LiveLog({ events }: { events: LogLine[] }) {
   const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  const newest = [...events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 5);
+  const newest = events.slice(0, 5);
   return (
     <div className="v2-log">
       <span className="v2-mono is-small is-muted">Live log</span>

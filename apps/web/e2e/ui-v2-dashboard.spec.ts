@@ -2,12 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
 import { signIn, state } from "./helpers";
+import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * The v2 Dashboard (U3, U4). Runs only in a build with NEXT_PUBLIC_OPENCMO_UI=v2: `npm run test:e2e:v2`.
  * One test on the fixture (`?sample=1`), one on real `approvals` rows decided through `approval_decide`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
+test.beforeAll(ensureOnboarded);
 
 test("on the fixture, approving drops every count, logs it, and empties the queue", async ({ page }) => {
   await signIn(page, state().users.a);

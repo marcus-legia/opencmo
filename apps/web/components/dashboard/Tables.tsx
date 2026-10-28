@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Chip, Panel, Sparkline } from "@/components/ui";
+import { Chip, Panel, Sparkline, TableWrap } from "@/components/ui";
 import { PLATFORM_LABEL, type Where } from "@/lib/screens/common";
 import type { DashboardScreen } from "@/lib/screens/dashboard";
 
@@ -29,7 +29,7 @@ export function ResultsPanel({ results, live }: { results: DashboardScreen["resu
       {results.rows.length === 0 ? (
         <p className="v2-panel-body v2-muted">Numbers show up here once a connected account reports them.</p>
       ) : (
-        <div className="v2-table-wrap">
+        <TableWrap label="Results by account">
           <table className="v2-table">
             <thead>
               <tr>
@@ -71,7 +71,7 @@ export function ResultsPanel({ results, live }: { results: DashboardScreen["resu
               })}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
       {results.brainUsed ? (
         <div className="v2-panel-foot">
@@ -113,7 +113,7 @@ export function TodayPanel({ rows, live, waiting }: { rows: Out[]; live: boolean
       {rows.length === 0 ? (
         <p className="v2-panel-body v2-muted">Nothing goes out today.</p>
       ) : (
-        <div className="v2-table-wrap">
+        <TableWrap label="Going out today">
           <table className="v2-table">
             <thead>
               <tr>
@@ -136,7 +136,7 @@ export function TodayPanel({ rows, live, waiting }: { rows: Out[]; live: boolean
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
     </Panel>
   );

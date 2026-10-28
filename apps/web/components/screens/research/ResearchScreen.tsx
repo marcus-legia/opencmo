@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { ButtonLink } from "@/components/ui";
+import { ButtonLink, TableWrap } from "@/components/ui";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { ResearchScreen as Data } from "@/lib/screens/research";
 
@@ -108,7 +108,7 @@ function ResearchBody({ data }: { data: Data }) {
       </Panel>
       <Panel id="research-your-results-24-h-after-posting" className="scr-side" title="Your results · 24 h after posting" foot="Results go to memory for Sunday's review.">
         {data.results.length ? (
-          <div className="v2-table-wrap">
+          <TableWrap label="Your results">
             <table className="v2-table scr-table-compact">
               <thead>
                 <tr>
@@ -129,7 +129,7 @@ function ResearchBody({ data }: { data: Data }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         ) : (
           <p className="v2-panel-body scr-muted">Your posts show here a day after they go out.</p>
         )}

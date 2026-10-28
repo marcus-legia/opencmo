@@ -7,7 +7,8 @@ export type TabItem<T extends string> = { id: T; label: string };
 
 /**
  * Underlined tabs with the WAI-ARIA keyboard pattern (arrows, Home, End). The caller renders the panel and gives it
- * `id={`${idBase}-panel`}` and `aria-labelledby={`${idBase}-${value}`}`.
+ * `id={`${idBase}-panel`}` and `aria-labelledby={`${idBase}-${value}`}`; tabs that filter a page without one panel
+ * pass `panel={false}`, so no `aria-controls` points at a missing element.
  */
 export function Tabs<T extends string>({
   label,
@@ -16,6 +17,7 @@ export function Tabs<T extends string>({
   onChange,
   idBase,
   large,
+  panel = true,
 }: {
   label: string;
   items: TabItem<T>[];
@@ -23,6 +25,7 @@ export function Tabs<T extends string>({
   onChange: (value: T) => void;
   idBase: string;
   large?: boolean;
+  panel?: boolean;
 }) {
   const list = useRef<HTMLDivElement>(null);
 
@@ -51,7 +54,7 @@ export function Tabs<T extends string>({
             role="tab"
             id={`${idBase}-${item.id}`}
             aria-selected={selected}
-            aria-controls={`${idBase}-panel`}
+            aria-controls={panel ? `${idBase}-panel` : undefined}
             tabIndex={selected ? 0 : -1}
             className="v2-tab"
             onClick={() => onChange(item.id)}

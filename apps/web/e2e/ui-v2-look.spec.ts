@@ -5,12 +5,14 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { signIn, state } from "./helpers";
+import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * U9 look check: every v2 screen at 1440 and 390 on fixtures, plus axe. Screenshots land next to the frames in
  * docs/plans/cmo/2026-10-27-ui-build-frames/ for side-by-side review. Runs with `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
+test.beforeAll(ensureOnboarded);
 
 const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-27-ui-build-frames");
 
@@ -38,6 +40,8 @@ for (const screen of SCREENS) {
       await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
       await page.goto(screen.path);
       await expect(page.getByTestId(screen.ready)).toBeVisible();
+      // Screens read their data client-side: look (and run axe) once loading blocks are gone.
+      await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${screen.name}-${width}.png`), fullPage: true });
 

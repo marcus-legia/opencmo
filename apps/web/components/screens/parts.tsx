@@ -98,7 +98,7 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 /** Loading state of a page: grey blocks, no spinner. */
 export function SkeletonBlocks({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="scr-skeleton" aria-busy="true" aria-label="Loading">
+    <div className="scr-skeleton" role="status" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows + 1 }, (_, i) => (
         <span key={i} />
       ))}

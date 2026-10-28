@@ -8,5 +8,6 @@ export { Panel } from "./Panel";
 export { SampleTag } from "./SampleTag";
 export { Segmented } from "./Segmented";
 export { Sparkline } from "./Sparkline";
+export { TableWrap } from "./TableWrap";
 export { Tabs, type TabItem } from "./Tabs";
 export { Toggle } from "./Toggle";

@@ -138,7 +138,7 @@ export function StudioScreen() {
           </>
         }
       />
-      <Tabs<Tab> label="Kind" idBase="studio-kind" items={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
+      <Tabs<Tab> label="Kind" idBase="studio-kind" panel={false} items={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
       <div className="scr-studio-tools">
         <label className="scr-search">
           <span aria-hidden="true">⌕</span>

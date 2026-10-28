@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 
-import { Button, ButtonLink, Chip, type ChipTone, Tabs } from "@/components/ui";
+import { Button, ButtonLink, Chip, TableWrap, Tabs, type ChipTone } from "@/components/ui";
 import type { BrainScreen as Data, Learned, OrderRow } from "@/lib/screens/brain";
 import { DEPARTMENT_LABEL } from "@/lib/screens/common";
 
@@ -122,7 +122,7 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
   return (
     <Panel id="brain-past-weeks" title="Past weeks" sub="Each Sunday the Brain closes the week against its goal.">
       {data.pastWeeks.length ? (
-        <div className="v2-table-wrap">
+        <TableWrap label="Past weeks">
           <table className="v2-table">
             <thead>
               <tr>
@@ -151,7 +151,7 @@ function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       ) : (
         <p className="v2-panel-body scr-muted">Your first week closes on Sunday.</p>
       )}
@@ -208,7 +208,7 @@ function OrdersTable({ orders }: { orders: OrderRow[] }) {
       );
     });
   return (
-    <div className="v2-table-wrap">
+    <TableWrap label="Orders this week">
       <table className="v2-table scr-orders">
         <thead>
           <tr>
@@ -221,7 +221,7 @@ function OrdersTable({ orders }: { orders: OrderRow[] }) {
         </thead>
         <tbody>{rows(roots, 0)}</tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 

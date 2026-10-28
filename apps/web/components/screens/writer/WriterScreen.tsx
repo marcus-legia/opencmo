@@ -51,7 +51,7 @@ export function WriterScreen() {
         actions={<ButtonLink href="/app?ask=1">Ask for a post</ButtonLink>}
       />
       <div className="scr-toolbar">
-        <Tabs<Kind> label="Kind" idBase="writer-kind" items={WRITER_KINDS.map((k) => ({ id: k, label: `${KIND_LABEL[k]} · ${count(k)}` }))} value={kind} onChange={setKind} />
+        <Tabs<Kind> label="Kind" idBase="writer-kind" panel={false} items={WRITER_KINDS.map((k) => ({ id: k, label: `${KIND_LABEL[k]} · ${count(k)}` }))} value={kind} onChange={setKind} />
         <Pills
           label="Platform"
           options={PLATFORM_FILTERS.map((p) => ({ id: p, label: p === "all" ? "All" : PLATFORM_LABEL[p as Platform] }))}
