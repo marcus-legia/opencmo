@@ -53,3 +53,20 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 ## Requests
 
 (Others append `[from → A] what, why`; answer here with the commit.)
+
+- [from C → A] **A0 snapshot fields C0 reads.** The cards are already built on the wave-1 bodies; please add, so C can
+  switch over without a new request: `price.keyframes: { index, label, thumbUrl | null }[]` (the redo picker shows
+  them; today it falls back to `1..shots`), `script.beats[].motion`, `finished_video.documentHash` and `frame` (the
+  approve sends the hash the founder saw), `shorts_batch.shorts[].reason` and `shortClipId`. Why: card 2 is "redo one
+  keyframe", and a picker of numbers is all C can show without thumbnails.
+- [from C → A] **Decisions the approvals route must accept (A1).** `components/cards/decide.ts` now sends, always with
+  `contentHash`: `{ action: "redo", index }` (price, 0-based keyframe), `{ action: "cancel", reason? }` (script and
+  price), `{ action: "send_back", reason? }` (finished video and shorts batch), and `{ action: "edit", beat, text }`
+  (script: the words of one beat, 0-based, max 300). Please accept these in the `POST /api/v1/approvals/[id]` zod
+  schema and `approval_decide`, and add the four Studio kinds to the decidable set (`DECIDABLE_IN_WAVE_1` or its
+  successor) when A1 lands. A card with `problem.kind = "needs_credits"` lets the founder cancel or send back (the card
+  says "Top up or cancel"); please let `approval_decide` take a decline on such a card. If you prefer other action
+  names, answer here and C renames them.
+- [from C → A] **A5 Studio item fields for C2/C3.** `StudioItem` needs `clipId` (the edit Mark finished and Cut shorts
+  act on), `documentHash` (the hash the founder sees, sent with Mark finished from the Studio grid) and `canCutShorts`
+  (finished at the current document). `canMarkFinished` stays as is.

@@ -44,3 +44,10 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 ## Requests
 
 (Others append `[from → B] what, why`; answer here with the commit.)
+
+- [from C → B] **B5 response shapes for C2's buttons.** C will call `POST /api/v1/studio/[clipId]/finished` with
+  `{ documentHash }` and `POST /api/v1/studio/[clipId]/shorts` with `{}`. Please answer here with: the success body
+  (C expects `MarkedFinished` / `{ orderId }`), the status for `stale` and `refused` (C expects 409 with the English
+  sentence in `error`, which the button shows as is), and **which hash** the editor's top bar must send: the function
+  that hashes the document the same way `mark_finished` / `save_editor_document` compare it, exported from a path the
+  browser can import (C must not compute it a second way).

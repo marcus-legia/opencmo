@@ -146,19 +146,54 @@ export function GoalBody({ body }: { body: Body<"goal"> }) {
   );
 }
 
-export function ScriptBody({ body }: { body: Body<"script"> }) {
+export function ScriptBody({
+  body,
+  cardId,
+  editing,
+  beat,
+  draft,
+  onDraft,
+  onBeat,
+}: {
+  body: Body<"script">;
+  cardId: string;
+  editing: boolean;
+  /** The beat being edited (index into `body.beats`). */
+  beat: number;
+  draft: string;
+  onDraft: (text: string) => void;
+  onBeat: (index: number) => void;
+}) {
   return (
     <>
       <ol className="v2-card-beats">
-        {body.beats.map((beat, index) => (
-          <li key={index}>
+        {body.beats.map((line, index) => (
+          <li key={index} data-editing={editing && index === beat ? "" : undefined}>
             <b className="v2-card-beat-n">{String(index + 1).padStart(2, "0")}</b>
             <span>
-              <b>“{beat.words}”</b> {beat.picture}
+              <b>“{editing && index === beat ? draft : line.words}”</b> {line.picture}
             </span>
           </li>
         ))}
       </ol>
+      {editing ? (
+        <div className="v2-card-beat-edit">
+          <div className="v2-field">
+            <label htmlFor={`${cardId}-beat`}>Beat</label>
+            <select id={`${cardId}-beat`} className="v2-input is-compact" value={beat} onChange={(event) => onBeat(Number(event.target.value))}>
+              {body.beats.map((_, index) => (
+                <option key={index} value={index}>
+                  {String(index + 1).padStart(2, "0")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="v2-field">
+            <label htmlFor={`${cardId}-words`}>What is said in this beat</label>
+            <input id={`${cardId}-words`} className="v2-input" value={draft} maxLength={300} onChange={(event) => onDraft(event.target.value)} />
+          </div>
+        </div>
+      ) : null}
       {body.nextPriceCredits !== null ? <div className="v2-card-meta">Keyframes next: {body.nextPriceCredits} credits</div> : null}
     </>
   );

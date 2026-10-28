@@ -20,6 +20,14 @@ A5) → C4.
       credits, wait, redo one keyframe, cancel), `finished_video` (player, length, approve = finished, open in editor,
       send back), `shorts_batch` (3 × 9:16 with hook and reason, approve the batch, send back). States: expired,
       decided elsewhere, needs credits, failed. Axe clean at 1440 and 390.
+  - [x] Actions on the wave-1 bodies (cloud session, 2026-10-28): Edit a beat (one beat's words → `edit` with `beat`),
+        Redo a keyframe (picker → `redo` with `index`), Cancel (`cancel`) on script and price, Send back
+        (`send_back`) on finished video and shorts batch; a card that needs credits can still be cancelled. Checked
+        on fixtures in a scratch page: axe clean at 1440 and 390, each action sends the right decision.
+  - [ ] Switch to A0's snapshot types (keyframe thumbnails in the picker, beat motion, short reason, the document
+        hash on approve) once A0 is pushed; requests in `A.md`.
+  - [ ] Look check inside the v2 shell on `/app/inbox/card-*` (needs the local stack; not possible in the cloud
+        session: no Docker).
 - [ ] **C1 Decide live** through `POST /api/v1/approvals/[id]` with the card's `contentHash` and the new actions
       (`redo` with a keyframe index, `cancel`, `send_back`); a refusal puts the card back with the server's sentence.
 - [ ] **C2 Mark finished**: the button on the Studio item and in the editor's top bar (calls B5's

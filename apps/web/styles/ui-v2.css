@@ -398,6 +398,15 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-state.is-needs_credits { background: var(--v2-brand-soft); color: var(--v2-waiting); }
 .v2-card-state.is-failed { background: var(--v2-stuck-soft); color: var(--v2-stuck); }
 .v2-card-decline { display: flex; flex-direction: column; gap: 8px; }
+.v2-card-decline fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.v2-card-decline legend { padding: 0; margin-bottom: 6px; font-size: 13px; }
+.v2-card-keyframes { display: flex; flex-wrap: wrap; gap: 6px; }
+.v2-card-keyframe { position: relative; display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--v2-line2); background: var(--v2-paper); font: 500 12px var(--v2-mono); cursor: pointer; }
+.v2-card-keyframe input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.v2-card-keyframe:has(input:checked) { border-color: var(--v2-ink); background: var(--v2-ink); color: var(--v2-paper); }
+.v2-card-keyframe:has(input:focus-visible) { outline: 2px solid var(--v2-brand-deep); outline-offset: 2px; }
+.v2-card-beats li[data-editing] { background: var(--v2-paper); }
+.v2-card-beat-edit { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; align-items: end; }
 
 /* Dashboard on a phone (DashboardPhone.dc.html) */
 @media (max-width: 760px) {
