@@ -22,13 +22,13 @@ import "server-only";
  * vendor is env only (docs/plans/editor/2026-10-20-editor-mcp-providers-plan.md, item 2).
  *
  * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, CHECKER, CAPTIONS,
- * WRITER, MOTION, DIRECTOR, MODERATION.
+ * WRITER, MOTION, DIRECTOR, MODERATION, SHORTS.
  * Two tiers: drafting agents use the big model (Sonnet, Gemini Pro), checking agents the small one (Haiku, Gemini
  * Flash) — a check does not need deep reasoning, and a separate context keeps the checker from being persuaded by
  * the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
 export type ProviderKind = "anthropic" | "gemini" | "openai";
 
 export const PROVIDER_KINDS: readonly ProviderKind[] = ["openai", "anthropic", "gemini"];
@@ -58,6 +58,7 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   motion: { id: "motion", label: "Motion director", role: "Plans the beats, timing and easing of an animated intro.", tier: "draft" },
   director: { id: "director", label: "Director", role: "Writes the script and shot list of an AI video from a prompt.", tier: "draft" },
   moderation: { id: "moderation", label: "Moderation", role: "Checks prompts for AI media against the product rules.", tier: "check" },
+  shorts: { id: "shorts", label: "Clip editor", role: "Picks the three best short clips of a finished video, hook first.", tier: "check" },
 };
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];
