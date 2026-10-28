@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/errors";
 import { mediaCreditsShort } from "@/lib/cmo/mcp/account";
 
+import { renderShort } from "./render";
 import { studioSession, type SessionOptions } from "./session";
 import { mayCall, type PreparedStep, type StepRef, type StudioAction, type StudioAdapter, type StudioContext, type StudioDecision, type StudioEntry, type StudioPlan } from "./types";
 
@@ -89,5 +90,15 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
     throw new Error(`Studio ${entry} is not built yet.`);
   };
 
-  return { plan, decide, buildVideo: later("buildVideo"), cutShorts: later("cutShorts"), markFinished: later("markFinished"), renderShort: later("renderShort") };
+  return {
+    plan,
+    decide,
+    buildVideo: later("buildVideo"),
+    cutShorts: later("cutShorts"),
+    markFinished: later("markFinished"),
+    async renderShort(shortClipId) {
+      allow(ctx, "renderShort");
+      return renderShort(ctx, shortClipId);
+    },
+  };
 }

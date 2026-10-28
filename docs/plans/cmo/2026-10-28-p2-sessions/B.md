@@ -26,7 +26,7 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 - [x] **B1 Extract**: move what MCP's studio group does (clip scope, `scope.plan`, the signed step, `scope.decide`)
       into the adapter; MCP calls it. Every existing MCP check passes unchanged (`packages/mcp-server/src/*.check.ts`
       and `apps/web/lib/mcp/*.check.ts`); same tools, same signed steps, same results.
-- [ ] **B3 Short render**: `renderShort` queues `render_document` for a short's own edit from a brain order, with no
+- [x] **B3 Short render**: `renderShort` queues `render_document` for a short's own edit from a brain order, with no
       editor open and no founder session (service path under the owner's id, as the worker does today); one test
       against `clip-export`.
 - [ ] **B2 Video brief**: `buildVideo(brief)` maps the brief to `create_video` input (prompt from objective + angle +
