@@ -182,6 +182,12 @@ begin
     returning id into v_clip;
     insert into public.editor_projects (clip_id, document, manifest)
     values (v_clip, v_item->'document', v_project.manifest);
+    -- Edited and voice-over transcripts are stored per clip: the short's captions read the parent's.
+    insert into public.editor_transcripts (clip_id, hash, body)
+    select v_clip, t.hash, t.body from public.editor_transcripts t
+    where t.clip_id = p_parent_clip_id
+      and t.hash in (select (regexp_matches((v_item->'document')::text, 'assets/transcripts/([0-9a-f]{64})\.json', 'g'))[1])
+    on conflict do nothing;
     insert into public.shorts (user_id, batch_id, parent_clip_id, short_clip_id, source_start, source_end, hook, reason, status)
     values (v_user, v_batch, p_parent_clip_id, v_clip, v_start, v_end, v_item->>'hook', v_item->>'reason', 'rendering')
     returning id into v_short;

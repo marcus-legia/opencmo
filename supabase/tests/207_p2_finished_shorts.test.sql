@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(43);
+select plan(45);
 
 select ok(has_function_privilege('authenticated', 'public.cut_shorts_order(uuid)', 'execute'), 'the founder''s Cut shorts button');
 select ok(has_function_privilege('authenticated', 'public.short_batch_create(uuid,text,uuid,jsonb)', 'execute'), 'the Builder under the founder''s session');
@@ -65,6 +65,9 @@ select is((select count(*)::int from public.work_orders where kind = 'cut_shorts
 update public.work_orders set status = 'cancelled' where id = (select id from t where name = 'order');
 delete from t where name = 'order';
 insert into t select 'order', id from public.work_orders where kind = 'cut_shorts' and status = 'queued';
+insert into public.editor_transcripts (clip_id, hash, body) values
+  ('e2072000-0000-4000-8000-00000000000a', repeat('a', 64), '[{"text":"Cut by words."}]'),
+  ('e2072000-0000-4000-8000-00000000000a', repeat('b', 64), '[{"text":"Not in any short."}]');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
 
@@ -78,7 +81,7 @@ select throws_ok($$ select public.short_batch_create('e2072000-0000-4000-8000-00
   null, '[{"source_start":0,"source_end":20,"hook":"h","title":"t","document":{}}]') $$, '22023', null, 'every short has its reason');
 insert into t select 'batch', (public.short_batch_create('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v2"}}'),
   (select id from t where name = 'order'), '[
-    {"source_start":0,"source_end":22,"hook":"Cut by words","title":"Cut by words","reason":"Opens on the pain","document":{"version":1,"stage":{"name":"s1"}}},
+    {"source_start":0,"source_end":22,"hook":"Cut by words","title":"Cut by words","reason":"Opens on the pain","document":{"version":1,"stage":{"name":"s1","children":[{"kind":"captions","src":"assets/transcripts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"}]}}},
     {"source_start":18,"source_end":41,"hook":"B-roll on the line","title":"B-roll","reason":"Shows the command","document":{"version":1,"stage":{"name":"s2"}}},
     {"source_start":38,"source_end":60,"hook":"Edit by asking","title":"Ask","reason":"Strongest demo","document":{"version":1,"stage":{"name":"s3"}}}
   ]'::jsonb)->>'batch_id')::uuid;
@@ -91,6 +94,13 @@ select is((select count(*)::int from public.editor_projects p join public.clips 
   'with the parent''s library');
 select is((select document->'stage'->>'name' from public.editor_projects p join public.clips c on c.id = p.clip_id
   where c.parent_clip_id = 'e2072000-0000-4000-8000-00000000000a' order by c.idx desc limit 1), 's1', 'and the Builder''s document');
+reset role;
+select is((select array_agg(t.hash) from public.editor_transcripts t join public.clips c on c.id = t.clip_id
+  where c.parent_clip_id = 'e2072000-0000-4000-8000-00000000000a' and c.idx = (select max(idx) from public.clips
+  where parent_clip_id = 'e2072000-0000-4000-8000-00000000000a')), array[repeat('a', 64)], 'the short gets the parent''s transcript its captions read');
+select is((select count(*)::int from public.editor_transcripts where hash = repeat('b', 64)), 1, 'and no transcript it does not use');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select throws_ok($$ select public.short_batch_create('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v2"}}'),
   null, '[{"source_start":0,"source_end":20,"hook":"h","title":"t","reason":"r","document":{}}]') $$, 'P0001',
   'Shorts are already being cut from this version.', 'a retry does not double the batch');
