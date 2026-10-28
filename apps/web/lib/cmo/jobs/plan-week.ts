@@ -42,7 +42,7 @@ ${skillText("content-calendar")}`;
 const VIDEO = new Set(["TikTok", "Reels", "Shorts"]);
 
 /**
- * Cắt và chuẩn hoá đầu ra model thành mục lịch hợp lệ (ngày, nền tảng, độ dài). Video: one a week (each becomes a
+ * Trims and normalizes the model's output into valid calendar items (day, platform, length). Video: one a week (each becomes a
  * `build_video` order that spends real credits behind its cards) unless the founder asked for more (`maxVideos`).
  */
 export function toPlanItems(plan: Plan, today = new Date(), maxVideos = 1): PlanItem[] {

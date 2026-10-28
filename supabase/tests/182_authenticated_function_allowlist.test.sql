@@ -124,6 +124,7 @@ insert into allowed values
   ('set_default_brand_kit(uuid)'),
   ('set_project_pinned(uuid,boolean)'),
   ('short_batch_create(uuid,text,uuid,jsonb)'),
+  ('short_render_refused(uuid)'),
   ('signup_credits()'),
   ('slice_transcript(jsonb,numeric,numeric)'),
   ('snapshot_editor_revision(uuid,text)'),

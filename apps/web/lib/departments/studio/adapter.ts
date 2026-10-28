@@ -119,7 +119,8 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
       action.kind === "approve",
       action.kind === "redo" ? { index: action.index } : undefined,
     );
-    const generationId = typeof approved.extra.generation_id === "string" ? approved.extra.generation_id : undefined;
+    // A contact-sheet redo reports its new keyframe only in the outcome (the in-app card reads it there).
+    const generationId = typeof approved.extra.generation_id === "string" ? approved.extra.generation_id : outcomeGeneration(approved.outcome.content);
     const view = approved.extra.view as { exports?: Record<string, unknown>[] } | undefined;
     const next = action.kind === "approve" && approved.outcome.ok ? nextStep(prepared.tool, approved.outcome.content) : undefined;
     const notes: string[] = [];
@@ -159,6 +160,15 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
     },
   };
   return adapter;
+}
+
+function outcomeGeneration(content: string): string | undefined {
+  try {
+    const value = (JSON.parse(content) as { generation_id?: unknown }).generation_id;
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Card 1 approved: once its keyframes are done, card 2 is `animate_video` on what `create_video` returned. */

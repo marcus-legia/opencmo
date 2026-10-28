@@ -52,10 +52,20 @@ export async function cutShorts(ctx: StudioContext, clipId: string, onUsage?: (u
     p_order_id: ctx.orderId ?? null,
     p_shorts: shorts.map(({ range, document }) => ({ source_start: range.start, source_end: range.end, hook: range.hook, title: range.title, reason: range.reason, document })),
   });
-  // Each short renders on its own; a refused render (daily limit, 20 in flight) is the order's to report.
+  // Each short renders on its own. One that cannot be queued (daily export limit, 20 in flight) fails now, so the
+  // batch settles on the others instead of waiting on a render that will never run.
   for (const short of created.shorts) {
-    const rendered = await renderShort(ctx, short.short_clip_id);
-    if (rendered.kind === "refused") console.warn(`[studio] short ${short.short_id} not rendered: ${rendered.message}`);
+    let rendered: Awaited<ReturnType<typeof renderShort>>;
+    try {
+      rendered = await renderShort(ctx, short.short_clip_id);
+    } catch (err) {
+      console.error(`[studio] short ${short.short_id} render`, err);
+      rendered = { kind: "refused", message: "The render could not start." };
+    }
+    if (rendered.kind === "refused") {
+      console.warn(`[studio] short ${short.short_id} not rendered: ${rendered.message}`);
+      await rpcOrThrow(ctx.supabase, "short_render_refused", { p_short_id: short.short_id });
+    }
   }
   return {
     kind: "cut",

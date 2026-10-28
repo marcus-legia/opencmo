@@ -1576,7 +1576,6 @@ declare
   v_target integer;
   v_step public.studio_steps;
   v_batch public.short_batches;
-  v_order uuid;
   v_n integer;
   v_text text;
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
@@ -1678,17 +1677,8 @@ begin
         raise exception 'Choose approve or send back.' using errcode = '22023';
       end if;
       if p_action = 'approve' then
+        -- Closes the card and finishes a video order making this edit (mark_finished owns both).
         perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
-        -- A video order's edit is its deliverable; the order is done.
-        select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
-        where s.clip_id = v_row.ref_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
-        order by s.created_at desc limit 1;
-        if v_order is not null then
-          insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
-          values (v_user, v_order, 'video', 'clip', v_row.ref_id, 'decided')
-          on conflict (ref_kind, ref_id) do nothing;
-          perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif(v_row.snapshot->>'title', ''), 'the video') || '”');
-        end if;
       else
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
       end if;
@@ -5989,6 +5979,7 @@ CREATE FUNCTION public.mark_finished(p_clip_id uuid, p_document_hash text) RETUR
 declare
   v_user uuid := public.require_user();
   v_row public.editor_projects;
+  v_order uuid;
 begin
   perform public.owned_clip(p_clip_id, v_user);
   select * into v_row from public.editor_projects where clip_id = p_clip_id for update;
@@ -5998,14 +5989,23 @@ begin
   if p_document_hash is null or p_document_hash is distinct from public.editor_document_hash(v_row.document) then
     raise exception 'This edit changed. Look at it again before marking it finished.' using errcode = 'P0001';
   end if;
-  if v_row.finished_hash = p_document_hash then
-    return v_row;
+  if v_row.finished_hash is distinct from p_document_hash then
+    update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
+    where clip_id = p_clip_id
+    returning * into v_row;
   end if;
-  update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
-  where clip_id = p_clip_id
-  returning * into v_row;
-  -- Marking it finished in the editor is the same decision as approving card 3.
+  -- Marking it finished in the editor or Studio is the same decision as approving card 3, in either order: the card
+  -- closes, and a video order making this edit is done with the edit as its deliverable.
   perform public.approval_close('editor_project', p_clip_id, 'approved');
+  select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+  where s.clip_id = p_clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+  order by s.created_at desc limit 1;
+  if v_order is not null then
+    insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+    values (v_user, v_order, 'video', 'clip', p_clip_id, 'decided')
+    on conflict (ref_kind, ref_id) do nothing;
+    perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'the video') || '”');
+  end if;
   return v_row;
 end;
 $$;
@@ -8423,6 +8423,65 @@ $$;
 
 
 --
+-- Name: short_batch_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_batch_settle(p_batch_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_batch public.short_batches;
+begin
+  select * into v_batch from public.short_batches where id = p_batch_id for update;
+  if not found or v_batch.status <> 'rendering' or exists (
+      select 1 from public.shorts where batch_id = v_batch.id and status in ('building', 'rendering')) then
+    return;
+  end if;
+  if exists (select 1 from public.shorts where batch_id = v_batch.id and status = 'ready') then
+    update public.short_batches set status = 'waiting_founder' where id = v_batch.id;
+    perform public.approval_raise(v_batch.user_id, 'short_batch', v_batch.id);
+    if v_batch.order_id is not null then
+      perform public.work_order_wait_founder(v_batch.order_id, 'Shorts are ready for you');
+    end if;
+  else
+    update public.short_batches set status = 'failed', error = 'Every short failed to render.' where id = v_batch.id;
+    if v_batch.order_id is not null and exists (select 1 from public.work_orders
+        where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+      perform public.work_order_move(v_batch.order_id, 'failed', null,
+        jsonb_build_object('code', 'render_failed', 'message', 'Every short failed to render.', 'retryable', true));
+    end if;
+  end if;
+end;
+$$;
+
+
+--
+-- Name: short_render_refused(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_render_refused(p_short_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_short public.shorts;
+begin
+  select * into v_short from public.shorts where id = p_short_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Short not found.' using errcode = 'P0002';
+  end if;
+  if v_short.status <> 'rendering' then
+    return;
+  end if;
+  update public.shorts set status = 'failed' where id = v_short.id;
+  perform public.short_batch_settle(v_short.batch_id);
+end;
+$$;
+
+
+--
 -- Name: signup_credits(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8990,10 +9049,11 @@ CREATE FUNCTION public.studio_work_count() RETURNS integer
     (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
        and not public.cmo_paused(o.user_id))
     + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
-       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled')
+       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
          and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes'))
     + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
        where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+         and not public.cmo_paused(s.user_id)
          and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
                          where g.status in ('queued', 'running')))
   )::integer
@@ -9154,7 +9214,6 @@ CREATE FUNCTION public.tasks_studio_rules() RETURNS trigger
     AS $$
 declare
   v_short public.shorts;
-  v_batch public.short_batches;
   v_order uuid;
   v_user uuid;
 begin
@@ -9167,31 +9226,16 @@ begin
       if v_short.status = 'rendering' then
         update public.shorts set status = case new.status when 'done' then 'ready' else 'failed' end where id = v_short.id;
       end if;
-      select * into v_batch from public.short_batches where id = v_short.batch_id for update;
-      if v_batch.status = 'rendering' and not exists (
-          select 1 from public.shorts where batch_id = v_batch.id and status in ('building', 'rendering')) then
-        if exists (select 1 from public.shorts where batch_id = v_batch.id and status = 'ready') then
-          update public.short_batches set status = 'waiting_founder' where id = v_batch.id;
-          perform public.approval_raise(v_batch.user_id, 'short_batch', v_batch.id);
-          if v_batch.order_id is not null then
-            perform public.work_order_wait_founder(v_batch.order_id, 'Shorts are ready for you');
-          end if;
-        else
-          update public.short_batches set status = 'failed', error = 'Every short failed to render.' where id = v_batch.id;
-          if v_batch.order_id is not null and exists (select 1 from public.work_orders
-              where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
-            perform public.work_order_move(v_batch.order_id, 'failed', null,
-              jsonb_build_object('code', 'render_failed', 'message', 'Every short failed to render.', 'retryable', true));
-          end if;
-        end if;
-      end if;
+      perform public.short_batch_settle(v_short.batch_id);
       return new;
     end if;
 
-    -- A long video an order is making: its steps name the edit.
+    -- A long video an order is making, once the order has reached its render (a step whose next is the render):
+    -- the founder's own exports of the edit before that neither raise card 3 nor fail the order.
     select s.order_id, s.user_id into v_order, v_user from public.studio_steps s
     join public.work_orders o on o.id = s.order_id
     where s.clip_id = new.clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+      and s.next->>'tool' = 'render'
     order by s.created_at desc limit 1;
     if v_order is null then
       return new;

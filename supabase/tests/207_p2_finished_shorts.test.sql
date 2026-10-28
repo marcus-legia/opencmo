@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(45);
+select plan(49);
 
 select ok(has_function_privilege('authenticated', 'public.cut_shorts_order(uuid)', 'execute'), 'the founder''s Cut shorts button');
 select ok(has_function_privilege('authenticated', 'public.short_batch_create(uuid,text,uuid,jsonb)', 'execute'), 'the Builder under the founder''s session');
@@ -142,8 +142,18 @@ insert into t select 'video', id from public.work_orders where kind = 'build_vid
 select is((select department from public.work_orders where id = (select id from t where name = 'video')), 'studio', 'a video order is Studio''s');
 select public.work_order_move((select id from t where name = 'video'), 'running');
 insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status, decision)
-values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-00000000000c', 'animate_video', 'price', '{}', '{"seconds":60}', 24,
+values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-00000000000c', 'create_video', 'script', '{}', '{"seconds":60}', 7,
   (select id from t where name = 'video'), 'done', 'approve');
+-- The founder exports the edit before the order reached its render: no card 3, the order goes on.
+insert into public.tasks (user_id, kind, clip_id, job_id, status, request_id, payload)
+values ('e2070000-0000-4000-8000-00000000000a', 'render_document', 'e2072000-0000-4000-8000-00000000000c', 'e2071000-0000-4000-8000-00000000000c',
+  'running', gen_random_uuid(), '{}');
+update public.tasks set status = 'failed', error = 'boom' where kind = 'render_document' and status = 'running' and clip_id = 'e2072000-0000-4000-8000-00000000000c';
+select is((select status from public.work_orders where id = (select id from t where name = 'video')), 'running',
+  'a failed export of the founder''s own does not fail the video order');
+insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status, decision, next)
+values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-00000000000c', 'animate_video', 'price', '{}', '{"seconds":60}', 24,
+  (select id from t where name = 'video'), 'done', 'approve', '{"tool":"render"}');
 insert into public.tasks (id, user_id, kind, clip_id, job_id, status, request_id, payload, settings_hash, duration)
 values ('e2075000-0000-4000-8000-00000000000c', 'e2070000-0000-4000-8000-00000000000a', 'render_document', 'e2072000-0000-4000-8000-00000000000c',
   'e2071000-0000-4000-8000-00000000000c', 'running', gen_random_uuid(), '{}', pg_temp.h('{"version":1,"stage":{"name":"ai"}}'), 60);
@@ -183,6 +193,40 @@ select is((select public.approval_decide(id, 'send_back', jsonb_build_object('co
 reset role;
 select is((select error->>'code' || ': ' || (error->>'message') from public.work_orders where id = (select id from t where name = 'order2')),
   'sent_back: Hooks are too slow', 'the order fails with it, for one replan');
+
+-- A short whose render could not be queued fails at once, and its batch settles.
+update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v3"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select public.mark_finished('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}'));
+insert into t select 'order3', id from public.work_orders where kind = 'cut_shorts' and brief->>'finished_hash' = pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}');
+insert into t select 'batch3', (public.short_batch_create('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}'),
+  (select id from t where name = 'order3'),
+  '[{"source_start":0,"source_end":20,"hook":"Hook","title":"One","reason":"Why","document":{"version":1}}]'::jsonb)->>'batch_id')::uuid;
+select public.short_render_refused((select id from public.shorts where batch_id = (select id from t where name = 'batch3')));
+select public.short_render_refused((select id from public.shorts where batch_id = (select id from t where name = 'batch3')));
+reset role;
+select is((select status from public.short_batches where id = (select id from t where name = 'batch3')), 'failed',
+  'a batch whose only short could not render fails instead of waiting forever');
+select is((select error->>'code' from public.work_orders where id = (select id from t where name = 'order3')), 'render_failed',
+  'and so does its order');
+
+-- Mark finished in the editor finishes a video order waiting on card 3, as approving the card does.
+select public.work_order_create('e2070000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+  (select id from public.work_orders where user_id = 'e2070000-0000-4000-8000-00000000000a' and parent_id is null),
+  'build_video', 'AI video again', '{}', 0);
+insert into t select 'video2', id from public.work_orders where kind = 'build_video' and title = 'AI video again';
+select public.work_order_move((select id from t where name = 'video2'), 'running');
+insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status, decision, next)
+values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-00000000000a', 'animate_video', 'price', '{}', '{"seconds":60}', 24,
+  (select id from t where name = 'video2'), 'done', 'approve', '{"tool":"render"}');
+update public.editor_projects set document = '{"version":1,"stage":{"name":"launch v3"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000a';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select public.mark_finished('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v3"}}'));
+reset role;
+select is((select status from public.work_orders where id = (select id from t where name = 'video2')), 'done',
+  'Mark finished in the editor finishes the video order too');
 
 select * from finish();
 rollback;

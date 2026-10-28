@@ -15,12 +15,21 @@ import { exportPlan, startDocumentExport } from "@/lib/editor/export";
 import type { RenderedShort, StudioContext } from "./types";
 
 /**
- * One request per short and document: a retried order step gets the task already queued (the
+ * One request per edit and document: a retried order step gets the task already queued (the
  * revision snapshot is reused for the same hash), never a second render.
  */
-export function renderRequestId(shortClipId: string, documentHash: string): string {
-  const hex = createHash("sha256").update(`render_short:${shortClipId}:${documentHash}`).digest("hex");
+export function renderRequestId(clipId: string, documentHash: string): string {
+  const hex = createHash("sha256").update(`render_edit:${clipId}:${documentHash}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** The edit as it is saved now, through the Export button's queue; returns the `render_document` task id. */
+export async function renderEdit(ctx: StudioContext, clipId: string): Promise<string> {
+  const project = await readEditorProject(ctx.supabase, clipId);
+  const revision = await rpcOrThrow<{ id: string }>(ctx.supabase, "snapshot_editor_revision", { p_clip_id: clipId, p_document_hash: project.document_hash });
+  const { resolution } = await exportPlan(ctx.supabase, ctx.userId);
+  const task = await startDocumentExport(ctx.supabase, clipId, revision.id, renderRequestId(clipId, project.document_hash), resolution);
+  return task.id;
 }
 
 export async function renderShort(ctx: StudioContext, shortClipId: string): Promise<RenderedShort> {
@@ -29,11 +38,7 @@ export async function renderShort(ctx: StudioContext, shortClipId: string): Prom
   if (!clip) return { kind: "refused", message: "This short no longer exists." };
   if (clip.kind !== "short") return { kind: "refused", message: "Only a short is rendered this way." };
   try {
-    const project = await readEditorProject(ctx.supabase, shortClipId);
-    const revision = await rpcOrThrow<{ id: string }>(ctx.supabase, "snapshot_editor_revision", { p_clip_id: shortClipId, p_document_hash: project.document_hash });
-    const { resolution } = await exportPlan(ctx.supabase, ctx.userId);
-    const task = await startDocumentExport(ctx.supabase, shortClipId, revision.id, renderRequestId(shortClipId, project.document_hash), resolution);
-    return { kind: "queued", taskId: task.id };
+    return { kind: "queued", taskId: await renderEdit(ctx, shortClipId) };
   } catch (err) {
     // A refusal the founder can act on (daily limit, 20 in flight, a changed edit) goes to the order.
     if (err instanceof ApiError && err.status < 500) return { kind: "refused", message: err.message };

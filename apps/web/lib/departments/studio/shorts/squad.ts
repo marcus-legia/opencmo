@@ -160,7 +160,7 @@ function fakePicks(list: readonly Candidate[], count: number) {
   for (const item of [...list].sort((a, b) => Math.abs(a.end - a.start - 30) - Math.abs(b.end - b.start - 30))) {
     if (picks.length === count) break;
     if (picks.some((pick) => overlaps(list[pick.candidate]!, item))) continue;
-    const opening = sentences([{ text: item.text, start: item.start, end: item.end }])[0]!.text;
+    const opening = sentences(item.text.split(/\s+/).map((text) => ({ text, start: item.start, end: item.start })))[0]!.text;
     picks.push({ candidate: item.id, hook: opening.slice(0, 120), title: item.text.split(/\s+/).slice(0, 6).join(" ").slice(0, 60), reason: "Opens on a whole sentence and ends on one." });
   }
   return { picks };

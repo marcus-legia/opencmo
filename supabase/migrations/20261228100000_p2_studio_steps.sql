@@ -152,6 +152,7 @@ as $$
 declare
   v_user uuid := public.require_user();
   v_row public.editor_projects;
+  v_order uuid;
 begin
   perform public.owned_clip(p_clip_id, v_user);
   select * into v_row from public.editor_projects where clip_id = p_clip_id for update;
@@ -161,14 +162,23 @@ begin
   if p_document_hash is null or p_document_hash is distinct from public.editor_document_hash(v_row.document) then
     raise exception 'This edit changed. Look at it again before marking it finished.' using errcode = 'P0001';
   end if;
-  if v_row.finished_hash = p_document_hash then
-    return v_row;
+  if v_row.finished_hash is distinct from p_document_hash then
+    update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
+    where clip_id = p_clip_id
+    returning * into v_row;
   end if;
-  update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
-  where clip_id = p_clip_id
-  returning * into v_row;
-  -- Marking it finished in the editor is the same decision as approving card 3.
+  -- Marking it finished in the editor or Studio is the same decision as approving card 3, in either order: the card
+  -- closes, and a video order making this edit is done with the edit as its deliverable.
   perform public.approval_close('editor_project', p_clip_id, 'approved');
+  select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+  where s.clip_id = p_clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+  order by s.created_at desc limit 1;
+  if v_order is not null then
+    insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+    values (v_user, v_order, 'video', 'clip', p_clip_id, 'decided')
+    on conflict (ref_kind, ref_id) do nothing;
+    perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'the video') || '”');
+  end if;
   return v_row;
 end;
 $$;

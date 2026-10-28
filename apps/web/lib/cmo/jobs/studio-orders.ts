@@ -21,10 +21,8 @@ import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { studio } from "@/lib/departments/studio/adapter";
 import { finishVideo } from "@/lib/departments/studio/finish";
-import { renderRequestId } from "@/lib/departments/studio/render";
+import { renderEdit } from "@/lib/departments/studio/render";
 import { VideoBriefSchema, type StudioAdapter, type StudioContext } from "@/lib/departments/studio/types";
-import { readEditorProject } from "@/lib/editor/apply";
-import { exportPlan, startDocumentExport } from "@/lib/editor/export";
 import { clientFor } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -143,7 +141,9 @@ async function runStep(admin: SupabaseClient, step: Step): Promise<void> {
       await finish(waitFor.length ? "running" : "done", { generationId: decided.generationId, next: { tool: "render" }, waitFor });
       return move(admin, step.order_id, "waiting_order", "Making the shots, voice-over and music");
     }
-    await finish("done", { generationId: decided.generationId });
+    // Nothing follows this step (a long take's step always has a next): the order would wait on nothing.
+    await finish("failed", { error: "The step finished without its next step." });
+    return move(admin, step.order_id, "failed", "", { code: "no_next_step", message: "Studio could not continue this video." });
   } catch (error) {
     console.error("[studio-orders] step", step.id, error);
     await finish("failed", { error: message(error) }).catch(() => undefined);
@@ -151,21 +151,15 @@ async function runStep(admin: SupabaseClient, step: Step): Promise<void> {
   }
 }
 
-/** The long video, rendered by the same `render_document` queue as the Export button, once per document. */
-async function renderVideo(ctx: StudioContext, clipId: string): Promise<string> {
-  const project = await readEditorProject(ctx.supabase, clipId);
-  const revision = await rpcOrThrow<{ id: string }>(ctx.supabase, "snapshot_editor_revision", { p_clip_id: clipId, p_document_hash: project.document_hash });
-  const { resolution } = await exportPlan(ctx.supabase, ctx.userId);
-  const task = await startDocumentExport(ctx.supabase, clipId, revision.id, renderRequestId(clipId, project.document_hash), resolution);
-  return task.id;
-}
-
 async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
   const { ctx, adapter } = brainStudio(step.user_id, step.order_id);
   try {
     if (step.wait_for.length) {
-      const { data } = await ctx.supabase.from("generations").select("id, status, error").in("id", step.wait_for);
-      const failed = ((data ?? []) as { status: string; error: string | null }[]).filter((g) => g.status !== "done");
+      const { data, error } = await ctx.supabase.from("generations").select("id, status, error").in("id", step.wait_for);
+      if (error) throw new Error(`generations read: ${error.message}`);
+      const rows = (data ?? []) as { id: string; status: string; error: string | null }[];
+      // A generation the read did not return (deleted, not ours) counts as failed, never as done.
+      const failed = step.wait_for.filter((id) => rows.find((g) => g.id === id)?.status !== "done");
       if (failed.length) {
         return move(admin, step.order_id, "failed", "", {
           code: "generation_failed",
@@ -178,7 +172,7 @@ async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
       // What the open editor would have done when the voice arrived: captions and the squad's words.
       const finished = await finishVideo(ctx, step.clip_id);
       if (finished.waiting) console.warn(`[studio-orders] ${finished.waiting} voice-over(s) of ${step.clip_id} found no finished voice; rendering without their captions`);
-      await renderVideo(ctx, step.clip_id);
+      await renderEdit(ctx, step.clip_id);
       return move(admin, step.order_id, "waiting_order", "Rendering the video");
     }
     const planned = await adapter.plan(step.clip_id, next.tool, next.input, { store: true, ...(next.redoOf ? { redoOf: next.redoOf } : {}) });

@@ -66,6 +66,7 @@ async function main() {
   assert.ok(Array.isArray(picked), String(picked));
   assert.equal(picked.length, 3);
   assert.deepEqual(reviewShorts(picked, words, 3), []);
+  assert.ok(picked.every((short) => !/[.!?]\s+\S/.test(short.hook)), "a hook is one sentence");
   assert.deepEqual(picked.map((short) => short.start), [...picked.map((short) => short.start)].sort((a, b) => a - b), "sorted by start");
   assert.match(String(await pickShorts({ words: talk(2) })), /no stretch of 15–60 seconds/);
 

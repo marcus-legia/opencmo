@@ -171,10 +171,11 @@ as $$
     (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
        and not public.cmo_paused(o.user_id))
     + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
-       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled')
+       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
          and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes'))
     + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
        where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+         and not public.cmo_paused(s.user_id)
          and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
                          where g.status in ('queued', 'running')))
   )::integer
