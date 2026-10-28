@@ -2,8 +2,8 @@
 
 /**
  * One approval card (Cards.dc.html): head = department · kind, body = the thing itself, foot = price, account, time,
- * then exactly one filled button that does what the head names. The same component renders in the Dashboard queue
- * (collapsible), on `/app/inbox/[id]` and on the design sheet.
+ * then exactly one filled button that does what the head names. Renders the `ApprovalCard` contract
+ * (`lib/screens/approval-card.ts`) in the Dashboard queue (collapsible) and on `/app/inbox/[id]`.
  */
 
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, ButtonLink } from "@/components/ui";
+import { PRIMARY_ACTION, type ApprovalCard as Card } from "@/lib/screens/approval-card";
 
 import {
   CorrectionBody,
@@ -25,43 +26,51 @@ import {
   SlideshowBody,
 } from "./bodies";
 import { blockedReason, type Decision } from "./decide";
-import { NUMERAL, cardHead, type ApprovalCardView } from "./model";
+import { NUMERAL, cardHead, headNote } from "./labels";
 
-export type DecideHandler = (card: ApprovalCardView, decision: Decision) => Promise<boolean>;
+export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
-type Action =
-  | { label: string; variant: "primary" | "secondary" | "quiet"; run: () => void; disabled?: string }
-  | { label: string; variant: "primary" | "secondary" | "quiet"; href: string; external?: boolean };
+type Variant = "primary" | "secondary" | "quiet";
+type Action = { label: string; variant: Variant; run: () => void; disabled?: string } | { label: string; variant: Variant; href: string };
 
-const STATE_LABEL = { expired: "Expired", decided: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
+const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
 
-/** Labels of the decline action that asks for a reason, per kind. */
-const DECLINE: Partial<Record<ApprovalCardView["kind"], string>> = {
-  post: "Skip with reason",
-  reply: "Dismiss",
-  price: "Cancel",
-  shorts_batch: "Send back",
-  correction: "Reject",
+/** The decline action of each kind: its label and the decision it sends with the optional reason. */
+const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "dismissed" | "reject" }>> = {
+  post: { label: "Skip with reason", action: "skip" },
+  reply: { label: "Dismiss", action: "dismissed" },
+  goal: { label: "Reject", action: "reject" },
+  price: { label: "Cancel", action: "skip" },
+  shorts_batch: { label: "Send back", action: "skip" },
+  correction: { label: "Reject", action: "reject" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */
 const LATER = "Opens with this department's release.";
 
-function firstText(card: ApprovalCardView): string {
-  if (card.body.kind === "post") return card.body.versions[0]?.texts[0] ?? "";
+function firstText(card: Card): string {
+  if (card.body.kind === "post") return card.body.platforms[0]?.versions[0] ?? "";
   if (card.body.kind === "correction") return card.body.rule;
   if (card.body.kind === "slideshow") return card.body.slides[0] ?? "";
   return "";
 }
 
+function decidedNote(card: Card): string | null {
+  if (card.status === "waiting" || card.problem) return null;
+  return card.status === "skipped" || card.status === "cancelled" ? "You set this card aside." : "You decided this card.";
+}
+
 export function ApprovalCard({
   card,
+  sample,
   onDecide,
   open = true,
   onToggle,
   headingLevel = "h3",
 }: {
-  card: ApprovalCardView;
+  card: Card;
+  /** Fixture card (outside production only): decisions change this screen and nothing else. */
+  sample: boolean;
   onDecide: DecideHandler;
   /** Queue only: whether the body shows. */
   open?: boolean;
@@ -77,11 +86,13 @@ export function ApprovalCard({
   const [shown, setShown] = useState(() => firstText(card));
   const [draft, setDraft] = useState(() => firstText(card));
 
-  const blocked = blockedReason(card);
+  const blocked = blockedReason(card, sample);
   const Heading = headingLevel;
   const head = cardHead(card);
   const numeral = NUMERAL[card.department];
+  const note = headNote(card);
   const bodyId = `card-${card.id}-body`;
+  const decline = DECLINE[card.kind];
 
   async function run(decision: Decision) {
     if (busy || blocked) return;
@@ -92,9 +103,12 @@ export function ApprovalCard({
   }
 
   function approve() {
-    if (card.kind === "post") return run({ action: "approve", text: editing ? draft.trim() : shown !== firstText(card) ? shown : undefined });
-    if (card.kind === "correction") return run({ action: "approve", text: editing ? draft.trim() : undefined });
-    if (card.kind === "slideshow") return run({ action: "approve", text: shown });
+    if (card.kind === "post") {
+      const text = editing ? draft.trim() : shown;
+      // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
+      return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    }
+    if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
     return run({ action: "approve" });
   }
 
@@ -109,70 +123,50 @@ export function ApprovalCard({
     window.open(card.body.threadUrl, "_blank", "noopener,noreferrer");
   }
 
-  const decline = DECLINE[card.kind];
-  const declineAction: Action | null = decline ? { label: decline, variant: "quiet", run: () => setDeclining(true) } : null;
   const editAction = (label = "Edit"): Action => ({
     label: editing ? "Stop editing" : label,
     variant: "secondary",
     run: () => {
-      setDraft(card.kind === "post" ? shown : draft);
+      if (!editing) setDraft(card.kind === "post" ? shown : card.body.kind === "correction" ? card.body.rule : draft);
       setEditing((was) => !was);
     },
   });
+  const declineAction: Action[] = decline ? [{ label: decline.label, variant: "quiet", run: () => setDeclining(true) }] : [];
+  const primary = (label = PRIMARY_ACTION[card.kind]): Action => ({ label, variant: "primary", run: approve });
+  const later = (label: string): Action => ({ label, variant: "secondary", run: () => undefined, disabled: LATER });
 
   const actions: Action[] = (() => {
-    switch (card.kind) {
+    switch (card.body.kind) {
       case "post":
-        return [{ label: editing ? "Approve edit" : "Approve", variant: "primary", run: approve }, editAction(), declineAction!];
+        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
       case "reply":
         return [
-          { label: "Copy and open thread", variant: "primary", run: copyReply },
+          { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
           { label: "I replied", variant: "secondary", run: () => run({ action: "replied" }) },
-          declineAction!,
+          ...declineAction,
         ];
       case "goal":
-        return [
-          { label: "Approve week", variant: "primary", run: approve },
-          { label: "Edit plan", variant: "secondary", href: "/app/brain" },
-        ];
+        return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
       case "script":
-        return [
-          { label: "Approve script", variant: "primary", run: approve },
-          { label: "Edit a beat", variant: "secondary", run: () => undefined, disabled: LATER },
-        ];
+        return [primary(), later("Edit a beat")];
       case "price":
-        return [
-          { label: "Approve price", variant: "primary", run: approve },
-          { label: "Redo a keyframe", variant: "secondary", run: () => undefined, disabled: LATER },
-          declineAction!,
-        ];
+        return [primary(), later("Redo a keyframe"), ...declineAction];
       case "finished_video":
-        return [
-          { label: "Approve: finished", variant: "primary", run: approve },
-          card.body.kind === "finished_video" && card.body.editorHref
-            ? { label: "Open in editor", variant: "secondary", href: card.body.editorHref }
-            : { label: "Open in editor", variant: "secondary", run: () => undefined, disabled: "This video has no edit to open." },
-        ];
+        return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }];
       case "shorts_batch":
-        return [{ label: "Approve batch", variant: "primary", run: approve }, declineAction!];
+        return [primary(), ...declineAction];
       case "slideshow":
-        return [
-          { label: "Approve", variant: "primary", run: approve },
-          { label: "Open in Slides", variant: "secondary", run: () => undefined, disabled: LATER },
-        ];
+        return [primary(), later("Open in Slides")];
       case "schedule":
-        return [
-          { label: "Approve time", variant: "primary", run: approve },
-          { label: "Change time", variant: "secondary", run: () => undefined, disabled: LATER },
-        ];
+        return [primary(), later("Change time")];
       case "correction":
-        return [{ label: editing ? "Keep edited rule" : "Keep as a rule", variant: "primary", run: approve }, editAction(), declineAction!];
+        return [primary(editing ? "Keep edited rule" : PRIMARY_ACTION.correction), editAction(), ...declineAction];
     }
   })();
 
-  // The price card shows its price large in the body; the foot does not repeat it.
-  const foot = [card.price !== null && card.kind !== "price" ? `${card.price} credits` : null, card.account, card.when, card.note].filter(Boolean).join(" · ");
-  const decidable = !blocked;
+  // The price card shows its price large in the body; `meta` already names the account and time.
+  const foot = [card.priceCredits !== null && card.kind !== "price" ? `${card.priceCredits} credits` : null, card.meta || null].filter(Boolean).join(" · ");
+  const decided = decidedNote(card);
 
   const headRow = (
     <span className="v2-card-head">
@@ -180,12 +174,12 @@ export function ApprovalCard({
         {numeral ? <span className="v2-card-numeral">{numeral} </span> : null}
         {head}
       </span>
-      {card.headNote ? <span>{card.headNote}</span> : null}
+      {note ? <span>{note}</span> : null}
     </span>
   );
 
   return (
-    <article className="v2-card" data-open={open || undefined} data-state={card.state} data-testid="approval-card" data-card-id={card.id} aria-label={`${head}: ${card.title}`}>
+    <article className="v2-card" data-open={open || undefined} data-status={card.status} data-testid="approval-card" data-card-id={card.id} aria-label={`${head}: ${card.title}`}>
       {onToggle ? (
         <Heading className="v2-card-heading">
           <button type="button" className="v2-card-toggle" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>
@@ -211,7 +205,7 @@ export function ApprovalCard({
           ) : card.body.kind === "script" ? (
             <ScriptBody body={card.body} />
           ) : card.body.kind === "price" ? (
-            <PriceBody body={card.body} price={card.price} />
+            <PriceBody body={card.body} price={card.priceCredits} />
           ) : card.body.kind === "finished_video" ? (
             <FinishedVideoBody body={card.body} />
           ) : card.body.kind === "shorts_batch" ? (
@@ -226,20 +220,25 @@ export function ApprovalCard({
 
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
 
-          {card.state !== "waiting" ? (
-            <p className={`v2-card-state is-${card.state}`}>
-              <b>{STATE_LABEL[card.state]}</b>
-              <span>{card.stateNote}</span>
-              {card.state === "needs_credits" ? <Link href="/app/billing">Top up</Link> : null}
+          {card.problem ? (
+            <p className={`v2-card-state is-${card.problem.kind}`}>
+              <b>{PROBLEM_LABEL[card.problem.kind]}</b>
+              <span>{card.problem.text}</span>
+              {card.problem.kind === "needs_credits" ? <Link href="/app/billing">Top up</Link> : null}
+            </p>
+          ) : decided ? (
+            <p className="v2-card-state is-decided_elsewhere">
+              <b>Decided</b>
+              <span>{decided}</span>
             </p>
           ) : null}
 
-          {declining ? (
+          {declining && decline ? (
             <form
               className="v2-card-decline"
               onSubmit={(event) => {
                 event.preventDefault();
-                void run({ action: "skip", reason: reason.trim() || undefined });
+                void run({ action: decline.action, reason: reason.trim() || undefined });
               }}
             >
               <label className="v2-field">
@@ -248,14 +247,14 @@ export function ApprovalCard({
               </label>
               <div className="v2-actions">
                 <Button type="submit" variant="primary" compact disabled={busy}>
-                  {decline}
+                  {decline.label}
                 </Button>
                 <Button variant="quiet" compact onClick={() => setDeclining(false)}>
                   Keep it
                 </Button>
               </div>
             </form>
-          ) : card.state === "decided" ? null : (
+          ) : card.status !== "waiting" || card.problem?.kind === "decided_elsewhere" ? null : (
             <div className="v2-actions">
               {actions.map((action) =>
                 "href" in action ? (
@@ -267,7 +266,7 @@ export function ApprovalCard({
                     key={action.label}
                     variant={action.variant}
                     compact
-                    disabled={busy || !!action.disabled || (!decidable && action.label !== "Stop editing")}
+                    disabled={busy || !!action.disabled || (!!blocked && action.label !== "Stop editing")}
                     title={action.disabled ?? blocked ?? undefined}
                     onClick={action.run}
                   >
@@ -277,7 +276,7 @@ export function ApprovalCard({
               )}
             </div>
           )}
-          {blocked && card.state === "waiting" ? <p className="v2-card-meta">{blocked}</p> : null}
+          {blocked && card.status === "waiting" && !card.problem ? <p className="v2-card-meta">{blocked}</p> : null}
         </div>
       ) : null}
     </article>

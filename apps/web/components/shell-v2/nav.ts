@@ -50,9 +50,9 @@ export const NAV_SETTINGS: NavEntry = { screen: "settings", label: "Settings", h
 /** Screens whose page works today whatever their v2 data says, so they are never hidden. */
 const ALWAYS: ReadonlySet<ScreenName> = new Set(["dashboard", "settings"]);
 
-export function isShown(entry: NavEntry, hideSample: boolean, live: Partial<Record<ScreenName, boolean>>): boolean {
+export function isShown(entry: NavEntry, hideSample: boolean, available: Partial<Record<ScreenName, boolean>>): boolean {
   if (!entry.screen || !hideSample || ALWAYS.has(entry.screen)) return true;
-  return live[entry.screen] === true;
+  return available[entry.screen] === true;
 }
 
 export const isCurrent = (entry: NavEntry, segment: string | null) => entry.segments.includes(segment);

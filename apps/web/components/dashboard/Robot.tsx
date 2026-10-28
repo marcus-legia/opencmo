@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import type { NodeState } from "./model";
+export type NodeState = "working" | "idle" | "stuck";
 
 /** The 13×12 pixel robot of Main.dc.html, as path runs. Body, ink (antenna, arms, feet) and eyes are separate fills. */
 const BODY = "M6 0h1v1h-1zM2 2h9v1h-9zM1 3h11v1h-11zM1 4h2v1h-2zM5 4h3v1h-3zM10 4h2v1h-2zM1 5h2v1h-2zM5 5h3v1h-3zM10 5h2v1h-2zM1 6h11v1h-11zM1 7h11v1h-11zM1 8h11v1h-11zM1 9h11v1h-11zM2 10h2v1h-2zM9 10h2v1h-2z";

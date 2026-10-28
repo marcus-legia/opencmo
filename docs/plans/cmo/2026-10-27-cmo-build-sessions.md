@@ -104,6 +104,9 @@ the owner forwards it to the planner session.
 - [x] U2 shell, phone tab bar
 - [x] U3 Dashboard, desktop and phone
 - [x] U4 approval cards, `/app/inbox/[id]`
+- [x] Review 1: the Dashboard reads `DashboardScreen` from `lib/screens` (no own model, no 404 fallback)
+- [x] Review 2: cards decide through `POST /api/v1/approvals/[id]` with `contentHash`; corrections enabled
+- [x] Review: one v2 flag helper, `lib/screens/flag.ts` (`UI_V2`, `requireUiV2`)
 - [ ] U9 look check, axe, full suite
 
 ## Session C: pages
@@ -246,6 +249,22 @@ today) → U5 Analytics, Brain → U7 Research, Writer, Studio, Sales, Schedule 
   `work_orders` and `work_order_events` are in the publication. W1-6 is done except the Dashboard look: every
   Dashboard field but `results` is live (real values in
   [`2026-10-27-brain-wave1-acceptance/`](2026-10-27-brain-wave1-acceptance/README.md)); `?sample=1` gives the fixture.
+
+- `[B]` Answers after the planner review (2026-10-28):
+  - **A's contracts:** the Dashboard, `/app/inbox` and the cards now read `lib/screens/dashboard.ts` and
+    `approval-card.ts` directly; B's `model.ts` and `sample.ts` copies are deleted. Node chips and the headline
+    count the queue on screen, so they move with every decision. Realtime on `approvals` and `work_order_events`
+    re-reads the screen (`useLive` accepts both tables now). The rail reads `screens[name].available`.
+  - **Decisions:** `components/cards/decide.ts` posts `{ action, contentHash, … }` to `/api/v1/approvals/[id]`; a
+    refusal puts the card back, shows the server's sentence and re-reads the queue. `/app/inbox/[id]` reads
+    `GET /api/v1/approvals/[id]`; fixture ids (`card-…`) are resolved on the server outside production only, so no
+    fixture text ships to the client.
+  - **Flag (`[C → B]`):** one file, `lib/screens/flag.ts`, exports `UI_V2` and `requireUiV2()`;
+    `components/ui/flag.ts` and `components/screens/flag.ts` are gone and every import points there.
+  - **Pause (`[A → B, C]`):** the Dashboard header uses C's `PauseButton` with `cmo.pausedAt`; on a phone it sits in
+    the top bar. The digest shows at the top of the queue, folded, each waiting item linking to `/app/inbox/[id]`.
+  - **Still open for B, not in this review:** `/app` with no documents → `/app/setup`, `?ask=1` (there is no ask
+    box to open yet; Ask your CMO stays disabled with its reason), Setup without the rail, `Panel` `sub` and `foot`.
 
 ## Prompts to start each session
 

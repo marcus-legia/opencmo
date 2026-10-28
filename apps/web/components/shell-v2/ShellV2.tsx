@@ -21,7 +21,7 @@ import { isShown, type DepartmentName, type NavEntry } from "./nav";
 import { Rail } from "./Rail";
 import { ShellStateContext, type ShellState } from "./ShellState";
 import { TabBar } from "./TabBar";
-import { useScreensLive } from "./useScreensLive";
+import { useScreensAvailable } from "./useScreensAvailable";
 
 type Props = {
   credits?: number | null;
@@ -85,8 +85,8 @@ function V2Frame({ credits, plan, email, userId, pending, hideSample, children, 
   }, []);
 
   const { active, toast: jobToast, clearToast } = useActiveJobs(userId ?? null, refreshAccount);
-  const live = useScreensLive();
-  const entries = useCallback((list: NavEntry[]) => list.filter((entry) => isShown(entry, hideSample, live)), [hideSample, live]);
+  const available = useScreensAvailable();
+  const entries = useCallback((list: NavEntry[]) => list.filter((entry) => isShown(entry, hideSample, available)), [hideSample, available]);
 
   const reportQueue = useCallback((count: number, stuck: DepartmentName[]) => {
     setQueue((was) => (was && was.pending === count && was.stuck.join() === stuck.join() ? was : { pending: count, stuck }));

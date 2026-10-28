@@ -3,6 +3,7 @@
 /**
  * The v2 home (S2): week strip, team graph with the live log, results, what goes out today, and the approval queue.
  * Desktop follows Main.dc.html; at phone width the graph becomes a list and the queue moves up (DashboardPhone.dc.html).
+ * Data: `DashboardScreen` from `/api/v1/screens/dashboard`; a block whose `live` flag is false shows "Sample data".
  */
 
 import { Button, Kpi, KpiStrip, Panel } from "@/components/ui";
@@ -15,7 +16,7 @@ import { TeamGraph, TeamList } from "./TeamGraph";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
-  const { state, view, decideCard, waiting, reload } = useDashboard();
+  const { state, decideCard, waiting, setPausedAt, reload } = useDashboard();
 
   if (state.status === "loading") {
     return (
@@ -24,12 +25,12 @@ export function Dashboard() {
       </div>
     );
   }
-  if (!view) {
+  if (state.status === "error") {
     return (
       <div className="v2-dash">
         <div className="v2-empty" role="alert">
           <b className="v2-empty-title">The Dashboard did not load.</b>
-          <span className="v2-empty-text">{state.status === "error" ? state.message : null}</span>
+          <span className="v2-empty-text">{state.message}</span>
           <div className="v2-actions">
             <Button variant="secondary" onClick={() => void reload()}>
               Try again
@@ -40,42 +41,43 @@ export function Dashboard() {
     );
   }
 
-  const count = view.queue.filter((card) => card.state === "waiting").length;
-  const working = view.team.filter((node) => node.state === "working").length;
-  const { week } = view;
+  const { data, live } = state;
+  const count = data.queue.filter((card) => card.status === "waiting").length;
+  const { week } = data;
+  const credits = week.credits.budget > 0 ? `${week.credits.used} / ${week.credits.budget}` : `${week.credits.used}`;
 
   return (
     <div className="v2-dash" data-testid="v2-dashboard">
-      <DashboardHeader count={count} timezone={view.timezone} goal={week} pauseLive={view.live.pause} paused={view.paused} />
+      <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} />
 
       <div className="v2-dash-week">
         <KpiStrip label="This week, live">
-          <Kpi label="Week goal" value={week.goal ?? "No goal yet"} text progress={week.total > 0 ? (week.done / week.total) * 100 : 0} />
-          <Kpi label="Deliverables done" value={`${week.done} / ${week.total}`} />
-          <Kpi label="Working now" value={`${working} of ${view.team.length}`} />
-          <Kpi label="Words drafted today" value={week.wordsToday === null ? null : week.wordsToday.toLocaleString("en-US")} />
-          <Kpi label="Credits this week" value={week.credits.budget === null ? `${week.credits.used}` : `${week.credits.used} / ${week.credits.budget}`} />
+          <Kpi label="Week goal" value={week.goal ?? "No goal yet"} text progress={week.deliverables.total > 0 ? (week.deliverables.done / week.deliverables.total) * 100 : 0} />
+          <Kpi label="Deliverables done" value={`${week.deliverables.done} / ${week.deliverables.total}`} />
+          <Kpi label="Working now" value={`${week.workingNow} of ${data.team.nodes.length}`} />
+          <Kpi label="Words drafted today" value={week.wordsDraftedToday.toLocaleString("en-US")} />
+          <Kpi label="Credits this week" value={credits} />
         </KpiStrip>
       </div>
 
       <div className="v2-dash-cols">
         <div className="v2-dash-main">
-          <Panel id="team-title" title="Your team, working" mark live sample={!view.live.team} className="v2-dash-team" actions={<Legend />}>
-            <TeamGraph view={view} waiting={waiting} />
-            <LiveLog events={view.log} timezone={view.timezone} />
+          <Panel id="team-title" title="Your team, working" mark live sample={!live.team || !live.log} className="v2-dash-team" actions={<Legend />}>
+            <TeamGraph team={data.team} waiting={waiting} />
+            <LiveLog events={data.log} />
           </Panel>
           <div className="v2-dash-teamlist">
-            <TeamList view={view} waiting={waiting} />
+            <TeamList team={data.team} waiting={waiting} />
           </div>
           <div className="v2-dash-results">
-            <ResultsPanel results={view.results} live={view.live.results} />
+            <ResultsPanel results={data.results} live={live.results} />
           </div>
           <div className="v2-dash-today">
-            <TodayPanel rows={view.today} live={view.live.today} waiting={(id) => view.queue.some((card) => card.id === id)} />
+            <TodayPanel rows={data.outToday} live={live.outToday} waiting={(id) => data.queue.some((card) => card.id === id)} />
           </div>
         </div>
         <div className="v2-dash-side">
-          <ApprovalQueue cards={view.queue} live={view.live.queue} nextCard={view.nextCard} onDecide={decideCard} />
+          <ApprovalQueue cards={data.queue} live={live.queue} digest={data.digest} onDecide={decideCard} />
         </div>
       </div>
     </div>

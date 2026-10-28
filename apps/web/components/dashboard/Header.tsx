@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { PauseButton } from "@/components/screens/brain/PauseButton";
 import { Logo } from "@/components/shell-v2/Logo";
 import { Button } from "@/components/ui";
 
@@ -12,9 +13,9 @@ export function headline(count: number): string {
 }
 
 const ASK_LATER = "Asking your CMO from the Dashboard opens with the brain chat.";
-const PAUSE_LATER = "Pause works once the brain's off switch is live.";
 
-function useClock(timezone: string) {
+/** The viewer's own clock: the Dashboard has no time zone field, and the browser's is the one the founder reads. */
+function useClock() {
   // Empty on the server and the first client frame: the time is the viewer's, not the build machine's.
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -23,7 +24,7 @@ function useClock(timezone: string) {
     return () => window.clearInterval(timer);
   }, []);
   if (!now) return { clock: "--:--:--", day: "", short: "" };
-  const zone = { timeZone: timezone };
+  const zone = {};
   return {
     clock: new Intl.DateTimeFormat("en-GB", { ...zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(now),
     day: new Intl.DateTimeFormat("en-GB", { ...zone, weekday: "long", day: "numeric", month: "short" }).format(now).replace(",", ""),
@@ -33,23 +34,21 @@ function useClock(timezone: string) {
 
 export function DashboardHeader({
   count,
-  timezone,
   goal,
+  pausedAt,
   pauseLive,
-  paused,
+  onPaused,
 }: {
   count: number;
-  timezone: string;
   goal: { done: number; total: number };
+  pausedAt: string | null;
   pauseLive: boolean;
-  paused: boolean;
+  onPaused: (pausedAt: string | null) => void;
 }) {
-  const { clock, day, short } = useClock(timezone);
-  const confirm = useRef<HTMLDialogElement>(null);
+  const { clock, day, short } = useClock();
   const pct = goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
   return (
-    <>
       <header className="v2-dash-head">
         <div className="v2-dash-phonebar">
           <span className="v2-dash-phonebrand">
@@ -60,11 +59,6 @@ export function DashboardHeader({
             <Button variant="secondary" icon aria-label="Ask your CMO" disabled title={ASK_LATER}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                 <path d="M4 5h16v11H9l-5 4z" />
-              </svg>
-            </Button>
-            <Button variant="danger" icon aria-label={paused ? "CMO paused" : "Pause CMO"} onClick={() => confirm.current?.showModal()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M9 5v14M15 5v14" />
               </svg>
             </Button>
           </span>
@@ -89,33 +83,15 @@ export function DashboardHeader({
           </span>
         </div>
 
-        <div className="v2-actions v2-dash-wide">
-          <Button variant="secondary" disabled title={ASK_LATER}>
-            Ask your CMO
-          </Button>
-          <Button variant="danger" onClick={() => confirm.current?.showModal()}>
-            {paused ? "CMO paused" : "Pause CMO"}
-          </Button>
+        <div className="v2-actions v2-dash-buttons">
+          <span className="v2-dash-wide">
+            <Button variant="secondary" disabled title={ASK_LATER}>
+              Ask your CMO
+            </Button>
+          </span>
+          {/* One Pause control for every width (it holds its own confirm dialog); on a phone CSS lifts it into the top bar. */}
+          <PauseButton pausedAt={pausedAt} live={pauseLive} onChange={onPaused} />
         </div>
       </header>
-
-      <dialog ref={confirm} className="v2-dialog" aria-labelledby="pause-title">
-        <form method="dialog" className="v2-dialog-body">
-          <h2 id="pause-title" className="v2-dialog-title">
-            Pause your CMO?
-          </h2>
-          <p>Nothing new starts and nothing goes out until you resume. Cards already waiting stay in the queue.</p>
-          {pauseLive ? null : <p className="v2-muted">{PAUSE_LATER}</p>}
-          <div className="v2-actions">
-            <Button type="submit" variant="danger" disabled={!pauseLive} title={pauseLive ? undefined : PAUSE_LATER}>
-              Pause CMO
-            </Button>
-            <Button type="submit" variant="quiet">
-              Keep working
-            </Button>
-          </div>
-        </form>
-      </dialog>
-    </>
   );
 }

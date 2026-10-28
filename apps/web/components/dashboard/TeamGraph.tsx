@@ -1,10 +1,18 @@
 import Link from "next/link";
 
-import { NUMERAL, DEPARTMENT_LABEL } from "@/components/cards/model";
-import type { DepartmentName } from "@/components/shell-v2/nav";
+import { NUMERAL } from "@/components/cards/labels";
+import { DEPARTMENT_LABEL, type Department } from "@/lib/screens/common";
+import type { DashboardScreen } from "@/lib/screens/dashboard";
 
-import type { DashboardView, NodeState, TeamNode } from "./model";
-import { Robot } from "./Robot";
+import { Robot, type NodeState } from "./Robot";
+
+type DepartmentName = Exclude<Department, "brain">;
+type Team = DashboardScreen["team"];
+type TeamNode = Team["nodes"][number];
+
+const BRAIN_STATE: Record<Team["brain"]["state"], string> = { on_track: "on track", stuck: "stuck", paused: "paused" };
+
+const time = (iso: string) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
 
 /** Node boxes and wires at the positions of Main.dc.html (a 760 × 690 board). */
 const NODE: Record<DepartmentName, { left: number; top: number; href: string; delay: number }> = {
@@ -97,8 +105,8 @@ export function waitingChip(node: TeamNode, waiting: number, short = false): Wai
 
 const STATE_WORD: Record<NodeState, string> = { working: "working", idle: "idle", stuck: "stuck" };
 
-export function TeamGraph({ view, waiting }: { view: DashboardView; waiting: (department: DepartmentName) => number }) {
-  const working = new Set(view.team.filter((node) => node.state === "working").map((node) => node.department));
+export function TeamGraph({ team, waiting }: { team: Team; waiting: (department: DepartmentName) => number }) {
+  const working = new Set(team.nodes.filter((node) => node.state === "working").map((node) => node.department));
   return (
     <div className="v2-graph-scroll">
       <div className="v2-graph">
@@ -113,30 +121,30 @@ export function TeamGraph({ view, waiting }: { view: DashboardView; waiting: (de
           <Link href="/app/brain" className="v2-hub">
             <Robot state="hub" />
             <span>
-              <span className="v2-hub-label">Brain · {view.brain.status}</span>
+              <span className="v2-hub-label">Brain · {BRAIN_STATE[team.brain.state]}</span>
               <br />
-              <b className="v2-hub-line">{view.brain.line}</b>
-              {view.brain.nextCheck ? (
+              <b className="v2-hub-line">{team.brain.watching === 1 ? "Watching 1 order" : `Watching ${team.brain.watching} orders`}</b>
+              {team.brain.nextCheckAt ? (
                 <>
                   <br />
-                  <span className="v2-hub-next">Next check {view.brain.nextCheck}</span>
+                  <span className="v2-hub-next">Next check {time(team.brain.nextCheckAt)}</span>
                 </>
               ) : null}
             </span>
           </Link>
         </div>
 
-        {view.team.map((node) => {
+        {team.nodes.map((node) => {
           const place = NODE[node.department];
           const chip = waitingChip(node, waiting(node.department));
           return (
             <div key={node.department} className="v2-node-slot" style={{ left: place.left, top: place.top }}>
-              <Link href={place.href} className={`v2-node is-${node.state}`} aria-label={`${DEPARTMENT_LABEL[node.department]}, ${STATE_WORD[node.state]}: ${node.status}. ${chip.label}.`}>
+              <Link href={place.href} className={`v2-node is-${node.state}`} aria-label={`${DEPARTMENT_LABEL[node.department]}, ${STATE_WORD[node.state]}: ${node.line}. ${chip.label}.`}>
                 <Robot state={node.state} delay={place.delay} />
                 <span>
                   <b className="v2-node-name">{DEPARTMENT_LABEL[node.department]}</b> <span className="v2-numeral">{NUMERAL[node.department]}</span>
                   <br />
-                  <span className="v2-node-status">{node.status}</span>
+                  <span className="v2-node-status">{node.line}</span>
                   <br />
                   <span className={`v2-chip is-${chip.tone}`}>{chip.label}</span>
                 </span>
@@ -154,15 +162,15 @@ export function TeamGraph({ view, waiting }: { view: DashboardView; waiting: (de
 }
 
 /** The phone version (DashboardPhone.dc.html): one row per department, the all-clear ones folded into one line. */
-export function TeamList({ view, waiting }: { view: DashboardView; waiting: (department: DepartmentName) => number }) {
-  const busy = view.team.filter((node) => node.state === "stuck" || waiting(node.department) > 0);
-  const clear = view.team.filter((node) => !busy.includes(node));
+export function TeamList({ team, waiting }: { team: Team; waiting: (department: DepartmentName) => number }) {
+  const busy = team.nodes.filter((node) => node.state === "stuck" || waiting(node.department) > 0);
+  const clear = team.nodes.filter((node) => !busy.includes(node));
   return (
     <section aria-label="Your team" className="v2-teamlist">
       <Link href="/app/brain" className="v2-teamlist-brain">
         <span className="v2-mark" aria-hidden="true" />
         <span className="v2-teamlist-name">Brain</span>
-        <span className="v2-teamlist-note">{view.brain.status}</span>
+        <span className="v2-teamlist-note">{BRAIN_STATE[team.brain.state]}</span>
       </Link>
       {busy.map((node) => {
         const chip = waitingChip(node, waiting(node.department), true);

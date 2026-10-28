@@ -16,10 +16,10 @@ const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-2
 
 /** Session B's screens; Session C appends its pages here as they land. */
 const SCREENS: { name: string; path: string; ready: string }[] = [
-  { name: "dashboard", path: "/app", ready: "v2-dashboard" },
+  { name: "dashboard", path: "/app?sample=1", ready: "v2-dashboard" },
   { name: "design", path: "/app/design", ready: "v2-design" },
-  { name: "inbox", path: "/app/inbox", ready: "approval-queue" },
-  { name: "inbox-card", path: "/app/inbox/sample-post", ready: "inbox-card-page" },
+  { name: "inbox", path: "/app/inbox?sample=1", ready: "approval-queue" },
+  { name: "inbox-card", path: "/app/inbox/card-post", ready: "inbox-card-page" },
   // Session C's pages on their fixtures (`?sample=1`), so the screenshots compare with the frames.
   ...["analytics", "brain", "library", "research", "writer", "studio", "sales", "schedule", "settings", "setup"].map((name) => ({
     name,

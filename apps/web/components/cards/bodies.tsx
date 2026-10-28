@@ -3,8 +3,10 @@
 import { useState } from "react";
 
 import { Tabs } from "@/components/ui";
+import type { CardBody } from "@/lib/screens/approval-card";
+import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
-import { DEPARTMENT_LABEL, PLATFORM_LABEL, formatSeconds, type CardBody, type Platform } from "./model";
+import { formatSeconds } from "./labels";
 
 type Body<K extends CardBody["kind"]> = Extract<CardBody, { kind: K }>;
 
@@ -25,31 +27,36 @@ export function PostBody({
   /** Reports the text on screen, so Approve sends what the founder saw. */
   onPick: (text: string) => void;
 }) {
-  const [platform, setPlatform] = useState<Platform>(body.versions[0]?.platform ?? "x");
+  const [platform, setPlatform] = useState<Platform>(body.platforms[0]?.platform ?? "x");
   const [version, setVersion] = useState(0);
-  const current = body.versions.find((v) => v.platform === platform) ?? body.versions[0];
-  const texts = current?.texts ?? [];
-  const text = texts[Math.min(version, texts.length - 1)] ?? "";
+  const current = body.platforms.find((p) => p.platform === platform) ?? body.platforms[0];
+  const versions = current?.versions ?? [];
+  const index = Math.min(version, versions.length - 1);
+  const text = versions[index] ?? "";
+  const tabbed = body.platforms.length > 1;
 
   function pick(nextPlatform: Platform, nextVersion: number) {
     setPlatform(nextPlatform);
     setVersion(nextVersion);
-    const list = body.versions.find((v) => v.platform === nextPlatform)?.texts ?? [];
+    const list = body.platforms.find((p) => p.platform === nextPlatform)?.versions ?? [];
     onPick(list[Math.min(nextVersion, list.length - 1)] ?? "");
   }
 
+  const length = (editing ? draft : text).length;
+  const limit = current?.limit ?? 0;
+
   return (
     <>
-      {body.versions.length > 1 ? (
+      {tabbed ? (
         <Tabs
           label="Platform"
           idBase={`${cardId}-platform`}
           value={platform}
           onChange={(p) => pick(p, 0)}
-          items={body.versions.map((v) => ({ id: v.platform, label: PLATFORM_LABEL[v.platform] }))}
+          items={body.platforms.map((p) => ({ id: p.platform, label: PLATFORM_LABEL[p.platform] }))}
         />
       ) : null}
-      <div id={`${cardId}-platform-panel`} role={body.versions.length > 1 ? "tabpanel" : undefined} aria-labelledby={body.versions.length > 1 ? `${cardId}-platform-${platform}` : undefined}>
+      <div id={`${cardId}-platform-panel`} role={tabbed ? "tabpanel" : undefined} aria-labelledby={tabbed ? `${cardId}-platform-${platform}` : undefined}>
         {editing ? (
           <label className="v2-field">
             <span>Edit before you approve</span>
@@ -59,20 +66,23 @@ export function PostBody({
           <p className="v2-card-text">{text}</p>
         )}
       </div>
-      {body.checks.length > 0 ? (
-        <div className="v2-card-chips">
-          {body.checks.map((check) => (
-            <span key={check} className="v2-chip is-posted">
-              {check}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <div className="v2-card-chips">
+        {limit ? (
+          <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
+            {length}/{limit}
+          </span>
+        ) : null}
+        {body.checks.map((check) => (
+          <span key={check} className="v2-chip is-posted">
+            {check}
+          </span>
+        ))}
+      </div>
       <div className="v2-card-meta">
-        {texts.length > 1 ? (
+        {versions.length > 1 ? (
           <span className="v2-card-versions">
-            Version {Math.min(version, texts.length - 1) + 1} of {texts.length}
-            <button type="button" className="v2-card-link" disabled={editing} onClick={() => pick(platform, (version + 1) % texts.length)}>
+            Version {index + 1} of {versions.length}
+            <button type="button" className="v2-card-link" disabled={editing} onClick={() => pick(platform, (index + 1) % versions.length)}>
               Next version
             </button>
           </span>
@@ -89,7 +99,11 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
       <p className="v2-card-strong">
         {body.community} · “{body.threadTitle}”
       </p>
-      {body.quote ? <blockquote className="v2-card-quote">“{body.quote}”</blockquote> : null}
+      {body.quotes.map((quote) => (
+        <blockquote key={quote.text} className="v2-card-quote">
+          “{quote.text}” <span className="v2-muted">({quote.from})</span>
+        </blockquote>
+      ))}
       {body.parts.length > 0 ? (
         <dl className="v2-card-scores" style={{ gridTemplateColumns: `repeat(${Math.min(4, body.parts.length)}, minmax(0, 1fr))` }}>
           {body.parts.map((part) => (
@@ -112,31 +126,41 @@ export function GoalBody({ body }: { body: Body<"goal"> }) {
   return (
     <>
       <p className="v2-card-goal">{body.goal}</p>
-      <ul className="v2-card-plan">
-        {body.plan.map((line) => (
-          <li key={line.what}>
-            <span>{line.what}</span>
-            <span className="v2-muted">{DEPARTMENT_LABEL[line.department]}</span>
-          </li>
-        ))}
-      </ul>
-      {body.target ? <div className="v2-card-meta">Target: {body.target}</div> : null}
+      {body.plan.length > 0 ? (
+        <ul className="v2-card-plan">
+          {body.plan.map((line) => (
+            <li key={line.what}>
+              <span>{line.what}</span>
+              <span className="v2-muted">{DEPARTMENT_LABEL[line.department]}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="v2-card-meta">
+        <span>
+          Target: {body.target} {body.metric}
+        </span>
+        {body.budgetCredits !== null ? <span>Budget {body.budgetCredits} credits</span> : null}
+      </div>
     </>
   );
 }
 
 export function ScriptBody({ body }: { body: Body<"script"> }) {
   return (
-    <ol className="v2-card-beats">
-      {body.beats.map((beat, index) => (
-        <li key={index}>
-          <b className="v2-card-beat-n">{String(index + 1).padStart(2, "0")}</b>
-          <span>
-            <b>“{beat.say}”</b> {beat.picture}
-          </span>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="v2-card-beats">
+        {body.beats.map((beat, index) => (
+          <li key={index}>
+            <b className="v2-card-beat-n">{String(index + 1).padStart(2, "0")}</b>
+            <span>
+              <b>“{beat.words}”</b> {beat.picture}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {body.nextPriceCredits !== null ? <div className="v2-card-meta">Keyframes next: {body.nextPriceCredits} credits</div> : null}
+    </>
   );
 }
 
@@ -150,7 +174,8 @@ export function PriceBody({ body, price }: { body: Body<"price">; price: number 
       </div>
       <div className="v2-card-price">
         <span className="v2-muted">
-          {formatSeconds(body.lengthSeconds)} · ready in about {body.readyMinutes} min
+          {formatSeconds(body.seconds)}
+          {body.readyInMinutes ? ` · ready in about ${body.readyInMinutes} min` : null}
         </span>
         <b className="v2-num">{price === null ? "–" : `${price} cr`}</b>
       </div>
@@ -162,12 +187,15 @@ export function FinishedVideoBody({ body }: { body: Body<"finished_video"> }) {
   return (
     <>
       <div className="v2-card-player">
-        {body.posterUrl ? <img src={body.posterUrl} alt="" /> : null}
-        <span className="v2-card-play" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <path d="M8 5l11 7-11 7z" fill="currentColor" />
-          </svg>
-        </span>
+        {body.previewUrl ? (
+          <video src={body.previewUrl} controls preload="metadata" playsInline />
+        ) : (
+          <span className="v2-card-play" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <path d="M8 5l11 7-11 7z" fill="currentColor" />
+            </svg>
+          </span>
+        )}
       </div>
       <div className="v2-card-meta">Approving marks it finished: Shorts can be cut from it</div>
     </>
@@ -178,11 +206,11 @@ export function ShortsBody({ body }: { body: Body<"shorts_batch"> }) {
   return (
     <ul className="v2-card-shorts">
       {body.shorts.map((short) => (
-        <li key={`${short.from}-${short.to}`}>
-          <span className="v2-card-poster" aria-hidden="true" />
+        <li key={`${short.start}-${short.end}`}>
+          {short.previewUrl ? <video className="v2-card-poster" src={short.previewUrl} controls preload="metadata" playsInline /> : <span className="v2-card-poster" aria-hidden="true" />}
           <span>
             <b>
-              {formatSeconds(short.from)}–{formatSeconds(short.to)}
+              {formatSeconds(short.start)}–{formatSeconds(short.end)}
             </b>
             <br />
             <span className="v2-muted">Hook: “{short.hook}”</span>
@@ -215,24 +243,27 @@ export function SlideshowBody({
       </ul>
       <label className="v2-field" htmlFor={`${cardId}-slide1`}>
         Slide 1 text
-        <input id={`${cardId}-slide1`} className="v2-input is-compact" value={firstSlide} maxLength={120} onChange={(event) => onFirstSlide(event.target.value)} />
+        <input id={`${cardId}-slide1`} className="v2-input is-compact" value={firstSlide} maxLength={300} onChange={(event) => onFirstSlide(event.target.value)} />
       </label>
     </>
   );
 }
 
 export function ScheduleBody({ body }: { body: Body<"schedule"> }) {
+  const when = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(body.at));
   return (
     <>
-      <p className="v2-card-strong">{body.item}</p>
+      <p className="v2-card-strong">{body.what}</p>
       <dl className="v2-card-facts">
         <div>
           <dt>Where</dt>
-          <dd>{body.where}</dd>
+          <dd>
+            {PLATFORM_LABEL[body.where.platform]} · {body.where.handle}
+          </dd>
         </div>
         <div>
           <dt>When (your time)</dt>
-          <dd className="v2-num">{body.when}</dd>
+          <dd className="v2-num">{when}</dd>
         </div>
       </dl>
       {body.why ? <div className="v2-card-meta">Why: {body.why}</div> : null}
@@ -255,19 +286,21 @@ export function CorrectionBody({
     <>
       {editing ? (
         <label className="v2-field">
-          <span>The rule, in your words</span>
-          <input className="v2-input" value={draft} maxLength={200} onChange={(event) => onDraft(event.target.value)} />
+          <span>The rule, in your words (3 to 200 characters)</span>
+          <input className="v2-input" value={draft} minLength={3} maxLength={200} onChange={(event) => onDraft(event.target.value)} />
         </label>
       ) : (
         <p className="v2-card-rule">“{body.rule}”</p>
       )}
-      <ul className="v2-card-edits">
-        {body.edits.map((edit, index) => (
-          <li key={index}>
-            <s className="v2-muted">{edit.before}</s> → {edit.after}
-          </li>
-        ))}
-      </ul>
+      {body.examples.length > 0 ? (
+        <ul className="v2-card-edits">
+          {body.examples.map((edit, index) => (
+            <li key={index}>
+              <s className="v2-muted">{edit.before}</s> → {edit.after}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </>
   );
 }
