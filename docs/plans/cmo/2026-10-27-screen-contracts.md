@@ -40,7 +40,7 @@ Phases: B0, B1, B2 (brain), A0 (approval) are wave 1 and land in this PR; everyt
 | Field | Source | Live today | Live with |
 |---|---|---|---|
 | credits, plan, email, userId | `credit_balance`, `profiles.plan` (`ShellAccount`, `app/app/shell.ts`) | yes | — |
-| pending | `lib/cmo/pending.ts`: `approvals` where `status = waiting` | yes | — |
+| pending | `lib/cmo/pending.ts`: `approvals` where `status = waiting`; with the flag off only `post` and `reply` (the kinds the v1 inbox decides) | yes | — |
 | rail availability | `GET /api/v1/screens` | yes | — |
 
 ## S2 Dashboard (`dashboard.ts`)
@@ -127,15 +127,15 @@ POST /api/v1/approvals/[id]   { action, contentHash, text?, reason?, goal?, targ
 
 | Screen | Field | Source | Live today | Live with |
 |---|---|---|---|---|
-| Research | `lastRunAt`, `nextRunAt` | `cmo_runs` kind `competitor_research`, `lib/cmo/loops.ts` | yes | W1-5 |
-| Research | `insights[]`, `dropped` | `competitor_research` output (`CompetitorInsight`) | yes | W1-5 |
-| Research | `results[]` | `post_metrics` 24 h after posting | partly (X) | R3 |
-| Writer | `drafts[]` | `content_items` (X today), other kinds W1 | partly (X) | W0–W1 |
+| Research | `lastRunAt`, `nextRunAt` | last done `competitor_research` run; next Sunday 00:05 UTC | **live** | W1-5 |
+| Research | `insights[]`, `dropped` | latest `cmo_insights` hooks with a source link; formats, ideas and hooks without one count as dropped | **live** | W1-5 |
+| Research | `results[]` | latest `post_metrics` per X post | **live** (X) | R3 |
+| Writer | `drafts[]` | X `content_items` of the last 14 days and ahead (planned/drafting → drafting, in review → waiting, approved → scheduled, published → posted) | **live** (X) | W0–W1 for other kinds |
 | Writer | `voice` | Library voice | partly | W0–W1 |
-| Studio | `items[]` | `projects`, `editor_projects`, uploads (`/api/v1/projects`) | yes | U7b (Session C reads today's API) |
+| Studio | `items[]` | generated work only (none before S1); uploads and edits come from `/api/v1/projects` on the page | **live** (empty) | S1 |
 | Studio | `items[].approvalId`, generated kinds | Studio cards | no | A1, S1–S3 |
 | Studio | `team` | long-take generations | no | B3 |
-| Sales | `threads[]`, `week` | `opportunities` | yes | W1-5 |
+| Sales | `threads[]`, `week` | `opportunities`; every rule label reads "Rules not checked yet: help first" until R1 | **live** | W1-5 |
 | Sales | `mentions`, `stuck`, rule labels | Sales safety | no | R1 |
 | Schedule | everything | `schedule_slots`, Zernio accounts | no | P0–P1 |
 

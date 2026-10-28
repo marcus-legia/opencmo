@@ -18,6 +18,19 @@ import { socialReaderReady } from "@/lib/cmo/social/reddit";
 /** Loops that call a model: for a founder in mode B they go to the inbox instead. */
 const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "competitor_research", "summarize_memory", "review_week"]);
 
+/**
+ * The open work order of each due calendar item. The run carries it (`input.order_id`), so a failed run fails its
+ * own order instead of a guess (`work_order_for_run`). Read errors only lose the link, never the run.
+ */
+async function dueLinks(admin: SupabaseClient, items: (string | undefined)[]): Promise<Map<string, string>> {
+  const ids = items.filter((id): id is string => Boolean(id));
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const { data } = await admin.from("work_orders").select("id, item_id").in("item_id", ids).in("status", ["queued", "deferred"]);
+  for (const row of (data ?? []) as { id: string; item_id: string }[]) out.set(row.item_id, row.id);
+  return out;
+}
+
 export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number; inbox: number }> {
   const today = isoDay();
   const weekday = new Date().getUTCDay();
@@ -34,12 +47,12 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
 
   const { data: due } = await admin
     .from("content_items")
-    .select("user_id, department, idea, day")
+    .select("id, user_id, department, idea, day")
     .in("department", ["post", "sales"])
     .eq("status", "planned")
     .lte("day", today)
     .order("day");
-  const dueRows = (due ?? []) as { user_id: string; department: string; idea: string }[];
+  const dueRows = (due ?? []) as { id: string; user_id: string; department: string; idea: string }[];
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
   const { data: published } = await admin.from("content_items").select("user_id").eq("status", "published").eq("department", "post").gte("published_at", since);
   const publishedBy = new Map<string, number>();
@@ -52,7 +65,7 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
   for (const user of users) {
     const firstDue = (department: string) => {
       const row = dueRows.find((d) => d.user_id === user && d.department === department);
-      return row ? { idea: row.idea } : null;
+      return row ? { idea: row.idea, id: row.id } : null;
     };
     const state: LoopState = {
       weekday,
@@ -64,9 +77,16 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
     };
     // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
     const claude = modes.get(user)?.brain === "claude";
+    const links = await dueLinks(admin, [state.duePost?.id, state.dueSales?.id]);
     for (const run of dueLoops(state)) {
       const toInbox = claude && THINKING.has(run.kind);
-      const input = { ...run.input, loop: run.loop, ...(toInbox ? { brain: "claude" } : {}) };
+      const item = run.kind === "post_draft" ? state.duePost?.id : run.kind === "sales_scan" ? state.dueSales?.id : undefined;
+      const input = {
+        ...run.input,
+        loop: run.loop,
+        ...(item ? { item_id: item, ...(links.get(item) ? { order_id: links.get(item) } : {}) } : {}),
+        ...(toInbox ? { brain: "claude" } : {}),
+      };
       const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: input });
       // Out of credits or at the daily cap: skip this user, keep going for the others.
       if (enqueueError) console.warn("[cron] cmo: skipped", run.loop, enqueueError.message);

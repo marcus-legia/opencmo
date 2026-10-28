@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { cronAuthorized } from "@/lib/cron-auth";
 import { buildDigest, digestSender, loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { SITE_URL } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -20,12 +21,19 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient(AbortSignal.timeout((maxDuration - 10) * 1000));
   const send = digestSender();
   const now = new Date();
-  const { data, error } = await admin.from("profiles").select("id, email, timezone, digest_hour").not("digest_hour", "is", null).limit(5000);
-  if (error) return NextResponse.json({ error: "Could not read founders." }, { status: 500 });
+  type Profile = { id: string; email: string | null; timezone: string; digest_hour: number };
+  let profiles: Profile[];
+  try {
+    profiles = await readAll<Profile>((from, to) =>
+      admin.from("profiles").select("id, email, timezone, digest_hour").not("digest_hour", "is", null).order("id").range(from, to),
+    );
+  } catch {
+    return NextResponse.json({ error: "Could not read founders." }, { status: 500 });
+  }
 
   let due = 0;
   let sent = 0;
-  for (const profile of (data ?? []) as { id: string; email: string | null; timezone: string; digest_hour: number }[]) {
+  for (const profile of profiles) {
     const clock = localClock(now, profile.timezone);
     if (clock.hour !== profile.digest_hour || !profile.email) continue;
     due += 1;

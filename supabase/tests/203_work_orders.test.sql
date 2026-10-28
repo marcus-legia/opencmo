@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(42);
+select plan(55);
 
 -- Grants, RLS, Realtime.
 select ok(has_table_privilege('authenticated', 'public.work_orders', 'select'), 'founders read orders');
@@ -26,6 +26,10 @@ create function pg_temp.id(p text) returns uuid language sql as $$ select id fro
 create function pg_temp.order_of(p_item text) returns public.work_orders language sql as $$
   select * from public.work_orders where item_id = pg_temp.id(p_item)
 $$;
+
+-- Same table as JOB_PRICES in apps/web/lib/cmo/jobs/progress.ts (review item 9): change both together.
+select is(array[public.cmo_job_price('plan_week'), public.cmo_job_price('post_draft'), public.cmo_job_price('sales_scan'),
+  public.cmo_job_price('competitor_research')], array[1, 1, 5, 2], 'order prices match the app''s JOB_PRICES');
 
 -- plan_week: the calendar and its tree.
 with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2030000-0000-4000-8000-00000000000a', 'plan_week', 'running') returning id)
@@ -64,6 +68,14 @@ select is((pg_temp.order_of('p1')).status, 'waiting_founder', 'a draft in review
 select is((select status from public.deliverables where ref_id = pg_temp.id('p1')), 'waiting_founder', 'the draft is the order''s deliverable');
 select is((pg_temp.order_of('p1')).spent_credits, 1, 'the run''s credits count against the order');
 select is((select spent_credits from public.work_orders where id = pg_temp.id('root')), 1, 'and against the week');
+update public.cmo_runs set credits = 1, status = 'done', output = '{}' where id = pg_temp.id('plan');
+select is((select spent_credits from public.work_orders where id = pg_temp.id('root')), 2, 'the plan run''s credit counts against the week too');
+
+-- A redraft while the card waits supersedes the card; the order keeps waiting on the new one (review item 3).
+update public.content_items set body = jsonb_set(body, '{text}', '"Cut a video by deleting the words you said."') where id = pg_temp.id('p1');
+select is((select count(*)::int from public.approvals where ref_id = pg_temp.id('p1') and status = 'cancelled'), 1, 'the old card is superseded');
+select is((pg_temp.order_of('p1')).status, 'waiting_founder', 'the order still waits on the founder');
+select is((select status from public.deliverables where ref_id = pg_temp.id('p1')), 'waiting_founder', 'and so does its deliverable');
 
 -- The founder approves the card: the order is done.
 set local role authenticated;
@@ -78,17 +90,24 @@ set local request.jwt.claims = '{"sub":"e2030000-0000-4000-8000-00000000000b"}';
 select is((select count(*)::int from public.work_orders), 0, 'another founder reads no orders');
 reset role;
 
--- A run whose work went to another planned order: the deliverable follows the item, the guess goes back to the queue.
+-- A guessed order is not blamed for a failed run; a run the schedule linked fails its own order (review item 8).
 with r as (insert into public.cmo_runs (user_id, kind, status, credits) values ('e2030000-0000-4000-8000-00000000000a', 'post_draft', 'running', 1) returning id)
+insert into t select 'guess', id from r;
+select is((pg_temp.order_of('p2')).run_id, pg_temp.id('guess'), 'an unlinked run takes the next post order as a guess');
+update public.cmo_runs set status = 'failed', error = 'The model did not answer.' where id = pg_temp.id('guess');
+select is((pg_temp.order_of('p2')).status, 'queued', 'a guessed order goes back to the queue');
+select is((pg_temp.order_of('p2')).run_id, null, 'free for the next run');
+with r as (insert into public.cmo_runs (user_id, kind, status, credits, input) values ('e2030000-0000-4000-8000-00000000000a', 'post_draft', 'running', 1,
+  jsonb_build_object('source', 'schedule', 'order_id', (pg_temp.order_of('p2')).id)) returning id)
 insert into t select 'r2', id from r;
-select is((pg_temp.order_of('p2')).run_id, pg_temp.id('r2'), 'the second run takes the next post order');
+select is((pg_temp.order_of('p2')).run_id, pg_temp.id('r2'), 'a run the schedule linked takes its order');
 
 -- Deferral, failure, and a run nobody planned.
 update public.cmo_runs set status = 'queued', not_before = now() + interval '1 minute' where id = pg_temp.id('r2');
 select is((pg_temp.order_of('p2')).status, 'deferred', 'a deferred run defers its order');
 update public.cmo_runs set status = 'running' where id = pg_temp.id('r2');
 update public.cmo_runs set status = 'failed', error = 'The model did not answer.' where id = pg_temp.id('r2');
-select is((pg_temp.order_of('p2')).status, 'failed', 'a failed run fails its order');
+select is((pg_temp.order_of('p2')).status, 'failed', 'a failed linked run fails its order');
 select is((pg_temp.order_of('p2')).error->>'code', 'run_failed', 'with an error the replan can read');
 with r as (insert into public.cmo_runs (user_id, kind, status, input) values ('e2030000-0000-4000-8000-00000000000a', 'competitor_research', 'queued', '{"source":"chat"}') returning id)
 insert into t select 'r3', id from r;
@@ -96,6 +115,18 @@ select is((select created_by from public.work_orders where run_id = pg_temp.id('
 update public.cmo_runs set status = 'running' where id = pg_temp.id('r3');
 update public.cmo_runs set status = 'done', output = '{"reason":"No competitor posted this week."}' where id = pg_temp.id('r3');
 select is((select done_reason from public.work_orders where run_id = pg_temp.id('r3')), 'No competitor posted this week.', 'done with nothing to approve states why');
+
+-- A draft that leaves review without the founder sends its order back: deleted → cancelled (review item 3).
+with r as (insert into public.cmo_runs (user_id, kind, status, input) values ('e2030000-0000-4000-8000-00000000000a', 'sales_scan', 'running',
+  jsonb_build_object('order_id', (pg_temp.order_of('s1')).id)) returning id)
+insert into t select 'r5', id from r;
+with o as (insert into public.opportunities (user_id, run_id, url, title, score, reply)
+  values ('e2030000-0000-4000-8000-00000000000a', pg_temp.id('r5'), 'https://www.reddit.com/r/SaaS/comments/b1/', 'Editing demos?', 70, 'Same here.') returning id)
+insert into t select 'o1', id from o;
+update public.cmo_runs set status = 'done', output = '{}' where id = pg_temp.id('r5');
+select is((pg_temp.order_of('s1')).status, 'waiting_founder', 'the scan''s order waits on its reply card');
+delete from public.opportunities where id = pg_temp.id('o1');
+select is((pg_temp.order_of('s1')).status, 'cancelled', 'a deleted draft cancels its order instead of finishing it');
 
 -- The state machine.
 insert into t select 'a', (public.work_order_create('e2030000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
@@ -107,8 +138,14 @@ select throws_ok($$ select public.work_order_move(pg_temp.id('a'), 'done') $$, '
 select public.work_order_move(pg_temp.id('a'), 'running');
 select throws_ok($$ select public.work_order_move(pg_temp.id('a'), 'done') $$, 'P0001', 'An order is done only with a deliverable or a reason.', 'done needs a deliverable or a reason');
 select throws_ok($$ select public.work_order_move(pg_temp.id('a'), 'failed') $$, '22023', 'A failed order needs an error code and message.', 'failed needs an error');
-select throws_ok($$ select public.work_order_spend(pg_temp.id('a'), 3) $$, 'P0001', 'Over budget: “Video brief” has no credits left for this.', 'spend never passes the budget');
-select lives_ok($$ select public.work_order_spend(pg_temp.id('a'), 2) $$, 'spending within the budget works');
+select is(public.work_order_spend(pg_temp.id('a'), 1), true, 'spending within the budget');
+create temp table t_root (spent int) on commit drop;
+insert into t_root select spent_credits from public.work_orders where id = pg_temp.id('root');
+select is(public.work_order_spend(pg_temp.id('a'), 2), false, 'an overrun is reported (review item 5)');
+select is((select spent_credits from public.work_orders where id = pg_temp.id('a')), 3, 'and recorded, not refused');
+select is((select spent_credits from public.work_orders where id = pg_temp.id('root')), (select spent + 2 from t_root), 'the week''s total stays true');
+select ok(exists (select 1 from public.work_order_events where order_id = pg_temp.id('a') and text = 'Over budget: “Video brief” used 3 of 2 credits'),
+  'the overrun is a note in the log');
 select is((public.work_order_move(pg_temp.id('a'), 'done', null, null, 'Brief written')).status, 'done', 'done with a reason');
 select lives_ok($$ select public.work_order_move(pg_temp.id('b'), 'running') $$, 'the dependent order starts once its dependency is done');
 select throws_ok($$ select public.work_order_move(pg_temp.id('a'), 'running') $$, 'P0001', 'An order cannot go from done to running.', 'done is final');

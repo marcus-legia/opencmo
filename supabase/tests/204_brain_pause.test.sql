@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(18);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('e2040000-0000-4000-8000-00000000000a', 'b2@test.local'),
@@ -42,8 +42,12 @@ select is((public.claim_cmo_run(pg_temp.id('queued'))).id, null, 'the claim neve
 select is((public.claim_cmo_run(pg_temp.id('other'))).id, pg_temp.id('other'), 'other founders keep running');
 update public.cmo_runs set lease_until = now() - interval '1 second' where id = pg_temp.id('running');
 select public.claim_cmo_run(pg_temp.id('running'));
-select is((select status || ' ' || not_before::text from public.cmo_runs where id = pg_temp.id('running')), 'queued infinity',
-  'a lost lease goes back to the queue parked');
+select is((select status || ' ' || not_before::text || ' ' || attempt from public.cmo_runs where id = pg_temp.id('running')), 'queued infinity 0',
+  'a lost lease goes back to the queue parked, without counting the attempt (review item 6)');
+-- Three attempts used, then paused: the sweep must not fail it for good.
+update public.cmo_runs set status = 'running', attempt = 3, lease_until = now() - interval '1 second' where id = pg_temp.id('running');
+select public.claim_cmo_run(pg_temp.id('running'));
+select is((select status || ' ' || attempt from public.cmo_runs where id = pg_temp.id('running')), 'queued 2', 'pausing never fails a run for good');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2040000-0000-4000-8000-00000000000a"}';
@@ -65,6 +69,13 @@ select is((select error->>'code' from public.work_orders where id = pg_temp.id('
 select throws_ok($$ select public.work_order_mark_replanned(pg_temp.id('o'), 'again') $$, 'P0001',
   'This order was already replanned once.', 'never a second replan');
 select ok(exists (select 1 from public.work_order_events where order_id = pg_temp.id('o') and kind = 'note'), 'the log says the Planner was asked');
+-- A stuck order that never started (review item 4): failed, marked, and never picked again.
+insert into t select 'q', (public.work_order_create('e2040000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+  pg_temp.id('root'), 'post_draft', 'Ask for B-roll', '{}', 1, now() - interval '2 days')).id;
+select is((public.work_order_mark_replanned(pg_temp.id('q'), 'A day past its due time')).status, 'failed', 'a stuck queued order fails before its replan');
+select ok((select brief ? 'replanned_at' from public.work_orders where id = pg_temp.id('q')), 'and is marked replanned');
+select throws_ok($$ select public.work_order_mark_replanned(pg_temp.id('q'), 'again') $$, 'P0001',
+  'This order was already replanned once.', 'so tomorrow''s check cannot replan it again');
 
 select * from finish();
 rollback;

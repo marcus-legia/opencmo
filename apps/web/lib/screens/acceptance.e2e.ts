@@ -8,6 +8,7 @@
  *       NODE_OPTIONS=--conditions=react-server npx tsx lib/screens/acceptance.e2e.ts
  *
  * Reads every screen the way the route does: the loader under the founder's RLS session, then `compose`.
+ * It leaves its founder in the database, and some pgTAP files expect an empty one: `npm run db:reset` before `db:test`.
  */
 import assert from "node:assert/strict";
 
@@ -16,10 +17,11 @@ import { createClient } from "@supabase/supabase-js";
 import { buildDigest, digestSender, loadDigestInput } from "@/lib/cmo/digest";
 import { drainCmoQueue } from "@/lib/cmo/jobs/runner";
 import { supabaseStore } from "@/lib/cmo/jobs/store";
+import { enqueueDueLoops } from "@/lib/cmo/schedule";
 import { clientFor } from "@/lib/mcp/auth";
 
 import { LOADERS } from "./load";
-import { compose, type ScreenName } from "./registry";
+import { compose, released, type ScreenName } from "./registry";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
@@ -74,8 +76,11 @@ export async function run(): Promise<void> {
   assert.equal(brain.data.week.credits.budget, 80, "the week holds the weekly budget");
   step(`plan_week wrote the tree: ${orders.length} orders (${orders.filter((o) => o.department === "writer").length} Writer, ${orders.filter((o) => o.department === "sales").length} Sales)`);
 
-  // A post draft and the Reddit scan run.
-  await enqueue(userId, "post_draft");
+  // The 00:05 schedule enqueues today's post, linked to its order; the Reddit scan is started by hand.
+  await enqueueDueLoops(admin);
+  const { data: draftRun } = await admin.from("cmo_runs").select("input").eq("user_id", userId).eq("kind", "post_draft").single();
+  const link = (draftRun as { input: { order_id?: string; item_id?: string } }).input;
+  assert.ok(link.order_id && link.item_id, "the schedule links the draft run to its order and calendar item");
   await enqueue(userId, "sales_scan", { brief: "Founders editing product demos" });
   await drain();
   let dashboard = await screen("dashboard", userId);
@@ -131,6 +136,17 @@ export async function run(): Promise<void> {
     await send(email, digest);
     step(`digest sent to the local mail catcher: “${digest.subject}”`);
   } else step(`digest built: “${digest.subject}” (no local mail sender set)`);
+
+  const writer = await screen("writer", userId);
+  assert.ok(writer.live.drafts && writer.data.drafts.some((d) => d.column === "scheduled"), "Writer shows the approved post live");
+  const salesScreen = await screen("sales", userId);
+  assert.equal(salesScreen.data.threads.filter((t) => t.status === "open").length, replies.length, "Sales lists the open threads live");
+  const researchScreen = await screen("research", userId);
+  assert.ok(researchScreen.live.insights && researchScreen.live.results, "Research reads live rows");
+  for (const name of ["dashboard", "brain", "library", "settings", "research", "writer", "studio", "sales"] as const) {
+    assert.ok(released(name), `${name} would show at release`);
+  }
+  step("Writer, Sales and Research read live rows; eight screens pass the release gate");
 
   const library = await screen("library", userId);
   assert.ok(library.live.documents && library.data.documents.length === 3, "Library reads the founder's documents");

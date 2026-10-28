@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 
 import { buildDigest, localClock } from "../digest";
 
+import { readAll } from "./progress-run";
 import { classifyOrder, nextCheckAt, progressReport, replanBrief, type OrderLedgerRow } from "./progress";
 
 const NOW = new Date("2026-10-29T10:00:00Z");
@@ -79,4 +80,22 @@ assert.equal(buildDigest({ appUrl: "x", dateLabel: "d", waiting: [], wentOut: []
 assert.deepEqual(localClock(new Date("2026-10-29T00:30:00Z"), "Asia/Ho_Chi_Minh"), { hour: 7, dateLabel: "Thursday 29 Oct" });
 assert.equal(localClock(new Date("2026-10-29T00:30:00Z"), "Not/AZone").hour, 0, "an unknown zone falls back to UTC");
 
-console.log("progress.check: classifier, one replan per order, digest template ok");
+// Paging: every row, pages never overlap (review item 7).
+async function paging(): Promise<void> {
+  const all = Array.from({ length: 2500 }, (_, i) => i);
+  const calls: [number, number][] = [];
+  const read = await readAll<number>(async (from, to) => {
+    calls.push([from, to]);
+    return { data: all.slice(from, to + 1), error: null };
+  });
+  assert.equal(read.length, 2500, "no row past a page is skipped");
+  assert.deepEqual(calls, [[0, 999], [1000, 1999], [2000, 2999]]);
+}
+
+void paging().then(
+  () => console.log("progress.check: classifier, one replan per order, digest template ok"),
+  (error) => {
+    console.error(error);
+    process.exit(1);
+  },
+);

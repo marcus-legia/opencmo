@@ -3,9 +3,21 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { progressReport, replanBrief, stuckReason, type OrderLedgerRow } from "./progress";
+import { mondayOf } from "./summarize-memory";
 
-/** `cmo_job_price` (SQL), for telling an order with no credits from one that needs none. */
-const PRICES: Record<string, number> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2 };
+const PAGE = 1000;
+
+/** Every row of a query, a page at a time (ordered by id so pages never overlap or skip). */
+export async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const batch = (data ?? []) as T[];
+    rows.push(...batch);
+    if (batch.length < PAGE) return rows;
+  }
+}
 
 export type ProgressOutcome = { users: number; stuck: number; replanned: number; overBudget: number };
 
@@ -15,23 +27,23 @@ export type ProgressOutcome = { users: number; stuck: number; replanned: number;
  * what is stuck. That is the only model call it can cause. Paused founders are skipped (`cmo_enqueue` refuses).
  */
 export async function runProgressCheck(admin: SupabaseClient, now = new Date()): Promise<ProgressOutcome> {
-  const week = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)))
-    .toISOString()
-    .slice(0, 10);
-  const { data, error } = await admin
-    .from("work_orders")
-    .select("id, user_id, parent_id, kind, title, department, status, due_at, budget_credits, spent_credits, updated_at, brief, error")
-    .eq("week", week)
-    .limit(5000);
-  if (error) throw new Error(`work_orders: ${error.message}`);
+  const week = mondayOf(now);
+  const rows = await readAll<OrderLedgerRow & { user_id: string }>((from, to) =>
+    admin
+      .from("work_orders")
+      .select("id, user_id, parent_id, kind, title, department, status, due_at, budget_credits, spent_credits, updated_at, brief, error")
+      .eq("week", week)
+      .order("id")
+      .range(from, to),
+  );
   const byUser = new Map<string, OrderLedgerRow[]>();
-  for (const row of (data ?? []) as (OrderLedgerRow & { user_id: string })[]) {
+  for (const row of rows) {
     byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row]);
   }
 
   const outcome: ProgressOutcome = { users: byUser.size, stuck: 0, replanned: 0, overBudget: 0 };
   for (const [user, orders] of byUser) {
-    const report = progressReport(orders, now, PRICES);
+    const report = progressReport(orders, now);
     outcome.stuck += report.stuck.length;
     outcome.overBudget += report.overBudget.length;
     if (!report.replan) continue;

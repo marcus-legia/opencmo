@@ -12,10 +12,14 @@ were checked through `next dev` with a signed-in session.
   ✓ approved the post: queue 6 → 5, log “You approved “Cut a video by deleting words””
   ✓ Pause CMO refused the next run; Resume cleared it
   ✓ digest sent to the local mail catcher: “5 things wait on you · today”
+  ✓ Writer, Sales and Research read live rows; eight screens pass the release gate
   ✓ Library reads the three documents live
 ```
 
-Also on that stack: `supabase test db` 115 files, 1797 assertions, pass; `supabase db lint --level warning` clean;
+Re-run on 2026-10-28 after the planner's review fixes: the post draft is now enqueued by the real 00:05 schedule
+(`enqueueDueLoops`), which links the run to its order and calendar item.
+
+Also on that stack: `supabase test db` 115 files, 1814 assertions, pass; `supabase db lint --level warning` clean;
 `NEXT_PUBLIC_OPENCMO_UI=v2 npm run build` clean.
 
 ## Live flags as served by `GET /api/v1/screens/[name]`

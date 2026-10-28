@@ -53,6 +53,9 @@ async function main() {
     ({ id: day + status + department, day, status, department }) as ItemRow;
   assert.equal(pickDueItem([mk("2026-10-07", "planned"), mk("2026-10-04", "planned"), mk("2026-10-03", "planned", "sales")], "2026-10-05")?.day, "2026-10-04");
   assert.equal(pickDueItem([mk("2026-10-07", "planned")], "2026-10-05"), null, "chưa tới hạn");
+  const named = [mk("2026-10-03", "planned"), mk("2026-10-04", "planned")];
+  assert.equal(pickDueItem(named, "2026-10-05", named[1]!.id)?.day, "2026-10-04", "the item the schedule named wins");
+  assert.equal(pickDueItem(named, "2026-10-05", "gone")?.day, "2026-10-03", "a named item no longer planned falls back to the oldest");
 
   // W1 rồi W2 chạy hết hàng đợi với LLM giả.
   const mem = memoryStore(docs);

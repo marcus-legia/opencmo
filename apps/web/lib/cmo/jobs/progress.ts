@@ -21,6 +21,12 @@ export type OrderLedgerRow = {
   error: { code?: string; message?: string } | null;
 };
 
+/**
+ * What each order kind costs, the same table as `cmo_job_price` in SQL (pgTAP `203_work_orders` pins both). An order
+ * that needs credits and was given none is over budget.
+ */
+export const JOB_PRICES: Readonly<Record<string, number>> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2 };
+
 export type Verdict = "done" | "on_track" | "waiting_founder" | "over_budget" | "stuck";
 
 const HOUR = 3_600_000;
@@ -72,7 +78,7 @@ export type ProgressReport = {
 };
 
 /** The week's ledger. The root (no parent) is the week itself, not an order to count. */
-export function progressReport(orders: OrderLedgerRow[], now: Date, prices: Record<string, number> = {}): ProgressReport {
+export function progressReport(orders: OrderLedgerRow[], now: Date, prices: Readonly<Record<string, number>> = JOB_PRICES): ProgressReport {
   const children = orders.filter((o) => o.parent_id !== null);
   const by = (v: Verdict) => children.filter((o) => classifyOrder(o, now, prices[o.kind] ?? 0) === v);
   const stuck = by("stuck");

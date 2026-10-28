@@ -2316,13 +2316,17 @@ begin
   for v_dead in
     update public.cmo_runs set status = 'failed', error = 'This task stopped too many times.', finished_at = now(), lease_until = null
     where status = 'running' and kind <> 'onboard' and lease_until < now() and attempt >= 3
+      and not public.cmo_paused(user_id)
     returning *
   loop
     perform public.cmo_refund_run(v_dead);
   end loop;
+  -- A paused founder's run gives its attempt back, as `cmo_defer_run` does: pausing is not a failure, and three
+  -- pauses must not fail it for good.
   update public.cmo_runs set status = 'queued', lease_until = null,
+    attempt = case when public.cmo_paused(user_id) then greatest(0, attempt - 1) else attempt end,
     not_before = case when public.cmo_paused(user_id) then 'infinity'::timestamptz else not_before end
-  where status = 'running' and kind <> 'onboard' and lease_until < now() and attempt < 3;
+  where status = 'running' and kind <> 'onboard' and lease_until < now() and (attempt < 3 or public.cmo_paused(user_id));
 
   select * into v_row from public.cmo_runs r
   where status = 'queued' and (p_run_id is null or id = p_run_id)
@@ -8519,7 +8523,6 @@ CREATE TABLE public.work_orders (
     CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
     CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
     CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
-    CONSTRAINT work_orders_check1 CHECK ((spent_credits <= budget_credits)),
     CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
     CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
@@ -8621,6 +8624,14 @@ declare
   v_refunded boolean := coalesce((p_run.output->>'refund')::boolean, false);
 begin
   if p_run.status = 'failed' then
+    -- Only an order the run was linked to for sure fails with it. A guessed planned order goes back to the queue:
+    -- failing it could blame the wrong calendar item.
+    if p_order.item_id is not null and not (p_run.input ? 'order_id') then
+      update public.work_orders set run_id = null where id = p_order.id;
+      perform public.work_order_move(p_order.id, 'queued',
+        'A ' || replace(p_run.kind, '_', ' ') || ' run failed: ' || left(coalesce(p_run.error, 'Something went wrong.'), 120));
+      return;
+    end if;
     perform public.work_order_move(p_order.id, 'failed', null,
       jsonb_build_object('code', 'run_failed', 'message', left(coalesce(p_run.error, 'Something went wrong.'), 300),
         'retryable', true, 'repair_hint', null));
@@ -8645,12 +8656,7 @@ begin
     end if;
   end loop;
   if not v_refunded and p_run.credits > 0 then
-    begin
-      perform public.work_order_spend(p_order.id, p_run.credits);
-    exception when sqlstate 'P0001' then
-      -- The credits are already settled on the run; the tree records the overrun for the progress check.
-      perform public.work_order_event(p_order, 'note', 'Spent ' || p_run.credits || ' credits over the budget of “' || p_order.title || '”');
-    end;
+    perform public.work_order_spend(p_order.id, p_run.credits);
   end if;
   for v_target in select * from public.work_orders where id = any(v_targets) and status not in ('done', 'failed', 'cancelled') loop
     if v_target.status = 'queued' and exists (select 1 from public.deliverables where order_id = v_target.id) then
@@ -8681,7 +8687,7 @@ $$;
 CREATE FUNCTION public.work_order_for_run(p_run public.cmo_runs) RETURNS public.work_orders
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_row public.work_orders;
   v_root public.work_orders;
@@ -8690,6 +8696,15 @@ begin
   select * into v_row from public.work_orders where run_id = p_run.id limit 1;
   if found or p_run.kind in ('onboard', 'plan_week') then
     return v_row;
+  end if;
+  if coalesce(p_run.input->>'order_id', '') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    update public.work_orders set run_id = p_run.id, updated_at = now()
+    where id = (p_run.input->>'order_id')::uuid and user_id = p_run.user_id and kind = p_run.kind
+      and run_id is null and status in ('queued', 'deferred')
+    returning * into v_row;
+    if found then
+      return v_row;
+    end if;
   end if;
   select * into v_root from public.work_orders
   where user_id = p_run.user_id and parent_id is null and week = date_trunc('week', current_date)::date;
@@ -8713,7 +8728,7 @@ begin
   update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_row.id returning * into v_row;
   return v_row;
 end;
-$$;
+$_$;
 
 
 --
@@ -8767,7 +8782,8 @@ begin
     return v_row;
   end if;
   v_ok := case v_row.status
-    when 'queued' then p_to in ('running', 'deferred', 'waiting_order', 'cancelled')
+    -- `failed` from `queued`: the progress check fails an order that never started before it replans it.
+    when 'queued' then p_to in ('running', 'deferred', 'waiting_order', 'failed', 'cancelled')
     when 'running' then p_to in ('waiting_founder', 'waiting_order', 'deferred', 'queued', 'done', 'failed', 'cancelled')
     when 'waiting_founder' then p_to in ('queued', 'running', 'done', 'failed', 'cancelled')
     when 'waiting_order' then p_to in ('queued', 'running', 'done', 'failed', 'cancelled')
@@ -8815,32 +8831,34 @@ $$;
 -- Name: work_order_spend(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.work_order_spend(p_id uuid, p_credits integer) RETURNS void
+CREATE FUNCTION public.work_order_spend(p_id uuid, p_credits integer) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
-  v_over text;
+  v_row public.work_orders;
+  v_within boolean := true;
 begin
   if p_credits is null or p_credits <= 0 then
-    return;
+    return true;
   end if;
-  with recursive up as (
-    select * from public.work_orders where id = p_id
-    union all
-    select o.* from public.work_orders o join up on o.id = up.parent_id
-  )
-  select title into v_over from up where spent_credits + p_credits > budget_credits limit 1;
-  if v_over is not null then
-    raise exception 'Over budget: “%” has no credits left for this.', v_over using errcode = 'P0001';
-  end if;
-  with recursive up as (
-    select id, parent_id from public.work_orders where id = p_id
-    union all
-    select o.id, o.parent_id from public.work_orders o join up on o.id = up.parent_id
-  )
-  update public.work_orders set spent_credits = spent_credits + p_credits, updated_at = now()
-  where id in (select id from up);
+  for v_row in
+    with recursive up as (
+      select id, parent_id from public.work_orders where id = p_id
+      union all
+      select o.id, o.parent_id from public.work_orders o join up on o.id = up.parent_id
+    )
+    update public.work_orders o set spent_credits = o.spent_credits + p_credits, updated_at = now()
+    from up where o.id = up.id
+    returning o.*
+  loop
+    if v_row.spent_credits > v_row.budget_credits and v_row.spent_credits - p_credits <= v_row.budget_credits then
+      perform public.work_order_event(v_row, 'note',
+        'Over budget: “' || v_row.title || '” used ' || v_row.spent_credits || ' of ' || v_row.budget_credits || ' credits');
+    end if;
+    v_within := v_within and v_row.spent_credits <= v_row.budget_credits;
+  end loop;
+  return v_within;
 end;
 $$;
 
@@ -8860,9 +8878,33 @@ begin
   if old.status <> 'waiting' or new.status = 'waiting' or v_ref_kind is null then
     return new;
   end if;
-  -- A superseded card is replaced by a new waiting one: the deliverable still waits.
-  if new.status = 'cancelled' and exists (select 1 from public.approvals
-      where ref_kind = new.ref_kind and ref_id = new.ref_id and status = 'waiting') then
+  -- A cancelled card is not a decision. `approval_raise` cancels the old card before it inserts the new one, so a
+  -- row still in review is getting a fresh card: its deliverable keeps waiting. A row that left review without the
+  -- founder (deleted, or back to drafting) sends its order back: cancelled when the row is gone, else queued.
+  if new.status = 'cancelled' then
+    begin
+      if (v_ref_kind = 'content_item' and exists (select 1 from public.content_items where id = new.ref_id and status = 'in_review'))
+         or (v_ref_kind = 'opportunity' and exists (select 1 from public.opportunities where id = new.ref_id and status = 'in_review')) then
+        return new;
+      end if;
+      update public.deliverables set status = 'ready' where ref_kind = v_ref_kind and ref_id = new.ref_id;
+      for v_order in
+        select o.* from public.work_orders o join public.deliverables d on d.order_id = o.id
+        where d.ref_kind = v_ref_kind and d.ref_id = new.ref_id and o.status = 'waiting_founder'
+      loop
+        if not exists (select 1 from public.deliverables where order_id = v_order.id and status = 'waiting_founder') then
+          if (v_ref_kind = 'content_item' and not exists (select 1 from public.content_items where id = new.ref_id))
+             or (v_ref_kind = 'opportunity' and not exists (select 1 from public.opportunities where id = new.ref_id)) then
+            perform public.work_order_move(v_order.id, 'cancelled', 'The draft of “' || v_order.title || '” was deleted');
+          else
+            update public.work_orders set run_id = null where id = v_order.id;
+            perform public.work_order_move(v_order.id, 'queued', '“' || v_order.title || '” went back to drafting');
+          end if;
+        end if;
+      end loop;
+    exception when others then
+      raise warning 'work orders did not follow card %: %', new.id, sqlerrm;
+    end;
     return new;
   end if;
   begin
@@ -8903,8 +8945,19 @@ begin
   end if;
   -- Orders follow runs; they never hold one back. A fault rolls back only the tree's change.
   begin
+    -- A plan run's credits count against the week it planned (its rows are the tree itself, not deliverables).
+    if new.kind = 'plan_week' then
+      if new.status = 'done' and new.credits > 0 and not coalesce((new.output->>'refund')::boolean, false) then
+        select * into v_order from public.work_orders
+        where user_id = new.user_id and parent_id is null and week = date_trunc('week', current_date)::date;
+        if found then
+          perform public.work_order_spend(v_order.id, new.credits);
+        end if;
+      end if;
+      return new;
+    end if;
     v_order := public.work_order_for_run(new);
-    if v_order.id is null or new.kind = 'plan_week' then
+    if v_order.id is null then
       return new;
     end if;
     if new.status = 'running' then

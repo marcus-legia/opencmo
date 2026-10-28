@@ -70,10 +70,19 @@ export const SCREENS = {
     live: ["site", "documents", "brandKits"],
     release: ["site", "documents", "brandKits"],
   }),
-  research: entry({ schema: ResearchScreenSchema, fixture: researchFixture, empty: researchEmpty, live: [], release: ["lastRunAt", "insights", "results"] }),
-  writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: [], release: ["drafts"] }),
-  studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: [], release: ["items"] }),
-  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: [], release: ["threads", "week"] }),
+  research: entry({
+    schema: ResearchScreenSchema,
+    fixture: researchFixture,
+    empty: researchEmpty,
+    live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results"],
+    release: ["lastRunAt", "insights", "results"],
+  }),
+  // Voice is the Library's learned notes (Writer W0–W1); the drafts are live today.
+  writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts"], release: ["drafts"] }),
+  // Uploads come from /api/v1/projects on the page; `items` holds only generated work (none before S1).
+  studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items"], release: ["items"] }),
+  // Mentions and the stuck banner come with Sales safety (R1).
+  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week"], release: ["threads", "week"] }),
   schedule: entry({ schema: ScheduleScreenSchema, fixture: scheduleFixture, empty: scheduleEmpty, live: [], release: ["slots", "accounts"] }),
   settings: entry({
     schema: SettingsScreenSchema,

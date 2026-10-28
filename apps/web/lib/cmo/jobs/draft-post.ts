@@ -61,9 +61,13 @@ function fakeDraft(idea: string, product: string): Draft {
   };
 }
 
-/** Mục tới hạn: mục X `planned` có ngày ≤ hôm nay, cũ nhất trước. */
-export function pickDueItem(items: ItemRow[], today = isoDay()): ItemRow | null {
-  return items.filter((i) => i.department === "post" && i.status === "planned" && i.day <= today).sort((a, b) => a.day.localeCompare(b.day))[0] ?? null;
+/**
+ * Mục tới hạn: mục X `planned` có ngày ≤ hôm nay, cũ nhất trước. `wanted` is the item the schedule named
+ * (`input.item_id`, so the run and its work order agree on what is drafted); it wins while it is still planned.
+ */
+export function pickDueItem(items: ItemRow[], today = isoDay(), wanted?: string): ItemRow | null {
+  const due = items.filter((i) => i.department === "post" && i.status === "planned" && i.day <= today);
+  return due.find((i) => i.id === wanted) ?? due.sort((a, b) => a.day.localeCompare(b.day))[0] ?? null;
 }
 
 export async function draftPost(ctx: JobContext): Promise<JobOutput> {
@@ -74,7 +78,14 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const due = await ctx.step(
     "next_due_item",
     "Finding today's post",
-    async () => (asked ? null : pickDueItem(await store.items(run.user_id, { statuses: ["planned"], department: "post", limit: 50 }), today)),
+    async () =>
+      asked
+        ? null
+        : pickDueItem(
+            await store.items(run.user_id, { statuses: ["planned"], department: "post", limit: 50 }),
+            today,
+            typeof run.input.item_id === "string" ? run.input.item_id : undefined,
+          ),
     (item) => (item ? `Today: ${item.idea}` : asked ? `Brief: ${asked}` : "Nothing due: a post from your strategy"),
   );
 

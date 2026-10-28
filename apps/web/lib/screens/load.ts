@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@/lib/api/handler";
 import { brainMode } from "@/lib/cmo/brain";
 import { loadDigestInput, localClock } from "@/lib/cmo/digest";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
-import { classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
+import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
+import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { SITE_URL } from "@/lib/site";
 
 import type { ApprovalCard } from "./approval-card";
@@ -13,22 +14,18 @@ import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
 import type { LibraryScreen } from "./library";
+import type { ResearchScreen } from "./research";
+import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
 import type { SettingsScreen } from "./settings";
+import type { StudioScreen } from "./studio";
+import type { WriterScreen } from "./writer";
 
 export type LoadContext = { supabase: SupabaseClient; userId: string; params: URLSearchParams };
 
 type Loader<N extends ScreenName> = (ctx: LoadContext) => Promise<Partial<ScreenData<N>>>;
 
-/** `cmo_job_price` (SQL): an order that needs credits and has none is over budget. */
-const PRICES: Record<string, number> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2 };
-
 const iso = (v: string | null | undefined): string | null => (v ? new Date(v).toISOString() : null);
-
-/** Monday of the current UTC week, as `date_trunc('week', current_date)` in SQL. */
-function mondayUtc(now = new Date()): string {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7))).toISOString().slice(0, 10);
-}
 
 /**
  * Runs each part on its own: a part that fails is left out, so its field stays sample (or empty in production) and
@@ -76,7 +73,7 @@ type OrderDb = OrderLedgerRow & { user_id: string; root_id: string | null; week:
 const ORDER_COLUMNS = "id, user_id, root_id, parent_id, week, kind, title, department, status, due_at, budget_credits, spent_credits, updated_at, created_at, brief, error, done_reason";
 
 /** This week's tree: the root and its orders, parents before children. */
-async function weekTree(supabase: SupabaseClient, week = mondayUtc()): Promise<{ root: OrderDb | null; orders: OrderDb[] }> {
+async function weekTree(supabase: SupabaseClient, week = mondayOf()): Promise<{ root: OrderDb | null; orders: OrderDb[] }> {
   const rows = must(await supabase.from("work_orders").select(ORDER_COLUMNS).eq("week", week).order("created_at").limit(500), "work_orders") as OrderDb[];
   const root = rows.find((o) => o.parent_id === null) ?? null;
   const children = rows.filter((o) => o.parent_id !== null);
@@ -108,7 +105,7 @@ const STATE_TEXT: Record<OrderState, string> = {
 
 function stateText(o: OrderDb, now: Date): string {
   if (o.status === "failed") return o.error?.code === "stuck" ? "Stuck: no progress" : `Stuck: ${(o.error?.message ?? "failed").slice(0, 60)}`;
-  if (o.status === "queued" && classifyOrder(o, now, PRICES[o.kind] ?? 0) === "over_budget") return "Stuck: budget";
+  if (o.status === "queued" && classifyOrder(o, now, JOB_PRICES[o.kind] ?? 0) === "over_budget") return "Stuck: budget";
   return STATE_TEXT[o.status];
 }
 
@@ -148,7 +145,7 @@ function orderRows(orders: OrderDb[], cards: Map<string, string>, rootId: string
   }));
 }
 
-async function weekGoal(supabase: SupabaseClient, week = mondayUtc()): Promise<string | null> {
+async function weekGoal(supabase: SupabaseClient, week = mondayOf()): Promise<string | null> {
   const r = await supabase.from("cmo_goals").select("goal").eq("week", week).eq("status", "approved").maybeSingle();
   if (r.error) throw new Error(`cmo_goals: ${r.error.message}`);
   return (r.data as { goal: string } | null)?.goal ?? null;
@@ -183,7 +180,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
     },
     team: async () => {
       const [{ orders }, cards, p] = await Promise.all([tree, queue, prof]);
-      const verdict = (o: OrderDb) => classifyOrder(o, now, PRICES[o.kind] ?? 0);
+      const verdict = (o: OrderDb) => classifyOrder(o, now, JOB_PRICES[o.kind] ?? 0);
       const nodes = TEAM.map((department) => {
         const mine = orders.filter((o) => o.department === department);
         const running = mine.find((o) => o.status === "running");
@@ -349,7 +346,7 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
       }));
     },
     pastWeeks: async () => {
-      const thisWeek = mondayUtc(now);
+      const thisWeek = mondayOf(now);
       const roots = must(
         await supabase.from("work_orders").select("id, week, budget_credits, spent_credits").is("parent_id", null).lt("week", thisWeek).order("week", { ascending: false }).limit(8),
         "work_orders",
@@ -453,8 +450,171 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
   });
 }
 
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const isHttps = (u: unknown): u is string => typeof u === "string" && /^https:\/\/\S+$/.test(u) && u.length <= 500;
+
+/** Waiting cards keyed by the row they decide. */
+async function waitingByRef(supabase: SupabaseClient, refKind: string): Promise<Map<string, string>> {
+  const rows = must(await supabase.from("approvals").select("id, ref_id").eq("ref_kind", refKind).eq("status", "waiting"), "approvals") as {
+    id: string;
+    ref_id: string;
+  }[];
+  return new Map(rows.map((r) => [r.ref_id, r.id]));
+}
+
+async function research({ supabase }: LoadContext): Promise<Partial<ResearchScreen>> {
+  const now = new Date();
+  const latest = supabase.from("cmo_insights").select("body, created_at").eq("kind", "competitors").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return parts<ResearchScreen>("research", {
+    lastRunAt: async () => {
+      const r = await supabase.from("cmo_runs").select("finished_at").eq("kind", "competitor_research").eq("status", "done").order("finished_at", { ascending: false }).limit(1).maybeSingle();
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      return iso((r.data as { finished_at: string | null } | null)?.finished_at);
+    },
+    // The research loop runs on Sunday's 00:05 UTC schedule.
+    nextRunAt: async () => {
+      const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + ((7 - now.getUTCDay()) % 7), 0, 5));
+      if (next <= now) next.setUTCDate(next.getUTCDate() + 7);
+      return next.toISOString();
+    },
+    insights: async () => {
+      const r = await latest;
+      if (r.error) throw new Error(`cmo_insights: ${r.error.message}`);
+      const body = ((r.data as { body?: { hooks?: unknown[] } } | null)?.body ?? {}) as { hooks?: { pattern?: string; example?: string; url?: string; lift?: number }[] };
+      // Every insight points to the post it came from: one without a link is dropped (counted in `dropped`).
+      return (body.hooks ?? [])
+        .filter((h) => typeof h.pattern === "string" && h.pattern && isHttps(h.url))
+        .slice(0, 20)
+        .map((h, i) => ({
+          id: `hook-${i}`,
+          type: "hook" as const,
+          scope: "competitors" as const,
+          platform: "X",
+          text: h.pattern!.slice(0, 300),
+          evidence: `${typeof h.lift === "number" ? `${h.lift}× the account's median` : "Above the account's median"}${h.example ? ` · “${h.example.slice(0, 120)}”` : ""}`.slice(0, 200),
+          usedIn: null,
+          sources: [h.url!],
+        }));
+    },
+    dropped: async () => {
+      const r = await latest;
+      if (r.error) throw new Error(`cmo_insights: ${r.error.message}`);
+      const body = ((r.data as { body?: unknown } | null)?.body ?? {}) as { hooks?: { url?: unknown }[]; formats?: unknown[]; ideas?: unknown[] };
+      return (body.hooks ?? []).filter((h) => !isHttps(h.url)).length + (body.formats ?? []).length + (body.ideas ?? []).length;
+    },
+    results: async () => {
+      const metrics = must(await supabase.from("post_metrics").select("item_id, views, replies, measured_at").order("measured_at", { ascending: false }).limit(100), "post_metrics") as {
+        item_id: string;
+        views: number;
+        replies: number;
+      }[];
+      const latestPerItem = [...new Map(metrics.map((m) => [m.item_id, m])).values()].slice(0, 10);
+      if (!latestPerItem.length) return [];
+      const items = must(await supabase.from("content_items").select("id, idea, final_text").in("id", latestPerItem.map((m) => m.item_id)), "content_items") as {
+        id: string;
+        idea: string;
+        final_text: string | null;
+      }[];
+      return latestPerItem.map((m) => {
+        const item = items.find((i) => i.id === m.item_id);
+        return { id: m.item_id, title: (item?.final_text ?? item?.idea ?? "X post").slice(0, 200), platform: "x" as const, views: Number(m.views), replies: Number(m.replies) };
+      });
+    },
+  });
+}
+
+async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
+  return parts<WriterScreen>("writer", {
+    drafts: async () => {
+      const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+      const [rows, cards] = await Promise.all([
+        supabase
+          .from("content_items")
+          .select("id, day, idea, status, body, final_text, published_at")
+          .eq("department", "post")
+          .in("status", ["planned", "drafting", "in_review", "approved", "published"])
+          .gte("day", since)
+          .order("day")
+          .limit(100),
+        waitingByRef(supabase, "content_item"),
+      ]);
+      const column = { planned: "drafting", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
+      return (must(rows, "content_items") as { id: string; day: string; idea: string; status: keyof typeof column; body: { text?: string; alternates?: unknown[] }; final_text: string | null; published_at: string | null }[]).map(
+        (r) => {
+          const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
+          const edited = r.final_text !== null && r.final_text !== r.body.text;
+          return {
+            id: r.id,
+            kind: "post" as const,
+            platform: "x" as const,
+            at: iso(r.published_at),
+            dayText: r.published_at ? null : WEEKDAY[new Date(`${r.day}T00:00:00Z`).getUTCDay()]!,
+            title: (r.final_text ?? text).slice(0, 300),
+            column: column[r.status],
+            versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
+            note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
+            approvalId: cards.get(r.id) ?? null,
+          };
+        },
+      );
+    },
+  });
+}
+
+/**
+ * Studio's uploads and edits are read live from `/api/v1/projects` on the page; this route only carries generated
+ * items (long videos, shorts, slideshows), which arrive with Studio S1. Until then their honest live value is none.
+ */
+async function studio(): Promise<Partial<StudioScreen>> {
+  return { items: [] };
+}
+
+async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
+  return parts<SalesScreen>("sales", {
+    threads: async () => {
+      const [rows, cards] = await Promise.all([
+        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status").order("created_at", { ascending: false }).limit(30),
+        waitingByRef(supabase, "opportunity"),
+      ]);
+      type Part = { label?: string; score?: number; max?: number; evidence?: string };
+      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string; status: "in_review" | "replied" | "dismissed" }[])
+        .map((r) => {
+          const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
+          return {
+            id: r.id,
+            score: Math.max(0, Math.min(100, Math.round(r.score))),
+            community: (r.community || "Reddit").slice(0, 80),
+            postedAt: iso(r.posted_at),
+            comments: r.comments,
+            title: r.title.slice(0, 300),
+            url: r.url,
+            // Subreddit rules are read with Sales safety (R1); until then every thread is help first, no product mention.
+            rule: { kind: "help_only" as const, text: "Rules not checked yet: help first" },
+            parts: parts.map((p) => ({ label: p.label as "Pain", score: p.score!, max: p.max! })),
+            quotes: parts.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: p.evidence!.slice(0, 400), from: p.label!.toLowerCase() })),
+            draft: r.reply,
+            draftChecks: null,
+            status: r.status === "in_review" ? ("open" as const) : r.status,
+            approvalId: cards.get(r.id) ?? null,
+          };
+        })
+        .sort((a, b) => Number(b.status === "open") - Number(a.status === "open"));
+    },
+    week: async () => {
+      const monday = `${mondayOf()}T00:00:00Z`;
+      const count = async (status: string) => {
+        const r = await supabase.from("opportunities").select("id", { count: "exact", head: true }).eq("status", status).gte("decided_at", monday);
+        if (r.error) throw new Error(`opportunities: ${r.error.message}`);
+        return r.count ?? 0;
+      };
+      const [replied, dismissed] = await Promise.all([count("replied"), count("dismissed")]);
+      return { replied, dismissed };
+    },
+  });
+}
+
 /**
  * Live readers, one per screen, under the founder's RLS session (no service role). A loader returns only the
  * fields it reads for real; `registry.ts` `live` must list them too before they replace sample data.
  */
-export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings };
+export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, research, writer, studio, sales };

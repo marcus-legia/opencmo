@@ -90,6 +90,19 @@ the owner forwards it to the planner session.
 - [x] W1-5 loaders live: Dashboard, Brain, Library, Settings
 - [ ] W1-6 acceptance run (backend run done and recorded; Dashboard look waits for B's U3)
 
+Planner review of `a3d6e01` (PR comment), Session A's items:
+- [x] 3. A superseded card no longer finishes its order; a draft that leaves review cancels (deleted) or requeues its order
+- [x] 4. A stuck queued order can fail before its replan, so it is replanned once, never daily
+- [x] 5. Spending is always recorded up to the week's root (overruns are notes, not refusals); plan runs count
+- [x] 6. Losing the lease while paused gives the attempt back; a paused run is never failed for good
+- [x] 7. The progress check and the digest cron page through every row
+- [x] 8. The schedule links each run to its order (`input.order_id`, `item_id`); an unlinked failed run never fails a guessed order
+- [x] 9. `JOB_PRICES` (pinned to `cmo_job_price` by pgTAP) and `mondayOf` exist once
+- [x] 10. With the flag off, the rail badge counts only post and reply cards
+- [x] Release gating: Research, Writer, Studio and Sales have live fields and pass `released()`
+- [x] Flag helpers: one helper, `lib/screens/flag.ts` (B consolidated it in `3d7873f`); A's code imports `UI_V2` from it
+- [ ] Re-run the acceptance with the real Dashboard and add Dashboard screenshots (after B's items 1 and 2)
+
 ## Session B: UI foundation, shell, Dashboard, cards
 
 **Owns:**

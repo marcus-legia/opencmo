@@ -104,8 +104,9 @@ begin
 end;
 $$;
 
--- Same as 20261016090000 plus the pause: a lost lease of a paused founder goes back to the queue parked, and the claim
--- never starts a paused founder's run (an inbox replay inserted while paused included).
+-- Same as 20261016090000 plus the pause: a lost lease of a paused founder goes back to the queue parked, without
+-- counting the attempt, and the claim never starts a paused founder's run (an inbox replay inserted while paused
+-- included).
 create or replace function public.claim_cmo_run(p_run_id uuid default null, p_lease_seconds integer default 300)
 returns public.cmo_runs language plpgsql security definer set search_path = public
 as $$
@@ -116,13 +117,17 @@ begin
   for v_dead in
     update public.cmo_runs set status = 'failed', error = 'This task stopped too many times.', finished_at = now(), lease_until = null
     where status = 'running' and kind <> 'onboard' and lease_until < now() and attempt >= 3
+      and not public.cmo_paused(user_id)
     returning *
   loop
     perform public.cmo_refund_run(v_dead);
   end loop;
+  -- A paused founder's run gives its attempt back, as `cmo_defer_run` does: pausing is not a failure, and three
+  -- pauses must not fail it for good.
   update public.cmo_runs set status = 'queued', lease_until = null,
+    attempt = case when public.cmo_paused(user_id) then greatest(0, attempt - 1) else attempt end,
     not_before = case when public.cmo_paused(user_id) then 'infinity'::timestamptz else not_before end
-  where status = 'running' and kind <> 'onboard' and lease_until < now() and attempt < 3;
+  where status = 'running' and kind <> 'onboard' and lease_until < now() and (attempt < 3 or public.cmo_paused(user_id));
 
   select * into v_row from public.cmo_runs r
   where status = 'queued' and (p_run_id is null or id = p_run_id)
