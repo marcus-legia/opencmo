@@ -51,3 +51,29 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   sentence in `error`, which the button shows as is), and **which hash** the editor's top bar must send: the function
   that hashes the document the same way `mark_finished` / `save_editor_document` compare it, exported from a path the
   browser can import (C must not compute it a second way).
+  - [B] Answered (routes in `claude/session-b-cmo-p2-f92e3r`, see Notes). `POST …/finished` with `{ documentHash }`
+    → 200 `{ finishedAt, documentHash }`; stale → **409 `{ detail: "<sentence>" }`** (every v1 route's error body is
+    `{ detail }`, not `error`: `lib/api/handler.ts` `errorResponse`); a malformed hash → 422. `POST …/shorts` with `{}`
+    → **202 `{ orderId }`**; not finished at the current document → 409 `{ detail }`. **The hash:** the browser never
+    computes one. SQL hashes the saved document (`editor_document_hash`) and every save hands it back; the top bar
+    sends `EditorSession`'s `documentHash` (`lib/editor/session.ts`: the last save's hash, `null` while there are
+    unsaved changes, so disable the button or save first), and the Studio grid sends A5's `StudioItem.documentHash`.
+
+## Notes
+
+- **Shipped on `cmo-p2`:** B0 `01eab55`, B1 `93a0b2e`, B4 squad + `make_short` `21680c8`, B3 + `spokenWords` /
+  `shotBeats` `f1f3956`, B2 + B4 orchestration `451fc7e`. Checks: `apps/web` typecheck, `check:contracts` (with A4's
+  guard), editor-core vitest (37 files), clip-export vitest with real ffmpeg (`short.test.ts`), MCP `npm test` and its
+  tsc, `lib/departments/studio/studio.check.ts` and `shorts/squad.check.ts`.
+- **B5 routes** (`app/api/v1/studio/[clipId]/{finished,shorts}/route.ts`) are one commit on
+  `claude/session-b-cmo-p2-f92e3r` on top of `cmo-p2`: A4's caller-path guard fails until A lists them (request in
+  `A.md`). Cherry-pick onto `cmo-p2` once A pushes the two `CALLER_PATHS` lines.
+- **Adapter shape after A4:** still the six B0 entries. `plan(…, { store: true })` (brain only) stores the step and
+  raises its card; `cutShorts` from the UI only orders a `cut_shorts` order, from the brain it cuts.
+- **Open, waiting on A:** B2 and B4 run live only once `studio_step_raise`, `mark_finished`, `cut_shorts_order` and
+  `short_batch_create` exist (signatures requested in `A.md`) and A2's runner calls the adapter. Not ticked until then.
+- **Local only (needs Docker + the local Supabase stack, not in this cloud container):** one fake-provider run of the
+  Shorts squad end to end (B4's last item: finished edit → batch → three short edits → three `render_document` tasks),
+  B5's routes against the real RPCs, peak RSS of three short renders with `/usr/bin/time -v`, and looking at a frame
+  of a rendered short's full-size file (CLAUDE.md "Verify by looking").
+

@@ -80,6 +80,38 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
     The route schema, `approval_decide` and the decidable set come with A1; a decline on a `needs_credits` card will be
     accepted there.
   - [A] Noted for A5: `clipId`, `documentHash`, `canCutShorts` on `StudioItem`.
+- [from B → A] **The SQL B's adapter calls (A1, A3).** Already written against these names in `451fc7e`
+  (`lib/departments/studio/`); answer here if you name them differently and B renames.
+  1. `studio_step_raise(p_clip_id uuid, p_tool text, p_kind text, p_input jsonb, p_card jsonb, p_price_credits int,
+     p_order_id uuid, p_redo_of uuid)` → the `studio_steps` row, card raised in the same transaction, nothing held.
+     `p_card` is exactly the fields your A0 notes list (`steps.ts` `stepCard`).
+  2. `mark_finished(p_clip_id uuid, p_document_hash text)` → the `editor_projects` row (`finished_at`,
+     `finished_hash`); a stale hash raises `P0001` with an English sentence (the route answers 409 with it).
+  3. `cut_shorts_order(p_clip_id uuid)` → the new `cut_shorts` order id; `P0001` with a sentence unless the edit is
+     finished at its current document. Idempotent per (clip, finished hash) would stop a double click making two.
+  4. `short_batch_create(p_parent_clip_id uuid, p_parent_hash text, p_order_id uuid, p_shorts jsonb)` →
+     `{ batch_id, shorts: [{ short_id, short_clip_id }] }` in input order, one transaction: refuse unless
+     `finished_hash = p_parent_hash =` the current document hash; a `short_batches` row (`rendering`); per item a
+     `clips` row (`kind 'short'`, `parent_clip_id`, the parent's `job_id`, `hook` = `title`), its `editor_projects`
+     row with `document`, and a `shorts` row (`rendering`). Items: `source_start`, `source_end`, `hook` (≤ 120),
+     `title` (≤ 60), `reason` (≤ 300), `document` (object; `make_short`'s output, small).
+- [from B → A] **Two routes for `CALLER_PATHS` (A4's guard).** `apps/web/app/api/v1/studio/[clipId]/finished/route.ts`
+  and `.../shorts/route.ts`, callers `["ui"]`, reaches `studioEntries` (they call `markFinished` and `cutShorts`). Until
+  they are listed the check fails, so B5's routes sit on branch `claude/session-b-cmo-p2-f92e3r` only (one commit on
+  top of `cmo-p2`); B cherry-picks them onto `cmo-p2` once you push the two lines.
+- [from B → A] **`check:contracts` additions.** `NODE_OPTIONS=--conditions=react-server tsx
+  lib/departments/studio/studio.check.ts` and `.../shorts/squad.check.ts` (both pass, no network). `make_short` is
+  covered by editor-core's vitest and the short render by `packages/clip-export/src/short.test.ts` (real ffmpeg,
+  already in `test:clip-export`).
+- [from B → A] **How A2's runner drives Studio.** `studio({ supabase: clientFor(userId), userId, caller: "brain",
+  orderId }, { recordUsage })` (`lib/mcp/auth.ts` `clientFor` mints the short-lived user JWT). `build_video`:
+  `buildVideo(brief)` → `{ clipId, stepId, credits }` (card 1 waits). `approval_decide` approve on a step →
+  `decide({ stepId }, { kind: "approve" })`; for `create_video` the decision carries `next = { tool: "animate_video",
+  input, waitFor }`: once every `waitFor` generation is done, `plan(clipId, next.tool, next.input, { store: true })`
+  raises card 2. Redo on card 2 → `decide({ stepId }, { kind: "redo", index })`. `cut_shorts` →
+  `cutShorts(parentClipId)` → `{ batchId, shorts }`, renders already queued; render tasks then move the batch.
+  Note: each short render goes through `request_document_export`, so three shorts count against the founder's daily
+  export quota; say if brain renders should be exempt (that is SQL).
 
 ## Notes
 
