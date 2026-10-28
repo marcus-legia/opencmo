@@ -21,7 +21,7 @@
       "required": ["name", "department", "effect", "approval", "callers", "order_kind", "max_steps", "credits", "input"],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "pattern": "^[a-z_]{1,40}$", "description": "The tool, op or job name as the code calls it." },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$", "description": "The tool, op or job name as the code calls it." },
         "department": { "enum": ["brain", "research", "writer", "studio", "sales", "schedule", "publish"] },
         "effect": {
           "enum": ["read", "write", "spend", "outbound"],
@@ -40,7 +40,7 @@
         },
         "order_kind": {
           "type": ["string", "null"],
-          "pattern": "^[a-z_]{1,40}$",
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
           "description": "The work_orders.kind it runs under; null when it never runs as an order."
         },
         "max_steps": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Effort budget: steps one run may take." },

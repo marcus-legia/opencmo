@@ -29,7 +29,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
         (credits, wait, keyframes or shots), `finished_video` (clip id, length, frame, document hash) and
         `shorts_batch` (3 × range, hook, reason, preview); fixtures for each.
   - [x] 4. `packages/contracts/capabilities.json` JSON schema (fields from `brain.md` §7) with today's CMO jobs.
-- [ ] **A4 Registry**: every Studio entry point and CMO job listed; `check:contracts` fails on a caller path the
+- [x] **A4 Registry**: every Studio entry point and CMO job listed; `check:contracts` fails on a caller path the
       registry does not list (the brain, the Assistant, MCP, the UI).
 - [ ] **A1 Studio steps**: RPCs `studio_step_raise` (from the adapter's `plan`, holds nothing), `approval_decide`
       cases for `script`/`price` (approve → the adapter's `decide`; `redo` raises a new card, keeps the order waiting;
@@ -92,3 +92,10 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 - pgTAP was run in a cloud session against `supabase/postgres:17.6.1.054` without GoTrue or storage-api: 112 files
   pass, the same 4 fail as on `7664261` (`010_rls`, `040_worker_d2_publication`, `055_web_d3_security_completion`,
   `090_exports_bucket`: storage and Realtime pieces that container does not have). CI's run is the one that counts.
+- A4: `capabilities.json` lists the 8 CMO jobs, the 6 Studio adapter entries (`studio_plan`, `studio_decide`,
+  `build_video`, `cut_shorts`, `mark_finished`, `render_short`, callers equal to `STUDIO_ACCESS`) and the 13 priced
+  Studio tools (MCP's `PRICED` + caption tools). `capabilities.check.ts` fails on a file that starts a CMO job or
+  calls the Studio adapter without a `CALLER_PATHS` entry, and on a path that reaches a job or entry not listing its
+  caller. **B:** a new caller of the adapter (the brain runner for `build_video`/`cut_shorts`, B5's routes for
+  `mark_finished`/`cut_shorts`) needs one line in `CALLER_PATHS` in the same commit, or `check:contracts` goes red;
+  append a request here if you'd rather A adds it.
