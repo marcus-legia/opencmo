@@ -2,7 +2,6 @@ export { Button, ButtonLink, type ButtonVariant } from "./Button";
 export { Chip, type ChipTone } from "./Chip";
 export { EmptyState } from "./EmptyState";
 export { Field, SelectField, TextareaField } from "./Field";
-export { UI_V2 } from "./flag";
 export { Kpi, KpiStrip } from "./Kpi";
 export { MonoLabel } from "./MonoLabel";
 export { Panel } from "./Panel";

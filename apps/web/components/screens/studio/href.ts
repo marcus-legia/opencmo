@@ -1,4 +1,4 @@
-import { UI_V2 } from "@/components/ui/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 
 /**
  * Where "the founder's uploads" live. With the redesign on, Studio replaces My projects (U7b); the old

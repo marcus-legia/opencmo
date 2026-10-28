@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { UI_V2 } from "@/components/ui/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 
 import { DesignSheet } from "./DesignSheet";
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { BrainScreen } from "@/components/screens/brain/BrainScreen";
-import { requireUiV2 } from "@/components/screens/flag";
+import { requireUiV2 } from "@/lib/screens/flag";
 
 export const metadata: Metadata = { title: "Brain" };
 

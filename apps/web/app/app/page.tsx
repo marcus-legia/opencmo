@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { CmoView } from "@/components/cmo/CmoView";
 import { CmoWorkspace } from "@/components/cmo/workspace/CmoWorkspace";
 import { Dashboard } from "@/components/dashboard/Dashboard";
-import { UI_V2 } from "@/components/ui/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
 import { createServerClient } from "@/lib/supabase/server";

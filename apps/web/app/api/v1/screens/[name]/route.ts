@@ -1,6 +1,6 @@
 import { notFound, withApi } from "@/lib/api/handler";
 import { isProduction } from "@/lib/production";
-import { uiV2 } from "@/lib/screens/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 import { LOADERS } from "@/lib/screens/load";
 import { compose, isScreenName, released, type ScreenName } from "@/lib/screens/registry";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export const GET = withApi({}, async ({ request, supabase, user, params }) => {
   const name = params.name ?? "";
-  if (!uiV2() || !isScreenName(name)) throw notFound();
+  if (!UI_V2 || !isScreenName(name)) throw notFound();
   const production = isProduction();
   if (production && !released(name)) throw notFound();
   const search = request.nextUrl.searchParams;

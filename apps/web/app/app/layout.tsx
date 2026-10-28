@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { WebShell } from "@/components/clipping/web/WebShell";
 import { ShellV2 } from "@/components/shell-v2/ShellV2";
-import { UI_V2 } from "@/components/ui/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 import { isProduction } from "@/lib/production";
 import { THEME_BOOT } from "@/lib/theme-boot";
 import { createServerClient } from "@/lib/supabase/server";

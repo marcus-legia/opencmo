@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { StudioScreen } from "@/components/screens/studio/StudioScreen";
-import { requireUiV2 } from "@/components/screens/flag";
+import { requireUiV2 } from "@/lib/screens/flag";
 
 export const metadata: Metadata = { title: "Studio" };
 

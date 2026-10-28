@@ -1,7 +1,7 @@
 import { permanentRedirect } from "next/navigation";
 
 import { LibraryView } from "@/components/clipping/web/LibraryView";
-import { UI_V2 } from "@/components/ui/flag";
+import { UI_V2 } from "@/lib/screens/flag";
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   // Studio replaces My projects (U7b). The redirect stays for bookmarks and old emails.
