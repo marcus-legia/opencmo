@@ -35,7 +35,7 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 - [x] **B5 Studio routes**: `POST /api/v1/studio/[clipId]/finished` (body: the document hash the founder sees) and
       `POST /api/v1/studio/[clipId]/shorts` (starts a `cut_shorts` order; refused unless finished), zod-validated,
       rate-limited, English errors.
-- [ ] **B4 Shorts squad**: Clip editor (registry agent `shorts`: picks 3 ranges from beats and word timings, hook
+- [x] **B4 Shorts squad**: Clip editor (registry agent `shorts`: picks 3 ranges from beats and word timings, hook
       first, 15–60 s), Clip reviewer (code: whole sentences, no overlap, hook in the first 3 s, length per platform;
       sends back once), Builder (`make_short` op in editor-core: copies the parent's range into a new `short` edit,
       9:16 frame, keeps captions), Renderer (B3). AI long videos use their beats; the founder's own finished edits use
@@ -117,23 +117,23 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 
 ## Notes
 
-- **Shipped on `cmo-p2`:** B0 `01eab55`, B1 `93a0b2e`, B4 squad + `make_short` `21680c8`, B3 + `spokenWords` /
-  `shotBeats` `f1f3956`, B2 + B4 orchestration `451fc7e`. Checks: `apps/web` typecheck, `check:contracts` (with A4's
-  guard), editor-core vitest (37 files), clip-export vitest with real ffmpeg (`short.test.ts`), MCP `npm test` and its
-  tsc, `lib/departments/studio/studio.check.ts` and `shorts/squad.check.ts`.
-- **B5 routes** are on `cmo-p2` (`cdc2259`), listed in A's `CALLER_PATHS`.
-- **Adapter shape after A4:** still the six B0 entries. `plan(…, { store: true })` (brain only) stores the step and
-  raises its card; `cutShorts` from the UI only orders a `cut_shorts` order, from the brain it cuts.
-- **Open:** B4 is ticked once A6's end-to-end run passes again with `7464580` (render fix) and `finishVideo` called
-  before the long video's render; both bugs it found are fixed on B's side.
-- **Measured in the cloud session (2026-10-28):** three shorts cut by `make_short` from a 60 s 1920×1080 edit with
-  captions, rendered by `clip-export run` at 1080p (`parallel: 2`): each job peaks at **~1.6 GB** RSS for the whole
-  process tree (node + ffmpeg, sampled from `/proc` every 50 ms; `/usr/bin/time` is not installed), under the 2 GB
-  budget; all three at once 4.8 GB, 48 s wall, so the worker must keep them in separate jobs (its parallel cap), never
-  one job. Looked at frames of the full-size `short1.mp4`: 1080×1920, 20.1 s, captions centred inside the frame,
-  sound at −21 dB mean.
-- **Still local only:** Docker starts in the cloud container, but `supabase start` cannot pull
-  `supabase/postgres:17.6.1.167` (the proxy blocks GHCR and ECR blob hosts; Docker Hub answers 429). So on a machine
-  with the stack: one fake-provider run of the Shorts squad end to end (finished edit → batch → three short edits →
-  three `render_document` tasks), B5's routes against the real RPCs, and `db:reset && db:test`; all of it also needs
-  A's four RPCs first.
+- **Shipped on `cmo-p2`:** B0 `01eab55`, B1 `93a0b2e`, B2/B4 `451fc7e`, B3 `f1f3956`, `make_short` + squad `21680c8`,
+  B5 `cdc2259`, F7 render fix `7464580`, `finishVideo` / Edit a beat / redo card `12551ad`.
+- **PR review and end-to-end run (2026-10-28, owner asked for the whole PR):** fixed across A's, B's and C's paths in
+  `a9a17f5`, `5794325`, `92911de`, `84572d9`: the red `check:contracts` (loader named `studio(`), `finishVideo` before
+  the long video's render, short edits get the parent's transcripts (every short render failed), a brain redo no
+  longer fails its order, a refused short render settles its batch (`short_render_refused`), Mark finished and card 3
+  agree in either order and finish the video order, paused founders leave the Modal sweep alone, the render rule only
+  acts once the order reached its render, Edit a beat re-plans through the runner's queue, Studio offers Mark finished
+  on built videos, C's e2e fixtures (job constraint, `next = render`, paused founder).
+- **Verified in a cloud session** (Docker + images through `mirror.gcr.io`, CLI 2.117.0, worker with
+  `OPENCMO_AI_FAKE=1`, every provider key emptied): `supabase test db` 119 files / 1976 tests PASS, `db lint` clean,
+  CI's SQL contention tests 14 pass, `test:e2e:v2` 32/32, `p2-acceptance.e2e.ts` 13/13 (plan → card 1 → edit a beat →
+  card 1 again → card 2 → redo a keyframe → card 2 again → render → card 3 → finished → shorts batch → approved), the
+  CI web job steps green. Looked at the rendered short (1080×1920, 28.8 s, captions inside the frame, sound).
+- **Peak RSS:** three `make_short` renders of a 60 s 1080p edit, one `clip-export` job each, peak ~1.6 GB per job
+  (whole process tree), under the 2 GB budget.
+- **Owner decisions left:** (1) charge the brain's Director and Clip editor calls (today free in brain mode; proposal:
+  a flat `cmo_job_price` per order, e.g. `build_video` 2 credits and `cut_shorts` 1, held when the runner claims it);
+  (2) a 30 s brain video yields one short, since three 15–60 s shorts need at least 45 s of speech: brief 60 s videos,
+  or allow 10 s shorts for AI videos; (3) short renders count against the founder's daily exports.

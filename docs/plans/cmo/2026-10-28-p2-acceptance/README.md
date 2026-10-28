@@ -7,23 +7,23 @@ with `NEXT_PUBLIC_OPENCMO_UI=v2`. Every real provider key was emptied (`GEMINI_A
 
 Script: `apps/web/lib/screens/p2-acceptance.e2e.ts`.
 
-## Result: passes to card 3, stops at the shorts
+## Result: passes end to end (re-run 2026-10-28, after the PR review fixes)
 
 | Step | Result |
 |---|---|
 | plan_week with "make 1 video" | one `build_video` order under Studio |
-| card 1 | 6 beats, keyframes 7 credits; a stale hash refused, then approved |
-| card 2 | 7 keyframes (contact sheet), video 53 credits; approved |
-| render | 1080×1920, 30 s, video + audio (`render-frame-12s.png`, fake provider frames) |
+| card 1 | 6 beats, keyframes 7 credits; a stale hash refused |
+| edit a beat | card 1 closes as edited and comes back with the founder's words (re-planned by the order runner) |
+| card 1 again | approved |
+| card 2 | 7 keyframes (contact sheet); keyframe 2 redone, a new contact sheet, approved (video 53 credits) |
+| render | 1080×1920, 30 s, video + audio + voice-over captions (`finishVideo`) |
 | card 3 | rendered, approved: edit finished, order done with its `video` deliverable, `cut_shorts` ordered by the rule |
-| shorts batch | **refused by the squad**: the edit has no voice-over words (B's request in `B.md`) |
+| shorts batch | 1 short of 29 s (a 30 s video holds one 15–60 s short), its hook the edited line; approved, one `short` deliverable ready for Schedule |
+| Studio | the finished video and the approved short, live |
 
-Two gaps, both in B's paths, both requested in `B.md`:
-
-1. `render_document`'s no-editor fallback did not match long-take shots (nested `startFrame`/`endFrame`). With a local
-   patch (in the request) the render passed; without it the order fails at the render.
-2. A brain-made video's voice-over captions are never filled without an editor: no words for the Shorts squad and no
-   captions in the render.
+The first run stopped at the shorts on two gaps in B's paths (render fallback for long-take shots, voice-over
+captions without an editor); the re-run found a third (a short's edit lacked the parent's transcripts). All three are
+fixed on `cmo-p2`. The screenshots below are from the first run.
 
 ## Screens (live, v2 shell)
 
