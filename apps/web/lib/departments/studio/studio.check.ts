@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 
 import { ScriptSnapshotSchema, PriceSnapshotSchema } from "@/lib/screens/approval-card";
 
+import { pendingVoiceovers, voiceRowMatches } from "./finish";
 import { renderRequestId } from "./render";
 import { stepCard } from "./steps";
 import { mayCall, VideoBriefSchema } from "./types";
@@ -68,9 +69,31 @@ assert.deepEqual([price.card.shots, price.card.seconds], [2, 10]);
 assert.doesNotMatch(JSON.stringify(price.card), /signed\.example/);
 PriceSnapshotSchema.parse({ kind: "price", step_id: "s", clip_id: "c", tool: "animate_video", price_credits: 80, ...price.card });
 
+// A redone keyframe: one tile, not made yet; the length comes from the replaced step (raiseStep).
+const redo = stepCard({ kind: "priced", credits: 3, lines: ["Redo keyframe 2 · 3 credits"], prepared: { clipId: "c", tool: "redo_keyframe", input: { op: { op: "redo_keyframe", sequence_id: "s", index: 1 } } } });
+assert.deepEqual([redo.kind, redo.card.keyframes, redo.card.seconds, redo.card.shots], ["price", [{ index: 1, words: "Redo keyframe 2 · 3 credits", path: null, garbled: false, credits: 3 }], null, 0]);
+PriceSnapshotSchema.parse({ kind: "price", step_id: "s", clip_id: "c", tool: "redo_keyframe", price_credits: 3, ...redo.card, seconds: 30 });
+
 const id = renderRequestId("short", "a".repeat(64));
 assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 assert.equal(id, renderRequestId("short", "a".repeat(64)), "one render per short and document");
 assert.notEqual(id, renderRequestId("short", "b".repeat(64)));
 
-console.log("studio adapter: access, brief, cards and render ids correct");
+// finishVideo: which voice-overs wait, and which finished generation is theirs.
+const voice = { generate: "voice", prompt: "What if your demo made itself?", model: "el-voice", voice: "Test A", seed: 9 };
+const edit = {
+  version: 1,
+  stage: { children: [{ kind: "scene", width: 1080, height: 1920, active: true, children: [
+    { kind: "audio", src: voice, marks: { voiceover: { key: "k1" } } },
+    { kind: "audio", src: { ...voice, seed: 1 }, marks: { voiceover: { key: "k2", synced: true } } },
+    { kind: "audio", src: "music.mp3" },
+  ] }] },
+};
+assert.deepEqual(pendingVoiceovers(edit as never).map((item) => item.key), ["k1"], "synced and plain audio are skipped");
+const spec = { prompt: voice.prompt, voice: "Test A", seed: 9 };
+assert.ok(voiceRowMatches(voice, { model: "el-voice", spec }));
+assert.ok(!voiceRowMatches(voice, { model: "el-voice", spec: { ...spec, seed: 8 } }), "another seed is another voice");
+assert.ok(!voiceRowMatches(voice, { model: "other", spec }), "another model");
+assert.ok(!voiceRowMatches(voice, { model: "el-voice", spec: { ...spec, prompt: "Other words." } }));
+
+console.log("studio adapter: access, brief, cards, render ids and finishVideo matching correct");

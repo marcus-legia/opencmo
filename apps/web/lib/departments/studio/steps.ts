@@ -28,7 +28,7 @@ export function stepCard(plan: Priced): { kind: "script" | "price"; card: Record
       },
     };
   }
-  const tiles = ((plan.sheet as { tiles?: SheetTile[] } | undefined)?.tiles ?? []).map((tile) => ({
+  const tiles: { index: number; words: string; path: string | null; garbled: boolean; credits: number }[] = ((plan.sheet as { tiles?: SheetTile[] } | undefined)?.tiles ?? []).map((tile) => ({
     index: tile.index,
     words: tile.words,
     path: tile.path,
@@ -36,8 +36,10 @@ export function stepCard(plan: Priced): { kind: "script" | "price"; card: Record
     credits: tile.credits,
   }));
   // Stage 2's op is the whole `create_video` placement: its shots and length are what the price buys.
-  const op = (plan.prepared.input as { op?: { op?: string; shots?: unknown[]; seconds?: number } }).op;
+  const op = (plan.prepared.input as { op?: { op?: string; shots?: unknown[]; seconds?: number; index?: number } }).op;
   const placed = op?.op === "create_video" ? op : null;
+  // A redone keyframe: the one tile being made again, not yet a file.
+  if (op?.op === "redo_keyframe" && typeof op.index === "number") tiles.push({ index: op.index, words: plan.lines[0] ?? "", path: null, garbled: false, credits: plan.credits });
   return {
     kind: "price",
     card: {
@@ -51,8 +53,17 @@ export function stepCard(plan: Priced): { kind: "script" | "price"; card: Record
   };
 }
 
+/** A redone keyframe's card shows the video's length, which only the step it replaces knows. */
+async function replacedSeconds(ctx: StudioContext, stepId: string): Promise<number | null> {
+  const { data, error } = await ctx.supabase.from("studio_steps").select("card").eq("id", stepId).maybeSingle<{ card: { seconds?: unknown } }>();
+  if (error) throw new Error(`studio_steps read: ${error.message}`);
+  const seconds = Number(data?.card?.seconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
 export async function raiseStep(ctx: StudioContext, plan: Priced, options: { redoOf?: string } = {}): Promise<{ stepId: string }> {
   const { kind, card } = stepCard(plan);
+  if (kind === "price" && card.seconds == null && options.redoOf) card.seconds = await replacedSeconds(ctx, options.redoOf);
   const row = await rpcOrThrow<{ id: string } | { id: string }[]>(ctx.supabase, "studio_step_raise", {
     p_clip_id: plan.prepared.clipId,
     p_tool: plan.prepared.tool,

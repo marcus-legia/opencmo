@@ -94,6 +94,11 @@ export type PlanOptions = {
   store?: boolean;
   /** With `store`: the step a redone keyframe replaces. */
   redoOf?: string;
+  /**
+   * With `store`: a storyboard step the founder sent back with one beat rewritten (`edit`). `create_video`
+   * is planned again from that step (the input passed is ignored), under the step's own order.
+   */
+  editOf?: string;
 };
 
 /** A stored step (`studio_steps.id`), or one carried in a signed code (MCP). */

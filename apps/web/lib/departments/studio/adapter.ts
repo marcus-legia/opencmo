@@ -7,6 +7,8 @@
 
 import { randomUUID } from "node:crypto";
 
+import type { LongTakePlan } from "@opencmo/editor-core";
+
 import { ApiError } from "@/lib/api/errors";
 import { mediaCreditsShort } from "@/lib/cmo/mcp/account";
 
@@ -44,12 +46,47 @@ async function storedStep(ctx: StudioContext, stepId: string): Promise<PreparedS
   return { clipId: row.clip_id, tool: row.tool, input: row.input };
 }
 
+/**
+ * Card 1 sent back with one beat rewritten (`edit {beat, text}`): the same plan with those words,
+ * through `create_video` again as a finished plan, so the code Reviewer checks it and no Director runs.
+ */
+async function editedRequest(ctx: StudioContext, stepId: string): Promise<{ clipId: string; input: unknown; orderId: string | null } | string> {
+  const { data, error } = await ctx.supabase.from("studio_steps").select("clip_id, tool, input, decision, decision_payload, order_id").eq("id", stepId).maybeSingle();
+  if (error) throw new Error(`studio_steps read: ${error.message}`);
+  const row = data as { clip_id: string; tool: string; input: { longTake?: { plan: LongTakePlan; aspect: string; seconds: number; model?: string; voice?: string } }; decision: string | null; decision_payload: { beat?: unknown; text?: unknown } | null; order_id: string | null } | null;
+  if (!row) throw new ApiError(404, "This step no longer exists.");
+  const longTake = row.input?.longTake;
+  if (row.tool !== "create_video" || row.decision !== "edit" || !longTake) return "Only a storyboard sent back with an edited beat is planned again.";
+  const beat = Number(row.decision_payload?.beat);
+  const text = typeof row.decision_payload?.text === "string" ? row.decision_payload.text.trim() : "";
+  if (!Number.isInteger(beat) || beat < 0 || beat >= longTake.plan.shots.length) return "That beat is not in the storyboard.";
+  if (!text) return "Write the beat's words, then send it again.";
+  const shots = longTake.plan.shots.map((shot, index) => (index === beat ? { ...shot, words: text } : shot));
+  // The voice reads the script and each beat shows its words: they stay the same text.
+  const plan = { ...longTake.plan, shots, script: shots.map((shot) => shot.words).join(" ") };
+  const input = {
+    prompt: `${plan.title}: ${plan.script}`.slice(0, 2000),
+    seconds: Math.round(longTake.seconds),
+    aspect: longTake.aspect,
+    ...(longTake.model ? { model: longTake.model } : {}),
+    ...(longTake.voice ? { voice: longTake.voice } : {}),
+    plan,
+  };
+  return { clipId: row.clip_id, input, orderId: row.order_id };
+}
+
 export function studio(ctx: StudioContext, options: SessionOptions = {}): StudioAdapter {
   const session = (clipId: string) => studioSession(ctx.supabase, ctx.caller, clipId, options);
 
   async function plan(clipId: string, tool: string, input: unknown, planOptions: PlanOptions = {}): Promise<StudioPlan> {
     allow(ctx, "plan");
     if (planOptions.store && ctx.caller !== "brain") throw new StudioAccessError(`Only the brain stores Studio steps, not the ${ctx.caller}.`);
+    if (planOptions.editOf) {
+      if (!planOptions.store || tool !== "create_video") throw new ApiError(400, "An edited storyboard is planned again with create_video and stored.");
+      const edited = await editedRequest(ctx, planOptions.editOf);
+      if (typeof edited === "string") return { kind: "invalid", message: edited };
+      return studio({ ...ctx, ...(edited.orderId ? { orderId: edited.orderId } : {}) }, options).plan(edited.clipId, tool, edited.input, { store: true });
+    }
     const { scope } = await session(clipId);
     const planned = await scope.plan({ id: randomUUID(), name: tool, input });
     if (planned.kind === "invalid") return { kind: "invalid", message: problem(planned.content) };
