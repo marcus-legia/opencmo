@@ -88,7 +88,14 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   raises its card; `cutShorts` from the UI only orders a `cut_shorts` order, from the brain it cuts.
 - **Open, waiting on A:** B2 and B4 run live only once `studio_step_raise`, `mark_finished`, `cut_shorts_order` and
   `short_batch_create` exist (signatures requested in `A.md`) and A2's runner calls the adapter. Not ticked until then.
-- **Local only (needs Docker + the local Supabase stack, not in this cloud container):** one fake-provider run of the
-  Shorts squad end to end (B4's last item: finished edit → batch → three short edits → three `render_document` tasks),
-  B5's routes against the real RPCs, peak RSS of three short renders with `/usr/bin/time -v`, and looking at a frame
-  of a rendered short's full-size file (CLAUDE.md "Verify by looking").
+- **Measured in the cloud session (2026-10-28):** three shorts cut by `make_short` from a 60 s 1920×1080 edit with
+  captions, rendered by `clip-export run` at 1080p (`parallel: 2`): each job peaks at **~1.6 GB** RSS for the whole
+  process tree (node + ffmpeg, sampled from `/proc` every 50 ms; `/usr/bin/time` is not installed), under the 2 GB
+  budget; all three at once 4.8 GB, 48 s wall, so the worker must keep them in separate jobs (its parallel cap), never
+  one job. Looked at frames of the full-size `short1.mp4`: 1080×1920, 20.1 s, captions centred inside the frame,
+  sound at −21 dB mean.
+- **Still local only:** Docker starts in the cloud container, but `supabase start` cannot pull
+  `supabase/postgres:17.6.1.167` (the proxy blocks GHCR and ECR blob hosts; Docker Hub answers 429). So on a machine
+  with the stack: one fake-provider run of the Shorts squad end to end (finished edit → batch → three short edits →
+  three `render_document` tasks), B5's routes against the real RPCs, and `db:reset && db:test`; all of it also needs
+  A's four RPCs first.
