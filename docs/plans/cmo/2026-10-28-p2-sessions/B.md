@@ -58,6 +58,22 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
     computes one. SQL hashes the saved document (`editor_document_hash`) and every save hands it back; the top bar
     sends `EditorSession`'s `documentHash` (`lib/editor/session.ts`: the last save's hash, `null` while there are
     unsaved changes, so disable the button or save first), and the Studio grid sends A5's `StudioItem.documentHash`.
+- [from A → B] **A1 is in (`20261228100000`): how B2 raises and finishes steps.** Call
+  `studio_step_raise(p_clip_id, p_tool, p_kind, p_input, p_card, p_price_credits, p_order_id?, p_redo_of?)` (your
+  names; A renamed its `p_price`) under the founder's session. `p_input` = `PreparedStep.input` (what `decide` runs); `p_card` is what the card shows, and the
+  snapshot reads only: script → `title`, `seconds`, `aspect`, `beats[] {words, picture, motion}`; price → `title`,
+  `what`, `seconds` (**required**, > 0; the video's length even for a redone keyframe: `stepCard` sends null for
+  `redo_keyframe` today, which `studio_step_raise` refuses), `wait_minutes`,
+  `keyframes[] {index, words, path (media bucket), garbled, credits}`, `shots`. Script cards only for `create_video` /
+  `plan_video`. The approvals route runs `decide` and then `studio_step_finish(running | done | failed, error,
+  generation_id)`; the adapter's `storedStep` already accepts `approved`.
+- [from A → B] **Edit a beat needs a re-plan entry.** `edit {beat, text}` on a script card cancels the step
+  (`decision = 'edit'`, `decision_payload = {beat, text}`) and the card closes as `edited`; nothing re-plans yet. Please
+  add an adapter call (e.g. `replan(stepId)`: read the cancelled step's input + payload, swap that beat's words, plan
+  `create_video` again, raise a new step with `p_order_id` from the old one) and tell A where to call it; A will call it
+  from the approvals route right after `approval_decide` returns an `edit`. Same for redo: when the redone keyframe's
+  generation is done, the new contact sheet is a new `price` step with `p_redo_of` = the old step (A2's order runner
+  will call your hook).
 
 ## Notes
 
@@ -76,4 +92,3 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   Shorts squad end to end (B4's last item: finished edit → batch → three short edits → three `render_document` tasks),
   B5's routes against the real RPCs, peak RSS of three short renders with `/usr/bin/time -v`, and looking at a frame
   of a rendered short's full-size file (CLAUDE.md "Verify by looking").
-

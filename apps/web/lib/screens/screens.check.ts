@@ -161,6 +161,29 @@ for (const snapshot of STUDIO_SNAPSHOTS) {
 check("every Studio kind has a snapshot and a source", () => {
   for (const kind of Object.keys(STUDIO_REF_KIND)) assert.ok(STUDIO_SNAPSHOTS.some((s) => s.kind === kind), kind);
 });
+check("a Studio snapshot builds a card that parses", () => {
+  for (const snapshot of STUDIO_SNAPSHOTS) {
+    const card = approvalToCard({
+      id: `card-${snapshot.kind}`,
+      kind: snapshot.kind,
+      department: "studio",
+      ref_kind: STUDIO_REF_KIND[snapshot.kind],
+      ref_id: "ref",
+      status: "waiting",
+      snapshot: snapshot as unknown as Record<string, unknown>,
+      content_hash: "a".repeat(64),
+      price_credits: "price_credits" in snapshot ? snapshot.price_credits : null,
+      post_at: null,
+      account: null,
+      expires_at: null,
+      created_at: "2026-10-29T03:42:00.123+00:00",
+      decided_at: null,
+      decided_via: null,
+    });
+    assert.ok(card, snapshot.kind);
+    ApprovalCardSchema.parse(card);
+  }
+});
 check("a snapshot never holds a signed URL", () => {
   for (const snapshot of STUDIO_SNAPSHOTS) assert.doesNotMatch(JSON.stringify(snapshot), /https?:\/\//, snapshot.kind);
 });

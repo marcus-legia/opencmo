@@ -31,7 +31,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   - [x] 4. `packages/contracts/capabilities.json` JSON schema (fields from `brain.md` §7) with today's CMO jobs.
 - [x] **A4 Registry**: every Studio entry point and CMO job listed; `check:contracts` fails on a caller path the
       registry does not list (the brain, the Assistant, MCP, the UI).
-- [ ] **A1 Studio steps**: RPCs `studio_step_raise` (from the adapter's `plan`, holds nothing), `approval_decide`
+- [x] **A1 Studio steps**: RPCs `studio_step_raise` (from the adapter's `plan`, holds nothing), `approval_decide`
       cases for `script`/`price` (approve → the adapter's `decide`; `redo` raises a new card, keeps the order waiting;
       cancel releases any hold) and `finished_video` (approve = `mark_finished`; send back keeps it open). pgTAP per
       transition, including a stale hash.
@@ -112,6 +112,13 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   `cutShorts(parentClipId)` → `{ batchId, shorts }`, renders already queued; render tasks then move the batch.
   Note: each short render goes through `request_document_export`, so three shorts count against the founder's daily
   export quota; say if brain renders should be exempt (that is SQL).
+  - [A] 1–2 are in A1 (`20261228100000`) with your names (A renamed its `p_price` to `p_price_credits`); 3–4
+    (`cut_shorts_order`, `short_batch_create`) come with A3, signatures as you wrote them, `cut_shorts_order`
+    idempotent per (clip, finished hash). The two B5 routes are in `CALLER_PATHS` (a listed file that is not on the
+    branch yet is skipped), and `studio.check.ts` + `squad.check.ts` are in `check:contracts`: cherry-pick B5 now.
+    A2's runner will drive Studio as you describe. Export quota: brain renders count like the founder's for now (three
+    shorts per finished video, and the founder approved the video); A3 says so in the batch card's meta if a render is
+    refused for the quota. Owner's call if it should change.
 
 ## Notes
 
@@ -131,3 +138,12 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   caller. **B:** a new caller of the adapter (the brain runner for `build_video`/`cut_shorts`, B5's routes for
   `mark_finished`/`cut_shorts`) needs one line in `CALLER_PATHS` in the same commit, or `check:contracts` goes red;
   append a request here if you'd rather A adds it.
+- A1 (`20261228100000_p2_studio_steps.sql`, `206_p2_studio_steps.test.sql`): `studio_step_raise` (authenticated,
+  owner of the clip, priced tools only, at most 20 waiting), `studio_step_finish` (approved → running | done | failed |
+  cancelled; never approves), `mark_finished(clip_id, document_hash)`, a trigger that raises/supersedes/closes the card
+  from the step row, `approvals.reason`, and `approval_decide` for script (approve | edit {beat, text} | cancel), price
+  (approve | redo {index} | cancel) and finished_video (approve = `mark_finished` at the card's hash | send_back).
+  `POST /api/v1/approvals/[id]` accepts the new actions and, after approve or redo of a step, runs it through the
+  adapter (`caller: "ui"`) and reports with `studio_step_finish`. Cards build from snapshots (`cards.ts`) and the
+  loader signs keyframes, renders and short previews (`studio-sign.ts`). `DECIDABLE_IN_WAVE_1` now includes script,
+  price, finished_video. Cancel moves the step's order to `cancelled`; everything else about order states is A2.

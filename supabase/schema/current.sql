@@ -1546,12 +1546,14 @@ CREATE TABLE public.approvals (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     decided_at timestamp with time zone,
     decided_via text,
+    reason text,
     CONSTRAINT approvals_account_check CHECK ((char_length(account) <= 100)),
     CONSTRAINT approvals_content_hash_check CHECK ((content_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
+    CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
     CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
@@ -1572,6 +1574,10 @@ declare
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
   v_via text := coalesce(nullif(v_payload->>'via', ''), 'app');
   v_target integer;
+  v_step public.studio_steps;
+  v_n integer;
+  v_text text;
+  v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1619,12 +1625,72 @@ begin
       perform public.cmo_decide_goal(v_row.ref_id, p_action, v_payload->>'goal', v_target);
     when 'correction' then
       perform public.cmo_decide_correction(v_row.ref_id, p_action, v_payload->>'text');
+    when 'script', 'price' then
+      if (v_row.kind = 'script' and p_action not in ('approve', 'edit', 'cancel'))
+         or (v_row.kind = 'price' and p_action not in ('approve', 'redo', 'cancel')) then
+        raise exception '%', case v_row.kind when 'script' then 'Choose approve, edit a beat or cancel.'
+          else 'Choose approve, redo a keyframe or cancel.' end using errcode = '22023';
+      end if;
+      select * into v_step from public.studio_steps where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_step.status <> 'waiting' then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'edit' then
+        if jsonb_typeof(v_payload->'beat') is distinct from 'number' then
+          raise exception 'Say which beat to change.' using errcode = '22023';
+        end if;
+        v_n := (v_payload->>'beat')::numeric::integer;
+        v_text := trim(coalesce(v_payload->>'text', ''));
+        if v_n < 0 or v_n >= jsonb_array_length(v_row.snapshot->'beats') then
+          raise exception 'That beat is not in the script.' using errcode = '22023';
+        end if;
+        if char_length(v_text) not between 1 and 300 then
+          raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
+        end if;
+        update public.studio_steps set status = 'cancelled', decision = 'edit', decided_at = now(),
+          decision_payload = jsonb_build_object('beat', v_n, 'text', v_text)
+        where id = v_step.id;
+      elsif p_action = 'redo' then
+        if jsonb_typeof(v_payload->'index') is distinct from 'number' then
+          raise exception 'Say which keyframe to make again.' using errcode = '22023';
+        end if;
+        v_n := (v_payload->>'index')::numeric::integer;
+        if not exists (select 1 from jsonb_array_elements(v_row.snapshot->'keyframes') k
+                       where jsonb_typeof(k->'index') = 'number' and (k->>'index')::numeric = v_n) then
+          raise exception 'That keyframe is not on the sheet.' using errcode = '22023';
+        end if;
+        update public.studio_steps set status = 'approved', decision = 'redo', decided_at = now(),
+          decision_payload = jsonb_build_object('index', v_n)
+        where id = v_step.id;
+      elsif p_action = 'cancel' then
+        update public.studio_steps set status = 'cancelled', decision = 'cancel', decided_at = now() where id = v_step.id;
+        -- Cancelling a card stops the video it belongs to.
+        if v_step.order_id is not null and exists (select 1 from public.work_orders
+            where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+          perform public.work_order_move(v_step.order_id, 'cancelled', 'You cancelled the video');
+        end if;
+      else
+        update public.studio_steps set status = 'approved', decision = 'approve', decided_at = now() where id = v_step.id;
+      end if;
+    when 'finished_video' then
+      if p_action not in ('approve', 'send_back') then
+        raise exception 'Choose approve or send back.' using errcode = '22023';
+      end if;
+      if p_action = 'approve' then
+        perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
+      else
+        -- The edit stays open: the founder tweaks it in the editor, and the next render raises a new card.
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+      end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
   end case;
   perform set_config('opencmo.decided_via', '', true);
 
   select * into v_row from public.approvals where id = p_id;
+  if v_reason is not null and v_row.status in ('skipped', 'edited') then
+    update public.approvals set reason = v_reason where id = p_id returning * into v_row;
+  end if;
   return v_row;
 end;
 $$;
@@ -5767,6 +5833,39 @@ $$;
 
 
 --
+-- Name: mark_finished(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_finished(p_clip_id uuid, p_document_hash text) RETURNS public.editor_projects
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.editor_projects;
+begin
+  perform public.owned_clip(p_clip_id, v_user);
+  select * into v_row from public.editor_projects where clip_id = p_clip_id for update;
+  if not found then
+    raise exception 'This edit has nothing to finish yet.' using errcode = 'P0002';
+  end if;
+  if p_document_hash is null or p_document_hash is distinct from public.editor_document_hash(v_row.document) then
+    raise exception 'This edit changed. Look at it again before marking it finished.' using errcode = 'P0001';
+  end if;
+  if v_row.finished_hash = p_document_hash then
+    return v_row;
+  end if;
+  update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
+  where clip_id = p_clip_id
+  returning * into v_row;
+  -- Marking it finished in the editor is the same decision as approving card 3.
+  perform public.approval_close('editor_project', p_clip_id, 'approved');
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: mark_generation_sent(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8301,6 +8400,164 @@ $$;
 
 
 --
+-- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.studio_steps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    clip_id uuid NOT NULL,
+    tool text NOT NULL,
+    kind text NOT NULL,
+    input jsonb NOT NULL,
+    card jsonb NOT NULL,
+    price_credits integer NOT NULL,
+    status text DEFAULT 'waiting'::text NOT NULL,
+    order_id uuid,
+    redo_of uuid,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    decision text,
+    decision_payload jsonb,
+    generation_id uuid,
+    CONSTRAINT studio_steps_card_check CHECK (((jsonb_typeof(card) = 'object'::text) AND (octet_length((card)::text) <= 32768))),
+    CONSTRAINT studio_steps_decision_check CHECK ((decision = ANY (ARRAY['approve'::text, 'edit'::text, 'redo'::text, 'cancel'::text]))),
+    CONSTRAINT studio_steps_decision_payload_check CHECK (((decision_payload IS NULL) OR ((jsonb_typeof(decision_payload) = 'object'::text) AND (octet_length((decision_payload)::text) <= 2048)))),
+    CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
+    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
+    CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
+    CONSTRAINT studio_steps_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'running'::text, 'done'::text, 'cancelled'::text, 'failed'::text]))),
+    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text))
+);
+
+
+--
+-- Name: studio_step_finish(uuid, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_finish(p_id uuid, p_status text, p_error text DEFAULT NULL::text, p_generation_id uuid DEFAULT NULL::uuid) RETURNS public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.studio_steps;
+  v_ok boolean;
+begin
+  select * into v_row from public.studio_steps where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Step not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = p_status then
+    return v_row;
+  end if;
+  v_ok := case v_row.status
+    when 'waiting' then p_status = 'cancelled'
+    when 'approved' then p_status in ('running', 'done', 'failed', 'cancelled')
+    when 'running' then p_status in ('done', 'failed', 'cancelled')
+    else false end;
+  if not coalesce(v_ok, false) then
+    raise exception 'A step cannot go from % to %.', v_row.status, p_status using errcode = 'P0001';
+  end if;
+  if p_status = 'failed' and nullif(trim(coalesce(p_error, '')), '') is null then
+    raise exception 'A failed step needs its error.' using errcode = '22023';
+  end if;
+  update public.studio_steps
+  set status = p_status,
+      decision = case when v_row.status = 'waiting' then 'cancel' else decision end,
+      decided_at = coalesce(decided_at, now()),
+      error = case when p_status = 'failed' then left(p_error, 500) else error end,
+      generation_id = coalesce(p_generation_id, generation_id)
+  where id = p_id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: studio_step_raise(uuid, text, text, jsonb, jsonb, integer, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_raise(p_clip_id uuid, p_tool text, p_kind text, p_input jsonb, p_card jsonb, p_price_credits integer, p_order_id uuid DEFAULT NULL::uuid, p_redo_of uuid DEFAULT NULL::uuid) RETURNS public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.studio_steps;
+begin
+  perform public.owned_clip(p_clip_id, v_user);
+  if p_tool is null or p_tool not in ('generate_media', 'add_3d_scene', 'add_voiceover', 'replace_background',
+      'create_video', 'animate_video', 'redo_keyframe', 'edit_video', 'add_explainer', 'plan_video', 'request_export',
+      'add_captions', 'translate_captions') then
+    raise exception 'This Studio tool is not priced on a card.' using errcode = '22023';
+  end if;
+  if p_kind is null or p_kind not in ('script', 'price') or (p_kind = 'script' and p_tool not in ('create_video', 'plan_video')) then
+    raise exception 'Only a storyboard is a script card.' using errcode = '22023';
+  end if;
+  if p_input is null or jsonb_typeof(p_input) <> 'object' or p_card is null or jsonb_typeof(p_card) <> 'object' then
+    raise exception 'This step is malformed.' using errcode = '22023';
+  end if;
+  -- A price card always says how long the video is (a redone keyframe too: the video it belongs to).
+  if (p_kind = 'script' and jsonb_typeof(p_card->'beats') is distinct from 'array')
+     or (p_kind = 'price' and (jsonb_typeof(p_card->'seconds') is distinct from 'number' or (p_card->>'seconds')::numeric <= 0
+       or (p_card ? 'keyframes' and jsonb_typeof(p_card->'keyframes') <> 'array'))) then
+    raise exception 'This step is malformed.' using errcode = '22023';
+  end if;
+  if p_price_credits is null or p_price_credits < 0 then
+    raise exception 'A step needs its price.' using errcode = '22023';
+  end if;
+  if p_order_id is not null and not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_redo_of is not null and not exists (
+      select 1 from public.studio_steps where id = p_redo_of and user_id = v_user and clip_id = p_clip_id) then
+    raise exception 'The step this replaces was not found.' using errcode = 'P0002';
+  end if;
+  -- Cards are few by design (approval.md rule 3); a loop raising cards without end stops here.
+  if (select count(*) from public.studio_steps where user_id = v_user and status = 'waiting') >= 20 then
+    raise exception 'Too many Studio cards are waiting. Decide some first.' using errcode = 'P0001';
+  end if;
+  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, redo_of)
+  values (v_user, p_clip_id, p_tool, p_kind, p_input, p_card, p_price_credits, p_order_id, p_redo_of)
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: studio_steps_sync(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_sync() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if tg_op = 'DELETE' then
+    perform public.approval_close('studio_step', old.id, 'cancelled');
+    return old;
+  end if;
+  if new.status = 'waiting' then
+    perform public.approval_raise(new.user_id, 'studio_step', new.id);
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and old.status <> 'waiting' then
+    return new;
+  end if;
+  perform public.approval_close('studio_step', new.id, case new.decision
+    when 'approve' then 'approved' when 'edit' then 'edited' when 'redo' then 'edited' when 'cancel' then 'skipped'
+    else 'cancelled' end);
+  return new;
+end;
+$$;
+
+
+--
 -- Name: sync_asset_transcript_from_task(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9763,35 +10020,6 @@ ALTER SEQUENCE public.storage_deletions_id_seq OWNED BY public.storage_deletions
 
 
 --
--- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.studio_steps (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    clip_id uuid NOT NULL,
-    tool text NOT NULL,
-    kind text NOT NULL,
-    input jsonb NOT NULL,
-    card jsonb NOT NULL,
-    price_credits integer NOT NULL,
-    status text DEFAULT 'waiting'::text NOT NULL,
-    order_id uuid,
-    redo_of uuid,
-    error text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    decided_at timestamp with time zone,
-    CONSTRAINT studio_steps_card_check CHECK (((jsonb_typeof(card) = 'object'::text) AND (octet_length((card)::text) <= 32768))),
-    CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
-    CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
-    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
-    CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
-    CONSTRAINT studio_steps_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'running'::text, 'done'::text, 'cancelled'::text, 'failed'::text]))),
-    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text))
-);
-
-
---
 -- Name: upload_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11174,6 +11402,13 @@ CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.med
 --
 
 CREATE TRIGGER reject_credit_ledger_change BEFORE DELETE OR UPDATE ON public.credit_ledger FOR EACH ROW EXECUTE FUNCTION public.reject_credit_ledger_change();
+
+
+--
+-- Name: studio_steps studio_steps_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER studio_steps_sync AFTER INSERT OR DELETE OR UPDATE ON public.studio_steps FOR EACH ROW EXECUTE FUNCTION public.studio_steps_sync();
 
 
 --

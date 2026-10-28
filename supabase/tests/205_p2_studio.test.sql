@@ -134,13 +134,17 @@ select is((select department from public.approvals where ref_kind = 'short_batch
   'so does a batch');
 
 -- RLS: each founder reads their own.
+create temp table t_cards (name text primary key, id uuid) on commit drop;
+grant all on t_cards to authenticated;
+insert into t_cards select 'step-a', id from public.approvals
+where ref_kind = 'studio_step' and ref_id = 'e2053000-0000-4000-8000-00000000000a' and status = 'waiting';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2050000-0000-4000-8000-00000000000b","role":"authenticated"}';
 select is((select count(*)::int from public.studio_steps), 1, 'a founder reads only their steps');
 select is((select count(*)::int from public.shorts) + (select count(*)::int from public.short_batches), 0,
   'and only their shorts');
 select throws_ok($$ select public.approval_decide(
-  (select id from public.approvals where ref_kind = 'studio_step' limit 1), 'approve', '{}') $$,
+  (select id from t_cards where name = 'step-a'), 'approve', '{}') $$,
   'P0002', null, 'nobody decides another founder''s Studio card');
 reset role;
 

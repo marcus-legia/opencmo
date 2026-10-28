@@ -5,7 +5,7 @@
  * Pure (no server-only): `screens.check.ts` runs it on sample rows.
  */
 
-import type { ApprovalCard, CardKind } from "./approval-card";
+import { FinishedVideoSnapshotSchema, PriceSnapshotSchema, ScriptSnapshotSchema, ShortsBatchSnapshotSchema, type ApprovalCard, type CardKind } from "./approval-card";
 import type { Department, ScorePart } from "./common";
 
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
@@ -105,8 +105,69 @@ function build(row: ApprovalRow): Built | null {
         body: { kind: "correction", correctionId: row.ref_id, rule: str(s.rule), examples },
       };
     }
+    // Studio (P2): the snapshot holds paths, never URLs; the screen loader signs them (`signStudioCard`), so a card built
+    // here shows no pictures yet. A snapshot that does not parse is not shown rather than shown wrong.
+    case "script": {
+      const parsed = ScriptSnapshotSchema.safeParse(s);
+      if (!parsed.success || parsed.data.beats.length === 0) return null;
+      const v = parsed.data;
+      return {
+        title: clip(`Script for “${v.title}” · ${v.beats.length} ${v.beats.length === 1 ? "beat" : "beats"}`, 300),
+        summary: "Approve the words and pictures; the keyframes are made next at the price below.",
+        meta: "Nothing spent until you approve",
+        body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: v.price_credits },
+      };
+    }
+    case "price": {
+      const parsed = PriceSnapshotSchema.safeParse(s);
+      if (!parsed.success || parsed.data.seconds === null) return null;
+      const v = parsed.data;
+      const shots = v.shots === 1 ? "1 shot" : `${v.shots} shots`;
+      return {
+        title: clip(`${v.title} · ${Math.round(v.seconds!)} s`, 300),
+        summary: clip(`${v.what || shots}.${v.wait_minutes ? ` Ready in about ${v.wait_minutes} minutes.` : ""}`, 400),
+        meta: v.keyframes.length ? "Redo any keyframe before you approve · credits held until the video is done" : "Credits held until the video is done",
+        body: {
+          kind: "price",
+          stepId: v.step_id,
+          what: v.what,
+          keyframes: v.keyframes.map((k) => ({ index: k.index, label: k.words, thumbUrl: null, garbled: k.garbled, credits: k.credits })),
+          shots: v.shots,
+          seconds: v.seconds!,
+          readyInMinutes: v.wait_minutes,
+        },
+      };
+    }
+    case "finished_video": {
+      const parsed = FinishedVideoSnapshotSchema.safeParse(s);
+      if (!parsed.success || parsed.data.seconds === null) return null;
+      const v = parsed.data;
+      return {
+        title: clip(`“${v.title || "Your video"}” is rendered · ${Math.floor(v.seconds! / 60)}:${String(Math.round(v.seconds!) % 60).padStart(2, "0")}`, 300),
+        summary: "Approving marks it finished: shorts can be cut from it.",
+        meta: "Open it in the editor to tweak first",
+        body: { kind: "finished_video", clipId: v.clip_id, documentHash: v.document_hash, seconds: v.seconds!, previewUrl: null, frameAt: Math.min(2, v.seconds! / 2) },
+      };
+    }
+    case "shorts_batch": {
+      const parsed = ShortsBatchSnapshotSchema.safeParse(s);
+      if (!parsed.success || parsed.data.shorts.length === 0) return null;
+      const v = parsed.data;
+      return {
+        title: clip(`${v.shorts.length} ${v.shorts.length === 1 ? "short" : "shorts"} from “${v.title || "your video"}”`, 300),
+        summary: clip(`Hooks: ${v.shorts.map((x) => x.hook).join(" · ")}.`, 400),
+        meta: "Cut from a finished edit · no generation credits",
+        body: {
+          kind: "shorts_batch",
+          batchId: v.batch_id,
+          parentClipId: v.parent_clip_id,
+          source: v.title,
+          shorts: v.shorts.map((x) => ({ shortClipId: x.short_clip_id, start: x.start, end: x.end, hook: x.hook, reason: x.reason, previewUrl: null })),
+        },
+      };
+    }
     default:
-      // Studio and Schedule cards arrive with A1 and A3; until then a row of those kinds is not shown.
+      // Slideshow and Schedule cards arrive with their phases; until then a row of those kinds is not shown.
       return null;
   }
 }

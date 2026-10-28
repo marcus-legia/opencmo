@@ -11,6 +11,7 @@ import { SITE_URL } from "@/lib/site";
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
+import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
 import type { LibraryScreen } from "./library";
@@ -60,13 +61,13 @@ async function cmoState(supabase: SupabaseClient, userId: string, p: Promise<Pro
   return { mode: mode.brain, pausedAt: iso(prof.cmo_paused_at) };
 }
 
-/** The queue: waiting cards, oldest first. Kinds the app cannot show yet (A1, A3) are left out. */
+/** The queue: waiting cards, oldest first, Studio pictures signed. Kinds the app cannot show yet are left out. */
 async function waitingCards(supabase: SupabaseClient): Promise<ApprovalCard[]> {
   const rows = must(
     await supabase.from("approvals").select(APPROVAL_COLUMNS).eq("status", "waiting").order("created_at", { ascending: true }).limit(100),
     "approvals",
   ) as ApprovalRow[];
-  return rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null);
+  return signStudioCards(supabase, rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null), rows);
 }
 
 type OrderDb = OrderLedgerRow & { user_id: string; root_id: string | null; week: string; created_at: string; done_reason: string | null };
