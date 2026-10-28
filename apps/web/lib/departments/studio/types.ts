@@ -25,7 +25,9 @@ export type StudioEntry = (typeof STUDIO_ENTRIES)[number];
  * Who may call each entry point; the capability registry (`packages/contracts/capabilities.json`)
  * lists the same pairs. `buildVideo` and `renderShort` are the brain's: the founder and MCP make a
  * video with `create_video` through `plan`. Marking an edit finished is the founder's call only (a
- * finished-video card approved in the inbox reaches it through `approval_decide`, i.e. the UI).
+ * finished-video card approved in the inbox reaches it through `approval_decide`, i.e. the UI). The
+ * founder's `cutShorts` ("Cut shorts") only orders a `cut_shorts` order; the brain's runner cuts it.
+ * Only the brain stores a planned step (`plan` with `store`): MCP signs it, the Assistant shows it.
  */
 export const STUDIO_ACCESS: Record<StudioEntry, readonly StudioCaller[]> = {
   plan: ["brain", "assistant", "mcp"],
@@ -79,11 +81,20 @@ export type StudioPlan =
       /** Card 2 of a long take: the keyframes to animate. */
       sheet?: unknown;
       prepared: PreparedStep;
+      /** Set when the plan was stored (`store`): the `studio_steps` row whose card now waits. */
+      stepId?: string;
     }
   /** The tool could not be planned: the founder (or the client) reads `message` and fixes the input. */
   | { kind: "invalid"; message: string }
   /** The price is more than the account holds: `message` says how to top up. Nothing is stored. */
   | { kind: "short"; message: string; credits: number };
+
+export type PlanOptions = {
+  /** Brain only: store the step and raise its card (`studio_step_raise`). */
+  store?: boolean;
+  /** With `store`: the step a redone keyframe replaces. */
+  redoOf?: string;
+};
 
 /** A stored step (`studio_steps.id`), or one carried in a signed code (MCP). */
 export type StepRef = { stepId: string } | { prepared: PreparedStep };
@@ -102,7 +113,12 @@ export type StudioDecision = {
   exports?: Record<string, unknown>[];
   /** True when the step changed the edit's document. */
   wrote: boolean;
+  /** Card 1 approved: the step to raise (card 2) once the generations in `waitFor` are done. */
+  next?: { tool: StudioTool; input: unknown; waitFor: string[] };
+  /** What went wrong after the step itself succeeded (the Brand Kit could not be applied). */
+  notes?: string[];
 };
+
 
 /** `buildVideo`'s answer: the blank edit made for the brief and the step that waits on card 1. */
 export type BuiltVideo =
@@ -119,6 +135,8 @@ export type ShortRange = {
   /** Why this range: hook, flow, value (shown on the batch card). */
   reason: string;
 };
+
+export type OrderedShorts = { kind: "ordered"; orderId: string } | { kind: "refused"; message: string };
 
 export type CutShorts =
   | { kind: "cut"; batchId: string; shorts: { shortId: string; clipId: string; range: ShortRange }[] }
@@ -144,14 +162,17 @@ export type StudioContext = {
 };
 
 export interface StudioAdapter {
-  /** Price a Studio tool on an edit; nothing is spent or stored. */
-  plan(clipId: string, tool: StudioTool, input: unknown): Promise<StudioPlan>;
+  /** Price a Studio tool on an edit; nothing is spent. Stored behind a card only with `store` (brain). */
+  plan(clipId: string, tool: StudioTool, input: unknown, options?: PlanOptions): Promise<StudioPlan>;
   /** Run, cancel or redo a planned step. A cancelled step releases any hold and changes nothing. */
   decide(step: StepRef, action: StudioAction): Promise<StudioDecision>;
   /** Brain only: a blank edit for the brief, the Director's plan, and card 1 raised as a `studio_steps` row. */
   buildVideo(brief: VideoBrief): Promise<BuiltVideo>;
-  /** Three shorts from an edit marked finished at its current document; each its own `short` edit. */
-  cutShorts(clipId: string): Promise<CutShorts>;
+  /**
+   * Shorts from an edit marked finished at its current document. The brain cuts three, each its own
+   * `short` edit; the founder ("Cut shorts") orders a `cut_shorts` order for the brain to cut.
+   */
+  cutShorts(clipId: string): Promise<CutShorts | OrderedShorts>;
   /** The founder marks the edit finished at the document hash they saw. */
   markFinished(clipId: string, hash: string): Promise<MarkedFinished>;
   /** Queue `render_document` for a short's own edit, with no editor open and no founder session. */

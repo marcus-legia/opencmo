@@ -10,9 +10,13 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api/errors";
 import { mediaCreditsShort } from "@/lib/cmo/mcp/account";
 
+import { markFinished, orderShorts } from "./finished";
 import { renderShort } from "./render";
+import { cutShorts } from "./shorts/cut";
+import { raiseStep } from "./steps";
+import { buildVideo } from "./video";
 import { studioSession, type SessionOptions } from "./session";
-import { mayCall, type PreparedStep, type StepRef, type StudioAction, type StudioAdapter, type StudioContext, type StudioDecision, type StudioEntry, type StudioPlan } from "./types";
+import { mayCall, type PreparedStep, type StepRef, type StudioAction, type StudioAdapter, type StudioContext, type StudioDecision, type StudioEntry, type StudioPlan, type PlanOptions } from "./types";
 
 export class StudioAccessError extends Error {}
 
@@ -43,8 +47,9 @@ async function storedStep(ctx: StudioContext, stepId: string): Promise<PreparedS
 export function studio(ctx: StudioContext, options: SessionOptions = {}): StudioAdapter {
   const session = (clipId: string) => studioSession(ctx.supabase, ctx.caller, clipId, options);
 
-  async function plan(clipId: string, tool: string, input: unknown): Promise<StudioPlan> {
+  async function plan(clipId: string, tool: string, input: unknown, planOptions: PlanOptions = {}): Promise<StudioPlan> {
     allow(ctx, "plan");
+    if (planOptions.store && ctx.caller !== "brain") throw new StudioAccessError(`Only the brain stores Studio steps, not the ${ctx.caller}.`);
     const { scope } = await session(clipId);
     const planned = await scope.plan({ id: randomUUID(), name: tool, input });
     if (planned.kind === "invalid") return { kind: "invalid", message: problem(planned.content) };
@@ -54,7 +59,7 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
     // Short of credits: say how to top up now, not after the founder agreed to a price they cannot pay.
     const short = credits ? await mediaCreditsShort(ctx.supabase, ctx.userId, credits) : null;
     if (short) return { kind: "short", message: short, credits };
-    return {
+    const priced: StudioPlan = {
       kind: "priced",
       credits,
       lines: card.changes ?? [],
@@ -62,6 +67,8 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
       ...(card.sheet ? { sheet: card.sheet } : {}),
       prepared: { clipId, tool, input: planned.input },
     };
+    if (!planOptions.store) return priced;
+    return { ...priced, ...(await raiseStep(ctx, priced, planOptions.redoOf ? { redoOf: planOptions.redoOf } : {})) };
   }
 
   async function decide(step: StepRef, action: StudioAction): Promise<StudioDecision> {
@@ -77,28 +84,58 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
     );
     const generationId = typeof approved.extra.generation_id === "string" ? approved.extra.generation_id : undefined;
     const view = approved.extra.view as { exports?: Record<string, unknown>[] } | undefined;
+    const next = action.kind === "approve" && approved.outcome.ok ? nextStep(prepared.tool, approved.outcome.content) : undefined;
+    const notes: string[] = [];
+    // A brain-made video wears the founder's Brand Kit once it is built; the founder applies their own in the editor.
+    if (ctx.caller === "brain" && prepared.tool === "animate_video" && action.kind === "approve" && approved.outcome.ok) {
+      const branded = await scope.run({ id: randomUUID(), name: "apply_brand_kit", input: {} });
+      if (!branded.ok) notes.push(problem(branded.content));
+    }
     return {
       outcome: approved.outcome,
       wrote: approved.wrote,
       ...(generationId ? { generationId } : {}),
       ...(view?.exports ? { exports: view.exports } : {}),
+      ...(next ? { next } : {}),
+      ...(notes.length ? { notes } : {}),
     };
   }
 
-  const later = (entry: StudioEntry) => async (): Promise<never> => {
-    allow(ctx, entry);
-    throw new Error(`Studio ${entry} is not built yet.`);
-  };
-
-  return {
+  const adapter: StudioAdapter = {
     plan,
     decide,
-    buildVideo: later("buildVideo"),
-    cutShorts: later("cutShorts"),
-    markFinished: later("markFinished"),
+    async buildVideo(brief) {
+      allow(ctx, "buildVideo");
+      return buildVideo(ctx, adapter, brief);
+    },
+    async cutShorts(clipId) {
+      allow(ctx, "cutShorts");
+      return ctx.caller === "ui" ? orderShorts(ctx, clipId) : cutShorts(ctx, clipId, options.recordUsage);
+    },
+    async markFinished(clipId, hash) {
+      allow(ctx, "markFinished");
+      return markFinished(ctx, clipId, hash);
+    },
     async renderShort(shortClipId) {
       allow(ctx, "renderShort");
       return renderShort(ctx, shortClipId);
     },
   };
+  return adapter;
+}
+
+/** Card 1 approved: once its keyframes are done, card 2 is `animate_video` on what `create_video` returned. */
+function nextStep(tool: string, content: string): StudioDecision["next"] {
+  if (tool !== "create_video") return undefined;
+  try {
+    const value = JSON.parse(content) as { result?: { keyframes?: { generation_id: string }[] }; voice?: string };
+    if (!value.result) return undefined;
+    return {
+      tool: "animate_video",
+      input: { ...value.result, ...(value.voice ? { voice: value.voice } : {}) },
+      waitFor: (value.result.keyframes ?? []).map((keyframe) => keyframe.generation_id),
+    };
+  } catch {
+    return undefined;
+  }
 }
