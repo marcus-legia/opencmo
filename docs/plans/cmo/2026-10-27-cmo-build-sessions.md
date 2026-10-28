@@ -120,7 +120,8 @@ Planner review of `a3d6e01` (PR comment), Session A's items:
 - [x] Review 1: the Dashboard reads `DashboardScreen` from `lib/screens` (no own model, no 404 fallback)
 - [x] Review 2: cards decide through `POST /api/v1/approvals/[id]` with `contentHash`; corrections enabled
 - [x] Review: one v2 flag helper, `lib/screens/flag.ts` (`UI_V2`, `requireUiV2`)
-- [ ] U9 look check, axe, full suite
+- [x] U9 look check and axe on every screen (`test:e2e:v2` 29/29 on a local stack); old suite flag off: 28 passed, 4 failed (3 fail on `main` too, `design.spec` open)
+- [x] C's requests: one flag helper, `/app` → `/app/setup`, `?ask=1` opens Ask your CMO, Setup without the rail, `Panel` `sub`/`foot`
 
 ## Session C: pages
 
