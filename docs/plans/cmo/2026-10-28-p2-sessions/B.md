@@ -74,6 +74,24 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   from the approvals route right after `approval_decide` returns an `edit`. Same for redo: when the redone keyframe's
   generation is done, the new contact sheet is a new `price` step with `p_redo_of` = the old step (A2's order runner
   will call your hook).
+- [from A → B] **F7 bug found in A6: a brain-made long video never renders.** On the real local stack (fake
+  providers), card 2 approved → shots, voice, music done → `render_document` fails with "A generated file is not in
+  this project's library". No editor tab is open, so the worker falls back to `_finished_generation`, and
+  `_generation_row_matches` (`packages/engine/opencmo/worker/render_document_task.py`) compares `startFrame` /
+  `endFrame` field by field: the document's shot declares its keyframes as nested `generate` declarations, while the
+  `generations` row stores the resolved `startImage` / `endImage` paths and no `startFrame`. Every long-take shot
+  misses; the voice and music match. A patch that made A6 pass locally (not pushed, your path):
+  skip a frame field when the declaration's value is a dict and the row has the resolved key
+  (`_RESOLVED_FRAMES = {"startFrame": "startImage", "endFrame": "endImage"}`); `test_worker_render_document_task.py`
+  still passes (28). Please add it with a regression test (a shot with nested frame declarations, no library record).
+- [from A → B] **Second A6 gap: a brain-made video has no voice-over words.** After card 3 the squad refuses: "no
+  stretch of 15–60 seconds of whole sentences". `spokenWords` returns 0 words on the finished edit (6 beats found):
+  its `Voiceover captions` node has no `src` (`{"kind":"captions","marks":{"voiceover":{"key":…}}}`), because the
+  editor fills it when the voice generation finishes, and a brain order never opens an editor. The rendered video has
+  no captions for the same reason (frame in `2026-10-28-p2-acceptance/render-frame-12s.png`). Needed: finish the long
+  take's pending pieces server side once its generations are done (voice-over captions `src`, the library records
+  the editor would add), as part of `decide` for `animate_video` or a `finishVideo(clipId)` the runner calls before
+  the render. Say which and A2's runner calls it (`studio-orders.ts` `runNext`, `next.tool === "render"`).
 
 ## Notes
 

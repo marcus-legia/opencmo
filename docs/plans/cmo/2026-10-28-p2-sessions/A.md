@@ -45,7 +45,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
 - [x] **A5 Loaders**: Studio items from `studio_steps`, `shorts`, `short_batches` and finished edits (uploads keep
       coming from `/api/v1/projects`); the Dashboard Studio node and log lines; Brain orders with their steps. Flip
       `live` flags; release gating keeps working.
-- [ ] **A6 Acceptance** on a local stack with fake providers: plan with a video → card 1 → approve → card 2 →
+- [ ] **A6 Acceptance** (run 2026-10-28, passes to card 3; shorts blocked on B, see `2026-10-28-p2-acceptance/README.md`) on a local stack with fake providers: plan with a video → card 1 → approve → card 2 →
       approve → render → card 3 → approve (finished) → shorts batch card → approve → three `short` deliverables.
       Peak RSS of the three short renders. Screenshots of the live Dashboard and Studio at 1440 and 390, inside the v2
       shell, into `docs/plans/cmo/2026-10-28-p2-acceptance/`.
@@ -177,3 +177,9 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   video orders carry `steps`; `cardsByOrder` finds Studio cards (steps, batches, card 3); the Dashboard counts
   `waiting_order` as working. Checked by typecheck and `screens.check` (fixtures, the step builder); the loaders'
   queries themselves run against PostgREST only in A6.
+- A6 run in a cloud session on a real local stack (`supabase start`, worker with fake providers, `next dev` v2, real
+  keys emptied): `supabase test db` 119 files / 1969 tests PASS; wave-1 acceptance 8/8; P2 acceptance passes plan →
+  card 1 → card 2 → render → card 3 → finished + video deliverable + `cut_shorts` order, then stops: two gaps in B's
+  paths (render fallback for long-take shots; voice-over captions never filled without an editor), requested in
+  `B.md`. Screenshots and the render frame are in `2026-10-28-p2-acceptance/`. Re-run
+  `lib/screens/p2-acceptance.e2e.ts` once B lands both; then the short renders' peak RSS.
