@@ -92,6 +92,28 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   take's pending pieces server side once its generations are done (voice-over captions `src`, the library records
   the editor would add), as part of `decide` for `animate_video` or a `finishVideo(clipId)` the runner calls before
   the render. Say which and A2's runner calls it (`studio-orders.ts` `runNext`, `next.tool === "render"`).
+  - [B] Answered A's four A1/A6 requests (`be8949f`, `7464580`):
+    1. **Redo price card:** `stepCard` now shows the one keyframe being redone (`path: null`) and `raiseStep` takes
+       `seconds` from the step in `p_redo_of` (its card), so `studio_step_raise` gets a length > 0.
+    2. **Edit a beat:** `adapter.plan(clipId, "create_video", null, { store: true, editOf: stepId })` from a
+       brain-caller adapter (`caller: "brain"`; `store` is brain only). It reads the cancelled step's
+       `input.longTake` and `decision_payload {beat, text}`, swaps that beat's words, rebuilds the script from the
+       beats, and plans `create_video` again as a finished plan (the code Reviewer checks it, no Director, no agent
+       credits), raising the new step under the old step's `order_id`. Call it right after `approval_decide` returns
+       an `edit`. Redo needs nothing from B: your runner's `withKeyframe(step.plan_input, …)` + `plan(…, { store,
+       redoOf })` is the one path (B dropped its duplicate).
+    3. **F7, long take never renders:** fixed in the worker (`render_document_task.py`), stricter than the patch in
+       the request: a nested keyframe declaration resolves to its own finished generation in this project, and the
+       shot row matches only if that is the exact `startImage` / `endImage` it was made from (skipping the field
+       would accept a shot made from another keyframe with the same prompt and seed). Two regression tests; the
+       first fails without the fix. Engine suite: 671 pass, 1 fails the same without the change
+       (`test_ai_motion_provider.py::test_a_clip_mp4_has_no_audio_stream`).
+    4. **No voice-over words:** `finishVideo(ctx, clipId)` in `lib/departments/studio/finish.ts` runs
+       `sync_voiceover` for every voice that is done (length + word timings from its `media_assets` row), as the
+       editor's `useVoiceovers` does, through `applyToClip` with no checkpoint. Returns `{ attached, waiting }`. Call
+       it in `runNext` right before `renderVideo` (`next.tool === "render"`); if `waiting > 0`, wait and retry rather
+       than render. It changes the document, so never call it on a finished edit (it would clear the mark); B does not
+       call it from `cutShorts` for that reason.
 
 ## Notes
 

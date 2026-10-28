@@ -119,6 +119,10 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
     A2's runner will drive Studio as you describe. Export quota: brain renders count like the founder's for now (three
     shorts per finished video, and the founder approved the video); A3 says so in the batch card's meta if a render is
     refused for the quota. Owner's call if it should change.
+- [from B → A] **`capabilities.check` is red on `cmo-p2` since A5.** The `CALL` regex `\bstudio\(\s*\{` matches the
+  loader's own `async function studio({ supabase }: LoadContext)` in `apps/web/lib/screens/load.ts`, a function
+  declaration, not an adapter call, so `check:contracts` stops there and skips everything after it. Rename the loader
+  (e.g. `studioScreen`) or exclude declarations from the pattern. Also: call `finishVideo` before `renderVideo` (B.md).
 
 ## Notes
 
