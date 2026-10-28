@@ -164,3 +164,14 @@ POST /api/v1/cmo/pause      { paused: true | false } → { pausedAt }           
 | Setup | `site`, `documents[]`, `step`, `done` | onboarding, `marketing_documents` | yes | W1-5 |
 | Setup | `accounts[]` | Zernio | no | P0 |
 | Setup | `hasBrandKit`, `goal` | `brand_kits`, `cmo_goals` | yes | W1-5 |
+
+## P2 Studio live (A5)
+
+- Studio `items`: `build_video` orders (status from the order, `editorHref` and `clipId` from its steps, the waiting
+  step's or card 3's `approvalId`, `canMarkFinished` / `canCutShorts` / `documentHash` from the edit) and
+  `short_batches` (one item per batch, its card). Uploads stay on `/api/v1/projects`.
+- Studio `team`: the open video order's steps (`lib/screens/video-steps.ts`), live.
+- Studio `editStates` (new): `{ clipId, documentHash, finishedAt, kind }` for the 100 latest edits, so the page puts
+  Mark finished and Cut shorts on upload cards; `StudioItem.clipId`, `documentHash`, `canCutShorts` are optional.
+- Brain `orders[].steps` (optional): the same lines under a video order; Studio cards count for the row's "Open".
+- Dashboard team: an order waiting on generations or renders shows its department as working.

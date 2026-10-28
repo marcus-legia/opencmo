@@ -42,7 +42,7 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
       unless the founder asks); order kinds `build_video` and `cut_shorts`; the runner hands them to B's adapter
       (`buildVideo`, `cutShorts`); order states follow steps, generations and renders; budget from `JOB_PRICES` plus
       the card's price.
-- [ ] **A5 Loaders**: Studio items from `studio_steps`, `shorts`, `short_batches` and finished edits (uploads keep
+- [x] **A5 Loaders**: Studio items from `studio_steps`, `shorts`, `short_batches` and finished edits (uploads keep
       coming from `/api/v1/projects`); the Dashboard Studio node and log lines; Brain orders with their steps. Flip
       `live` flags; release gating keeps working.
 - [ ] **A6 Acceptance** on a local stack with fake providers: plan with a video → card 1 → approve → card 2 →
@@ -172,3 +172,8 @@ A0 → (push, M1) → A4 → A1 (after B0) → A3 → A2 (after B2) → A5 → A
   it dispatches (`cmo_dispatch.count_studio_work`, engine test).
 - **Open (A2):** the brain-mode Director and Clip editor model calls are not charged yet (`recordUsage` only logs);
   "edit a beat" waits on B's re-plan entry (request in `B.md`); `stepCard` must send `seconds` for `redo_keyframe`.
+- A5: Studio `items` (video orders + shorts batches with their cards), `team` (the open video order's steps) and the new
+  `editStates` are live; `StudioItem` gains C's optional `clipId`, `documentHash`, `canCutShorts`; Brain rows of
+  video orders carry `steps`; `cardsByOrder` finds Studio cards (steps, batches, card 3); the Dashboard counts
+  `waiting_order` as working. Checked by typecheck and `screens.check` (fixtures, the step builder); the loaders'
+  queries themselves run against PostgREST only in A6.

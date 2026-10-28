@@ -19,7 +19,8 @@ import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
 import type { SettingsScreen } from "./settings";
-import type { StudioScreen } from "./studio";
+import type { StudioItem, StudioScreen, TeamStep } from "./studio";
+import { videoSteps, type VideoStepRow } from "./video-steps";
 import type { WriterScreen } from "./writer";
 
 export type LoadContext = { supabase: SupabaseClient; userId: string; params: URLSearchParams };
@@ -114,11 +115,15 @@ function stateText(o: OrderDb, now: Date): string {
 async function cardsByOrder(supabase: SupabaseClient, orderIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!orderIds.length) return out;
-  const deliverables = must(await supabase.from("deliverables").select("order_id, ref_kind, ref_id").in("order_id", orderIds), "deliverables") as {
-    order_id: string;
-    ref_kind: string;
-    ref_id: string;
-  }[];
+  const deliverables = [
+    ...(must(await supabase.from("deliverables").select("order_id, ref_kind, ref_id").in("order_id", orderIds), "deliverables") as {
+      order_id: string;
+      ref_kind: string;
+      ref_id: string;
+    }[]),
+    // Studio's cards hang off its steps, batches and edits, not deliverables (P2).
+    ...(await studioRefs(supabase, orderIds)),
+  ];
   if (!deliverables.length) return out;
   const waiting = must(
     await supabase.from("approvals").select("id, ref_id").eq("status", "waiting").in("ref_id", deliverables.map((d) => d.ref_id)),
@@ -184,7 +189,8 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
       const verdict = (o: OrderDb) => classifyOrder(o, now, JOB_PRICES[o.kind] ?? 0);
       const nodes = TEAM.map((department) => {
         const mine = orders.filter((o) => o.department === department);
-        const running = mine.find((o) => o.status === "running");
+        // An order waiting on its generations or renders (Studio) is at work, not idle.
+        const running = mine.find((o) => o.status === "running") ?? mine.find((o) => o.status === "waiting_order");
         const stuck = mine.find((o) => verdict(o) === "stuck" || verdict(o) === "over_budget");
         const next = mine.filter((o) => o.status === "queued").sort((a, b) => (a.due_at ?? "9").localeCompare(b.due_at ?? "9"))[0];
         const waitingOn = mine.find((o) => o.status === "waiting_founder");
@@ -284,7 +290,11 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
       const { root, orders } = await tree;
       if (!root) return [];
       const visible = orders.filter((o) => o.status !== "cancelled");
-      return orderRows(visible, await cardsByOrder(supabase, visible.map((o) => o.id)), root.id, now);
+      const [cards, steps] = await Promise.all([
+        cardsByOrder(supabase, visible.map((o) => o.id)),
+        videoStepsByOrder(supabase, visible.filter((o) => o.kind === "build_video")),
+      ]);
+      return orderRows(visible, cards, root.id, now).map((row) => (steps.has(row.id) ? { ...row, steps: steps.get(row.id) } : row));
     },
     learned: async () => {
       const [lessons, rules, skips] = await Promise.all([
@@ -452,6 +462,41 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
 }
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** The rows Studio's cards decide, per order: its steps, its shorts batches and its video's edit (card 3). */
+async function studioRefs(supabase: SupabaseClient, orderIds: string[]): Promise<{ order_id: string; ref_id: string }[]> {
+  const [steps, batches] = await Promise.all([
+    supabase.from("studio_steps").select("id, order_id, clip_id").in("order_id", orderIds),
+    supabase.from("short_batches").select("id, order_id").in("order_id", orderIds),
+  ]);
+  const stepRows = must(steps, "studio_steps") as { id: string; order_id: string; clip_id: string }[];
+  return [
+    ...stepRows.map((r) => ({ order_id: r.order_id, ref_id: r.id })),
+    ...[...new Map(stepRows.map((r) => [r.clip_id, r.order_id])).entries()].map(([clip, order]) => ({ order_id: order, ref_id: clip })),
+    ...(must(batches, "short_batches") as { id: string; order_id: string }[]).map((r) => ({ order_id: r.order_id, ref_id: r.id })),
+  ];
+}
+
+type StepDb = VideoStepRow & { id: string; order_id: string; clip_id: string; created_at: string };
+const STEP_COLUMNS = "id, order_id, clip_id, tool, kind, status, decision, card, next, next_done_at, created_at";
+
+/** Each video order's team steps, oldest step first. */
+async function videoStepsByOrder(supabase: SupabaseClient, orders: { id: string; status: string }[]): Promise<Map<string, TeamStep[]>> {
+  const out = new Map<string, TeamStep[]>();
+  if (!orders.length) return out;
+  const ids = orders.map((o) => o.id);
+  const [steps, card3] = await Promise.all([
+    supabase.from("studio_steps").select(STEP_COLUMNS).in("order_id", ids).order("created_at", { ascending: true }),
+    supabase.from("approvals").select("ref_id").eq("ref_kind", "editor_project").eq("status", "waiting"),
+  ]);
+  const rows = must(steps, "studio_steps") as StepDb[];
+  const waiting = new Set((must(card3, "approvals") as { ref_id: string }[]).map((r) => r.ref_id));
+  for (const o of orders) {
+    const mine = rows.filter((r) => r.order_id === o.id);
+    out.set(o.id, videoSteps(o as { status: OrderDb["status"] }, mine, mine.some((r) => waiting.has(r.clip_id))));
+  }
+  return out;
+}
+
 const isHttps = (u: unknown): u is string => typeof u === "string" && /^https:\/\/\S+$/.test(u) && u.length <= 500;
 
 /** Waiting cards keyed by the row they decide. */
@@ -563,11 +608,121 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
 }
 
 /**
- * Studio's uploads and edits are read live from `/api/v1/projects` on the page; this route only carries generated
- * items (long videos, shorts, slideshows), which arrive with Studio S1. Until then their honest live value is none.
+ * Studio (P2 A5): the long videos the brain's orders make and the shorts batches, with their cards; the Video team
+ * panel for the video in progress; and every recent edit's finished state (`editStates`), which the page puts on the
+ * upload cards it reads from `/api/v1/projects`. Uploads themselves stay on that route.
  */
-async function studio(): Promise<Partial<StudioScreen>> {
-  return { items: [] };
+async function studio({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
+  type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short"; hook: string | null } | null };
+  const videos = supabase
+    .from("work_orders")
+    .select("id, title, status, created_at, updated_at, error, brief")
+    .eq("kind", "build_video")
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .then((r) => must(r, "work_orders") as VideoOrder[]);
+  const edits = supabase
+    .from("editor_projects")
+    .select("clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook)")
+    .order("updated_at", { ascending: false })
+    .limit(100)
+    .then((r) => must(r, "editor_projects") as unknown as Edit[]);
+  const steps = videos.then(async (orders) =>
+    orders.length
+      ? (must(await supabase.from("studio_steps").select(STEP_COLUMNS).in("order_id", orders.map((o) => o.id)).order("created_at", { ascending: true }), "studio_steps") as StepDb[])
+      : [],
+  );
+  const cards = Promise.all([waitingByRef(supabase, "studio_step"), waitingByRef(supabase, "editor_project"), waitingByRef(supabase, "short_batch")]);
+
+  return parts<StudioScreen>("studio", {
+    items: async () => {
+      const [orders, stepRows, editRows, [stepCards, editCards, batchCards]] = await Promise.all([videos, steps, edits, cards]);
+      const editOf = new Map(editRows.map((e) => [e.clip_id, e]));
+      const videoItems = orders.map((o) => {
+        const mine = stepRows.filter((r) => r.order_id === o.id);
+        const clipId = mine.at(-1)?.clip_id ?? null;
+        const edit = clipId ? editOf.get(clipId) : undefined;
+        const finished = !!edit?.finished_hash && edit.finished_hash === edit.document_hash;
+        const waitingStep = mine.find((r) => stepCards.has(r.id));
+        const approvalId = (waitingStep && stepCards.get(waitingStep.id)) ?? (clipId ? editCards.get(clipId) : undefined) ?? null;
+        const status: StudioItem["status"] =
+          o.status === "done" ? (finished ? "finished" : "ready") : o.status === "failed" ? "failed" : o.status === "waiting_founder" ? "waiting_founder" : "running";
+        const seconds = typeof o.brief.seconds === "number" ? ` · ${o.brief.seconds} s` : "";
+        const now = videoSteps(o, mine, !!(clipId && editCards.has(clipId))).find((s) => s.state === "running");
+        return {
+          id: o.id,
+          kind: "video" as const,
+          title: o.title.slice(0, 200),
+          subtitle: `AI video${seconds}${status === "finished" ? " · finished" : now ? ` · ${now.label.toLowerCase()}` : ""}`.slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(o.created_at).toISOString(),
+          editedAt: edit ? new Date(edit.updated_at).toISOString() : null,
+          failure: o.status === "failed" ? (o.error?.message ?? "The video could not be made.").slice(0, 200) : null,
+          projectId: null,
+          editorHref: clipId ? `/app/editor/${clipId}` : null,
+          approvalId,
+          canMarkFinished: !!edit && !finished && o.status !== "failed",
+          clipId,
+          documentHash: edit?.document_hash ?? null,
+          canCutShorts: finished,
+          edits: [],
+        };
+      });
+
+      const batches = must(
+        await supabase.from("short_batches").select("id, parent_clip_id, status, error, created_at, decided_at, shorts(id, status)").order("created_at", { ascending: false }).limit(20),
+        "short_batches",
+      ) as { id: string; parent_clip_id: string; status: string; error: string | null; created_at: string; decided_at: string | null; shorts: { id: string; status: string }[] }[];
+      const batchItems = batches.map((b) => {
+        const parent = editOf.get(b.parent_clip_id)?.clips?.hook ?? "your video";
+        const count = b.shorts.filter((x) => x.status !== "failed").length;
+        const status: StudioItem["status"] =
+          b.status === "approved" ? "finished" : b.status === "waiting_founder" ? "waiting_founder" : b.status === "failed" ? "failed" : b.status === "sent_back" || b.status === "cancelled" ? "cancelled" : "running";
+        return {
+          id: b.id,
+          kind: "short" as const,
+          title: `${count} ${count === 1 ? "short" : "shorts"} · ${parent}`.slice(0, 200),
+          subtitle: (status === "running" ? "Cut from a finished edit · rendering" : status === "cancelled" ? "Sent back" : "Cut from a finished edit · 9:16").slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(b.created_at).toISOString(),
+          editedAt: iso(b.decided_at),
+          failure: b.status === "failed" ? (b.error ?? "The shorts could not be rendered.").slice(0, 200) : null,
+          projectId: null,
+          editorHref: null,
+          approvalId: batchCards.get(b.id) ?? null,
+          canMarkFinished: false,
+          clipId: null,
+          documentHash: null,
+          canCutShorts: false,
+          edits: [],
+        };
+      });
+      return [...videoItems, ...batchItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    team: async () => {
+      const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);
+      const live = orders.find((o) => ["queued", "running", "waiting_founder", "waiting_order", "deferred"].includes(o.status));
+      if (!live) return null;
+      const mine = stepRows.filter((r) => r.order_id === live.id);
+      const clip = mine.at(-1)?.clip_id;
+      return { title: live.title.slice(0, 200), steps: videoSteps(live, mine, !!(clip && editCards.has(clip))) };
+    },
+    editStates: async () =>
+      (await edits)
+        .filter((e) => e.clips)
+        .map((e) => ({
+          clipId: e.clip_id,
+          documentHash: e.document_hash,
+          finishedAt: e.finished_hash === e.document_hash ? iso(e.finished_at) : null,
+          kind: e.clips!.kind,
+        })),
+  });
 }
 
 async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
 import { ALL_KINDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
+import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
 
@@ -183,6 +184,18 @@ check("a Studio snapshot builds a card that parses", () => {
     assert.ok(card, snapshot.kind);
     ApprovalCardSchema.parse(card);
   }
+});
+check("the Video team's steps follow the order's steps", () => {
+  const script = { tool: "create_video", kind: "script" as const, card: { beats: [1, 2, 3] }, next: null, next_done_at: null };
+  const waiting = videoSteps({ status: "waiting_founder" }, [{ ...script, status: "waiting", decision: null }], false);
+  assert.equal(waiting.find((s) => s.state === "running")?.label, "Storyboard · waits on you");
+  assert.equal(waiting[1]!.label, "Director: 3 beats");
+  const making = videoSteps({ status: "waiting_order" }, [{ ...script, status: "running", decision: "approve" }], false);
+  assert.equal(making.find((s) => s.state === "running")?.label, "Keyframes");
+  const sheet = { tool: "animate_video", kind: "price" as const, card: { shots: 4 }, next: { tool: "render" }, next_done_at: "2026-10-29T00:00:00Z", status: "done" as const, decision: "approve" };
+  const rendering = videoSteps({ status: "waiting_order" }, [{ ...script, status: "done", decision: "approve", next_done_at: "x" }, sheet], false);
+  assert.equal(rendering.find((s) => s.state === "running")?.label, "Render → finished video card");
+  assert.ok(videoSteps({ status: "done" }, [{ ...script, status: "done", decision: "approve" }, sheet], false).every((s) => s.state === "done"));
 });
 check("a snapshot never holds a signed URL", () => {
   for (const snapshot of STUDIO_SNAPSHOTS) assert.doesNotMatch(JSON.stringify(snapshot), /https?:\/\//, snapshot.kind);
