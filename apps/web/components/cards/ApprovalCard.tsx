@@ -166,7 +166,8 @@ export function ApprovalCard({
       case "script":
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
-        return [primary(), { label: "Redo a keyframe", variant: "secondary", run: () => setRedoing(true) }, ...declineAction];
+        // Redo exists only for a contact sheet: a price for shots alone has no keyframe to make again.
+        return [primary(), ...(card.body.keyframes.length > 0 ? [{ label: "Redo a keyframe", variant: "secondary" as const, run: () => setRedoing(true) }] : []), ...declineAction];
       case "finished_video":
         return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }, ...declineAction];
       case "shorts_batch":
@@ -269,14 +270,15 @@ export function ApprovalCard({
               }}
             >
               <fieldset className="v2-field">
-                <legend>Which keyframe should be made again? Only that one is redone; its new price comes on a new card.</legend>
+                <legend>Which keyframe should be made again? Only that one is redone; its price comes on a new card.</legend>
                 <div className="v2-card-keyframes">
-                  {Array.from({ length: Math.max(1, card.body.shots) }, (_, index) => (
-                    <label key={index} className="v2-card-keyframe">
-                      <input type="radio" name={`${card.id}-keyframe`} value={index} checked={keyframe === index} onChange={() => setKeyframe(index)} />
+                  {card.body.keyframes.map((frame) => (
+                    <label key={frame.index} className="v2-card-keyframe" title={frame.label}>
+                      <input type="radio" name={`${card.id}-keyframe`} value={frame.index} checked={keyframe === frame.index} onChange={() => setKeyframe(frame.index)} />
                       <span>
                         <span className="v2-visually-hidden">Keyframe </span>
-                        {String(index + 1).padStart(2, "0")}
+                        {String(frame.index + 1).padStart(2, "0")}
+                        {frame.garbled ? <span className="v2-visually-hidden"> (text may be garbled)</span> : null}
                       </span>
                     </label>
                   ))}

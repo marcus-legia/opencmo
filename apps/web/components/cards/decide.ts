@@ -62,8 +62,15 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       return `Cancelled. No credits were spent${suffix}.`;
     case "send_back":
       return card.kind === "finished_video" ? `Sent back. The edit stays open in the editor${suffix}.` : `Sent back with your note${suffix}.`;
+    case "edit":
+      if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
+      return `Approved${suffix}.`;
     default:
       if (card.kind === "post" && !sample) return "Approved. Post it on X when you are ready.";
+      if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
+      if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
+      if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;
+      if (card.body.kind === "shorts_batch") return `Approved ${card.body.shorts.length} shorts. They are ready to schedule${suffix}.`;
       return `Approved${suffix}.`;
   }
 }

@@ -6,12 +6,13 @@ import { Elapsed } from "@/components/Elapsed";
 import { ApiError, api } from "@/components/clipping/api";
 import { stageLabel } from "@/components/clipping/ProcessingView";
 import { useLive } from "@/components/clipping/useLive";
-import { Button, ButtonLink, MonoLabel } from "@/components/ui";
+import { Button, ButtonLink, Chip, MonoLabel } from "@/components/ui";
 import type { Project } from "@/lib/clipping-types";
 
 import { shortDate } from "../format";
 import { ErrorNote } from "../parts";
 import type { CardActions } from "./StudioCard";
+import { isFinished, type EditState } from "./finish";
 import type { Card } from "./model";
 
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
@@ -27,6 +28,8 @@ export function StudioDrawer({
   actions,
   onClose,
   onProject,
+  editStates,
+  finishing,
 }: {
   card: Card | null;
   /** The URL names an item that is not in the loaded list: try it as an upload by id. */
@@ -35,6 +38,10 @@ export function StudioDrawer({
   actions: CardActions;
   onClose: () => void;
   onProject: (project: Project) => void;
+  /** P2: each edit's finished state, by clip id (live only). */
+  editStates: ReadonlyMap<string, EditState>;
+  /** The edit a Mark finished or Cut shorts call is running for. */
+  finishing: string | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const projectId = card?.project?.id ?? missing;
@@ -156,6 +163,7 @@ export function StudioDrawer({
                               <a href={`/app/editor/${encodeURIComponent(clip.id!)}`} data-testid={i === 0 ? "project-open-editor" : undefined}>
                                 Open in editor
                               </a>
+                              <EditFinish clipId={clip.id!} state={editStates.get(clip.id!)} busy={finishing === clip.id} actions={actions} />
                             </li>
                           ))}
                       </ul>
@@ -242,5 +250,22 @@ export function StudioDrawer({
         )}
       </div>
     </dialog>
+  );
+}
+
+/** Mark finished, or the finished chip and Cut shorts, for one edit of an upload. Nothing until its state is known. */
+function EditFinish({ clipId, state, busy, actions }: { clipId: string; state: EditState | undefined; busy: boolean; actions: CardActions }) {
+  if (!state) return null;
+  return isFinished(state) ? (
+    <span className="v2-actions">
+      <Chip tone="posted">Finished</Chip>
+      <Button compact variant="secondary" disabled={busy} data-testid="studio-cut-shorts" onClick={() => actions.cutShorts(clipId)}>
+        Cut shorts
+      </Button>
+    </span>
+  ) : (
+    <Button compact variant="secondary" disabled={busy} data-testid="studio-mark-finished" onClick={() => actions.markFinished(clipId, state.documentHash)}>
+      Mark finished
+    </Button>
   );
 }

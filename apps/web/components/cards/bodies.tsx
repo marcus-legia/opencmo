@@ -172,6 +172,7 @@ export function ScriptBody({
             <b className="v2-card-beat-n">{String(index + 1).padStart(2, "0")}</b>
             <span>
               <b>“{editing && index === beat ? draft : line.words}”</b> {line.picture}
+              {line.motion ? <span className="v2-muted"> Motion: {line.motion}</span> : null}
             </span>
           </li>
         ))}
@@ -194,7 +195,11 @@ export function ScriptBody({
           </div>
         </div>
       ) : null}
-      {body.nextPriceCredits !== null ? <div className="v2-card-meta">Keyframes next: {body.nextPriceCredits} credits</div> : null}
+      <div className="v2-card-meta">
+        {body.seconds ? <span>{formatSeconds(body.seconds)}</span> : null}
+        {body.aspect ? <span>{body.aspect}</span> : null}
+        {body.nextPriceCredits !== null ? <span>Keyframes next: {body.nextPriceCredits} credits</span> : null}
+      </div>
     </>
   );
 }
@@ -202,11 +207,25 @@ export function ScriptBody({
 export function PriceBody({ body, price }: { body: Body<"price">; price: number | null }) {
   return (
     <>
-      <div className="v2-card-frames" aria-hidden="true">
-        {Array.from({ length: Math.min(8, Math.max(1, body.shots)) }, (_, index) => (
-          <span key={index} className={index % 3 === 0 ? "is-light" : undefined} />
-        ))}
-      </div>
+      {body.keyframes.length > 0 ? (
+        <ol className="v2-card-sheet" aria-label="Contact sheet">
+          {body.keyframes.map((frame) => (
+            <li key={frame.index}>
+              {frame.thumbUrl ? <img src={frame.thumbUrl} alt="" loading="lazy" /> : <span className="v2-card-sheet-empty" aria-hidden="true" />}
+              <span className="v2-card-sheet-label">
+                <b className="v2-card-beat-n">{String(frame.index + 1).padStart(2, "0")}</b> {frame.label}
+              </span>
+              {frame.garbled ? <span className="v2-chip is-stuck">Text may be garbled</span> : null}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <div className="v2-card-frames" aria-hidden="true">
+          {Array.from({ length: Math.min(8, Math.max(1, body.shots)) }, (_, index) => (
+            <span key={index} className={index % 3 === 0 ? "is-light" : undefined} />
+          ))}
+        </div>
+      )}
       <div className="v2-card-price">
         <span className="v2-muted">
           {formatSeconds(body.seconds)}
@@ -223,7 +242,8 @@ export function FinishedVideoBody({ body }: { body: Body<"finished_video"> }) {
     <>
       <div className="v2-card-player">
         {body.previewUrl ? (
-          <video src={body.previewUrl} controls preload="metadata" playsInline />
+          // No poster image exists: the fragment seeks the render to the still the brain picked.
+          <video src={`${body.previewUrl}#t=${body.frameAt}`} controls preload="metadata" playsInline />
         ) : (
           <span className="v2-card-play" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24">
@@ -249,6 +269,8 @@ export function ShortsBody({ body }: { body: Body<"shorts_batch"> }) {
             </b>
             <br />
             <span className="v2-muted">Hook: “{short.hook}”</span>
+            <br />
+            <span>{short.reason}</span>
           </span>
         </li>
       ))}

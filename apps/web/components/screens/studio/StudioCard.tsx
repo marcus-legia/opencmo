@@ -15,6 +15,9 @@ export type CardActions = {
   retry: (card: Card) => void;
   cancel: (card: Card) => void;
   remove: (card: Card) => void;
+  /** P2: mark the edit finished at the hash on screen; cut 3 shorts from a finished edit. */
+  markFinished: (clipId: string, documentHash: string) => void;
+  cutShorts: (clipId: string) => void;
 };
 
 /** Generated media: a picture of its kind until real thumbnails exist (the frame's drawings). */
@@ -274,9 +277,14 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
               Open in editor
             </Button>
           )}
-          {card.canMarkFinished && (
-            <Button compact variant="on-dark" disabled title="Marking an edit finished arrives with Studio's shorts">
+          {card.canMarkFinished && card.clipId && card.documentHash && (
+            <Button compact variant="on-dark" disabled={busy} data-testid="studio-mark-finished" onClick={() => actions.markFinished(card.clipId!, card.documentHash!)}>
               Mark finished
+            </Button>
+          )}
+          {card.canCutShorts && card.clipId && (
+            <Button compact variant="on-dark" disabled={busy} data-testid="studio-cut-shorts" onClick={() => actions.cutShorts(card.clipId!)}>
+              Cut shorts
             </Button>
           )}
         </span>
