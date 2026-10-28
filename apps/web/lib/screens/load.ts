@@ -612,7 +612,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
  * panel for the video in progress; and every recent edit's finished state (`editStates`), which the page puts on the
  * upload cards it reads from `/api/v1/projects`. Uploads themselves stay on that route.
  */
-async function studio({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
+async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
   type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
   type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short"; hook: string | null } | null };
   const videos = supabase
@@ -773,4 +773,4 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
  * Live readers, one per screen, under the founder's RLS session (no service role). A loader returns only the
  * fields it reads for real; `registry.ts` `live` must list them too before they replace sample data.
  */
-export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, research, writer, studio, sales };
+export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, research, writer, studio: studioScreen, sales };

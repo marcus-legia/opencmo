@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
-import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
+import { kickReplan, kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 import { signStudioCards } from "@/lib/screens/studio-sign";
 
@@ -53,7 +53,8 @@ export const POST = withApi(
         p_payload: { ...rest, content_hash: contentHash, via: "app" },
       }),
     );
-    if (row?.ref_kind === "studio_step" || row?.ref_kind === "short_batch") kickStudioOrders();
+    if (row?.ref_kind === "studio_step" && action === "edit") kickReplan(row.ref_id);
+    else if (row?.ref_kind === "studio_step" || row?.ref_kind === "short_batch") kickStudioOrders();
     const card = row ? approvalToCard(row) : null;
     if (!card) throw new ApiError(500, "Could not read the card back.");
     return card;
