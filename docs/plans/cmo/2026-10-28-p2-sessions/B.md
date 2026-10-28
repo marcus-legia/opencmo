@@ -29,10 +29,10 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
 - [x] **B3 Short render**: `renderShort` queues `render_document` for a short's own edit from a brain order, with no
       editor open and no founder session (service path under the owner's id, as the worker does today); one test
       against `clip-export`.
-- [ ] **B2 Video brief**: `buildVideo(brief)` maps the brief to `create_video` input (prompt from objective + angle +
+- [x] **B2 Video brief**: `buildVideo(brief)` maps the brief to `create_video` input (prompt from objective + angle +
       hooks, seconds, aspect, voice) with the Brand Kit and the strategy voice; each priced step of the long-take
       squad (keyframes, shots, redo keyframe) goes through A's `studio_step_raise` instead of a chat card.
-- [ ] **B5 Studio routes**: `POST /api/v1/studio/[clipId]/finished` (body: the document hash the founder sees) and
+- [x] **B5 Studio routes**: `POST /api/v1/studio/[clipId]/finished` (body: the document hash the founder sees) and
       `POST /api/v1/studio/[clipId]/shorts` (starts a `cut_shorts` order; refused unless finished), zod-validated,
       rate-limited, English errors.
 - [ ] **B4 Shorts squad**: Clip editor (registry agent `shorts`: picks 3 ranges from beats and word timings, hook
@@ -121,13 +121,11 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   `shotBeats` `f1f3956`, B2 + B4 orchestration `451fc7e`. Checks: `apps/web` typecheck, `check:contracts` (with A4's
   guard), editor-core vitest (37 files), clip-export vitest with real ffmpeg (`short.test.ts`), MCP `npm test` and its
   tsc, `lib/departments/studio/studio.check.ts` and `shorts/squad.check.ts`.
-- **B5 routes** (`app/api/v1/studio/[clipId]/{finished,shorts}/route.ts`) are one commit on
-  `claude/session-b-cmo-p2-f92e3r` on top of `cmo-p2`: A4's caller-path guard fails until A lists them (request in
-  `A.md`). Cherry-pick onto `cmo-p2` once A pushes the two `CALLER_PATHS` lines.
+- **B5 routes** are on `cmo-p2` (`cdc2259`), listed in A's `CALLER_PATHS`.
 - **Adapter shape after A4:** still the six B0 entries. `plan(…, { store: true })` (brain only) stores the step and
   raises its card; `cutShorts` from the UI only orders a `cut_shorts` order, from the brain it cuts.
-- **Open, waiting on A:** B2 and B4 run live only once `studio_step_raise`, `mark_finished`, `cut_shorts_order` and
-  `short_batch_create` exist (signatures requested in `A.md`) and A2's runner calls the adapter. Not ticked until then.
+- **Open:** B4 is ticked once A6's end-to-end run passes again with `7464580` (render fix) and `finishVideo` called
+  before the long video's render; both bugs it found are fixed on B's side.
 - **Measured in the cloud session (2026-10-28):** three shorts cut by `make_short` from a 60 s 1920×1080 edit with
   captions, rendered by `clip-export run` at 1080p (`parallel: 2`): each job peaks at **~1.6 GB** RSS for the whole
   process tree (node + ffmpeg, sampled from `/proc` every 50 ms; `/usr/bin/time` is not installed), under the 2 GB
