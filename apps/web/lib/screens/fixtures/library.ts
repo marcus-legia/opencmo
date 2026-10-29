@@ -24,21 +24,21 @@ export const libraryFixture: LibraryScreen = {
   ],
   voice: {
     notes: [
-      { id: "v-1", text: "Short sentences, one idea each.", source: "All platforms · from 6 edits · last Tue", replaces: null },
-      { id: "v-2", text: "“We” on X, “I” on LinkedIn.", source: "Per platform · from 4 edits", replaces: null },
-      { id: "v-3", text: "Name the feature, then show it.", source: "All platforms", replaces: "lead with the pain (Oct 9)" },
+      { id: "v-1", text: "Short sentences, one idea each.", platform: null, source: "From your edit: wrong voice", at: at("2026-10-27", "09:12"), weight: 0.97, replaces: null },
+      { id: "v-2", text: "“We” on X, “I” on LinkedIn.", platform: "linkedin", source: "From your edit: wrong voice", at: at("2026-10-22", "16:40"), weight: 0.88, replaces: null },
+      { id: "v-3", text: "Name the feature, then show it.", platform: "x", source: "Approved as drafted", at: at("2026-10-14", "08:05"), weight: 0.75, replaces: "lead with the pain (Oct 9)" },
     ],
     wordsCut: ["game-changer", "unlock", "seamless", "leverage"],
   },
   skills: {
     writing: [
-      { id: "s-plain", name: "Plain writing (No AI Slop)", origin: "built_in", note: "Built in · guidance, never a hard filter", enabled: true },
-      { id: "s-profiles", name: "Platform profiles: X, Threads, LinkedIn", origin: "built_in", note: "Built in · length, tone, no links, hashtags only on videos", enabled: true },
-      { id: "s-launch", name: "Launch threads", origin: "yours", note: "Yours · saved from a chat on Oct 18", enabled: false },
+      { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in", note: "Guidance on stock phrases and patterns to avoid, never a hard filter", readBy: ["Writer", "Checker", "Sales", "CMO chat"] },
+      { id: "x-writing", name: "Writing for X", origin: "built_in", note: "One idea per post, a clear first line, no links and no hashtags", readBy: ["Writer", "Checker"] },
+      { id: "s-launch", name: "Launch threads", origin: "yours", note: "Saved from a chat on Oct 18", readBy: ["Writer"] },
     ],
     video: [
-      { id: "s-listicle", name: "Senior dev listicle", origin: "built_in", note: "Built in style skill", enabled: true },
-      { id: "s-demo", name: "OpenCMO demo cut", origin: "yours", note: "Yours · saved from the editor Assistant", enabled: true },
+      { id: "s-listicle", name: "Senior dev listicle", origin: "built_in", note: "A style skill for list videos", readBy: ["Studio", "Editor Assistant"] },
+      { id: "s-demo", name: "OpenCMO demo cut", origin: "yours", note: "Saved from the editor Assistant", readBy: ["Editor Assistant"] },
     ],
   },
 };

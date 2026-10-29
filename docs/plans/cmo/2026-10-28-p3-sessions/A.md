@@ -17,15 +17,19 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
 
 ## Todo
 
-- [ ] **A0 Contracts (push first)**
-  - [ ] 1. `platforms.json` + schema: per profile `id`, `limit`, `visibleBeforeMore`, `tone`, `hashtags` (max, 0 for
+- [x] **A0 Contracts (push first)** — built by Session C at the owner's request (2026-10-29: no Session A was
+      running and C starts on A0's types). What A0 settled beyond the list: `platform_profile(id)` in SQL (compared
+      with `platforms.json` by `lib/cmo/platforms.check.ts`), `label` and `platform` fields per profile,
+      `content_items.clip_id` (a caption is a `video` content item for one edit), caption and correction fields on the
+      card types (`CaptionSnapshotSchema`, `CaptionSchema`, `CAPTION_ACTION`, `editMode`/`times`), `SAMPLE_CARDS`.
+  - [x] 1. `platforms.json` + schema: per profile `id`, `limit`, `visibleBeforeMore`, `tone`, `hashtags` (max, 0 for
         posts), `links` (false), `kind` (`post` | `caption` | `youtube`); X, Threads, LinkedIn, Instagram caption,
         TikTok caption, YouTube title/description, with headroom (`writer.md` §7). `check:contracts` validates it; a
         Python loader test reads the same file.
-  - [ ] 2. Migration skeleton: `cmo_draft_outcomes.platform`; voice notes as `cmo_memories` rows (`topic` `post`,
+  - [x] 2. Migration skeleton: `cmo_draft_outcomes.platform`; voice notes as `cmo_memories` rows (`topic` `post`,
         `kind` `preference`, `source` = outcome id) with an index for "newest first"; `deliverables` link from a
         `caption` to its `video`/`short` (`parent_id`); pgTAP.
-  - [ ] 3. Screen types: `writer.voice`, `library.voice` (note, from what, when, weight), `library.skills` (name,
+  - [x] 3. Screen types: `writer.voice`, `library.voice` (note, from what, when, weight), `library.skills` (name,
         what it is for, read by which agent); card snapshot types for Threads/LinkedIn posts, captions, correction.
 - [ ] **A1 Voice notes and corrections in SQL**: `voice_note_add(outcome_id)` (security definer, owner check),
       `voice_note_delete(id)` for the founder, weight by age in the read RPC, `expires_at` 60 days; correction trigger:

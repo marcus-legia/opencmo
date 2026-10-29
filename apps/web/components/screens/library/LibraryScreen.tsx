@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { BrandView } from "@/components/clipping/web/BrandView";
 
-import { Button, SampleTag, Tabs, Toggle } from "@/components/ui";
+import { Button, SampleTag, Tabs } from "@/components/ui";
 import type { LibraryScreen as Data } from "@/lib/screens/library";
 
 import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
@@ -151,22 +151,19 @@ function SkillsTab({ skills, sample }: { skills: Data["skills"]; sample: { skill
   );
 }
 
+/** Read only (P3 C1): what each skill is for and which agents read it. Skills change through their own files. */
 function SkillList({ id, title, items, sample }: { id: string; title: string; items: Skill[]; sample: boolean }) {
-  const [on, setOn] = useState(() => new Map(items.map((item) => [item.id, item.enabled])));
   return (
     <Panel id={id} white title={<>{title} {sample && <SampleTag />}</>}>
       <div className="scr-rows">
         {items.length === 0 && <p className="scr-row scr-muted">None yet. Ask the editor Assistant to remember a recipe and it shows here.</p>}
         {items.map((item) => (
-          <div key={item.id} className="scr-row scr-row-inline">
-            <span>
-              <b>{item.name}</b>
-              <br />
-              <span className="scr-tiny scr-muted">{item.note}</span>
+          <div key={item.id} className="scr-row">
+            <b>{item.name}</b>
+            <span className="scr-tiny scr-muted">
+              {item.origin === "built_in" ? "Built in" : "Yours"} · {item.note}
             </span>
-            <Toggle checked={on.get(item.id) ?? false} onChange={(next) => setOn((map) => new Map(map).set(item.id, next))}>
-              <span className="scr-sr-only">{item.name}</span>
-            </Toggle>
+            <span className="scr-tiny">Read by {item.readBy.join(", ")}</span>
           </div>
         ))}
       </div>

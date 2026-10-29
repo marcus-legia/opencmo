@@ -101,7 +101,8 @@ def _with_engine(img: modal.Image) -> modal.Image:
     # thiếu file này thì task `generate` nào cũng hỏng (opencmo/ai/catalog.py).
     # Bảng task kind (opencmo/worker/kinds.py): thiếu thì worker không phân được việc nào.
     # The edit-length cap the web Upload panel shares (opencmo/worker/process_job.py).
-    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json"):
+    # Platform profiles Writer and the cards share (opencmo/platforms.py).
+    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json"):
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )

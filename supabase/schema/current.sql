@@ -2656,7 +2656,9 @@ CREATE TABLE public.content_items (
     published_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    clip_id uuid,
     CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
+    CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
     CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
     CONSTRAINT content_items_external_url_check CHECK ((char_length(external_url) <= 500)),
     CONSTRAINT content_items_final_text_check CHECK ((char_length(final_text) <= 4000)),
@@ -3055,6 +3057,24 @@ begin
       steps = coalesce(p_steps, steps)
   where id = p_run and attempt = p_attempt and status = 'running';
   return found;
+end;
+$$;
+
+
+--
+-- Name: cmo_draft_outcomes_platform(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_draft_outcomes_platform() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.platform is null and new.department = 'post' then
+    select c.platform into new.platform from public.content_items c
+    where c.id = new.item_id and public.platform_profile(c.platform) is not null;
+  end if;
+  return new;
 end;
 $$;
 
@@ -3567,6 +3587,7 @@ CREATE TABLE public.cmo_memories (
     importance smallint DEFAULT 2 NOT NULL,
     expires_at timestamp with time zone,
     source_run uuid,
+    source_outcome uuid,
     CONSTRAINT cmo_memories_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 600))),
     CONSTRAINT cmo_memories_importance_check CHECK (((importance >= 1) AND (importance <= 3))),
     CONSTRAINT cmo_memories_kind_check CHECK ((kind = ANY (ARRAY['preference'::text, 'fact'::text, 'feedback'::text, 'result'::text]))),
@@ -5117,6 +5138,26 @@ $$;
 
 
 --
+-- Name: deliverables_parent_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.deliverables_parent_guard() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.parent_id is not null and not exists (
+    select 1 from public.deliverables p
+    where p.id = new.parent_id and p.user_id = new.user_id and p.kind in ('video', 'short')
+  ) then
+    raise exception 'A caption belongs to one of your videos or shorts.' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: editor_projects; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -6403,6 +6444,25 @@ CREATE FUNCTION public.plan_usage_limits(p_plan text) RETURNS TABLE(preview_dail
     when 'creator' then 26843545600::bigint when 'starter' then 10737418240::bigint else 2147483648::bigint end,
   case coalesce(p_plan, 'free')
     when 'creator' then 2500 when 'starter' then 1000 else 200 end;
+$$;
+
+
+--
+-- Name: platform_profile(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_id
+    when 'x' then '{"kind": "post", "limit": 280, "title": null, "hashtags": 0, "label": "X"}'::jsonb
+    when 'threads' then '{"kind": "post", "limit": 500, "title": null, "hashtags": 0, "label": "Threads"}'::jsonb
+    when 'linkedin' then '{"kind": "post", "limit": 3000, "title": null, "hashtags": 0, "label": "LinkedIn"}'::jsonb
+    when 'instagram_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "Instagram caption"}'::jsonb
+    when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
+    when 'youtube' then '{"kind": "youtube", "limit": 5000, "title": 100, "hashtags": 3, "label": "YouTube title and description"}'::jsonb
+  end
 $$;
 
 
@@ -10179,11 +10239,13 @@ CREATE TABLE public.cmo_draft_outcomes (
     prompt_version text DEFAULT ''::text NOT NULL,
     decided_at timestamp with time zone DEFAULT now() NOT NULL,
     classified_at timestamp with time zone,
+    platform text,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
     CONSTRAINT cmo_draft_outcomes_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['NO_MEANINGFUL_EDIT'::text, 'TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text, 'FULL_REWRITE'::text]))),
     CONSTRAINT cmo_draft_outcomes_model_check CHECK ((char_length(model) <= 100)),
+    CONSTRAINT cmo_draft_outcomes_platform_check CHECK (((platform IS NULL) OR (public.platform_profile(platform) IS NOT NULL))),
     CONSTRAINT cmo_draft_outcomes_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
     CONSTRAINT cmo_draft_outcomes_similarity_check CHECK (((similarity >= (0)::double precision) AND (similarity <= (1)::double precision)))
 );
@@ -10284,7 +10346,9 @@ CREATE TABLE public.deliverables (
     ref_id uuid NOT NULL,
     status text DEFAULT 'ready'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    parent_id uuid,
     CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
+    CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
     CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
@@ -11583,6 +11647,13 @@ CREATE INDEX cmo_lessons_user_idx ON public.cmo_lessons USING btree (user_id, we
 
 
 --
+-- Name: cmo_memories_source_outcome_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX cmo_memories_source_outcome_key ON public.cmo_memories USING btree (source_outcome) WHERE (source_outcome IS NOT NULL);
+
+
+--
 -- Name: cmo_memories_topic_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11594,6 +11665,13 @@ CREATE INDEX cmo_memories_topic_idx ON public.cmo_memories USING btree (user_id,
 --
 
 CREATE INDEX cmo_memories_user_idx ON public.cmo_memories USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: cmo_memories_voice_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_memories_voice_idx ON public.cmo_memories USING btree (user_id, created_at DESC) WHERE ((topic = 'post'::text) AND (kind = 'preference'::text));
 
 
 --
@@ -11615,6 +11693,13 @@ CREATE INDEX cmo_runs_queue_idx ON public.cmo_runs USING btree (created_at) WHER
 --
 
 CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: content_items_clip_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX content_items_clip_idx ON public.content_items USING btree (clip_id) WHERE (clip_id IS NOT NULL);
 
 
 --
@@ -11650,6 +11735,13 @@ CREATE INDEX credit_ledger_user_idx ON public.credit_ledger USING btree (user_id
 --
 
 CREATE INDEX deliverables_order_idx ON public.deliverables USING btree (order_id);
+
+
+--
+-- Name: deliverables_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX deliverables_parent_idx ON public.deliverables USING btree (parent_id) WHERE (parent_id IS NOT NULL);
 
 
 --
@@ -12059,10 +12151,24 @@ CREATE TRIGGER clips_record_storage_deletions BEFORE DELETE ON public.clips FOR 
 
 
 --
+-- Name: cmo_draft_outcomes cmo_draft_outcomes_platform; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_draft_outcomes_platform BEFORE INSERT ON public.cmo_draft_outcomes FOR EACH ROW EXECUTE FUNCTION public.cmo_draft_outcomes_platform();
+
+
+--
 -- Name: cmo_memories cmo_memories_classify; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EACH ROW EXECUTE FUNCTION public.cmo_memories_classify();
+
+
+--
+-- Name: deliverables deliverables_parent_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER deliverables_parent_guard BEFORE INSERT OR UPDATE OF parent_id, user_id ON public.deliverables FOR EACH ROW EXECUTE FUNCTION public.deliverables_parent_guard();
 
 
 --
@@ -12422,6 +12528,14 @@ ALTER TABLE ONLY public.cmo_lessons
 
 
 --
+-- Name: cmo_memories cmo_memories_source_outcome_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_memories
+    ADD CONSTRAINT cmo_memories_source_outcome_fkey FOREIGN KEY (source_outcome) REFERENCES public.cmo_draft_outcomes(id) ON DELETE SET NULL;
+
+
+--
 -- Name: cmo_memories cmo_memories_source_run_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12443,6 +12557,14 @@ ALTER TABLE ONLY public.cmo_memories
 
 ALTER TABLE ONLY public.cmo_runs
     ADD CONSTRAINT cmo_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: content_items content_items_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.content_items
+    ADD CONSTRAINT content_items_clip_id_fkey FOREIGN KEY (clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
 
 
 --
@@ -12475,6 +12597,14 @@ ALTER TABLE ONLY public.credit_ledger
 
 ALTER TABLE ONLY public.deliverables
     ADD CONSTRAINT deliverables_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: deliverables deliverables_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.deliverables(id) ON DELETE CASCADE;
 
 
 --

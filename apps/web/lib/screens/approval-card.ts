@@ -8,6 +8,8 @@
 
 import { z } from "zod";
 
+import { profileOf } from "../cmo/platforms";
+
 import { DepartmentSchema, PlatformSchema, QuoteSchema, ScorePartSchema, WhereSchema, day, iso } from "./common";
 
 export const CARD_KINDS = [
@@ -38,15 +40,20 @@ export const CardProblemSchema = z.object({
   text: z.string().max(200),
 });
 
+/** A platform profile id from `packages/contracts/platforms.json` (`x`, `threads`, `tiktok_caption`…). */
+export const ProfileIdSchema = z.string().refine((id) => profileOf(id) !== null, "Unknown platform profile.");
+
 const PostBody = z.object({
   kind: z.literal("post"),
-  /** Platform tabs; each has its own versions. */
+  /** Platform tabs; each has its own versions. Limits come from the platform's profile (`platforms.json`). */
   platforms: z
     .array(
       z.object({
         platform: PlatformSchema,
         versions: z.array(z.string().max(3000)).min(1).max(3),
         limit: z.number().int().positive(),
+        /** Characters shown before the platform's "more" on a phone (LinkedIn); null when the whole post shows. */
+        visibleBeforeMore: z.number().int().positive().nullable(),
       }),
     )
     .min(1),
@@ -86,6 +93,20 @@ const GoalBody = z.object({
  * on every read). The bodies below are what the card renders, built from a snapshot plus signed URLs.
  */
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * Words Writer made for one edit and one platform profile (P3 F8): a `content_items` row, department `video`,
+ * `clip_id` the edit. In a finished video or shorts batch snapshot only when the edit has some, so a card raised
+ * before captions existed keeps its hash.
+ */
+export const CaptionSnapshotSchema = z.object({
+  caption_id: z.string(),
+  clip_id: z.string(),
+  profile: ProfileIdSchema,
+  text: z.string().max(5000),
+  /** The YouTube profile's title; null for every other profile. */
+  title: z.string().max(100).nullable(),
+});
 
 /** One beat of the storyboard: the voice line, the keyframe (picture) and what moves during the beat. */
 export const StoryBeatSchema = z.object({ words: z.string().max(300), picture: z.string().max(300), motion: z.string().max(300).nullable() });
@@ -142,6 +163,7 @@ export const FinishedVideoSnapshotSchema = z.object({
   render_task_id: z.string().nullable(),
   render_path: z.string().max(500).nullable(),
   seconds: z.number().positive().nullable(),
+  captions: z.array(CaptionSnapshotSchema).max(12).optional(),
 });
 
 /** Card 4: the shorts cut from one finished edit, approved together (`ref_kind = 'short_batch'`). */
@@ -164,6 +186,8 @@ export const ShortsBatchSnapshotSchema = z.object({
       }),
     )
     .max(3),
+  /** Captions of every short in the batch (`clip_id` = the short's own edit). */
+  captions: z.array(CaptionSnapshotSchema).max(36).optional(),
 });
 
 export const StudioSnapshotSchema = z.discriminatedUnion("kind", [
@@ -200,6 +224,15 @@ const PriceBody = z.object({
   readyInMinutes: z.number().int().positive().nullable(),
 });
 
+/** One caption on a finished video or shorts card, editable before approving (`edit_caption`). */
+export const CaptionSchema = z.object({
+  id: z.string(),
+  profile: ProfileIdSchema,
+  text: z.string().max(5000),
+  title: z.string().max(100).nullable(),
+});
+export type Caption = z.infer<typeof CaptionSchema>;
+
 const FinishedVideoBody = z.object({
   kind: z.literal("finished_video"),
   clipId: z.string(),
@@ -210,6 +243,8 @@ const FinishedVideoBody = z.object({
   previewUrl: z.url().nullable(),
   /** Seconds into the render shown as the still before it plays. */
   frameAt: z.number().min(0),
+  /** One per platform profile: captions and the YouTube title and description. */
+  captions: z.array(CaptionSchema).max(12),
 });
 
 const ShortsBatchBody = z.object({
@@ -227,6 +262,7 @@ const ShortsBatchBody = z.object({
         hook: z.string().max(120),
         reason: z.string().max(300),
         previewUrl: z.url().nullable(),
+        captions: z.array(CaptionSchema).max(12),
       }),
     )
     .min(1)
@@ -251,6 +287,10 @@ const CorrectionBody = z.object({
   kind: z.literal("correction"),
   correctionId: z.string(),
   rule: z.string().max(200),
+  /** The repeated edit the rule comes from (`cmo_draft_outcomes.edit_mode`); null for rules from skip reasons. */
+  editMode: z.string().max(40).nullable(),
+  /** How many edits it was learned from. */
+  times: z.number().int().min(0),
   /** The edits the rule was learned from: draft line → what the founder wrote. */
   examples: z.array(z.object({ before: z.string().max(300), after: z.string().max(300) })),
 });
@@ -309,6 +349,12 @@ export const PRIMARY_ACTION: Record<CardKind, string> = {
   schedule: "Approve time",
   correction: "Keep as a rule",
 };
+
+/**
+ * Words on a finished video or shorts card: `edit_caption {caption, text, title?}` changes one caption before the
+ * card is approved. The card keeps its id and gets a new hash, so a tab showing the old words is refused.
+ */
+export const CAPTION_ACTION = "edit_caption";
 
 /**
  * Studio actions (`approval_decide`, A1), named as `components/cards/decide.ts` sends them: redo one keyframe on a

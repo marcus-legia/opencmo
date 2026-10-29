@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
-import { ALL_KINDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
+import { ALL_KINDS, SAMPLE_CARDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
@@ -69,7 +69,7 @@ for (const name of SCREEN_NAMES) {
 
 check("cards: one sample of each of the ten kinds", () => {
   assert.deepEqual(ALL_KINDS.map((c) => c.kind), [...CARD_KINDS]);
-  for (const card of [...ALL_KINDS, ...STATE_CARDS]) ApprovalCardSchema.parse(card);
+  for (const card of SAMPLE_CARDS) ApprovalCardSchema.parse(card);
 });
 
 check("cards: a body of another kind is refused", () => {
