@@ -1576,6 +1576,7 @@ declare
   v_target integer;
   v_step public.studio_steps;
   v_batch public.short_batches;
+  v_order uuid;
   v_n integer;
   v_text text;
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
@@ -1618,7 +1619,8 @@ begin
         raise exception 'Choose approve or reject.' using errcode = '22023';
       end if;
       if v_payload ? 'target' then
-        if jsonb_typeof(v_payload->'target') <> 'number' then
+        if jsonb_typeof(v_payload->'target') <> 'number'
+           or (v_payload->>'target')::numeric <> trunc((v_payload->>'target')::numeric) then
           raise exception 'The target must be a whole number.' using errcode = '22023';
         end if;
         v_target := (v_payload->>'target')::numeric::integer;
@@ -1637,7 +1639,8 @@ begin
         raise exception 'This card was already decided.' using errcode = 'P0001';
       end if;
       if p_action = 'edit' then
-        if jsonb_typeof(v_payload->'beat') is distinct from 'number' then
+        if jsonb_typeof(v_payload->'beat') is distinct from 'number'
+           or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
           raise exception 'Say which beat to change.' using errcode = '22023';
         end if;
         v_n := (v_payload->>'beat')::numeric::integer;
@@ -1655,7 +1658,8 @@ begin
           next = '{"tool": "replan"}'::jsonb, next_done_at = null
         where id = v_step.id;
       elsif p_action = 'redo' then
-        if jsonb_typeof(v_payload->'index') is distinct from 'number' then
+        if jsonb_typeof(v_payload->'index') is distinct from 'number'
+           or (v_payload->>'index')::numeric <> trunc((v_payload->>'index')::numeric) then
           raise exception 'Say which keyframe to make again.' using errcode = '22023';
         end if;
         v_n := (v_payload->>'index')::numeric::integer;
@@ -1684,6 +1688,15 @@ begin
         perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
       else
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+        -- A failure is data: the order fails with the founder's reason and the progress check replans it.
+        select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+        where s.clip_id = v_row.ref_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+        order by s.created_at desc limit 1;
+        if v_order is not null then
+          perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the video back.'), 'retryable', true,
+            'repair_hint', 'Change what the founder asked, then render the video again.'));
+        end if;
       end if;
     when 'shorts_batch' then
       if p_action not in ('approve', 'send_back') then
@@ -4966,6 +4979,11 @@ begin
   if found then
     return v_id;
   end if;
+  -- Each order runs the Clip editor and renders three shorts: a daily cap keeps re-marking from looping it.
+  if (select count(*) from public.work_orders where user_id = p_user and kind = 'cut_shorts'
+      and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'You can cut shorts 10 times a day. Try again tomorrow.' using errcode = 'P0001';
+  end if;
   v_root := public.work_order_week_root(p_user);
   select id into v_id from public.work_order_create(p_user, v_root.week, v_root.id, 'cut_shorts',
     left('Shorts from “' || coalesce(nullif(v_clip.hook, ''), 'your video') || '”', 200),
@@ -6000,8 +6018,10 @@ begin
   -- Marking it finished in the editor or Studio is the same decision as approving card 3, in either order: the card
   -- closes, and a video order making this edit is done with the edit as its deliverable.
   perform public.approval_close('editor_project', p_clip_id, 'approved');
+  -- Only a built video finishes its order (the order reached its render); before that a waiting card 2 still runs.
   select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
   where s.clip_id = p_clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+    and s.next->>'tool' = 'render'
   order by s.created_at desc limit 1;
   if v_order is not null then
     insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
@@ -8369,6 +8389,9 @@ declare
   v_start numeric;
   v_end numeric;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   if v_parent.kind = 'short' then
     raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
   end if;
@@ -8471,6 +8494,9 @@ declare
   v_user uuid := public.require_user();
   v_short public.shorts;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   select * into v_short from public.shorts where id = p_short_id and user_id = v_user for update;
   if not found then
     raise exception 'Short not found.' using errcode = 'P0002';
@@ -8685,6 +8711,20 @@ $$;
 
 
 --
+-- Name: studio_brain_call(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_brain_call() RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public'
+    AS $$
+begin
+  return coalesce(auth.jwt()->>'opencmo_actor', '') = 'brain';
+end;
+$$;
+
+
+--
 -- Name: studio_order_move(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8696,6 +8736,11 @@ declare
   v_status text := (select status from public.work_orders where id = p_id and kind in ('build_video', 'cut_shorts'));
 begin
   if v_status is null or v_status in ('done', 'failed', 'cancelled') or v_status = p_to then
+    return;
+  end if;
+  -- A card waits on the founder (a batch card raised while the runner was still finishing): it stays waiting. An
+  -- approved card goes back to work through the claims' `running`, never straight to `waiting_order`.
+  if p_to = 'waiting_order' and v_status = 'waiting_founder' then
     return;
   end if;
   if p_to = 'waiting_founder' then
@@ -8785,6 +8830,51 @@ $$;
 
 
 --
+-- Name: studio_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_record_usage(p_order_id uuid, p_model text, p_input integer, p_output integer, p_cache_read integer, p_cache_write integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_total bigint;
+  v_credits integer;
+  v_held integer;
+  v_charge integer;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind in ('build_video', 'cut_shorts')) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_input is null or p_output is null or p_cache_read is null or p_cache_write is null
+     or least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
+    raise exception 'Invalid usage.' using errcode = '22023';
+  end if;
+  perform public.lock_credit_owner(v_user);
+  insert into public.work_order_usage (user_id, order_id, model, input_tokens, output_tokens, cache_read_tokens,
+    cache_write_tokens, micro_usd)
+  values (v_user, p_order_id, left(coalesce(nullif(p_model, ''), 'unknown'), 64), p_input, p_output, p_cache_read, p_cache_write,
+    public.agent_micro_usd(p_model, p_input, p_output, p_cache_read, p_cache_write));
+  select coalesce(sum(micro_usd), 0)::bigint into v_total from public.work_order_usage where order_id = p_order_id;
+  v_credits := public.agent_credits(v_total);
+  v_held := public.credit_held('work_order', p_order_id);
+  if v_credits > v_held then
+    v_charge := least(v_credits - v_held, greatest(public.credit_balance(v_user), 0));
+    if v_charge > 0 then
+      perform public.credit_settle(v_user, 'work_order', p_order_id, v_held + v_charge, 'CMO video team usage');
+      perform public.work_order_spend(p_order_id, v_charge);
+    end if;
+  end if;
+  return v_credits;
+end;
+$$;
+
+
+--
 -- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8839,6 +8929,9 @@ declare
   v_row public.studio_steps;
   v_ok boolean;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   select * into v_row from public.studio_steps where id = p_id and user_id = v_user for update;
   if not found then
     raise exception 'Step not found.' using errcode = 'P0002';
@@ -8859,6 +8952,20 @@ begin
   end if;
   if p_next is not null and (jsonb_typeof(p_next) <> 'object' or not p_next ? 'tool') then
     raise exception 'The next step is malformed.' using errcode = '22023';
+  end if;
+  -- A next step is set once, when the step itself runs: never on a step already done, failed or cancelled.
+  if p_next is not null and v_row.status not in ('approved', 'running') then
+    raise exception 'This step has already run.' using errcode = 'P0001';
+  end if;
+  -- The week's "credits used": what the step starts spending, recorded once as it leaves `approved` (a decide that
+  -- failed spent nothing). A redone keyframe costs what its generation holds.
+  if v_row.status = 'approved' and p_status in ('running', 'done') and v_row.order_id is not null then
+    if v_row.decision = 'approve' then
+      perform public.work_order_spend(v_row.order_id, v_row.price_credits);
+    elsif v_row.decision = 'redo' and p_generation_id is not null then
+      perform public.work_order_spend(v_row.order_id,
+        coalesce((select credits_reserved from public.generations where id = p_generation_id and user_id = v_user), 0));
+    end if;
   end if;
   if p_wait_for is not null and exists (select 1 from unnest(p_wait_for) w(id)
       where not exists (select 1 from public.generations g where g.id = w.id and g.user_id = v_user)) then
@@ -8902,6 +9009,9 @@ declare
   v_user uuid := public.require_user();
   v_row public.studio_steps;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   perform public.owned_clip(p_clip_id, v_user);
   if p_tool is null or p_tool not in ('generate_media', 'add_3d_scene', 'add_voiceover', 'replace_background',
       'create_video', 'animate_video', 'redo_keyframe', 'edit_video', 'add_explainer', 'plan_video', 'request_export',
@@ -8962,8 +9072,11 @@ begin
     limit greatest(1, least(coalesce(p_limit, 5), 10))
     for update of s skip locked
   loop
-    if v_row.claimed_at is null and v_row.decision = 'approve' then
-      perform public.work_order_spend(v_row.order_id, v_row.price_credits);
+    if v_row.claimed_at is not null then
+      update public.studio_steps set status = 'failed', error = 'Studio stopped while starting this step.' where id = v_row.id;
+      perform public.studio_order_move(v_row.order_id, 'failed', null, jsonb_build_object('code', 'step_interrupted',
+        'message', 'Studio stopped while starting a step. Nothing more will run for it.', 'retryable', true));
+      continue;
     end if;
     update public.studio_steps set claimed_at = now() where id = v_row.id returning * into v_row;
     perform public.studio_order_move(v_row.order_id, 'running');
@@ -9383,7 +9496,7 @@ begin
     v_free := v_parent.budget_credits - v_parent.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = p_parent and status not in ('done', 'failed', 'cancelled')), 0);
-    if coalesce(p_budget, 0) > v_free then
+    if coalesce(p_budget, 0) > 0 and p_budget > v_free then
       raise exception 'The parent order has % credits left to hand out.', greatest(v_free, 0) using errcode = 'P0001';
     end if;
   end if;
@@ -9898,6 +10011,14 @@ begin
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     if v_item.department = 'video' then
+      -- The replan deleted the item of a video already under way (its order lost `item_id`): the new item is that
+      -- same video, not a second one this week.
+      update public.work_orders set item_id = v_item.id, updated_at = now()
+      where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
+                    and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
+      if found then
+        continue;
+      end if;
       perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
         jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
           'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
@@ -10145,7 +10266,7 @@ CREATE TABLE public.credit_ledger (
     external_id text,
     ref_kind text,
     ref_id uuid,
-    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text]))),
+    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text, 'work_order'::text]))),
     CONSTRAINT credit_ledger_ref_pair CHECK (((ref_kind IS NULL) = (ref_id IS NULL)))
 );
 
@@ -10633,6 +10754,30 @@ ALTER TABLE public.work_order_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: work_order_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_order_usage (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    model text NOT NULL,
+    input_tokens integer NOT NULL,
+    output_tokens integer NOT NULL,
+    cache_read_tokens integer NOT NULL,
+    cache_write_tokens integer NOT NULL,
+    micro_usd bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT work_order_usage_cache_read_tokens_check CHECK ((cache_read_tokens >= 0)),
+    CONSTRAINT work_order_usage_cache_write_tokens_check CHECK ((cache_write_tokens >= 0)),
+    CONSTRAINT work_order_usage_input_tokens_check CHECK ((input_tokens >= 0)),
+    CONSTRAINT work_order_usage_micro_usd_check CHECK ((micro_usd >= 0)),
+    CONSTRAINT work_order_usage_model_check CHECK (((char_length(model) >= 1) AND (char_length(model) <= 64))),
+    CONSTRAINT work_order_usage_output_tokens_check CHECK ((output_tokens >= 0))
 );
 
 
@@ -11280,6 +11425,14 @@ ALTER TABLE ONLY public.work_order_events
 
 
 --
+-- Name: work_order_usage work_order_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: work_orders work_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11805,6 +11958,13 @@ CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations U
 --
 
 CREATE INDEX work_order_events_user_idx ON public.work_order_events USING btree (user_id, at DESC);
+
+
+--
+-- Name: work_order_usage_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_usage_order_idx ON public.work_order_usage USING btree (order_id);
 
 
 --
@@ -12766,6 +12926,22 @@ ALTER TABLE ONLY public.work_order_events
 
 
 --
+-- Name: work_order_usage work_order_usage_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_order_usage work_order_usage_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: work_orders work_orders_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13188,6 +13364,13 @@ CREATE POLICY "read own order events" ON public.work_order_events FOR SELECT TO 
 
 
 --
+-- Name: work_order_usage read own order usage; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+
+--
 -- Name: page_captures read own page captures; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13269,6 +13452,12 @@ ALTER TABLE public.upload_reservations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.work_order_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_order_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_order_usage ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: work_orders; Type: ROW SECURITY; Schema: public; Owner: -

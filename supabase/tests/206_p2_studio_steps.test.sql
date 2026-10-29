@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(47);
+select plan(50);
 
 select ok(has_function_privilege('authenticated', 'public.studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)', 'execute'),
   'the adapter raises steps under the founder''s session');
@@ -47,7 +47,13 @@ create function pg_temp.decide(p_step uuid, p_action text, p_extra jsonb default
 $$;
 
 set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
+
+-- Only the brain's runner stores steps: a founder calling the RPC directly is refused.
 set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.studio_step_raise('e2062000-0000-4000-8000-00000000000a', 'create_video', 'script', '{}',
+  '{"beats":[]}', 0) $$, '42501', null, 'a founder cannot store a Studio step');
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- Raise: card 1 (script) for the order.
 insert into t select 's1', id from public.studio_step_raise('e2062000-0000-4000-8000-00000000000a', 'create_video', 'script',
@@ -79,6 +85,8 @@ select throws_ok($$ select pg_temp.decide((select id from t where name = 's1'), 
   '22023', 'That beat is not in the script.', 'only a beat of the script');
 select throws_ok($$ select pg_temp.decide((select id from t where name = 's1'), 'edit', '{"beat":0,"text":"  "}') $$,
   '22023', null, 'a beat is never empty');
+select throws_ok($$ select pg_temp.decide((select id from t where name = 's1'), 'edit', '{"beat":0.6,"text":"x"}') $$,
+  '22023', 'Say which beat to change.', 'a fractional beat is refused, not rounded');
 
 -- Edit a beat: the card closes as edited, the step stops, the order keeps waiting.
 select is((pg_temp.decide((select id from t where name = 's1'), 'edit', '{"beat":1,"text":"Cut it by deleting words.","reason":"Shorter line"}')).status,
@@ -91,7 +99,7 @@ select is((select status from public.work_orders where id = (select id from t wh
 select is((select count(*)::int from public.studio_steps_ready(10) where id = (select id from t where name = 's1') and next->>'tool' = 'replan'), 1,
   'the order runner picks up the re-plan');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- The re-planned card 1, approved.
 insert into t select 's2', id from public.studio_step_raise('e2062000-0000-4000-8000-00000000000a', 'create_video', 'script',
@@ -118,6 +126,8 @@ insert into t select 'p1', id from public.studio_step_raise('e2062000-0000-4000-
   '{"title":"How the CMO plans a week","what":"2 shots, voice-over","seconds":60,"wait_minutes":25,"keyframes":[{"index":0,"words":"a","path":"u/0.png","garbled":false,"credits":1},{"index":1,"words":"b","path":"u/1.png","garbled":true,"credits":1}],"shots":2}',
   24, (select id from t where name = 'order'));
 select is((pg_temp.card((select id from t where name = 'p1'))).price_credits, 24, 'card 2 carries the video price');
+select throws_ok($$ select pg_temp.decide((select id from t where name = 'p1'), 'redo', '{"index":0.5}') $$,
+  '22023', 'Say which keyframe to make again.', 'a fractional keyframe is refused, not rounded');
 select throws_ok($$ select pg_temp.decide((select id from t where name = 'p1'), 'redo', '{"index":7}') $$,
   '22023', 'That keyframe is not on the sheet.', 'only a keyframe on the sheet');
 select is((pg_temp.decide((select id from t where name = 'p1'), 'redo', '{"index":1}')).status, 'edited', 'redo closes card 2 as edited');
@@ -137,7 +147,7 @@ select is((select count(*)::int from public.approvals where ref_id = (select id 
 select is((select status from public.approvals where ref_id = (select id from t where name = 'p2') and price_credits = 24), 'cancelled',
   'and supersedes the old one');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- Cancel: the step stops, the video's order is cancelled, nothing was held.
 select is((pg_temp.decide((select id from t where name = 'p2'), 'cancel', '{"reason":"Not this week"}')).status, 'skipped', 'cancel closes the card');
@@ -145,7 +155,7 @@ select is((select status from public.studio_steps where id = (select id from t w
 reset role;
 select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'cancelled', 'and so does the video''s order');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- Card 3 and Mark finished.
 reset role;
@@ -153,21 +163,21 @@ select public.approval_raise('e2060000-0000-4000-8000-00000000000a', 'editor_pro
 insert into t select 'f1', id from public.approvals where ref_kind = 'editor_project' and status = 'waiting';
 update public.editor_projects set document = '{"version":1,"stage":{"name":"launch v2"}}' where clip_id = 'e2062000-0000-4000-8000-00000000000a';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select throws_ok($$ select public.approval_decide((select id from t where name = 'f1'), 'approve',
   jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select id from t where name = 'f1')))) $$,
   'P0001', null, 'card 3 of an older document is refused (A3 also closes it when the document changes)');
 reset role;
 select public.approval_raise('e2060000-0000-4000-8000-00000000000a', 'editor_project', 'e2062000-0000-4000-8000-00000000000a');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((select public.approval_decide(id, 'send_back', jsonb_build_object('content_hash', content_hash, 'reason', 'Music too loud'))
   from public.approvals where ref_kind = 'editor_project' and status = 'waiting').status, 'skipped', 'send back closes card 3');
 select is((select finished_at from public.editor_projects where clip_id = 'e2062000-0000-4000-8000-00000000000a'), null, 'and keeps the edit open');
 reset role;
 select public.approval_raise('e2060000-0000-4000-8000-00000000000a', 'editor_project', 'e2062000-0000-4000-8000-00000000000a');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2060000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((select public.approval_decide(id, 'approve', jsonb_build_object('content_hash', content_hash))
   from public.approvals where ref_kind = 'editor_project' and status = 'waiting').status, 'approved', 'approving card 3');
 select is((select finished_hash from public.editor_projects where clip_id = 'e2062000-0000-4000-8000-00000000000a'),

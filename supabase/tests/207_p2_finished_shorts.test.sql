@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(49);
+select plan(55);
 
 select ok(has_function_privilege('authenticated', 'public.cut_shorts_order(uuid)', 'execute'), 'the founder''s Cut shorts button');
 select ok(has_function_privilege('authenticated', 'public.short_batch_create(uuid,text,uuid,jsonb)', 'execute'), 'the Builder under the founder''s session');
@@ -31,7 +31,7 @@ grant all on t to authenticated;
 create function pg_temp.h(p_doc text) returns text language sql as $$ select public.editor_document_hash(p_doc::jsonb) $$;
 
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- Not finished: no shorts.
 select throws_ok($$ select public.cut_shorts_order('e2072000-0000-4000-8000-00000000000a') $$, 'P0001',
@@ -54,7 +54,7 @@ select is((select finished_at from public.editor_projects where clip_id = 'e2072
 select is((select finished_hash from public.editor_projects where clip_id = 'e2072000-0000-4000-8000-00000000000a'), null, 'and its hash');
 update public.editor_projects set manifest = '{"version":1,"folders":[],"assets":[{"id":"m"}]}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select public.mark_finished('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v2"}}'));
 reset role;
 update public.editor_projects set manifest = '{"version":1,"folders":[],"assets":[{"id":"m"},{"id":"n"}]}' where clip_id = 'e2072000-0000-4000-8000-00000000000a';
@@ -69,7 +69,7 @@ insert into public.editor_transcripts (clip_id, hash, body) values
   ('e2072000-0000-4000-8000-00000000000a', repeat('a', 64), '[{"text":"Cut by words."}]'),
   ('e2072000-0000-4000-8000-00000000000a', repeat('b', 64), '[{"text":"Not in any short."}]');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 
 -- The Builder's batch.
 select throws_ok($$ select public.short_batch_create('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch"}}'),
@@ -100,7 +100,7 @@ select is((select array_agg(t.hash) from public.editor_transcripts t join public
   where parent_clip_id = 'e2072000-0000-4000-8000-00000000000a')), array[repeat('a', 64)], 'the short gets the parent''s transcript its captions read');
 select is((select count(*)::int from public.editor_transcripts where hash = repeat('b', 64)), 1, 'and no transcript it does not use');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select throws_ok($$ select public.short_batch_create('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v2"}}'),
   null, '[{"source_start":0,"source_end":20,"hook":"h","title":"t","reason":"r","document":{}}]') $$, 'P0001',
   'Shorts are already being cut from this version.', 'a retry does not double the batch');
@@ -125,7 +125,7 @@ select is((select status from public.work_orders where id = (select id from t wh
 
 -- Approve the batch → one short deliverable each, order done.
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((select public.approval_decide(id, 'approve', jsonb_build_object('content_hash', content_hash))
   from public.approvals where ref_kind = 'short_batch' and status = 'waiting').status, 'approved', 'the batch is approved at once');
 reset role;
@@ -162,7 +162,7 @@ select is((select snapshot->>'render_path' from public.approvals where ref_kind 
   'the render raises card 3 with the video');
 select is((select status from public.work_orders where id = (select id from t where name = 'video')), 'waiting_founder', 'the video order waits on you');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((select public.approval_decide(id, 'approve', jsonb_build_object('content_hash', content_hash))
   from public.approvals where ref_kind = 'editor_project' and status = 'waiting').status, 'approved', 'card 3 approved');
 reset role;
@@ -175,7 +175,7 @@ select is((select count(*)::int from public.work_orders where kind = 'cut_shorts
 -- Sending a batch back fails its order with the reason, for the replan.
 update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v2"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select public.mark_finished('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v2"}}'));
 insert into t select 'order2', id from public.work_orders where kind = 'cut_shorts' and brief->>'finished_hash' = pg_temp.h('{"version":1,"stage":{"name":"ai v2"}}');
 insert into t select 'batch2', (public.short_batch_create('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v2"}}'),
@@ -187,7 +187,7 @@ select 'e2070000-0000-4000-8000-00000000000a', 'render_document', short_clip_id,
 from public.shorts where batch_id = (select id from t where name = 'batch2');
 update public.tasks set status = 'done' where kind = 'render_document' and status = 'running';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((select public.approval_decide(id, 'send_back', jsonb_build_object('content_hash', content_hash, 'reason', 'Hooks are too slow'))
   from public.approvals where ref_kind = 'short_batch' and status = 'waiting').reason, 'Hooks are too slow', 'send back keeps the reason');
 reset role;
@@ -197,7 +197,7 @@ select is((select error->>'code' || ': ' || (error->>'message') from public.work
 -- A short whose render could not be queued fails at once, and its batch settles.
 update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v3"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select public.mark_finished('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}'));
 insert into t select 'order3', id from public.work_orders where kind = 'cut_shorts' and brief->>'finished_hash' = pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}');
 insert into t select 'batch3', (public.short_batch_create('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v3"}}'),
@@ -222,11 +222,60 @@ values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-0000000
   (select id from t where name = 'video2'), 'done', 'approve', '{"tool":"render"}');
 update public.editor_projects set document = '{"version":1,"stage":{"name":"launch v3"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000a';
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select public.mark_finished('e2072000-0000-4000-8000-00000000000a', pg_temp.h('{"version":1,"stage":{"name":"launch v3"}}'));
 reset role;
 select is((select status from public.work_orders where id = (select id from t where name = 'video2')), 'done',
   'Mark finished in the editor finishes the video order too');
+
+-- Only the brain's runner creates batches and reports refused renders.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.short_batch_create('e2072000-0000-4000-8000-00000000000c', repeat('a', 64), null,
+  '[{"source_start":0,"source_end":20,"hook":"h","title":"t","reason":"r","document":{}}]') $$, '42501', null,
+  'a founder cannot create a shorts batch');
+select throws_ok($$ select public.short_render_refused(gen_random_uuid()) $$, '42501', null, 'nor report a refused render');
+reset role;
+
+-- Mark finished while card 2 still waits: the edit is finished, the order (not yet rendered) goes on.
+select public.work_order_create('e2070000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date, (select id from public.work_orders where user_id = 'e2070000-0000-4000-8000-00000000000a' and parent_id is null), 'build_video', 'AI video 3', '{}', 0);
+insert into t select 'video3', id from public.work_orders where kind = 'build_video' and title = 'AI video 3';
+select public.work_order_move((select id from t where name = 'video3'), 'running');
+insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status)
+values ('e2070000-0000-4000-8000-00000000000a', 'e2072000-0000-4000-8000-00000000000c', 'animate_video', 'price', '{}', '{"seconds":60}', 24, (select id from t where name = 'video3'), 'waiting');
+update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v5"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
+select public.mark_finished('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v5"}}'));
+reset role;
+select is((select status from public.work_orders where id = (select id from t where name = 'video3')), 'running',
+  'a video order whose card 2 still waits is not finished by Mark finished');
+
+-- Sending card 3 back fails the video order with the reason, for the replan.
+update public.studio_steps set status = 'done', decision = 'approve', next = '{"tool":"render"}'
+where order_id = (select id from t where name = 'video3');
+update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v6"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
+insert into public.tasks (user_id, kind, clip_id, job_id, status, request_id, payload, settings_hash, duration)
+values ('e2070000-0000-4000-8000-00000000000a', 'render_document', 'e2072000-0000-4000-8000-00000000000c', 'e2071000-0000-4000-8000-00000000000c', 'running', gen_random_uuid(), '{}', pg_temp.h('{"version":1,"stage":{"name":"ai v6"}}'), 60);
+update public.tasks set status = 'done', output_path = 'u/ai6.mp4', finished_at = now() where kind = 'render_document' and status = 'running' and clip_id = 'e2072000-0000-4000-8000-00000000000c';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
+select is((select public.approval_decide(id, 'send_back', jsonb_build_object('content_hash', content_hash, 'reason', 'Too slow'))
+  from public.approvals where ref_kind = 'editor_project' and status = 'waiting').status, 'skipped', 'card 3 sent back');
+reset role;
+select is((select status || ' ' || (error->>'code') || ': ' || (error->>'message') from public.work_orders where id = (select id from t where name = 'video3')),
+  'failed sent_back: Too slow', 'the video order fails with the reason instead of waiting on nothing');
+
+-- Cut shorts runs the Clip editor: at most 10 orders a day.
+select public.work_order_create('e2070000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date, (select id from public.work_orders where user_id = 'e2070000-0000-4000-8000-00000000000a' and parent_id is null), 'cut_shorts', 'filler', '{}', 0)
+from generate_series(1, 10);
+update public.editor_projects set document = '{"version":1,"stage":{"name":"ai v7"}}' where clip_id = 'e2072000-0000-4000-8000-00000000000c';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2070000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
+select public.mark_finished('e2072000-0000-4000-8000-00000000000c', pg_temp.h('{"version":1,"stage":{"name":"ai v7"}}'));
+select throws_ok($$ select public.cut_shorts_order('e2072000-0000-4000-8000-00000000000c') $$, 'P0001', 'You can cut shorts 10 times a day. Try again tomorrow.',
+  'the eleventh Cut shorts of the day is refused');
+reset role;
 
 select * from finish();
 rollback;

@@ -7,6 +7,9 @@ import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screen
 import { signStudioCards } from "@/lib/screens/studio-sign";
 
 export const dynamic = "force-dynamic";
+// A Studio decision drains the order runner after the answer (`after()`, 250 s): the function must outlive it, or a
+// step stops mid-decide.
+export const maxDuration = 300;
 
 const UUID = /^[0-9a-f-]{36}$/i;
 

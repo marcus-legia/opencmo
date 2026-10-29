@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(42);
+select plan(43);
 
 -- JCS is the same as canonicalJson() in apps/web/lib/settings-schema.ts (string computed there).
 select is(public.jcs('{"b":1,"a":[true,null,"x\ny \"q\" \\ \u0001"],"é":"é ✓","A":{"z":[],"y":{}},"n":-12}'::jsonb),
@@ -103,6 +103,8 @@ select is((pg_temp.decide('p5', 'approve', '{"via":"mcp"}')).decided_via, 'mcp',
 select throws_ok($$ select pg_temp.decide('o1', 'approve') $$, '22023', 'Choose replied or dismissed.', 'a reply has its own actions');
 select is((pg_temp.decide('o1', 'replied')).status, 'approved', 'replied');
 select is((pg_temp.decide('o2', 'dismissed', '{"reason":"agencies"}')).status, 'skipped', 'dismissed');
+select throws_ok($$ select pg_temp.decide('g1', 'approve', '{"target":2.5}') $$, '22023', 'The target must be a whole number.',
+  'a fraction is refused, not rounded');
 select is((pg_temp.decide('g1', 'approve', '{"target":5}')).status, 'edited', 'a new target is an edit');
 select is((select target from public.cmo_goals where id = (select id from t_ref where name = 'g1')), 5, 'the goal has the new target');
 select is((pg_temp.decide('c1', 'approve')).status, 'approved', 'keep the rule');

@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(29);
+select plan(37);
 
 select ok(has_function_privilege('service_role', 'public.studio_orders_claim(uuid,integer)', 'execute'), 'the runner claims orders');
 select ok(not has_function_privilege('authenticated', 'public.studio_orders_claim(uuid,integer)', 'execute'), 'founders cannot');
@@ -56,14 +56,20 @@ insert into public.studio_steps (id, user_id, clip_id, tool, kind, input, card, 
   ('e2083000-0000-4000-8000-00000000000a', 'e2080000-0000-4000-8000-00000000000a', 'e2082000-0000-4000-8000-00000000000a', 'create_video',
    'script', '{}', '{"beats":[]}', 6, (select id from t where name = 'order'), 'approved', 'approve', now());
 
--- The approved step: claimed once, the spend recorded once, the order running.
+-- The approved step: claimed once, the order running; its price is recorded when it starts, not here.
 select is((select count(*)::int from public.studio_steps_claim()), 1, 'the runner claims the approved step');
 select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'running', 'the order runs again');
-select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 6, 'the card''s price is recorded on the order');
+select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 0, 'nothing is recorded before the step starts');
 select is((select count(*)::int from public.studio_steps_claim()), 0, 'a claimed step is not claimed again');
-update public.studio_steps set claimed_at = now() - interval '11 minutes' where id = 'e2083000-0000-4000-8000-00000000000a';
-select is((select count(*)::int from public.studio_steps_claim()), 1, 'a crashed runner''s claim is taken again');
-select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 6, 'without spending twice');
+-- A step whose runner stopped mid-claim is not decided again: it fails, with its order.
+insert into public.studio_steps (id, user_id, clip_id, tool, kind, input, card, price_credits, order_id, status, decision, decided_at, claimed_at) values
+  ('e2083000-0000-4000-8000-00000000000b', 'e2080000-0000-4000-8000-00000000000a', 'e2082000-0000-4000-8000-00000000000a', 'animate_video',
+   'price', '{}', '{"seconds":30}', 9, (select id from t where name = 'cut'), 'approved', 'redo', now(), now() - interval '11 minutes');
+select is((select count(*)::int from public.studio_steps_claim()), 0, 'a crashed runner''s claim is not taken again');
+select is((select status || ' ' || error from public.studio_steps where id = 'e2083000-0000-4000-8000-00000000000b'), 'failed Studio stopped while starting this step.',
+  'the step fails instead');
+select is((select status || ' ' || (error->>'code') from public.work_orders where id = (select id from t where name = 'cut')), 'failed step_interrupted',
+  'and its order, for the progress check');
 
 -- decide → keyframes queued: the step stores card 2 and waits on them.
 insert into public.generations (id, user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved, status) values
@@ -72,12 +78,17 @@ insert into public.generations (id, user_id, job_id, clip_id, kind, model, spec,
   ('e2084000-0000-4000-8000-000000000002', 'e2080000-0000-4000-8000-00000000000a', 'e2081000-0000-4000-8000-00000000000a',
    'e2082000-0000-4000-8000-00000000000a', 'image', (select id from public.ai_models where kind = 'image' order by id limit 1), '{}', repeat('b', 64), 1, 'queued');
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2080000-0000-4000-8000-00000000000a","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"e2080000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 select is((public.studio_step_finish('e2083000-0000-4000-8000-00000000000a', 'running', null, null,
   '{"tool":"animate_video","input":{"keyframes":[]}}', array['e2084000-0000-4000-8000-000000000001', 'e2084000-0000-4000-8000-000000000002']::uuid[])).next->>'tool',
   'animate_video', 'the step keeps what runs next');
+select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 6, 'the card''s price is recorded as the step starts');
 select throws_ok($$ select public.studio_step_finish('e2083000-0000-4000-8000-00000000000a', 'running', null, null,
   '{"tool":"render"}', array[gen_random_uuid()]) $$, '22023', null, 'a step waits only on the founder''s own generations');
+set local request.jwt.claims = '{"sub":"e2080000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.studio_step_finish('e2083000-0000-4000-8000-00000000000a', 'done') $$, '42501', null,
+  'a founder cannot finish a step: only the brain''s runner');
+set local request.jwt.claims = '{"sub":"e2080000-0000-4000-8000-00000000000a","role":"authenticated","opencmo_actor":"brain"}';
 reset role;
 select public.studio_order_move((select id from t where name = 'order'), 'waiting_order', 'Making the keyframes');
 select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'waiting_order', 'the order waits on its generations');
@@ -89,11 +100,42 @@ update public.generations set status = 'failed' where id = 'e2084000-0000-4000-8
 select is((select count(*)::int from public.studio_steps_ready()), 1, 'ready once every generation finished (the runner reads which failed)');
 select is((select status from public.studio_steps where id = 'e2083000-0000-4000-8000-00000000000a'), 'done', 'the step is done');
 select is((select count(*)::int from public.studio_steps_ready()), 0, 'and its next runs once');
+set local role authenticated;
+select throws_ok($$ select public.studio_step_finish('e2083000-0000-4000-8000-00000000000a', 'done', null, null, '{"tool":"render"}') $$, 'P0001',
+  'This step has already run.', 'a step that ran cannot be armed again');
+reset role;
 
 -- Card 2 raised: back to the founder, through running.
 select public.studio_order_move((select id from t where name = 'order'), 'waiting_founder', 'Card 2 waits on you');
 select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'waiting_founder',
   'from waiting on generations to waiting on the founder');
+
+-- The runner finishing up while that card waits does not pull the order back to "rendering".
+select public.studio_order_move((select id from t where name = 'order'), 'waiting_order', 'Rendering');
+select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'waiting_founder',
+  'an order waiting on the founder stays waiting');
+
+-- A redone keyframe's cost is recorded as it starts.
+insert into public.generations (id, user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved, status) values
+  ('e2084000-0000-4000-8000-000000000003', 'e2080000-0000-4000-8000-00000000000a', 'e2081000-0000-4000-8000-00000000000a',
+   'e2082000-0000-4000-8000-00000000000a', 'image', (select id from public.ai_models where kind = 'image' order by id limit 1), '{}', repeat('c', 64), 3, 'queued');
+insert into public.studio_steps (id, user_id, clip_id, tool, kind, input, card, price_credits, order_id, status, decision, decided_at) values
+  ('e2083000-0000-4000-8000-00000000000c', 'e2080000-0000-4000-8000-00000000000a', 'e2082000-0000-4000-8000-00000000000a', 'animate_video',
+   'price', '{}', '{"seconds":30}', 40, (select id from t where name = 'order'), 'approved', 'redo', now());
+set local role authenticated;
+select public.studio_step_finish('e2083000-0000-4000-8000-00000000000c', 'running', null, 'e2084000-0000-4000-8000-000000000003');
+reset role;
+select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 9, 'the redo adds its keyframe''s 3 credits');
+
+-- A replan while the video is under way keeps one video order: the new item is linked to it.
+with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2080000-0000-4000-8000-00000000000a', 'plan_week', 'running') returning id)
+insert into t select 'run2', id from r;
+select public.cmo_plan_week('e2080000-0000-4000-8000-00000000000a', (select id from t where name = 'run2'), jsonb_build_array(
+  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', current_date + 2, 'idea', 'How the CMO plans a week, take 2')));
+select is((select count(*)::int from public.work_orders where kind = 'build_video' and status not in ('done', 'failed', 'cancelled')), 1,
+  'a replan does not start a second video this week');
+select is((select c.idea from public.work_orders o join public.content_items c on c.id = o.item_id where o.id = (select id from t where name = 'order')),
+  'How the CMO plans a week, take 2', 'the running order carries the new item');
 
 select * from finish();
 rollback;

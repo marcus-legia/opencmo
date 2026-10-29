@@ -133,7 +133,16 @@ B0 → (push, M1) → B1 → B5 (after A3's RPC) → B3 → B2 (after A1) → B4
   CI web job steps green. Looked at the rendered short (1080×1920, 28.8 s, captions inside the frame, sound).
 - **Peak RSS:** three `make_short` renders of a 60 s 1080p edit, one `clip-export` job each, peak ~1.6 GB per job
   (whole process tree), under the 2 GB budget.
-- **Owner decisions left:** (1) charge the brain's Director and Clip editor calls (today free in brain mode; proposal:
-  a flat `cmo_job_price` per order, e.g. `build_video` 2 credits and `cut_shorts` 1, held when the runner claims it);
-  (2) a 30 s brain video yields one short, since three 15–60 s shorts need at least 45 s of speech: brief 60 s videos,
-  or allow 10 s shorts for AI videos; (3) short renders count against the founder's daily exports.
+- **Ultra review fixes (2026-10-29, 15 findings):** the brain's Director and Clip editor calls are charged by real
+  tokens (owner's choice): `work_order_usage` + `studio_record_usage` settle the order's running total on the credit
+  ledger (`ref_kind = 'work_order'`, new migration `20261228130000_p2_review_fixes.sql`). Only the order runner, whose
+  JWT says `opencmo_actor: brain` (`brainClientFor`), may raise, finish or charge steps and create or fail short
+  batches (`studio_brain_call()`). Also: a 0-credit child under an overspent parent, one video order per week across
+  replans, a re-claimed step fails instead of running twice (and the approvals route lives 300 s), spend recorded
+  when a step starts (redo included), Mark finished only finishes a built video's order, sending card 3 back fails
+  the order with the reason, a waiting order is never pulled back to rendering, fractions refused, Cut shorts capped
+  at 10 a day, the cancel toast, comments in English, the dead `orderId` option, cached keyframe lookups in the
+  worker. pgTAP 120 files / 2008 tests, `test:e2e:v2` 32/32, p2 acceptance 13/13, CI web steps green.
+- **Owner decisions left:** (1) a 30 s brain video yields one short, since three 15–60 s shorts need at least 45 s of
+  speech: brief 60 s videos, or allow 10 s shorts for AI videos; (2) short renders count against the founder's daily
+  exports.

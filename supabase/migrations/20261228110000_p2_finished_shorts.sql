@@ -100,6 +100,11 @@ begin
   if found then
     return v_id;
   end if;
+  -- Each order runs the Clip editor and renders three shorts: a daily cap keeps re-marking from looping it.
+  if (select count(*) from public.work_orders where user_id = p_user and kind = 'cut_shorts'
+      and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'You can cut shorts 10 times a day. Try again tomorrow.' using errcode = 'P0001';
+  end if;
   v_root := public.work_order_week_root(p_user);
   select id into v_id from public.work_order_create(p_user, v_root.week, v_root.id, 'cut_shorts',
     left('Shorts from “' || coalesce(nullif(v_clip.hook, ''), 'your video') || '”', 200),
@@ -142,6 +147,9 @@ declare
   v_start numeric;
   v_end numeric;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   if v_parent.kind = 'short' then
     raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
   end if;
@@ -361,6 +369,9 @@ declare
   v_user uuid := public.require_user();
   v_short public.shorts;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   select * into v_short from public.shorts where id = p_short_id and user_id = v_user for update;
   if not found then
     raise exception 'Short not found.' using errcode = 'P0002';
@@ -437,6 +448,7 @@ declare
   v_target integer;
   v_step public.studio_steps;
   v_batch public.short_batches;
+  v_order uuid;
   v_n integer;
   v_text text;
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
@@ -479,7 +491,8 @@ begin
         raise exception 'Choose approve or reject.' using errcode = '22023';
       end if;
       if v_payload ? 'target' then
-        if jsonb_typeof(v_payload->'target') <> 'number' then
+        if jsonb_typeof(v_payload->'target') <> 'number'
+           or (v_payload->>'target')::numeric <> trunc((v_payload->>'target')::numeric) then
           raise exception 'The target must be a whole number.' using errcode = '22023';
         end if;
         v_target := (v_payload->>'target')::numeric::integer;
@@ -498,7 +511,8 @@ begin
         raise exception 'This card was already decided.' using errcode = 'P0001';
       end if;
       if p_action = 'edit' then
-        if jsonb_typeof(v_payload->'beat') is distinct from 'number' then
+        if jsonb_typeof(v_payload->'beat') is distinct from 'number'
+           or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
           raise exception 'Say which beat to change.' using errcode = '22023';
         end if;
         v_n := (v_payload->>'beat')::numeric::integer;
@@ -516,7 +530,8 @@ begin
           next = '{"tool": "replan"}'::jsonb, next_done_at = null
         where id = v_step.id;
       elsif p_action = 'redo' then
-        if jsonb_typeof(v_payload->'index') is distinct from 'number' then
+        if jsonb_typeof(v_payload->'index') is distinct from 'number'
+           or (v_payload->>'index')::numeric <> trunc((v_payload->>'index')::numeric) then
           raise exception 'Say which keyframe to make again.' using errcode = '22023';
         end if;
         v_n := (v_payload->>'index')::numeric::integer;
@@ -545,6 +560,15 @@ begin
         perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
       else
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+        -- A failure is data: the order fails with the founder's reason and the progress check replans it.
+        select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+        where s.clip_id = v_row.ref_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+        order by s.created_at desc limit 1;
+        if v_order is not null then
+          perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the video back.'), 'retryable', true,
+            'repair_hint', 'Change what the founder asked, then render the video again.'));
+        end if;
       end if;
     when 'shorts_batch' then
       if p_action not in ('approve', 'send_back') then

@@ -52,6 +52,18 @@ create trigger studio_steps_sync after insert or update or delete on public.stud
 
 -- The adapter's `plan` → a waiting step and its card. Runs under the founder's session (the brain mints a user JWT,
 -- as MCP does), so ownership is the clip's. Holds nothing: credits are held when the step runs.
+-- True when the caller is the brain's order runner: its short-lived JWT carries `opencmo_actor = brain`, signed with
+-- the project's JWT secret, so a founder calling the RPCs directly cannot claim it.
+create or replace function public.studio_brain_call() returns boolean
+language plpgsql stable set search_path = public
+as $$
+begin
+  return coalesce(auth.jwt()->>'opencmo_actor', '') = 'brain';
+end;
+$$;
+revoke all on function public.studio_brain_call() from public, anon;
+grant execute on function public.studio_brain_call() to authenticated, service_role;
+
 create or replace function public.studio_step_raise(p_clip_id uuid, p_tool text, p_kind text, p_input jsonb, p_card jsonb,
   p_price_credits integer, p_order_id uuid default null, p_redo_of uuid default null)
 returns public.studio_steps language plpgsql volatile security definer set search_path = public
@@ -60,6 +72,9 @@ declare
   v_user uuid := public.require_user();
   v_row public.studio_steps;
 begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
   perform public.owned_clip(p_clip_id, v_user);
   if p_tool is null or p_tool not in ('generate_media', 'add_3d_scene', 'add_voiceover', 'replace_background',
       'create_video', 'animate_video', 'redo_keyframe', 'edit_video', 'add_explainer', 'plan_video', 'request_export',
@@ -170,8 +185,10 @@ begin
   -- Marking it finished in the editor or Studio is the same decision as approving card 3, in either order: the card
   -- closes, and a video order making this edit is done with the edit as its deliverable.
   perform public.approval_close('editor_project', p_clip_id, 'approved');
+  -- Only a built video finishes its order (the order reached its render); before that a waiting card 2 still runs.
   select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
   where s.clip_id = p_clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+    and s.next->>'tool' = 'render'
   order by s.created_at desc limit 1;
   if v_order is not null then
     insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)

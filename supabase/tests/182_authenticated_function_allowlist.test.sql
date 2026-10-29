@@ -125,6 +125,8 @@ insert into allowed values
   ('set_project_pinned(uuid,boolean)'),
   ('short_batch_create(uuid,text,uuid,jsonb)'),
   ('short_render_refused(uuid)'),
+  ('studio_record_usage(uuid,text,integer,integer,integer,integer)'),
+  ('studio_brain_call()'),
   ('signup_credits()'),
   ('slice_transcript(jsonb,numeric,numeric)'),
   ('snapshot_editor_revision(uuid,text)'),

@@ -23,7 +23,9 @@ import { studio } from "@/lib/departments/studio/adapter";
 import { finishVideo } from "@/lib/departments/studio/finish";
 import { renderEdit } from "@/lib/departments/studio/render";
 import { VideoBriefSchema, type StudioAdapter, type StudioContext } from "@/lib/departments/studio/types";
-import { clientFor } from "@/lib/mcp/auth";
+import type { LlmUsage } from "@/lib/cmo/jobs/llm";
+import { balance } from "@/lib/cmo/mcp/account";
+import { brainClientFor } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type Order = { id: string; user_id: string; kind: string; brief: Record<string, unknown> };
@@ -40,11 +42,23 @@ type Step = {
   plan_input: Record<string, unknown> | null;
 };
 
-/** The adapter as the brain, for one order, with the founder's own session. */
+/**
+ * The adapter as the brain, for one order, under the founder's brain session. The Director's and the Clip editor's
+ * model calls are charged to the order by their real tokens (`studio_record_usage`), as Assistant turns are.
+ */
 function brainStudio(userId: string, orderId: string): { ctx: StudioContext; adapter: StudioAdapter } {
-  const ctx: StudioContext = { supabase: clientFor(userId), userId, caller: "brain", orderId };
-  // The Director's and the Clip editor's model calls are not charged yet in brain mode: noted in A.md (open item).
-  return { ctx, adapter: studio(ctx, { recordUsage: async (usage) => console.info(`[studio-orders] model usage ${usage.model}`) }) };
+  const ctx: StudioContext = { supabase: brainClientFor(userId), userId, caller: "brain", orderId };
+  const recordUsage = async (usage: LlmUsage) => {
+    await rpcOrThrow(ctx.supabase, "studio_record_usage", {
+      p_order_id: orderId,
+      p_model: usage.model,
+      p_input: usage.input,
+      p_output: usage.output,
+      p_cache_read: usage.cacheRead,
+      p_cache_write: usage.cacheWrite,
+    });
+  };
+  return { ctx, adapter: studio(ctx, { recordUsage }) };
 }
 
 const message = (error: unknown) => (error instanceof ApiError ? error.message : "Studio could not finish this step.");
@@ -72,8 +86,13 @@ export function briefOf(order: Order) {
 }
 
 async function runOrder(admin: SupabaseClient, order: Order): Promise<void> {
-  const { adapter } = brainStudio(order.user_id, order.id);
+  const { ctx, adapter } = brainStudio(order.user_id, order.id);
   try {
+    // The team's model calls are paid from the balance: with nothing left, the order waits for a top-up.
+    const credits = (await balance(ctx.supabase, order.user_id))?.credits;
+    if (credits !== undefined && credits < 1) {
+      return move(admin, order.id, "failed", "", { code: "needs_credits", message: "Top up credits so the video team can work." });
+    }
     if (order.kind === "build_video") {
       const built = await adapter.buildVideo(briefOf(order));
       if (built.kind === "invalid") return move(admin, order.id, "failed", "", { code: "invalid_brief", message: built.message });
@@ -195,15 +214,12 @@ async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
   }
 }
 
-/**
- * Carries out what is due, until nothing is or the time is up. `orderId` (the approvals route, right after a
- * decision) only shortens the wait for that order's claim; the other queues are drained as usual.
- */
-export async function drainStudioOrders(admin: SupabaseClient, opts: { orderId?: string; budgetMs?: number } = {}): Promise<number> {
+/** Carries out what is due, until nothing is or the time is up. */
+export async function drainStudioOrders(admin: SupabaseClient, opts: { budgetMs?: number } = {}): Promise<number> {
   const deadline = Date.now() + (opts.budgetMs ?? 240_000);
   let done = 0;
   while (Date.now() < deadline) {
-    const orders = (await rpcOrThrow<Order[]>(admin, "studio_orders_claim", { p_order: opts.orderId ?? null, p_limit: 3 })) ?? [];
+    const orders = (await rpcOrThrow<Order[]>(admin, "studio_orders_claim", { p_order: null, p_limit: 3 })) ?? [];
     for (const order of orders) await runOrder(admin, order);
     const steps = (await rpcOrThrow<Step[]>(admin, "studio_steps_claim", { p_limit: 5 })) ?? [];
     for (const step of steps) await runStep(admin, step);
@@ -217,10 +233,10 @@ export async function drainStudioOrders(admin: SupabaseClient, opts: { orderId?:
 }
 
 /** Runs the Studio queue after the response is sent (the approvals route, the internal run route). */
-export function kickStudioOrders(orderId?: string, budgetMs = 250_000): void {
+export function kickStudioOrders(budgetMs = 250_000): void {
   after(async () => {
     try {
-      await drainStudioOrders(createAdminClient(), { orderId, budgetMs });
+      await drainStudioOrders(createAdminClient(), { budgetMs });
     } catch (error) {
       console.error("[studio-orders] drain", error);
     }

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
@@ -18,6 +18,19 @@ const admin = () => {
   const { url, service } = state();
   return createClient(url, service, { auth: { persistSession: false } });
 };
+
+/**
+ * The founder's session as the brain's Studio order runner sees it (`lib/mcp/auth.ts` `brainClientFor`): only it may
+ * store steps and create shorts batches, as the adapter does.
+ */
+function brainClient(userId: string): SupabaseClient {
+  const { url, anon } = state();
+  const now = Math.floor(Date.now() / 1000);
+  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const body = `${part({ alg: "HS256", typ: "JWT" })}.${part({ opencmo_actor: "brain", sub: userId, role: "authenticated", aud: "authenticated", iat: now, exp: now + 600 })}`;
+  const token = `${body}.${createHmac("sha256", process.env.SUPABASE_JWT_SECRET!).update(body).digest("base64url")}`;
+  return createClient(url, anon, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+}
 
 /** A founder of its own per test, past Setup and with credits for the keyframe hold. */
 async function founder(db: SupabaseClient): Promise<{ user: E2EUser; me: SupabaseClient }> {
@@ -92,7 +105,7 @@ async function cardPage(page: Page, id: string) {
 
 test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited, a keyframe redone, the video finished", async ({ page }) => {
   const db = admin();
-  const { user, me } = await founder(db);
+  const { user } = await founder(db);
   // The cards decide live; the steps behind them are this test's own rows, which the order runner the approvals
   // route kicks cannot carry out. Paused, the runner leaves them alone (the cards still decide).
   expect((await db.from("profiles").update({ cmo_paused_at: new Date().toISOString() }).eq("id", user.id)).error).toBeNull();
@@ -100,7 +113,7 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
   const orderId = await videoOrder(db, user.id, "How the CMO plans a week");
 
   // Card 1: the storyboard, raised by the adapter under the founder's session.
-  const { data: script, error: scriptError } = await me.rpc("studio_step_raise", {
+  const { data: script, error: scriptError } = await brainClient(user.id).rpc("studio_step_raise", {
     p_clip_id: video.clipId,
     p_tool: "create_video",
     p_kind: "script",
@@ -143,7 +156,7 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
     .toMatchObject({ beat: 1, text: "Cut it by deleting words." });
 
   // Card 2: the contact sheet; redo one keyframe.
-  const { data: sheet, error: sheetError } = await me.rpc("studio_step_raise", {
+  const { data: sheet, error: sheetError } = await brainClient(user.id).rpc("studio_step_raise", {
     p_clip_id: video.clipId,
     p_tool: "animate_video",
     p_kind: "price",
@@ -266,7 +279,7 @@ test("approving a shorts batch puts the three shorts in Studio", async ({ page }
     { start: 18, end: 41, hook: "B-roll on the line", reason: "Shows the command" },
     { start: 38, end: 60, hook: "Edit by asking", reason: "Strongest demo" },
   ];
-  const { data: batch, error } = await me.rpc("short_batch_create", {
+  const { data: batch, error } = await brainClient(user.id).rpc("short_batch_create", {
     p_parent_clip_id: parent.clipId,
     p_parent_hash: parent.hash,
     p_order_id: order!.id,

@@ -44,7 +44,7 @@ export const CapabilitySchema = z
       .refine((list) => new Set(list).size === list.length, "callers repeat"),
     order_kind: name.nullable(),
     max_steps: z.number().int().min(1).max(200),
-    credits: z.union([z.number().int().min(0), z.literal("quote")]),
+    credits: z.union([z.number().int().min(0), z.literal("quote"), z.literal("usage")]),
     input: z.string().min(1).max(80),
     $comment: z.string().optional(),
   })
@@ -111,6 +111,7 @@ check("a job's price is the one SQL charges", () => {
 check("spending needs a card or a fixed price", () => {
   for (const c of registry.capabilities) {
     if (c.credits === "quote") assert.equal(c.approval, "price", `${c.name}: a quoted price is shown on a card`);
+    if (c.credits === "usage") assert.equal(c.effect, "spend", `${c.name}: charged by usage, so it spends`);
     if (c.effect === "outbound") assert.notEqual(c.approval, "none", `${c.name}: outbound always waits on the founder`);
   }
 });

@@ -45,8 +45,8 @@
         },
         "max_steps": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Effort budget: steps one run may take." },
         "credits": {
-          "oneOf": [{ "type": "integer", "minimum": 0 }, { "const": "quote" }],
-          "description": "The fixed price, or quote when the price comes from the plan (shown on the card)."
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "const": "quote" }, { "const": "usage" }],
+          "description": "The fixed price, quote when the price comes from the plan (shown on the card), or usage when the model tokens it uses are charged (the brain's Studio team)."
         },
         "input": { "type": "string", "minLength": 1, "maxLength": 80, "description": "The name of the input type or schema in code." },
         "$comment": { "type": "string" }
