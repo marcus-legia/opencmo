@@ -48,7 +48,9 @@ description; Studio gets its video brief from Writer instead of the brain writin
 | F9 | Slide text capability | — | `write_slides` (5–10 slides, hook first, one idea each, CTA last) registered and tested; S3 (P5) calls it |
 | F10 | Evals and acceptance | — | eval cases per platform and kind in `lib/cmo/jobs/eval`; approve-as-is rate and edit modes measured before and after F1; a local run with fake providers: plan → X + Threads + LinkedIn drafts → approve/edit → voice notes → finished video → captions |
 
-## 3. What exists (`cmo-build` at `992d632`, P2 planned; refresh before start)
+## 3. What exists (refreshed 2026-10-29: `cmo-build` at `fefe493`, P2 merged as #124, merged into `cmo-p3` at `b3d17e8`)
+
+The list below is the state P3 started from: the writer as wave 1 left it, then what P2 actually built.
 
 - Agents: `lib/cmo/agents/registry.ts` (`x_writer`, `writer`, `director`, `checker`).
 - X draft job `lib/cmo/jobs/draft-post.ts` (197 lines): 3 versions with an angle each, checker on the other
@@ -65,8 +67,20 @@ description; Studio gets its video brief from Writer instead of the brain writin
 - Wave 1 B0 built corrections (`approvals.kind` allows `correction`, `ref_kind` `correction`).
 - `content_items.platform` is free text (1–20 characters); `deliverables.kind` already allows `caption`.
 - Screens: `writer` (`drafts` live, `voice` not), `library` (`voice`, `skills` not live).
-- After P2 (planned): the Studio adapter's `buildVideo(brief)` with a brief type, `short` deliverables, the shorts
-  batch card, `capabilities.json` filled in.
+- P2 as built (#124):
+  - Studio adapter `lib/departments/studio/` (`types.ts`, `adapter.ts`, `video.ts`, `shorts/`): `plan`, `decide`,
+    `buildVideo(brief)`, `cutShorts`, `markFinished`, `renderShort`, with callers per entry (`STUDIO_ACCESS`).
+  - The brief type `VideoBriefSchema` lived in the adapter's `types.ts`: objective, angle, up to 3 hooks, up to 6 key
+    points, seconds 5–90, aspect, voice; no call to action. `briefRequest` turns it into `create_video` input for the
+    Director. The brain wrote it inline from the plan's video item (`briefOf` in `jobs/studio-orders.ts`).
+  - Studio orders `build_video`, `cut_shorts` (`work_orders`), run by `jobs/studio-orders.ts` under the founder's
+    brain JWT; priced steps stored in `studio_steps` behind `script`/`price` cards; `finished_video` and
+    `shorts_batch` cards (`short_batches`, `shorts`); finished state `editor_projects.finished_at` + `finished_hash`;
+    approved shorts become `short` deliverables.
+  - `packages/contracts/capabilities.json` lists the CMO jobs, the Studio entries and the priced MCP tools, checked by
+    `lib/cmo/capabilities.check.ts`.
+- What P3 changed against this list is in each session's notes (`2026-10-28-p3-sessions/`): the brief moved to
+  `lib/cmo/writer/types.ts` (Studio re-exports it) and gained a call to action (B0).
 
 ## 4. Global constraints
 
