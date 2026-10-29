@@ -62,7 +62,7 @@ function fakeDraft(idea: string, product: string): Draft {
 }
 
 /**
- * Mục tới hạn: mục X `planned` có ngày ≤ hôm nay, cũ nhất trước. `wanted` is the item the schedule named
+ * The item due: an X item still `planned` dated today or earlier, oldest first. `wanted` is the item the schedule named
  * (`input.item_id`, so the run and its work order agree on what is drafted); it wins while it is still planned.
  */
 export function pickDueItem(items: ItemRow[], today = isoDay(), wanted?: string): ItemRow | null {

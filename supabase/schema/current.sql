@@ -1546,13 +1546,15 @@ CREATE TABLE public.approvals (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     decided_at timestamp with time zone,
     decided_via text,
+    reason text,
     CONSTRAINT approvals_account_check CHECK ((char_length(account) <= 100)),
     CONSTRAINT approvals_content_hash_check CHECK ((content_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
-    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text]))),
+    CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
@@ -1572,6 +1574,12 @@ declare
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
   v_via text := coalesce(nullif(v_payload->>'via', ''), 'app');
   v_target integer;
+  v_step public.studio_steps;
+  v_batch public.short_batches;
+  v_order uuid;
+  v_n integer;
+  v_text text;
+  v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1611,7 +1619,8 @@ begin
         raise exception 'Choose approve or reject.' using errcode = '22023';
       end if;
       if v_payload ? 'target' then
-        if jsonb_typeof(v_payload->'target') <> 'number' then
+        if jsonb_typeof(v_payload->'target') <> 'number'
+           or (v_payload->>'target')::numeric <> trunc((v_payload->>'target')::numeric) then
           raise exception 'The target must be a whole number.' using errcode = '22023';
         end if;
         v_target := (v_payload->>'target')::numeric::integer;
@@ -1619,12 +1628,119 @@ begin
       perform public.cmo_decide_goal(v_row.ref_id, p_action, v_payload->>'goal', v_target);
     when 'correction' then
       perform public.cmo_decide_correction(v_row.ref_id, p_action, v_payload->>'text');
+    when 'script', 'price' then
+      if (v_row.kind = 'script' and p_action not in ('approve', 'edit', 'cancel'))
+         or (v_row.kind = 'price' and p_action not in ('approve', 'redo', 'cancel')) then
+        raise exception '%', case v_row.kind when 'script' then 'Choose approve, edit a beat or cancel.'
+          else 'Choose approve, redo a keyframe or cancel.' end using errcode = '22023';
+      end if;
+      select * into v_step from public.studio_steps where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_step.status <> 'waiting' then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'edit' then
+        if jsonb_typeof(v_payload->'beat') is distinct from 'number'
+           or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
+          raise exception 'Say which beat to change.' using errcode = '22023';
+        end if;
+        v_n := (v_payload->>'beat')::numeric::integer;
+        v_text := trim(coalesce(v_payload->>'text', ''));
+        if v_n < 0 or v_n >= jsonb_array_length(v_row.snapshot->'beats') then
+          raise exception 'That beat is not in the script.' using errcode = '22023';
+        end if;
+        if char_length(v_text) not between 1 and 300 then
+          raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
+        end if;
+        -- The order runner plans the storyboard again with these words (`next`, added in 20261228120000): queued
+        -- like any other Studio step, so it waits while the founder's CMO is paused and is retried.
+        update public.studio_steps set status = 'cancelled', decision = 'edit', decided_at = now(),
+          decision_payload = jsonb_build_object('beat', v_n, 'text', v_text),
+          next = '{"tool": "replan"}'::jsonb, next_done_at = null
+        where id = v_step.id;
+      elsif p_action = 'redo' then
+        if jsonb_typeof(v_payload->'index') is distinct from 'number'
+           or (v_payload->>'index')::numeric <> trunc((v_payload->>'index')::numeric) then
+          raise exception 'Say which keyframe to make again.' using errcode = '22023';
+        end if;
+        v_n := (v_payload->>'index')::numeric::integer;
+        if not exists (select 1 from jsonb_array_elements(v_row.snapshot->'keyframes') k
+                       where jsonb_typeof(k->'index') = 'number' and (k->>'index')::numeric = v_n) then
+          raise exception 'That keyframe is not on the sheet.' using errcode = '22023';
+        end if;
+        update public.studio_steps set status = 'approved', decision = 'redo', decided_at = now(),
+          decision_payload = jsonb_build_object('index', v_n)
+        where id = v_step.id;
+      elsif p_action = 'cancel' then
+        update public.studio_steps set status = 'cancelled', decision = 'cancel', decided_at = now() where id = v_step.id;
+        if v_step.order_id is not null and exists (select 1 from public.work_orders
+            where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+          perform public.work_order_move(v_step.order_id, 'cancelled', 'You cancelled the video');
+        end if;
+      else
+        update public.studio_steps set status = 'approved', decision = 'approve', decided_at = now() where id = v_step.id;
+      end if;
+    when 'finished_video' then
+      if p_action not in ('approve', 'send_back') then
+        raise exception 'Choose approve or send back.' using errcode = '22023';
+      end if;
+      if p_action = 'approve' then
+        -- Closes the card and finishes a video order making this edit (mark_finished owns both).
+        perform public.mark_finished(v_row.ref_id, v_row.snapshot->>'document_hash');
+      else
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+        -- A failure is data: the order fails with the founder's reason and the progress check replans it.
+        select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+        where s.clip_id = v_row.ref_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+        order by s.created_at desc limit 1;
+        if v_order is not null then
+          perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the video back.'), 'retryable', true,
+            'repair_hint', 'Change what the founder asked, then render the video again.'));
+        end if;
+      end if;
+    when 'shorts_batch' then
+      if p_action not in ('approve', 'send_back') then
+        raise exception 'Choose approve or send back.' using errcode = '22023';
+      end if;
+      select * into v_batch from public.short_batches where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_batch.status <> 'waiting_founder' then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'approve' then
+        update public.short_batches set status = 'approved', decided_at = now() where id = v_batch.id;
+        update public.shorts set status = 'approved' where batch_id = v_batch.id and status = 'ready';
+        -- Each short is its own deliverable, ready for Schedule (P4).
+        if v_batch.order_id is not null then
+          insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+          select v_user, v_batch.order_id, 'short', 'clip', s.short_clip_id, 'ready'
+          from public.shorts s where s.batch_id = v_batch.id and s.status = 'approved' and s.short_clip_id is not null
+          on conflict (ref_kind, ref_id) do nothing;
+          if exists (select 1 from public.work_orders where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+            perform public.work_order_move(v_batch.order_id, 'done', 'Shorts approved');
+          end if;
+        end if;
+        perform public.approval_close('short_batch', v_batch.id, 'approved');
+      else
+        update public.short_batches set status = 'sent_back', decided_at = now() where id = v_batch.id;
+        update public.shorts set status = 'sent_back' where batch_id = v_batch.id and status = 'ready';
+        -- A failure is data: the replan reads the reason and may not cut the same shorts again (brain.md §6).
+        if v_batch.order_id is not null and exists (select 1 from public.work_orders
+            where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+          perform public.work_order_move(v_batch.order_id, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the shorts back.'), 'retryable', true,
+            'repair_hint', 'Cut different ranges from the same finished edit.'));
+        end if;
+        perform public.approval_close('short_batch', v_batch.id, 'skipped');
+      end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
   end case;
   perform set_config('opencmo.decided_via', '', true);
 
   select * into v_row from public.approvals where id = p_id;
+  if v_reason is not null and v_row.status in ('skipped', 'edited') then
+    update public.approvals set reason = v_reason where id = p_id returning * into v_row;
+  end if;
   return v_row;
 end;
 $$;
@@ -1664,10 +1780,13 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
   v_kind := v_snapshot->>'kind';
-  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash)
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits)
   values (p_user, v_kind,
-    case v_kind when 'post' then 'writer' when 'reply' then 'sales' else 'brain' end,
-    p_ref_kind, p_ref_id, v_snapshot, v_hash);
+    case v_kind when 'post' then 'writer' when 'reply' then 'sales'
+      when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
+      when 'shorts_batch' then 'studio' else 'brain' end,
+    p_ref_kind, p_ref_id, v_snapshot, v_hash,
+    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end);
 end;
 $$;
 
@@ -1700,6 +1819,46 @@ begin
     when 'correction' then
       select jsonb_build_object('kind', 'correction', 'rule', rule, 'source_edits', source_edits)
       into v from public.cmo_corrections where id = p_ref_id;
+    when 'studio_step' then
+      select case s.kind
+        when 'script' then jsonb_build_object('kind', 'script', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
+          'title', coalesce(s.card->>'title', ''), 'seconds', s.card->'seconds', 'aspect', s.card->'aspect',
+          'beats', case when jsonb_typeof(s.card->'beats') = 'array' then s.card->'beats' else '[]'::jsonb end,
+          'price_credits', s.price_credits)
+        else jsonb_build_object('kind', 'price', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
+          'title', coalesce(s.card->>'title', ''), 'what', coalesce(s.card->>'what', ''), 'seconds', s.card->'seconds',
+          'wait_minutes', s.card->'wait_minutes',
+          'keyframes', case when jsonb_typeof(s.card->'keyframes') = 'array' then s.card->'keyframes' else '[]'::jsonb end,
+          'shots', coalesce(s.card->'shots', '0'::jsonb), 'price_credits', s.price_credits)
+        end
+      into v from public.studio_steps s where s.id = p_ref_id;
+    when 'editor_project' then
+      select jsonb_build_object('kind', 'finished_video', 'clip_id', c.id, 'title', coalesce(c.hook, ''),
+        'document_hash', public.editor_document_hash(p.document),
+        'render_task_id', r.id, 'render_path', r.output_path, 'seconds', r.duration)
+      into v
+      from public.editor_projects p
+      join public.clips c on c.id = p.clip_id
+      left join lateral (
+        select t.id, t.output_path, t.duration from public.tasks t
+        where t.clip_id = p.clip_id and t.kind = 'render_document' and t.status = 'done'
+          and t.settings_hash = public.editor_document_hash(p.document)
+        order by t.finished_at desc nulls last, t.created_at desc
+        limit 1
+      ) r on true
+      where p.clip_id = p_ref_id;
+    when 'short_batch' then
+      select jsonb_build_object('kind', 'shorts_batch', 'batch_id', b.id, 'parent_clip_id', b.parent_clip_id,
+        'title', coalesce(c.hook, ''), 'parent_hash', b.parent_hash,
+        'shorts', coalesce((
+          select jsonb_agg(jsonb_build_object('short_id', s.id, 'short_clip_id', s.short_clip_id,
+            'start', s.source_start, 'end', s.source_end, 'hook', s.hook, 'reason', s.reason)
+            order by s.source_start, s.id)
+          from public.shorts s where s.batch_id = b.id and s.status <> 'failed'), '[]'::jsonb))
+      into v
+      from public.short_batches b
+      left join public.clips c on c.id = b.parent_clip_id
+      where b.id = p_ref_id;
     else
       raise exception 'Unknown card source.' using errcode = '22023';
   end case;
@@ -4775,6 +4934,68 @@ $$;
 
 
 --
+-- Name: cut_shorts_order(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cut_shorts_order(p_clip_id uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  return public.cut_shorts_order_for(public.require_user(), p_clip_id, 'founder');
+end;
+$$;
+
+
+--
+-- Name: cut_shorts_order_for(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cut_shorts_order_for(p_user uuid, p_clip_id uuid, p_created_by text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_clip public.clips := public.owned_clip(p_clip_id, p_user);
+  v_project public.editor_projects;
+  v_root public.work_orders;
+  v_id uuid;
+begin
+  if v_clip.kind = 'short' then
+    raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
+  end if;
+  select * into v_project from public.editor_projects where clip_id = p_clip_id for update;
+  if not found or v_project.finished_hash is null
+     or v_project.finished_hash is distinct from public.editor_document_hash(v_project.document) then
+    raise exception 'Mark this edit finished first: shorts are cut only from a finished edit.' using errcode = 'P0001';
+  end if;
+  if public.cmo_paused(p_user) then
+    raise exception 'Your CMO is paused. Resume it to start new work.' using errcode = 'P0001';
+  end if;
+  select id into v_id from public.work_orders
+  where user_id = p_user and kind = 'cut_shorts' and brief->>'clip_id' = p_clip_id::text
+    and brief->>'finished_hash' = v_project.finished_hash and status not in ('failed', 'cancelled')
+  limit 1;
+  if found then
+    return v_id;
+  end if;
+  -- Each order runs the Clip editor and renders three shorts: a daily cap keeps re-marking from looping it.
+  if (select count(*) from public.work_orders where user_id = p_user and kind = 'cut_shorts'
+      and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'You can cut shorts 10 times a day. Try again tomorrow.' using errcode = 'P0001';
+  end if;
+  v_root := public.work_order_week_root(p_user);
+  select id into v_id from public.work_order_create(p_user, v_root.week, v_root.id, 'cut_shorts',
+    left('Shorts from “' || coalesce(nullif(v_clip.hook, ''), 'your video') || '”', 200),
+    jsonb_build_object('objective', 'Cut 3 shorts from the finished edit.', 'clip_id', p_clip_id,
+      'finished_hash', v_project.finished_hash, 'done_when', 'The founder approved the shorts batch.'),
+    0, null, '{}', p_created_by);
+  return v_id;
+end;
+$$;
+
+
+--
 -- Name: defer_object_deletions(bigint[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4906,7 +5127,11 @@ CREATE TABLE public.editor_projects (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     document jsonb NOT NULL,
     generated_document jsonb,
+    finished_at timestamp with time zone,
+    finished_hash text,
     CONSTRAINT editor_projects_document_check CHECK (((document IS NULL) OR (octet_length((document)::text) < 262144))),
+    CONSTRAINT editor_projects_finished_check CHECK (((finished_at IS NULL) = (finished_hash IS NULL))),
+    CONSTRAINT editor_projects_finished_hash_check CHECK ((finished_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT editor_projects_generated_document_check CHECK (((generated_document IS NULL) OR (octet_length((generated_document)::text) < 262144))),
     CONSTRAINT editor_projects_manifest_check CHECK ((pg_column_size(manifest) < 65536))
 );
@@ -4974,6 +5199,55 @@ CREATE FUNCTION public.editor_json(p_clip_id uuid) RETURNS jsonb
   )
   from public.editor_projects p
   where p.clip_id = p_clip_id;
+$$;
+
+
+--
+-- Name: editor_projects_clear_finished(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.editor_projects_clear_finished() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.finished_hash is not null and new.document is distinct from old.document
+     and public.editor_document_hash(new.document) is distinct from new.finished_hash then
+    new.finished_at := null;
+    new.finished_hash := null;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: editor_projects_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.editor_projects_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid;
+begin
+  if new.document is distinct from old.document then
+    perform public.approval_close('editor_project', new.clip_id, 'cancelled');
+  end if;
+  if new.finished_hash is not null and new.finished_hash is distinct from old.finished_hash then
+    select j.user_id into v_user from public.clips c join public.jobs j on j.id = c.job_id
+    where c.id = new.clip_id and c.kind <> 'short';
+    if v_user is not null and not public.cmo_paused(v_user) then
+      begin
+        perform public.cut_shorts_order_for(v_user, new.clip_id, 'event');
+      exception when others then
+        raise warning 'cut_shorts rule failed for clip %: %', new.clip_id, sqlerrm;
+      end;
+    end if;
+  end if;
+  return new;
+end;
 $$;
 
 
@@ -5716,6 +5990,51 @@ $$;
 
 
 --
+-- Name: mark_finished(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mark_finished(p_clip_id uuid, p_document_hash text) RETURNS public.editor_projects
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.editor_projects;
+  v_order uuid;
+begin
+  perform public.owned_clip(p_clip_id, v_user);
+  select * into v_row from public.editor_projects where clip_id = p_clip_id for update;
+  if not found then
+    raise exception 'This edit has nothing to finish yet.' using errcode = 'P0002';
+  end if;
+  if p_document_hash is null or p_document_hash is distinct from public.editor_document_hash(v_row.document) then
+    raise exception 'This edit changed. Look at it again before marking it finished.' using errcode = 'P0001';
+  end if;
+  if v_row.finished_hash is distinct from p_document_hash then
+    update public.editor_projects set finished_at = now(), finished_hash = p_document_hash
+    where clip_id = p_clip_id
+    returning * into v_row;
+  end if;
+  -- Marking it finished in the editor or Studio is the same decision as approving card 3, in either order: the card
+  -- closes, and a video order making this edit is done with the edit as its deliverable.
+  perform public.approval_close('editor_project', p_clip_id, 'approved');
+  -- Only a built video finishes its order (the order reached its render); before that a waiting card 2 still runs.
+  select s.order_id into v_order from public.studio_steps s join public.work_orders o on o.id = s.order_id
+  where s.clip_id = p_clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+    and s.next->>'tool' = 'render'
+  order by s.created_at desc limit 1;
+  if v_order is not null then
+    insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+    values (v_user, v_order, 'video', 'clip', p_clip_id, 'decided')
+    on conflict (ref_kind, ref_id) do nothing;
+    perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'the video') || '”');
+  end if;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: mark_generation_sent(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6013,7 +6332,9 @@ CREATE TABLE public.clips (
     kind text DEFAULT 'full'::text NOT NULL,
     settings jsonb,
     settings_hash text,
-    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text]))),
+    parent_clip_id uuid,
+    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text, 'short'::text]))),
+    CONSTRAINT clips_parent_short_check CHECK (((parent_clip_id IS NULL) OR (kind = 'short'::text))),
     CONSTRAINT clips_settings_hash_check CHECK ((((settings IS NULL) AND (settings_hash IS NULL)) OR ((jsonb_typeof(settings) = 'object'::text) AND COALESCE((settings_hash ~ '^[0-9a-f]{64}$'::text), false)))),
     CONSTRAINT clips_settings_size_check CHECK (((settings IS NULL) OR (pg_column_size(settings) < 65536))),
     CONSTRAINT clips_source_range_check CHECK ((source_end > source_start))
@@ -8048,6 +8369,148 @@ $$;
 
 
 --
+-- Name: short_batch_create(uuid, text, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_batch_create(p_parent_clip_id uuid, p_parent_hash text, p_order_id uuid, p_shorts jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_parent public.clips := public.owned_clip(p_parent_clip_id, v_user);
+  v_project public.editor_projects;
+  v_batch uuid;
+  v_item jsonb;
+  v_clip uuid;
+  v_short uuid;
+  v_idx integer;
+  v_out jsonb := '[]'::jsonb;
+  v_start numeric;
+  v_end numeric;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  if v_parent.kind = 'short' then
+    raise exception 'A short is not cut into shorts.' using errcode = 'P0001';
+  end if;
+  select * into v_project from public.editor_projects where clip_id = p_parent_clip_id for update;
+  if not found or p_parent_hash is null or v_project.finished_hash is distinct from p_parent_hash
+     or p_parent_hash is distinct from public.editor_document_hash(v_project.document) then
+    raise exception 'This edit changed after it was marked finished. Mark it finished again to cut shorts.' using errcode = 'P0001';
+  end if;
+  if p_order_id is not null and not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_shorts is null or jsonb_typeof(p_shorts) <> 'array' or jsonb_array_length(p_shorts) not between 1 and 3 then
+    raise exception 'A batch has 1 to 3 shorts.' using errcode = '22023';
+  end if;
+  -- One batch at a time per finished version: a retry of the same cut does not double it.
+  if exists (select 1 from public.short_batches where parent_clip_id = p_parent_clip_id and parent_hash = p_parent_hash
+             and status not in ('sent_back', 'failed', 'cancelled')) then
+    raise exception 'Shorts are already being cut from this version.' using errcode = 'P0001';
+  end if;
+  -- Short edits take the next free negative index of the parent's job (uploads use 0 and up, blank edits -1).
+  perform 1 from public.jobs where id = v_parent.job_id for update;
+  insert into public.short_batches (user_id, parent_clip_id, parent_hash, order_id, status)
+  values (v_user, p_parent_clip_id, p_parent_hash, p_order_id, 'rendering')
+  returning id into v_batch;
+  for v_item in select * from jsonb_array_elements(p_shorts) loop
+    if jsonb_typeof(v_item) <> 'object' or jsonb_typeof(v_item->'document') is distinct from 'object'
+       or jsonb_typeof(v_item->'source_start') is distinct from 'number' or jsonb_typeof(v_item->'source_end') is distinct from 'number'
+       or char_length(coalesce(v_item->>'hook', '')) not between 1 and 120
+       or char_length(coalesce(v_item->>'title', '')) not between 1 and 60
+       or char_length(coalesce(v_item->>'reason', '')) not between 1 and 300 then
+      raise exception 'A short needs its range, hook, title, reason and edit.' using errcode = '22023';
+    end if;
+    v_start := (v_item->>'source_start')::numeric;
+    v_end := (v_item->>'source_end')::numeric;
+    v_idx := (select least(coalesce(min(idx), 0), -1) - 1 from public.clips where job_id = v_parent.job_id);
+    insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, kind, parent_clip_id)
+    values (v_parent.job_id, v_idx, v_item->>'title', 0, v_end - v_start, 'short', p_parent_clip_id)
+    returning id into v_clip;
+    insert into public.editor_projects (clip_id, document, manifest)
+    values (v_clip, v_item->'document', v_project.manifest);
+    -- Edited and voice-over transcripts are stored per clip: the short's captions read the parent's.
+    insert into public.editor_transcripts (clip_id, hash, body)
+    select v_clip, t.hash, t.body from public.editor_transcripts t
+    where t.clip_id = p_parent_clip_id
+      and t.hash in (select (regexp_matches((v_item->'document')::text, 'assets/transcripts/([0-9a-f]{64})\.json', 'g'))[1])
+    on conflict do nothing;
+    insert into public.shorts (user_id, batch_id, parent_clip_id, short_clip_id, source_start, source_end, hook, reason, status)
+    values (v_user, v_batch, p_parent_clip_id, v_clip, v_start, v_end, v_item->>'hook', v_item->>'reason', 'rendering')
+    returning id into v_short;
+    v_out := v_out || jsonb_build_array(jsonb_build_object('short_id', v_short, 'short_clip_id', v_clip));
+  end loop;
+  return jsonb_build_object('batch_id', v_batch, 'shorts', v_out);
+end;
+$$;
+
+
+--
+-- Name: short_batch_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_batch_settle(p_batch_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_batch public.short_batches;
+begin
+  select * into v_batch from public.short_batches where id = p_batch_id for update;
+  if not found or v_batch.status <> 'rendering' or exists (
+      select 1 from public.shorts where batch_id = v_batch.id and status in ('building', 'rendering')) then
+    return;
+  end if;
+  if exists (select 1 from public.shorts where batch_id = v_batch.id and status = 'ready') then
+    update public.short_batches set status = 'waiting_founder' where id = v_batch.id;
+    perform public.approval_raise(v_batch.user_id, 'short_batch', v_batch.id);
+    if v_batch.order_id is not null then
+      perform public.work_order_wait_founder(v_batch.order_id, 'Shorts are ready for you');
+    end if;
+  else
+    update public.short_batches set status = 'failed', error = 'Every short failed to render.' where id = v_batch.id;
+    if v_batch.order_id is not null and exists (select 1 from public.work_orders
+        where id = v_batch.order_id and status not in ('done', 'failed', 'cancelled')) then
+      perform public.work_order_move(v_batch.order_id, 'failed', null,
+        jsonb_build_object('code', 'render_failed', 'message', 'Every short failed to render.', 'retryable', true));
+    end if;
+  end if;
+end;
+$$;
+
+
+--
+-- Name: short_render_refused(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.short_render_refused(p_short_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_short public.shorts;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  select * into v_short from public.shorts where id = p_short_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Short not found.' using errcode = 'P0002';
+  end if;
+  if v_short.status <> 'rendering' then
+    return;
+  end if;
+  update public.shorts set status = 'failed' where id = v_short.id;
+  perform public.short_batch_settle(v_short.batch_id);
+end;
+$$;
+
+
+--
 -- Name: signup_credits(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8248,6 +8711,472 @@ $$;
 
 
 --
+-- Name: studio_brain_call(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_brain_call() RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public'
+    AS $$
+begin
+  return coalesce(auth.jwt()->>'opencmo_actor', '') = 'brain';
+end;
+$$;
+
+
+--
+-- Name: studio_order_move(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_order_move(p_id uuid, p_to text, p_text text DEFAULT NULL::text, p_error jsonb DEFAULT NULL::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_status text := (select status from public.work_orders where id = p_id and kind in ('build_video', 'cut_shorts'));
+begin
+  if v_status is null or v_status in ('done', 'failed', 'cancelled') or v_status = p_to then
+    return;
+  end if;
+  -- A card waits on the founder (a batch card raised while the runner was still finishing): it stays waiting. An
+  -- approved card goes back to work through the claims' `running`, never straight to `waiting_order`.
+  if p_to = 'waiting_order' and v_status = 'waiting_founder' then
+    return;
+  end if;
+  if p_to = 'waiting_founder' then
+    perform public.work_order_wait_founder(p_id, p_text);
+  elsif p_to in ('waiting_order', 'running') then
+    if v_status <> 'running' then
+      perform public.work_order_move(p_id, 'running');
+    end if;
+    if p_to = 'waiting_order' then
+      perform public.work_order_move(p_id, 'waiting_order', p_text);
+    end if;
+  elsif p_to = 'failed' then
+    perform public.work_order_move(p_id, 'failed', p_text, p_error);
+  else
+    raise exception 'The order runner cannot move an order to %.', p_to using errcode = '22023';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: work_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    root_id uuid,
+    parent_id uuid,
+    week date NOT NULL,
+    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    department text NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
+    budget_credits integer DEFAULT 0 NOT NULL,
+    spent_credits integer DEFAULT 0 NOT NULL,
+    due_at timestamp with time zone,
+    status text DEFAULT 'queued'::text NOT NULL,
+    error jsonb,
+    done_reason text,
+    run_id uuid,
+    item_id uuid,
+    created_by text DEFAULT 'loop'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
+    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
+    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
+    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
+    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
+    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
+    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
+    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
+    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
+);
+
+
+--
+-- Name: studio_orders_claim(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_orders_claim(p_order uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 3) RETURNS SETOF public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  for v_id in
+    select o.id from public.work_orders o
+    where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts') and (p_order is null or o.id = p_order)
+      and not public.cmo_paused(o.user_id)
+    order by o.created_at
+    limit greatest(1, least(coalesce(p_limit, 3), 10))
+    for update skip locked
+  loop
+    return next public.work_order_move(v_id, 'running');
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: studio_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_record_usage(p_order_id uuid, p_model text, p_input integer, p_output integer, p_cache_read integer, p_cache_write integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_total bigint;
+  v_credits integer;
+  v_held integer;
+  v_charge integer;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind in ('build_video', 'cut_shorts')) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_input is null or p_output is null or p_cache_read is null or p_cache_write is null
+     or least(p_input, p_output, p_cache_read, p_cache_write) < 0 then
+    raise exception 'Invalid usage.' using errcode = '22023';
+  end if;
+  perform public.lock_credit_owner(v_user);
+  insert into public.work_order_usage (user_id, order_id, model, input_tokens, output_tokens, cache_read_tokens,
+    cache_write_tokens, micro_usd)
+  values (v_user, p_order_id, left(coalesce(nullif(p_model, ''), 'unknown'), 64), p_input, p_output, p_cache_read, p_cache_write,
+    public.agent_micro_usd(p_model, p_input, p_output, p_cache_read, p_cache_write));
+  select coalesce(sum(micro_usd), 0)::bigint into v_total from public.work_order_usage where order_id = p_order_id;
+  v_credits := public.agent_credits(v_total);
+  v_held := public.credit_held('work_order', p_order_id);
+  if v_credits > v_held then
+    v_charge := least(v_credits - v_held, greatest(public.credit_balance(v_user), 0));
+    if v_charge > 0 then
+      perform public.credit_settle(v_user, 'work_order', p_order_id, v_held + v_charge, 'CMO video team usage');
+      perform public.work_order_spend(p_order_id, v_charge);
+    end if;
+  end if;
+  return v_credits;
+end;
+$$;
+
+
+--
+-- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.studio_steps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    clip_id uuid NOT NULL,
+    tool text NOT NULL,
+    kind text NOT NULL,
+    input jsonb NOT NULL,
+    card jsonb NOT NULL,
+    price_credits integer NOT NULL,
+    status text DEFAULT 'waiting'::text NOT NULL,
+    order_id uuid,
+    redo_of uuid,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    decision text,
+    decision_payload jsonb,
+    generation_id uuid,
+    next jsonb,
+    wait_for uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    next_done_at timestamp with time zone,
+    plan_input jsonb,
+    claimed_at timestamp with time zone,
+    CONSTRAINT studio_steps_card_check CHECK (((jsonb_typeof(card) = 'object'::text) AND (octet_length((card)::text) <= 32768))),
+    CONSTRAINT studio_steps_decision_check CHECK ((decision = ANY (ARRAY['approve'::text, 'edit'::text, 'redo'::text, 'cancel'::text]))),
+    CONSTRAINT studio_steps_decision_payload_check CHECK (((decision_payload IS NULL) OR ((jsonb_typeof(decision_payload) = 'object'::text) AND (octet_length((decision_payload)::text) <= 2048)))),
+    CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
+    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
+    CONSTRAINT studio_steps_next_check CHECK (((next IS NULL) OR ((jsonb_typeof(next) = 'object'::text) AND (next ? 'tool'::text) AND (octet_length((next)::text) <= 65536)))),
+    CONSTRAINT studio_steps_plan_input_check CHECK (((plan_input IS NULL) OR ((jsonb_typeof(plan_input) = 'object'::text) AND (octet_length((plan_input)::text) <= 65536)))),
+    CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
+    CONSTRAINT studio_steps_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'running'::text, 'done'::text, 'cancelled'::text, 'failed'::text]))),
+    CONSTRAINT studio_steps_tool_check CHECK ((tool ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT studio_steps_wait_for_check CHECK ((cardinality(wait_for) <= 60))
+);
+
+
+--
+-- Name: studio_step_finish(uuid, text, text, uuid, jsonb, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_finish(p_id uuid, p_status text, p_error text DEFAULT NULL::text, p_generation_id uuid DEFAULT NULL::uuid, p_next jsonb DEFAULT NULL::jsonb, p_wait_for uuid[] DEFAULT NULL::uuid[]) RETURNS public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.studio_steps;
+  v_ok boolean;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  select * into v_row from public.studio_steps where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Step not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = p_status and p_next is null then
+    return v_row;
+  end if;
+  v_ok := v_row.status = p_status or case v_row.status
+    when 'waiting' then p_status = 'cancelled'
+    when 'approved' then p_status in ('running', 'done', 'failed', 'cancelled')
+    when 'running' then p_status in ('done', 'failed', 'cancelled')
+    else false end;
+  if not coalesce(v_ok, false) then
+    raise exception 'A step cannot go from % to %.', v_row.status, p_status using errcode = 'P0001';
+  end if;
+  if p_status = 'failed' and nullif(trim(coalesce(p_error, '')), '') is null then
+    raise exception 'A failed step needs its error.' using errcode = '22023';
+  end if;
+  if p_next is not null and (jsonb_typeof(p_next) <> 'object' or not p_next ? 'tool') then
+    raise exception 'The next step is malformed.' using errcode = '22023';
+  end if;
+  -- A next step is set once, when the step itself runs: never on a step already done, failed or cancelled.
+  if p_next is not null and v_row.status not in ('approved', 'running') then
+    raise exception 'This step has already run.' using errcode = 'P0001';
+  end if;
+  -- The week's "credits used": what the step starts spending, recorded once as it leaves `approved` (a decide that
+  -- failed spent nothing). A redone keyframe costs what its generation holds.
+  if v_row.status = 'approved' and p_status in ('running', 'done') and v_row.order_id is not null then
+    if v_row.decision = 'approve' then
+      perform public.work_order_spend(v_row.order_id, v_row.price_credits);
+    elsif v_row.decision = 'redo' and p_generation_id is not null then
+      perform public.work_order_spend(v_row.order_id,
+        coalesce((select credits_reserved from public.generations where id = p_generation_id and user_id = v_user), 0));
+    end if;
+  end if;
+  if p_wait_for is not null and exists (select 1 from unnest(p_wait_for) w(id)
+      where not exists (select 1 from public.generations g where g.id = w.id and g.user_id = v_user)) then
+    raise exception 'A step only waits on the founder''s own generations.' using errcode = '22023';
+  end if;
+  update public.studio_steps
+  set status = p_status,
+      decision = case when v_row.status = 'waiting' then 'cancel' else decision end,
+      decided_at = coalesce(decided_at, now()),
+      error = case when p_status = 'failed' then left(p_error, 500) else error end,
+      generation_id = coalesce(p_generation_id, generation_id),
+      next = coalesce(p_next, next),
+      wait_for = coalesce(p_wait_for, wait_for),
+      next_done_at = case when p_next is not null then null else next_done_at end
+  where id = p_id
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: studio_step_plan_input(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_plan_input(p_id uuid, p_input jsonb) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ update public.studio_steps set plan_input = p_input where id = p_id and plan_input is null $$;
+
+
+--
+-- Name: studio_step_raise(uuid, text, text, jsonb, jsonb, integer, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_step_raise(p_clip_id uuid, p_tool text, p_kind text, p_input jsonb, p_card jsonb, p_price_credits integer, p_order_id uuid DEFAULT NULL::uuid, p_redo_of uuid DEFAULT NULL::uuid) RETURNS public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.studio_steps;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  perform public.owned_clip(p_clip_id, v_user);
+  if p_tool is null or p_tool not in ('generate_media', 'add_3d_scene', 'add_voiceover', 'replace_background',
+      'create_video', 'animate_video', 'redo_keyframe', 'edit_video', 'add_explainer', 'plan_video', 'request_export',
+      'add_captions', 'translate_captions') then
+    raise exception 'This Studio tool is not priced on a card.' using errcode = '22023';
+  end if;
+  if p_kind is null or p_kind not in ('script', 'price') or (p_kind = 'script' and p_tool not in ('create_video', 'plan_video')) then
+    raise exception 'Only a storyboard is a script card.' using errcode = '22023';
+  end if;
+  if p_input is null or jsonb_typeof(p_input) <> 'object' or p_card is null or jsonb_typeof(p_card) <> 'object' then
+    raise exception 'This step is malformed.' using errcode = '22023';
+  end if;
+  -- A price card always says how long the video is (a redone keyframe too: the video it belongs to).
+  if (p_kind = 'script' and jsonb_typeof(p_card->'beats') is distinct from 'array')
+     or (p_kind = 'price' and (jsonb_typeof(p_card->'seconds') is distinct from 'number' or (p_card->>'seconds')::numeric <= 0
+       or (p_card ? 'keyframes' and jsonb_typeof(p_card->'keyframes') <> 'array'))) then
+    raise exception 'This step is malformed.' using errcode = '22023';
+  end if;
+  if p_price_credits is null or p_price_credits < 0 then
+    raise exception 'A step needs its price.' using errcode = '22023';
+  end if;
+  if p_order_id is not null and not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_redo_of is not null and not exists (
+      select 1 from public.studio_steps where id = p_redo_of and user_id = v_user and clip_id = p_clip_id) then
+    raise exception 'The step this replaces was not found.' using errcode = 'P0002';
+  end if;
+  -- Cards are few by design (approval.md rule 3); a loop raising cards without end stops here.
+  if (select count(*) from public.studio_steps where user_id = v_user and status = 'waiting') >= 20 then
+    raise exception 'Too many Studio cards are waiting. Decide some first.' using errcode = 'P0001';
+  end if;
+  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, redo_of)
+  values (v_user, p_clip_id, p_tool, p_kind, p_input, p_card, p_price_credits, p_order_id, p_redo_of)
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: studio_steps_claim(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_claim(p_limit integer DEFAULT 5) RETURNS SETOF public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.studio_steps;
+begin
+  for v_row in
+    select s.* from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
+      and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes')
+    order by s.decided_at
+    limit greatest(1, least(coalesce(p_limit, 5), 10))
+    for update of s skip locked
+  loop
+    if v_row.claimed_at is not null then
+      update public.studio_steps set status = 'failed', error = 'Studio stopped while starting this step.' where id = v_row.id;
+      perform public.studio_order_move(v_row.order_id, 'failed', null, jsonb_build_object('code', 'step_interrupted',
+        'message', 'Studio stopped while starting a step. Nothing more will run for it.', 'retryable', true));
+      continue;
+    end if;
+    update public.studio_steps set claimed_at = now() where id = v_row.id returning * into v_row;
+    perform public.studio_order_move(v_row.order_id, 'running');
+    return next v_row;
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: studio_steps_ready(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_ready(p_limit integer DEFAULT 5) RETURNS SETOF public.studio_steps
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.studio_steps;
+begin
+  for v_row in
+    select s.* from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+      and not public.cmo_paused(s.user_id)
+      and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
+                      where g.status in ('queued', 'running'))
+    order by s.decided_at
+    limit greatest(1, least(coalesce(p_limit, 5), 10))
+    for update of s skip locked
+  loop
+    update public.studio_steps set next_done_at = now(), status = case when status = 'running' then 'done' else status end
+    where id = v_row.id returning * into v_row;
+    return next v_row;
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: studio_steps_sync(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_steps_sync() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if tg_op = 'DELETE' then
+    perform public.approval_close('studio_step', old.id, 'cancelled');
+    return old;
+  end if;
+  if new.status = 'waiting' then
+    perform public.approval_raise(new.user_id, 'studio_step', new.id);
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and old.status <> 'waiting' then
+    return new;
+  end if;
+  perform public.approval_close('studio_step', new.id, case new.decision
+    when 'approve' then 'approved' when 'edit' then 'edited' when 'redo' then 'edited' when 'cancel' then 'skipped'
+    else 'cancelled' end);
+  return new;
+end;
+$$;
+
+
+--
+-- Name: studio_video_budget(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_video_budget() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 60 $$;
+
+
+--
+-- Name: studio_work_count(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_work_count() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select (
+    (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
+       and not public.cmo_paused(o.user_id))
+    + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
+       where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
+         and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes'))
+    + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
+       where s.next is not null and s.next_done_at is null and o.status not in ('done', 'failed', 'cancelled')
+         and not public.cmo_paused(s.user_id)
+         and not exists (select 1 from unnest(s.wait_for) w(id) join public.generations g on g.id = w.id
+                         where g.status in ('queued', 'running')))
+  )::integer
+$$;
+
+
+--
 -- Name: sync_asset_transcript_from_task(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8392,6 +9321,59 @@ $$;
 
 
 --
+-- Name: tasks_studio_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.tasks_studio_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_short public.shorts;
+  v_order uuid;
+  v_user uuid;
+begin
+  if new.kind <> 'render_document' or new.status not in ('done', 'failed') or old.status = new.status or new.clip_id is null then
+    return new;
+  end if;
+  begin
+    select * into v_short from public.shorts where short_clip_id = new.clip_id;
+    if found then
+      if v_short.status = 'rendering' then
+        update public.shorts set status = case new.status when 'done' then 'ready' else 'failed' end where id = v_short.id;
+      end if;
+      perform public.short_batch_settle(v_short.batch_id);
+      return new;
+    end if;
+
+    -- A long video an order is making, once the order has reached its render (a step whose next is the render):
+    -- the founder's own exports of the edit before that neither raise card 3 nor fail the order.
+    select s.order_id, s.user_id into v_order, v_user from public.studio_steps s
+    join public.work_orders o on o.id = s.order_id
+    where s.clip_id = new.clip_id and o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled')
+      and s.next->>'tool' = 'render'
+    order by s.created_at desc limit 1;
+    if v_order is null then
+      return new;
+    end if;
+    if new.status = 'done' then
+      if new.settings_hash = (select public.editor_document_hash(document) from public.editor_projects where clip_id = new.clip_id) then
+        perform public.approval_raise(v_user, 'editor_project', new.clip_id);
+        perform public.work_order_wait_founder(v_order, 'Your video is rendered');
+      end if;
+    else
+      perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'render_failed',
+        'message', left(coalesce(nullif(new.error, ''), 'The render failed.'), 200), 'retryable', true));
+    end if;
+  exception when others then
+    raise warning 'studio render rule failed for task %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: upload_reservation_allows(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8494,49 +9476,6 @@ $$;
 
 
 --
--- Name: work_orders; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.work_orders (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    root_id uuid,
-    parent_id uuid,
-    week date NOT NULL,
-    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    department text NOT NULL,
-    kind text NOT NULL,
-    title text NOT NULL,
-    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
-    budget_credits integer DEFAULT 0 NOT NULL,
-    spent_credits integer DEFAULT 0 NOT NULL,
-    due_at timestamp with time zone,
-    status text DEFAULT 'queued'::text NOT NULL,
-    error jsonb,
-    done_reason text,
-    run_id uuid,
-    item_id uuid,
-    created_by text DEFAULT 'loop'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    finished_at timestamp with time zone,
-    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
-    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
-    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
-    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
-    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
-    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
-    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
-    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
-    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
-    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
-    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
-    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
-    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
-);
-
-
---
 -- Name: work_order_create(uuid, date, uuid, text, text, jsonb, integer, timestamp with time zone, uuid[], text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8557,7 +9496,7 @@ begin
     v_free := v_parent.budget_credits - v_parent.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = p_parent and status not in ('done', 'failed', 'cancelled')), 0);
-    if coalesce(p_budget, 0) > v_free then
+    if coalesce(p_budget, 0) > 0 and p_budget > v_free then
       raise exception 'The parent order has % credits left to hand out.', greatest(v_free, 0) using errcode = 'P0001';
     end if;
   end if;
@@ -8592,6 +9531,7 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
   select case p_kind
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
+    when 'build_video' then 'studio' when 'cut_shorts' then 'studio'
     else 'brain' end
 $$;
 
@@ -8864,6 +9804,56 @@ $$;
 
 
 --
+-- Name: work_order_wait_founder(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_wait_founder(p_id uuid, p_text text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_status text := (select status from public.work_orders where id = p_id);
+begin
+  if v_status is null or v_status in ('waiting_founder', 'done', 'failed', 'cancelled') then
+    return;
+  end if;
+  if v_status <> 'running' then
+    perform public.work_order_move(p_id, 'running');
+  end if;
+  perform public.work_order_move(p_id, 'waiting_founder', p_text);
+end;
+$$;
+
+
+--
+-- Name: work_order_week_root(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_order_week_root(p_user uuid) RETURNS public.work_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_week date := date_trunc('week', current_date)::date;
+  v_root public.work_orders;
+  v_goal text;
+  v_budget integer;
+begin
+  select * into v_root from public.work_orders where user_id = p_user and week = v_week and parent_id is null for update;
+  if found then
+    return v_root;
+  end if;
+  select goal into v_goal from public.cmo_goals where user_id = p_user and week = v_week and status = 'approved';
+  select weekly_credit_budget into v_budget from public.profiles where id = p_user;
+  return public.work_order_create(p_user, v_week, null, 'plan_week',
+    coalesce('Week of ' || to_char(v_week, 'Mon DD') || ': ' || v_goal, 'Week of ' || to_char(v_week, 'Mon DD')),
+    jsonb_build_object('objective', coalesce(v_goal, 'Plan and run this week''s marketing.')),
+    coalesce(v_budget, 0), (v_week + 7)::timestamptz);
+end;
+$$;
+
+
+--
 -- Name: work_orders_follow_approval(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8993,21 +9983,11 @@ CREATE FUNCTION public.work_orders_plan_week(p_user uuid, p_run uuid) RETURNS pu
 declare
   v_week date := date_trunc('week', current_date)::date;
   v_root public.work_orders;
-  v_goal text;
-  v_budget integer;
   v_item record;
   v_free integer;
   v_price integer;
 begin
-  select * into v_root from public.work_orders where user_id = p_user and week = v_week and parent_id is null for update;
-  if not found then
-    select goal into v_goal from public.cmo_goals where user_id = p_user and week = v_week and status = 'approved';
-    select weekly_credit_budget into v_budget from public.profiles where id = p_user;
-    v_root := public.work_order_create(p_user, v_week, null, 'plan_week',
-      coalesce('Week of ' || to_char(v_week, 'Mon DD') || ': ' || v_goal, 'Week of ' || to_char(v_week, 'Mon DD')),
-      jsonb_build_object('objective', coalesce(v_goal, 'Plan and run this week''s marketing.')),
-      coalesce(v_budget, 0), (v_week + 7)::timestamptz);
-  end if;
+  v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
   if v_root.status = 'queued' then
     v_root := public.work_order_move(v_root.id, 'running', 'Planned the week');
@@ -9016,27 +9996,42 @@ begin
   -- Orders whose calendar item the new plan deleted.
   for v_item in
     select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
-      and kind in ('post_draft', 'sales_scan') and status = 'queued' and created_by = 'loop' and id <> v_root.id
+      and kind in ('post_draft', 'sales_scan', 'build_video') and status = 'queued' and created_by = 'loop' and id <> v_root.id
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
 
   for v_item in
-    select c.id, c.department, c.idea, c.day from public.content_items c
-    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales')
+    select c.id, c.department, c.idea, c.reason, c.platform, c.day from public.content_items c
+    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales', 'video')
       and not exists (select 1 from public.work_orders o where o.item_id = c.id)
     order by c.day, c.created_at
   loop
-    v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
     v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    if v_item.department = 'video' then
+      -- The replan deleted the item of a video already under way (its order lost `item_id`): the new item is that
+      -- same video, not a second one this week.
+      update public.work_orders set item_id = v_item.id, updated_at = now()
+      where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
+                    and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
+      if found then
+        continue;
+      end if;
+      perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
+        jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
+          'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
+        least(public.studio_video_budget(), greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC',
+        '{}', 'loop', v_item.id);
+      continue;
+    end if;
+    v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
     -- Past the weekly budget the order is still planned, with nothing to spend: it shows as over budget.
     perform public.work_order_create(p_user, v_week, v_root.id,
       case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
       jsonb_build_object('objective', v_item.idea, 'done_when',
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
-      -- Due by the end of the item's own day (UTC, the calendar's day), so the page shows the day it was planned for.
       least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'loop', v_item.id);
   end loop;
 
@@ -9271,7 +10266,7 @@ CREATE TABLE public.credit_ledger (
     external_id text,
     ref_kind text,
     ref_id uuid,
-    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text]))),
+    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text, 'work_order'::text]))),
     CONSTRAINT credit_ledger_ref_pair CHECK (((ref_kind IS NULL) = (ref_id IS NULL)))
 );
 
@@ -9290,7 +10285,7 @@ CREATE TABLE public.deliverables (
     status text DEFAULT 'ready'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
-    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text]))),
+    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
 
@@ -9629,6 +10624,50 @@ CREATE TABLE public.scene_codes (
 
 
 --
+-- Name: short_batches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.short_batches (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    parent_clip_id uuid NOT NULL,
+    parent_hash text NOT NULL,
+    order_id uuid,
+    status text DEFAULT 'picking'::text NOT NULL,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT short_batches_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT short_batches_parent_hash_check CHECK ((parent_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT short_batches_status_check CHECK ((status = ANY (ARRAY['picking'::text, 'building'::text, 'rendering'::text, 'waiting_founder'::text, 'approved'::text, 'sent_back'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: shorts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shorts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    batch_id uuid NOT NULL,
+    parent_clip_id uuid,
+    short_clip_id uuid,
+    source_start numeric NOT NULL,
+    source_end numeric NOT NULL,
+    hook text NOT NULL,
+    reason text NOT NULL,
+    status text DEFAULT 'building'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT shorts_check CHECK (((source_end > source_start) AND ((source_end - source_start) <= (180)::numeric))),
+    CONSTRAINT shorts_hook_check CHECK (((char_length(hook) >= 1) AND (char_length(hook) <= 120))),
+    CONSTRAINT shorts_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 300))),
+    CONSTRAINT shorts_source_start_check CHECK ((source_start >= (0)::numeric)),
+    CONSTRAINT shorts_status_check CHECK ((status = ANY (ARRAY['building'::text, 'rendering'::text, 'ready'::text, 'approved'::text, 'sent_back'::text, 'failed'::text])))
+);
+
+
+--
 -- Name: storage_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9715,6 +10754,30 @@ ALTER TABLE public.work_order_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: work_order_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_order_usage (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    model text NOT NULL,
+    input_tokens integer NOT NULL,
+    output_tokens integer NOT NULL,
+    cache_read_tokens integer NOT NULL,
+    cache_write_tokens integer NOT NULL,
+    micro_usd bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT work_order_usage_cache_read_tokens_check CHECK ((cache_read_tokens >= 0)),
+    CONSTRAINT work_order_usage_cache_write_tokens_check CHECK ((cache_write_tokens >= 0)),
+    CONSTRAINT work_order_usage_input_tokens_check CHECK ((input_tokens >= 0)),
+    CONSTRAINT work_order_usage_micro_usd_check CHECK ((micro_usd >= 0)),
+    CONSTRAINT work_order_usage_model_check CHECK (((char_length(model) >= 1) AND (char_length(model) <= 64))),
+    CONSTRAINT work_order_usage_output_tokens_check CHECK ((output_tokens >= 0))
 );
 
 
@@ -10274,6 +11337,30 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: short_batches short_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shorts shorts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shorts shorts_short_clip_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_short_clip_id_key UNIQUE (short_clip_id);
+
+
+--
 -- Name: storage_deletions storage_deletions_bucket_path_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10287,6 +11374,14 @@ ALTER TABLE ONLY public.storage_deletions
 
 ALTER TABLE ONLY public.storage_deletions
     ADD CONSTRAINT storage_deletions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: studio_steps studio_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_pkey PRIMARY KEY (id);
 
 
 --
@@ -10327,6 +11422,14 @@ ALTER TABLE ONLY public.upload_reservations
 
 ALTER TABLE ONLY public.work_order_events
     ADD CONSTRAINT work_order_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: work_order_usage work_order_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_pkey PRIMARY KEY (id);
 
 
 --
@@ -10421,6 +11524,13 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 --
 
 CREATE INDEX caption_translations_user_idx ON public.caption_translations USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: clips_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clips_parent_idx ON public.clips USING btree (parent_clip_id) WHERE (parent_clip_id IS NOT NULL);
 
 
 --
@@ -10746,6 +11856,34 @@ CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, 
 
 
 --
+-- Name: short_batches_parent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_parent_idx ON public.short_batches USING btree (parent_clip_id);
+
+
+--
+-- Name: short_batches_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_user_idx ON public.short_batches USING btree (user_id, status, created_at);
+
+
+--
+-- Name: shorts_batch_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_batch_idx ON public.shorts USING btree (batch_id);
+
+
+--
+-- Name: shorts_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_user_idx ON public.shorts USING btree (user_id, created_at);
+
+
+--
 -- Name: storage_deletions_job_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10757,6 +11895,27 @@ CREATE INDEX storage_deletions_job_idx ON public.storage_deletions USING btree (
 --
 
 CREATE INDEX storage_deletions_work_idx ON public.storage_deletions USING btree (attempts, id);
+
+
+--
+-- Name: studio_steps_clip_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_clip_idx ON public.studio_steps USING btree (clip_id);
+
+
+--
+-- Name: studio_steps_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_order_idx ON public.studio_steps USING btree (order_id) WHERE (order_id IS NOT NULL);
+
+
+--
+-- Name: studio_steps_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_user_idx ON public.studio_steps USING btree (user_id, status, created_at);
 
 
 --
@@ -10799,6 +11958,13 @@ CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations U
 --
 
 CREATE INDEX work_order_events_user_idx ON public.work_order_events USING btree (user_id, at DESC);
+
+
+--
+-- Name: work_order_usage_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_usage_order_idx ON public.work_order_usage USING btree (order_id);
 
 
 --
@@ -10900,6 +12066,20 @@ CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EA
 
 
 --
+-- Name: editor_projects editor_projects_clear_finished; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_projects_clear_finished BEFORE UPDATE OF document ON public.editor_projects FOR EACH ROW EXECUTE FUNCTION public.editor_projects_clear_finished();
+
+
+--
+-- Name: editor_projects editor_projects_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER editor_projects_rules AFTER UPDATE ON public.editor_projects FOR EACH ROW EXECUTE FUNCTION public.editor_projects_rules();
+
+
+--
 -- Name: editor_revisions editor_revisions_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -10963,6 +12143,13 @@ CREATE TRIGGER reject_credit_ledger_change BEFORE DELETE OR UPDATE ON public.cre
 
 
 --
+-- Name: studio_steps studio_steps_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER studio_steps_sync AFTER INSERT OR DELETE OR UPDATE ON public.studio_steps FOR EACH ROW EXECUTE FUNCTION public.studio_steps_sync();
+
+
+--
 -- Name: tasks tasks_record_storage_deletions; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -10974,6 +12161,13 @@ CREATE TRIGGER tasks_record_storage_deletions BEFORE DELETE ON public.tasks FOR 
 --
 
 CREATE TRIGGER tasks_refund_media_captions AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.refund_media_captions_from_task();
+
+
+--
+-- Name: tasks tasks_studio_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tasks_studio_rules AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.tasks_studio_rules();
 
 
 --
@@ -11137,6 +12331,14 @@ ALTER TABLE ONLY public.caption_translations
 
 ALTER TABLE ONLY public.clips
     ADD CONSTRAINT clips_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: clips clips_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clips
+    ADD CONSTRAINT clips_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
 
 
 --
@@ -11564,6 +12766,94 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: short_batches short_batches_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: short_batches short_batches_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
+
+
+--
+-- Name: short_batches short_batches_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.short_batches
+    ADD CONSTRAINT short_batches_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shorts shorts_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.short_batches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: shorts shorts_parent_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_parent_clip_id_fkey FOREIGN KEY (parent_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
+
+
+--
+-- Name: shorts shorts_short_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_short_clip_id_fkey FOREIGN KEY (short_clip_id) REFERENCES public.clips(id) ON DELETE SET NULL;
+
+
+--
+-- Name: shorts shorts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shorts
+    ADD CONSTRAINT shorts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: studio_steps studio_steps_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_clip_id_fkey FOREIGN KEY (clip_id) REFERENCES public.clips(id) ON DELETE CASCADE;
+
+
+--
+-- Name: studio_steps studio_steps_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: studio_steps studio_steps_redo_of_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_redo_of_fkey FOREIGN KEY (redo_of) REFERENCES public.studio_steps(id) ON DELETE SET NULL;
+
+
+--
+-- Name: studio_steps studio_steps_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.studio_steps
+    ADD CONSTRAINT studio_steps_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: tasks tasks_asset_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11633,6 +12923,22 @@ ALTER TABLE ONLY public.work_order_events
 
 ALTER TABLE ONLY public.work_order_events
     ADD CONSTRAINT work_order_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_order_usage work_order_usage_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_order_usage work_order_usage_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_order_usage
+    ADD CONSTRAINT work_order_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -12058,10 +13364,38 @@ CREATE POLICY "read own order events" ON public.work_order_events FOR SELECT TO 
 
 
 --
+-- Name: work_order_usage read own order usage; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+
+--
 -- Name: page_captures read own page captures; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: short_batches read own short batches; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own short batches" ON public.short_batches FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: shorts read own shorts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own shorts" ON public.shorts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: studio_steps read own studio steps; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own studio steps" ON public.studio_steps FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -12078,10 +13412,28 @@ CREATE POLICY "read own work orders" ON public.work_orders FOR SELECT TO authent
 ALTER TABLE public.scene_codes ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: short_batches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.short_batches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: shorts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: storage_deletions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.storage_deletions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: studio_steps; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.studio_steps ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: tasks; Type: ROW SECURITY; Schema: public; Owner: -
@@ -12100,6 +13452,12 @@ ALTER TABLE public.upload_reservations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.work_order_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_order_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_order_usage ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: work_orders; Type: ROW SECURITY; Schema: public; Owner: -

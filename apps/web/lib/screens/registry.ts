@@ -80,7 +80,7 @@ export const SCREENS = {
   // Voice is the Library's learned notes (Writer W0–W1); the drafts are live today.
   writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts"], release: ["drafts"] }),
   // Uploads come from /api/v1/projects on the page; `items` holds only generated work (none before S1).
-  studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items"], release: ["items"] }),
+  studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
   // Mentions and the stuck banner come with Sales safety (R1).
   sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week"], release: ["threads", "week"] }),
   schedule: entry({ schema: ScheduleScreenSchema, fixture: scheduleFixture, empty: scheduleEmpty, live: [], release: ["slots", "accounts"] }),

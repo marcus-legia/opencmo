@@ -3,7 +3,7 @@
  * is the first five of `Main.dc.html`; the rest are here for the card sheet and `/app/inbox/[id]`.
  */
 
-import type { ApprovalCard } from "../approval-card";
+import type { ApprovalCard, StudioSnapshot } from "../approval-card";
 import { at } from "./shared";
 
 const base = {
@@ -59,7 +59,19 @@ export const PRICE_CARD: ApprovalCard = {
   meta: "Credits held until the video is done",
   priceCredits: 24,
   expiresAt: at("2026-10-29", "11:42"),
-  body: { kind: "price", what: "Long video “How the CMO plans a week”", shots: 12, seconds: 60, readyInMinutes: 25 },
+  body: {
+    kind: "price",
+    stepId: "step-sample-2",
+    what: "Long video “How the CMO plans a week”",
+    keyframes: [
+      { index: 0, label: "You recorded the demo.", thumbUrl: null, garbled: false, credits: 1 },
+      { index: 1, label: "Now cut it by words.", thumbUrl: null, garbled: true, credits: 1 },
+      { index: 2, label: "Ask for B-roll.", thumbUrl: null, garbled: false, credits: 1 },
+    ],
+    shots: 12,
+    seconds: 60,
+    readyInMinutes: 25,
+  },
 };
 
 export const SHORTS_CARD: ApprovalCard = {
@@ -72,11 +84,13 @@ export const SHORTS_CARD: ApprovalCard = {
   meta: "Cut from a finished edit · no generation credits",
   body: {
     kind: "shorts_batch",
+    batchId: "batch-sample",
+    parentClipId: "clip-sample",
     source: "Editor launch",
     shorts: [
-      { start: 0, end: 22, hook: "Cut by words", previewUrl: null },
-      { start: 18, end: 41, hook: "B-roll on the line", previewUrl: null },
-      { start: 38, end: 60, hook: "Edit by asking", previewUrl: null },
+      { shortClipId: "short-sample-1", start: 0, end: 22, hook: "Cut by words", reason: "Opens on the pain every founder knows", previewUrl: null },
+      { shortClipId: "short-sample-2", start: 18, end: 41, hook: "B-roll on the line", reason: "Shows the slash command working", previewUrl: null },
+      { shortClipId: "short-sample-3", start: 38, end: 60, hook: "Edit by asking", reason: "Ends on the strongest demo moment", previewUrl: null },
     ],
   },
 };
@@ -168,10 +182,13 @@ export const SCRIPT_CARD: ApprovalCard = {
   meta: "Nothing spent yet",
   body: {
     kind: "script",
+    stepId: "step-sample-1",
+    seconds: 60,
+    aspect: "9:16",
     beats: [
-      { words: "You recorded the demo.", picture: "Desk, laptop, morning light." },
-      { words: "Now cut it by words.", picture: "Transcript lines fade out." },
-      { words: "Ask for B-roll.", picture: "Slash command, shot drops in." },
+      { words: "You recorded the demo.", picture: "Desk, laptop, morning light.", motion: "Slow push in on the screen." },
+      { words: "Now cut it by words.", picture: "Transcript lines fade out.", motion: "Lines lift away one by one." },
+      { words: "Ask for B-roll.", picture: "Slash command, shot drops in.", motion: null },
     ],
     nextPriceCredits: 6,
   },
@@ -185,7 +202,7 @@ export const FINISHED_CARD: ApprovalCard = {
   title: "“Editor launch” is rendered · 1:00",
   summary: "Approving marks it finished: Shorts can be cut from it.",
   meta: "Open in the editor to tweak first",
-  body: { kind: "finished_video", clipId: "clip-sample", seconds: 60, previewUrl: null },
+  body: { kind: "finished_video", clipId: "clip-sample", documentHash: "1".repeat(64), seconds: 60, previewUrl: null, frameAt: 2 },
 };
 
 export const SLIDESHOW_CARD: ApprovalCard = {
@@ -245,4 +262,55 @@ export const ALL_KINDS: ApprovalCard[] = [
   SLIDESHOW_CARD,
   SCHEDULE_CARD,
   CORRECTION_CARD,
+];
+
+/**
+ * One snapshot per Studio kind, as `approval_snapshot` writes it. The script one is the exact output asserted in
+ * `supabase/tests/205_p2_studio.test.sql`, so the SQL and the TypeScript shape cannot drift apart unnoticed.
+ */
+export const STUDIO_SNAPSHOTS: StudioSnapshot[] = [
+  {
+    kind: "script",
+    step_id: "e2053000-0000-4000-8000-00000000000a",
+    clip_id: "e2052000-0000-4000-8000-00000000000a",
+    tool: "create_video",
+    title: "How the CMO plans a week",
+    seconds: 60,
+    aspect: "9:16",
+    beats: [{ words: "You recorded the demo.", picture: "Desk, laptop.", motion: "Slow push in." }],
+    price_credits: 6,
+  },
+  {
+    kind: "price",
+    step_id: "step-sample-2",
+    clip_id: "clip-sample",
+    tool: "animate_video",
+    title: "How the CMO plans a week",
+    what: "12 shots, voice-over, music",
+    seconds: 60,
+    wait_minutes: 25,
+    keyframes: [{ index: 0, words: "You recorded the demo.", path: "user/keyframes/00.png", garbled: false, credits: 1 }],
+    shots: 12,
+    price_credits: 24,
+  },
+  {
+    kind: "finished_video",
+    clip_id: "clip-sample",
+    title: "Editor launch",
+    document_hash: "1".repeat(64),
+    render_task_id: "task-sample",
+    render_path: "user/clip-sample/task-sample.mp4",
+    seconds: 60,
+  },
+  {
+    kind: "shorts_batch",
+    batch_id: "batch-sample",
+    parent_clip_id: "clip-sample",
+    title: "Editor launch",
+    parent_hash: "1".repeat(64),
+    shorts: [
+      { short_id: "s1", short_clip_id: "short-sample-1", start: 0, end: 22, hook: "Cut by words", reason: "Opens on the pain every founder knows" },
+      { short_id: "s2", short_clip_id: null, start: 18, end: 41, hook: "B-roll on the line", reason: "Shows the slash command working" },
+    ],
+  },
 ];

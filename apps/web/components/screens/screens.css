@@ -310,6 +310,8 @@
 .scr-team .is-running { font-weight: 600; }
 .scr-team .is-running .scr-team-mark { width: 16px; height: 6px; background: var(--v2-brand); }
 .scr-team .is-todo { color: var(--v2-ink2); }
+.scr-team.is-compact { padding: 4px 0 0; }
+.scr-team.is-compact li { padding: 3px 0; border-bottom: 0; font-size: 12px; font-weight: 400; }
 .scr-drawer { margin: 0 0 0 auto; height: 100vh; max-height: 100vh; width: min(480px, 100vw); border-radius: 0; }
 .scr-drawer .scr-dialog-body { min-height: 100%; }
 .scr-drawer-block { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 14px; border: 1px solid var(--v2-line); border-radius: 4px; background: var(--v2-paper2); }

@@ -3,17 +3,19 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { api } from "@/components/clipping/api";
+import { ApiError, api } from "@/components/clipping/api";
 import { createBlankEdit } from "@/components/editor/ClipPicker";
+import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, ButtonLink, EmptyState, SampleTag, Tabs } from "@/components/ui";
 import type { Project } from "@/lib/clipping-types";
-import { STUDIO_KINDS, type StudioScreen as Data } from "@/lib/screens/studio";
+import { STUDIO_KINDS, type StudioScreen as Data, type TeamStep } from "@/lib/screens/studio";
 
 import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
 import { useScreen } from "../useScreen";
 import { StudioCard, type CardActions } from "./StudioCard";
 import { StudioDrawer } from "./StudioDrawer";
+import { cutShorts, markFinished, type EditState } from "./finish";
 import { SORTS, projectCard, screenCard, sortCards, type Card, type Sort } from "./model";
 import { useProjects } from "./useProjects";
 
@@ -38,7 +40,10 @@ export function StudioScreen() {
   const [itemId, setItemId] = useState<string | null>(params.get("item"));
   const [error, setError] = useState<string | null>(null);
   const projects = useProjects(query);
-  const [screen] = useScreen("studio");
+  const [screen, reloadScreen] = useScreen("studio");
+  const { toast } = useShellState();
+  /** The edit a Mark finished or Cut shorts call is running for. */
+  const [finishing, setFinishing] = useState<string | null>(null);
 
   // The search box lives in the URL (`?q=`), so coming back to Studio shows the same results.
   useEffect(() => {
@@ -57,6 +62,35 @@ export function StudioScreen() {
   }, []);
 
   const sampleItems = screen.status === "ready" && !screen.live.items;
+  // Sample edit states would put buttons for edits that do not exist on real uploads.
+  const editStates = useMemo(
+    () => new Map<string, EditState>(screen.status === "ready" && screen.live.editStates ? screen.data.editStates.map((e) => [e.clipId, e]) : []),
+    [screen],
+  );
+
+  const finish = useCallback(
+    async (clipId: string, run: () => Promise<unknown>, done: string) => {
+      if (finishing) return;
+      if (sampleItems && !editStates.has(clipId)) {
+        toast(`${done} (sample, nothing was sent).`);
+        return;
+      }
+      setFinishing(clipId);
+      setError(null);
+      try {
+        await run();
+        toast(done);
+        reloadScreen();
+      } catch (err) {
+        // A stale hash or an edit that is not finished: the server's sentence says what to do.
+        setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+        reloadScreen();
+      } finally {
+        setFinishing(null);
+      }
+    },
+    [finishing, sampleItems, editStates, toast, reloadScreen],
+  );
   const cards = useMemo(() => {
     const uploads = projects.projects.map(projectCard);
     const ids = new Set(uploads.map((c) => c.id));
@@ -109,6 +143,8 @@ export function StudioScreen() {
       void projects.remove(card.project);
       if (itemId === card.id) openItem(null);
     },
+    markFinished: (clipId, documentHash) => void finish(clipId, () => markFinished(clipId, documentHash), "Marked finished. Shorts can be cut from it"),
+    cutShorts: (clipId) => void finish(clipId, () => cutShorts(clipId), "Cutting 3 shorts. The batch card comes to your Dashboard"),
   };
 
   return (
@@ -196,7 +232,7 @@ export function StudioScreen() {
           ) : (
             <div className="scr-grid">
               {visible.map((card) => (
-                <StudioCard key={card.id} card={card} busy={projects.busyId === card.id} actions={actions} />
+                <StudioCard key={card.id} card={card} busy={projects.busyId === card.id || (!!finishing && finishing === card.clipId)} actions={actions} />
               ))}
             </div>
           )}
@@ -216,6 +252,8 @@ export function StudioScreen() {
         actions={actions}
         onClose={() => openItem(null)}
         onProject={projects.replace}
+        editStates={editStates}
+        finishing={finishing}
       />
     </Screen>
   );
@@ -224,18 +262,24 @@ export function StudioScreen() {
 function TeamPanel({ team, sample }: { team: NonNullable<Data["team"]>; sample: boolean }) {
   return (
     <Panel id="studio-video-team-now" className="scr-side" title={<>Video team · now {sample && <SampleTag />}</>} sub={team.title}>
-      <ol className="scr-team">
-        {team.steps.map((step, i) => (
-          <li key={step.label} className={`is-${step.state}`}>
-            <span className="scr-team-mark" aria-hidden="true">
-              {step.state === "done" ? "✓" : step.state === "running" ? "" : i + 1}
-            </span>
-            <span>{step.label}</span>
-            <span className="scr-sr-only">{step.state === "done" ? "done" : step.state === "running" ? "in progress" : "to do"}</span>
-          </li>
-        ))}
-      </ol>
+      <TeamSteps steps={team.steps} />
     </Panel>
   );
 }
 
+/** The Video team's steps on one video: Studio's team panel and, compact, under a video order on Brain. */
+export function TeamSteps({ steps, compact = false }: { steps: TeamStep[]; compact?: boolean }) {
+  return (
+    <ol className={compact ? "scr-team is-compact" : "scr-team"}>
+      {steps.map((step, i) => (
+        <li key={step.label} className={`is-${step.state}`}>
+          <span className="scr-team-mark" aria-hidden="true">
+            {step.state === "done" ? "✓" : step.state === "running" ? "" : i + 1}
+          </span>
+          <span>{step.label}</span>
+          <span className="scr-sr-only">{step.state === "done" ? "done" : step.state === "running" ? "in progress" : "to do"}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}

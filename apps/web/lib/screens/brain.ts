@@ -6,6 +6,7 @@
 import { z } from "zod";
 
 import { CmoStateSchema, CreditsSchema, DepartmentSchema, day, iso } from "./common";
+import { TeamStepSchema } from "./studio";
 
 /** Same values as `work_orders.status` (brain plan W1-3). */
 export const ORDER_STATES = ["queued", "running", "waiting_founder", "waiting_order", "deferred", "done", "failed", "cancelled"] as const;
@@ -27,6 +28,8 @@ export const OrderRowSchema = z.object({
   stateText: z.string().max(80),
   /** A card to open from the row ("Open"). */
   approvalId: z.string().nullable(),
+  /** A video order's team steps (P2), the same lines as Studio's Video team panel; absent for other orders. */
+  steps: z.array(TeamStepSchema).optional(),
 });
 export type OrderRow = z.infer<typeof OrderRowSchema>;
 

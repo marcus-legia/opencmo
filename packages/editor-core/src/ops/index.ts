@@ -48,6 +48,7 @@ import { createVideo, redoKeyframe } from './create-video';
 import { add3d, addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addLottie, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
+export { makeShort, makeShortInput, MAX_SHORT_SECONDS, SHORT_FRAME, shotBeats, spokenWords, type MakeShort, type SpokenWord, type TimelineSpan } from './shorts';
 import { styleOp, type StyleDeps } from '../style/apply';
 // Track C: proof B-roll.
 import { addProof } from '../proof';
