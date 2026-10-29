@@ -8,6 +8,8 @@
  * read in a skill, never a check that drops a draft.
  */
 
+import { countHashtags } from "../platforms";
+
 import { normalizeNumber } from "./context";
 
 export const X_LIMIT = 280;
@@ -17,11 +19,9 @@ export type CheckRules = { avoid: string[]; known: Set<string> };
 /** A URL, a `www.` address, or a bare domain on a TLD people link to ("opencmo.io/pricing"); not "Next.js". */
 const LINK = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+|\b[a-z0-9][a-z0-9-]*\.(?:com|io|ai|co|app|dev|net|org|so|xyz|me|ly|gg|sh|to|tv|link|site|online|store|tech|page|info|biz|us|uk)\b(?!\.\w)/i;
 
-/** A hashtag as platforms read it: `#` after a space or the start, with at least one letter ("#buildinpublic", not "#1" or "C#"). */
-const HASHTAG = /(?:^|[^\p{L}\p{N}_&/])#(?=[\p{N}_]*\p{L})[\p{L}\p{N}_]+/gu;
-
 export const hasLink = (text: string): boolean => LINK.test(text);
-export const hashtagCount = (text: string): number => (text.match(HASHTAG) ?? []).length;
+/** Hashtags the way the platforms count them ("#buildinpublic", not "#1" or "C#"), the same count the cards show. */
+export const hashtagCount = countHashtags;
 
 /** Words the strategy says to avoid, and numbers the documents do not hold: the fact checks every kind shares. */
 export function factIssues(text: string, rules: CheckRules): string[] {

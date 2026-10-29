@@ -12,26 +12,13 @@
 import { z } from "zod";
 
 import type { Documents } from "../jobs/types";
+import type { PlatformProfile } from "../platforms";
 
 export const WRITER_KINDS = ["post", "caption", "youtube", "video_brief", "slides"] as const;
 export type WriterKind = (typeof WRITER_KINDS)[number];
 
-/**
- * The fields Writer reads from a platform profile (`packages/contracts/platforms.json`, Session A's A0).
- * `limit` counts characters; for YouTube it is the description and `titleLimit` the title. `hashtags` is
- * the most a text may carry: 0 for every post profile (owner decision 2026-10-26, `writer.md` §7).
- */
-export type WriterProfile = {
-  id: string;
-  kind: "post" | "caption" | "youtube";
-  limit: number;
-  /** Characters a reader sees before "more"; null when the whole text shows. */
-  visibleBeforeMore: number | null;
-  tone: string;
-  hashtags: number;
-  links: boolean;
-  titleLimit?: number;
-};
+/** A platform profile (`packages/contracts/platforms.json`, A0): limit, title limit, "more" cut, tone, hashtags, links. */
+export type WriterProfile = PlatformProfile;
 
 /** Which profile kind each writer kind drafts for. Video briefs and slides go to Studio, not a platform. */
 export const PROFILE_KIND: Record<WriterKind, WriterProfile["kind"] | null> = {

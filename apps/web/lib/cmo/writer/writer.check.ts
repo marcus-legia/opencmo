@@ -1,6 +1,7 @@
 /**
  * Writer's pure parts: the contract (kinds, the video brief shared with Studio); W0's post rules (no links,
- * no hashtags) and No AI Slop as guidance read by the writer, the checker, sales and CMO chat.
+ * no hashtags) and No AI Slop as guidance read by the writer, the checker, sales and CMO chat; W1's posts per
+ * platform profile (one writer agent each, one cached prefix, checks from `platforms.json`).
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/writer/writer.check.ts
  */
@@ -9,14 +10,19 @@ import assert from "node:assert/strict";
 import { VideoBriefSchema as StudioBriefSchema } from "@/lib/departments/studio/types";
 import { briefRequest } from "@/lib/departments/studio/video";
 
+import { AGENT_SPECS, POST_WRITERS } from "../agents/registry";
 import { checkPost } from "../jobs/check-post";
-import { REVIEW_SYSTEM } from "../jobs/draft-post";
+import { postProfile, REVIEW_SYSTEM } from "../jobs/draft-post";
+import { memoryStore } from "../jobs/memory-store";
+import { drainCmoQueue } from "../jobs/runner";
+import { isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
+import { POST_PROFILES, profileOf } from "../platforms";
 import { CMO_SKILLS } from "../skills/index.gen";
 import { skillIndex } from "../skills";
 
-import { captionText, checkCaption, checkSlides, checkYoutube, cleanHashtags } from "./checks";
-import { profileBlock, voiceBlock, writerData } from "./context";
+import { captionText, checkCaption, checkPostFor, checkSlides, checkYoutube, cleanHashtags, moreAdvice } from "./checks";
+import { profileBlock, profileFromPrompt, voiceBlock, writerData } from "./context";
 import { createWriter, type WriterThink } from "./draft";
 import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
 import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS, type WriterContext, type WriterProfile } from "./types";
@@ -71,14 +77,20 @@ for (const clean of [
 ]) assert.deepEqual(stockPatterns(clean), [], `clean: ${clean}`);
 
 // Writer core: code checks per kind and profile.
-const instagram: WriterProfile = { id: "instagram", kind: "caption", limit: 2200, visibleBeforeMore: 125, tone: "hook in the first line", hashtags: 5, links: false };
-const tiktok: WriterProfile = { id: "tiktok", kind: "caption", limit: 2200, visibleBeforeMore: 100, tone: "short", hashtags: 3, links: false };
-const youtube: WriterProfile = { id: "youtube", kind: "youtube", limit: 5000, titleLimit: 100, visibleBeforeMore: null, tone: "searchable", hashtags: 3, links: false };
-const threads: WriterProfile = { id: "threads", kind: "post", limit: 500, visibleBeforeMore: null, tone: "conversational", hashtags: 0, links: false };
+const profile = (id: string): WriterProfile => {
+  const found = profileOf(id);
+  assert.ok(found, `profile ${id}`);
+  return found;
+};
+const instagram = profile("instagram_caption");
+const tiktok = profile("tiktok_caption");
+const youtube = profile("youtube");
+const threads = profile("threads");
+const tiktok3: WriterProfile = { ...tiktok, hashtags: 3 };
 assert.deepEqual(cleanHashtags(["#BuildInPublic", "buildinpublic", " #saas ", "#", "#1", "build in public"]), ["BuildInPublic", "saas"], "one tag per word, no empty or number-only tags");
 assert.equal(captionText({ text: "Hook line ", hashtags: ["saas", "#founder"] }), "Hook line\n\n#saas #founder");
-assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d"] }, tiktok, rules), ["It has 4 hashtags; tiktok takes at most 3."]);
-assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, tiktok, rules), ["It has 4 hashtags; tiktok takes at most 3."], "tags in the text count too");
+assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d", "e", "f"] }, tiktok, rules), ["It has 6 hashtags; the TikTok caption takes at most 5."]);
+assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, tiktok3, rules), ["It has 4 hashtags; the TikTok caption takes at most 3."], "tags in the text count too");
 assert.ok(checkCaption({ text: "See paylane.app", hashtags: [] }, instagram, rules).some((issue) => issue.includes("link")));
 assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, instagram, rules)[0]?.includes("2202 characters"), "the limit counts the published caption with its hashtags");
 assert.deepEqual(checkYoutube({ title: "How Paylane chases late invoices", description: "A walk through.", hashtags: ["saas"] }, youtube, rules), []);
@@ -88,7 +100,7 @@ assert.ok(checkSlides([{ heading: "One", body: "" }], rules)[0]?.includes("1 sli
 assert.deepEqual(checkSlides(Array.from({ length: 5 }, (_, i) => ({ heading: `Slide ${i + 1}`, body: "" })), rules), []);
 
 // The data after the cached prefix: profile, then the founder's rules, then their voice (newest, heaviest first).
-assert.match(profileBlock(threads), /platform: threads[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
+assert.match(profileBlock(threads), /platform: threads \(Threads\)[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
 assert.match(profileBlock(youtube), /title limit: 100 characters; description limit: 5000 characters/);
 const voice = voiceBlock([
   { body: "Old note", weight: 0.2, createdAt: "2026-09-01T00:00:00Z" },
@@ -128,20 +140,20 @@ async function writerChecks() {
   assert.deepEqual(ig.hashtags, ["freelancer", "invoicing"], "hashtags cleaned, the 14 from the transcript is a known number");
   await writer.draft("caption", tiktok, { video }, ctx);
   assert.equal(run.calls[0]!.system, run.calls[1]!.system, "one cached prefix for every caption profile");
-  assert.ok(run.calls[0]!.prompt.includes("platform: instagram") && run.calls[1]!.prompt.includes("platform: tiktok"));
+  assert.ok(run.calls[0]!.prompt.includes("platform: instagram_caption") && run.calls[1]!.prompt.includes("platform: tiktok_caption"));
 
   // A failed code check gets one fix round with the reasons; the fixed caption is kept.
-  const tooMany = { ...caption, hashtags: ["a1", "b1", "c1", "d1"] };
+  const tooMany = { ...caption, hashtags: ["a1", "b1", "c1", "d1", "e1", "f1"] };
   const fixed = scripted([tooMany, caption]);
   const out = await createWriter({ think: fixed.think, agentFor: () => "x_writer", canFix: true }).draft("caption", tiktok, { video }, ctx);
   assert.equal(fixed.calls.length, 2);
-  assert.match(fixed.calls[1]!.prompt, /<problems>It has 4 hashtags; tiktok takes at most 3\.<\/problems>/);
-  assert.equal(fixed.calls[1]!.label, "write_caption_tiktok_fix");
+  assert.match(fixed.calls[1]!.prompt, /<problems>It has 6 hashtags; the TikTok caption takes at most 5\.<\/problems>/);
+  assert.equal(fixed.calls[1]!.label, "write_caption_tiktok_caption_fix");
   assert.deepEqual(out.hashtags, ["freelancer", "invoicing"]);
 
   // Still failing after the fix (or no fix allowed): the run fails with the reasons, no card.
   const stuck = scripted([tooMany]);
-  await assert.rejects(createWriter({ think: stuck.think, agentFor: () => "x_writer", canFix: false }).draft("caption", tiktok, { video }, ctx), /failed our checks\. It has 4 hashtags/);
+  await assert.rejects(createWriter({ think: stuck.think, agentFor: () => "x_writer", canFix: false }).draft("caption", tiktok, { video }, ctx), /failed our checks\. It has 6 hashtags/);
 
   // Posts: the versions that pass the code are kept; a link or hashtag drops a version, never the style.
   const post = { versions: [{ text: "We send the reminder on day 3.", angle: "a" }, { text: "Try it at paylane.app", angle: "b" }, { text: "Day 7 is the second nudge #saas", angle: "c" }], rationale: "r" };
@@ -178,7 +190,64 @@ async function writerChecks() {
   await assert.rejects(createWriter({ think: scripted([]).think, agentFor: () => "x_writer", canFix: false }).draft("caption", threads, { video }, ctx), /caption profile/);
 }
 
-writerChecks().then(
+// W1: posts per platform profile.
+async function postChecks() {
+  for (const p of POST_PROFILES) {
+    const agent = POST_WRITERS[p.id];
+    assert.ok(agent && AGENT_SPECS[agent].tier === "draft", `${p.id} has its own drafting agent`);
+  }
+  assert.deepEqual([postProfile("threads").id, postProfile("linkedin").id, postProfile("x").id], ["threads", "linkedin", "x"]);
+  assert.deepEqual([postProfile(null).id, postProfile("reddit").id, postProfile("tiktok_caption").id], ["x", "x", "x"], "no item, an unknown or a caption platform: X");
+  const linkedin = profile("linkedin");
+  const x = profile("x");
+  const long = `${"Late invoices are a process problem. ".repeat(11).trim()}`;
+  assert.ok([...long].length > 280 && [...long].length <= 500);
+  assert.deepEqual(checkPostFor(long, threads, rules), [], "Threads takes 500 characters");
+  assert.ok(checkPostFor(long, x, rules)[0]?.includes("X allows 280"));
+  assert.deepEqual(checkPostFor(`${long}\n\n${long}\n\n${long}`, linkedin, rules), [], "LinkedIn takes 3,000");
+  assert.ok(checkPostFor(long.repeat(9), linkedin, rules)[0]?.includes("LinkedIn allows 3000"));
+  assert.ok(checkPostFor("Ship it #buildinpublic", linkedin, rules).some((issue) => issue.includes("hashtag")), "no hashtags on any post profile");
+  assert.ok(moreAdvice(long, linkedin)[0]?.includes('LinkedIn shows about 140 before "more"'), "a long first line gets advice on LinkedIn");
+  assert.deepEqual(moreAdvice(`Late invoices are a process.\n\n${long}`, linkedin), [], "a short first line lands before the cut");
+  assert.deepEqual(moreAdvice(long, threads), [], "Threads shows the whole post");
+
+  // A Threads item through the founder's Claude: its own agent, the <platform> block first, X's prefix.
+  process.env.OPENCMO_AGENT_FAKE = "1";
+  const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] }, content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] } };
+  const item = (platform: string, id: string): ItemRow => ({ id, run_id: null, department: "post", platform, day: isoDay(), idea: "Why reminders on day 3, 7 and 14 get invoices paid", reason: "pillar", status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
+  const mem = memoryStore(docs, []);
+  mem.items.push(item("threads", "t1"), item("x", "x1"));
+  mem.enqueue("post_draft", { brain: "claude", item_id: "t1" });
+  mem.enqueue("post_draft", { brain: "claude", item_id: "x1" });
+  await drainCmoQueue(mem.store);
+  const [onThreads, onX] = mem.inbox;
+  assert.ok(onThreads && onX, "both runs wait for Claude");
+  assert.deepEqual([onThreads.request.agent, onX.request.agent], ["threads_writer", "x_writer"]);
+  assert.equal(onThreads.request.system, onX.request.system, "one cached prefix for every post profile");
+  assert.deepEqual([profileFromPrompt(onThreads.request.prompt), profileFromPrompt(onX.request.prompt)], ["threads", "x"]);
+  assert.match(onThreads.request.title, /today's Threads post/);
+  // A 400-character version is a Threads post, never an X one.
+  const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
+  mem.submit(onThreads.id, "draft_post", answer);
+  mem.submit(onX.id, "draft_post", answer);
+  await drainCmoQueue(mem.store);
+  const threadsCard = mem.items.find((i) => i.id === "t1")!;
+  const xCard = mem.items.find((i) => i.id === "x1")!;
+  assert.equal(threadsCard.status, "in_review");
+  assert.deepEqual([threadsCard.body.text, threadsCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]]);
+  assert.deepEqual([xCard.body.text, xCard.body.alternates], ["Reminders on day 3, 7 and 14.", []], "the long version is dropped on X");
+
+  // The fake writer drafts LinkedIn too, end to end.
+  const fake = memoryStore(docs, []);
+  fake.items.push(item("linkedin", "l1"));
+  const run = fake.enqueue("post_draft", { item_id: "l1" });
+  await drainCmoQueue(fake.store);
+  assert.equal(run.status, "done", `LinkedIn draft (${run.error})`);
+  assert.equal(fake.items.find((i) => i.id === "l1")!.status, "in_review");
+  delete process.env.OPENCMO_AGENT_FAKE;
+}
+
+writerChecks().then(postChecks).then(
   () => console.log("writer.check: ok"),
   (error) => {
     console.error(error);

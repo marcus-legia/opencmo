@@ -21,14 +21,14 @@ import "server-only";
  * the two tiers. `groq` is a spelling of `openai` on Groq's endpoint. Moving every agent to another
  * vendor is env only (docs/plans/editor/2026-10-20-editor-mcp-providers-plan.md, item 2).
  *
- * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, SALES, RESEARCH, CHECKER, CAPTIONS,
- * WRITER, MOTION, DIRECTOR, MODERATION, SHORTS.
+ * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, THREADS_WRITER, LINKEDIN_WRITER, SALES, RESEARCH,
+ * CHECKER, CAPTIONS, WRITER, MOTION, DIRECTOR, MODERATION, SHORTS.
  * Two tiers: drafting agents use the big model (Sonnet, Gemini Pro), checking agents the small one (Haiku, Gemini
  * Flash) — a check does not need deep reasoning, and a separate context keeps the checker from being persuaded by
  * the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "threads_writer" | "linkedin_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
 export type ProviderKind = "anthropic" | "gemini" | "openai";
 
 export const PROVIDER_KINDS: readonly ProviderKind[] = ["openai", "anthropic", "gemini"];
@@ -50,6 +50,8 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   onboarding: { id: "onboarding", label: "Onboarding", role: "Reads the website and drafts the four marketing documents.", tier: "draft" },
   planner: { id: "planner", label: "Planner", role: "Plans the week of posts, Reddit replies and short videos.", tier: "draft" },
   x_writer: { id: "x_writer", label: "X writer", role: "Drafts X posts for the founder to approve and post.", tier: "draft" },
+  threads_writer: { id: "threads_writer", label: "Threads writer", role: "Drafts Threads posts for the founder to approve and post.", tier: "draft" },
+  linkedin_writer: { id: "linkedin_writer", label: "LinkedIn writer", role: "Drafts LinkedIn posts for the founder to approve and post.", tier: "draft" },
   sales: { id: "sales", label: "Sales", role: "Finds Reddit threads where people need the product and drafts helpful replies.", tier: "draft" },
   research: { id: "research", label: "Research", role: "Finds competitor and niche posts that outperform, and why they worked.", tier: "draft" },
   checker: { id: "checker", label: "Checker", role: "Reviews drafts and scores threads in a separate context.", tier: "check" },
@@ -62,6 +64,12 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
 };
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];
+
+/**
+ * The writer agent for each post profile of `packages/contracts/platforms.json` (P3 W1). Each can run on its own
+ * model and key; all of them send the same system prompt, so the prompt cache serves every platform.
+ */
+export const POST_WRITERS: Readonly<Record<string, AgentId>> = { x: "x_writer", threads: "threads_writer", linkedin: "linkedin_writer" };
 
 function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"], env: NodeJS.ProcessEnv): string {
   if (provider === "gemini") return tier === "check" ? "gemini-flash-latest" : "gemini-pro-latest";

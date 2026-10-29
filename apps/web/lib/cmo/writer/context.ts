@@ -15,15 +15,20 @@ export const VOICE_NOTES_MAX = 12;
 
 export function profileBlock(profile: WriterProfile): string {
   const lines = [
-    `platform: ${profile.id}`,
+    `platform: ${profile.id} (${profile.label})`,
     `kind: ${profile.kind}`,
-    profile.kind === "youtube" ? `title limit: ${profile.titleLimit ?? 100} characters; description limit: ${profile.limit} characters` : `limit: ${profile.limit} characters`,
+    profile.kind === "youtube" ? `title limit: ${profile.title ?? 100} characters; description limit: ${profile.limit} characters` : `limit: ${profile.limit} characters`,
     profile.visibleBeforeMore ? `visible before "more": about ${profile.visibleBeforeMore} characters; the hook must land before the cut` : "visible before \"more\": all of it",
     `tone: ${profile.tone}`,
     `hashtags: ${profile.hashtags ? `at most ${profile.hashtags}` : "none"}`,
     `links: ${profile.links ? "allowed" : "none"}`,
   ];
   return `<platform>\n${lines.join("\n")}\n</platform>`;
+}
+
+/** The profile a writer prompt was built for, read back from the `<platform>` block it starts with. */
+export function profileFromPrompt(prompt: string): string | null {
+  return /^<platform>\nplatform: ([a-z_]+)/.exec(prompt)?.[1] ?? null;
 }
 
 /** How the founder writes, newest and weightiest first; each note says how much it counts. */

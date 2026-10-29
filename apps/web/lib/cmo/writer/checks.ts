@@ -29,13 +29,24 @@ export function captionText(draft: Pick<CaptionDraft, "text" | "hashtags">): str
 function tagIssues(text: string, tags: readonly string[], profile: WriterProfile): string[] {
   const count = hashtagCount(text) + cleanHashtags(tags).length;
   if (count <= profile.hashtags) return [];
-  return [profile.hashtags ? `It has ${count} hashtags; ${profile.id} takes at most ${profile.hashtags}.` : `It has a hashtag; ${profile.id} takes none.`];
+  return [profile.hashtags ? `It has ${count} hashtags; the ${profile.label} takes at most ${profile.hashtags}.` : `It has a hashtag; the ${profile.label} takes none.`];
 }
 
-const linkIssues = (text: string, profile: WriterProfile): string[] => (!profile.links && hasLink(text) ? [`It has a link; ${profile.id} takes none.`] : []);
+const linkIssues = (text: string, profile: WriterProfile): string[] => (!profile.links && hasLink(text) ? [`It has a link; the ${profile.label} takes none.`] : []);
 
 export function checkPostFor(text: string, profile: WriterProfile, rules: CheckRules): string[] {
-  return checkPost(text, rules, { limit: profile.limit, platform: profile.id });
+  return checkPost(text, rules, { limit: profile.limit, platform: profile.label });
+}
+
+/**
+ * Advice for the fix round, never a reason to drop a version: on a platform that cuts a post at "more" (LinkedIn),
+ * the first line should end before the cut so the hook is read.
+ */
+export function moreAdvice(text: string, profile: WriterProfile): string[] {
+  const cut = profile.visibleBeforeMore;
+  const first = text.trim().split("\n")[0] ?? "";
+  if (!cut || chars(first) <= cut) return [];
+  return [`The first line is ${chars(first)} characters; ${profile.label} shows about ${cut} before "more", so the hook should land sooner.`];
 }
 
 /** The published caption (text and hashtags together) must fit the profile's limit. */
@@ -44,7 +55,7 @@ export function checkCaption(draft: Pick<CaptionDraft, "text" | "hashtags">, pro
   if (!text) return ["The caption is empty."];
   const full = captionText(draft);
   return [
-    ...(chars(full) > profile.limit ? [`It is ${chars(full)} characters; ${profile.id} allows ${profile.limit}.`] : []),
+    ...(chars(full) > profile.limit ? [`It is ${chars(full)} characters; the ${profile.label} allows ${profile.limit}.`] : []),
     ...factIssues(text, rules),
     ...linkIssues(text, profile),
     ...tagIssues(text, draft.hashtags, profile),
@@ -55,7 +66,7 @@ export function checkYoutube(draft: Pick<YoutubeDraft, "title" | "description" |
   const title = draft.title.trim();
   const description = draft.description.trim();
   if (!title || !description) return [title ? "The description is empty." : "The title is empty."];
-  const titleLimit = profile.titleLimit ?? 100;
+  const titleLimit = profile.title ?? 100;
   const full = captionText({ text: description, hashtags: draft.hashtags });
   return [
     ...(chars(title) > titleLimit ? [`The title is ${chars(title)} characters; YouTube allows ${titleLimit}.`] : []),

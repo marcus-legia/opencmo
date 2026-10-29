@@ -26,7 +26,7 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
       chat load it; remove the three patterns from `x-writing.md` (lines 13, 16, 23); fix the fake drafts
       (`draft-post.ts` line 57 and the e2e/check copies); `check-post.ts`: no links and no hashtags in posts. Eval
       cases before and after (fake provider); the real run waits for the owner.
-- [ ] **B2 W1**: `draft-post` takes a profile; one writer agent per profile in the registry with the same cached
+- [x] **B2 W1**: `draft-post` takes a profile; one writer agent per profile in the registry with the same cached
       prefix; checks from `platforms.json` (limit, visible before "more" as advice on LinkedIn); 3 versions per
       platform from one idea.
 - [ ] **B3 W2**: the writer reads the top voice notes (newest first, weight by age) and tier 0 corrections after the
@@ -50,6 +50,15 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   version from `eval/style.ts`, eval only): before 24/36 outputs passed (every fixture's versions 2 and 3 showed
   `faux_insight`/`colon_reveal`), after 36/36; compare: BETTER, 12 better, 0 worse, McNemar p = 0.0005. The real
   run (`cmo:eval --provider anthropic --yes`, before and after) waits for the owner's go-ahead (plan §6).
+- **Writer core** (`f333ef2`): `lib/cmo/writer/` (`prompts.ts`, `context.ts`, `checks.ts`, `draft.ts`): one fixed
+  system prompt per kind, the data after it (profile, founder's rules, voice notes, documents, research, brief),
+  code checks per kind and profile, and `createWriter().draft()` (write, checks, optional review, one fix, checks).
+- **B2**: `WriterProfile` is A0's `PlatformProfile`. `draft-post` drafts for the due item's profile (no item or an
+  unknown platform: X, since `cmo_save_draft` makes an X item without one), with `POST_WRITERS` (`x_writer`,
+  `threads_writer`, `linkedin_writer`) on one shared system prompt; the `<platform>` block comes first in the prompt
+  and MCP's precheck reads the profile back from it (`profileFromPrompt`), so a Threads answer is checked against
+  500, not 280. LinkedIn's "more" cut is advice for the fix round (`moreAdvice`), never a drop. Recent posts in the
+  prompt are the same platform's. Eval: `w2-threads` and `w2-linkedin` (fake 36/36 each).
 - `writer.check.ts` holds B's asserts; it runs in `check:contracts` once A adds it (request in `A.md`).
 
 ## Requests

@@ -52,3 +52,7 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
 - [from B → A] Add `NODE_OPTIONS=--conditions=react-server tsx lib/cmo/writer/writer.check.ts` to `check:contracts` in
   `apps/web/package.json` (your block). It covers Writer's contract: Studio takes Writer's `VideoBrief`, every kind
   names its profile kind, the brief's new `cta` reaches the Director. Later B tasks add their asserts to the same file.
+- [from B → A] `cmo_save_draft` inserts `platform = 'x'` when there is no item, so a CMO "now" brief can only become an
+  X post; for "write this for LinkedIn now", it needs a `p_platform` (checked with `platform_profile`). B2 drafts the
+  item's profile and falls back to X without one. Not blocking; only if A2 or the CMO chat should order posts per
+  platform without an item.
