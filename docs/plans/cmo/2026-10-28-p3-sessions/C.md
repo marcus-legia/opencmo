@@ -24,8 +24,12 @@ Read the frames while A0 lands → C0 → C2 (after A1) → C1 (after A3) → C3
       platform only once the approval went through), the "more" marker at a word boundary. `e2e/ui-v2-writer.spec.ts`
       7/7 with axe at 1440 and 390; screenshots in `docs/plans/cmo/2026-10-28-p3-acceptance/c/`. Live caption edits
       wait on the SQL requested in A.md (`[from C → A] Captions on the Studio cards`).
-- [ ] **C2 Correction card**: the repeated edit with two before/after examples, approve or dismiss; decided through
+- [x] **C2 Correction card**: the repeated edit with two before/after examples, approve or dismiss; decided through
       `POST /api/v1/approvals/[id]` with the card's `contentHash`.
+      Done: the card names the repeated edit and how often ("You rewrote the first line in 3 posts these two weeks"),
+      two examples labelled Draft / You wrote, Keep as a rule · Edit · Dismiss (`reject`). e2e on live rows (A1's
+      trigger raises it from three edited outcomes): a stale hash is refused, Dismiss → `rejected`, Keep → `active`;
+      axe at 1440 and 390.
 - [ ] **C1 Writer and Library live**: Writer drafts per platform (filter), Library → Voice (notes with weight and
       source, delete with confirm) and Skills (read-only list: what each is for, which agent reads it).
 - [ ] **C3 e2e** on live rows: approve a Threads draft (copy + open), delete a voice note, edit a caption on a shorts

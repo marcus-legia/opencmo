@@ -92,7 +92,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "skip":
       return `Skipped${suffix}.`;
     case "reject":
-      return `Rejected${suffix}.`;
+      return card.kind === "correction" ? `Dismissed. Drafts stay as they are${suffix}.` : `Rejected${suffix}.`;
     case "redo":
       return `Making keyframe ${decision.index + 1} again. A new card comes when it is ready${suffix}.`;
     case "cancel":
@@ -101,6 +101,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "send_back":
       return card.kind === "finished_video" ? `Sent back. The edit stays open in the editor${suffix}.` : `Sent back with your note${suffix}.`;
     case "edit":
+      if (card.kind === "correction") return `Kept your version of the rule. Every draft follows it${suffix}.`;
       if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
       return `Approved${suffix}.`;
     default:
@@ -113,6 +114,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
       if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;
+      if (card.kind === "correction") return `Kept as a rule. Every draft follows it${suffix}.`;
       if (card.body.kind === "shorts_batch") return `Approved ${card.body.shorts.length} shorts. They are ready to schedule${suffix}.`;
       return `Approved${suffix}.`;
   }

@@ -366,6 +366,17 @@ export function ScheduleBody({ body }: { body: Body<"schedule"> }) {
   );
 }
 
+/** What the founder kept doing, per edit mode (`cmo_draft_outcomes.edit_mode`). */
+const EDIT_SEEN: Record<string, string> = {
+  TOO_SALESY: "You toned down the selling",
+  WRONG_VOICE: "You rewrote drafts in your own words",
+  INVENTED_CLAIM: "You removed a claim that was not true",
+  TOO_LONG: "You cut drafts shorter",
+  HOOK_REWRITTEN: "You rewrote the first line",
+  CTA_REMOVED: "You cut the closing ask",
+  FULL_REWRITE: "You rewrote most of the draft",
+};
+
 export function CorrectionBody({
   body,
   editing,
@@ -387,11 +398,19 @@ export function CorrectionBody({
       ) : (
         <p className="v2-card-rule">“{body.rule}”</p>
       )}
+      {body.editMode && EDIT_SEEN[body.editMode] ? (
+        <p className="v2-card-meta">
+          {EDIT_SEEN[body.editMode]} in {body.times} {body.times === 1 ? "post" : "posts"} these two weeks.
+        </p>
+      ) : null}
       {body.examples.length > 0 ? (
-        <ul className="v2-card-edits">
+        <ul className="v2-card-edits" aria-label="Your edits">
           {body.examples.map((edit, index) => (
             <li key={index}>
-              <s className="v2-muted">{edit.before}</s> → {edit.after}
+              <span className="v2-card-edit-label">Draft</span>
+              <s className="v2-muted">{edit.before}</s>
+              <span className="v2-card-edit-label">You wrote</span>
+              <span>{edit.after}</span>
             </li>
           ))}
         </ul>

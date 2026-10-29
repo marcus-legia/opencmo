@@ -390,7 +390,8 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-facts dd.v2-num { font: 500 14px var(--v2-mono); }
 .v2-card-rule { font-size: 16px; font-weight: 500; }
 .v2-card-edits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.v2-card-edits li { padding: 6px 10px; background: var(--v2-paper); }
+.v2-card-edits li { padding: 6px 10px; background: var(--v2-paper); display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 8px; }
+.v2-card-edit-label { font: 500 11px var(--v2-mono); color: var(--v2-ink2); text-transform: uppercase; }
 .v2-card-state { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; font-size: 13px; }
 .v2-card-state b { font: 500 11px var(--v2-mono); text-transform: uppercase; }
 .v2-card-state.is-expired { background: var(--v2-paper3); }

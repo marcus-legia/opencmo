@@ -47,7 +47,7 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   price: { label: "Cancel", action: "cancel" },
   finished_video: { label: "Send back", action: "send_back" },
   shorts_batch: { label: "Send back", action: "send_back" },
-  correction: { label: "Reject", action: "reject" },
+  correction: { label: "Dismiss", action: "reject" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */

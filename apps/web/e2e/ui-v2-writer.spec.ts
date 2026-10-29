@@ -1,15 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { E2EUser } from "./global-setup";
 import { signIn, state } from "./helpers";
 import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * P3 Writer for every platform (sessions/C.md). C0: the Threads and LinkedIn post cards and the captions on the
- * Studio cards, on fixtures, at 1440 and 390 with axe. v2 build only: `npm run test:e2e:v2`.
+ * Studio cards, on fixtures, at 1440 and 390 with axe. C2: the correction card on live rows. v2 build only:
+ * `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
@@ -87,4 +91,83 @@ test("a caption counts its limit and hashtags per platform; too many hashtags ca
   await tiktok.getByRole("button", { name: "Save caption" }).click();
   await expect(tiktok).toContainText("Cut your demo by deleting words. #editing");
   await expect(tiktok).toContainText("#1/5");
+});
+
+// ------------------------------------------------------------------ live rows
+
+const admin = () => {
+  const { url, service } = state();
+  return createClient(url, service, { auth: { persistSession: false } });
+};
+
+/** A founder of their own per test, past Setup. */
+async function founder(db: SupabaseClient): Promise<E2EUser> {
+  const user = { email: `writer-${randomUUID()}@test.local`, password: `pw-${randomUUID()}`, id: "" };
+  const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
+  expect(created.error).toBeNull();
+  user.id = created.data.user!.id;
+  const doc = await db
+    .from("marketing_documents")
+    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });
+  expect(doc.error).toBeNull();
+  return user;
+}
+
+/** Three X posts the founder approved after rewriting the first line: the third raises a correction card. */
+async function repeatedEdits(db: SupabaseClient, userId: string) {
+  const edits = [
+    ["Tired of editing demos?", "Editing a demo should not take longer than building it."],
+    ["What if you could cut by words?", "Cut a video by deleting words."],
+    ["Ever wished B-roll found itself?", "B-roll lands on the line you mean."],
+  ];
+  const day = new Date().toISOString().slice(0, 10);
+  for (const [index, [before, after]] of edits.entries()) {
+    const id = randomUUID();
+    const item = await db.from("content_items").insert({ id, user_id: userId, department: "post", platform: "X", day, idea: `Idea ${index}`, status: "approved", body: { text: before }, final_text: after });
+    expect(item.error).toBeNull();
+    const decidedAt = new Date(Date.now() - (3 - index) * 3_600_000).toISOString();
+    const outcome = await db
+      .from("cmo_draft_outcomes")
+      .insert({ user_id: userId, item_id: id, department: "post", action: "approve", chosen_version: 0, similarity: 0.3, edit_mode: "HOOK_REWRITTEN", classified_at: decidedAt, decided_at: decidedAt });
+    expect(outcome.error).toBeNull();
+  }
+  const { data } = await db.from("approvals").select("id, content_hash, ref_id").eq("user_id", userId).eq("kind", "correction").eq("status", "waiting").single();
+  expect(data).not.toBeNull();
+  return data as { id: string; content_hash: string; ref_id: string };
+}
+
+test("a correction card shows the repeated edit with two examples; a stale hash is refused; dismiss and keep decide it", async ({ page }) => {
+  const db = admin();
+  const user = await founder(db);
+  const card = await repeatedEdits(db, user.id);
+  await signIn(page, user);
+
+  const stale = await page.request.post(`/api/v1/approvals/${card.id}`, { data: { action: "approve", contentHash: "0".repeat(64) } });
+  expect(stale.ok()).toBeFalsy();
+  expect(JSON.stringify(await stale.json())).toMatch(/changed/);
+
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+    await page.goto(`/app/inbox/${card.id}`);
+    const view = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+    await expect(view).toContainText("You rewrote the first line in 3 posts these two weeks.");
+    await expect(view).toContainText("from 3 edits");
+    await expect(view.getByRole("list", { name: "Your edits" }).getByRole("listitem")).toHaveCount(2);
+    await expect(view).toContainText("B-roll lands on the line you mean.");
+    await axeAndShot(page, "live-correction", width);
+  }
+  const view = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  await view.getByRole("button", { name: "Dismiss" }).click();
+  await view.getByRole("button", { name: "Dismiss" }).click();
+  await expect.poll(async () => (await db.from("cmo_corrections").select("status").eq("id", card.ref_id).single()).data?.status).toBe("rejected");
+  await expect.poll(async () => (await db.from("approvals").select("status").eq("id", card.id).single()).data?.status).toBe("skipped");
+
+  // Another founder keeps the rule: it becomes a rule every draft reads first.
+  const other = await founder(db);
+  const second = await repeatedEdits(db, other.id);
+  await page.context().clearCookies();
+  await signIn(page, other);
+  await page.goto(`/app/inbox/${second.id}`);
+  await page.getByTestId("inbox-card-page").getByRole("button", { name: "Keep as a rule" }).click();
+  await expect.poll(async () => (await db.from("cmo_corrections").select("status").eq("id", second.ref_id).single()).data?.status).toBe("active");
 });
