@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,8 +12,9 @@ import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * P3 Writer for every platform (sessions/C.md). C0: the Threads and LinkedIn post cards and the captions on the
- * Studio cards, on fixtures, at 1440 and 390 with axe. C2: the correction card on live rows. v2 build only:
- * `npm run test:e2e:v2`.
+ * Studio cards, on fixtures, at 1440 and 390 with axe. C2: the correction card on live rows. C3 on live rows: a
+ * Threads and a LinkedIn draft approved (copy + open), a caption edited on a shorts card (a stale hash refused), a
+ * voice note deleted. v2 build only: `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
@@ -210,4 +211,125 @@ test("Writer filters drafts per platform", async ({ page }) => {
   await expect(cards).toHaveCount(4);
   await filter.getByRole("button", { name: "X", exact: true }).click();
   await expect(cards).toHaveCount(4);
+});
+
+// ------------------------------------------------------------------ C3: posts and captions on live rows
+
+/** The founder's session as the brain's Studio order runner sees it (`lib/mcp/auth.ts` `brainClientFor`). */
+function brainClient(userId: string): SupabaseClient {
+  const { url, anon } = state();
+  const now = Math.floor(Date.now() / 1000);
+  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const body = `${part({ alg: "HS256", typ: "JWT" })}.${part({ opencmo_actor: "brain", sub: userId, role: "authenticated", aud: "authenticated", iat: now, exp: now + 600 })}`;
+  const token = `${body}.${createHmac("sha256", process.env.SUPABASE_JWT_SECRET!).update(body).digest("base64url")}`;
+  return createClient(url, anon, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+}
+
+/** A post draft waiting on the founder, as Writer leaves it; the calendar's label ("Threads") names the platform. */
+async function postCard(db: SupabaseClient, userId: string, platform: string, text: string) {
+  const id = randomUUID();
+  const item = await db
+    .from("content_items")
+    .insert({ id, user_id: userId, department: "post", platform, day: new Date().toISOString().slice(0, 10), idea: `${platform} idea`, status: "in_review", body: { text, alternates: [] } });
+  expect(item.error).toBeNull();
+  const { data } = await db.from("approvals").select("id").eq("ref_kind", "content_item").eq("ref_id", id).eq("status", "waiting").single();
+  expect(data).not.toBeNull();
+  return { itemId: id, cardId: (data as { id: string }).id };
+}
+
+test("a Threads draft is approved and opens Threads with the text; a LinkedIn one is copied and opens LinkedIn", async ({ page }) => {
+  const db = admin();
+  const user = await founder(db);
+  const threadsText = "I spent more time cutting my demo than building the feature. So the editor came first: delete a word and the cut follows. ".repeat(3).trim();
+  expect(threadsText.length).toBeGreaterThan(280);
+  const threads = await postCard(db, user.id, "Threads", threadsText);
+  const linkedinText = "Why we built the editor before anything else.\n\nEvery launch video took longer to cut than to build. So the first thing OpenCMO does is let you cut by deleting words.";
+  const linkedin = await postCard(db, user.id, "LinkedIn", linkedinText);
+
+  await signIn(page, user);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.context().route(/https:\/\/www\.(threads|linkedin)\.com\/.*/, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>Composer</title>" }));
+
+  await page.goto(`/app/inbox/${threads.cardId}`);
+  let card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  await expect(card).toContainText(`${threadsText.length}/500`);
+  let popup = page.waitForEvent("popup");
+  await card.getByRole("button", { name: "Approve and open Threads" }).click();
+  let tab = await popup;
+  await expect.poll(() => tab.url()).toBe(`https://www.threads.com/intent/post?text=${encodeURIComponent(threadsText)}`);
+  await tab.close();
+  await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
+  await expect.poll(async () => (await db.from("cmo_draft_outcomes").select("platform").eq("item_id", threads.itemId).single()).data?.platform).toBe("threads");
+
+  await page.goto(`/app/inbox/${linkedin.cardId}`);
+  card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  await expect(card).toContainText("/3000");
+  popup = page.waitForEvent("popup");
+  await card.getByRole("button", { name: "Approve, copy and open LinkedIn" }).click();
+  tab = await popup;
+  await expect.poll(() => tab.url()).toContain("linkedin.com/feed/?shareActive=true");
+  await tab.close();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(linkedinText);
+  await expect.poll(async () => (await db.from("content_items").select("status").eq("id", linkedin.itemId).single()).data?.status).toBe("approved");
+});
+
+test("a caption is edited on a live shorts card: same card, new hash, a stale hash refused, delivered under its short", async ({ page }) => {
+  const db = admin();
+  const user = await founder(db);
+  const jobId = randomUUID();
+  const parentClip = randomUUID();
+  const document = { version: 1, stage: { name: "Cut by words" } };
+  expect((await db.from("jobs").insert({ id: jobId, user_id: user.id, kind: "edit", source_url: "editor://blank", duration_seconds: 60, status: "done" })).error).toBeNull();
+  expect((await db.from("clips").insert({ id: parentClip, job_id: jobId, idx: -1, hook: "Cut by words", start_seconds: 0, end_seconds: 0, kind: "blank" })).error).toBeNull();
+  expect((await db.from("editor_projects").insert({ clip_id: parentClip, document })).error).toBeNull();
+  const { data: hash } = await db.rpc("editor_document_hash", { p_document: document });
+  const me = createClient(state().url, state().anon, { auth: { persistSession: false } });
+  expect((await me.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+  expect((await me.rpc("mark_finished", { p_clip_id: parentClip, p_document_hash: hash })).error).toBeNull();
+  const { data: order } = await db.from("work_orders").select("id").eq("user_id", user.id).eq("kind", "cut_shorts").single();
+  // Writer's and Studio's runners are not under test: paused once the order exists, they leave this founder's rows alone.
+  expect((await db.from("profiles").update({ cmo_paused_at: new Date().toISOString() }).eq("id", user.id)).error).toBeNull();
+  const { data: batch, error } = await brainClient(user.id).rpc("short_batch_create", {
+    p_parent_clip_id: parentClip,
+    p_parent_hash: hash,
+    p_order_id: order!.id,
+    p_shorts: [{ source_start: 0, source_end: 22, hook: "Cut by words", title: "Cut by words", reason: "Opens on the pain", document: { version: 1, stage: { name: "s0" } } }],
+  });
+  expect(error).toBeNull();
+  const batchId = (batch as { batch_id: string }).batch_id;
+  const { data: shorts } = await db.from("shorts").select("short_clip_id").eq("batch_id", batchId);
+  const shortClip = shorts![0]!.short_clip_id as string;
+  const taskId = randomUUID();
+  await db.from("tasks").insert({ id: taskId, user_id: user.id, kind: "render_document", clip_id: shortClip, job_id: jobId, status: "running", request_id: randomUUID(), payload: {} });
+  await db.from("tasks").update({ status: "done", output_path: `${user.id}/${taskId}.mp4` }).eq("id", taskId);
+  const saved = await db.rpc("cmo_save_caption", { p_user: user.id, p_run: null, p_clip: shortClip, p_profile: "tiktok_caption", p_text: "Cut your demo by deleting words. #editing #buildinpublic" });
+  expect(saved.error).toBeNull();
+  const captionId = (saved.data as { id: string }).id;
+  const { data: before } = await db.from("approvals").select("id, content_hash").eq("ref_kind", "short_batch").eq("ref_id", batchId).eq("status", "waiting").single();
+  expect(before).not.toBeNull();
+
+  await signIn(page, user);
+  await page.goto(`/app/inbox/${before!.id}`);
+  const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  const tiktok = card.getByTestId("caption").filter({ hasText: "TikTok caption" });
+  await expect(tiktok).toContainText("#2/5");
+  await tiktok.getByRole("button", { name: "Edit TikTok caption" }).click();
+  await tiktok.getByLabel("Caption").fill("Your transcript is the timeline. #editing");
+  await tiktok.getByRole("button", { name: "Save caption" }).click();
+  await expect(tiktok).toContainText("Your transcript is the timeline. #editing");
+  await expect.poll(async () => (await db.from("content_items").select("body").eq("id", captionId).single()).data?.body?.text).toBe("Your transcript is the timeline. #editing");
+  const { data: after } = await db.from("approvals").select("id, content_hash, status").eq("id", before!.id).single();
+  expect(after!.status).toBe("waiting");
+  expect(after!.content_hash).not.toBe(before!.content_hash);
+
+  // A tab still showing the old card is refused, for a caption and for the decision.
+  const stale = await page.request.post(`/api/v1/approvals/${before!.id}`, { data: { action: "edit_caption", contentHash: before!.content_hash, caption: captionId, text: "Old tab" } });
+  expect(stale.ok()).toBeFalsy();
+  expect(JSON.stringify(await stale.json())).toMatch(/changed/);
+
+  // The card on screen took the new hash: approving it goes through and delivers the caption under its short.
+  await card.getByRole("button", { name: "Approve batch" }).click();
+  await expect.poll(async () => (await db.from("approvals").select("status").eq("id", before!.id).single()).data?.status).toBe("approved");
+  const { data: shortDeliverable } = await db.from("deliverables").select("id").eq("ref_kind", "clip").eq("ref_id", shortClip).single();
+  await expect.poll(async () => (await db.from("deliverables").select("parent_id").eq("ref_kind", "content_item").eq("ref_id", captionId).maybeSingle()).data?.parent_id).toBe(shortDeliverable!.id);
 });

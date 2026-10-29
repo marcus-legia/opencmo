@@ -61,10 +61,15 @@ export async function editCaption(card: ApprovalCard, caption: Caption, sample: 
   if (sample) return withCaption(card, caption);
   const reason = blockedReason(card, sample);
   if (reason) throw new ApiError(reason, 0, null);
-  return api<ApprovalCard>(
+  const next = await api<ApprovalCard>(
     `/approvals/${encodeURIComponent(card.id)}`,
     jsonBody({ action: CAPTION_ACTION, contentHash: card.contentHash, caption: caption.id, text: caption.text, ...(caption.title !== null ? { title: caption.title } : {}) }),
   );
+  // The answer is not signed: keep this card's previews and take the new hash and the captions as saved.
+  const saved = (next.body.kind === "finished_video" ? next.body.captions : next.body.kind === "shorts_batch" ? next.body.shorts.flatMap((s) => s.captions) : []).find(
+    (c) => c.id === caption.id,
+  );
+  return { ...withCaption(card, saved ?? caption), contentHash: next.contentHash };
 }
 
 /**
