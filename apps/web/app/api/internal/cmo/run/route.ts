@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!cmoPausedEverywhere()) {
     kickCmoQueue(undefined, (maxDuration - 40) * 1000);
     // Studio's orders (P2 A2) are not `cmo_runs`; the sweep counts them with `studio_work_count`.
-    kickStudioOrders(undefined, (maxDuration - 40) * 1000);
+    kickStudioOrders((maxDuration - 40) * 1000);
   }
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

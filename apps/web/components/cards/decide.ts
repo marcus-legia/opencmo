@@ -18,7 +18,7 @@ export type Decision =
   | { action: "reject"; reason?: string }
   /** Price card (card 2): make keyframe `index` (0-based) again; a new card replaces this one. */
   | { action: "redo"; index: number }
-  /** Script and price cards: stop the video here; any hold is released. */
+  /** Script and price cards: stop the video here; nothing more is spent (keyframes already made stay paid for). */
   | { action: "cancel"; reason?: string }
   /** Finished video and shorts batch: not yet, with what to change. */
   | { action: "send_back"; reason?: string };
@@ -59,7 +59,8 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "redo":
       return `Making keyframe ${decision.index + 1} again. A new card comes when it is ready${suffix}.`;
     case "cancel":
-      return `Cancelled. No credits were spent${suffix}.`;
+      // Card 2 comes after the keyframes were made and paid for: only card 1 is cancelled before any spend.
+      return card.kind === "price" ? `Cancelled. Nothing more will be spent${suffix}.` : `Cancelled. No credits were spent${suffix}.`;
     case "send_back":
       return card.kind === "finished_video" ? `Sent back. The edit stays open in the editor${suffix}.` : `Sent back with your note${suffix}.`;
     case "edit":
