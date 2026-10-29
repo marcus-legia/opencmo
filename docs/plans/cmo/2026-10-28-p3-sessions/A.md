@@ -149,3 +149,16 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
 - `lib/screens/load.check.ts` (in check:contracts) runs both loaders on rows shaped as the database's, through a stub
   that applies the loaders' filters; every column and RPC was also read under a founder's session on a local
   database (grants and RLS hold).
+
+## A4: acceptance (session A, 2026-10-29) — script ready, not yet run
+
+- `apps/web/lib/screens/p3-acceptance.e2e.ts` runs the whole of F10 on a local stack with fake providers: the plan's X,
+  Threads and LinkedIn posts and a video waiting on its brief → Writer's brief taken by the video → three post cards,
+  each within its profile → approve X as written, edit LinkedIn, skip Threads → three voice notes in Library and
+  Writer → cards 1–3, captions on card 3 (one edited there, same card, a stale hash refused) → the shorts batch card
+  with captions → captions delivered under the video and each short. Screenshots at 1440 and 390 come from
+  `npm run test:e2e:writer` on the same stack (Session C's live specs).
+- **Not run yet, two blockers:** Session B's B4 (the `write_video_brief` and `write_caption` jobs) is not pushed; and
+  Session A's container cannot start the stack (its network policy blocks the PostgREST and Kong images). Run it, and
+  the screenshots, where both hold; then tick A4 and post M3.
+- CI on `96352fa` (A0–A3, B1–B3, C0–C3) is green.
