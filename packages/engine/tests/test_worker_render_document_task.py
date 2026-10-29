@@ -540,3 +540,17 @@ def test_long_take_shot_made_from_another_keyframe_is_not_used(monkeypatch):
     store.generations = _long_take_rows("media/u1/j1/broll.mp4")
     rd.process(store, _task())
     assert store.failed is not None and "is not in this project's library" in store.failed
+
+
+def test_a_keyframe_shared_by_two_shots_is_looked_up_once(monkeypatch):
+    second = {**LONG_SHOT, "prompt": "keep pushing in", "seed": 8}
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}, {"kind": "video", "src": second}], [])
+    store = FakeStore()
+    rows = _long_take_rows("media/u1/j1/fox.png")
+    store.generations = rows + [{**rows[1], "id": "g-shot-2", "spec": {**rows[1]["spec"], "prompt": "keep pushing in", "seed": 8}}]
+    looked_up: list[str] = []
+    original = store.get_media_asset
+    monkeypatch.setattr(store, "get_media_asset", lambda media_id: looked_up.append(media_id) or original(media_id))
+    rd.process(store, _task())
+    assert store.failed is None
+    assert looked_up.count("m-fox") == 1, "the shared keyframe is resolved once"

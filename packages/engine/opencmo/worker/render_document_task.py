@@ -275,6 +275,8 @@ class _Sources:
         self.count = 0
         # Finished generations of this project, read once and only when a declaration needs one.
         self.generations: list[dict[str, Any]] | None = None
+        # A keyframe is shared by the shots on either side of it: look each one up once per export.
+        self.frame_paths: dict[str, str | None] = {}
 
     def _path(self, suffix: str) -> Path:
         self.count += 1
@@ -345,6 +347,12 @@ class _Sources:
 
     def _finished_frame_path(self, declaration: dict[str, Any]) -> str | None:
         """Storage path of a nested keyframe's finished generation, owned by this task's project."""
+        key = json.dumps(declaration, sort_keys=True)
+        if key not in self.frame_paths:
+            self.frame_paths[key] = self._lookup_frame_path(declaration)
+        return self.frame_paths[key]
+
+    def _lookup_frame_path(self, declaration: dict[str, Any]) -> str | None:
         media_id = self._finished_generation(declaration)
         row = self.store.get_media_asset(media_id) if media_id else None
         if not row or row.get("user_id") != self.task.user_id or row.get("job_id") != self.task.job_id or row.get("status") != "ready":
