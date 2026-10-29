@@ -41,6 +41,31 @@ export function profileOf(id: string): PlatformProfile | null {
   return BY_ID.get(id) ?? null;
 }
 
+/**
+ * The profile a calendar label names (`content_items.platform`: the plan writes "X", "LinkedIn", "Reels", "Shorts")
+ * or a profile id itself; null for Reddit and anything unknown. SQL's `platform_profile_id` maps the same labels
+ * (check:contracts compares them).
+ */
+export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
+  x: "x",
+  twitter: "x",
+  threads: "threads",
+  linkedin: "linkedin",
+  instagram: "instagram_caption",
+  instagram_caption: "instagram_caption",
+  reels: "instagram_caption",
+  tiktok: "tiktok_caption",
+  tiktok_caption: "tiktok_caption",
+  youtube: "youtube",
+  shorts: "youtube",
+  "youtube shorts": "youtube",
+};
+
+export function profileIdOf(label: string | null | undefined): string | null {
+  if (typeof label !== "string") return null;
+  return PLATFORM_LABELS[label.trim().toLowerCase()] ?? null;
+}
+
 /** The profiles Writer drafts posts for, in the file's order: X, Threads, LinkedIn. */
 export const POST_PROFILES = PROFILES.filter((p) => p.kind === "post");
 /** The profiles a video or short gets words for: captions and the YouTube title and description. */

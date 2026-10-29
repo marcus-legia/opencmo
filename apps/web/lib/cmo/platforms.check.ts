@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { PLATFORMS } from "../screens/common";
 
-import { PROFILES, PROFILE_KINDS, PlatformProfileSchema, countHashtags } from "./platforms";
+import { PLATFORM_LABELS, PROFILES, PROFILE_KINDS, PlatformProfileSchema, countHashtags, profileIdOf, profileOf } from "./platforms";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
@@ -80,6 +80,28 @@ check("SQL's platform_profile() has the file's numbers", () => {
   for (const p of PROFILES) {
     assert.deepEqual(found.get(p.id), { kind: p.kind, limit: p.limit, title: p.title, hashtags: p.hashtags, label: p.label }, p.id);
   }
+});
+
+/** `platform_profile_id` as the latest migration defining it writes it: `when '<label>' then '<id>'`. */
+export function sqlLabels(sql: string): Map<string, string> | null {
+  const last = [...sql.matchAll(/create (?:or replace )?function public\.platform_profile_id\(p_label text\)[\s\S]*?\$\$([\s\S]*?)\$\$/gi)].at(-1);
+  if (!last) return null;
+  return new Map([...last[1]!.matchAll(/when '([a-z_ ]+)' then '([a-z_]+)'/g)].map((m) => [m[1]!, m[2]!]));
+}
+
+check("SQL's platform_profile_id() maps the same labels to the same profiles", () => {
+  const dir = join(ROOT, "supabase", "migrations");
+  let found: Map<string, string> | null = null;
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    found = sqlLabels(readFileSync(join(dir, file), "utf8")) ?? found;
+  }
+  assert.ok(found, "platform_profile_id not found in any migration");
+  assert.deepEqual(Object.fromEntries([...found].sort()), Object.fromEntries(Object.entries(PLATFORM_LABELS).sort()));
+  for (const id of new Set(Object.values(PLATFORM_LABELS))) assert.ok(profileOf(id), `${id} is a profile`);
+  for (const p of PROFILES) assert.equal(profileIdOf(p.id), p.id, `${p.id} maps to itself`);
+  assert.equal(profileIdOf(" X "), "x");
+  assert.equal(profileIdOf("LinkedIn"), "linkedin");
+  assert.equal(profileIdOf("Reddit"), null);
 });
 
 if (failures.length) {

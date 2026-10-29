@@ -64,3 +64,9 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
 ## Requests
 
 (Others append `[from → B] what, why`; answer here with the commit.)
+
+- [from A → B] `postProfile` in `draft-post.ts` reads `profileOf(item.platform)`, but the calendar holds labels ("X",
+  "Threads", "LinkedIn"): `profileOf("LinkedIn")` is null, so a LinkedIn item would be drafted as an X post. Use
+  `profileOf(profileIdOf(platform) ?? "x")` (`lib/cmo/platforms.ts`, A1; same map as SQL's `platform_profile_id`).
+  B3: voice notes need no write from `classify-edits` (labeling the edit writes the note); read them with
+  `voice_notes_for` (A.md "A1: what B and C build on").

@@ -133,6 +133,20 @@ check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
   assert.equal(reply.body.kind === "reply" && reply.body.parts.length, 1, "a malformed score part is dropped");
 });
 
+check("cards: a post planned with the calendar's label shows, with its platform's limits", () => {
+  const post = (platform: string) =>
+    approvalToCard(row("post", { kind: "post", platform, day: "2026-10-29", idea: "Idea", text: "One line.", alternates: [], rationale: "" }));
+  const x = post("X");
+  assert.ok(x && x.body.kind === "post", "a post planned as X is shown");
+  assert.deepEqual(x.body.platforms.map((p) => [p.platform, p.limit]), [["x", 280]]);
+  const linkedin = post("LinkedIn");
+  assert.ok(linkedin && linkedin.body.kind === "post");
+  assert.deepEqual(linkedin.body.platforms.map((p) => [p.platform, p.limit, p.visibleBeforeMore]), [["linkedin", 3000, 140]]);
+  assert.match(linkedin.meta, /LinkedIn/);
+  const unknown = post("Mastodon");
+  assert.ok(unknown && unknown.body.kind === "post" && unknown.body.platforms[0]!.platform === "x", "an unknown label is decided as X, so shown as X");
+});
+
 check("cards: Studio kinds are not shown before A1; expired and elsewhere states", () => {
   assert.equal(approvalToCard(row("price", { kind: "price" })), null);
   const past = approvalToCard(row("goal", { kind: "goal", week: "2026-10-26", goal: "Goal", metric: "posts", target: 3 }, { expires_at: "2026-10-01T00:00:00+00:00" }))!;

@@ -5,7 +5,7 @@
  * Pure (no server-only): `screens.check.ts` runs it on sample rows.
  */
 
-import { profileOf } from "../cmo/platforms";
+import { profileIdOf, profileOf } from "../cmo/platforms";
 
 import {
   FinishedVideoSnapshotSchema,
@@ -67,9 +67,11 @@ function build(row: ApprovalRow): Built | null {
   const s = row.snapshot;
   switch (row.kind) {
     case "post": {
-      // A post for a platform without a profile cannot be approved (SQL refuses it), so it is not shown.
-      const profile = profileOf(str(s.platform, "x"));
-      if (!profile || profile.kind !== "post") return null;
+      // The calendar writes labels ("X", "LinkedIn"); a label without a post profile was planned for X, as SQL's
+      // `cmo_decide_post` decides it (every post before P3 was for X).
+      const named = profileOf(profileIdOf(str(s.platform)) ?? "x");
+      const profile = named && named.kind === "post" ? named : profileOf("x");
+      if (!profile) return null;
       const text = str(s.text);
       const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3);
       const { head, rest } = firstSentence(text);

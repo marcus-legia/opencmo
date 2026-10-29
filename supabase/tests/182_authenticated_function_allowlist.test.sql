@@ -136,7 +136,11 @@ insert into allowed values
   ('studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)'),
   ('upload_reservation_allows(text,text,jsonb)'),
   ('upload_usage()'),
-  ('use_media_transcript(uuid,uuid,numeric,numeric)');
+  ('use_media_transcript(uuid,uuid,numeric,numeric)'),
+  -- P3 A1: voice notes, the founder's own (owner check inside).
+  ('voice_note_add(uuid)'),
+  ('voice_note_delete(uuid)'),
+  ('voice_notes(integer,text)');
 
 create temp table callable on commit drop as
 select p.oid::regprocedure::text as signature

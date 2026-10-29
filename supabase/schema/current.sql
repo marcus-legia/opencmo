@@ -1818,6 +1818,7 @@ begin
       into v from public.cmo_goals where id = p_ref_id;
     when 'correction' then
       select jsonb_build_object('kind', 'correction', 'rule', rule, 'source_edits', source_edits)
+        || case when edit_mode is not null then jsonb_build_object('edit_mode', edit_mode, 'times', times) else '{}'::jsonb end
       into v from public.cmo_corrections where id = p_ref_id;
     when 'studio_step' then
       select case s.kind
@@ -2769,9 +2770,14 @@ CREATE TABLE public.cmo_corrections (
     status text DEFAULT 'proposed'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     decided_at timestamp with time zone,
+    edit_mode text,
+    times integer,
+    CONSTRAINT cmo_corrections_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text]))),
+    CONSTRAINT cmo_corrections_mode_times_check CHECK (((edit_mode IS NULL) = (times IS NULL))),
     CONSTRAINT cmo_corrections_rule_check CHECK (((char_length(rule) >= 3) AND (char_length(rule) <= 200))),
     CONSTRAINT cmo_corrections_source_edits_check CHECK (((jsonb_typeof(source_edits) = 'array'::text) AND (octet_length((source_edits)::text) <= 8192))),
-    CONSTRAINT cmo_corrections_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text])))
+    CONSTRAINT cmo_corrections_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text]))),
+    CONSTRAINT cmo_corrections_times_check CHECK (((times >= 1) AND (times <= 100)))
 );
 
 
@@ -2972,6 +2978,10 @@ declare
   v_best real;
   v_best_index smallint;
   v_sim real;
+  v_profile text;
+  v_label text;
+  v_limit integer;
+  v_outcome uuid;
 begin
   if p_action is null or p_action not in ('approve', 'skip') then
     raise exception 'Unknown action.' using errcode = '22023';
@@ -2986,18 +2996,33 @@ begin
   if v_row.status <> 'in_review' then
     raise exception 'This post was already decided.' using errcode = 'P0001';
   end if;
+  -- A post on a platform without a post profile was planned for X (every post before P3).
+  v_profile := public.platform_profile_id(v_row.platform);
+  if v_profile is null or public.platform_profile(v_profile)->>'kind' <> 'post' then
+    v_profile := 'x';
+  end if;
+  v_label := public.platform_profile(v_profile)->>'label';
+  v_limit := (public.platform_profile(v_profile)->>'limit')::integer;
 
   if p_action = 'skip' then
     update public.content_items set status = 'skipped', decided_at = now(), updated_at = now()
     where id = p_id returning * into v_row;
     if p_reason is not null and char_length(trim(p_reason)) > 0 then
-      insert into public.cmo_memories (user_id, type, body)
-      values (v_user, 'feedback', left('Skipped the X post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
+      insert into public.cmo_memories (user_id, type, topic, body)
+      values (v_user, 'feedback', 'post', left('Skipped the ' || v_label || ' post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
     end if;
-    insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version)
+    insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version, platform)
     values (v_user, p_id, 'post', 'skip', left(coalesce(v_row.body->'gen'->>'model', ''), 100),
-            left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40))
-    on conflict (department, item_id) do nothing;
+            left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40), v_profile)
+    on conflict (department, item_id) do nothing
+    returning id into v_outcome;
+    if v_outcome is not null and p_reason is not null and char_length(trim(p_reason)) > 0 then
+      begin
+        perform public.voice_note_write(v_outcome, left(trim(p_reason), 400));
+      exception when others then
+        raise warning 'voice note for decision % failed: %', v_outcome, sqlerrm;
+      end;
+    end if;
     return v_row;
   end if;
 
@@ -3005,14 +3030,14 @@ begin
   if v_text is null or char_length(v_text) = 0 then
     raise exception 'This post is empty.' using errcode = '22023';
   end if;
-  if char_length(v_text) > 280 then
-    raise exception 'Posts on X can be at most 280 characters.' using errcode = '22023';
+  if char_length(v_text) > v_limit then
+    raise exception 'Posts on % can be at most % characters.', v_label, to_char(v_limit, 'FM999,999') using errcode = '22023';
   end if;
   if (select count(*) from public.operation_log
-      where user_id = v_user and platform = 'x' and action = 'approve' and at > now() - interval '1 day') >= 5 then
-    raise exception 'You can approve 5 posts for X a day. Try again tomorrow.' using errcode = 'P0001';
+      where user_id = v_user and platform = v_profile and action = 'approve' and at > now() - interval '1 day') >= 5 then
+    raise exception 'You can approve 5 posts for % a day. Try again tomorrow.', v_label using errcode = 'P0001';
   end if;
-  insert into public.operation_log (user_id, platform, action, target) values (v_user, 'x', 'approve', p_id::text);
+  insert into public.operation_log (user_id, platform, action, target) values (v_user, v_profile, 'approve', p_id::text);
   update public.content_items set status = 'approved', final_text = v_text, decided_at = now(), updated_at = now()
   where id = p_id returning * into v_row;
 
@@ -3028,13 +3053,15 @@ begin
       v_best_index := i - 1;
     end if;
   end loop;
+  -- A post approved as written is labelled at once; its voice note comes from the outcome's own trigger.
   insert into public.cmo_draft_outcomes (
-    user_id, item_id, department, action, chosen_version, similarity, edit_mode, classified_at, model, prompt_version
+    user_id, item_id, department, action, chosen_version, similarity, edit_mode, classified_at, model, prompt_version, platform
   ) values (
     v_user, p_id, 'post', 'approve', v_best_index, v_best,
     case when v_best >= public.cmo_as_written() then 'NO_MEANINGFUL_EDIT' end,
     case when v_best >= public.cmo_as_written() then now() end,
-    left(coalesce(v_row.body->'gen'->>'model', ''), 100), left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40)
+    left(coalesce(v_row.body->'gen'->>'model', ''), 100), left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40),
+    v_profile
   )
   on conflict (department, item_id) do nothing;
   return v_row;
@@ -3062,6 +3089,49 @@ $$;
 
 
 --
+-- Name: cmo_draft_outcomes_backfill_platform(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_draft_outcomes_backfill_platform() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_n integer;
+begin
+  update public.cmo_draft_outcomes o set platform = public.platform_profile_id(c.platform)
+  from public.content_items c
+  where o.platform is null and o.department = 'post' and c.id = o.item_id and public.platform_profile_id(c.platform) is not null;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: cmo_draft_outcomes_learn(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_draft_outcomes_learn() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.edit_mode is null or (tg_op = 'UPDATE' and old.edit_mode is not distinct from new.edit_mode) then
+    return new;
+  end if;
+  begin
+    perform public.voice_note_write(new.id);
+    perform public.correction_from_edits(new.id);
+  exception when others then
+    raise warning 'learning from decision % failed: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: cmo_draft_outcomes_platform(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3071,8 +3141,7 @@ CREATE FUNCTION public.cmo_draft_outcomes_platform() RETURNS trigger
     AS $$
 begin
   if new.platform is null and new.department = 'post' then
-    select c.platform into new.platform from public.content_items c
-    where c.id = new.item_id and public.platform_profile(c.platform) is not null;
+    select public.platform_profile_id(c.platform) into new.platform from public.content_items c where c.id = new.item_id;
   end if;
   return new;
 end;
@@ -4557,6 +4626,85 @@ begin
   end if;
   update public.upload_reservations set status = 'consumed' where id = v_res.id;
 end;
+$$;
+
+
+--
+-- Name: correction_from_edits(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.correction_from_edits(p_outcome uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_o public.cmo_draft_outcomes;
+  v_rule text;
+  v_since timestamptz;
+  v_n integer;
+  v_edits jsonb;
+  v_id uuid;
+begin
+  select * into v_o from public.cmo_draft_outcomes where id = p_outcome;
+  v_rule := public.correction_rule(v_o.edit_mode);
+  if v_o.id is null or v_rule is null or v_o.department <> 'post' or v_o.action <> 'approve' then
+    return null;
+  end if;
+  -- The same lock as `cmo_propose_correction`: one proposal at a time per founder.
+  perform pg_advisory_xact_lock(hashtextextended('cmo_corrections:' || v_o.user_id::text, 0));
+  if exists (select 1 from public.cmo_corrections where user_id = v_o.user_id and edit_mode = v_o.edit_mode and status = 'proposed') then
+    return null;
+  end if;
+  v_since := greatest(now() - interval '14 days', coalesce((
+    select max(created_at) from public.cmo_corrections where user_id = v_o.user_id and edit_mode = v_o.edit_mode), '-infinity'));
+  select count(*) into v_n from public.cmo_draft_outcomes
+  where user_id = v_o.user_id and department = 'post' and action = 'approve' and edit_mode = v_o.edit_mode and decided_at > v_since;
+  if v_n < 3 then
+    return null;
+  end if;
+  -- An approved rule with the same words already holds; five waiting rules are enough for one founder.
+  if exists (select 1 from public.cmo_corrections where user_id = v_o.user_id and status = 'active' and lower(rule) = lower(v_rule))
+     or (select count(*) from public.cmo_corrections where user_id = v_o.user_id and status = 'proposed') >= 5 then
+    return null;
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('before', left(e.draft, 300), 'after', left(e.final_text, 300), 'at', e.at)
+    order by e.decided_at desc, e.id), '[]'::jsonb)
+  into v_edits
+  from (
+    select case o.chosen_version when 0 then c.body->>'text' else c.body->'alternates'->>(o.chosen_version - 1) end as draft,
+      c.final_text, to_char(o.decided_at, 'YYYY-MM-DD') as at, o.decided_at, o.id
+    from public.cmo_draft_outcomes o
+    join public.content_items c on c.id = o.item_id and c.user_id = o.user_id
+    where o.user_id = v_o.user_id and o.department = 'post' and o.action = 'approve' and o.edit_mode = v_o.edit_mode
+      and o.decided_at > v_since and c.final_text is not null and o.chosen_version is not null
+    order by o.decided_at desc, o.id
+    limit 3
+  ) e
+  where e.draft is not null;
+  insert into public.cmo_corrections (user_id, rule, source_edits, edit_mode, times)
+  values (v_o.user_id, v_rule, v_edits, v_o.edit_mode, least(v_n, 100))
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: correction_rule(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.correction_rule(p_mode text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_mode
+    when 'TOO_SALESY' then 'Help first: drop the pitch and the hype.'
+    when 'WRONG_VOICE' then 'Write the way I talk: plain words, short sentences, no marketing tone.'
+    when 'INVENTED_CLAIM' then 'Never state a number, result or story that is not in my documents.'
+    when 'TOO_LONG' then 'Keep it short: one idea, no extra lines.'
+    when 'HOOK_REWRITTEN' then 'Open with a plain, specific first line.'
+    when 'CTA_REMOVED' then 'End on the point itself: no closing ask, no summary line.'
+    else null end
 $$;
 
 
@@ -6463,6 +6611,31 @@ CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
     when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
     when 'youtube' then '{"kind": "youtube", "limit": 5000, "title": 100, "hashtags": 3, "label": "YouTube title and description"}'::jsonb
   end
+$$;
+
+
+--
+-- Name: platform_profile_id(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.platform_profile_id(p_label text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case lower(trim(coalesce(p_label, '')))
+    when 'x' then 'x'
+    when 'twitter' then 'x'
+    when 'threads' then 'threads'
+    when 'linkedin' then 'linkedin'
+    when 'instagram' then 'instagram_caption'
+    when 'instagram_caption' then 'instagram_caption'
+    when 'reels' then 'instagram_caption'
+    when 'tiktok' then 'tiktok_caption'
+    when 'tiktok_caption' then 'tiktok_caption'
+    when 'youtube' then 'youtube'
+    when 'shorts' then 'youtube'
+    when 'youtube shorts' then 'youtube'
+    else null end
 $$;
 
 
@@ -9536,6 +9709,193 @@ $$;
 
 
 --
+-- Name: voice_edit_phrase(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_edit_phrase(p_mode text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_mode
+    when 'TOO_SALESY' then 'toned down the selling'
+    when 'WRONG_VOICE' then 'rewrote it in their own voice'
+    when 'INVENTED_CLAIM' then 'removed a claim that was not true'
+    when 'TOO_LONG' then 'cut it shorter'
+    when 'HOOK_REWRITTEN' then 'rewrote the first line'
+    when 'CTA_REMOVED' then 'removed the closing ask'
+    when 'FULL_REWRITE' then 'rewrote it'
+    else null end
+$$;
+
+
+--
+-- Name: voice_note_add(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_note_add(p_outcome_id uuid) RETURNS public.cmo_memories
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_owner uuid;
+begin
+  select user_id into v_owner from public.cmo_draft_outcomes where id = p_outcome_id;
+  if v_owner is null
+     or (v_user is not null and v_owner <> v_user)
+     or (v_user is null and coalesce(auth.role(), '') <> 'service_role') then
+    raise exception 'Decision not found.' using errcode = 'P0002';
+  end if;
+  return public.voice_note_write(p_outcome_id);
+end;
+$$;
+
+
+--
+-- Name: voice_note_cap(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_note_cap() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 60 $$;
+
+
+--
+-- Name: voice_note_days(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_note_days() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 60 $$;
+
+
+--
+-- Name: voice_note_delete(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_note_delete(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_outcome uuid;
+begin
+  delete from public.cmo_memories where id = p_id and user_id = v_user and source_outcome is not null
+  returning source_outcome into v_outcome;
+  if not found then
+    raise exception 'Voice note not found.' using errcode = 'P0002';
+  end if;
+  update public.cmo_draft_outcomes set voice_note_deleted_at = now() where id = v_outcome;
+end;
+$$;
+
+
+--
+-- Name: voice_note_write(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_note_write(p_outcome uuid, p_reason text DEFAULT NULL::text) RETURNS public.cmo_memories
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_o public.cmo_draft_outcomes;
+  v_item public.content_items;
+  v_label text;
+  v_body text;
+  v_row public.cmo_memories;
+  v_reason text := nullif(trim(coalesce(p_reason, '')), '');
+begin
+  select * into v_o from public.cmo_draft_outcomes where id = p_outcome;
+  if not found or v_o.department <> 'post' or v_o.voice_note_deleted_at is not null then
+    return null;
+  end if;
+  select * into v_row from public.cmo_memories where source_outcome = p_outcome;
+  if found then
+    return v_row;
+  end if;
+  select * into v_item from public.content_items where id = v_o.item_id and user_id = v_o.user_id;
+  if not found then
+    return null;
+  end if;
+  v_label := coalesce(public.platform_profile(coalesce(v_o.platform, 'x'))->>'label', 'X');
+  v_body := case
+    when v_o.action = 'skip' and v_reason is not null then
+      'Skipped a draft on ' || v_label || ' about "' || left(v_item.idea, 120) || '": ' || v_reason
+    when v_o.action = 'approve' and v_item.final_text is not null
+         and (v_o.edit_mode = 'NO_MEANINGFUL_EDIT' or v_o.similarity >= public.cmo_as_written()) then
+      'Approved as written on ' || v_label || ': "' || v_item.final_text || '"'
+    when v_o.action = 'approve' and v_item.final_text is not null and public.voice_edit_phrase(v_o.edit_mode) is not null then
+      'Edited on ' || v_label || ' before approving (' || public.voice_edit_phrase(v_o.edit_mode) || '): "'
+        || v_item.final_text || '"'
+    end;
+  if v_body is null then
+    return null;
+  end if;
+  insert into public.cmo_memories (user_id, type, kind, topic, importance, body, source_outcome, expires_at, created_at)
+  values (v_o.user_id, 'agent', 'preference', 'post', 1, left(v_body, 600), p_outcome,
+    now() + make_interval(days => public.voice_note_days()), now())
+  on conflict (source_outcome) where source_outcome is not null do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select * into v_row from public.cmo_memories where source_outcome = p_outcome;
+    return v_row;
+  end if;
+  -- Over the cap, the oldest notes go: they weigh least anyway.
+  delete from public.cmo_memories where id in (
+    select id from public.cmo_memories where user_id = v_o.user_id and source_outcome is not null
+    order by created_at desc, id offset public.voice_note_cap());
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: voice_notes(integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_notes(p_limit integer DEFAULT 20, p_platform text DEFAULT NULL::text) RETURNS TABLE(id uuid, body text, platform text, source text, edit_mode text, created_at timestamp with time zone, expires_at timestamp with time zone, weight real)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select * from public.voice_notes_of(public.require_user(), p_limit, p_platform) $$;
+
+
+--
+-- Name: voice_notes_for(uuid, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_notes_for(p_user uuid, p_limit integer DEFAULT 20, p_platform text DEFAULT NULL::text) RETURNS TABLE(id uuid, body text, platform text, source text, edit_mode text, created_at timestamp with time zone, expires_at timestamp with time zone, weight real)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select * from public.voice_notes_of(p_user, p_limit, p_platform) $$;
+
+
+--
+-- Name: voice_notes_of(uuid, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.voice_notes_of(p_user uuid, p_limit integer, p_platform text) RETURNS TABLE(id uuid, body text, platform text, source text, edit_mode text, created_at timestamp with time zone, expires_at timestamp with time zone, weight real)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select m.id, m.body, o.platform,
+    case when o.action = 'skip' then 'skipped'
+      when o.edit_mode = 'NO_MEANINGFUL_EDIT' or o.similarity >= public.cmo_as_written() then 'approved'
+      else 'edited' end,
+    case when o.edit_mode = 'NO_MEANINGFUL_EDIT' then null else o.edit_mode end,
+    m.created_at, m.expires_at,
+    greatest(0, least(1, extract(epoch from (m.expires_at - now()))
+      / nullif(extract(epoch from (m.expires_at - m.created_at)), 0)))::real
+  from public.cmo_memories m
+  join public.cmo_draft_outcomes o on o.id = m.source_outcome
+  where m.user_id = p_user and m.expires_at > now() and (p_platform is null or o.platform = p_platform)
+  order by m.created_at desc, m.id
+  limit least(greatest(coalesce(p_limit, 20), 1), 100)
+$$;
+
+
+--
 -- Name: work_order_create(uuid, date, uuid, text, text, jsonb, integer, timestamp with time zone, uuid[], text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10240,6 +10600,7 @@ CREATE TABLE public.cmo_draft_outcomes (
     decided_at timestamp with time zone DEFAULT now() NOT NULL,
     classified_at timestamp with time zone,
     platform text,
+    voice_note_deleted_at timestamp with time zone,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
@@ -11598,6 +11959,13 @@ CREATE INDEX clips_parent_idx ON public.clips USING btree (parent_clip_id) WHERE
 
 
 --
+-- Name: cmo_corrections_mode_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_corrections_mode_idx ON public.cmo_corrections USING btree (user_id, edit_mode, created_at DESC) WHERE (edit_mode IS NOT NULL);
+
+
+--
 -- Name: cmo_corrections_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12148,6 +12516,13 @@ CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.opportu
 --
 
 CREATE TRIGGER clips_record_storage_deletions BEFORE DELETE ON public.clips FOR EACH ROW EXECUTE FUNCTION public.record_clip_storage_deletions();
+
+
+--
+-- Name: cmo_draft_outcomes cmo_draft_outcomes_learn; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_draft_outcomes_learn AFTER INSERT OR UPDATE OF edit_mode ON public.cmo_draft_outcomes FOR EACH ROW EXECUTE FUNCTION public.cmo_draft_outcomes_learn();
 
 
 --
