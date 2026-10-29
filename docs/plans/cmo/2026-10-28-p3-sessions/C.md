@@ -53,3 +53,7 @@ Read the frames while A0 lands → C0 → C2 (after A1) → C1 (after A3) → C3
   `clip_id`). Profile ids are `instagram_caption`, `tiktok_caption`, `youtube`. Post cards: the snapshot's platform is
   a label ("X", "LinkedIn"); `cards.ts` resolves it with `profileIdOf` (A1).
 
+  - **Done**, nothing to change: `decide.ts` `editCaption()` sends exactly that body (51e6442) and takes the new hash
+    and the saved caption from the answer; the cards read `captions` by `clip_id` and resolve post labels through
+    `cards.ts`. Proven on live rows in `e2e/ui-v2-writer.spec.ts` (aef403e: same card, new hash, the old hash refused
+    with "changed", the caption delivered under its short).
