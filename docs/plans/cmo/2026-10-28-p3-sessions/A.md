@@ -39,7 +39,7 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
       platform); order kinds `write_caption`, `write_video_brief`, `write_slides` in `capabilities.json`; event rules:
       a video order calls `write_video_brief` before `buildVideo`; finished video and shorts batch built →
       `write_caption` per platform the plan targets.
-- [ ] **A3 Loaders**: per-platform drafts in `writer.drafts`, `writer.voice`, `library.voice`, `library.skills`; flip
+- [x] **A3 Loaders**: per-platform drafts in `writer.drafts`, `writer.voice`, `library.voice`, `library.skills`; flip
       `live`; release gating keeps working.
 - [ ] **A4 Acceptance** on a local stack with fake providers: plan → X + Threads + LinkedIn drafts → approve one, edit
       one (voice note appears), skip one → finished video → captions per platform on the shorts card. Screenshots
@@ -131,3 +131,18 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   Writer never overwrites a caption the founder edited. Approving the video or the batch makes each caption a
   `caption` deliverable under its video's or short's (`parent_id`), and the caption `approved`.
 - **write_slides (F9):** registered; nothing orders it until S3 (P5).
+
+## A3: loaders (session A, 2026-10-29)
+
+- `writer.drafts`: posts on their own platform (labels resolved with `profileIdOf`), captions per platform (kind
+  `caption`, the card that shows them: the finished-video card, else the shorts batch card), and the briefs Writer
+  wrote for Studio (kind `video_brief`, "Fed the Studio team" once done), last two weeks. `writer.voice`: the rules
+  the founder approved, the 8 heaviest voice notes (source, platform, weight), the product rule, and the strategy's
+  words to avoid. Both live and in `release`.
+- `library.voice`: up to 40 live voice notes (`voice_notes`) with where each came from ("Approved as written", "From
+  your edit: shorter", "From a skip reason"), its platform and weight; delete with `voice_note_delete`.
+  `library.skills`: read only, brain.md §8b: writing = No AI Slop and the platform profiles; video = the style skills
+  we ship and the founder's own (`editor_skills`). Both live and in `release`.
+- `lib/screens/load.check.ts` (in check:contracts) runs both loaders on rows shaped as the database's, through a stub
+  that applies the loaders' filters; every column and RPC was also read under a founder's session on a local
+  database (grants and RLS hold).
