@@ -5,7 +5,8 @@
  */
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { DECIDABLE_IN_WAVE_1, type ApprovalCard } from "@/lib/screens/approval-card";
+import { CAPTION_ACTION, DECIDABLE_IN_WAVE_1, type ApprovalCard, type Caption } from "@/lib/screens/approval-card";
+import type { Platform } from "@/lib/screens/common";
 
 /** The actions `approval_decide` accepts, per kind (contract doc S3). */
 export type Decision =
@@ -44,6 +45,42 @@ export async function decide(card: ApprovalCard, decision: Decision, sample: boo
   return api<ApprovalCard>(`/approvals/${encodeURIComponent(card.id)}`, jsonBody({ action, contentHash: card.contentHash, ...rest }));
 }
 
+/** The card with one caption's words replaced, as the server answers it but with the old hash (sample cards only). */
+function withCaption(card: ApprovalCard, caption: Caption): ApprovalCard {
+  const swap = (list: Caption[]) => list.map((c) => (c.id === caption.id ? caption : c));
+  if (card.body.kind === "finished_video") return { ...card, body: { ...card.body, captions: swap(card.body.captions) } };
+  if (card.body.kind === "shorts_batch") return { ...card, body: { ...card.body, shorts: card.body.shorts.map((s) => ({ ...s, captions: swap(s.captions) })) } };
+  return card;
+}
+
+/**
+ * Changes one caption on a finished video or shorts card before it is approved. Not a decision: the card stays
+ * waiting, with a new `contentHash` the next decision must send. Sample cards change on this screen only.
+ */
+export async function editCaption(card: ApprovalCard, caption: Caption, sample: boolean): Promise<ApprovalCard> {
+  if (sample) return withCaption(card, caption);
+  const reason = blockedReason(card, sample);
+  if (reason) throw new ApiError(reason, 0, null);
+  return api<ApprovalCard>(
+    `/approvals/${encodeURIComponent(card.id)}`,
+    jsonBody({ action: CAPTION_ACTION, contentHash: card.contentHash, caption: caption.id, text: caption.text, ...(caption.title !== null ? { title: caption.title } : {}) }),
+  );
+}
+
+/**
+ * Where an approved post goes until Schedule posts it (P4): Threads opens its composer with the text in it;
+ * LinkedIn's composer takes no text, so the post is copied first. X keeps "post it when you are ready".
+ */
+export const POST_TARGET: Partial<Record<Platform, { url: (text: string) => string; copy: boolean; label: string }>> = {
+  threads: { url: (text) => `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`, copy: false, label: " and open Threads" },
+  linkedin: { url: () => "https://www.linkedin.com/feed/?shareActive=true", copy: true, label: ", copy and open LinkedIn" },
+};
+
+/** The platform of a post card (one platform per card since P3). */
+export function postPlatform(card: ApprovalCard): Platform | null {
+  return card.body.kind === "post" ? (card.body.platforms[0]?.platform ?? null) : null;
+}
+
 /** What the toast says after a decision went through. */
 export function decidedMessage(card: ApprovalCard, decision: Decision, sample: boolean): string {
   const suffix = sample ? " (sample, nothing was sent)" : "";
@@ -67,7 +104,12 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
       return `Approved${suffix}.`;
     default:
-      if (card.kind === "post" && !sample) return "Approved. Post it on X when you are ready.";
+      if (card.kind === "post" && !sample) {
+        const platform = postPlatform(card);
+        if (platform === "threads") return "Approved. Threads opened with your post: check it and post it from your account.";
+        if (platform === "linkedin") return "Approved and copied. Paste it in LinkedIn and post it from your account.";
+        return "Approved. Post it on X when you are ready.";
+      }
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
       if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;

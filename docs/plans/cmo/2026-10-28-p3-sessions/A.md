@@ -59,6 +59,26 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   platform without an item.
   - **A2** takes it (with the plan's Threads and LinkedIn items).
 
+- [from C → A] **Captions on the Studio cards (C0 is built on fixtures; C3 needs the SQL).** A0's types already carry
+  them: `FinishedVideoSnapshotSchema.captions` / `ShortsBatchSnapshotSchema.captions` (`CaptionSnapshotSchema`:
+  `caption_id`, `clip_id`, `profile` = profile id, `text` = the words as they go out, hashtags included, `title` =
+  YouTube's or null) and the action name `CAPTION_ACTION = "edit_caption"` (`lib/screens/approval-card.ts`). Needed:
+  1. `approval_snapshot` for `editor_project` and `short_batch` adds `captions` (the `video` content items with
+     `clip_id` = the edit or one of the batch's shorts, not skipped/failed, profile order of `platforms.json`), **only
+     when there are some** so cards raised before keep their hash. (Session C's dropped A1 draft did this with a
+     `caption_snapshot(uuid[])` helper: `git show 89577b8 -- supabase/migrations/` if useful.)
+  2. A caption written or changed while its card waits refreshes that card **in place** (same id, new snapshot and
+     hash), not a new card: the founder may be editing it.
+  3. `approval_decide(id, 'edit_caption', {content_hash, caption, text, title?})` for `finished_video` and
+     `shorts_batch`: the hash check as for every decision; the caption belongs to this card's edit(s); `text` within
+     the profile's limit and hashtag count, `title` 1–100 for YouTube only; updates the caption, refreshes the card in
+     place and returns it still `waiting` (not decided: no `approval_close`, no order moves).
+  4. `POST /api/v1/approvals/[id]` accepts `action: "edit_caption"` with `caption` (uuid), `text` (≤ 5,000) and
+     `title` (≤ 100), and answers the card **signed** (`signStudioCards`) so the previews stay. `components/cards/decide.ts`
+     `editCaption()` already sends exactly this body.
+  5. Approving the card makes each caption a `caption` deliverable under its video or short (`parent_id`).
+  C3's e2e edits a caption on a live shorts card and expects a stale hash refused.
+
 ## A1: what B and C build on (session A, 2026-10-29)
 
 - **Labels.** The calendar keeps writing labels ("X", "Threads", "LinkedIn", "Reels", "Shorts"), as every row before
