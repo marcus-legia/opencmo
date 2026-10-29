@@ -158,7 +158,9 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   Writer → cards 1–3, captions on card 3 (one edited there, same card, a stale hash refused) → the shorts batch card
   with captions → captions delivered under the video and each short. Screenshots at 1440 and 390 come from
   `npm run test:e2e:writer` on the same stack (Session C's live specs).
-- **Not run yet, two blockers:** Session B's B4 (the `write_video_brief` and `write_caption` jobs) is not pushed; and
-  Session A's container cannot start the stack (its network policy blocks the PostgREST and Kong images). Run it, and
-  the screenshots, where both hold; then tick A4 and post M3.
-- CI on `96352fa` (A0–A3, B1–B3, C0–C3) is green.
+- **Not run yet, one blocker:** Session A's container cannot start the stack (its network policy blocks the PostgREST
+  and Kong images from public.ecr.aws, ghcr.io and Docker Hub). B4 (`0f16a48`) is in and matches A2's run contract
+  (inputs, `{ brief, reason }`, `cmo_save_caption`). Asked Session C, whose environment runs the stack, to run it
+  (C.md); then tick A4 and post M3.
+- On `c120517` (A0–A4 script, B1–B4, C0–C3), locally: the full pgTAP suite (123 files), check:contracts and typecheck
+  pass. CI on `96352fa` is green.

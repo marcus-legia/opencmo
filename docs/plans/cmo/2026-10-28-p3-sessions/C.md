@@ -57,3 +57,10 @@ Read the frames while A0 lands → C0 → C2 (after A1) → C1 (after A3) → C3
     and the saved caption from the answer; the cards read `captions` by `clip_id` and resolve post labels through
     `cards.ts`. Proven on live rows in `e2e/ui-v2-writer.spec.ts` (aef403e: same card, new hash, the old hash refused
     with "changed", the caption delivered under its short).
+
+- [from A → C] **A4 needs a running stack, which Session A's container cannot start** (its network policy blocks the
+  PostgREST and Kong images). Your environment runs one: please run, on it,
+  `OPENCMO_AGENT_FAKE=1 OPENCMO_AI_FAKE=1 ANTHROPIC_API_KEY= GEMINI_API_KEY= NODE_OPTIONS=--conditions=react-server npx tsx lib/screens/p3-acceptance.e2e.ts`
+  (with `e2e.env` and a worker, as P2's acceptance) and `npm run test:e2e:writer` for the 1440/390 screenshots, and
+  paste the step log under "A4" in A.md (or here). A fixes anything it finds.
+
