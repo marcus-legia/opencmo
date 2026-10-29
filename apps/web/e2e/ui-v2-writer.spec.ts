@@ -171,3 +171,43 @@ test("a correction card shows the repeated edit with two examples; a stale hash 
   await page.getByTestId("inbox-card-page").getByRole("button", { name: "Keep as a rule" }).click();
   await expect.poll(async () => (await db.from("cmo_corrections").select("status").eq("id", second.ref_id).single()).data?.status).toBe("active");
 });
+
+test("Library → Voice: notes with platform, source and weight; delete asks first; skills say who reads them", async ({ page }) => {
+  mkdirSync(OUT, { recursive: true });
+  await signIn(page, state().users.a);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+    await page.goto("/app/library?tab=voice&sample=1");
+    const notes = page.getByTestId("voice-note");
+    await expect(notes).toHaveCount(3);
+    await expect(notes.first()).toContainText("All platforms · From your edit: wrong voice");
+    await expect(notes.nth(1)).toContainText("LinkedIn");
+    await expect(page.getByRole("meter", { name: "Weight of “Short sentences, one idea each.”" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete note: “We” on X, “I” on LinkedIn." }).click();
+    await expect(page.getByRole("group", { name: "Delete note: “We” on X, “I” on LinkedIn.?" })).toBeVisible();
+    await axeAndShot(page, "library-voice-confirm", width);
+    await page.getByRole("button", { name: "Keep" }).click();
+    await expect(notes).toHaveCount(3);
+    await page.getByRole("button", { name: "Delete note: “We” on X, “I” on LinkedIn." }).click();
+    await page.getByRole("button", { name: "Delete note", exact: true }).click();
+    await expect(notes).toHaveCount(2);
+
+    await page.goto("/app/library?tab=skills&sample=1");
+    await expect(page.getByText("Read by Writer, Checker, Sales, CMO chat")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("switch")).toHaveCount(0);
+    await axeAndShot(page, "library-skills", width);
+  }
+});
+
+test("Writer filters drafts per platform", async ({ page }) => {
+  await signIn(page, state().users.a);
+  await page.goto("/app/writer?sample=1");
+  const cards = page.locator(".scr-board-card");
+  await expect(cards).toHaveCount(8);
+  const filter = page.getByRole("group", { name: "Platform" });
+  await filter.getByRole("button", { name: "LinkedIn", exact: true }).click();
+  await expect(cards).toHaveCount(4);
+  await filter.getByRole("button", { name: "X", exact: true }).click();
+  await expect(cards).toHaveCount(4);
+});
