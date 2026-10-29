@@ -21,7 +21,7 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
       profile) and outputs (versions with angle and rationale; for captions one per platform; for the brief angle,
       3 hooks, key points, CTA, seconds, aspect); the video brief type is the one P2's adapter takes (move it here if
       P2 defined it in the adapter, through a request to its owner if needed).
-- [ ] **B1 W0**: `no-ai-slop.md` from the attached repo (principles and patterns only, ~1,700 words, MIT notice in
+- [x] **B1 W0**: `no-ai-slop.md` from the attached repo (principles and patterns only, ~1,700 words, MIT notice in
       `skills/LICENSE.md` and `THIRD_PARTY_NOTICES.md`), regenerate the index; `x_writer`, checker, `sales` and CMO
       chat load it; remove the three patterns from `x-writing.md` (lines 13, 16, 23); fix the fake drafts
       (`draft-post.ts` line 57 and the e2e/check copies); `check-post.ts`: no links and no hashtags in posts. Eval
@@ -35,6 +35,22 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
 - [ ] **B4 W3**: `write_video_brief` (called by A2's rule before `buildVideo`), `write_caption` per platform (hashtags
       only here, per profile max), YouTube title + description, `write_slides` (5–10 slides, hook first, CTA last,
       no invented numbers); a unit test per kind and one fake-provider run end to end.
+
+## Notes
+
+- **B0** (`dba2d93`): P2's `VideoBrief` moved into `lib/cmo/writer/types.ts`; `lib/departments/studio/types.ts`
+  re-exports it, so every P2 import still works. The brief gained `cta` (default empty, older briefs parse) and the
+  Director's prompt reads it (one line in `video.ts`).
+- **B1**: the No AI Slop skill is ~1,730 words (principles, words, patterns and a hand-over checklist from
+  `eval.md`; its chat questions, output format and scoring left out). `x_writer` and the checker carry it in their
+  system prompt (cached), sales' reply prompt too; CMO chat lists it and is told to read it before writing text
+  that goes out (its prompt stays a fixed string). MCP's `get_check_rubric` now says "No links and no hashtags"
+  (`steps.ts`), the same rule `checkPost` runs. No e2e or check copied the fake drafts; only `draft-post.ts` had them.
+- **B1 eval, fake provider** (`cmo:eval --provider fake --job w2`, with a new code-only `style-N` result per
+  version from `eval/style.ts`, eval only): before 24/36 outputs passed (every fixture's versions 2 and 3 showed
+  `faux_insight`/`colon_reveal`), after 36/36; compare: BETTER, 12 better, 0 worse, McNemar p = 0.0005. The real
+  run (`cmo:eval --provider anthropic --yes`, before and after) waits for the owner's go-ahead (plan §6).
+- `writer.check.ts` holds B's asserts; it runs in `check:contracts` once A adds it (request in `A.md`).
 
 ## Requests
 

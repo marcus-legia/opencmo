@@ -12,6 +12,7 @@ live next to the files.
 | OpenCMO starter Lottie animations | `packages/clip-media/lottie/` | CC0-1.0 |
 | Lucide icons | `packages/clip-icons/data/`, `apps/web/components/icons/` | ISC (`LUCIDE-LICENSE`, `LICENSE-lucide.txt`) |
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
+| No AI Slop writing guidance by Peter Yang (adapted), Copyright (c) 2026 Peter Yang | `apps/web/lib/cmo/skills/no-ai-slop.md` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
 | Story design guidance from HyperFrames by HeyGen (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `explainer`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-hyperframes.md`) |
 | Motion design skill by LottieFiles (adapted) | `apps/web/lib/agent/motion-guide.ts` (incl. `EXPLAINER_MOTION`), `apps/web/lib/agent/guides.ts` (guide `explainer`, motion section), `packages/editor-core/src/motion/intro.ts` | MIT (`apps/web/lib/agent/LICENSE-motion-design.md`) |
 | Rough-cut editing rules from video-use, cut-video, claude-code-video-editing-skill and takecut (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`), `apps/web/lib/agent/retakes.ts` | MIT (`apps/web/lib/agent/LICENSE-roughcut.md`) |

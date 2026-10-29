@@ -7,7 +7,9 @@
  *
  *   W1 — finished, 5–10 items, at most one Reddit item a day, video only when the strategy mentions
  *        it, every item has a reason, no avoid words or invented numbers (code only)
- *   W2 — finished; each of the three versions passes `checkPost`, then the judge
+ *   W2 — finished; each of the three versions passes `checkPost`, then the judge; and, by code, which
+ *        No AI Slop stock patterns each version shows (`style.ts`: measured before and after a prompt
+ *        change, never a gate in production)
  */
 
 import type { CaseResult } from "@/lib/eval/compare";
@@ -17,6 +19,7 @@ import { avoidList, knownNumbers, normalizeNumber } from "../context";
 import { cascade } from "../judge";
 import { memoryStore } from "../memory-store";
 import type { Documents } from "../types";
+import { stockPatterns } from "./style";
 import { registerCases, type EvalCase } from "./types";
 
 const BUDGET_MS = 240_000;
@@ -86,6 +89,8 @@ const w2: EvalCase = {
       env.log(`[${index + 1}] ${text}`);
       const issues = text ? checkPost(text, rules) : ["no draft"];
       results.push(await cascade(`w2:${fixture.name}:${index}`, env.epoch, issues, env.judge, { job: `An X post for the founder on: ${fixture.brief}`, docs: fixture.docs, output: text }));
+      const patterns = text ? stockPatterns(text) : [];
+      results.push({ id: `w2:${fixture.name}:style-${index}`, epoch: env.epoch, pass: Boolean(text) && patterns.length === 0, decided_by: "code", ...(patterns.length ? { notes: patterns } : text ? {} : { notes: ["no draft"] }) });
     }
     return results;
   },

@@ -67,7 +67,7 @@ export function checkRubric(kind: CmoJobKind): string {
         `- At most ${X_LIMIT} characters.`,
         "- None of the strategy's words to avoid.",
         "- Any number of 10 or more, and any percentage, must appear in the documents (years are fine).",
-        "- At most two hashtags.",
+        "- No links and no hashtags.",
         "",
         ...shared.map((line) => `- ${line}`),
       ].join("\n");
