@@ -15,7 +15,11 @@ import { stockPatterns } from "../jobs/eval/style";
 import { CMO_SKILLS } from "../skills/index.gen";
 import { skillIndex } from "../skills";
 
-import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS } from "./types";
+import { captionText, checkCaption, checkSlides, checkYoutube, cleanHashtags } from "./checks";
+import { profileBlock, voiceBlock, writerData } from "./context";
+import { createWriter, type WriterThink } from "./draft";
+import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
+import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS, type WriterContext, type WriterProfile } from "./types";
 
 assert.equal(StudioBriefSchema, VideoBriefSchema, "Studio takes Writer's video brief, not a copy");
 assert.deepEqual(Object.keys(PROFILE_KIND).sort(), [...WRITER_KINDS].sort(), "every kind says which profile it drafts for");
@@ -66,4 +70,118 @@ for (const clean of [
   "Overall revenue grew after we added reminders.",
 ]) assert.deepEqual(stockPatterns(clean), [], `clean: ${clean}`);
 
-console.log("writer.check: ok");
+// Writer core: code checks per kind and profile.
+const instagram: WriterProfile = { id: "instagram", kind: "caption", limit: 2200, visibleBeforeMore: 125, tone: "hook in the first line", hashtags: 5, links: false };
+const tiktok: WriterProfile = { id: "tiktok", kind: "caption", limit: 2200, visibleBeforeMore: 100, tone: "short", hashtags: 3, links: false };
+const youtube: WriterProfile = { id: "youtube", kind: "youtube", limit: 5000, titleLimit: 100, visibleBeforeMore: null, tone: "searchable", hashtags: 3, links: false };
+const threads: WriterProfile = { id: "threads", kind: "post", limit: 500, visibleBeforeMore: null, tone: "conversational", hashtags: 0, links: false };
+assert.deepEqual(cleanHashtags(["#BuildInPublic", "buildinpublic", " #saas ", "#", "#1", "build in public"]), ["BuildInPublic", "saas"], "one tag per word, no empty or number-only tags");
+assert.equal(captionText({ text: "Hook line ", hashtags: ["saas", "#founder"] }), "Hook line\n\n#saas #founder");
+assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d"] }, tiktok, rules), ["It has 4 hashtags; tiktok takes at most 3."]);
+assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, tiktok, rules), ["It has 4 hashtags; tiktok takes at most 3."], "tags in the text count too");
+assert.ok(checkCaption({ text: "See paylane.app", hashtags: [] }, instagram, rules).some((issue) => issue.includes("link")));
+assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, instagram, rules)[0]?.includes("2202 characters"), "the limit counts the published caption with its hashtags");
+assert.deepEqual(checkYoutube({ title: "How Paylane chases late invoices", description: "A walk through.", hashtags: ["saas"] }, youtube, rules), []);
+assert.ok(checkYoutube({ title: "t".repeat(101), description: "d", hashtags: [] }, youtube, rules)[0]?.includes("101 characters"));
+assert.ok(checkYoutube({ title: "Late invoices #saas", description: "d", hashtags: [] }, youtube, rules).some((issue) => issue.includes("title has a hashtag")));
+assert.ok(checkSlides([{ heading: "One", body: "" }], rules)[0]?.includes("1 slides"));
+assert.deepEqual(checkSlides(Array.from({ length: 5 }, (_, i) => ({ heading: `Slide ${i + 1}`, body: "" })), rules), []);
+
+// The data after the cached prefix: profile, then the founder's rules, then their voice (newest, heaviest first).
+assert.match(profileBlock(threads), /platform: threads[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
+assert.match(profileBlock(youtube), /title limit: 100 characters; description limit: 5000 characters/);
+const voice = voiceBlock([
+  { body: "Old note", weight: 0.2, createdAt: "2026-09-01T00:00:00Z" },
+  { body: "Cuts the last line", weight: 0.9, createdAt: "2026-10-20T00:00:00Z" },
+]);
+assert.ok(voice.indexOf("Cuts the last line") < voice.indexOf("Old note"), "heavier notes first");
+const ctx: WriterContext = {
+  documents: { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] } },
+  corrections: ["Never end with a summary line."],
+  voiceNotes: [{ body: "Writes in lowercase", weight: 1, createdAt: "2026-10-28T00:00:00Z" }],
+  recent: [],
+};
+const data = writerData(ctx, threads, "BRIEF");
+assert.ok(data.indexOf("<platform>") < data.indexOf("<founder_rules") && data.indexOf("<founder_rules") < data.indexOf("<founder_voice") && data.indexOf("<founder_voice") < data.indexOf("<documents>") && data.endsWith("BRIEF"));
+for (const system of [CAPTION_SYSTEM, YOUTUBE_SYSTEM, VIDEO_BRIEF_SYSTEM, SLIDES_SYSTEM]) {
+  assert.ok(system.includes('<skill name="no-ai-slop">'), "every writer kind reads No AI Slop");
+}
+
+// draft(): the same prefix for every profile of a kind; one fix round; what still fails never reaches a card.
+type Call = { agent: string; system: string; prompt: string; label: string };
+function scripted(answers: unknown[]): { think: WriterThink; calls: Call[] } {
+  const calls: Call[] = [];
+  const think: WriterThink = async (opts) => {
+    calls.push({ agent: opts.agent, system: opts.system, prompt: opts.prompt, label: opts.label });
+    if (!answers.length) throw new Error("no scripted answer left");
+    return opts.schema.parse(answers.shift());
+  };
+  return { think, calls };
+}
+const video = { deliverableId: "d1", kind: "short" as const, title: "Chasing late invoices", hook: "Your invoice is 14 days late.", transcript: "Your invoice is 14 days late. Paylane sends the reminder.", seconds: 32 };
+
+async function writerChecks() {
+  const caption = { text: "Your invoice is 14 days late.\n\nPaylane sends the reminder for you.", hashtags: ["#freelancer", "invoicing"], rationale: "Leads with the hook." };
+  const run = scripted([caption, caption]);
+  const writer = createWriter({ think: run.think, agentFor: () => "x_writer", canFix: true });
+  const ig = await writer.draft("caption", instagram, { video }, ctx);
+  assert.deepEqual(ig.hashtags, ["freelancer", "invoicing"], "hashtags cleaned, the 14 from the transcript is a known number");
+  await writer.draft("caption", tiktok, { video }, ctx);
+  assert.equal(run.calls[0]!.system, run.calls[1]!.system, "one cached prefix for every caption profile");
+  assert.ok(run.calls[0]!.prompt.includes("platform: instagram") && run.calls[1]!.prompt.includes("platform: tiktok"));
+
+  // A failed code check gets one fix round with the reasons; the fixed caption is kept.
+  const tooMany = { ...caption, hashtags: ["a1", "b1", "c1", "d1"] };
+  const fixed = scripted([tooMany, caption]);
+  const out = await createWriter({ think: fixed.think, agentFor: () => "x_writer", canFix: true }).draft("caption", tiktok, { video }, ctx);
+  assert.equal(fixed.calls.length, 2);
+  assert.match(fixed.calls[1]!.prompt, /<problems>It has 4 hashtags; tiktok takes at most 3\.<\/problems>/);
+  assert.equal(fixed.calls[1]!.label, "write_caption_tiktok_fix");
+  assert.deepEqual(out.hashtags, ["freelancer", "invoicing"]);
+
+  // Still failing after the fix (or no fix allowed): the run fails with the reasons, no card.
+  const stuck = scripted([tooMany]);
+  await assert.rejects(createWriter({ think: stuck.think, agentFor: () => "x_writer", canFix: false }).draft("caption", tiktok, { video }, ctx), /failed our checks\. It has 4 hashtags/);
+
+  // Posts: the versions that pass the code are kept; a link or hashtag drops a version, never the style.
+  const post = { versions: [{ text: "We send the reminder on day 3.", angle: "a" }, { text: "Try it at paylane.app", angle: "b" }, { text: "Day 7 is the second nudge #saas", angle: "c" }], rationale: "r" };
+  const posted = await createWriter({ think: scripted([post]).think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM" }).draft("post", threads, { idea: "Reminders" }, ctx);
+  assert.deepEqual(posted.versions.map((v) => v.angle), ["a"]);
+
+  // The checker's review joins the fix round as advice; it never drops a version on its own.
+  const reviewed = scripted([{ ...post, versions: [post.versions[0]!, { text: "Most founders skip this: reminders.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }, { ...post, versions: [post.versions[0]!, { text: "Reminders on day 7 get paid.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }]);
+  const withReview = await createWriter({ think: reviewed.think, agentFor: () => "x_writer", canFix: true, postSystem: "POST SYSTEM", review: async () => [[], ["Cut the faux-insight setup."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
+  assert.equal(withReview.versions.length, 3);
+  assert.match(reviewed.calls[1]!.prompt, /Cut the faux-insight setup/);
+  const noFix = scripted([{ ...post, versions: [post.versions[0]!, { text: "Most founders skip this: reminders.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }]);
+  const kept = await createWriter({ think: noFix.think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM", review: async () => [[], ["Cut the faux-insight setup."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
+  assert.equal(kept.versions.length, 3, "a style problem the writer could not fix still reaches the founder");
+
+  // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
+  const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r" };
+  const b = await createWriter({ think: scripted([brief]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "Late invoices" }, ctx);
+  assert.deepEqual([b.brief.hooks.length, b.brief.cta, b.brief.seconds], [3, "Try Paylane", 30]);
+  assert.equal(VideoBriefSchema.parse(b.brief).objective, brief.objective, "Studio's buildVideo takes it as is");
+  await assert.rejects(createWriter({ think: scripted([{ ...brief, hooks: ["One"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /1 hooks; a brief has 3/);
+  await assert.rejects(createWriter({ think: scripted([{ ...brief, keyPoints: ["Used by 4,000 freelancers"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /4,000/);
+
+  // The CI fakes pass their own checks for every kind, so fake runs and e2e reach a card.
+  const fake: WriterThink = async (opts) => opts.schema.parse(opts.fake!());
+  const fakeWriter = createWriter({ think: fake, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM" });
+  assert.equal((await fakeWriter.draft("post", threads, { idea: "Why reminders on day 3 and 7 work" }, ctx)).versions.length, 3);
+  for (const profile of [instagram, tiktok]) assert.ok((await fakeWriter.draft("caption", profile, { video }, ctx)).hashtags.length <= profile.hashtags);
+  assert.ok((await fakeWriter.draft("youtube", youtube, { video }, ctx)).title);
+  assert.equal((await fakeWriter.draft("video_brief", null, { idea: "Chasing a late invoice", seconds: 45 }, ctx)).brief.seconds, 45);
+  assert.equal((await fakeWriter.draft("slides", null, { idea: "Three reminders that get invoices paid", count: 7 }, ctx)).slides.length, 7);
+
+  // A kind on the wrong profile is a programming error, not a draft.
+  await assert.rejects(createWriter({ think: scripted([]).think, agentFor: () => "x_writer", canFix: false }).draft("caption", threads, { video }, ctx), /caption profile/);
+}
+
+writerChecks().then(
+  () => console.log("writer.check: ok"),
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);
