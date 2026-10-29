@@ -23,6 +23,7 @@ export function briefRequest(brief: VideoBrief, strategy: StrategyVoice = {}): C
     brief.angle && `Angle: ${brief.angle}`,
     brief.hooks.length && `Open with one of these hooks (the first is preferred): ${brief.hooks.map((hook) => `"${hook}"`).join("; ")}`,
     brief.keyPoints.length && `Facts to use (use no others): ${brief.keyPoints.join("; ")}`,
+    brief.cta && `End with this call to action: ${brief.cta}`,
     strategy.voice?.trim() && `Brand voice: ${strategy.voice.trim()}`,
     strategy.avoid?.length && `Never say or imply: ${strategy.avoid.join("; ")}`,
   ].filter((line): line is string => Boolean(line));

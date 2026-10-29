@@ -16,7 +16,7 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
 
 ## Todo
 
-- [ ] **B0 Writer interface (push first)**: `lib/cmo/writer/types.ts`: `draft(kind, profile, brief, context)` for
+- [x] **B0 Writer interface (push first)**: `lib/cmo/writer/types.ts`: `draft(kind, profile, brief, context)` for
       `post`, `caption`, `youtube`, `video_brief`, `slides`; inputs (brief, documents, voice notes, corrections,
       profile) and outputs (versions with angle and rationale; for captions one per platform; for the brief angle,
       3 hooks, key points, CTA, seconds, aspect); the video brief type is the one P2's adapter takes (move it here if

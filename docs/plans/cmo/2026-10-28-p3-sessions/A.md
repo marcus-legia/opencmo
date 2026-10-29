@@ -44,3 +44,7 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
 ## Requests
 
 (Others append `[from → A] what, why`; answer here with the commit.)
+
+- [from B → A] Add `NODE_OPTIONS=--conditions=react-server tsx lib/cmo/writer/writer.check.ts` to `check:contracts` in
+  `apps/web/package.json` (your block). It covers Writer's contract: Studio takes Writer's `VideoBrief`, every kind
+  names its profile kind, the brief's new `cta` reaches the Director. Later B tasks add their asserts to the same file.
