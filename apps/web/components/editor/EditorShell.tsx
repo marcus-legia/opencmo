@@ -24,6 +24,7 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import type { RenderTask } from "@/lib/api/tasks";
 import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
+import { UI_V2 } from "@/lib/screens/flag";
 
 import { fitCamera, renderScale, zoomAt, type Camera, type Size } from "./camera";
 import { FrameBar } from "./FrameBar";
@@ -1317,6 +1318,7 @@ function Workspace({
         onLoadLatest={() => void loadLatest()}
         onExport={() => void startExport()}
         onCancelExport={() => void cancelExport()}
+        finish={UI_V2 ? { clipId, documentHash: state.documentHash } : undefined}
       />
       <div className="ed2-body" ref={layout.bodyRef}>
       <aside

@@ -10,15 +10,25 @@ import { DECIDABLE_IN_WAVE_1, type ApprovalCard } from "@/lib/screens/approval-c
 /** The actions `approval_decide` accepts, per kind (contract doc S3). */
 export type Decision =
   | { action: "approve"; text?: string }
-  | { action: "edit"; text: string }
+  /** `beat` (script cards): the beat whose words `text` replaces; absent, `text` is the whole draft. */
+  | { action: "edit"; text: string; beat?: number }
   | { action: "skip"; reason?: string }
   | { action: "replied" }
   | { action: "dismissed"; reason?: string }
-  | { action: "reject"; reason?: string };
+  | { action: "reject"; reason?: string }
+  /** Price card (card 2): make keyframe `index` (0-based) again; a new card replaces this one. */
+  | { action: "redo"; index: number }
+  /** Script and price cards: stop the video here; nothing more is spent (keyframes already made stay paid for). */
+  | { action: "cancel"; reason?: string }
+  /** Finished video and shorts batch: not yet, with what to change. */
+  | { action: "send_back"; reason?: string };
 
-/** Why the card cannot be decided here, or null when it can. */
-export function blockedReason(card: ApprovalCard, sample: boolean): string | null {
-  if (card.problem) return card.problem.text;
+/** Declining spends nothing, so a card that waits on credits can still be cancelled or set aside. */
+const DECLINES: ReadonlySet<Decision["action"]> = new Set(["skip", "dismissed", "reject", "cancel", "send_back"]);
+
+/** Why the card cannot be decided here (with `action`, that decision), or null when it can. */
+export function blockedReason(card: ApprovalCard, sample: boolean, action?: Decision["action"]): string | null {
+  if (card.problem && !(card.problem.kind === "needs_credits" && action && DECLINES.has(action))) return card.problem.text;
   if (card.status !== "waiting") return "This card was already decided.";
   if (sample) return null;
   if (!DECIDABLE_IN_WAVE_1.has(card.kind)) return "Decisions on this card open with its department's release.";
@@ -28,7 +38,7 @@ export function blockedReason(card: ApprovalCard, sample: boolean): string | nul
 /** Sends the decision; returns the card as the server has it now. Sample cards resolve locally. */
 export async function decide(card: ApprovalCard, decision: Decision, sample: boolean): Promise<ApprovalCard | null> {
   if (sample) return null;
-  const reason = blockedReason(card, sample);
+  const reason = blockedReason(card, sample, decision.action);
   if (reason) throw new ApiError(reason, 0, null);
   const { action, ...rest } = decision;
   return api<ApprovalCard>(`/approvals/${encodeURIComponent(card.id)}`, jsonBody({ action, contentHash: card.contentHash, ...rest }));
@@ -46,8 +56,22 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       return `Skipped${suffix}.`;
     case "reject":
       return `Rejected${suffix}.`;
+    case "redo":
+      return `Making keyframe ${decision.index + 1} again. A new card comes when it is ready${suffix}.`;
+    case "cancel":
+      // Card 2 comes after the keyframes were made and paid for: only card 1 is cancelled before any spend.
+      return card.kind === "price" ? `Cancelled. Nothing more will be spent${suffix}.` : `Cancelled. No credits were spent${suffix}.`;
+    case "send_back":
+      return card.kind === "finished_video" ? `Sent back. The edit stays open in the editor${suffix}.` : `Sent back with your note${suffix}.`;
+    case "edit":
+      if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
+      return `Approved${suffix}.`;
     default:
       if (card.kind === "post" && !sample) return "Approved. Post it on X when you are ready.";
+      if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
+      if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
+      if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;
+      if (card.body.kind === "shorts_batch") return `Approved ${card.body.shorts.length} shorts. They are ready to schedule${suffix}.`;
       return `Approved${suffix}.`;
   }
 }

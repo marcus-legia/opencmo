@@ -29,22 +29,34 @@ function jwtSecret(): string {
   return secret;
 }
 
-/** JWT HS256 `authenticated` cho `userId`, cùng dạng Supabase Auth phát. */
-export function userToken(userId: string, now = Math.floor(Date.now() / 1000)): string {
+/** An HS256 `authenticated` JWT for `userId`, shaped like Supabase Auth's; `claims` add to it (signed, so unforgeable). */
+export function userToken(userId: string, now = Math.floor(Date.now() / 1000), claims: Record<string, string> = {}): string {
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64url(
-    JSON.stringify({ sub: userId, role: "authenticated", aud: "authenticated", iat: now, exp: now + TOKEN_SECONDS }),
+    JSON.stringify({ ...claims, sub: userId, role: "authenticated", aud: "authenticated", iat: now, exp: now + TOKEN_SECONDS }),
   );
   const signature = createHmac("sha256", jwtSecret()).update(`${header}.${payload}`).digest("base64url");
   return `${header}.${payload}.${signature}`;
 }
 
-/** Client Supabase dưới RLS của `userId` (không cookie, không lưu phiên). */
-export function clientFor(userId: string): SupabaseClient {
+function clientWith(token: string): SupabaseClient {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${userToken(userId)}` } },
+    global: { headers: { Authorization: `Bearer ${token}` } },
   }) as unknown as SupabaseClient;
+}
+
+/** A Supabase client under `userId`'s RLS (no cookie, no stored session). */
+export function clientFor(userId: string): SupabaseClient {
+  return clientWith(userToken(userId));
+}
+
+/**
+ * The same, as the brain's Studio order runner: the token also says `opencmo_actor: brain`, which the RPCs that
+ * store, finish and charge Studio steps require (`studio_brain_call()`); a founder's own session cannot call them.
+ */
+export function brainClientFor(userId: string): SupabaseClient {
+  return clientWith(userToken(userId, undefined, { opencmo_actor: "brain" }));
 }
 
 /** `Authorization: Bearer ocm_…` → user id, hoặc null (khoá thiếu, sai, đã thu hồi). */
