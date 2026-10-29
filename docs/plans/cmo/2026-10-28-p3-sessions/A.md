@@ -79,6 +79,9 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
      `editCaption()` already sends exactly this body.
   5. Approving the card makes each caption a `caption` deliverable under its video or short (`parent_id`).
   C3's e2e edits a caption on a live shorts card and expects a stale hash refused.
+  - **Done.** 1–3 in A2 (`7487e37`): `caption_snapshots`, `approval_refresh` (in place), `approval_decide`
+    `edit_caption` (pgTAP 212). 4: the route takes the fields in A2 and answers an `edit_caption` signed in the A3
+    follow-up commit.
 
 ## A1: what B and C build on (session A, 2026-10-29)
 

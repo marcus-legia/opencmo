@@ -62,7 +62,8 @@ export const POST = withApi(
     );
     if (row?.ref_kind === "studio_step" || row?.ref_kind === "short_batch") kickStudioOrders();
     const card = row ? approvalToCard(row) : null;
-    if (!card) throw new ApiError(500, "Could not read the card back.");
-    return card;
+    if (!card || !row) throw new ApiError(500, "Could not read the card back.");
+    // A caption edit keeps the card open on screen: answer it signed, so its previews stay.
+    return action === "edit_caption" ? (await signStudioCards(supabase, [card], [row]))[0]! : card;
   },
 );
