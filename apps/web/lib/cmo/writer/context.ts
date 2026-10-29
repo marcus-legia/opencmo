@@ -7,7 +7,9 @@
  * prefix when they disagree (`writer.md` §5).
  */
 
-import { correctionsBlock, documentsBlock } from "../jobs/context";
+import { correctionsBlock, documentsBlock, lessonsBlock, memoriesBlock } from "../jobs/context";
+import type { CmoStore, MemoryTopic } from "../jobs/types";
+import { profileOf } from "../platforms";
 import type { VoiceNote, WriterContext, WriterProfile } from "./types";
 
 /** At most this many voice notes reach a prompt; the read RPC already sorts them newest and heaviest first. */
@@ -31,12 +33,35 @@ export function profileFromPrompt(prompt: string): string | null {
   return /^<platform>\nplatform: ([a-z_]+)/.exec(prompt)?.[1] ?? null;
 }
 
-/** How the founder writes, newest and weightiest first; each note says how much it counts. */
+/**
+ * How the founder writes, weightiest (newest) first; each note says its platform and how much it counts, so a newer
+ * habit outweighs an older one and a LinkedIn habit is read as LinkedIn's.
+ */
 export function voiceBlock(notes: readonly VoiceNote[]): string {
   if (!notes.length) return "";
   const top = [...notes].sort((a, b) => b.weight - a.weight || b.createdAt.localeCompare(a.createdAt)).slice(0, VOICE_NOTES_MAX);
-  const lines = top.map((note) => `- (weight ${note.weight.toFixed(2)}, ${note.createdAt.slice(0, 10)}) ${note.body}`);
+  const label = (platform: string | null) => (platform ? (profileOf(platform)?.label ?? platform) : "any platform");
+  const lines = top.map((note) => `- (${label(note.platform)}, weight ${note.weight.toFixed(2)}, ${note.createdAt.slice(0, 10)}) ${note.body}`);
   return `<founder_voice learned_from="the founder's approvals and edits" newer_counts_more="true">\n${lines.join("\n")}\n</founder_voice>`;
+}
+
+/**
+ * What a writer remembers, split so each part takes its place in the prompt: the founder's rules (tier 0), their
+ * voice notes (read apart, newest and heaviest first), then the topic's lessons and the other notes.
+ */
+export async function writerMemory(store: CmoStore, userId: string, topic: MemoryTopic = "post"): Promise<Pick<WriterContext, "corrections" | "voiceNotes" | "memories">> {
+  const [corrections, notes, lessons, memories] = await Promise.all([
+    store.corrections(userId),
+    store.voiceNotes(userId, VOICE_NOTES_MAX),
+    store.lessons(userId),
+    store.memories(userId, 15, topic, { voice: false }),
+  ]);
+  const relevant = lessons.filter((lesson) => lesson.topic === topic || lesson.topic === "general");
+  return {
+    corrections,
+    voiceNotes: notes.map((note) => ({ body: note.body, platform: note.platform, weight: note.weight, createdAt: note.created_at })),
+    memories: [lessonsBlock(relevant), memoriesBlock(memories)].filter(Boolean).join("\n\n"),
+  };
 }
 
 /** Everything after the cached prefix, in the order the writer reads it. `brief` is the kind's work order. */

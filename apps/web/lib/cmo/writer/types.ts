@@ -79,7 +79,10 @@ export type WriterBrief<K extends WriterKind = WriterKind> = WriterBriefs[K];
 
 /** A voice note learned from the founder's approvals and edits (`cmo_memories`, topic `post`). */
 export type VoiceNote = {
+  /** The founder's own words from one decision (approved text, an edit, a skip reason), written by SQL. */
   body: string;
+  /** The profile id the decision was on; null when unknown. */
+  platform: string | null;
   /** 0–1, newer notes weigh more (the read RPC weighs by age). */
   weight: number;
   createdAt: string;

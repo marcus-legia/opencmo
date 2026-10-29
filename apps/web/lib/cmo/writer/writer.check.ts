@@ -103,14 +103,15 @@ assert.deepEqual(checkSlides(Array.from({ length: 5 }, (_, i) => ({ heading: `Sl
 assert.match(profileBlock(threads), /platform: threads \(Threads\)[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
 assert.match(profileBlock(youtube), /title limit: 100 characters; description limit: 5000 characters/);
 const voice = voiceBlock([
-  { body: "Old note", weight: 0.2, createdAt: "2026-09-01T00:00:00Z" },
-  { body: "Cuts the last line", weight: 0.9, createdAt: "2026-10-20T00:00:00Z" },
+  { body: "Old note", platform: "x", weight: 0.2, createdAt: "2026-09-01T00:00:00Z" },
+  { body: "Cuts the last line", platform: "linkedin", weight: 0.9, createdAt: "2026-10-20T00:00:00Z" },
 ]);
 assert.ok(voice.indexOf("Cuts the last line") < voice.indexOf("Old note"), "heavier notes first");
+assert.match(voice, /- \(LinkedIn, weight 0\.90, 2026-10-20\) Cuts the last line/, "each note says its platform and weight");
 const ctx: WriterContext = {
   documents: { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] } },
   corrections: ["Never end with a summary line."],
-  voiceNotes: [{ body: "Writes in lowercase", weight: 1, createdAt: "2026-10-28T00:00:00Z" }],
+  voiceNotes: [{ body: "Writes in lowercase", platform: "threads", weight: 1, createdAt: "2026-10-28T00:00:00Z" }],
   recent: [],
 };
 const data = writerData(ctx, threads, "BRIEF");
@@ -197,6 +198,7 @@ async function postChecks() {
     assert.ok(agent && AGENT_SPECS[agent].tier === "draft", `${p.id} has its own drafting agent`);
   }
   assert.deepEqual([postProfile("threads").id, postProfile("linkedin").id, postProfile("x").id], ["threads", "linkedin", "x"]);
+  assert.deepEqual([postProfile("Threads").id, postProfile("LinkedIn").id, postProfile("X").id, postProfile("Twitter").id], ["threads", "linkedin", "x", "x"], "the calendar's labels");
   assert.deepEqual([postProfile(null).id, postProfile("reddit").id, postProfile("tiktok_caption").id], ["x", "x", "x"], "no item, an unknown or a caption platform: X");
   const linkedin = profile("linkedin");
   const x = profile("x");
@@ -236,6 +238,26 @@ async function postChecks() {
   assert.equal(threadsCard.status, "in_review");
   assert.deepEqual([threadsCard.body.text, threadsCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]]);
   assert.deepEqual([xCard.body.text, xCard.body.alternates], ["Reminders on day 3, 7 and 14.", []], "the long version is dropped on X");
+
+  // W2: the founder's rules first, then their voice notes (newest, weightiest), then documents; the prefix is the same
+  // whatever the founder's notes say; voice notes are not read twice through the general memories.
+  const voiced = memoryStore(docs, ["Skipped a draft: too salesy"], [], ["Never end with a summary line."]);
+  voiced.voice.push(
+    { body: 'Edited on LinkedIn before approving (cut it shorter): "Reminders get paid."', platform: "linkedin", created_at: "2026-10-28T09:00:00Z", weight: 0.98 },
+    { body: 'Approved as written on X: "Day 3, 7, 14."', platform: "x", created_at: "2026-09-10T09:00:00Z", weight: 0.2 },
+  );
+  voiced.items.push(item("LinkedIn", "lv"));
+  voiced.enqueue("post_draft", { brain: "claude", item_id: "lv" });
+  await drainCmoQueue(voiced.store);
+  const asked = voiced.inbox[0]!.request;
+  assert.equal(profileFromPrompt(asked.prompt), "linkedin", "a calendar label resolves to its profile");
+  assert.equal(asked.agent, "linkedin_writer");
+  const at = (tag: string) => asked.prompt.indexOf(tag);
+  assert.ok(at("<platform>") === 0 && at("<platform>") < at("<founder_rules") && at("<founder_rules") < at("<founder_voice") && at("<founder_voice") < at("<documents>") && at("<documents>") < at("<memories>"), "rules, then voice, then documents and memories");
+  assert.ok(asked.prompt.indexOf("cut it shorter") < asked.prompt.indexOf("Day 3, 7, 14."), "the newer, heavier note first");
+  assert.match(asked.prompt, /\(LinkedIn, weight 0\.98, 2026-10-28\)/);
+  assert.equal(asked.system, onX.request.system, "the founder's notes never change the cached prefix");
+  assert.match(asked.system, /When their voice and the no-ai-slop guidance disagree, write it their way/);
 
   // The fake writer drafts LinkedIn too, end to end.
   const fake = memoryStore(docs, []);

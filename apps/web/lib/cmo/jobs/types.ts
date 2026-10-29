@@ -23,6 +23,9 @@ export const MEMORY_TOPICS: MemoryTopic[] = ["general", "post", "sales", "video"
 export type MemoryEvent = { kind: "preference" | "fact" | "feedback" | "result"; topic: MemoryTopic; body: string; created_at: string };
 
 /** Tier 3: a weekly lesson for one topic; `week` is the Monday it covers. */
+/** A voice note as `voice_notes_for` returns it: the founder's own words from one decision, and its platform. */
+export type VoiceNoteRow = { body: string; platform: string | null; created_at: string; weight: number };
+
 export type Lesson = { week: string; topic: MemoryTopic; body: string };
 
 /** Điều W7 học được từ đối thủ: mọi mẫu đều có URL bài làm bằng chứng. */
@@ -115,8 +118,13 @@ export interface CmoStore {
   step(run: QueuedRun, steps: Step[]): Promise<boolean>;
   complete(run: QueuedRun, ok: boolean, output: Record<string, unknown> | null, error: string | null): Promise<boolean>;
   documents(userId: string): Promise<Documents>;
-  /** Unexpired notes, most important first; with a topic, that topic plus `general`. */
-  memories(userId: string, limit: number, topic?: MemoryTopic): Promise<string[]>;
+  /**
+   * Unexpired notes, most important first; with a topic, that topic plus `general`. `voice: false` leaves out the
+   * voice notes (rows learned from a decision), for a writer that reads them on their own through `voiceNotes`.
+   */
+  memories(userId: string, limit: number, topic?: MemoryTopic, opts?: { voice?: boolean }): Promise<string[]>;
+  /** The founder's voice notes (`voice_notes_for`), newest first, with a weight that falls from 1 to 0 with age. */
+  voiceNotes(userId: string, limit: number): Promise<VoiceNoteRow[]>;
   /** Every note written since `since` (ISO), newest first, for the weekly summary. */
   memoryEvents(userId: string, since: string): Promise<MemoryEvent[]>;
   /** Memory tier 0: the founder's active rules (`cmo_corrections`), newest first. */

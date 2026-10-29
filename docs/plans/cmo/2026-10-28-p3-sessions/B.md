@@ -29,7 +29,7 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
 - [x] **B2 W1**: `draft-post` takes a profile; one writer agent per profile in the registry with the same cached
       prefix; checks from `platforms.json` (limit, visible before "more" as advice on LinkedIn); 3 versions per
       platform from one idea.
-- [ ] **B3 W2**: the writer reads the top voice notes (newest first, weight by age) and tier 0 corrections after the
+- [x] **B3 W2**: the writer reads the top voice notes (newest first, weight by age) and tier 0 corrections after the
       cached prefix; the founder's voice beats the skill; `classify-edits` writes notes through A1's RPC; outside text
       never becomes a note.
 - [ ] **B4 W3**: `write_video_brief` (called by A2's rule before `buildVideo`), `write_caption` per platform (hashtags
@@ -59,6 +59,13 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   and MCP's precheck reads the profile back from it (`profileFromPrompt`), so a Threads answer is checked against
   500, not 280. LinkedIn's "more" cut is advice for the fix round (`moreAdvice`), never a drop. Recent posts in the
   prompt are the same platform's. Eval: `w2-threads` and `w2-linkedin` (fake 36/36 each).
+- **B3**: the writer's prompt reads, after the `<platform>` block, the founder's rules (tier 0), then up to 12 voice
+  notes from `voice_notes_for` (store `voiceNotes`), weightiest (newest) first, each with its platform and weight,
+  then documents, lessons and the other notes; the general memories leave voice-note rows out (`source_outcome` set),
+  so no note is read twice. The checker reads the rules and voice too, and treats a pattern the founder uses as their
+  voice. The system prompt says the founder's voice beats No AI Slop; it is the same for every founder and platform.
+  `classify-edits` is unchanged: A1's `cmo_draft_outcomes_learn` trigger writes the note when the edit is labelled,
+  and only SQL writes notes, from the founder's own words, so outside text never becomes one.
 - `writer.check.ts` holds B's asserts; it runs in `check:contracts` once A adds it (request in `A.md`).
 
 ## Requests
@@ -70,3 +77,5 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   `profileOf(profileIdOf(platform) ?? "x")` (`lib/cmo/platforms.ts`, A1; same map as SQL's `platform_profile_id`).
   B3: voice notes need no write from `classify-edits` (labeling the edit writes the note); read them with
   `voice_notes_for` (A.md "A1: what B and C build on").
+  - **Done** in the B3 commit: `postProfile` resolves labels with `profileIdOf` (asserted for "X", "Threads",
+    "LinkedIn", "Twitter"); notes are read with `voice_notes_for`; `classify-edits` unchanged.
