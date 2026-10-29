@@ -1567,7 +1567,7 @@ CREATE TABLE public.approvals (
 CREATE FUNCTION public.approval_decide(p_id uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb) RETURNS public.approvals
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_user uuid := public.require_user();
   v_row public.approvals;
@@ -1580,6 +1580,8 @@ declare
   v_n integer;
   v_text text;
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
+  v_caption public.content_items;
+  v_title text;
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1600,6 +1602,33 @@ begin
   if v_payload->>'content_hash' is distinct from v_row.content_hash
      or public.approval_hash(public.approval_snapshot(v_row.ref_kind, v_row.ref_id)) is distinct from v_row.content_hash then
     raise exception 'This card changed. Look at it again before deciding.' using errcode = 'P0001';
+  end if;
+
+  -- Words on a finished video or a shorts batch: one caption changes, nothing is decided.
+  if p_action = 'edit_caption' then
+    if v_row.kind not in ('finished_video', 'shorts_batch') then
+      raise exception 'Only a video''s or a batch''s captions are edited here.' using errcode = '22023';
+    end if;
+    if coalesce(v_payload->>'caption', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception 'Say which caption to change.' using errcode = '22023';
+    end if;
+    select * into v_caption from public.content_items
+    where id = (v_payload->>'caption')::uuid and user_id = v_user and department = 'video' and clip_id is not null
+      and v_row.snapshot->'captions' @> jsonb_build_array(jsonb_build_object('caption_id', (v_payload->>'caption')))
+    for update;
+    if not found then
+      raise exception 'That caption is not on this card.' using errcode = '22023';
+    end if;
+    v_text := trim(coalesce(v_payload->>'text', ''));
+    v_title := case when v_caption.platform = 'youtube' then nullif(trim(coalesce(v_payload->>'title', v_caption.body->>'title', '')), '') end;
+    perform public.caption_check(v_caption.platform, v_text, v_title);
+    update public.content_items
+    set body = jsonb_strip_nulls(body || jsonb_build_object('text', v_text, 'title', v_title, 'edited_at', now())),
+        updated_at = now()
+    where id = v_caption.id;
+    perform public.approval_refresh(v_row.ref_kind, v_row.ref_id);
+    select * into v_row from public.approvals where id = p_id;
+    return v_row;
   end if;
 
   perform set_config('opencmo.decided_via', v_via, true);
@@ -1743,7 +1772,7 @@ begin
   end if;
   return v_row;
 end;
-$$;
+$_$;
 
 
 --
@@ -1792,6 +1821,27 @@ $$;
 
 
 --
+-- Name: approval_refresh(text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_refresh(p_ref_kind text, p_ref_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_snapshot jsonb := public.approval_snapshot(p_ref_kind, p_ref_id);
+begin
+  if v_snapshot is null then
+    return;
+  end if;
+  update public.approvals set snapshot = v_snapshot, content_hash = public.approval_hash(v_snapshot)
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting'
+    and content_hash is distinct from public.approval_hash(v_snapshot);
+end;
+$$;
+
+
+--
 -- Name: approval_snapshot(text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1801,6 +1851,7 @@ CREATE FUNCTION public.approval_snapshot(p_ref_kind text, p_ref_id uuid) RETURNS
     AS $$
 declare
   v jsonb;
+  v_captions jsonb;
 begin
   case p_ref_kind
     when 'content_item' then
@@ -1848,6 +1899,7 @@ begin
         limit 1
       ) r on true
       where p.clip_id = p_ref_id;
+      v_captions := public.caption_snapshots(array[p_ref_id]);
     when 'short_batch' then
       select jsonb_build_object('kind', 'shorts_batch', 'batch_id', b.id, 'parent_clip_id', b.parent_clip_id,
         'title', coalesce(c.hook, ''), 'parent_hash', b.parent_hash,
@@ -1860,9 +1912,16 @@ begin
       from public.short_batches b
       left join public.clips c on c.id = b.parent_clip_id
       where b.id = p_ref_id;
+      v_captions := public.caption_snapshots(array(
+        select s.short_clip_id from public.shorts s
+        where s.batch_id = p_ref_id and s.status <> 'failed' and s.short_clip_id is not null
+        order by s.source_start, s.id));
     else
       raise exception 'Unknown card source.' using errcode = '22023';
   end case;
+  if v is not null and v_captions is not null then
+    v := v || jsonb_build_object('captions', v_captions);
+  end if;
   return v;
 end;
 $$;
@@ -1889,6 +1948,57 @@ begin
     perform public.approval_raise(r.user_id, r.ref_kind, r.id);
   end loop;
   return (select count(*) from public.approvals) - v_before;
+end;
+$$;
+
+
+--
+-- Name: approvals_caption_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_caption_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_clips uuid[];
+  v_root public.work_orders;
+  v_order public.work_orders;
+  v_free integer;
+  v_profiles text[];
+begin
+  if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'waiting' then
+    return new;
+  end if;
+  begin
+    if exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'write_caption'
+               and brief->>'ref_id' = new.ref_id::text and status not in ('failed', 'cancelled'))
+       or public.cmo_paused(new.user_id) then
+      return new;
+    end if;
+    v_clips := case new.kind
+      when 'finished_video' then array[new.ref_id]
+      else array(select s.short_clip_id from public.shorts s where s.batch_id = new.ref_id and s.status = 'ready'
+                   and s.short_clip_id is not null order by s.source_start, s.id) end;
+    if cardinality(v_clips) = 0 then
+      return new;
+    end if;
+    v_profiles := public.caption_targets(new.user_id);
+    v_root := public.work_order_week_root(new.user_id);
+    v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    v_order := public.work_order_create(new.user_id, v_root.week, v_root.id, 'write_caption',
+      left('Captions for “' || coalesce(nullif(new.snapshot->>'title', ''), 'your video') || '”', 200),
+      jsonb_build_object('objective', 'Write the captions for each platform.', 'ref_kind', new.ref_kind, 'ref_id', new.ref_id,
+        'clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles), 'done_when', 'The captions are on the card.'),
+      least(public.cmo_job_price('write_caption'), greatest(v_free, 0)), null, '{}', 'event');
+    perform public.writer_order_start(v_order, jsonb_build_object('clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles),
+      'ref_kind', new.ref_kind, 'ref_id', new.ref_id));
+  exception when others then
+    raise warning 'caption rule for card % failed: %', new.id, sqlerrm;
+  end;
+  return new;
 end;
 $$;
 
@@ -2216,6 +2326,169 @@ $$;
 
 
 --
+-- Name: caption_cards_refresh(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_cards_refresh(p_clip uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_batch uuid;
+begin
+  perform public.approval_refresh('editor_project', p_clip);
+  for v_batch in select distinct s.batch_id from public.shorts s where s.short_clip_id = p_clip loop
+    perform public.approval_refresh('short_batch', v_batch);
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: caption_check(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_check(p_profile text, p_text text, p_title text) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_profile jsonb := public.platform_profile(p_profile);
+  v_label text := v_profile->>'label';
+  v_tags integer;
+begin
+  if v_profile is null or v_profile->>'kind' not in ('caption', 'youtube') then
+    raise exception 'Captions are for Instagram, TikTok and YouTube.' using errcode = '22023';
+  end if;
+  if p_text is null or char_length(trim(p_text)) = 0 or char_length(p_text) > (v_profile->>'limit')::integer then
+    raise exception 'A % is 1 to % characters.', v_label, to_char((v_profile->>'limit')::integer, 'FM999,999') using errcode = '22023';
+  end if;
+  if v_profile->>'kind' = 'youtube' then
+    if p_title is null or char_length(trim(p_title)) = 0 or char_length(p_title) > (v_profile->>'title')::integer then
+      raise exception 'A YouTube title is 1 to % characters.', v_profile->>'title' using errcode = '22023';
+    end if;
+  elsif p_title is not null then
+    raise exception 'Only YouTube has a title.' using errcode = '22023';
+  end if;
+  if concat_ws(' ', p_title, p_text) ~* '(https?://|www\.)' then
+    raise exception 'Captions carry no links.' using errcode = '22023';
+  end if;
+  -- `countHashtags` in lib/cmo/platforms.ts: `#word` with a letter in it, not `#1` or `a#b`.
+  select count(*) into v_tags
+  from regexp_matches(concat_ws(' ', p_title, p_text), '(^|[^[:alnum:]_&/])#[[:alnum:]_]*[[:alpha:]][[:alnum:]_]*', 'g');
+  if v_tags > (v_profile->>'hashtags')::integer then
+    raise exception 'A % carries at most % hashtags.', v_label, v_profile->>'hashtags' using errcode = '22023';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: content_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.content_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    run_id uuid,
+    department text NOT NULL,
+    platform text NOT NULL,
+    day date NOT NULL,
+    idea text NOT NULL,
+    reason text DEFAULT ''::text NOT NULL,
+    status text DEFAULT 'planned'::text NOT NULL,
+    priority text DEFAULT 'medium'::text NOT NULL,
+    body jsonb DEFAULT '{}'::jsonb NOT NULL,
+    final_text text,
+    external_url text,
+    decided_at timestamp with time zone,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    clip_id uuid,
+    CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
+    CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
+    CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
+    CONSTRAINT content_items_external_url_check CHECK ((char_length(external_url) <= 500)),
+    CONSTRAINT content_items_final_text_check CHECK ((char_length(final_text) <= 4000)),
+    CONSTRAINT content_items_idea_check CHECK (((char_length(idea) >= 1) AND (char_length(idea) <= 300))),
+    CONSTRAINT content_items_platform_check CHECK (((char_length(platform) >= 1) AND (char_length(platform) <= 20))),
+    CONSTRAINT content_items_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
+    CONSTRAINT content_items_reason_check CHECK ((char_length(reason) <= 300)),
+    CONSTRAINT content_items_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'drafting'::text, 'in_review'::text, 'approved'::text, 'published'::text, 'skipped'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: caption_deliver(public.content_items); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_deliver(p_caption public.content_items) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_parent public.deliverables;
+begin
+  select * into v_parent from public.deliverables
+  where ref_kind = 'clip' and ref_id = p_caption.clip_id and kind in ('video', 'short') and user_id = p_caption.user_id
+  order by created_at limit 1;
+  if not found then
+    return;
+  end if;
+  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status, parent_id)
+  values (p_caption.user_id, v_parent.order_id, 'caption', 'content_item', p_caption.id, 'ready', v_parent.id)
+  on conflict (ref_kind, ref_id) do nothing;
+  update public.content_items set status = 'approved', decided_at = coalesce(decided_at, now()), updated_at = now()
+  where id = p_caption.id and status = 'in_review';
+end;
+$$;
+
+
+--
+-- Name: caption_profiles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_profiles() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    AS $$ select array['instagram_caption', 'tiktok_caption', 'youtube'] $$;
+
+
+--
+-- Name: caption_snapshots(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_snapshots(p_clips uuid[]) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select jsonb_agg(jsonb_build_object('caption_id', c.id, 'clip_id', c.clip_id, 'profile', c.platform,
+      'text', coalesce(c.body->>'text', ''), 'title', c.body->>'title')
+    order by array_position(p_clips, c.clip_id), array_position(public.caption_profiles(), c.platform))
+  from public.content_items c
+  where c.clip_id = any(p_clips) and c.department = 'video'
+$$;
+
+
+--
+-- Name: caption_targets(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.caption_targets(p_user uuid) RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select array_agg(p order by array_position(public.caption_profiles(), p))
+     from (select distinct public.platform_profile_id(c.platform) as p from public.content_items c
+           where c.user_id = p_user and c.department = 'video' and c.clip_id is null
+             and c.day between date_trunc('week', current_date)::date and date_trunc('week', current_date)::date + 6) x
+     where p = any(public.caption_profiles())),
+    public.caption_profiles())
+$$;
+
+
+--
 -- Name: captions_credits(numeric); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2454,7 +2727,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -2633,42 +2906,6 @@ CREATE FUNCTION public.cleanup_started_at() RETURNS timestamp with time zone
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$ select clock_timestamp(); $$;
-
-
---
--- Name: content_items; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.content_items (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    run_id uuid,
-    department text NOT NULL,
-    platform text NOT NULL,
-    day date NOT NULL,
-    idea text NOT NULL,
-    reason text DEFAULT ''::text NOT NULL,
-    status text DEFAULT 'planned'::text NOT NULL,
-    priority text DEFAULT 'medium'::text NOT NULL,
-    body jsonb DEFAULT '{}'::jsonb NOT NULL,
-    final_text text,
-    external_url text,
-    decided_at timestamp with time zone,
-    published_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    clip_id uuid,
-    CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
-    CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
-    CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
-    CONSTRAINT content_items_external_url_check CHECK ((char_length(external_url) <= 500)),
-    CONSTRAINT content_items_final_text_check CHECK ((char_length(final_text) <= 4000)),
-    CONSTRAINT content_items_idea_check CHECK (((char_length(idea) >= 1) AND (char_length(idea) <= 300))),
-    CONSTRAINT content_items_platform_check CHECK (((char_length(platform) >= 1) AND (char_length(platform) <= 20))),
-    CONSTRAINT content_items_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
-    CONSTRAINT content_items_reason_check CHECK ((char_length(reason) <= 300)),
-    CONSTRAINT content_items_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'drafting'::text, 'in_review'::text, 'approved'::text, 'published'::text, 'skipped'::text, 'failed'::text])))
-);
 
 
 --
@@ -3162,6 +3399,8 @@ declare
     when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
     else public.cmo_job_price(p_kind)
   end;
+  v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides')
+    then coalesce(p_input->>'order_id', p_input->>'item_id') end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
@@ -3182,6 +3421,7 @@ begin
   select * into v_row from public.cmo_runs
   where user_id = p_user and kind = p_kind and status in ('queued', 'running')
     and (status = 'queued' or lease_until is null or lease_until > now())
+    and (v_key is null or coalesce(input->>'order_id', input->>'item_id') = v_key)
   order by created_at desc limit 1;
   if found then
     return v_row;
@@ -3342,6 +3582,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
+    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10
     else 0 end
 $$;
 
@@ -3355,6 +3596,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
+    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1
     else 0 end
 $$;
 
@@ -3758,15 +4000,59 @@ $$;
 
 
 --
--- Name: cmo_save_draft(uuid, uuid, uuid, text, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_save_caption(uuid, uuid, uuid, text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_save_draft(p_user uuid, p_run uuid, p_item uuid, p_idea text, p_body jsonb, p_priority text DEFAULT 'medium'::text) RETURNS public.content_items
+CREATE FUNCTION public.cmo_save_caption(p_user uuid, p_run uuid, p_clip uuid, p_profile text, p_text text, p_title text DEFAULT NULL::text, p_gen jsonb DEFAULT '{}'::jsonb) RETURNS public.content_items
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_hook text;
+  v_text text := trim(coalesce(p_text, ''));
+  v_title text := nullif(trim(coalesce(p_title, '')), '');
+  v_row public.content_items;
+begin
+  select c.hook into v_hook from public.clips c join public.jobs j on j.id = c.job_id where c.id = p_clip and j.user_id = p_user;
+  if not found then
+    raise exception 'Video not found.' using errcode = 'P0002';
+  end if;
+  perform public.caption_check(p_profile, v_text, v_title);
+  if p_gen is not null and (jsonb_typeof(p_gen) <> 'object' or octet_length(p_gen::text) > 1024) then
+    raise exception 'This caption is not valid.' using errcode = '22023';
+  end if;
+  select * into v_row from public.content_items where clip_id = p_clip and platform = p_profile for update;
+  if found and v_row.body ? 'edited_at' then
+    return v_row;
+  end if;
+  insert into public.content_items (user_id, run_id, department, platform, day, idea, status, body, clip_id)
+  values (p_user, p_run, 'video', p_profile, current_date, left(coalesce(v_title, nullif(v_hook, ''), 'Caption'), 300), 'in_review',
+    jsonb_strip_nulls(jsonb_build_object('text', v_text, 'title', v_title, 'drafted_text', v_text, 'drafted_title', v_title,
+      'gen', coalesce(p_gen, '{}'::jsonb))),
+    p_clip)
+  on conflict (clip_id, platform) where clip_id is not null do update
+  set body = excluded.body, idea = excluded.idea, run_id = excluded.run_id, updated_at = now()
+  returning * into v_row;
+  perform public.caption_cards_refresh(p_clip);
+  perform public.caption_deliver(v_row);
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: cmo_save_draft(uuid, uuid, uuid, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_draft(p_user uuid, p_run uuid, p_item uuid, p_idea text, p_body jsonb, p_priority text DEFAULT 'medium'::text, p_platform text DEFAULT NULL::text) RETURNS public.content_items
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   v_row public.content_items;
+  v_profile jsonb := public.platform_profile(public.platform_profile_id(p_platform));
+  v_post boolean := coalesce(v_profile->>'kind' = 'post', false);
+  v_platform text := case when v_post then v_profile->>'label' else 'x' end;
 begin
   if p_body is null or jsonb_typeof(p_body) <> 'object' or coalesce(p_body->>'text', '') = '' then
     raise exception 'This draft is not valid.' using errcode = '22023';
@@ -3781,7 +4067,8 @@ begin
     end if;
   else
     insert into public.content_items (user_id, run_id, department, platform, day, idea, status, priority, body)
-    values (p_user, p_run, 'post', 'x', current_date, left(coalesce(nullif(p_idea, ''), 'Post for X'), 300),
+    values (p_user, p_run, 'post', v_platform, current_date,
+            left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
             'in_review', coalesce(p_priority, 'medium'), p_body)
     returning * into v_row;
   end if;
@@ -5281,6 +5568,28 @@ begin
   if not found then
     raise exception 'That media file was not found.' using errcode = 'P0002';
   end if;
+end;
+$$;
+
+
+--
+-- Name: deliverables_caption_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.deliverables_caption_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_caption public.content_items;
+begin
+  if new.ref_kind <> 'clip' or new.kind not in ('video', 'short') then
+    return new;
+  end if;
+  for v_caption in select * from public.content_items where clip_id = new.ref_id and department = 'video' and user_id = new.user_id loop
+    perform public.caption_deliver(v_caption);
+  end loop;
+  return new;
 end;
 $$;
 
@@ -9052,6 +9361,8 @@ begin
     select o.id from public.work_orders o
     where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts') and (p_order is null or o.id = p_order)
       and not public.cmo_paused(o.user_id)
+      and not exists (select 1 from unnest(o.depends_on) d(id) left join public.work_orders w on w.id = d.id
+                      where w.status is distinct from 'done')
     order by o.created_at
     limit greatest(1, least(coalesce(p_limit, 3), 10))
     for update skip locked
@@ -9396,7 +9707,9 @@ CREATE FUNCTION public.studio_work_count() RETURNS integer
     AS $$
   select (
     (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
-       and not public.cmo_paused(o.user_id))
+       and not public.cmo_paused(o.user_id)
+       and not exists (select 1 from unnest(o.depends_on) d(id) left join public.work_orders w on w.id = d.id
+                       where w.status is distinct from 'done'))
     + (select count(*) from public.studio_steps s join public.work_orders o on o.id = s.order_id
        where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
          and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes'))
@@ -9952,6 +10265,7 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
     when 'build_video' then 'studio' when 'cut_shorts' then 'studio'
+    when 'write_caption' then 'writer' when 'write_video_brief' then 'writer' when 'write_slides' then 'writer'
     else 'brain' end
 $$;
 
@@ -10274,6 +10588,56 @@ $$;
 
 
 --
+-- Name: work_orders_brief_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.work_orders_brief_rules() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_brief jsonb;
+  v_video public.work_orders;
+begin
+  if new.kind <> 'write_video_brief' or new.status = old.status or new.status not in ('done', 'failed', 'cancelled') then
+    return new;
+  end if;
+  begin
+    if new.status = 'done' then
+      select r.output->'brief' into v_brief from public.cmo_runs r where r.id = new.run_id;
+      if jsonb_typeof(v_brief) is distinct from 'object' or char_length(coalesce(v_brief->>'objective', '')) not between 3 and 300 then
+        v_brief := null;
+      end if;
+    end if;
+    for v_video in
+      select * from public.work_orders where user_id = new.user_id and new.id = any(depends_on) and status = 'queued' for update
+    loop
+      if v_brief is not null then
+        update public.work_orders
+        set brief = (brief - array['objective', 'angle', 'hooks', 'key_points', 'cta', 'seconds', 'aspect'])
+              || jsonb_strip_nulls(jsonb_build_object('objective', v_brief->'objective', 'angle', v_brief->'angle',
+                   'hooks', v_brief->'hooks', 'key_points', coalesce(v_brief->'keyPoints', v_brief->'key_points'),
+                   'cta', v_brief->'cta', 'seconds', v_brief->'seconds', 'aspect', v_brief->'aspect', 'brief_from', 'writer')),
+            updated_at = now()
+        where id = v_video.id;
+        perform public.work_order_event(v_video, 'note', 'Writer wrote the brief for “' || v_video.title || '”');
+      else
+        update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now() where id = v_video.id;
+        perform public.work_order_event(v_video, 'note', '“' || v_video.title || '” goes on with the plan''s own brief');
+      end if;
+    end loop;
+  exception when others then
+    -- The brief could not be taken (too long for the order, say): the video still goes on, with its own brief.
+    raise warning 'brief rule for order % failed: %', new.id, sqlerrm;
+    update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now()
+    where user_id = new.user_id and new.id = any(depends_on) and status = 'queued';
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: work_orders_follow_approval(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10406,6 +10770,8 @@ declare
   v_item record;
   v_free integer;
   v_price integer;
+  v_brief public.work_orders;
+  v_due timestamptz;
 begin
   v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
@@ -10420,16 +10786,26 @@ begin
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
+  -- A brief not started yet whose every video was dropped.
+  for v_item in
+    select b.id from public.work_orders b
+    where b.root_id = v_root.id and b.kind = 'write_video_brief' and b.status in ('queued', 'deferred')
+      and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and b.id = any(v.depends_on)
+                      and v.status not in ('done', 'failed', 'cancelled'))
+  loop
+    perform public.work_order_move(v_item.id, 'cancelled', 'Its video was dropped from the new plan');
+  end loop;
 
   for v_item in
     select c.id, c.department, c.idea, c.reason, c.platform, c.day from public.content_items c
     where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales', 'video')
-      and not exists (select 1 from public.work_orders o where o.item_id = c.id)
+      and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id)
     order by c.day, c.created_at
   loop
     v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    v_due := (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC';
     if v_item.department = 'video' then
       -- The replan deleted the item of a video already under way (its order lost `item_id`): the new item is that
       -- same video, not a second one this week.
@@ -10439,11 +10815,19 @@ begin
       if found then
         continue;
       end if;
+      v_price := public.cmo_job_price('write_video_brief');
+      v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_video_brief',
+        left('Brief for “' || v_item.idea || '”', 200),
+        jsonb_build_object('objective', v_item.idea, 'reason', coalesce(v_item.reason, ''), 'platform', v_item.platform,
+          'done_when', 'Studio has the brief for this video.'),
+        least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop');
       perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
         jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
           'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
-        least(public.studio_video_budget(), greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC',
-        '{}', 'loop', v_item.id);
+        least(public.studio_video_budget(), greatest(v_free - least(v_price, greatest(v_free, 0)), 0)), v_due,
+        array[v_brief.id], 'loop', v_item.id);
+      perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, ''),
+        'seconds', 30, 'aspect', '9:16', 'platform', v_item.platform));
       continue;
     end if;
     v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);
@@ -10452,7 +10836,7 @@ begin
       case v_item.department when 'post' then 'post_draft' else 'sales_scan' end, v_item.idea,
       jsonb_build_object('objective', v_item.idea, 'done_when',
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
-      least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'loop', v_item.id);
+      least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop', v_item.id);
   end loop;
 
   if not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'review_week') then
@@ -10484,6 +10868,25 @@ CREATE FUNCTION public.write_budget_rows(p_table text) RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$
   select case p_table when 'marketing_documents' then 300 else 1200 end;
+$$;
+
+
+--
+-- Name: writer_order_start(public.work_orders, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.writer_order_start(p_order public.work_orders, p_input jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  begin
+    perform public.cmo_enqueue(p_order.user_id, p_order.kind, p_input || jsonb_build_object('order_id', p_order.id, 'source', 'event'));
+  exception when others then
+    perform public.work_order_move(p_order.id, 'failed', null, jsonb_build_object('code', 'not_started',
+      'message', left(sqlerrm, 200), 'retryable', true));
+  end;
+end;
 $$;
 
 
@@ -12064,6 +12467,13 @@ CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, 
 
 
 --
+-- Name: content_items_caption_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX content_items_caption_key ON public.content_items USING btree (clip_id, platform) WHERE (clip_id IS NOT NULL);
+
+
+--
 -- Name: content_items_clip_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12484,6 +12894,13 @@ CREATE TRIGGER apply_credit_ledger_insert AFTER INSERT ON public.credit_ledger F
 
 
 --
+-- Name: approvals approvals_caption_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_caption_rules AFTER INSERT ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_caption_rules();
+
+
+--
 -- Name: cmo_corrections approvals_sync; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -12537,6 +12954,13 @@ CREATE TRIGGER cmo_draft_outcomes_platform BEFORE INSERT ON public.cmo_draft_out
 --
 
 CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EACH ROW EXECUTE FUNCTION public.cmo_memories_classify();
+
+
+--
+-- Name: deliverables deliverables_caption_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER deliverables_caption_rules AFTER INSERT ON public.deliverables FOR EACH ROW EXECUTE FUNCTION public.deliverables_caption_rules();
 
 
 --
@@ -12670,6 +13094,13 @@ CREATE TRIGGER tasks_sync_generation AFTER UPDATE OF status ON public.tasks FOR 
 --
 
 CREATE TRIGGER tasks_sync_page_capture AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.sync_page_capture_from_task();
+
+
+--
+-- Name: work_orders work_orders_brief_rules; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER work_orders_brief_rules AFTER UPDATE OF status ON public.work_orders FOR EACH ROW EXECUTE FUNCTION public.work_orders_brief_rules();
 
 
 --

@@ -79,3 +79,12 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   `voice_notes_for` (A.md "A1: what B and C build on").
   - **Done** in the B3 commit: `postProfile` resolves labels with `profileIdOf` (asserted for "X", "Threads",
     "LinkedIn", "Twitter"); notes are read with `voice_notes_for`; `classify-edits` unchanged.
+
+- [from A → B] **B4 run contract** (A2, details in A.md "A2: Writer's orders"): add `write_video_brief`, `write_caption`
+  (and `write_slides`) to `CmoJobKind`/`CMO_JOB_KINDS` and to `JOBS` in `runner.ts` with your jobs (go ahead and edit
+  those lines; the registry and SQL prices are in, so `capabilities.check` holds once they are listed). The brief job
+  reads `run.input {idea, reason, seconds, aspect, platform}` and returns `{ brief: VideoBrief, reason }`; the caption
+  job reads `run.input {clip_ids, profiles}` (profile ids) and saves each caption with `cmo_save_caption` (title only
+  for `youtube`; hashtags joined into the text), returning `{ reason }`. `VideoSource.deliverableId` cannot be filled:
+  the card is raised before any deliverable exists. Please key it by the edit (`clipId`).
+

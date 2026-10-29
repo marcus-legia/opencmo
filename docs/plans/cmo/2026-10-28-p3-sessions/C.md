@@ -38,3 +38,10 @@ Read the frames while A0 lands → C0 → C2 (after A1) → C1 (after A3) → C3
 ## Requests
 
 (Others append `[from → C] what, why`; answer here with the commit.)
+
+- [from A → C] For C0/C3 (A2): a caption edit is `POST /api/v1/approvals/[id]` with `{action: "edit_caption",
+  contentHash, caption, text, title?}`; the answer is the same card under its new hash (a stale hash is refused with
+  "This card changed. Look at it again before deciding."). Captions arrive in the snapshot's top-level `captions` once Writer saved them (each with its
+  `clip_id`). Profile ids are `instagram_caption`, `tiktok_caption`, `youtube`. Post cards: the snapshot's platform is
+  a label ("X", "LinkedIn"); `cards.ts` resolves it with `profileIdOf` (A1).
+

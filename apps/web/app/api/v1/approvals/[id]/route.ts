@@ -25,10 +25,14 @@ export const GET = withApi({}, async ({ supabase, params }) => {
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 const body = z.object({
-  action: z.enum(["approve", "skip", "replied", "dismissed", "reject", "edit", "redo", "cancel", "send_back"]),
+  action: z.enum(["approve", "skip", "replied", "dismissed", "reject", "edit", "redo", "cancel", "send_back", "edit_caption"]),
   /** The `contentHash` of the card the founder saw. */
   contentHash: hash,
-  text: z.string().max(4000).optional(),
+  /** Up to a YouTube description (5,000); each kind's RPC holds its own limit. */
+  text: z.string().max(5000).optional(),
+  /** Finished-video and shorts cards, `edit_caption`: the caption the founder changes, and YouTube's title. */
+  caption: z.uuid().optional(),
+  title: z.string().max(100).optional(),
   /** Script card: the beat (0-based) whose words `text` replaces. */
   beat: z.number().int().min(0).max(100).optional(),
   /** Price card: the keyframe (0-based) to make again. */

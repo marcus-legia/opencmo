@@ -28,6 +28,12 @@ const d = briefOf(order({ objective: "x", seconds: 500, aspect: "4:3" }));
 assert.equal(d.seconds, 90, "seconds are clamped");
 assert.equal(d.aspect, "9:16", "an unknown frame falls back to vertical");
 assert.ok(d.objective.length >= 3, "a too-short objective is replaced, not refused");
+// P3 A2: the brief as SQL writes it once Writer's `write_video_brief` ran (`work_orders_brief_rules`).
+const w = briefOf(order({ objective: "Show a demo cut by words", angle: "Founder's screen", hooks: ["Cut by words.", "No timeline.", "One take."],
+  key_points: ["Delete words to cut"], cta: "Try it on your demo", seconds: 40, aspect: "9:16", platform: "TikTok", brief_from: "writer" }));
+assert.deepEqual([w.hooks, w.keyPoints, w.cta, w.seconds], [["Cut by words.", "No timeline.", "One take."], ["Delete words to cut"], "Try it on your demo", 40],
+  "Writer's hooks, key points and call to action reach the Director");
+assert.equal(briefOf(order({ objective: "A plan item" })).cta, "", "a plan item alone has no call to action");
 
 const input = { keyframes: [{ generation_id: "g0", note: 1 }, { generation_id: "g1" }], seconds: 30 };
 assert.deepEqual(withKeyframe(input, 1, "g9"), { keyframes: [{ generation_id: "g0", note: 1 }, { generation_id: "g9" }], seconds: 30 });

@@ -15,7 +15,7 @@ import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
 import { pickDueItem } from "./draft-post";
-import { toPlanItems } from "./plan-week";
+import { namedPlatforms, toPlanItems } from "./plan-week";
 import { drainCmoQueue } from "./runner";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, threadBlock, timingScore } from "./sales-scan";
 import { parseRedditSearch, type RedditThread } from "../social/reddit";
@@ -39,14 +39,31 @@ async function main() {
   assert.deepEqual(checkPost("Plans start at $12/month.", { avoid: [], known }), [], "giá có trong document");
   assert.deepEqual(checkPost("Since 2024 we invoice.", { avoid: [], known }), [], "năm không tính là số bịa");
 
-  // toPlanItems: kẹp ngày 0–6, ép nền tảng theo department.
+  // toPlanItems: kẹp ngày 0–6, ép nền tảng theo department; a post keeps X, Threads or LinkedIn (P3 A2).
   const today = new Date(Date.UTC(2026, 9, 5));
   const plan = toPlanItems({ items: [
     { day_offset: 9, department: "post", platform: "LinkedIn", idea: " Launch ", reason: "r" },
     { day_offset: -2, department: "video", platform: "YouTube", idea: "Clip", reason: "r" },
     { day_offset: 1, department: "sales", platform: "x", idea: "Thread", reason: "r" },
+    { day_offset: 1, department: "post", platform: "Mastodon", idea: "Elsewhere", reason: "r" },
   ] }, today);
-  assert.deepEqual(plan.map((p) => [p.day, p.platform, p.idea]), [["2026-10-11", "X", "Launch"], ["2026-10-05", "Shorts", "Clip"], ["2026-10-06", "Reddit", "Thread"]]);
+  assert.deepEqual(plan.map((p) => [p.day, p.platform, p.idea]), [
+    ["2026-10-11", "LinkedIn", "Launch"], ["2026-10-05", "Shorts", "Clip"], ["2026-10-06", "Reddit", "Thread"], ["2026-10-06", "X", "Elsewhere"],
+  ]);
+  // One post per platform a day, at most 3 LinkedIn posts a week; the same idea may go to each platform.
+  const post = (day_offset: number, platform: string, idea = "Idea") => ({ day_offset, department: "post" as const, platform, idea, reason: "r" });
+  const capped = toPlanItems({ items: [
+    post(0, "X"), post(0, "Threads"), post(0, "LinkedIn"), post(0, "X", "Second X today"),
+    post(1, "LinkedIn"), post(2, "LinkedIn"), post(3, "LinkedIn", "A fourth LinkedIn post"),
+  ] }, today);
+  assert.deepEqual(capped.map((p) => `${p.day.slice(8)} ${p.platform} ${p.idea}`), [
+    "05 X Idea", "05 Threads Idea", "05 LinkedIn Idea", "06 LinkedIn Idea", "07 LinkedIn Idea",
+  ]);
+
+  // The fake plan reads which post platforms besides X the founder names (strategy, rhythm, goal, brief).
+  assert.deepEqual(namedPlatforms({ cadence: "X daily, LinkedIn twice a week" }, undefined), ["LinkedIn"]);
+  assert.deepEqual(namedPlatforms("Post on threads and linkedin too"), ["Threads", "LinkedIn"]);
+  assert.deepEqual(namedPlatforms({ cadence: "Ship threads of tweets on X" }, "LinkedInfluencer"), ["Threads"], "a word, not part of one");
 
   // pickDueItem: mục X planned cũ nhất có ngày ≤ hôm nay.
   const mk = (day: string, status: ItemRow["status"], department: ItemRow["department"] = "post") =>

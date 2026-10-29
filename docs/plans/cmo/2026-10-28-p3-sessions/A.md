@@ -35,7 +35,7 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
       `voice_note_delete(id)` for the founder, weight by age in the read RPC, `expires_at` 60 days; correction trigger:
       the same edit mode 3 times in 14 days raises one `correction` card (no duplicates while one waits). pgTAP per
       path.
-- [ ] **A2 Plan and rules**: `plan_week` may plan Threads and LinkedIn items (strategy and goals decide; caps per
+- [x] **A2 Plan and rules**: `plan_week` may plan Threads and LinkedIn items (strategy and goals decide; caps per
       platform); order kinds `write_caption`, `write_video_brief`, `write_slides` in `capabilities.json`; event rules:
       a video order calls `write_video_brief` before `buildVideo`; finished video and shorts batch built →
       `write_caption` per platform the plan targets.
@@ -57,7 +57,8 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   X post; for "write this for LinkedIn now", it needs a `p_platform` (checked with `platform_profile`). B2 drafts the
   item's profile and falls back to X without one. Not blocking; only if A2 or the CMO chat should order posts per
   platform without an item.
-  - **A2** takes it (with the plan's Threads and LinkedIn items).
+  - **A2** takes it (with the plan's Threads and LinkedIn items). **Done** in the A2 commit:
+    `cmo_save_draft(..., p_platform)`: a post profile's label ("LinkedIn"), X without one.
 
 - [from C → A] **Captions on the Studio cards (C0 is built on fixtures; C3 needs the SQL).** A0's types already carry
   them: `FinishedVideoSnapshotSchema.captions` / `ShortsBatchSnapshotSchema.captions` (`CaptionSnapshotSchema`:
@@ -104,3 +105,29 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   CTA_REMOVED) in 14 days proposes one rule (`cmo_corrections.edit_mode`, `times`), whose card snapshot carries
   `edit_mode` and `times` (C's `editMode`, `times`); none while one waits, none while the same rule is active,
   counting starts again after each proposal. Decided through `approval_decide` as before.
+
+## A2: Writer's orders (session A, 2026-10-29)
+
+- **Plan:** posts go to X, Threads or LinkedIn (`toPlanItems` keeps the platform the strategy, rhythm, goal or brief
+  names: one per platform a day, at most 7 X, 5 Threads, 3 LinkedIn a week). The schedule drafts every post due
+  today, one `post_draft` run per item (up to 3), since `cmo_enqueue` now waits per item for a post with one.
+- **Kinds:** `write_video_brief`, `write_caption`, `write_slides` are CMO run kinds (1 credit each, in
+  `capabilities.json`, department `writer`). `cmo_enqueue` gives each Writer order its own run (`input.order_id`).
+  SQL starts the runs; until B4 adds the jobs, a run fails as an unknown task (refunded) and its order fails cleanly.
+- **Video brief (F7):** a video item of the plan → a `write_video_brief` order and a `build_video` order that waits on
+  it (`depends_on`; Studio does not claim it before). Run input: `{order_id, idea, reason, seconds, aspect,
+  platform}`. The job returns `output.brief` (Writer's `VideoBrief`); SQL copies objective, angle, hooks,
+  `keyPoints` (as `key_points`), cta, seconds, aspect into the video order, and `briefOf` passes them to the
+  Director. A brief that fails, is cancelled or returns no brief: the video goes on with the plan's own brief.
+- **Captions (F8):** a finished-video card or a shorts batch card raised → one `write_caption` order. Run input:
+  `{order_id, clip_ids, profiles, ref_kind, ref_id}`, where `profiles` are the caption profile ids the week's plan
+  targets (`instagram_caption`, `tiktok_caption`, `youtube`; all three when its video items name none). Writer saves
+  each with `cmo_save_caption(p_user, p_run, p_clip, p_profile, p_text, p_title, p_gen)` (service role; the profile's
+  length, a title only on YouTube, no links, at most the profile's hashtags, counted as `countHashtags` does). A
+  caption is a `content_items` row (department `video`, `platform` = profile id, `clip_id`, `body.text`/`title`/
+  `drafted_text`); the card refreshes in place (same id, new hash) and its snapshot gains `captions`
+  (`CaptionSnapshotSchema`). The founder edits one on the card: `POST /api/v1/approvals/[id]` with `{action:
+  "edit_caption", contentHash, caption, text, title?}` (same rules; a stale hash is refused; the card keeps its id).
+  Writer never overwrites a caption the founder edited. Approving the video or the batch makes each caption a
+  `caption` deliverable under its video's or short's (`parent_id`), and the caption `approved`.
+- **write_slides (F9):** registered; nothing orders it until S3 (P5).

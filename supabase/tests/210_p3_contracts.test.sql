@@ -60,21 +60,23 @@ values ('e2105000-0000-4000-8000-00000000000a', 'e2100000-0000-4000-8000-0000000
   'build_video', 'Video', '{"objective":"v"}', 'studio', 'running');
 insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id) values
   ('e2106000-0000-4000-8000-00000000000a', 'e2100000-0000-4000-8000-00000000000a', 'e2105000-0000-4000-8000-00000000000a', 'video', 'clip', 'e2104000-0000-4000-8000-00000000000a');
-insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, parent_id) values
-  ('e2106000-0000-4000-8000-00000000000c', 'e2100000-0000-4000-8000-00000000000a', 'e2105000-0000-4000-8000-00000000000a', 'caption',
-   'content_item', 'e2101000-0000-4000-8000-00000000000c', 'e2106000-0000-4000-8000-00000000000a');
-select is((select parent_id from public.deliverables where id = 'e2106000-0000-4000-8000-00000000000c'),
+create temp table t_cap (id uuid) on commit drop;
+-- The video's deliverable brings its captions' along (A2's rule, 20261229110000).
+create function pg_temp.cap() returns uuid language sql as $$
+  select id from public.deliverables where ref_kind = 'content_item' and ref_id = 'e2101000-0000-4000-8000-00000000000c' $$;
+select is((select parent_id from public.deliverables where id = pg_temp.cap()),
   'e2106000-0000-4000-8000-00000000000a'::uuid, 'a caption points at its video');
 select throws_ok($$ update public.deliverables set parent_id = 'e2106000-0000-4000-8000-00000000000a'
   where id = 'e2106000-0000-4000-8000-00000000000a' $$, '23514', null, 'only a caption has a parent');
 select throws_ok($$ insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, parent_id) values
   ('e2100000-0000-4000-8000-00000000000a', 'e2105000-0000-4000-8000-00000000000a', 'caption', 'content_item', gen_random_uuid(),
-   'e2106000-0000-4000-8000-00000000000c') $$, '23514', 'A caption belongs to one of your videos or shorts.', 'a caption''s parent is a video or short');
+   pg_temp.cap()) $$, '23514', 'A caption belongs to one of your videos or shorts.', 'a caption''s parent is a video or short');
 select throws_ok($$ update public.deliverables set user_id = 'e2100000-0000-4000-8000-00000000000b'
-  where id = 'e2106000-0000-4000-8000-00000000000c' $$, '23514', 'A caption belongs to one of your videos or shorts.',
+  where id = pg_temp.cap() $$, '23514', 'A caption belongs to one of your videos or shorts.',
   'and belongs to the same founder');
+insert into t_cap select pg_temp.cap();
 delete from public.deliverables where id = 'e2106000-0000-4000-8000-00000000000a';
-select is((select count(*)::int from public.deliverables where id = 'e2106000-0000-4000-8000-00000000000c'), 0,
+select is((select count(*)::int from public.deliverables where id = (select id from t_cap)), 0,
   'a caption goes with its video');
 delete from public.clips where id = 'e2104000-0000-4000-8000-00000000000a';
 select is((select count(*)::int from public.content_items where id = 'e2101000-0000-4000-8000-00000000000c'), 0,

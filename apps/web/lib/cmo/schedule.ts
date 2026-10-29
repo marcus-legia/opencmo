@@ -15,6 +15,9 @@ import { socialReaderReady } from "@/lib/cmo/social/reddit";
  * still queued or running, so calling this more often would re-run a loop whose run already
  * finished (the Monday plan, for one).
  */
+/** Posts drafted for one founder in a day: one run per due item (X, Threads, LinkedIn), the oldest first. */
+const POST_RUNS_A_DAY = 3;
+
 /** Loops that call a model: for a founder in mode B they go to the inbox instead. */
 const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "competitor_research", "summarize_memory", "review_week"]);
 
@@ -67,6 +70,9 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
       const row = dueRows.find((d) => d.user_id === user && d.department === department);
       return row ? { idea: row.idea, id: row.id } : null;
     };
+    // Every post due today gets its own run (`cmo_enqueue` waits per item), so a day with an X, a Threads and a
+    // LinkedIn post drafts all three.
+    const duePosts = dueRows.filter((d) => d.user_id === user && d.department === "post").slice(0, POST_RUNS_A_DAY);
     const state: LoopState = {
       weekday,
       duePost: firstDue("post"),
@@ -77,22 +83,25 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
     };
     // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
     const claude = modes.get(user)?.brain === "claude";
-    const links = await dueLinks(admin, [state.duePost?.id, state.dueSales?.id]);
+    const links = await dueLinks(admin, [...duePosts.map((d) => d.id), state.dueSales?.id]);
     for (const run of dueLoops(state)) {
       const toInbox = claude && THINKING.has(run.kind);
-      const item = run.kind === "post_draft" ? state.duePost?.id : run.kind === "sales_scan" ? state.dueSales?.id : undefined;
-      const input = {
-        ...run.input,
-        loop: run.loop,
-        ...(item ? { item_id: item, ...(links.get(item) ? { order_id: links.get(item) } : {}) } : {}),
-        ...(toInbox ? { brain: "claude" } : {}),
-      };
-      const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: input });
-      // Out of credits or at the daily cap: skip this user, keep going for the others.
-      if (enqueueError) console.warn("[cron] cmo: skipped", run.loop, enqueueError.message);
-      else {
-        queued += 1;
-        if (toInbox) inbox += 1;
+      const items: (string | undefined)[] =
+        run.kind === "post_draft" ? (duePosts.length ? duePosts.map((d) => d.id) : [undefined]) : [run.kind === "sales_scan" ? state.dueSales?.id : undefined];
+      for (const item of items) {
+        const input = {
+          ...run.input,
+          loop: run.loop,
+          ...(item ? { item_id: item, ...(links.get(item) ? { order_id: links.get(item) } : {}) } : {}),
+          ...(toInbox ? { brain: "claude" } : {}),
+        };
+        const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: input });
+        // Out of credits or at the daily cap: skip this run, keep going for the others.
+        if (enqueueError) console.warn("[cron] cmo: skipped", run.loop, enqueueError.message);
+        else {
+          queued += 1;
+          if (toInbox) inbox += 1;
+        }
       }
     }
   }
