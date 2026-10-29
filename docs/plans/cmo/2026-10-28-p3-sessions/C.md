@@ -30,10 +30,18 @@ Read the frames while A0 lands → C0 → C2 (after A1) → C1 (after A3) → C3
       two examples labelled Draft / You wrote, Keep as a rule · Edit · Dismiss (`reject`). e2e on live rows (A1's
       trigger raises it from three edited outcomes): a stale hash is refused, Dismiss → `rejected`, Keep → `active`;
       axe at 1440 and 390.
-- [ ] **C1 Writer and Library live**: Writer drafts per platform (filter), Library → Voice (notes with weight and
+- [x] **C1 Writer and Library live**: Writer drafts per platform (filter), Library → Voice (notes with weight and
       source, delete with confirm) and Skills (read-only list: what each is for, which agent reads it).
-- [ ] **C3 e2e** on live rows: approve a Threads draft (copy + open), delete a voice note, edit a caption on a shorts
+      Done on A3's loaders: each note shows its platform, source, date and weight; Delete asks first, then
+      `DELETE /api/v1/library/voice/[id]` (`voice_note_delete`; a sample note only leaves the screen); skills are read
+      only with who reads them; the Writer filters drafts per platform. Live: a note learned from a decision shows in
+      Writer's "Your voice" and in Library, and the founder deletes it.
+- [x] **C3 e2e** on live rows: approve a Threads draft (copy + open), delete a voice note, edit a caption on a shorts
       card (stale hash refused).
+      Done: `e2e/ui-v2-writer.spec.ts` (`npm run test:e2e:writer`), 13/13: a Threads draft over 280 characters approved
+      and Threads opened with its text, a LinkedIn draft copied and LinkedIn opened, a voice note deleted, a caption
+      edited on a shorts card (same card, new hash; the old hash refused; delivered under its short on approval), plus
+      C0–C2. The whole v2 suite (`test:e2e:v2`) passes, 45/45; check:contracts and typecheck green.
 
 ## Requests
 

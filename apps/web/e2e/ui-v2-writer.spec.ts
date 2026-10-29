@@ -333,3 +333,45 @@ test("a caption is edited on a live shorts card: same card, new hash, a stale ha
   const { data: shortDeliverable } = await db.from("deliverables").select("id").eq("ref_kind", "clip").eq("ref_id", shortClip).single();
   await expect.poll(async () => (await db.from("deliverables").select("parent_id").eq("ref_kind", "content_item").eq("ref_id", captionId).maybeSingle()).data?.parent_id).toBe(shortDeliverable!.id);
 });
+
+test("a voice note learned from a decision shows live in Writer and Library, and the founder deletes it", async ({ page }) => {
+  const db = admin();
+  const user = await founder(db);
+  // The founder approved an X post as written: A1 writes the voice note from the decision itself.
+  const itemId = randomUUID();
+  const text = "Cut a video by deleting words. The transcript is the timeline.";
+  expect(
+    (await db.from("content_items").insert({ id: itemId, user_id: user.id, department: "post", platform: "X", day: new Date().toISOString().slice(0, 10), idea: "Cut by words", status: "approved", body: { text }, final_text: text })).error,
+  ).toBeNull();
+  expect(
+    (
+      await db
+        .from("cmo_draft_outcomes")
+        .insert({ user_id: user.id, item_id: itemId, department: "post", action: "approve", chosen_version: 0, similarity: 1, edit_mode: "NO_MEANINGFUL_EDIT", classified_at: new Date().toISOString() })
+    ).error,
+  ).toBeNull();
+  const { data: notes } = await db.from("cmo_memories").select("id, body").eq("user_id", user.id).eq("topic", "post").eq("kind", "preference");
+  expect(notes).toHaveLength(1);
+  const note = notes![0] as { id: string; body: string };
+
+  await signIn(page, user);
+  await page.goto("/app/writer");
+  await expect(page.getByRole("region", { name: "Your voice" })).toContainText(note.body);
+
+  await page.goto("/app/library?tab=voice");
+  const row = page.getByTestId("voice-note");
+  await expect(row).toHaveCount(1);
+  const voice = page.getByRole("region", { name: /^Voice/ });
+  await expect(voice).toContainText(note.body);
+  await expect(voice.getByText(/sample/i)).toHaveCount(0);
+  await expect(row).toContainText("X · Approved as written");
+  await row.getByRole("button", { name: /^Delete note:/ }).click();
+  const deleted = page.waitForResponse((r) => r.url().includes("/api/v1/library/voice/") && r.request().method() === "DELETE");
+  await page.getByRole("button", { name: "Delete note", exact: true }).click();
+  const response = await deleted;
+  expect(response.status(), await response.text()).toBe(200);
+  await expect(row).toHaveCount(0);
+  await expect.poll(async () => (await db.from("cmo_memories").select("id").eq("id", note.id)).data?.length).toBe(0);
+  await page.reload();
+  await expect(page.getByText("No notes yet.")).toBeVisible();
+});
