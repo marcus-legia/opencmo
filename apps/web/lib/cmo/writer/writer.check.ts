@@ -16,6 +16,7 @@ import { checkPost } from "../jobs/check-post";
 import { postProfile, REVIEW_SYSTEM } from "../jobs/draft-post";
 import { memoryStore } from "../jobs/memory-store";
 import { drainCmoQueue } from "../jobs/runner";
+import { duePerPlatform } from "../schedule";
 import { isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
 import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
@@ -215,6 +216,10 @@ async function postChecks() {
   assert.ok(moreAdvice(long, linkedin)[0]?.includes('LinkedIn shows about 140 before "more"'), "a long first line gets advice on LinkedIn");
   assert.deepEqual(moreAdvice(`Late invoices are a process.\n\n${long}`, linkedin), [], "a short first line lands before the cut");
   assert.deepEqual(moreAdvice(long, threads), [], "Threads shows the whole post");
+
+  // The schedule drafts one post per platform a tick, the oldest first: an X backlog never crowds out the others.
+  const due = [{ id: "x-old", platform: "X" }, { id: "x-older", platform: "x" }, { id: "x-today", platform: "Twitter" }, { id: "t", platform: "Threads" }, { id: "l", platform: "LinkedIn" }, { id: "unknown", platform: null }];
+  assert.deepEqual(duePerPlatform(due).map((d) => d.id), ["x-old", "t", "l"]);
 
   // A Threads item through the founder's Claude: its own agent, the <platform> block first, X's prefix.
   process.env.OPENCMO_AGENT_FAKE = "1";

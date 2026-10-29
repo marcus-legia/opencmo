@@ -55,9 +55,10 @@ as $$
 $$;
 revoke all on function public.work_order_department(text) from public, anon, authenticated;
 
--- Same as 20261227120000, except a run that names its order (Writer's orders) or its calendar item (a post draft)
--- waits only behind a run for the same order or item: a founder's three posts due today, or two Writer orders,
--- each get a run.
+-- Same as 20261227120000, except a run that names its calendar item (a post draft) or its order (Writer's orders)
+-- waits only behind a run for the same item or order: a founder's three posts due today, or two Writer orders,
+-- each get a run. The item comes first: the schedule names a post's order only while the order is queued, so a
+-- post's runs must match by item whether they carry the order or not.
 create or replace function public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) returns public.cmo_runs
 language plpgsql security definer set search_path = public
 as $$
@@ -68,7 +69,7 @@ declare
     else public.cmo_job_price(p_kind)
   end;
   v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides')
-    then coalesce(p_input->>'order_id', p_input->>'item_id') end;
+    then coalesce(p_input->>'item_id', p_input->>'order_id') end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
@@ -89,7 +90,7 @@ begin
   select * into v_row from public.cmo_runs
   where user_id = p_user and kind = p_kind and status in ('queued', 'running')
     and (status = 'queued' or lease_until is null or lease_until > now())
-    and (v_key is null or coalesce(input->>'order_id', input->>'item_id') = v_key)
+    and (v_key is null or coalesce(input->>'item_id', input->>'order_id') = v_key)
   order by created_at desc limit 1;
   if found then
     return v_row;
@@ -133,7 +134,10 @@ revoke all on function public.writer_order_start(public.work_orders, jsonb) from
 -- ------------------------------------------------------------------ the video brief before the video
 
 -- Same as 20261228120000, plus Writer's brief: a new video item becomes a `write_video_brief` order and a
--- `build_video` order that waits on it. A replan cancels a queued brief whose videos it cancelled.
+-- `build_video` order that waits on it. A replan replaces every calendar item, so a video the new plan still has
+-- takes over its order (and brief) before anything is cancelled: a video waits `queued` on its brief, and cancelling
+-- it first would pay for a second brief. Only videos left without an item are cancelled, with a brief that has not
+-- started and that only they waited on; that brief's queued run is failed and refunded, so it never runs.
 create or replace function public.work_orders_plan_week(p_user uuid, p_run uuid)
 returns public.work_orders language plpgsql volatile security definer set search_path = public
 as $$
@@ -145,6 +149,7 @@ declare
   v_price integer;
   v_brief public.work_orders;
   v_due timestamptz;
+  v_run public.cmo_runs;
 begin
   v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
@@ -152,14 +157,33 @@ begin
     v_root := public.work_order_move(v_root.id, 'running', 'Planned the week');
   end if;
 
-  -- Orders whose calendar item the new plan deleted.
+  -- Posts and Reddit scans whose calendar item the new plan deleted.
   for v_item in
     select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
-      and kind in ('post_draft', 'sales_scan', 'build_video') and status = 'queued' and created_by = 'loop' and id <> v_root.id
+      and kind in ('post_draft', 'sales_scan') and status = 'queued' and created_by = 'loop' and id <> v_root.id
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
-  -- A brief not started yet whose every video was dropped.
+  -- The replan deleted the item of a video already ordered (its order lost `item_id`, whether under way or still
+  -- waiting on its brief): a new video item is that same video, not a second one this week.
+  for v_item in
+    select c.id from public.content_items c
+    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department = 'video'
+      and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id)
+    order by c.day, c.created_at
+  loop
+    update public.work_orders set item_id = v_item.id, updated_at = now()
+    where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
+                  and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
+  end loop;
+  -- Videos the new plan dropped that have not started.
+  for v_item in
+    select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
+      and kind = 'build_video' and status = 'queued' and created_by = 'loop'
+  loop
+    perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
+  end loop;
+  -- A brief not started yet whose every video was dropped, and its run, which would still run and charge.
   for v_item in
     select b.id from public.work_orders b
     where b.root_id = v_root.id and b.kind = 'write_video_brief' and b.status in ('queued', 'deferred')
@@ -167,6 +191,14 @@ begin
                       and v.status not in ('done', 'failed', 'cancelled'))
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Its video was dropped from the new plan');
+    for v_run in
+      update public.cmo_runs set status = 'failed', error = 'Its video was dropped from the new plan.', finished_at = now(),
+        lease_until = null
+      where user_id = p_user and kind = 'write_video_brief' and status = 'queued' and input->>'order_id' = v_item.id::text
+      returning *
+    loop
+      perform public.cmo_refund_run(v_run);
+    end loop;
   end loop;
 
   for v_item in
@@ -180,14 +212,7 @@ begin
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_due := (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC';
     if v_item.department = 'video' then
-      -- The replan deleted the item of a video already under way (its order lost `item_id`): the new item is that
-      -- same video, not a second one this week.
-      update public.work_orders set item_id = v_item.id, updated_at = now()
-      where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
-                    and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
-      if found then
-        continue;
-      end if;
+      -- Videos that took over an order were matched above and have their order now; this one is new.
       v_price := public.cmo_job_price('write_video_brief');
       v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_video_brief',
         left('Brief for “' || v_item.idea || '”', 200),
@@ -513,7 +538,10 @@ end;
 $$;
 revoke all on function public.caption_deliver(public.content_items) from public, anon, authenticated;
 
--- Writer saves one caption (service role, the `write_caption` run). A caption the founder edited keeps their words.
+-- Writer saves one caption (service role, the `write_caption` run). A caption the founder edited, or one already
+-- approved or delivered, keeps its words: Writer only rewrites a caption still waiting on its card. Saving never
+-- delivers: a caption becomes a deliverable only when the founder approves the card that shows it
+-- (`deliverables_caption_rules`), so one written after the card was decided waits unseen instead of shipping.
 -- Answers the caption row.
 create or replace function public.cmo_save_caption(p_user uuid, p_run uuid, p_clip uuid, p_profile text, p_text text,
   p_title text default null, p_gen jsonb default '{}'::jsonb)
@@ -534,7 +562,7 @@ begin
     raise exception 'This caption is not valid.' using errcode = '22023';
   end if;
   select * into v_row from public.content_items where clip_id = p_clip and platform = p_profile for update;
-  if found and v_row.body ? 'edited_at' then
+  if found and (v_row.body ? 'edited_at' or v_row.status <> 'in_review') then
     return v_row;
   end if;
   insert into public.content_items (user_id, run_id, department, platform, day, idea, status, body, clip_id)
@@ -546,7 +574,6 @@ begin
   set body = excluded.body, idea = excluded.idea, run_id = excluded.run_id, updated_at = now()
   returning * into v_row;
   perform public.caption_cards_refresh(p_clip);
-  perform public.caption_deliver(v_row);
   return v_row;
 end;
 $$;
@@ -598,13 +625,17 @@ declare
   v_order public.work_orders;
   v_free integer;
   v_profiles text[];
+  -- The cut the captions describe: a finished video's document (sent back, edited and raised again, it is a new
+  -- cut that needs new words; raised again for its render alone, it is not); a shorts batch is its own cut.
+  v_cut text := case when new.kind = 'finished_video' then new.snapshot->>'document_hash' end;
 begin
   if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'waiting' then
     return new;
   end if;
   begin
     if exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'write_caption'
-               and brief->>'ref_id' = new.ref_id::text and status not in ('failed', 'cancelled'))
+               and brief->>'ref_id' = new.ref_id::text and brief->>'document_hash' is not distinct from v_cut
+               and status not in ('failed', 'cancelled'))
        or public.cmo_paused(new.user_id) then
       return new;
     end if;
@@ -623,7 +654,8 @@ begin
     v_order := public.work_order_create(new.user_id, v_root.week, v_root.id, 'write_caption',
       left('Captions for “' || coalesce(nullif(new.snapshot->>'title', ''), 'your video') || '”', 200),
       jsonb_build_object('objective', 'Write the captions for each platform.', 'ref_kind', new.ref_kind, 'ref_id', new.ref_id,
-        'clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles), 'done_when', 'The captions are on the card.'),
+        'clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles), 'done_when', 'The captions are on the card.')
+        || case when v_cut is not null then jsonb_build_object('document_hash', v_cut) else '{}'::jsonb end,
       least(public.cmo_job_price('write_caption'), greatest(v_free, 0)), null, '{}', 'event');
     perform public.writer_order_start(v_order, jsonb_build_object('clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles),
       'ref_kind', new.ref_kind, 'ref_id', new.ref_id));

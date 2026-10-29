@@ -76,6 +76,10 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   `brief_writer`, `slides_writer`. These kinds get code checks and one fix round, no checker call (a caption run
   writes up to 18 texts; the code holds the rules SQL holds again). The old workspace maps them to a new job `W5`
   ("Write for video"). Evals: `w3-brief`, `w3-caption` (fake 6/6 and 36/36). `npm run build` passes.
+- **Review fixes** (owner's code review, 2026-10-29): nine of ten findings fixed; see the commit and A.md. The tenth
+  (`packages/engine/opencmo/platforms.py` has no runtime caller) stays: the plan's F3 asks that Python read the same
+  `platforms.json`, and it loads that file rather than copying it. pgTAP ran on a local Postgres 16 with Supabase
+  stand-ins (124 files pass); CI's Postgres 17 run is the authoritative one.
 - `writer.check.ts` holds B's asserts; it runs in `check:contracts` once A adds it (request in `A.md`).
 
 ## Requests

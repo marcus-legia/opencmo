@@ -1966,13 +1966,17 @@ declare
   v_order public.work_orders;
   v_free integer;
   v_profiles text[];
+  -- The cut the captions describe: a finished video's document (sent back, edited and raised again, it is a new
+  -- cut that needs new words; raised again for its render alone, it is not); a shorts batch is its own cut.
+  v_cut text := case when new.kind = 'finished_video' then new.snapshot->>'document_hash' end;
 begin
   if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'waiting' then
     return new;
   end if;
   begin
     if exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'write_caption'
-               and brief->>'ref_id' = new.ref_id::text and status not in ('failed', 'cancelled'))
+               and brief->>'ref_id' = new.ref_id::text and brief->>'document_hash' is not distinct from v_cut
+               and status not in ('failed', 'cancelled'))
        or public.cmo_paused(new.user_id) then
       return new;
     end if;
@@ -1991,7 +1995,8 @@ begin
     v_order := public.work_order_create(new.user_id, v_root.week, v_root.id, 'write_caption',
       left('Captions for “' || coalesce(nullif(new.snapshot->>'title', ''), 'your video') || '”', 200),
       jsonb_build_object('objective', 'Write the captions for each platform.', 'ref_kind', new.ref_kind, 'ref_id', new.ref_id,
-        'clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles), 'done_when', 'The captions are on the card.'),
+        'clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles), 'done_when', 'The captions are on the card.')
+        || case when v_cut is not null then jsonb_build_object('document_hash', v_cut) else '{}'::jsonb end,
       least(public.cmo_job_price('write_caption'), greatest(v_free, 0)), null, '{}', 'event');
     perform public.writer_order_start(v_order, jsonb_build_object('clip_ids', to_jsonb(v_clips), 'profiles', to_jsonb(v_profiles),
       'ref_kind', new.ref_kind, 'ref_id', new.ref_id));
@@ -3219,6 +3224,7 @@ declare
   v_label text;
   v_limit integer;
   v_outcome uuid;
+  v_note uuid;
 begin
   if p_action is null or p_action not in ('approve', 'skip') then
     raise exception 'Unknown action.' using errcode = '22023';
@@ -3244,21 +3250,26 @@ begin
   if p_action = 'skip' then
     update public.content_items set status = 'skipped', decided_at = now(), updated_at = now()
     where id = p_id returning * into v_row;
-    if p_reason is not null and char_length(trim(p_reason)) > 0 then
-      insert into public.cmo_memories (user_id, type, topic, body)
-      values (v_user, 'feedback', 'post', left('Skipped the ' || v_label || ' post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
-    end if;
     insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version, platform)
     values (v_user, p_id, 'post', 'skip', left(coalesce(v_row.body->'gen'->>'model', ''), 100),
             left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40), v_profile)
     on conflict (department, item_id) do nothing
     returning id into v_outcome;
-    if v_outcome is not null and p_reason is not null and char_length(trim(p_reason)) > 0 then
-      begin
-        perform public.voice_note_write(v_outcome, left(trim(p_reason), 400));
-      exception when others then
-        raise warning 'voice note for decision % failed: %', v_outcome, sqlerrm;
-      end;
+    -- The reason is remembered once: as the decision's voice note, or, when no note is written (no outcome, a
+    -- failure), as feedback, so Writer never reads the same skip twice.
+    if p_reason is not null and char_length(trim(p_reason)) > 0 then
+      v_note := null;
+      if v_outcome is not null then
+        begin
+          v_note := (public.voice_note_write(v_outcome, left(trim(p_reason), 400))).id;
+        exception when others then
+          raise warning 'voice note for decision % failed: %', v_outcome, sqlerrm;
+        end;
+      end if;
+      if v_note is null then
+        insert into public.cmo_memories (user_id, type, topic, body)
+        values (v_user, 'feedback', 'post', left('Skipped the ' || v_label || ' post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
+      end if;
     end if;
     return v_row;
   end if;
@@ -3400,7 +3411,7 @@ declare
     else public.cmo_job_price(p_kind)
   end;
   v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides')
-    then coalesce(p_input->>'order_id', p_input->>'item_id') end;
+    then coalesce(p_input->>'item_id', p_input->>'order_id') end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
     raise exception 'Unknown task.' using errcode = '22023';
@@ -3421,7 +3432,7 @@ begin
   select * into v_row from public.cmo_runs
   where user_id = p_user and kind = p_kind and status in ('queued', 'running')
     and (status = 'queued' or lease_until is null or lease_until > now())
-    and (v_key is null or coalesce(input->>'order_id', input->>'item_id') = v_key)
+    and (v_key is null or coalesce(input->>'item_id', input->>'order_id') = v_key)
   order by created_at desc limit 1;
   if found then
     return v_row;
@@ -3613,17 +3624,30 @@ declare
   v_user uuid := public.require_user();
   v_row public.content_items;
   v_url text := nullif(trim(coalesce(p_url, '')), '');
+  v_profile text;
 begin
-  if v_url is not null and v_url !~ '^https://(www\.)?(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}' then
-    raise exception 'Paste the link to your post on X, like https://x.com/you/status/123.' using errcode = '22023';
-  end if;
-  update public.content_items set status = 'published', external_url = v_url, published_at = now(), updated_at = now()
-  where id = p_id and user_id = v_user and status = 'approved'
-  returning * into v_row;
+  select * into v_row from public.content_items where id = p_id and user_id = v_user and status = 'approved' for update;
   if not found then
     raise exception 'Approve the post before marking it as posted.' using errcode = 'P0001';
   end if;
-  insert into public.operation_log (user_id, platform, action, target) values (v_user, 'x', 'publish', p_id::text)
+  v_profile := coalesce(public.platform_profile_id(v_row.platform), 'x');
+  if public.platform_profile(v_profile)->>'kind' is distinct from 'post' then
+    v_profile := 'x';
+  end if;
+  if v_url is not null then
+    if v_profile = 'threads' and v_url !~ '^https://(www\.)?threads\.(net|com)/@[A-Za-z0-9_.]{1,30}/post/[A-Za-z0-9_-]{1,64}' then
+      raise exception 'Paste the link to your post on Threads, like https://www.threads.com/@you/post/abc.' using errcode = '22023';
+    elsif v_profile = 'linkedin'
+      and v_url !~ '^https://(www\.)?linkedin\.com/(posts/[A-Za-z0-9_%.-]{1,255}|feed/update/urn:li:(activity|share|ugcPost):[0-9]{1,25})' then
+      raise exception 'Paste the link to your post on LinkedIn, like https://www.linkedin.com/feed/update/urn:li:activity:123.' using errcode = '22023';
+    elsif v_profile = 'x' and v_url !~ '^https://(www\.)?(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}' then
+      raise exception 'Paste the link to your post on X, like https://x.com/you/status/123.' using errcode = '22023';
+    end if;
+  end if;
+  update public.content_items set status = 'published', external_url = v_url, published_at = now(), updated_at = now()
+  where id = v_row.id
+  returning * into v_row;
+  insert into public.operation_log (user_id, platform, action, target) values (v_user, v_profile, 'publish', p_id::text)
   on conflict do nothing;
   return v_row;
 end;
@@ -4022,7 +4046,7 @@ begin
     raise exception 'This caption is not valid.' using errcode = '22023';
   end if;
   select * into v_row from public.content_items where clip_id = p_clip and platform = p_profile for update;
-  if found and v_row.body ? 'edited_at' then
+  if found and (v_row.body ? 'edited_at' or v_row.status <> 'in_review') then
     return v_row;
   end if;
   insert into public.content_items (user_id, run_id, department, platform, day, idea, status, body, clip_id)
@@ -4034,7 +4058,6 @@ begin
   set body = excluded.body, idea = excluded.idea, run_id = excluded.run_id, updated_at = now()
   returning * into v_row;
   perform public.caption_cards_refresh(p_clip);
-  perform public.caption_deliver(v_row);
   return v_row;
 end;
 $$;
@@ -10772,6 +10795,7 @@ declare
   v_price integer;
   v_brief public.work_orders;
   v_due timestamptz;
+  v_run public.cmo_runs;
 begin
   v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
@@ -10779,14 +10803,33 @@ begin
     v_root := public.work_order_move(v_root.id, 'running', 'Planned the week');
   end if;
 
-  -- Orders whose calendar item the new plan deleted.
+  -- Posts and Reddit scans whose calendar item the new plan deleted.
   for v_item in
     select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
-      and kind in ('post_draft', 'sales_scan', 'build_video') and status = 'queued' and created_by = 'loop' and id <> v_root.id
+      and kind in ('post_draft', 'sales_scan') and status = 'queued' and created_by = 'loop' and id <> v_root.id
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
-  -- A brief not started yet whose every video was dropped.
+  -- The replan deleted the item of a video already ordered (its order lost `item_id`, whether under way or still
+  -- waiting on its brief): a new video item is that same video, not a second one this week.
+  for v_item in
+    select c.id from public.content_items c
+    where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department = 'video'
+      and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id)
+    order by c.day, c.created_at
+  loop
+    update public.work_orders set item_id = v_item.id, updated_at = now()
+    where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
+                  and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
+  end loop;
+  -- Videos the new plan dropped that have not started.
+  for v_item in
+    select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
+      and kind = 'build_video' and status = 'queued' and created_by = 'loop'
+  loop
+    perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
+  end loop;
+  -- A brief not started yet whose every video was dropped, and its run, which would still run and charge.
   for v_item in
     select b.id from public.work_orders b
     where b.root_id = v_root.id and b.kind = 'write_video_brief' and b.status in ('queued', 'deferred')
@@ -10794,6 +10837,14 @@ begin
                       and v.status not in ('done', 'failed', 'cancelled'))
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Its video was dropped from the new plan');
+    for v_run in
+      update public.cmo_runs set status = 'failed', error = 'Its video was dropped from the new plan.', finished_at = now(),
+        lease_until = null
+      where user_id = p_user and kind = 'write_video_brief' and status = 'queued' and input->>'order_id' = v_item.id::text
+      returning *
+    loop
+      perform public.cmo_refund_run(v_run);
+    end loop;
   end loop;
 
   for v_item in
@@ -10807,14 +10858,7 @@ begin
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_due := (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC';
     if v_item.department = 'video' then
-      -- The replan deleted the item of a video already under way (its order lost `item_id`): the new item is that
-      -- same video, not a second one this week.
-      update public.work_orders set item_id = v_item.id, updated_at = now()
-      where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
-                    and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
-      if found then
-        continue;
-      end if;
+      -- Videos that took over an order were matched above and have their order now; this one is new.
       v_price := public.cmo_job_price('write_video_brief');
       v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_video_brief',
         left('Brief for “' || v_item.idea || '”', 200),

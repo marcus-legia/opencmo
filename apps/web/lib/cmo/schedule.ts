@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { brainModes } from "@/lib/cmo/brain";
 import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
+import { profileIdOf } from "@/lib/cmo/platforms";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
 
 /**
@@ -25,6 +26,15 @@ const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "s
  * The open work order of each due calendar item. The run carries it (`input.order_id`), so a failed run fails its
  * own order instead of a guess (`work_order_for_run`). Read errors only lose the link, never the run.
  */
+/** The first item of each post profile, in the given order (oldest due first); an unknown label counts as X. */
+export function duePerPlatform<T extends { platform: string | null }>(rows: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const profile = profileIdOf(row.platform) ?? "x";
+    return seen.has(profile) ? false : (seen.add(profile), true);
+  });
+}
+
 async function dueLinks(admin: SupabaseClient, items: (string | undefined)[]): Promise<Map<string, string>> {
   const ids = items.filter((id): id is string => Boolean(id));
   const out = new Map<string, string>();
@@ -50,12 +60,12 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
 
   const { data: due } = await admin
     .from("content_items")
-    .select("id, user_id, department, idea, day")
+    .select("id, user_id, department, idea, day, platform")
     .in("department", ["post", "sales"])
     .eq("status", "planned")
     .lte("day", today)
     .order("day");
-  const dueRows = (due ?? []) as { id: string; user_id: string; department: string; idea: string }[];
+  const dueRows = (due ?? []) as { id: string; user_id: string; department: string; idea: string; platform: string | null }[];
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
   const { data: published } = await admin.from("content_items").select("user_id").eq("status", "published").eq("department", "post").gte("published_at", since);
   const publishedBy = new Map<string, number>();
@@ -70,9 +80,10 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
       const row = dueRows.find((d) => d.user_id === user && d.department === department);
       return row ? { idea: row.idea, id: row.id } : null;
     };
-    // Every post due today gets its own run (`cmo_enqueue` waits per item), so a day with an X, a Threads and a
-    // LinkedIn post drafts all three.
-    const duePosts = dueRows.filter((d) => d.user_id === user && d.department === "post").slice(0, POST_RUNS_A_DAY);
+    // One post per platform gets its own run (`cmo_enqueue` waits per item), the oldest due first as `pickDueItem`
+    // drafts: a day with an X, a Threads and a LinkedIn post drafts all three, and a backlog on X never crowds out the
+    // other platforms.
+    const duePosts = duePerPlatform(dueRows.filter((d) => d.user_id === user && d.department === "post")).slice(0, POST_RUNS_A_DAY);
     const state: LoopState = {
       weekday,
       duePost: firstDue("post"),

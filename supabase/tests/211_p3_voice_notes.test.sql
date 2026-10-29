@@ -84,7 +84,7 @@ select ok(public.cmo_set_edit_mode(pg_temp.outcome('02'), 'TOO_LONG'), 'the clas
 select is((select body from public.cmo_memories where source_outcome = pg_temp.outcome('02')),
   'Edited on X before approving (cut it shorter): "We shipped cut by words."', 'then the note says what changed and what stayed');
 
--- Skips: a reason is a note (and still a skip memory); no reason, nothing to learn.
+-- Skips: a reason is a note, remembered once (no second skip memory); no reason, nothing to learn.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2110000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select lives_ok($$ select public.cmo_decide_post('e2111000-0000-4000-8000-000000000003', 'skip', null, 'Too salesy') $$, 'skip with a reason');
@@ -92,8 +92,8 @@ select lives_ok($$ select public.cmo_decide_post('e2111000-0000-4000-8000-000000
 reset role;
 select is((select body from public.cmo_memories where source_outcome = pg_temp.outcome('03')),
   'Skipped a draft on X about "Pricing": Too salesy', 'the reason is the note');
-select is((select topic from public.cmo_memories where type = 'feedback' and body = 'Skipped the X post "Pricing": Too salesy'), 'post',
-  'the skip memory stays, under Post');
+select is((select count(*)::int from public.cmo_memories where body like '%"Pricing"%Too salesy%'), 1,
+  'the reason is read once: no skip memory beside the note');
 select is((select count(*)::int from public.cmo_memories where source_outcome = pg_temp.outcome('04')), 0, 'a bare skip teaches nothing');
 
 -- Reading: newest first, weighed by age; expired notes are gone.

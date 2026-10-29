@@ -357,6 +357,7 @@ declare
   v_label text;
   v_limit integer;
   v_outcome uuid;
+  v_note uuid;
 begin
   if p_action is null or p_action not in ('approve', 'skip') then
     raise exception 'Unknown action.' using errcode = '22023';
@@ -382,21 +383,26 @@ begin
   if p_action = 'skip' then
     update public.content_items set status = 'skipped', decided_at = now(), updated_at = now()
     where id = p_id returning * into v_row;
-    if p_reason is not null and char_length(trim(p_reason)) > 0 then
-      insert into public.cmo_memories (user_id, type, topic, body)
-      values (v_user, 'feedback', 'post', left('Skipped the ' || v_label || ' post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
-    end if;
     insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version, platform)
     values (v_user, p_id, 'post', 'skip', left(coalesce(v_row.body->'gen'->>'model', ''), 100),
             left(coalesce(v_row.body->'gen'->>'prompt_version', ''), 40), v_profile)
     on conflict (department, item_id) do nothing
     returning id into v_outcome;
-    if v_outcome is not null and p_reason is not null and char_length(trim(p_reason)) > 0 then
-      begin
-        perform public.voice_note_write(v_outcome, left(trim(p_reason), 400));
-      exception when others then
-        raise warning 'voice note for decision % failed: %', v_outcome, sqlerrm;
-      end;
+    -- The reason is remembered once: as the decision's voice note, or, when no note is written (no outcome, a
+    -- failure), as feedback, so Writer never reads the same skip twice.
+    if p_reason is not null and char_length(trim(p_reason)) > 0 then
+      v_note := null;
+      if v_outcome is not null then
+        begin
+          v_note := (public.voice_note_write(v_outcome, left(trim(p_reason), 400))).id;
+        exception when others then
+          raise warning 'voice note for decision % failed: %', v_outcome, sqlerrm;
+        end;
+      end if;
+      if v_note is null then
+        insert into public.cmo_memories (user_id, type, topic, body)
+        values (v_user, 'feedback', 'post', left('Skipped the ' || v_label || ' post "' || left(v_row.idea, 120) || '": ' || trim(p_reason), 600));
+      end if;
     end if;
     return v_row;
   end if;
@@ -518,5 +524,47 @@ begin
 end;
 $$;
 revoke all on function public.approval_snapshot(text, uuid) from public, anon, authenticated;
+
+
+-- ------------------------------------------------------------------ Marking a post posted, per platform
+
+-- Same as 20261014090000, for every post profile: a Threads or LinkedIn post is approved now too, so its link is
+-- checked as that platform's and the operation log records the post's own profile (X for an unknown label, as
+-- `cmo_decide_post` does).
+create or replace function public.cmo_mark_posted(p_id uuid, p_url text default null)
+returns public.content_items language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.content_items;
+  v_url text := nullif(trim(coalesce(p_url, '')), '');
+  v_profile text;
+begin
+  select * into v_row from public.content_items where id = p_id and user_id = v_user and status = 'approved' for update;
+  if not found then
+    raise exception 'Approve the post before marking it as posted.' using errcode = 'P0001';
+  end if;
+  v_profile := coalesce(public.platform_profile_id(v_row.platform), 'x');
+  if public.platform_profile(v_profile)->>'kind' is distinct from 'post' then
+    v_profile := 'x';
+  end if;
+  if v_url is not null then
+    if v_profile = 'threads' and v_url !~ '^https://(www\.)?threads\.(net|com)/@[A-Za-z0-9_.]{1,30}/post/[A-Za-z0-9_-]{1,64}' then
+      raise exception 'Paste the link to your post on Threads, like https://www.threads.com/@you/post/abc.' using errcode = '22023';
+    elsif v_profile = 'linkedin'
+      and v_url !~ '^https://(www\.)?linkedin\.com/(posts/[A-Za-z0-9_%.-]{1,255}|feed/update/urn:li:(activity|share|ugcPost):[0-9]{1,25})' then
+      raise exception 'Paste the link to your post on LinkedIn, like https://www.linkedin.com/feed/update/urn:li:activity:123.' using errcode = '22023';
+    elsif v_profile = 'x' and v_url !~ '^https://(www\.)?(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}' then
+      raise exception 'Paste the link to your post on X, like https://x.com/you/status/123.' using errcode = '22023';
+    end if;
+  end if;
+  update public.content_items set status = 'published', external_url = v_url, published_at = now(), updated_at = now()
+  where id = v_row.id
+  returning * into v_row;
+  insert into public.operation_log (user_id, platform, action, target) values (v_user, v_profile, 'publish', p_id::text)
+  on conflict do nothing;
+  return v_row;
+end;
+$$;
 
 commit;

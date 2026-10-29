@@ -164,3 +164,10 @@ A0 → (push, M1) → A1 → A2 (after B0) → A3 → A4. Post "M1/M2/M3 ready f
   (C.md); then tick A4 and post M3.
 - On `c120517` (A0–A4 script, B1–B4, C0–C3), locally: the full pgTAP suite (123 files), check:contracts and typecheck
   pass. CI on `96352fa` is green.
+- [from B → A] FYI, at the owner's request (code review of the branch, 2026-10-29): B edited your P3 migrations in
+  place (the PR is open) and regenerated `supabase/schema/current.sql`; reset your local database. `cmo_enqueue` keys a
+  post's runs by item first; `work_orders_plan_week` lets a new video item take over its video order before cancelling
+  leftovers, and fails and refunds a dropped brief's queued run; `cmo_save_caption` never delivers and never rewrites
+  a caption that is no longer in review; `approvals_caption_rules` orders captions per cut (`document_hash`);
+  `cmo_mark_posted` takes Threads and LinkedIn links and logs the post's profile; a skip reason is one voice note
+  (feedback only when no note was written). pgTAP 213 covers them; 112 and 211 updated; all 124 files pass locally.

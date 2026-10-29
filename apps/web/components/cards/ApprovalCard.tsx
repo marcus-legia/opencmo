@@ -121,12 +121,13 @@ export function ApprovalCard({
   /**
    * Threads and LinkedIn are posted by the founder until Schedule posts them (P4): approve, then open the platform's
    * composer. The tab opens inside the click (a later one is blocked as a pop-up) and goes to the platform only once
-   * the approval went through; LinkedIn's text is copied inside the click for the same reason.
+   * the approval went through; LinkedIn's text is copied inside the click for the same reason. A sample card opens
+   * nothing and copies nothing: its text is not the founder's and nothing was approved.
    */
   async function approvePost(text: string) {
     const platform = postPlatform(card);
     const target = platform ? POST_TARGET[platform] : undefined;
-    if (!target || blockedReason(card, sample, "approve") || busy) return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    if (!target || sample || blockedReason(card, sample, "approve") || busy) return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
     const tab = window.open("about:blank", "_blank");
     if (tab) tab.opener = null;
     const copied = !target.copy ? Promise.resolve(true) : navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false);

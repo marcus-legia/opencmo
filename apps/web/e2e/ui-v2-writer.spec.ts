@@ -69,13 +69,12 @@ test("LinkedIn shows where “more” cuts the post; Threads and LinkedIn approv
   const threads = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(threads).toContainText("/500");
   await expect(threads.locator(".v2-card-fold")).toHaveCount(0);
-  // The composer is never really reached from a test: the tab's address is what the founder would land on.
-  await page.context().route("https://www.threads.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>Threads</title>" }));
-  const popup = page.waitForEvent("popup");
+  // A sample card opens no composer: its text is not the founder's and nothing was approved (live cards below do).
+  const popups: unknown[] = [];
+  page.on("popup", (tab) => popups.push(tab));
   await threads.getByRole("button", { name: "Approve and open Threads" }).click();
-  const tab = await popup;
-  await expect.poll(() => tab.url()).toContain("threads.com/intent/post?text=I%20spent%20more%20time");
-  await tab.close();
+  await expect(page.getByText("Approved (sample, nothing was sent).")).toBeVisible();
+  expect(popups).toHaveLength(0);
 });
 
 test("a caption counts its limit and hashtags per platform; too many hashtags cannot be saved", async ({ page }) => {
