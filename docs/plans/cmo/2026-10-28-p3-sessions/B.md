@@ -32,7 +32,7 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
 - [x] **B3 W2**: the writer reads the top voice notes (newest first, weight by age) and tier 0 corrections after the
       cached prefix; the founder's voice beats the skill; `classify-edits` writes notes through A1's RPC; outside text
       never becomes a note.
-- [ ] **B4 W3**: `write_video_brief` (called by A2's rule before `buildVideo`), `write_caption` per platform (hashtags
+- [x] **B4 W3**: `write_video_brief` (called by A2's rule before `buildVideo`), `write_caption` per platform (hashtags
       only here, per profile max), YouTube title + description, `write_slides` (5–10 slides, hook first, CTA last,
       no invented numbers); a unit test per kind and one fake-provider run end to end.
 
@@ -66,6 +66,16 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   voice. The system prompt says the founder's voice beats No AI Slop; it is the same for every founder and platform.
   `classify-edits` is unchanged: A1's `cmo_draft_outcomes_learn` trigger writes the note when the edit is labelled,
   and only SQL writes notes, from the founder's own words, so outside text never becomes one.
+- **B4**: `lib/cmo/writer/jobs.ts` holds the three runs SQL starts (A2's contract): `write_video_brief` returns
+  `{ brief, reason }` (Writer's `VideoBrief`, keys as SQL copies them), `write_caption` writes every edit × profile
+  and saves each through `store.saveCaption` → `cmo_save_caption` (text with its hashtags joined, a title only for
+  YouTube), returns `{ reason, saved, failed }`; a caption that fails our checks twice is left out and the run fails
+  only when none was saved. `write_slides` returns `{ slides, reason }`. An edit's words are read by
+  `writer/video-source.ts` as the founder (`brainClientFor`, the Shorts squad's path; words only); an edit with no
+  document is skipped. Agents: `instagram_writer`, `tiktok_writer`, `youtube_writer` (`CAPTION_WRITERS`),
+  `brief_writer`, `slides_writer`. These kinds get code checks and one fix round, no checker call (a caption run
+  writes up to 18 texts; the code holds the rules SQL holds again). The old workspace maps them to a new job `W5`
+  ("Write for video"). Evals: `w3-brief`, `w3-caption` (fake 6/6 and 36/36). `npm run build` passes.
 - `writer.check.ts` holds B's asserts; it runs in `check:contracts` once A adds it (request in `A.md`).
 
 ## Requests
@@ -87,4 +97,6 @@ B0 → (push, M1) → B1 → B2 (after A0) → B3 (after A1) → B4 (after A2).
   job reads `run.input {clip_ids, profiles}` (profile ids) and saves each caption with `cmo_save_caption` (title only
   for `youtube`; hashtags joined into the text), returning `{ reason }`. `VideoSource.deliverableId` cannot be filled:
   the card is raised before any deliverable exists. Please key it by the edit (`clipId`).
+  - **Done** in the B4 commit: the three kinds are in `CmoJobKind` and `JOBS`; `VideoSource` is keyed by `clipId`;
+    outputs as asked (`write_caption` also returns `saved` and `failed`).
 

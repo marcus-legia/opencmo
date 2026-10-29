@@ -65,6 +65,11 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       if (error) throw new Error(`voice_notes_for: ${error.message}`);
       return ((data ?? []) as { body: string; platform: string | null; created_at: string; weight: number }[]).map((n) => ({ body: n.body, platform: n.platform, created_at: n.created_at, weight: Number(n.weight) }));
     },
+    // The editor's code loads only for a caption run.
+    videoSource: async (userId, clipId) => (await import("../writer/video-source")).readVideoSource(userId, clipId),
+    async saveCaption(userId, runId, clipId, profile, text, title, gen) {
+      await rpc("cmo_save_caption", { p_user: userId, p_run: runId, p_clip: clipId, p_profile: profile, p_text: text, p_title: title, p_gen: gen });
+    },
     async corrections(userId) {
       const { data, error } = await admin
         .from("cmo_corrections")

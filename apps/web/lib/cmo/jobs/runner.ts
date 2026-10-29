@@ -17,6 +17,7 @@ import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
+import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
 import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
 
@@ -61,6 +62,9 @@ export const JOBS: Record<CmoJobKind, Job> = {
   pull_metrics: pullMetrics,
   summarize_memory: summarizeMemory,
   review_week: reviewWeek,
+  write_video_brief: writeVideoBrief,
+  write_caption: writeCaption,
+  write_slides: writeSlides,
 };
 
 /** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */

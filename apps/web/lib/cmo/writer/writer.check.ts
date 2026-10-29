@@ -1,7 +1,8 @@
 /**
  * Writer's pure parts: the contract (kinds, the video brief shared with Studio); W0's post rules (no links,
  * no hashtags) and No AI Slop as guidance read by the writer, the checker, sales and CMO chat; W1's posts per
- * platform profile (one writer agent each, one cached prefix, checks from `platforms.json`).
+ * platform profile (one writer agent each, one cached prefix, checks from `platforms.json`); W2's voice notes; W3's
+ * runs for Studio (video brief, captions per profile, YouTube text, slides) on the fake provider.
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/writer/writer.check.ts
  */
@@ -10,20 +11,22 @@ import assert from "node:assert/strict";
 import { VideoBriefSchema as StudioBriefSchema } from "@/lib/departments/studio/types";
 import { briefRequest } from "@/lib/departments/studio/video";
 
-import { AGENT_SPECS, POST_WRITERS } from "../agents/registry";
+import { AGENT_SPECS, CAPTION_WRITERS, POST_WRITERS } from "../agents/registry";
 import { checkPost } from "../jobs/check-post";
 import { postProfile, REVIEW_SYSTEM } from "../jobs/draft-post";
 import { memoryStore } from "../jobs/memory-store";
 import { drainCmoQueue } from "../jobs/runner";
 import { isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
-import { POST_PROFILES, profileOf } from "../platforms";
+import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
 import { CMO_SKILLS } from "../skills/index.gen";
 import { skillIndex } from "../skills";
 
 import { captionText, checkCaption, checkPostFor, checkSlides, checkYoutube, cleanHashtags, moreAdvice } from "./checks";
 import { profileBlock, profileFromPrompt, voiceBlock, writerData } from "./context";
 import { createWriter, type WriterThink } from "./draft";
+import { writerAgent } from "./jobs";
+import { firstLine } from "./video-source";
 import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
 import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS, type WriterContext, type WriterProfile } from "./types";
 
@@ -131,7 +134,7 @@ function scripted(answers: unknown[]): { think: WriterThink; calls: Call[] } {
   };
   return { think, calls };
 }
-const video = { deliverableId: "d1", kind: "short" as const, title: "Chasing late invoices", hook: "Your invoice is 14 days late.", transcript: "Your invoice is 14 days late. Paylane sends the reminder.", seconds: 32 };
+const video = { clipId: "c1", kind: "short" as const, title: "Chasing late invoices", hook: "Your invoice is 14 days late.", transcript: "Your invoice is 14 days late. Paylane sends the reminder.", seconds: 32 };
 
 async function writerChecks() {
   const caption = { text: "Your invoice is 14 days late.\n\nPaylane sends the reminder for you.", hashtags: ["#freelancer", "invoicing"], rationale: "Leads with the hook." };
@@ -269,7 +272,72 @@ async function postChecks() {
   delete process.env.OPENCMO_AGENT_FAKE;
 }
 
-writerChecks().then(postChecks).then(
+// W3: Writer's runs for Studio, through the runner on the fake provider.
+async function studioChecks() {
+  for (const p of CAPTION_PROFILES) assert.ok(CAPTION_WRITERS[p.id] && AGENT_SPECS[CAPTION_WRITERS[p.id]!].tier === "draft", `${p.id} has its own writer agent`);
+  assert.deepEqual([writerAgent("video_brief", null), writerAgent("slides", null), writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["brief_writer", "slides_writer", "tiktok_writer", "youtube_writer", "threads_writer"]);
+
+  assert.deepEqual([firstLine("Your invoice is late. Paylane sends it."), firstLine("no stop at all"), firstLine("v1.2 shipped today! More soon.")], ["Your invoice is late.", "no stop at all", "v1.2 shipped today!"], "the first sentence said, not a decimal point");
+  process.env.OPENCMO_AGENT_FAKE = "1";
+  const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] } };
+
+  // write_video_brief: SQL's input → Writer's brief, as Studio takes it.
+  const briefRun = memoryStore(docs, []);
+  const b = briefRun.enqueue("write_video_brief", { order_id: "o1", idea: "Chasing a late invoice in one take", reason: "pillar: getting paid", seconds: 30, aspect: "9:16", platform: "Reels" });
+  await drainCmoQueue(briefRun.store);
+  assert.equal(b.status, "done", `brief run (${b.error})`);
+  const out = b.output as { brief: unknown; reason: string };
+  const parsed = VideoBriefSchema.parse(out.brief);
+  assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
+  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "cta", "hooks", "keyPoints", "objective", "seconds"], "the keys SQL copies into the video order");
+  const noIdea = briefRun.enqueue("write_video_brief", { order_id: "o2", idea: "" });
+  await drainCmoQueue(briefRun.store);
+  assert.equal(noIdea.status, "failed", "a brief with no idea fails its order");
+
+  // write_caption: each edit × each profile, saved through the store with the published text.
+  const cap = memoryStore(docs, []);
+  cap.videos.push(
+    { clipId: "s1", kind: "short", title: "Late invoices", hook: "Your invoice is 14 days late.", transcript: "Your invoice is 14 days late. Paylane sends the reminder.", seconds: 31 },
+    { clipId: "s2", kind: "short", title: "The day 3 reminder", hook: "Day 3 is the first nudge.", transcript: "Day 3 is the first nudge. Then day 7.", seconds: 24 },
+  );
+  cap.captions.push({ runId: "earlier", clipId: "s2", profile: "tiktok_caption", text: "The founder's own words", title: null, gen: {}, edited: true });
+  const c = cap.enqueue("write_caption", { order_id: "o3", clip_ids: ["s1", "s2", "s1"], profiles: ["instagram_caption", "tiktok_caption", "youtube", "x", "made_up"], ref_kind: "short_batch", ref_id: "b1" });
+  await drainCmoQueue(cap.store);
+  assert.equal(c.status, "done", `caption run (${c.error})`);
+  assert.equal((c.output as { saved: number }).saved, 6, "two edits × three caption profiles; X and unknown ids ignored, a repeated edit once");
+  assert.equal(cap.captions.find((row) => row.clipId === "s2" && row.profile === "tiktok_caption")!.text, "The founder's own words", "a caption the founder edited is never overwritten");
+  for (const row of cap.captions.filter((r) => r.runId === c.id)) {
+    const p = profile(row.profile);
+    assert.ok([...row.text].length <= p.limit && countHashtags(row.text) <= p.hashtags && !/https?:\/\/|www\./i.test(row.text), `${row.profile} passes cmo_save_caption's rules`);
+    assert.equal(row.title === null, p.kind !== "youtube", "a title only on YouTube");
+    assert.ok(row.title === null || [...row.title].length <= (p.title ?? 100));
+    assert.deepEqual(Object.keys(row.gen).sort(), ["model", "prompt_version"]);
+  }
+  assert.deepEqual(new Set(c.steps.map((step) => step.tool)).has("write_caption_youtube_1"), true, "one step per edit and profile");
+
+  const gone = memoryStore(docs, []);
+  gone.videos.push({ clipId: "s1", kind: "video", title: "Demo", transcript: "Paylane sends the reminder.", seconds: 40 });
+  const partial = gone.enqueue("write_caption", { order_id: "o4", clip_ids: ["s1", "missing"], profiles: ["youtube"] });
+  await drainCmoQueue(gone.store);
+  assert.equal(partial.status, "done");
+  assert.deepEqual([(partial.output as { saved: number }).saved, (partial.output as { failed: string[] }).failed.length], [1, 1], "a missing edit is reported, the others still get captions");
+  const nothing = gone.enqueue("write_caption", { order_id: "o5", clip_ids: ["missing"], profiles: ["youtube"] });
+  const empty = gone.enqueue("write_caption", { order_id: "o6", clip_ids: [], profiles: ["youtube"] });
+  await drainCmoQueue(gone.store);
+  assert.deepEqual([nothing.status, empty.status], ["failed", "failed"], "no caption saved fails the run (its credit is refunded)");
+
+  // write_slides: 5 to 10 slides, the hook first and the call to action last.
+  const sl = memoryStore(docs, []);
+  const slides = sl.enqueue("write_slides", { order_id: "o7", idea: "Three reminders that get invoices paid", count: 6 });
+  await drainCmoQueue(sl.store);
+  assert.equal(slides.status, "done", `slides run (${slides.error})`);
+  const list = (slides.output as { slides: { heading: string }[] }).slides;
+  assert.equal(list.length, 6);
+  assert.match(list.at(-1)!.heading, /Paylane/, "the call to action last");
+  delete process.env.OPENCMO_AGENT_FAKE;
+}
+
+writerChecks().then(postChecks).then(studioChecks).then(
   () => console.log("writer.check: ok"),
   (error) => {
     console.error(error);

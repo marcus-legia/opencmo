@@ -3,6 +3,7 @@
  * Supabase. Not `server-only`, so `tsx` scripts can import it.
  */
 
+import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 
@@ -24,6 +25,9 @@ export type RunState = QueuedRun & { status: string; steps: Step[]; error: strin
 export function memoryStore(docs: Documents, memories: string[] = ["Skipped the X post \"Pricing\": too salesy"], events: MemoryEvent[] = [], corrections: string[] = []) {
   /** Voice notes as `voice_notes_for` would return them; tests push rows here, newest first. */
   const voice: VoiceNoteRow[] = [];
+  /** Edits a caption run can read, and the captions it saved (`edited`: the founder's own, never overwritten). */
+  const videos: VideoSource[] = [];
+  const captions: { runId: string; clipId: string; profile: string; text: string; title: string | null; gen: Record<string, unknown>; edited: boolean }[] = [];
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
   const results: WeekResults = { posts: 0, replies: 0, views: 0 };
@@ -59,6 +63,14 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     documents: async () => docs,
     memories: async () => memories,
     voiceNotes: async (_u, limit) => voice.slice(0, limit),
+    videoSource: async (_u, clipId) => videos.find((video) => video.clipId === clipId) ?? null,
+    async saveCaption(_u, runId, clipId, profile, text, title, gen) {
+      const at = captions.findIndex((c) => c.clipId === clipId && c.profile === profile);
+      if (at >= 0 && captions[at]!.edited) return;
+      const row = { runId, clipId, profile, text, title, gen, edited: false };
+      if (at >= 0) captions[at] = row;
+      else captions.push(row);
+    },
     memoryEvents: async () => events,
     corrections: async () => corrections,
     lessons: async () => latestPerTopic([...lessons].sort((a, b) => b.week.localeCompare(a.week))),
@@ -167,5 +179,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, insights, metrics, lessons, goals, results, enqueue, inbox, submit, voice };
+  return { store, runs, items, opps, insights, metrics, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
 }

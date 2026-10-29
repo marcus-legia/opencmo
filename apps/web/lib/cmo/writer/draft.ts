@@ -52,6 +52,8 @@ export type WriterDeps = {
   /** The checker's problems, one list per version (posts) or one list (other kinds); advice, never a gate. */
   review?: (kind: WriterKind, output: unknown, data: string) => Promise<string[][]>;
   onUsage?: ThinkOptions<z.ZodType>["onUsage"];
+  /** Added to every call's label, so one run writing for several edits keeps each call apart (inbox answers). */
+  labelSuffix?: string;
 };
 
 const FAILURE = "We could not write this. Try again in a minute.";
@@ -89,7 +91,7 @@ function briefBlock(kind: WriterKind, brief: WriterBrief): string {
     case "video_brief": {
       const b = brief as WriterBrief<"video_brief">;
       const asks = [b.seconds ? `${b.seconds} seconds` : "", b.aspect ? `${b.aspect} frame` : ""].filter(Boolean).join(", ");
-      return `The week plan's video: "${b.idea}"${reasonOf(b)}${asks ? `\nThe founder asked for: ${asks}.` : ""}\n\nWrite the brief.`;
+      return `The week plan's video: "${b.idea}"${reasonOf(b)}${asks ? `\nPlanned: ${asks}.` : ""}\n\nWrite the brief.`;
     }
     case "slides": {
       const b = brief as WriterBrief<"slides">;
@@ -255,7 +257,7 @@ export function createWriter(deps: WriterDeps): Writer {
       const data = writerData(context, p, briefBlock(kind, brief));
       const agent = deps.agentFor(kind, p);
       const ask = (prompt: string, round: string) =>
-        deps.think({ agent, system, prompt, schema, label: `${label}${round}`, title, failure: FAILURE, fake: () => fakeOutput(kind, p, brief, product), ...(deps.onUsage ? { onUsage: deps.onUsage } : {}) });
+        deps.think({ agent, system, prompt, schema, label: `${label}${deps.labelSuffix ?? ""}${round}`, title, failure: FAILURE, fake: () => fakeOutput(kind, p, brief, product), ...(deps.onUsage ? { onUsage: deps.onUsage } : {}) });
 
       let output: unknown = await ask(data, "");
       const problems = problemsOf(kind, p, output, rules);

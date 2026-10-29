@@ -56,8 +56,8 @@ export type VideoBrief = z.infer<typeof VideoBriefSchema>;
 
 /** The finished edit a caption or YouTube text is written for: its words, never its frames. */
 export type VideoSource = {
-  /** The `video` or `short` deliverable the caption belongs to. */
-  deliverableId: string;
+  /** The edit the caption is for (`content_items.clip_id`); its deliverable does not exist until the card is approved. */
+  clipId: string;
   kind: "video" | "short";
   title: string;
   /** The first spoken line, when the edit has one. */

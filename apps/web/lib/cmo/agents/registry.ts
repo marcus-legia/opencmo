@@ -21,14 +21,15 @@ import "server-only";
  * the two tiers. `groq` is a spelling of `openai` on Groq's endpoint. Moving every agent to another
  * vendor is env only (docs/plans/editor/2026-10-20-editor-mcp-providers-plan.md, item 2).
  *
- * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, THREADS_WRITER, LINKEDIN_WRITER, SALES, RESEARCH,
- * CHECKER, CAPTIONS, WRITER, MOTION, DIRECTOR, MODERATION, SHORTS.
+ * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, THREADS_WRITER, LINKEDIN_WRITER, INSTAGRAM_WRITER,
+ * TIKTOK_WRITER, YOUTUBE_WRITER, BRIEF_WRITER, SLIDES_WRITER, SALES, RESEARCH, CHECKER, CAPTIONS, WRITER, MOTION,
+ * DIRECTOR, MODERATION, SHORTS.
  * Two tiers: drafting agents use the big model (Sonnet, Gemini Pro), checking agents the small one (Haiku, Gemini
  * Flash) — a check does not need deep reasoning, and a separate context keeps the checker from being persuaded by
  * the draft.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "threads_writer" | "linkedin_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "threads_writer" | "linkedin_writer" | "instagram_writer" | "tiktok_writer" | "youtube_writer" | "brief_writer" | "slides_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
 export type ProviderKind = "anthropic" | "gemini" | "openai";
 
 export const PROVIDER_KINDS: readonly ProviderKind[] = ["openai", "anthropic", "gemini"];
@@ -52,6 +53,11 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   x_writer: { id: "x_writer", label: "X writer", role: "Drafts X posts for the founder to approve and post.", tier: "draft" },
   threads_writer: { id: "threads_writer", label: "Threads writer", role: "Drafts Threads posts for the founder to approve and post.", tier: "draft" },
   linkedin_writer: { id: "linkedin_writer", label: "LinkedIn writer", role: "Drafts LinkedIn posts for the founder to approve and post.", tier: "draft" },
+  instagram_writer: { id: "instagram_writer", label: "Instagram writer", role: "Writes the Instagram caption of the founder's finished video or short.", tier: "draft" },
+  tiktok_writer: { id: "tiktok_writer", label: "TikTok writer", role: "Writes the TikTok caption of the founder's finished video or short.", tier: "draft" },
+  youtube_writer: { id: "youtube_writer", label: "YouTube writer", role: "Writes the YouTube title and description of the founder's finished video.", tier: "draft" },
+  brief_writer: { id: "brief_writer", label: "Brief writer", role: "Writes the brief the video team makes a video from: angle, three hooks, key points, call to action.", tier: "draft" },
+  slides_writer: { id: "slides_writer", label: "Slides writer", role: "Writes the text of a slideshow: the hook first, one idea a slide, the call to action last.", tier: "draft" },
   sales: { id: "sales", label: "Sales", role: "Finds Reddit threads where people need the product and drafts helpful replies.", tier: "draft" },
   research: { id: "research", label: "Research", role: "Finds competitor and niche posts that outperform, and why they worked.", tier: "draft" },
   checker: { id: "checker", label: "Checker", role: "Reviews drafts and scores threads in a separate context.", tier: "check" },
@@ -70,6 +76,9 @@ export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];
  * model and key; all of them send the same system prompt, so the prompt cache serves every platform.
  */
 export const POST_WRITERS: Readonly<Record<string, AgentId>> = { x: "x_writer", threads: "threads_writer", linkedin: "linkedin_writer" };
+
+/** The writer agent for each caption profile (P3 W3); same idea as `POST_WRITERS`: one prefix per kind, many agents. */
+export const CAPTION_WRITERS: Readonly<Record<string, AgentId>> = { instagram_caption: "instagram_writer", tiktok_caption: "tiktok_writer", youtube: "youtube_writer" };
 
 function defaultModel(provider: ProviderKind, tier: AgentSpec["tier"], env: NodeJS.ProcessEnv): string {
   if (provider === "gemini") return tier === "check" ? "gemini-flash-latest" : "gemini-pro-latest";

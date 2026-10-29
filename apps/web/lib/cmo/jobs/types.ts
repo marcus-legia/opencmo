@@ -4,9 +4,20 @@
  */
 
 import type { DocumentKind } from "../documents";
+import type { VideoSource } from "../writer/types";
 
-export type CmoJobKind = "plan_week" | "post_draft" | "sales_scan" | "competitor_research" | "pull_metrics" | "summarize_memory" | "review_week";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week"];
+export type CmoJobKind =
+  | "plan_week"
+  | "post_draft"
+  | "sales_scan"
+  | "competitor_research"
+  | "pull_metrics"
+  | "summarize_memory"
+  | "review_week"
+  | "write_video_brief"
+  | "write_caption"
+  | "write_slides";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -127,6 +138,10 @@ export interface CmoStore {
   voiceNotes(userId: string, limit: number): Promise<VoiceNoteRow[]>;
   /** Every note written since `since` (ISO), newest first, for the weekly summary. */
   memoryEvents(userId: string, since: string): Promise<MemoryEvent[]>;
+  /** An edit's own words for its captions (read as the founder, under RLS); null when the edit is not theirs. */
+  videoSource(userId: string, clipId: string): Promise<VideoSource | null>;
+  /** One caption for one edit and profile (`cmo_save_caption`, which checks it again); a founder's edit is kept. */
+  saveCaption(userId: string, runId: string, clipId: string, profile: string, text: string, title: string | null, gen: Record<string, unknown>): Promise<void>;
   /** Memory tier 0: the founder's active rules (`cmo_corrections`), newest first. */
   corrections(userId: string): Promise<string[]>;
   /** The latest lesson for each topic. */
