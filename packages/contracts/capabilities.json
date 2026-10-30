@@ -20,7 +20,6 @@
     {"department": "studio", "name": "mark_finished", "effect": "write", "approval": "none", "callers": ["ui"], "order_kind": null, "max_steps": 1, "credits": 0, "input": "clipId + documentHash"},
     {"department": "studio", "name": "render_short", "effect": "write", "approval": "none", "callers": ["brain"], "order_kind": "cut_shorts", "max_steps": 1, "credits": 0, "input": "shortClipId"},
     {"department": "studio", "name": "generate_media", "effect": "spend", "approval": "price", "callers": ["assistant", "mcp"], "order_kind": null, "max_steps": 1, "credits": "quote", "input": "GenerateMediaInput"},
-    {"department": "studio", "name": "add_3d_scene", "effect": "spend", "approval": "price", "callers": ["assistant", "mcp"], "order_kind": null, "max_steps": 1, "credits": "quote", "input": "Add3dSceneInput"},
     {"department": "studio", "name": "add_voiceover", "effect": "spend", "approval": "price", "callers": ["assistant", "mcp"], "order_kind": null, "max_steps": 1, "credits": "quote", "input": "AddVoiceoverInput"},
     {"department": "studio", "name": "replace_background", "effect": "spend", "approval": "price", "callers": ["assistant", "mcp"], "order_kind": null, "max_steps": 1, "credits": "quote", "input": "ReplaceBackgroundInput"},
     {"department": "studio", "name": "create_video", "effect": "spend", "approval": "price", "callers": ["brain", "assistant", "mcp"], "order_kind": "build_video", "max_steps": 1, "credits": "quote", "input": "CreateVideoInput"},
