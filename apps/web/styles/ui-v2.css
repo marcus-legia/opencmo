@@ -479,3 +479,12 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-slides.is-strip[data-aspect="16:9"] li { flex-basis: 160px; aspect-ratio: 16 / 9; }
 .v2-card-slides.is-strip[data-aspect="1:1"] li { flex-basis: 112px; aspect-ratio: 1; }
 .v2-card-state.is-help_only { background: var(--v2-brand-soft); color: var(--v2-waiting); }
+
+/* P5 C1: "New" offers a video or a slideshow. */
+.v2-new { position: relative; }
+.v2-new-choices { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; background: var(--v2-card); border: 1px solid var(--v2-line); box-shadow: 0 8px 24px rgb(0 0 0 / 0.08); }
+.v2-new-choices button { all: unset; box-sizing: border-box; min-height: var(--v2-target); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; font-size: 14px; }
+.v2-new-choices button + button { border-top: 1px solid var(--v2-line); }
+.v2-new-choices button span { color: var(--v2-ink2); font-size: 12px; }
+.v2-new-choices button:hover, .v2-new-choices button:focus-visible { background: var(--v2-paper2); outline: none; }
+.v2-new-choices button:focus-visible { box-shadow: inset 0 0 0 2px var(--v2-ink); }

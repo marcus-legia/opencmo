@@ -63,6 +63,7 @@ import { gridFor, layoutKey, MIN, PRESETS, splitterFor, useEditorLayout, type Pa
 import { PanelToggles } from "./PanelToggles";
 import { Splitter } from "./Splitter";
 import { Soundboard } from "./soundboard/Soundboard";
+import { SlidePanel, SlideStrip, readSlides, slideAt } from "./slides/SlidesView";
 import { Timeline } from "./timeline/Timeline";
 import { studioItemHref } from "@/components/screens/studio/href";
 
@@ -364,6 +365,13 @@ function Workspace({
     router.replace(pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, pathname, router]);
+  // Slides view (P5 C1): `?view=slides` (New slideshow, Open in Slides) or an edit already made of slides.
+  const slides = useMemo(() => readSlides(state.document), [state.document]);
+  const [slidesView, setSlidesView] = useState(() => search.get("view") === "slides" || readSlides(session.current).length > 0);
+  // The slide picked in the strip, by id: right after `add_slide` the renderer still has the old length, so a seek to
+  // the new slide is clamped and the playhead alone would point at the one before it. Playing follows the playhead.
+  const [pickedSlide, setPickedSlide] = useState<string | null>(null);
+  const currentSlide = slidesView ? ((!playing && slides.find((slide) => slide.id === pickedSlide)) || slideAt(slides, frame / 30)) : null;
   const layout = useEditorLayout();
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -1229,7 +1237,7 @@ function Workspace({
   ];
 
   // Bố cục Palmier (layout.ts): mỗi panel một ô lưới, bấm vào là "đang chọn" (phím ` phóng to nó).
-  const grid = gridFor(layout, hideTimeline);
+  const grid = gridFor(layout, hideTimeline || slidesView);
   const panel = (name: PanelName) => ({
     "data-panel": name,
     "data-focused": layout.focused === name ? "" : undefined,
@@ -1398,9 +1406,22 @@ function Workspace({
         style={{ gridTemplateAreas: grid.areas, gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows }}
       >
       {/* Hidden, not unmounted: an upload in flight lives in the Upload tab's state. */}
-      <section className="ed2-left" {...panel("media")} hidden={hideUI || !layout.visible.media} aria-label="Media">
+      <section className="ed2-left" {...panel("media")} hidden={hideUI || !layout.visible.media} aria-label={slidesView ? "Slides" : "Media"}>
         {splitter("media")}
-        <div className="ed2-left-tabs" role="tablist">
+        {slidesView ? (
+          <SlideStrip
+            slides={slides}
+            current={currentSlide}
+            busy={busy}
+            run={run}
+            onPick={(slide) => {
+              setPickedSlide(slide.id);
+              playback.seek(Math.round(slide.start * 30));
+            }}
+            onTimeline={() => setSlidesView(false)}
+          />
+        ) : null}
+        <div className="ed2-left-tabs" role="tablist" hidden={slidesView}>
           {(["media", "transcript", "upload"] as const).map((tab) => (
             <button
               key={tab}
@@ -1415,7 +1436,7 @@ function Workspace({
             </button>
           ))}
         </div>
-        {leftTab === "media" ? (
+        {slidesView ? null : leftTab === "media" ? (
           <LibraryPanel
             library={library}
             transcriptOf={transcripts.statusOf}
@@ -1432,7 +1453,7 @@ function Workspace({
           />
         ) : null}
         <UploadPanel
-          hidden={leftTab !== "upload"}
+          hidden={slidesView || leftTab !== "upload"}
           frame={sceneWidth && sceneHeight ? frameAspect(sceneWidth, sceneHeight) : "9:16"}
           onOpen={(id) => void leave(`/app/editor/${id}`)}
         />
@@ -1535,6 +1556,11 @@ function Workspace({
           />
         ) : null}
         <div className="ed2-tools" role="toolbar" aria-label="Tools">
+          {slides.length > 0 && !slidesView ? (
+            <button type="button" className="ed2-chip" title="Edit slide by slide, timeline hidden" data-testid="tool-slides" onClick={() => setSlidesView(true)}>
+              ▤ Slides
+            </button>
+          ) : null}
           <button
             type="button"
             className="ed2-chip"
@@ -1618,7 +1644,17 @@ function Workspace({
           </div>
         ) : null}
       </main>
-      {hideUI || !layout.visible.inspector ? null : (
+      {hideUI || !layout.visible.inspector ? null : slidesView ? (
+      <div className="ed2-insp-wrap" {...panel("inspector")}>
+      {splitter("inspector")}
+      <SlidePanel
+        slide={currentSlide}
+        images={library.manifest.assets.filter((item) => item.type === "IMAGE").map((item) => ({ path: item.path, name: item.path.split("/").pop() ?? item.path }))}
+        busy={busy}
+        run={run}
+      />
+      </div>
+      ) : (
       <div className="ed2-insp-wrap" {...panel("inspector")}>
       {splitter("inspector")}
       <Inspector
@@ -1636,7 +1672,7 @@ function Workspace({
       />
       </div>
       )}
-      {hideTimeline ? null : (
+      {hideTimeline || slidesView ? null : (
       <div className="ed2-tl-wrap" {...panel("timeline")}>
       {splitter("timeline")}
       <Timeline

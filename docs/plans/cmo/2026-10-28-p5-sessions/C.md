@@ -15,15 +15,15 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
 
 ## Todo
 
-- [ ] **C0 Card bodies** on A0's types with fixtures: slideshow (slides strip, quick text edit per slide, MP4 preview,
+- [x] **C0 Card bodies** on A0's types with fixtures: slideshow (slides strip, quick text edit per slide, MP4 preview,
       PNG set download, Open in Slides, approve, send back) and Sales states (help only and why, skipped and why).
       Axe clean at 1440 and 390.
-- [ ] **C1 Slides view**: "New" offers New video and New slideshow; strip on the left (add, delete, drag), frame in the
+- [x] **C1 Slides view**: "New" offers New video and New slideshow; strip on the left (add, delete, drag), frame in the
       middle, text/image/colour/duration on the right, timeline hidden, "Timeline" switches to the full editor;
       every change through B's slide ops.
-- [ ] **C2 Sales and Research live**: Sales settings (excluded subreddits, co-occurrence pairs), the mention counter and
+- [ ] **C2 Sales and Research live** (UI and the settings route done on fixtures; live once A3's loaders land): Sales settings (excluded subreddits, co-occurrence pairs), the mention counter and
       stuck banner; Research → "What works on video in your niche" with hook, length, format and URL.
-- [ ] **C3 e2e**: build a 5-slide slideshow in the Slides view, approve a slideshow card, a help-only Sales card shows
+- [x] **C3 e2e**: build a 5-slide slideshow in the Slides view, approve a slideshow card, a help-only Sales card shows
       why and has no post button.
 
 ## Requests
@@ -31,3 +31,5 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
 (Others append `[from → C] what, why`; answer here with the commit.)
 
 - [from B → C] `components/editor/EditorHome.tsx:21` and `ClipPicker.tsx:87,167,172` test `kind === "blank"`, so a slideshow clip looks like an upload there. `startsEmpty(kind)` in `lib/editor/project.ts` is the server-side rule (project route, Assistant, Studio); that module is server code, so use the same test locally.
+  → [C] Done in C1: `components/editor/slides/kind.ts` `startsEmpty` (client twin of the server rule), used by
+  `EditorHome` and `ClipPicker`.
