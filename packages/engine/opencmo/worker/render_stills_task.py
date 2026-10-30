@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ from opencmo.worker.task_run import TaskContext, TaskError, run_task
 FAILED = "Exporting the slides as images failed. Please try again."
 STILLS_TIMEOUT = 600
 MARK_TIMEOUT = 60
+#: All the stills together: a stuck ffmpeg must not hold the worker for 35 × MARK_TIMEOUT.
+MARK_BUDGET = 300
 #: The hook is the first slide: what TikTok photo mode shows first.
 COVER_INDEX = 0
 
@@ -95,9 +98,12 @@ def _run(ctx: TaskContext) -> None:
     if bool(job.get("watermark", True)):
         mark = _watermark_filter(WATERMARK, int(result["height"]))
         if mark:
+            deadline = time.monotonic() + MARK_BUDGET
             for still in stills:
                 if ctx.lost():
                     return
+                if time.monotonic() > deadline:
+                    raise TaskError(FAILED)
                 _burn_watermark(still, mark)
 
     archive = root / "slides.zip"
@@ -111,14 +117,18 @@ def _run(ctx: TaskContext) -> None:
     if base != zip_object.removesuffix(".zip"):
         raise ValueError("Invalid stills destination")
     listed: list[dict[str, Any]] = []
+    # `manifest.files` is what job deletion and retention walk: every object this task wrote is named in it.
+    files: dict[str, dict[str, Any]] = {}
     for index, still in enumerate(stills):
         object_name = f"{base}-{index + 1:02d}.png"
         store.replace_object(bucket, object_name, still, content_type="image/png")
         ctx.uploaded(bucket, object_name)
         listed.append({"index": index, "object": object_name, "bytes": still.stat().st_size})
+        files[f"still_{index + 1:02d}"] = {"bucket": bucket, "object": object_name, "bytes": still.stat().st_size}
     store.replace_object(bucket, zip_object, archive, content_type="application/zip")
     ctx.uploaded(bucket, zip_object)
     size = archive.stat().st_size
+    files["zip"] = {"bucket": bucket, "object": zip_object, "bytes": size}
     output = {
         "output_path": zip_object,
         "stills": listed,
@@ -127,6 +137,6 @@ def _run(ctx: TaskContext) -> None:
         "width": result["width"],
         "height": result["height"],
         "count": len(stills),
-        "manifest": {"attempt_id": task.attempt_id, "editor_revision_id": (task.payload or {}).get("editor_revision_id")},
+        "manifest": {"attempt_id": task.attempt_id, "editor_revision_id": (task.payload or {}).get("editor_revision_id"), "files": files},
     }
     ctx.complete(lambda: store.complete_task(task.id, task.attempt_id, output))

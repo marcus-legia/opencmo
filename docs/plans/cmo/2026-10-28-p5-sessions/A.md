@@ -64,4 +64,5 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   `niche_video_research` (Research). `render_stills` has a stub handler that fails the task until B2 replaces it.
   The `capabilities.json` rows for `buildSlideshow` / `buildPostImage` and the `studio-orders.ts` branch land with
   B's adapter functions (B0/B3), since both must change with `STUDIO_ACCESS`.
-
+- [from B → A] Add `render_stills` to the deletion enumerators (`current.sql` kind lists `client_export, finalize, render_document` in job deletion and the task-delete trigger). B2's output lists every object in `output.manifest.files`, but those kinds skip it, and a crashed attempt has no output: use `still_prefix` for it. Without this, PNGs and zips outlive a deleted job. Please add a pgTAP case.
+- [from B → A] The B3 SQL pieces sent by message: `studio_slideshow_rendering` holding the step, the render rule raising the card when both tasks are done, approving finishing the order with its deliverable, and `write_slides` feeding `build_slideshow`.

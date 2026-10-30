@@ -92,6 +92,8 @@ def test_uploads_each_still_and_the_zip_then_completes(tmp_path: Path, node) -> 
     assert (done["count"], done["cover_index"], done["width"], done["height"]) == (2, 0, 360, 640)
     assert [item["object"] for item in done["stills"]] == ["u-1/c-1/t-1-01.png", "u-1/c-1/t-1-02.png"]
     assert done["zip"] == {"object": ZIP, "bytes": len(store.uploads[ZIP][1])}
+    # Job deletion walks this list: every object written must be in it.
+    assert {entry["object"] for entry in done["manifest"]["files"].values()} == set(store.uploads)
 
 
 def test_watermark_changes_the_png_only_when_the_job_has_one(tmp_path: Path, node) -> None:

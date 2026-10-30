@@ -22,8 +22,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
-import { slideSpans, validate, type ClipDocument } from '@opencmo/clip-doc';
-import { captureTimes, COLOR_GUIDE, createRenderer, FPS, MAX_LOOK_TIMES, mediaSources, pickScene, scopeStats, visibleAt, withoutText, type LookBox, type MediaHost } from '@opencmo/clip-render';
+import { MAX_SLIDES, slideSpans, validate, type ClipDocument } from '@opencmo/clip-doc';
+import { captureTimes, COLOR_GUIDE, createRenderer, FPS, MAX_LOOK_TIMES, mediaSources, outputSize, pickScene, scopeStats, visibleAt, withoutText, type LookBox, type MediaHost } from '@opencmo/clip-render';
 import { z } from 'zod';
 
 import { userInput } from './inputs.ts';
@@ -262,6 +262,7 @@ export async function lookJob(raw: unknown): Promise<LookResult> {
   return grab(job);
 }
 
+const MAX_STILL_EDGE = 1920;
 export const StillsSchema = JobSchema.pick({ document: true, media: true, transcripts: true, fonts: true, scene: true }).extend({ out_dir: z.string().min(1) });
 
 /** One PNG per slide, at its midpoint with text kept, as the export draws it: `slide-01.png`, `slide-02.png`… */
@@ -270,15 +271,22 @@ export async function stillsJob(raw: unknown): Promise<{ files: string[]; width:
   const document = validate(job.document);
   const spans = slideSpans(document);
   if (!spans.length) return { error: 'This project has no slides to export as images.' };
+  // The document is the user's: the op's limit does not bind one saved another way.
+  if (spans.length > MAX_SLIDES) return { error: `A slideshow has at most ${MAX_SLIDES} slides.` };
   const scene = pickScene(document, job.scene);
+  // The export's size, with the long edge capped: a very narrow frame would otherwise draw a huge canvas per slide.
+  const size = outputSize(scene, 1080);
+  const edge = Math.min(MAX_STILL_EDGE, Math.max(size.width, size.height));
+  const fit = edge / Math.max(scene.width, scene.height);
+  const [width, height] = [Math.round(scene.width * fit), Math.round(scene.height * fit)];
   mkdirSync(job.out_dir, { recursive: true });
   const files: string[] = [];
-  await drawFrames(job, document, () => spans.map((span) => (span.start + span.end) / 2), Math.max(scene.width, scene.height), (canvas, index) => {
+  await drawFrames(job, document, () => spans.map((span) => (span.start + span.end) / 2), edge, (canvas, index) => {
     const file = join(job.out_dir, `slide-${String(index + 1).padStart(2, '0')}.png`);
     writeFileSync(file, canvas.encodeSync('png'));
     files.push(file);
   });
-  return { files, width: scene.width, height: scene.height };
+  return { files, width, height };
 }
 
 /** CLI helper: the job file the worker wrote. */

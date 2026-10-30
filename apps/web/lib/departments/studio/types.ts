@@ -13,13 +13,13 @@ import { z } from "zod";
 
 import type { SupabaseClient } from "@/lib/api/handler";
 import type { ToolOutcome } from "@/lib/agent/tools";
-import { BRIEF_ASPECTS, type VideoBrief } from "@/lib/cmo/writer/types";
+import { BRIEF_ASPECTS, SlideSchema, type VideoBrief } from "@/lib/cmo/writer/types";
 
 /** Who calls Studio. `ui` is the founder's own buttons (Mark finished, Cut shorts) over `/api/v1/studio`. */
 export const STUDIO_CALLERS = ["brain", "assistant", "mcp", "ui"] as const;
 export type StudioCaller = (typeof STUDIO_CALLERS)[number];
 
-export const STUDIO_ENTRIES = ["plan", "decide", "buildVideo", "cutShorts", "markFinished", "renderShort"] as const;
+export const STUDIO_ENTRIES = ["plan", "decide", "buildVideo", "cutShorts", "markFinished", "renderShort", "buildSlideshow"] as const;
 export type StudioEntry = (typeof STUDIO_ENTRIES)[number];
 
 /**
@@ -37,6 +37,7 @@ export const STUDIO_ACCESS: Record<StudioEntry, readonly StudioCaller[]> = {
   cutShorts: ["brain", "ui"],
   markFinished: ["ui"],
   renderShort: ["brain"],
+  buildSlideshow: ["brain"],
 };
 
 export const mayCall = (caller: StudioCaller, entry: StudioEntry): boolean => STUDIO_ACCESS[entry].includes(caller);
@@ -145,8 +146,8 @@ export type RenderedShort = { kind: "queued"; taskId: string } | { kind: "refuse
  */
 export const SlideshowBriefSchema = z.object({
   idea: z.string().trim().min(3).max(500),
-  reason: z.string().trim().max(500).optional(),
-  count: z.number().int().min(5).max(10).optional(),
+  /** Writer's `write_slides` output; SQL copies it into the order's brief. */
+  slides: z.array(SlideSchema).min(5).max(10),
   aspect: z.enum(BRIEF_ASPECTS).default("9:16"),
 });
 export type SlideshowBrief = z.infer<typeof SlideshowBriefSchema>;
@@ -172,7 +173,7 @@ export type BuiltPostImage = { kind: "rendering"; clipId: string; stillsTaskId: 
  * `render_stills` (worker `render_stills_task.py`): one PNG per slide, drawn at its midpoint with text kept, and a zip
  * of the set. Objects stay at three path levels in `exports`: `<user>/<clip>/<task>-01.png`, `<user>/<clip>/<task>.zip`.
  */
-export type RenderStillsInput = { editor_revision_id: string; source_hash: string; bucket: "exports"; object: string; manifest: unknown };
+export type RenderStillsInput = { editor_revision_id: string; source_hash: string; bucket: "exports"; object: string; still_prefix: string; manifest: unknown };
 export type RenderStillsOutput = {
   stills: { index: number; object: string; bytes: number }[];
   zip: { object: string; bytes: number };
@@ -211,4 +212,6 @@ export interface StudioAdapter {
   markFinished(clipId: string, hash: string): Promise<MarkedFinished>;
   /** Queue `render_document` for a short's own edit, with no editor open and no founder session. */
   renderShort(shortClipId: string): Promise<RenderedShort>;
+  /** Brain only: a slideshow edit from Writer's slides, its MP4 and PNG set queued; the card comes when both are done. */
+  buildSlideshow(brief: SlideshowBrief): Promise<BuiltSlideshow>;
 }

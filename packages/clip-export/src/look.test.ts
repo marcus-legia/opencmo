@@ -60,7 +60,7 @@ describe('lookJob (real ffmpeg)', () => {
     return { gray: sum / (data.length / 4), width: image.width, height: image.height };
   };
 
-  it('stills: one PNG per slide at its midpoint, text kept, as big as the scene', async () => {
+  it('stills: one PNG per slide at its midpoint, text kept, at the size of the export', async () => {
     const slide = (id: string, start: number, end: number, fill: string, text: string) => ({
       kind: 'group', id, start, end, marks: { visual: { op: 'add_slide', input: {} } },
       children: [
@@ -72,21 +72,27 @@ describe('lookJob (real ffmpeg)', () => {
     const out = join(dir, 'stills');
     const result = await stillsJob({ document: slides, media: [], transcripts: [], fonts: FONTS, out_dir: out });
     if ('error' in result) throw new Error(result.error);
-    expect(result).toMatchObject({ width: 360, height: 640 });
+    expect(result).toMatchObject({ width: 1080, height: 1920 });
     expect(result.files.map((file) => file.slice(out.length + 1))).toEqual(['slide-01.png', 'slide-02.png']);
     const pixels = async (file: string) => {
       const image = await loadImage(file);
       const canvas = createCanvas(image.width, image.height);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, 0, 0);
-      return { size: [image.width, image.height], corner: [...ctx.getImageData(5, 5, 1, 1).data].slice(0, 3), whites: ctx.getImageData(0, 200, 360, 200).data.filter((_, at, data) => at % 4 === 0 && data[at]! > 240 && data[at + 1]! > 240 && data[at + 2]! > 240).length };
+      return { size: [image.width, image.height], corner: [...ctx.getImageData(5, 5, 1, 1).data].slice(0, 3), whites: ctx.getImageData(0, 600, 1080, 600).data.filter((_, at, data) => at % 4 === 0 && data[at]! > 240 && data[at + 1]! > 240 && data[at + 2]! > 240).length };
     };
     const [first, second] = [await pixels(result.files[0]!), await pixels(result.files[1]!)];
-    expect(first.size).toEqual([360, 640]);
+    expect(first.size).toEqual([1080, 1920]);
     expect(first.corner).toEqual([255, 0, 0]);
     expect(second.corner).toEqual([0, 0, 255]);
     expect(first.whites).toBeGreaterThan(100);
     expect(second.whites).toBeGreaterThan(100);
+  });
+
+  it('stills: a saved document past the slide limit is refused', async () => {
+    const group = { kind: 'group', start: 0, end: 1, marks: { visual: { op: 'add_slide', input: {} } }, children: [] };
+    const many = validate({ version: 1, stage: { children: [{ kind: 'scene', width: 360, height: 640, active: true, children: Array.from({ length: 36 }, (_, at) => ({ ...group, id: `s${at}`, start: at, end: at + 1 })) }] } });
+    expect(await stillsJob({ document: many, media: [], transcripts: [], fonts: FONTS, out_dir: join(dir, 'many') })).toEqual({ error: expect.stringMatching(/at most 35/) });
   });
 
   it('stills: a document with no slides says so', async () => {

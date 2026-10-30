@@ -10,6 +10,7 @@ import "server-only";
  *   approved step       → decide; keep `next` + `wait_for` → generations run         (waiting_order)
  *   generations done    → card 2 (plan, store), or the render of the long video; A3's rules raise card 3
  *   queued cut_shorts   → cutShorts(edit)                → short renders            (waiting_order)
+ *   queued build_slideshow → buildSlideshow(brief)       → MP4 and PNG set renders  (waiting_order); SQL raises the card
  *
  * The founder's decision on a card is recorded by `approval_decide`; this runner only carries it out. A step that
  * fails fails its order with the reason (the progress check replans from it).
@@ -22,7 +23,7 @@ import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { studio } from "@/lib/departments/studio/adapter";
 import { finishVideo } from "@/lib/departments/studio/finish";
 import { renderEdit } from "@/lib/departments/studio/render";
-import { VideoBriefSchema, type StudioAdapter, type StudioContext } from "@/lib/departments/studio/types";
+import { SlideshowBriefSchema, VideoBriefSchema, type StudioAdapter, type StudioContext } from "@/lib/departments/studio/types";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 import { balance } from "@/lib/cmo/mcp/account";
 import { brainClientFor } from "@/lib/mcp/auth";
@@ -101,6 +102,13 @@ async function runOrder(admin: SupabaseClient, order: Order): Promise<void> {
       const built = await adapter.buildVideo(briefOf(order));
       if (built.kind === "invalid") return move(admin, order.id, "failed", "", { code: "invalid_brief", message: built.message });
       return move(admin, order.id, "waiting_founder", "The storyboard waits on you");
+    }
+    if (order.kind === "build_slideshow") {
+      const brief = SlideshowBriefSchema.safeParse(order.brief);
+      if (!brief.success) return move(admin, order.id, "failed", "", { code: "invalid_brief", message: "This slideshow has no slides to build." });
+      const built = await adapter.buildSlideshow(brief.data);
+      if (built.kind === "invalid") return move(admin, order.id, "failed", "", { code: "invalid_brief", message: built.message });
+      return move(admin, order.id, "waiting_order", "Rendering the slideshow");
     }
     const clipId = typeof order.brief.clip_id === "string" ? order.brief.clip_id : "";
     const cut = await adapter.cutShorts(clipId);

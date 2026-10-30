@@ -48,6 +48,11 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
   added the scrim on image backgrounds. Not yet run: an upload to real Storage or `request_stills_export` end to end
   (fake store in `test_worker_render_stills.py`); A4's acceptance covers it. The worker's ffmpeg watermark ran on PNGs
   in the test.
+- **B3 status (2026-10-31): code in, not done.** `buildSlideshow`, its reviewer, visuals and builder are pushed and
+  checked with pure checks only. It calls `studio_slideshow_rendering`, which A has not written yet, so no real order
+  has run and no card has been raised. Tick B3 after A's SQL lands and one order runs on the local stack.
+- **Visuals:** captured pages or the Brand Kit background. The founder's library screenshots are not used: a library
+  belongs to one job, and a new slideshow edit starts with an empty one.
 
 ## Requests
 

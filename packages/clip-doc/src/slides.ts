@@ -7,6 +7,8 @@
 import type { ClipDocument, SceneNode } from './schema.ts';
 
 export const SLIDE_OP = 'add_slide';
+/** TikTok photo mode's limit: the PNG set must fit it. The op and the still export both hold it. */
+export const MAX_SLIDES = 35;
 
 export type SlideSpan = { id: string | undefined; start: number; end: number };
 

@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 
-import { SLIDE_OP, type ClipDocument, type Marker } from '@opencmo/clip-doc';
+import { MAX_SLIDES, SLIDE_OP, type ClipDocument, type Marker } from '@opencmo/clip-doc';
 
 import { readBrand, themeFromBrand } from '../brand';
 import { clone, drawId, type Entity } from '../doc';
@@ -24,9 +24,10 @@ import { LOGO_MARK } from './brand';
 import { OpFailure } from './context';
 import { activeScene } from './timeline';
 
-/** TikTok photo mode's limit: the PNG set must fit it. */
-export const MAX_SLIDES = 35;
+export { MAX_SLIDES };
 export const SLIDE_SECONDS = { min: 1, max: 30, default: 4 } as const;
+/** What fits its text box on every frame shape; the Slideshow squad's reviewer and Writer hold slides to it. */
+export const SLIDE_TEXT_MAX = { heading: 60, body: 130 } as const;
 export const SLIDE_LAYERS = { background: 'Background', scrim: 'Scrim', heading: 'Heading', body: 'Body' } as const;
 
 const slideId = z.string().min(1).max(40);
@@ -121,6 +122,8 @@ function reflow(scene: Entity, order: Slide[] = slidesOf(scene)): void {
 function textLayer(scene: Entity, name: string, text: string, box: { y: number; height: number; size: number; weight: number }, theme: { text: string; font?: string }, seconds: number): Entity {
 	const width = scene.width as number;
 	const height = scene.height as number;
+	// A square or wide frame is short: the same words need smaller type to stay inside the box.
+	const tall = height > width * 1.2 ? 1 : 0.7;
 	return {
 		kind: 'text',
 		name,
@@ -133,7 +136,7 @@ function textLayer(scene: Entity, name: string, text: string, box: { y: number; 
 		color: theme.text,
 		fontFamily: theme.font ?? 'Inter',
 		fontWeight: box.weight,
-		fontSize: Math.round(Math.min(width, height) * box.size),
+		fontSize: Math.round(Math.min(width, height) * box.size * tall),
 		start: 0,
 		end: seconds,
 		text,
