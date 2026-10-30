@@ -58,7 +58,7 @@ export function SalesSettings({ initial, live }: { initial: Settings; live: bool
   return (
     <section className="v2-panel scr-sales-settings" aria-labelledby="sales-settings-title" data-testid="sales-settings">
       <div className="v2-panel-body">
-        <h2 id="sales-settings-title" className="scr-settings-title">
+        <h2 id="sales-settings-title" className="scr-settings-title" tabIndex={-1}>
           Where Sales looks
         </h2>
         <p className="scr-small scr-muted">Ruled out before scoring: a skipped subreddit or a thread without both words costs nothing.</p>

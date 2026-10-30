@@ -152,6 +152,18 @@ test("Slideshow card: slides, quick text edit, approve finishes the order", asyn
     settings_hash: hash,
   }));
   expect((await db.from("tasks").insert(tasks)).error).toBeNull();
+  // Writer's TikTok caption for this slideshow: the card carries it, as a finished video's (P5 A3).
+  const caption = await db.from("content_items").insert({
+    user_id: user.id,
+    department: "video",
+    platform: "tiktok_caption",
+    clip_id: clipId,
+    day: new Date().toISOString().slice(0, 10),
+    idea: "3 ways to cut a demo",
+    status: "in_review",
+    body: { text: "Three ways to cut a demo #editing" },
+  });
+  expect(caption.error).toBeNull();
   const slides = ["3 ways to cut a demo", "1. Cut by words", "2. Ask for B-roll"].map((text) => ({ text, still_path: null, seconds: 3 }));
   const step = await brainClient(user.id).rpc("studio_slideshow_rendering", {
     p_order_id: orderId,
@@ -178,6 +190,13 @@ test("Slideshow card: slides, quick text edit, approve finishes the order", asyn
   }
 
   const shown = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  // A caption edited on the card: the card keeps its id with a new hash, and Approve sends that hash.
+  const before = (await db.from("approvals").select("content_hash").eq("id", card!.id).single()).data!.content_hash;
+  await shown.getByRole("button", { name: /^Edit / }).first().click();
+  await shown.getByTestId("caption").getByLabel("Caption").fill("Three ways to cut a demo by words #editing");
+  await shown.getByRole("button", { name: "Save caption" }).click();
+  await expect.poll(async () => (await db.from("approvals").select("content_hash").eq("id", card!.id).single()).data?.content_hash).not.toBe(before);
+  await expect(shown).toContainText("Three ways to cut a demo by words #editing");
   await shown.getByRole("button", { name: "Approve" }).click();
   await expect.poll(async () => (await db.from("approvals").select("status").eq("id", card!.id).single()).data?.status).toBe("approved");
   await expect.poll(async () => (await db.from("work_orders").select("status").eq("id", orderId).single()).data?.status).toBe("done");
@@ -224,4 +243,51 @@ test("Help-only Sales card says why and has no post button", async ({ page }) =>
   await expect(shown.getByRole("button", { name: "Copy and open thread" })).toBeVisible();
   await expect(shown.getByRole("button", { name: /post/i })).toHaveCount(0);
   await noSeriousAxe(page);
+});
+
+test("Sales settings save live; a stuck scan points at them, not at credits", async ({ page }) => {
+  const db = admin();
+  const { user } = await founder(db);
+  // Two finished scans that raised no card: the Sales screen says so (A3's `stuck`).
+  for (const minutes of [20, 10]) {
+    const run = await db.from("cmo_runs").insert({
+      user_id: user.id,
+      kind: "sales_scan",
+      status: "done",
+      output: { cards: 0 },
+      created_at: new Date(Date.now() - minutes * 60_000).toISOString(),
+    });
+    expect(run.error).toBeNull();
+  }
+
+  await signIn(page, user);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+    await page.goto("/app/sales");
+    await expect(page.getByTestId("sales-settings")).toBeVisible();
+    const banner = page.getByRole("alert").filter({ hasText: "found no conversation worth joining" });
+    await expect(banner).toBeVisible();
+    await expect(banner).not.toContainText("threads found before it stopped");
+    await expect(banner.getByRole("button", { name: /credits/ })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await noSeriousAxe(page);
+  }
+  await page.getByRole("alert").getByRole("button", { name: "Change where Sales looks" }).click();
+  await expect(page.locator("#sales-settings-title")).toBeFocused();
+
+  const settings = page.getByTestId("sales-settings");
+  await settings.getByLabel("Never scan this subreddit").fill("r/Memes");
+  await settings.getByRole("button", { name: "Exclude" }).click();
+  await settings.getByLabel("A thread must mention").fill("Video");
+  await settings.getByLabel("and also").fill("editor");
+  await settings.getByRole("button", { name: "Add pair" }).click();
+  await settings.getByRole("button", { name: "Save where Sales looks" }).click();
+  await expect(settings.getByRole("status").filter({ hasText: "Saved. The next scan skips these." })).toBeVisible();
+  await expect
+    .poll(async () => (await db.from("sales_settings").select("excluded_subreddits, co_occurrence").eq("user_id", user.id).maybeSingle()).data)
+    .toEqual({ excluded_subreddits: ["memes"], co_occurrence: [["video", "editor"]] });
+
+  await page.reload();
+  await expect(page.getByTestId("sales-settings").getByRole("list", { name: "Excluded subreddits" })).toContainText("r/memes");
+  await expect(page.getByTestId("sales-settings").getByRole("list", { name: "Word pairs" })).toContainText("video + editor");
 });

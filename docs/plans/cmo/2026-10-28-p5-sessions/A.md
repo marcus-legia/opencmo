@@ -104,4 +104,8 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   last ten posted replies named the product, else help only with why. Excluded subreddits and pairs before scoring;
   code drops drafts with a link, over 120 words, or the product named in a help-only reply. `cmo_decide_opportunity`
   takes the posted text (`p_text`); `product_mentioned` reads it. pgTAP `227`.
-
+- [from C → A] Schedule card image: add `preview.imageUrl` (nullable, signed from `snapshot.image.object` in `exports`) to
+  `ScheduleBody` and sign it where the schedule cards are enriched; C then shows the image above the post's words.
+- [from C → A] FYI, found while running e2e: on `cmo-p5` as of `b5f389a`, `ui-v2-schedule` fails "connect Threads through
+  the fake Zernio" (no "Connect Threads" button in Settings → Accounts) and "dragging its slot … asks again" (no "New time
+  saved" toast). Both fail the same way without C's changes.
