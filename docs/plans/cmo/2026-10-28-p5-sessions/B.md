@@ -30,7 +30,7 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
       avoid; sends back once) → visuals (captured pages and the founder's screenshots first, `/image` with
       moderation otherwise, never text inside the image) → builder (slide ops, Brand Kit) → MP4 + PNG set → one
       `slideshow` card through A's step RPC.
-- [ ] **B4 Post image squad**: a frame of the founder's video or a captured page + a title layer; generate only when
+- [x] **B4 Post image squad**: a frame of the founder's video or a captured page + a title layer; generate only when
       none fits; aspect per platform; Brand Kit; an `image` deliverable attached to its post.
 
 ## Notes for M1
@@ -53,6 +53,11 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
   approve → order done, deliverable ready, no credits spent. A frame of the full-size MP4 and the PNGs were looked at:
   right slide, text and watermark on both. Real Storage upload is now covered. Not covered: captured-page backgrounds on
   a real order, and the `write_slides` → `build_slideshow` pair, which nothing orders until A3 (A's pgTAP 222 covers the rule). No real model ran.
+- **B4 run (2026-10-31):** three `build_post_image` orders on the local stack (`slideshow.e2e.ts`): a captured page on X
+  (1920×1080), the plain background on LinkedIn (1080×1080), TikTok (1080×1920); each an `image` deliverable on its post,
+  looked at. The same run put a captured page behind a post image on a real order. **Not run: a real video frame.** It
+  goes through `saveFrame`, which needs the deployed `look` endpoint; locally that is not set up, so the run only proved
+  the fallback to the plain background. Check it once on a deployed worker. The title sits above centre with no body.
 - **Visuals:** captured pages or the Brand Kit background. The founder's library screenshots are not used: a library
   belongs to one job, and a new slideshow edit starts with an empty one.
 

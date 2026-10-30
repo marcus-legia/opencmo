@@ -19,6 +19,7 @@ import type { Slide } from "@/lib/cmo/writer/types";
 import { applyToClip, readEditorProject } from "@/lib/editor/apply";
 import { exportPlan, startDocumentExport } from "@/lib/editor/export";
 import { ensureProject } from "@/lib/editor/project";
+import { wakeWorker } from "@/lib/modal";
 
 import { renderRequestId } from "../render";
 import { SlideshowBriefSchema, type BuiltSlideshow, type SlideshowBrief, type StudioContext } from "../types";
@@ -58,7 +59,7 @@ export function slideOps(slides: readonly Slide[], captureIds: readonly string[]
   });
 }
 
-const stillsRequestId = (clipId: string, hash: string): string => {
+export const stillsRequestId = (clipId: string, hash: string): string => {
   const hex = createHash("sha256").update(`render_stills:${clipId}:${hash}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
@@ -89,6 +90,7 @@ export async function buildSlideshow(ctx: StudioContext, input: SlideshowBrief):
   const mp4 = await startDocumentExport(ctx.supabase, clipId, revision.id, renderRequestId(clipId, project.document_hash), resolution);
   const stills = firstRow(await rpcOrThrow<{ id: string } | { id: string }[]>(ctx.supabase, "request_stills_export", { p_clip_id: clipId, p_revision_id: revision.id, p_request_id: stillsRequestId(clipId, project.document_hash) }));
   if (!stills) throw new Error("request_stills_export returned no task.");
+  await wakeWorker({ task_id: stills.id });
 
   const prefix = `${ctx.userId}/${clipId}/${stills.id}`;
   const spans = slideSpans(project.document);

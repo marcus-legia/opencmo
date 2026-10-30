@@ -11,6 +11,7 @@ import { slideSpans, validate, type ClipDocument } from "@opencmo/clip-doc";
 
 import { STUDIO_ACCESS } from "../types";
 import { reviewSlides, slideOps, slideSeconds } from "./build";
+import { postImageAspect } from "./post-image";
 
 const slide = (heading: string, body = "") => ({ heading, body });
 const five = ["Hook", "Two", "Three", "Four", "Try it"].map((text) => slide(text, "One short line."));
@@ -27,6 +28,8 @@ assert.deepEqual(ops.map((op) => ("background" in op ? op.background!.src : null
 assert.equal(slideOps(five, []).every((op) => !("background" in op)), true, "no captures: the Brand Kit background");
 
 assert.deepEqual(STUDIO_ACCESS.buildSlideshow, ["brain"], "only the brain's order builds a slideshow");
+assert.deepEqual(STUDIO_ACCESS.buildPostImage, ["brain"], "only the brain's order builds a post image");
+assert.deepEqual(["x", "youtube", "linkedin", "tiktok_caption"].map(postImageAspect), ["16:9", "16:9", "1:1", "9:16"]);
 
 async function main() {
   // The ops the squad writes build a document the export can read.
