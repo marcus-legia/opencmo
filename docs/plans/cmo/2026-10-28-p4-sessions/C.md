@@ -20,7 +20,8 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
       time in the founder's timezone, TikTok fields (privacy from creator info, comment/duet/stitch, AI-generated
       label off by default with one line of help), change time, cancel; states: waiting, published (link), failed
       (reason, Retry), missed (new time). Axe clean at 1440 and 390.
-- [ ] **C3 Copy**: landing and cards say "you approve when it posts"; the fallback card says "No account connected:
+- [ ] **C3 Copy** (landing line and the schedule card done; the post card's "Approve and open Threads" / "Post it on
+      X when you are ready" change with A3, once an approved post raises a schedule card): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
       copy and open" and links to Settings → Accounts.
 - [ ] **C1 Settings → Accounts live**: connect per platform (opens Zernio's link), handle and avatar, disconnect
       with confirm, error state.
