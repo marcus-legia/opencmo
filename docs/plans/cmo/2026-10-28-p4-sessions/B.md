@@ -16,7 +16,7 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
 
 ## Todo
 
-- [ ] **B0 Adapter interface (push first)**: `lib/departments/publish/types.ts`: `publish(deliverable, slot)` →
+- [x] **B0 Adapter interface (push first)**: `lib/departments/publish/types.ts`: `publish(deliverable, slot)` →
       `{ status, externalId, url, error }`, `connectLink(platform, returnUrl)`, `disconnect(accountId)`,
       `creatorInfo(accountId)`; `fake.ts` with the same interface (used by tests, e2e and acceptance, selected by
       `OPENCMO_PUBLISH_FAKE=1`); `intent.ts` (X intent, Threads web intent, LinkedIn/Facebook copy + open).

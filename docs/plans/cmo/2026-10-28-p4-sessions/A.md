@@ -52,3 +52,9 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
 ## Requests
 
 (Others append `[from → A] what, why`; answer here with the commit.)
+
+- [from B → A] Add `tsx lib/departments/publish/publish.check.ts` to `check:contracts` in `apps/web/package.json`
+  (your block). Why: B0's adapter contract and fake (`lib/departments/publish/`) are checked there; it needs no
+  `react-server` condition. Contract for A2/A0: the slot B3 hands the adapter is `PublishSlotSchema` in
+  `lib/departments/publish/types.ts` (`id`, `platform`, `zernioAccountId`, `idempotencyKey`, `publishAt`, `fields`);
+  the card's platform fields are `PlatformFieldsSchema` there, so the schedule snapshot can reuse it.
