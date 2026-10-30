@@ -166,8 +166,19 @@ scripts/dev.mjs         one-command dev stack
 ## Working style
 
 - Don't expand scope. Note out-of-scope improvements in the PR or an issue instead.
-- Commit freely as work progresses (owner, 2026-10-25); push to the working branch. Commit messages in English.
+- **Commit and push as you go (owner, 2026-10-27).** Finished work is committed and pushed to the task's branch and
+  its PR right away, without waiting to be asked; nothing is left only in a session or a container, which can be
+  reclaimed. Each commit is green on its own (the checks of what it touches). Commit messages in English. Deploys,
+  merges and force-pushes still wait for the owner.
 - An HTML doc ships with a markdown twin of the same name for agents (`docs/architecture/README.md`); change both together.
+- **Parallel sessions (owner, 2026-10-27): one branch, one PR.** When a plan splits work across sessions, every session
+  works on the same branch and the same PR; no session opens its own branch or PR. The plan creates that branch before
+  any session starts, so no session has to wait for it or invent one.
+- **Split the work so it cannot conflict.** Before sessions start, the plan gives each session a numbered todo list with
+  checkboxes, the exact files and folders it owns, the order it works in, and what it waits on. Shared files get named
+  blocks with one owner each. Checklists and requests go in a per-session file (`<plan>-sessions/<session>.md`), not one
+  file all sessions edit. A building block two sessions need (types, primitives, a flag helper) is built once by one
+  named session first, never twice.
 
 ## Product advisor role
 
