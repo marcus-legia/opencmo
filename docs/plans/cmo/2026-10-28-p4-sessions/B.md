@@ -40,12 +40,12 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
       when Zernio lists it under this founder's profile on that platform, then 303 → `/app/settings?tab=accounts`
       with `connected=<platform>` or `connect_error=<our sentence>`; `DELETE /api/v1/accounts/[id]` → `{disconnected}`.
       Rules in `lib/departments/publish/accounts.ts` (checked in `accounts.check.ts`).*
-- [ ] **B3 `publish_post` handler**: reload the slot and its approval, check the snapshot hash again, start
+- [x] **B3 `publish_post` handler** *(wired by C after A and B stopped, `f7f61d0`: `lib/departments/publish/job.ts` over A2's RPCs, checked in `publish-post.check.ts`)*: reload the slot and its approval, check the snapshot hash again, start
       `publish_media` for a video and wait for its result, post through the adapter, call `publish_status`; no
       account → mark for the intent fallback card instead.
       *Rules done and checked (`lib/cmo/jobs/publish-post.ts`, `publish-post.check.ts`): `runPublishPost(deps, slotId)`
       re-entrant; waits on A2 for the deps (slot read, export, media task, `publish_status`). See the request in A.md.*
-- [ ] **B5 Webhook**: `/api/webhooks/zernio` verifies the signature, refuses replays through `zernio_receipts`, maps
+- [x] **B5 Webhook** *(route by C, `f7f61d0`: `app/api/webhooks/zernio/route.ts` + `webhook-handle.ts`, checked in `webhook.check.ts`)*: `/api/webhooks/zernio` verifies the signature, refuses replays through `zernio_receipts`, maps
       Zernio's status to `publish_status`; tests for a bad signature, a replay and each status.
       *Signature + event mapping done (`lib/departments/publish/webhook.ts`, `webhook.check.ts`); the route waits on
       A2's `publish_status` and a receipt RPC.*

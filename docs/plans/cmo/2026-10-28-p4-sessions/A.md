@@ -53,7 +53,7 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
       calendar's; titles from the post or the short's hook; rules from `schedule-defaults.json`) and
       `settings.accounts` (every publish platform: connected, reconnect, or Connect). `live` flipped for both;
       `load.check.ts` covers them.
-- [ ] **A2 Firing** (`20261230120000_p4_firing`, pgTAP 218): SQL and the sweep are in; two lines wait on B.
+- [x] **A2 Firing** (`20261230120000_p4_firing`, pgTAP 218): SQL and the sweep are in. *Last two lines finished by C after A and B stopped (owner, 2026-10-30).*
   - [x] `schedule_claim_due()` (service role): past-window slots missed and proposed again (never late); due slots
         whose approval still covers what goes out → one `publish_post` order (Publish, under the week's root) and its
         run, leased to the window end (never twice); changed after approval → missed; intent → `reminded`; paused
@@ -64,9 +64,9 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   - [x] `publish_post` job kind in SQL (free, 100 a day, keyed by order), department `publish`, `capabilities.json`;
         the `accounts` rate-limit bucket for B2. `modal_app.py` `sweep()` calls `cmo_dispatch.claim_due_slots`
         before dispatching (tests in `test_cmo_dispatch.py`).
-  - [ ] `JOBS.publish_post` + `CmoJobKind`, once B3's handler is pushed (request in `B.md`).
-  - [ ] `publish_media` in `tasks_kind_check` + `task-kinds.json`, once B4's handler is pushed (request in `B.md`).
-- [ ] **A4 Acceptance** on a local stack with the fake Zernio (F11), peak RSS of one `publish_media` run, screenshots
+  - [x] `JOBS.publish_post` + `CmoJobKind` (C, `f7f61d0`: `lib/departments/publish/job.ts`, W3 "Publish").
+  - [x] `publish_media` in `tasks_kind_check` + `task-kinds.json` (A, `20261230130000`).
+- [ ] **A4 Acceptance** *(written by C: `lib/screens/p4-acceptance.e2e.ts`, `aa69ec5`; not run yet: needs a machine with Docker)* on a local stack with the fake Zernio (F11), peak RSS of one `publish_media` run, screenshots
       at 1440 and 390 into `docs/plans/cmo/2026-10-28-p4-acceptance/`.
 
 ## Requests
@@ -139,3 +139,21 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   posted it" → `cmo_mark_posted` (which A3 already uses to drop waiting slots). When that lands, C drops the post
   card's open-on-approve and its toast says "Approved. A schedule card asks you for its time." Until then C leaves
   the post card as it is, so founders without an account can still post.
+
+### Answers to C (by C, after A and B stopped; owner, 2026-10-30)
+
+- C1 decide route: A1 took it (`publishAt` camelCase); C0 follows (`ebf6c30`).
+- C2 fixtures: `SCHEDULE_STATE_CARDS` (`fb39b8e`).
+- C3 TikTok: A2 added the disclosure toggles in SQL; the strict TS schema dropped every new TikTok card until
+  `fb39b8e` added them; `zernio.ts` now sends `commercialContentType`. `canPostMore` / `maxVideoSeconds` still not on
+  the card (open).
+- C4 published link, C5 states: `state` and `publishedUrl` on the schedule body, read from the slot in
+  `schedule-enrich.ts` (`fb39b8e`).
+- C6 foot line: left as A1 built it (`Posts from …`).
+- C7 slot route and calendar links: `POST /api/v1/schedule/slots/[id]` (`f7f61d0`), loader `url` / `approvalId`
+  (`7194932`).
+- C8 copy-and-open: `20261230140000_p4_finish` raises the card at the slot's time (no expiry) and adds
+  `schedule_mark_posted`; post cards no longer open composers (`fb39b8e`, `f7f61d0`).
+- Found on the way: `schedule_propose` compared Writer's labels ("X") with ids ("x"), so no real post got a slot;
+  fixed in `20261230140000` (`bc46e79`).
+

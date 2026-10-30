@@ -20,14 +20,14 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
       time in the founder's timezone, TikTok fields (privacy from creator info, comment/duet/stitch, AI-generated
       label off by default with one line of help), change time, cancel; states: waiting, published (link), failed
       (reason, Retry), missed (new time). Axe clean at 1440 and 390.
-- [ ] **C3 Copy** (landing line and the schedule card done; the post card's "Approve and open Threads" / "Post it on
-      X when you are ready" change once A answers C8: the reminder card replaces open-on-approve): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
+- [x] **C3 Copy** (landing line and the schedule card done; the post card's "Approve and open Threads" / "Post it on
+      X when you are ready" changed in `fb39b8e`: approving a post opens nothing; its copy-and-open card comes at its time): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
       copy and open" and links to Settings → Accounts.
 - [x] **C1 Settings → Accounts live**: connect per platform (opens Zernio's link), handle and avatar, disconnect
       with confirm, error state.
-- [ ] **C2 Schedule page live**: calendar with times in the founder's timezone, drag to move (change-time action,
+- [x] **C2 Schedule page live** (`7194932`: drag and a Move picker, posted links, waiting cards open): calendar with times in the founder's timezone, drag to move (change-time action,
       the new card appears in the queue), per-platform filter, published and failed markers.
-- [ ] **C4 e2e** with the fake Zernio: approve a schedule card, drag a slot (old card superseded), retry a failed
+- [x] **C4 e2e** (`aa69ec5`, `npm run test:e2e:schedule`; written, not run here: no Docker) with the fake Zernio: approve a schedule card, drag a slot (old card superseded), retry a failed
       post, connect and disconnect an account.
 
 ## Requests
