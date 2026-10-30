@@ -150,6 +150,9 @@ const children = [
       // MCP (G5) ký JWT ngắn hạn cho chủ khoá API.
       SUPABASE_JWT_SECRET: supabase.JWT_SECRET,
       NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://127.0.0.1:3000",
+      // The redesigned UI (ui-build plan): local and preview run it, production leaves it unset until
+      // release. `NEXT_PUBLIC_OPENCMO_UI= npm run dev` shows today's UI.
+      NEXT_PUBLIC_OPENCMO_UI: process.env.NEXT_PUBLIC_OPENCMO_UI ?? "v2",
       // apps/web/.env.local holds the PRODUCTION worker URL and token: local jobs must be picked up
       // by the local worker, never sent to the production one. `@next/env` keeps a value that is
       // already set, so empty strings win over the file.
