@@ -37,7 +37,7 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
 - [x] **A3 Loaders, rules and publish**: `sales.mentions`, `sales.stuck`, Research niche, Studio slideshows and images;
       event rule: slideshow or image approved → schedule (P4); the P4 publish step handles `slideshow` (MP4 via its
       clip) and `image` (attached to its post), with pgTAP; flip `live`.
-- [ ] **A4 Acceptance** with fake providers (F13), one real slideshow made in the Slides view kept as landing material, peak RSS of the slideshow render and stills, screenshots at 1440 and
+- [~] **A4 Acceptance** (fake-provider run passed, `2026-10-28-p5-acceptance/README.md`; screenshots, the real slideshow and R0 open) with fake providers (F13), one real slideshow made in the Slides view kept as landing material, peak RSS of the slideshow render and stills, screenshots at 1440 and
       390 into `docs/plans/cmo/2026-10-28-p5-acceptance/`; the R0 report with the owner's decision.
 
 ## Requests

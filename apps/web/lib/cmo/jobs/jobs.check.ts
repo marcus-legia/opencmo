@@ -445,6 +445,7 @@ async function main() {
   memS.submit(scan.id, "check_rules", { rules: Array.from({ length: communities }, (_, index) => ({ index, verdict: "help_only", summary: "No self-promotion" })) });
   await drainCmoQueue(memS.store);
   assert.equal(scan.step, "draft_reply", "round four: replies");
+  assert.equal(memS.rules.size, 0, "a verdict from the founder's Claude never enters the shared rules cache");
   assert.deepEqual(scan.memo.reddit_search, found, "the same threads");
   const toReply = (scan.request.prompt.match(/<thread index=/g) ?? []).length;
   memS.submit(scan.id, "draft_reply", { replies: Array.from({ length: toReply }, (_, index) => ({ index, reply: "Put the due date on the invoice and remind on day 3, 7 and 14." })) });

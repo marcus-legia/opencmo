@@ -328,7 +328,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         const r = read.find((x) => x.index === index);
         const verdict: SubredditVerdict = r?.verdict ?? "help_only";
         const summary = (r?.summary.trim() || `r/${u.name}: ${verdict.replace("_", " ")}`).slice(0, 200);
-        await store.saveSubredditRule({ subreddit: u.name, verdict, summary });
+        // The cache is shared by every founder: only a verdict from OpenCMO's own model goes into it. One from the
+        // founder's Claude (the inbox) holds for this scan only, so no founder can set another's rule or its text.
+        if (ctx.brain === "opencmo") await store.saveSubredditRule({ subreddit: u.name, verdict, summary });
         out.set(u.name, { verdict, summary });
       }
     }
