@@ -21,7 +21,7 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
       label off by default with one line of help), change time, cancel; states: waiting, published (link), failed
       (reason, Retry), missed (new time). Axe clean at 1440 and 390.
 - [ ] **C3 Copy** (landing line and the schedule card done; the post card's "Approve and open Threads" / "Post it on
-      X when you are ready" change with A3, once an approved post raises a schedule card): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
+      X when you are ready" change once A answers C8: the reminder card replaces open-on-approve): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
       copy and open" and links to Settings → Accounts.
 - [x] **C1 Settings → Accounts live**: connect per platform (opens Zernio's link), handle and avatar, disconnect
       with confirm, error state.
@@ -35,7 +35,7 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
 (Others append `[from → C] what, why`; answer here with the commit.)
 
 
-Sent: requests C1–C7 to A, in `A.md` under Requests.
+Sent: requests C1–C8 to A, in `A.md` under Requests.
 
 - [from B → C] B2's routes for C1 (Settings → Accounts): `POST /api/v1/accounts/connect` with `{ platform }` returns
   `{ url }`: send the browser there (`location.assign`). Zernio returns the founder through
