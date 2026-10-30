@@ -241,6 +241,18 @@ test("an approved Threads draft opens nothing: it gets a slot and a schedule car
   const threadsText = "I spent more time cutting my demo than building the feature. So the editor came first: delete a word and the cut follows. ".repeat(3).trim();
   expect(threadsText.length).toBeGreaterThan(280);
   const threads = await postCard(db, user.id, "Threads", threadsText);
+  // Writer's run files a deliverable under its order; Schedule follows the deliverable once it is decided (A3).
+  const week = new Date();
+  week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
+  const order = await db
+    .from("work_orders")
+    .insert({ user_id: user.id, week: week.toISOString().slice(0, 10), kind: "post_draft", title: "Threads post", brief: {}, department: "writer", status: "waiting_founder" })
+    .select("id")
+    .single();
+  expect(order.error).toBeNull();
+  expect(
+    (await db.from("deliverables").insert({ user_id: user.id, order_id: order.data!.id, kind: "post", ref_kind: "content_item", ref_id: threads.itemId, status: "waiting_founder" })).error,
+  ).toBeNull();
 
   await signIn(page, user);
   const popups: unknown[] = [];

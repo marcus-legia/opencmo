@@ -9620,8 +9620,9 @@ begin
     return 0;
   end if;
   if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
-    select array_agg(platform) into v_platforms from public.content_items
-    where id = v_d.ref_id and status = 'approved' and platform in ('x', 'threads', 'linkedin');
+    -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
+    select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
+    where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
   elsif v_d.kind = 'short' and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c

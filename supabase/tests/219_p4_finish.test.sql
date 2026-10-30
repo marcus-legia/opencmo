@@ -1,4 +1,4 @@
--- P4 finish (20261230140000): a due slot with no connected account raises its copy-and-open card, which does not
+-- P4 finish (20261230140000): a post Writer stored under the calendar's label ("Threads") gets its slot; a due slot with no connected account raises its copy-and-open card, which does not
 -- expire and starts no publish_post; "I posted it" publishes the founder's own copy-and-open slot (and its post),
 -- once, and nothing else.
 create extension if not exists pgtap with schema extensions;
@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(12);
+select plan(13);
 
 insert into auth.users (id, email) values
   ('e2190000-0000-4000-8000-00000000000a', 'p4fin@test.local'),
@@ -63,6 +63,16 @@ select is((select status from public.schedule_slots where id = 'e2194000-0000-40
 select is((select published_at is not null from public.schedule_slots where id = 'e2194000-0000-4000-8000-00000000000a'), true, 'with its time');
 select is((select status from public.content_items where id = 'e2192000-0000-4000-8000-00000000000a'), 'published', 'and the post is published');
 select is((select status from public.schedule_slots where id = 'e2194000-0000-4000-8000-00000000000b'), 'waiting', 'the other slot is untouched');
+
+-- A post stored the way Writer stores it (the calendar's label), approved: Schedule proposes it on its platform.
+insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
+  ('e2192000-0000-4000-8000-00000000000c', 'e2190000-0000-4000-8000-00000000000a', 'post', 'Threads', current_date, 'Post c', 'in_review', '{"text":"Post c."}');
+insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status) values
+  ('e2193000-0000-4000-8000-00000000000c', 'e2190000-0000-4000-8000-00000000000a', 'e2191000-0000-4000-8000-00000000000a', 'post', 'content_item', 'e2192000-0000-4000-8000-00000000000c', 'waiting_founder');
+update public.content_items set status = 'approved' where id = 'e2192000-0000-4000-8000-00000000000c';
+update public.deliverables set status = 'decided' where id = 'e2193000-0000-4000-8000-00000000000c';
+select is((select platform || ':' || mode || ':' || status from public.schedule_slots where deliverable_id = 'e2193000-0000-4000-8000-00000000000c'),
+  'threads:intent:proposed', 'a "Threads" post gets a Threads slot (copy and open: no Threads account)');
 
 select * from finish();
 rollback;

@@ -3,6 +3,8 @@
 --
 -- - A due slot with no connected account used to turn `reminded` and show nothing. It now raises its copy-and-open
 --   card (as publish_status 'intent' does), and that card does not expire: the founder posts it when they can.
+-- - schedule_propose read a post's platform as an id, but Writer stores the calendar's label ("X", "Threads",
+--   "LinkedIn"): no real post ever got a slot. It now goes through platform_profile_id.
 -- - schedule_mark_posted: the founder copied it and posted it themselves. The slot is published, its card closed,
 --   and a post's row is published too (its other waiting slots are dropped by schedule_follow_content).
 
@@ -91,6 +93,59 @@ end;
 $$;
 revoke all on function public.schedule_claim_due() from public, anon, authenticated;
 grant execute on function public.schedule_claim_due() to service_role;
+
+create or replace function public.schedule_propose(p_deliverable uuid)
+returns integer language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  v_d public.deliverables;
+  v_rules jsonb := public.schedule_rules();
+  v_platform text;
+  v_platforms text[];
+  v_at timestamptz;
+  v_account uuid;
+  v_slot uuid;
+  v_n integer := 0;
+begin
+  select * into v_d from public.deliverables where id = p_deliverable;
+  if not found then
+    return 0;
+  end if;
+  if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
+    -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
+    select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
+    where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
+  elsif v_d.kind = 'short' and v_d.ref_kind = 'clip' then
+    select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
+    where exists (select 1 from public.content_items c
+      where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'
+        and c.platform = public.platform_profile_id(p));
+  end if;
+  foreach v_platform in array coalesce(v_platforms, '{}') loop
+    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
+      and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published'));
+    continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
+      >= (v_rules->>'maxProposals')::integer;
+    v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
+    continue when v_at is null;
+    select id into v_account from public.social_accounts
+    where user_id = v_d.user_id and platform = v_platform and status = 'connected';
+    -- TikTok's posting guidelines: the founder picks the audience and turns on each interaction and disclosure;
+    -- nothing starts on.
+    insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, jitter_seconds,
+      window_ends_at, options)
+    values (v_d.user_id, v_d.id, v_platform, v_account, case when v_account is null then 'intent' else 'publish' end,
+      v_at, public.schedule_jitter(), v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer),
+      case when v_platform = 'tiktok' then '{"allow_comment": false, "allow_duet": false, "allow_stitch": false,
+        "brand_organic": false, "brand_content": false}'::jsonb else '{}'::jsonb end)
+    returning id into v_slot;
+    perform public.approval_raise(v_d.user_id, 'schedule_slot', v_slot);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+revoke all on function public.schedule_propose(uuid) from public, anon, authenticated;
 
 -- "I posted it" on a copy-and-open card. Only the founder's own slot, and only one they post themselves: a slot
 -- that goes through their connected account is never marked posted by hand. A second call changes nothing.
