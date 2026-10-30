@@ -114,8 +114,9 @@ html[data-ui="v2"] {
 
 /* KPI strip: tiles separated by 1 px rules */
 .v2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 1px; background: var(--v2-line); border: 1px solid var(--v2-line); border-radius: var(--v2-radius); overflow: hidden; }
-/* A short last row: the last tile runs to the end instead of leaving a bare strip of the line colour. */
-.v2-kpis > :last-child { grid-column-end: -1; }
+/* Lines drawn by the tiles, not by the gap: a short last row then ends in the tile colour, not a bare grey strip. */
+.v2-kpis { gap: 0; background: var(--v2-paper2); }
+.v2-kpis > * { box-shadow: 1px 0 0 var(--v2-line), 0 1px 0 var(--v2-line); }
 .v2-kpi { padding: 14px 18px; background: var(--v2-paper2); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .v2-kpi-value { font: 500 24px var(--v2-mono); }
 .v2-kpi-value.is-text { font: 500 15px var(--v2-sans); }
