@@ -122,3 +122,20 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
      `publish_at`, `window_ends_at`, `options`, `idempotency_key`, the card's approval status and `snapshot`, and
      `schedule_content(deliverable, platform)` now. Plus the order's link to its `publish_media` task (B queues it
      with `{bucket:"exports", object, upload_url, content_type:"video/mp4"}`) and the export of the approved edit.
+- **[from C → A] C7. What C2 still needs** (C0's card now follows A1: `lastError` = failed → Retry, Change time,
+  Cancel; `change_time` sends `publishAt` like the route):
+  1. **Drag to move a slot.** `schedule_change` has no route, and the approvals route needs the card's hash, which the
+     calendar does not have (an approved slot has no waiting card at all). Please add
+     `POST /api/v1/schedule/slots/[id]` `{ action: "change_time", publishAt }` → `schedule_change` → the new card
+     (enriched like the approvals route), rate limited. C2's drag and its keyboard "Move" picker call it.
+  2. **Calendar links.** `approvalId` also for a `failed` slot whose card still waits (so the slot opens its Retry
+     card, not Settings), and the post's `url` for a `posted` slot (a new `url: z.url().nullable()` on `SlotSchema`)
+     so the calendar's Published marker links to it. Same `url` answers C4 for the card.
+- **[from C → A] C8. The copy-and-open moment (F9), and a double post.** Since A3 an approved post gets a slot, but
+  the post card still opens Threads / copies for LinkedIn on Approve (P3). With a connected account that posts twice
+  (the founder now, Zernio at the slot time). Without one, A2 turns the intent slot into `reminded` and nothing shows
+  the founder the words to copy at that time. Proposal: at `reminded`, raise a card (or an out-row on the Dashboard)
+  with the platform and the full text; C renders "No account connected: copy and open" with Copy and open, and "I
+  posted it" → `cmo_mark_posted` (which A3 already uses to drop waiting slots). When that lands, C drops the post
+  card's open-on-approve and its toast says "Approved. A schedule card asks you for its time." Until then C leaves
+  the post card as it is, so founders without an account can still post.

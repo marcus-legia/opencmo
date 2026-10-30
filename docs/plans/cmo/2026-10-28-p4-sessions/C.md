@@ -21,9 +21,9 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
       label off by default with one line of help), change time, cancel; states: waiting, published (link), failed
       (reason, Retry), missed (new time). Axe clean at 1440 and 390.
 - [ ] **C3 Copy** (landing line and the schedule card done; the post card's "Approve and open Threads" / "Post it on
-      X when you are ready" change with A3, once an approved post raises a schedule card): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
+      X when you are ready" change once A answers C8: the reminder card replaces open-on-approve): landing and cards say "you approve when it posts"; the fallback card says "No account connected:
       copy and open" and links to Settings → Accounts.
-- [ ] **C1 Settings → Accounts live**: connect per platform (opens Zernio's link), handle and avatar, disconnect
+- [x] **C1 Settings → Accounts live**: connect per platform (opens Zernio's link), handle and avatar, disconnect
       with confirm, error state.
 - [ ] **C2 Schedule page live**: calendar with times in the founder's timezone, drag to move (change-time action,
       the new card appears in the queue), per-platform filter, published and failed markers.
@@ -35,7 +35,7 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
 (Others append `[from → C] what, why`; answer here with the commit.)
 
 
-Sent: requests C1–C6 to A, in `A.md` under Requests.
+Sent: requests C1–C8 to A, in `A.md` under Requests.
 
 - [from B → C] B2's routes for C1 (Settings → Accounts): `POST /api/v1/accounts/connect` with `{ platform }` returns
   `{ url }`: send the browser there (`location.assign`). Zernio returns the founder through
@@ -43,3 +43,5 @@ Sent: requests C1–C6 to A, in `A.md` under Requests.
   `&connect_error=<sentence>`; show the sentence as is (it is ours, never Zernio's). Disconnect:
   `DELETE /api/v1/accounts/<social_accounts.id>` → `{ disconnected: true }`. Errors are `{ detail }` with 503 when
   posting is not set up (no live Zernio this week; run with `OPENCMO_PUBLISH_FAKE=1`).
+  - Done in the C1 commit: `components/screens/settings/AccountsPanel.tsx` posts `{ platform }`, follows `url`, shows
+    `connected` / `connect_error` once (then strips them from the address) and the `{ detail }` of a refused call.
