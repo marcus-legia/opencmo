@@ -47,6 +47,7 @@ import { createVideo, redoKeyframe } from './create-video';
 import { addChart, addDiagram, addGraph, addHookTitle, addIcon, addList, addShape, addTitle, stagger, updateVisual } from './visuals';
 import { emphasizeWords } from './emphasis';
 import { punchIn } from './punch-in';
+export { addSlideInput, deleteSlideInput, MAX_SLIDES, moveSlideInput, setSlideDurationInput, setSlideTextInput, SLIDE_LAYERS, SLIDE_SECONDS, slideBackground, type AddSlide, type DeleteSlide, type MoveSlide, type SetSlideDuration, type SetSlideText } from './slides';
 export { makeShort, makeShortInput, MAX_SHORT_SECONDS, SHORT_FRAME, shotBeats, spokenWords, type MakeShort, type SpokenWord, type TimelineSpan } from './shorts';
 import { addCameraMove, removeCameraMoves, syncCameraMoves } from './camera';
 import { styleOp, type StyleDeps } from '../style/apply';

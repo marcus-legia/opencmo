@@ -9,9 +9,11 @@
  * behind an approval card. The team owns how a video is made; callers only say what they want.
  */
 
+import { z } from "zod";
+
 import type { SupabaseClient } from "@/lib/api/handler";
 import type { ToolOutcome } from "@/lib/agent/tools";
-import type { VideoBrief } from "@/lib/cmo/writer/types";
+import { BRIEF_ASPECTS, type VideoBrief } from "@/lib/cmo/writer/types";
 
 /** Who calls Studio. `ui` is the founder's own buttons (Mark finished, Cut shorts) over `/api/v1/studio`. */
 export const STUDIO_CALLERS = ["brain", "assistant", "mcp", "ui"] as const;
@@ -136,6 +138,51 @@ export type MarkedFinished =
   | { kind: "stale"; message: string };
 
 export type RenderedShort = { kind: "queued"; taskId: string } | { kind: "refused"; message: string };
+
+/**
+ * The Slideshow squad's brief (P5 B0, `studio.md` §7). The squads spend no credits (owner, 2026-10-30): they use the
+ * founder's screenshots, captured pages and Brand Kit; an AI image is the founder's own `/image`, priced as always.
+ */
+export const SlideshowBriefSchema = z.object({
+  idea: z.string().trim().min(3).max(500),
+  reason: z.string().trim().max(500).optional(),
+  count: z.number().int().min(5).max(10).optional(),
+  aspect: z.enum(BRIEF_ASPECTS).default("9:16"),
+});
+export type SlideshowBrief = z.infer<typeof SlideshowBriefSchema>;
+
+/** The Post image squad's brief (`studio.md` §8). With no source, the title sits on the Brand Kit background. */
+export const PostImageBriefSchema = z.object({
+  /** The `content_item` the image is attached to. */
+  postId: z.string().uuid(),
+  title: z.string().trim().min(1).max(200),
+  platform: z.string().min(1).max(40),
+  source: z.union([z.object({ clipId: z.string().uuid(), time: z.number().min(0) }), z.object({ captureId: z.string().uuid() })]).optional(),
+});
+export type PostImageBrief = z.infer<typeof PostImageBriefSchema>;
+
+/** Both tasks render one revision, so the MP4 and the PNG set show the same document. */
+export type BuiltSlideshow =
+  | { kind: "rendering"; clipId: string; mp4TaskId: string; stillsTaskId: string }
+  | { kind: "invalid"; message: string };
+
+export type BuiltPostImage = { kind: "rendering"; clipId: string; stillsTaskId: string } | { kind: "invalid"; message: string };
+
+/**
+ * `render_stills` (worker `render_stills_task.py`): one PNG per slide, drawn at its midpoint with text kept, and a zip
+ * of the set. Objects stay at three path levels in `exports`: `<user>/<clip>/<task>-01.png`, `<user>/<clip>/<task>.zip`.
+ */
+export type RenderStillsInput = { editor_revision_id: string; source_hash: string; bucket: "exports"; object: string; manifest: unknown };
+export type RenderStillsOutput = {
+  stills: { index: number; object: string; bytes: number }[];
+  zip: { object: string; bytes: number };
+  /** The slide TikTok photo mode shows first; the hook. */
+  cover_index: number;
+  width: number;
+  height: number;
+  count: number;
+  manifest: Record<string, unknown>;
+};
 
 /**
  * Who drives the call. `orderId` ties planned steps, shorts and renders to the brain's work order;

@@ -16,7 +16,7 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
 
 ## Todo
 
-- [ ] **B0 Contracts (push first)**: slide op signatures (`add_slide`, `move_slide`, `delete_slide`,
+- [x] **B0 Contracts (push first)**: slide op signatures (`add_slide`, `move_slide`, `delete_slide`,
       `set_slide_duration`, `set_slide_text`) and the slideshow document shape (each slide a timed span on one
       timeline, built from the groups and markers `clip-doc` already has; a `clip-doc` schema change only if
       unavoidable, then B owns it with a `clip-doc` migration and flags it at M1); adapter types `buildSlideshow(brief)` and `buildPostImage(brief)`; `render_stills` task input and
@@ -32,6 +32,17 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
       `slideshow` card through A's step RPC.
 - [ ] **B4 Post image squad**: a frame of the founder's video or a captured page + a title layer; generate only when
       none fits; aspect per platform; Brand Kit; an `image` deliverable attached to its post.
+
+## Notes for M1
+
+- **No automatic AI images (owner, 2026-10-30):** B3 uses the founder's screenshots, captured pages and Brand Kit
+  backgrounds, so nothing spends credits before a card. An AI image is the founder's own `/image`, priced as always.
+  B4 follows the same rule, a session decision to keep credits behind approval. Both differ from the plan's F10 and
+  F11 and from `studio.md` §7 and §8, which allow generating.
+- **No `clip-doc` schema change:** only a pure helper, `slideSpans`, shared by the slide ops and the still export.
+- `buildSlideshow` and `buildPostImage` join `STUDIO_ENTRIES` and `StudioAdapter` in B3, with their rows in
+  `capabilities.json` (A), so `capabilities.check.ts` stays green; B0 ships their types only.
+- `render_stills` must honour `jobs.watermark`, or the PNG set would be a way round the free plan's watermark.
 
 ## Requests
 

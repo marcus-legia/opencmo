@@ -43,3 +43,8 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
 ## Requests
 
 (Others append `[from → A] what, why`; answer here with the commit.)
+
+- [from B → A] Bucket `exports` allows only `video/*`: add `image/png` and `application/zip`, or `render_stills` uploads are refused.
+- [from B → A] An RPC to queue `render_stills`, like `request_document_export` (ownership, daily limit, sets the destination), e.g. `request_stills_export`. Input and output: `RenderStillsInput`, `RenderStillsOutput` in `apps/web/lib/departments/studio/types.ts`.
+- [from B → A] Order kinds `build_slideshow` and `build_post_image` and their branch in `lib/cmo/jobs/studio-orders.ts`; B writes the adapter functions (B3, B4).
+- [from B → A] `capabilities.json` rows for `build_slideshow` and `build_post_image` (callers `brain`, effect `write`, approval `founder`, credits 0): the squads spend no credits. Needed when B3 adds them to `STUDIO_ACCESS`.
