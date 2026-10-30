@@ -225,6 +225,7 @@ function V2Frame({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setChatOpen(false);
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       if (event.key === "\\") {
         event.preventDefault();
@@ -311,7 +312,6 @@ function V2Frame({
             />
             <aside className="v2-chatcol" id="v2-chat" aria-label="Your CMO" ref={chatColumn}>
               <div className="v2-chatcol-head">
-                <span className="v2-mono is-small is-muted">Your CMO</span>
                 <button type="button" className="v2-button is-quiet is-compact" onClick={() => setChatOpen(false)}>
                   Close
                 </button>
