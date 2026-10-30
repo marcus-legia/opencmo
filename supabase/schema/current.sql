@@ -8992,6 +8992,69 @@ $$;
 
 
 --
+-- Name: schedule_follow_content(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_follow_content() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_deliverable uuid;
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+  begin
+    if new.status = 'approved' and new.department = 'video' and new.clip_id is not null then
+      select id into v_deliverable from public.deliverables
+      where ref_kind = 'clip' and ref_id = new.clip_id and kind = 'short' and user_id = new.user_id;
+      if v_deliverable is not null then
+        perform public.schedule_propose(v_deliverable);
+      end if;
+    elsif new.status = 'published' and new.department = 'post' then
+      -- Posted by hand (copy and open, or marked posted): what still waits for its time is dropped with its card.
+      update public.approvals a set status = 'cancelled', decided_at = now()
+      from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+      where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'
+        and d.ref_kind = 'content_item' and d.ref_id = new.id and s.status in ('proposed', 'waiting');
+      update public.schedule_slots s set status = 'cancelled', updated_at = now()
+      from public.deliverables d
+      where d.id = s.deliverable_id and d.ref_kind = 'content_item' and d.ref_id = new.id
+        and s.status in ('proposed', 'waiting');
+    end if;
+  exception when others then
+    raise warning 'schedule rule for content item % failed: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: schedule_follow_deliverable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_follow_deliverable() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if (new.kind = 'post' and new.status = 'decided' and (tg_op = 'INSERT' or old.status is distinct from 'decided'))
+     or (new.kind = 'short' and tg_op = 'INSERT') then
+    begin
+      perform public.schedule_propose(new.id);
+    exception when others then
+      -- Scheduling is never a reason to undo the founder's approval of the work itself.
+      raise warning 'schedule rule for deliverable % failed: %', new.id, sqlerrm;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: schedule_jitter(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13762,6 +13825,20 @@ CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.med
 --
 
 CREATE TRIGGER reject_credit_ledger_change BEFORE DELETE OR UPDATE ON public.credit_ledger FOR EACH ROW EXECUTE FUNCTION public.reject_credit_ledger_change();
+
+
+--
+-- Name: content_items schedule_follow_content; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_follow_content AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.schedule_follow_content();
+
+
+--
+-- Name: deliverables schedule_follow_deliverable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON public.deliverables FOR EACH ROW EXECUTE FUNCTION public.schedule_follow_deliverable();
 
 
 --

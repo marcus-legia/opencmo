@@ -45,8 +45,14 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
       TikTok, Instagram or YouTube asks to connect; retry past the window proposes a new time), change → the new card,
       cancel. Failure cards expire with the window. Route actions `change_time`, `change_account`, `set_options`,
       `retry`; schedule cards build in `cards.ts` and are decidable.
-- [ ] **A3 Loaders and rule**: event rule approved `post`/`short` deliverable → `schedule_propose`; loaders for
-      `schedule.*` and `settings.accounts`; flip `live`; release gating.
+- [x] **A3 Loaders and rule** (`20261230110000_p4_schedule_rules`, pgTAP 217): an approved post (deliverable
+      decided) and an approved short (deliverable made, or a caption approved later) call `schedule_propose`; a post
+      marked posted by hand drops its waiting slots and cards. `schedule-enrich.ts` adds the founder's timezone, the
+      avatar, the short's signed render and TikTok creator info (through `publishAdapter()`; none of it is hashed) on
+      the queue and the card route. Loaders: `schedule` (`?from=YYYY-MM-DD`, a week; SQL statuses mapped onto the
+      calendar's; titles from the post or the short's hook; rules from `schedule-defaults.json`) and
+      `settings.accounts` (every publish platform: connected, reconnect, or Connect). `live` flipped for both;
+      `load.check.ts` covers them.
 - [ ] **A2 Firing**: `schedule_claim_due()` (service role; leases due `waiting` slots, marks past-window ones
       `missed` and raises a new card, skips everything while the brain is paused) → one `publish_post` work order per
       slot; `sweep()` calls it every minute; `publish_status(slot_id, status, external_id, url, error)` for B's

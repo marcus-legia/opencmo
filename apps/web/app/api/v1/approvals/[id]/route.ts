@@ -5,6 +5,7 @@ import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
 import { ScheduleOptionsSchema } from "@/lib/screens/approval-card";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
+import { enrichScheduleCards } from "@/lib/screens/schedule-enrich";
 import { signStudioCards } from "@/lib/screens/studio-sign";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +16,13 @@ export const maxDuration = 300;
 const UUID = /^[0-9a-f-]{36}$/i;
 
 /** One card, for `/app/inbox/[id]` (the digest and reminders link here; they never decide). */
-export const GET = withApi({}, async ({ supabase, params }) => {
+export const GET = withApi({}, async ({ supabase, user, params }) => {
   if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Card not found.");
   const { data } = await supabase.from("approvals").select(APPROVAL_COLUMNS).eq("id", params.id).maybeSingle();
   const row = data as ApprovalRow | null;
   const card = row ? approvalToCard(row) : null;
   if (!card || !row) throw new ApiError(404, "Card not found.");
-  return (await signStudioCards(supabase, [card], [row]))[0]!;
+  return (await enrichScheduleCards(supabase, user.id, await signStudioCards(supabase, [card], [row])))[0]!;
 });
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
@@ -61,7 +62,7 @@ const body = z.object({
  */
 export const POST = withApi(
   { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
-  async ({ supabase, body, params }) => {
+  async ({ supabase, user, body, params }) => {
     if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Card not found.");
     const { action, contentHash, publishAt, accountId, options, ...rest } = body;
     // SQL reads the schedule fields by their column names.
@@ -80,7 +81,9 @@ export const POST = withApi(
     if (row?.ref_kind === "studio_step" || row?.ref_kind === "short_batch") kickStudioOrders();
     const card = row ? approvalToCard(row) : null;
     if (!card || !row) throw new ApiError(500, "Could not read the card back.");
-    // A caption edit keeps the card open on screen: answer it signed, so its previews stay.
-    return action === "edit_caption" ? (await signStudioCards(supabase, [card], [row]))[0]! : card;
+    // A caption edit keeps the card open on screen: answer it signed, so its previews stay. A schedule change answers
+    // the new card, which the founder decides next: in their time, with its video and TikTok's fields.
+    if (action === "edit_caption") return (await signStudioCards(supabase, [card], [row]))[0]!;
+    return card.kind === "schedule" ? (await enrichScheduleCards(supabase, user.id, [card]))[0]! : card;
   },
 );
