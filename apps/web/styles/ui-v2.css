@@ -466,3 +466,16 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 @media (max-width: 760px) {
   .v2-ask { margin: auto 0 0; width: 100vw; height: 88vh; border-left: 0; border-top: 1px solid var(--v2-line); }
 }
+
+/* P5 C0: the slideshow card's strip. Every slide is a button that opens its quick text edit. */
+.v2-card-slides.is-strip { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; }
+.v2-card-slides.is-strip li { flex: 0 0 96px; padding: 0; scroll-snap-align: start; }
+.v2-card-slides.is-strip li[aria-current] { outline: 2px solid var(--v2-brand); outline-offset: 1px; }
+.v2-card-slide { all: unset; box-sizing: border-box; position: relative; width: 100%; height: 100%; padding: 8px; display: flex; align-items: flex-end; cursor: pointer; overflow: hidden; overflow-wrap: anywhere; }
+.v2-card-slide:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+.v2-card-slide[disabled] { cursor: default; }
+.v2-card-slide img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.v2-card-slide-n { position: absolute; top: 4px; left: 4px; padding: 0 4px; font: 500 10px var(--v2-mono); background: var(--v2-paper); color: var(--v2-ink); }
+.v2-card-slides.is-strip[data-aspect="16:9"] li { flex-basis: 160px; aspect-ratio: 16 / 9; }
+.v2-card-slides.is-strip[data-aspect="1:1"] li { flex-basis: 112px; aspect-ratio: 1; }
+.v2-card-state.is-help_only { background: var(--v2-brand-soft); color: var(--v2-waiting); }

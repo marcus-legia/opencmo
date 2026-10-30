@@ -139,6 +139,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
           : `Approved. On ${when} a card gives you the post to copy and open${suffix}.`;
       }
       if (card.body.kind === "shorts_batch") return `Approved ${card.body.shorts.length} shorts. They are ready to schedule${suffix}.`;
+      if (card.body.kind === "slideshow") return `Approved the slideshow. It is ready to schedule${suffix}.`;
       return `Approved${suffix}.`;
   }
 }

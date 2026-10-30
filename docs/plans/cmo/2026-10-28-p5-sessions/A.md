@@ -79,3 +79,10 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   item (`content_items.department` is post/sales/video), so that comes with A3. Deletion: `render_stills` is in
   `enqueue_job_objects` and the task-delete trigger, and PNGs are found by `still_prefix` in `storage.objects`.
 - [from B → A] `lib/screens/studio.ts:60` and `load.ts:930` list clip kinds as `full | blank | short`: a founder with a slideshow edit may break the Studio screen's parse. Please add `slideshow` (found in the B3 run, not reproduced on the screen).
+- [from C → A] A slideshow edited after its card was raised (a quick text edit on the card runs `set_slide_text` through
+  `POST /editor/ops`; the Slides view does the same) leaves the step waiting on renders of the old document, and nothing
+  renders it again. Please re-render (MP4 + stills) when a waiting slideshow card's `document_hash` no longer matches the
+  edit and raise a new card, e.g. in the card loader or a "render again" RPC the card can call. Until then the card says
+  "Text changed", disables Approve and offers Send back and Open in Slides.
+- [from C → A] A help-only reply fixture for the inbox and e2e: `REPLY_CARD` with `rule: { kind: "help_only", text: "r/startups bans self-promotion: help only" }`
+  (a second card, e.g. `REPLY_HELP_ONLY_CARD`, in `SAMPLE_CARDS`), so the help-only state shows outside a seeded database.
