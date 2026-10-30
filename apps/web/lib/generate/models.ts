@@ -41,10 +41,6 @@ function providerEnabled(model: AiModel): boolean {
     case "fal":
       // Aggregator nhiều lab (plan Palmier P1): một khoá cho mọi model `provider: fal`.
       return Boolean(process.env.FAL_KEY);
-    case "opencmo-3d":
-      // 3D Studio: renderer của chính mình (GPU Modal, hoặc CLI local khi dev);
-      // bản fake vẽ khung màu thay cảnh. Cùng luật với `adapter_for` ở worker.
-      return ["modal", "local"].includes(process.env.OPENCMO_3D ?? "") || aiFakeEnabled();
     case "opencmo-motion":
       // Explainers: Remotion on Modal, or the CLI on this machine when developing, plus a voice
       // (ElevenLabs, or the silent fake voice outside production). A silent motion clip needs only

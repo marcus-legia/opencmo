@@ -357,3 +357,164 @@ describe('add_explainer with a silent motion clip (B3)', () => {
 	});
 });
 
+
+describe('add_explainer placed in half the frame over the speaker', () => {
+	/** A 9:16 clip of the user's 16:9 talk, as the upload generator makes it. */
+	const speaker = validate({
+		version: 1,
+		stage: {
+			children: [
+				{
+					kind: 'scene',
+					id: 'sc',
+					width: 1080,
+					height: 1920,
+					workarea: [0, 30],
+					active: true,
+					marks: { reframe: { focus: 0.5, track: [[0, 0.7], [30, 0.7]], mode: 'fill' } },
+					children: [
+						{ kind: 'video', id: 'talk', src: 'assets/master.mp4', x: -1166.67, width: 3413.33, height: 1920, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 },
+						{ kind: 'captions', id: 'cap', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 },
+					],
+				},
+			],
+		},
+	}) as ClipDocument;
+	const silentOp = (format: '1:1' | '16:9' | '9:16', place: string, start = 6) => ({
+		op: 'add_explainer',
+		title: 'How the funnel leaks',
+		format,
+		duration: 8,
+		start,
+		place,
+		spec: {
+			prompt: 'Motion clip: How the funnel leaks',
+			aspectRatio: format,
+			duration: 8,
+			scene: { template: 'clip', code_ref: CODE_REF, title: 'How the funnel leaks', beats: [{ say: 'Visitors pour in.', seconds: 4 }, { say: 'Most drop at signup.', seconds: 4 }] },
+		},
+	});
+
+	it('top: a square animation fills the upper 1080x1080 and the speaker gets the band below for its time', async () => {
+		const { document } = await applyOps(speaker, [silentOp('1:1', 'top')], ctx);
+		expect(() => validate(document)).not.toThrow();
+		const scene = sceneNode(document) as Node & { marks: { layout: { ranges: { start: number; end: number; mode: string; ratio: number }[] } } };
+		expect(scene.marks.layout.ranges).toEqual([expect.objectContaining({ start: 6, end: 14, mode: 'split-bottom', ratio: 0.438 })]);
+		const layer = JSON.stringify(document).includes('Motion clip: How the funnel leaks') && scene.children!.find((child) => child.name === 'Motion clip: How the funnel leaks')!;
+		expect(layer).toMatchObject({ x: 0, y: 0, width: 1080, height: 1080, start: 6, end: 14 });
+		// Over the speaker group and the layout panel, under the captions.
+		const names = scene.children!.map((child) => (child.marks as { layout?: string } | undefined)?.layout ?? child.name ?? child.kind);
+		expect(names.indexOf('Motion clip: How the funnel leaks')).toBeGreaterThan(names.indexOf('panel'));
+		expect(names.at(-1)).toBe('captions');
+	});
+
+	it("the clip's own captions move to the seam for the split and back after", async () => {
+		const { document } = await applyOps(speaker, [silentOp('1:1', 'top')], ctx);
+		const captions = sceneNode(document).children!.find((child) => child.kind === 'captions') as Node & { tracks: { id: string; property: string; keyframes: { time: number; value: number }[] }[] };
+		const track = captions.tracks.find((item) => item.property === 'offsetY')!;
+		expect(track.id).toMatch(/^layout-caption-offsetY-/);
+		// classic sits centred (960); the seam is at 1079.04 (ratio 0.438) and the captions centre 5% above it.
+		expect(track.keyframes.map(({ time, value }) => [time, value])).toEqual([[6, 0], [6.3, 23.04], [13.7, 23.04], [14, 0]]);
+		const { document: full } = await applyOps(document, [{ op: 'set_layout', mode: 'full', start: 0, end: 30 }], ctx);
+		expect((sceneNode(full).children!.find((child) => child.kind === 'captions') as Node).tracks).toBeUndefined();
+	});
+
+	it('bottom: the animation below, the speaker on top; a 16:9 animation takes a shorter band', async () => {
+		const { document } = await applyOps(speaker, [silentOp('16:9', 'bottom')], ctx);
+		const scene = sceneNode(document) as Node & { marks: { layout: { ranges: { mode: string; ratio: number }[] } } };
+		expect(scene.marks.layout.ranges[0]).toMatchObject({ mode: 'split-top', ratio: 0.683 });
+		expect(scene.children!.find((child) => child.name === 'Motion clip: How the funnel leaks')).toMatchObject({ x: 0, y: 1312, width: 1080, height: 608 });
+	});
+
+	it('refuses a shape that cannot share the frame and names the ones that can', async () => {
+		await expect(applyOps(speaker, [silentOp('9:16', 'top')], ctx)).rejects.toThrow(/does not fit half of this 1080x1920 frame next to the speaker\. Use format 16:9 or 1:1\./);
+	});
+
+	it('without place, a split already there takes the animation into its visual band', async () => {
+		const { document: split } = await applyOps(speaker, [{ op: 'set_layout', mode: 'split-bottom', start: 2, end: 20, ratio: 0.5 }], ctx);
+		const { document } = await applyOps(split, [silentOp('1:1', undefined as never, 4)], ctx);
+		// The 960 px band: the square fits its height, centred across.
+		expect(sceneNode(document).children!.find((child) => child.name === 'Motion clip: How the funnel leaks')).toMatchObject({ y: 0, height: 960, width: 960, x: 60 });
+	});
+});
+
+describe('add_explainer places on a 16:9 talking video', () => {
+	const talk = validate({
+		version: 1,
+		stage: {
+			children: [
+				{
+					kind: 'scene',
+					id: 'sc',
+					width: 1920,
+					height: 1080,
+					workarea: [0, 30],
+					active: true,
+					children: [
+						{ kind: 'video', id: 'talk', src: 'assets/master.mp4', x: 0, width: 1920, height: 1080, objectFit: 'cover', start: 0, sourceIn: 0, sourceOut: 30 },
+						{ kind: 'captions', id: 'cap', src: 'assets/transcript.json', start: 0, sourceIn: 0, sourceOut: 30 },
+					],
+				},
+			],
+		},
+	}) as ClipDocument;
+	const placed = (format: '1:1' | '16:9', place: string) => ({
+		op: 'add_explainer',
+		title: 'Setup steps',
+		format,
+		duration: 6,
+		start: 4,
+		place,
+		spec: { prompt: 'Motion clip: Setup steps', aspectRatio: format, duration: 6, scene: { template: 'clip', code_ref: CODE_REF, title: 'Setup steps', beats: [{ say: 'Install it.', seconds: 3 }, { say: 'Run it.', seconds: 3 }] } },
+	});
+	const layerOf = (document: ClipDocument) => sceneNode(document).children!.find((child) => child.name === 'Motion clip: Setup steps')!;
+	const roles = (document: ClipDocument) => sceneNode(document).children!.map((child) => (child.marks as { layout?: string } | undefined)?.layout ?? child.name ?? child.kind);
+
+	it('right: the speaker in the left column, the animation fitted to the right one', async () => {
+		const { document } = await applyOps(talk, [placed('1:1', 'right')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { mode: string; anchor: string }[] } }).layout.ranges;
+		expect(ranges[0]).toMatchObject({ mode: 'side-by-side', anchor: 'left' });
+		expect(layerOf(document)).toMatchObject({ x: 960, y: 60, width: 960, height: 960 });
+	});
+
+	it('keeps the panel colour of the range it replaces', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'side-by-side', start: 2, end: 20, background: '#F4F1EA' }, placed('1:1', 'right')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { start: number; background?: string }[] } }).layout.ranges;
+		expect(ranges.every((range) => range.background === '#F4F1EA')).toBe(true);
+	});
+
+	it('without a place, fills the visual column of a side-by-side already there', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'side-by-side', anchor: 'left', start: 2, end: 20 }, placed('1:1', undefined as never)], ctx);
+		const layer = layerOf(document) as unknown as { x: number; width: number };
+		expect(layer.x).toBeGreaterThanOrEqual(960 - 1);
+		expect(layer.x + layer.width).toBeLessThanOrEqual(1920);
+	});
+
+	it('without a place, holds a layout that ends before the animation does', async () => {
+		const { document } = await applyOps(talk, [{ op: 'set_layout', mode: 'pip', start: 2, end: 6 }, placed('16:9', undefined as never)], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { start: number; end: number }[] } }).layout.ranges;
+		expect(ranges).toEqual([expect.objectContaining({ start: 2, end: 10 })]);
+	});
+
+	it('refuses columns on a vertical frame and layouts without a speaker', async () => {
+		const tall = validate({ version: 1, stage: { children: [{ ...(talk.stage.children[0] as object), width: 1080, height: 1920 }] } }) as ClipDocument;
+		await expect(applyOps(tall, [placed('1:1', 'left')], ctx)).rejects.toThrow(/vertical/);
+		const noSpeaker = validate({ version: 1, stage: { children: [{ kind: 'scene', id: 'sc', width: 1920, height: 1080, workarea: [0, 30], active: true, children: [{ kind: 'rect', fill: '#123456', start: 0, end: 30 }] }] } }) as ClipDocument;
+		await expect(applyOps(noSpeaker, [placed('1:1', 'right')], ctx)).rejects.toThrow(/no speaker video/);
+	});
+
+	it('behind: the animation fills the frame under a corner facecam', async () => {
+		const { document } = await applyOps(talk, [placed('16:9', 'behind')], ctx);
+		const ranges = (sceneNode(document).marks as { layout: { ranges: { mode: string; ratio: number }[] } }).layout.ranges;
+		expect(ranges[0]).toMatchObject({ mode: 'pip', ratio: 0.24 });
+		expect(layerOf(document)).toMatchObject({ x: 0, y: 0, width: 1920, height: 1080 });
+		const order = roles(document);
+		expect(order.indexOf('Motion clip: Setup steps')).toBeLessThan(order.indexOf('speaker'));
+		expect(order.indexOf('Motion clip: Setup steps')).toBeGreaterThan(order.indexOf('backdrop'));
+		// The next rebuild (another layout range here) keeps the backdrop under the animation.
+		const { document: again } = await applyOps(document, [{ op: 'set_layout', mode: 'pip', start: 20, end: 26 }], ctx);
+		const after = roles(again);
+		expect(after.indexOf('Motion clip: Setup steps')).toBeGreaterThan(after.indexOf('backdrop'));
+		expect(after.indexOf('Motion clip: Setup steps')).toBeLessThan(after.indexOf('speaker'));
+	});
+});

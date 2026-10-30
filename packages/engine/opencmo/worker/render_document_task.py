@@ -56,9 +56,8 @@ def _canonical(task: Task) -> tuple[str, str]:
 
 _REPO = Path(__file__).resolve().parents[4]
 CLIP_EXPORT = Path(os.environ.get("OPENCMO_CLIP_EXPORT", _REPO / "packages/clip-export/src/cli.ts"))
-# Font + Lottie của clip ở `packages/clip-media` (R7c); Modal đặt hai biến này.
+# The clip fonts live in `packages/clip-media` (R7c); Modal sets this variable.
 EDITOR_FONTS = Path(os.environ.get("OPENCMO_EDITOR_FONTS", _REPO / "packages/clip-media/fonts"))
-EDITOR_LOTTIE = Path(os.environ.get("OPENCMO_EDITOR_LOTTIE", _REPO / "packages/clip-media/lottie"))
 
 MASTER = "assets/master.mp4"
 TRANSCRIPT = "assets/transcript.json"
@@ -210,15 +209,41 @@ def _generation_matches(declaration: dict[str, Any], record: dict[str, Any]) -> 
     return all(spec.get(name) == declaration[name] for name in _SPEC_FIELDS if name in declaration)
 
 
-def _generation_row_matches(declaration: dict[str, Any], row: dict[str, Any]) -> bool:
+# A long-take shot declares its keyframe as a nested `generate` declaration; its `generations` row
+# stores the keyframe the server resolved it to, as a storage path under these keys.
+_RESOLVED_FRAMES = {"startFrame": "startImage", "endFrame": "endImage"}
+
+
+def _bare_path(path: Any) -> str:
+    return str(path).removeprefix("media/")
+
+
+def _generation_row_matches(
+    declaration: dict[str, Any],
+    row: dict[str, Any],
+    frame_path: Callable[[dict[str, Any]], str | None] | None = None,
+) -> bool:
     """A finished `generations` row for this declaration: same prompt, same model when the
-    declaration names one, and every spec field the declaration wrote."""
+    declaration names one, and every spec field the declaration wrote. A nested keyframe
+    declaration matches only when `frame_path` finds its own finished generation and it is the
+    exact image the row was made from."""
     spec = row.get("spec") or {}
     if not isinstance(spec, dict) or spec.get("prompt") != declaration.get("prompt"):
         return False
     if "model" in declaration and row.get("model") != declaration["model"]:
         return False
-    return all(spec.get(name) == declaration[name] for name in _SPEC_FIELDS if name in declaration)
+    for name in _SPEC_FIELDS:
+        if name not in declaration:
+            continue
+        wanted = declaration[name]
+        resolved = _RESOLVED_FRAMES.get(name)
+        if resolved and isinstance(wanted, dict) and "generate" in wanted and name not in spec and resolved in spec:
+            path = frame_path(wanted) if frame_path else None
+            if path is None or _bare_path(path) != _bare_path(spec[resolved]):
+                return False
+        elif spec.get(name) != wanted:
+            return False
+    return True
 
 
 def _library_record(manifest: dict[str, Any], src: Any) -> dict[str, Any] | None:
@@ -249,6 +274,8 @@ class _Sources:
         self.count = 0
         # Finished generations of this project, read once and only when a declaration needs one.
         self.generations: list[dict[str, Any]] | None = None
+        # A keyframe is shared by the shots on either side of it: look each one up once per export.
+        self.frame_paths: dict[str, str | None] = {}
 
     def _path(self, suffix: str) -> Path:
         self.count += 1
@@ -313,9 +340,23 @@ class _Sources:
         if self.generations is None:
             self.generations = self.store.done_generations(self.task.job_id)
         for row in self.generations:
-            if _generation_row_matches(declaration, row):
+            if _generation_row_matches(declaration, row, self._finished_frame_path):
                 return str(row["media_asset_id"])
         return None
+
+    def _finished_frame_path(self, declaration: dict[str, Any]) -> str | None:
+        """Storage path of a nested keyframe's finished generation, owned by this task's project."""
+        key = json.dumps(declaration, sort_keys=True)
+        if key not in self.frame_paths:
+            self.frame_paths[key] = self._lookup_frame_path(declaration)
+        return self.frame_paths[key]
+
+    def _lookup_frame_path(self, declaration: dict[str, Any]) -> str | None:
+        media_id = self._finished_generation(declaration)
+        row = self.store.get_media_asset(media_id) if media_id else None
+        if not row or row.get("user_id") != self.task.user_id or row.get("job_id") != self.task.job_id or row.get("status") != "ready":
+            return None
+        return str(row.get("storage_path") or "") or None
 
     def _media_object(self, media_id: str, name: str) -> tuple[str, str]:
         row = self.store.get_media_asset(media_id)
@@ -433,7 +474,6 @@ def _run(ctx: TaskContext) -> None:
         "media": media,
         "transcripts": transcripts,
         "fonts": str(EDITOR_FONTS),
-        "lottie": str(EDITOR_LOTTIE),
         "out": str(final),
         "resolution": resolution,
     }

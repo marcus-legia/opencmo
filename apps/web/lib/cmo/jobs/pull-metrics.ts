@@ -4,6 +4,7 @@
  * thẳng theo link; bài không link thì so chữ với ~100 bài nổi nhất của handle người dùng.
  */
 
+import { profileIdOf } from "../platforms";
 import { xTopPosts, xTweet } from "../social/research";
 import { ScBudget, SocialReadError, type SocialPost } from "../social/scrapecreators";
 import { LlmError } from "./llm-error";
@@ -34,7 +35,10 @@ export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
   const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
   const { docs, published } = await ctx.step("find_posts", "Finding posts you published", async () => ({
     docs: await store.documents(run.user_id),
-    published: (await store.items(run.user_id, { statuses: ["published"], department: "post", limit: 50 })).filter((i) => (i.published_at ?? "") >= since).slice(-MAX_POSTS),
+    // Only X posts: the numbers are read on X, and a Threads or LinkedIn post sharing an idea must not take an X post's.
+    published: (await store.items(run.user_id, { statuses: ["published"], department: "post", limit: 50 }))
+      .filter((i) => (i.published_at ?? "") >= since && (profileIdOf(i.platform) ?? "x") === "x")
+      .slice(-MAX_POSTS),
   }), (r) => `${r.published.length} posts in the last ${WINDOW_DAYS} days`);
   if (!published.length) return { measured: 0 };
 

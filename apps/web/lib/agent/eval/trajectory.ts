@@ -10,7 +10,7 @@ export type Call = { name: string; input?: unknown };
 export type Rule = { ok: boolean; note: string };
 
 /** Tools that put a priced card in front of the founder. */
-export const PAID_TOOLS = new Set(["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer", "replace_background", "edit_video", "plan_video"]);
+export const PAID_TOOLS = new Set(["create_video", "generate_media", "add_voiceover", "add_explainer", "replace_background", "edit_video", "plan_video"]);
 
 const list = (calls: Call[]) => calls.map((call) => call.name).join(", ") || "none";
 

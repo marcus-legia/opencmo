@@ -4,9 +4,20 @@
  */
 
 import type { DocumentKind } from "../documents";
+import type { VideoSource } from "../writer/types";
 
-export type CmoJobKind = "plan_week" | "post_draft" | "sales_scan" | "competitor_research" | "pull_metrics" | "summarize_memory" | "review_week";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week"];
+export type CmoJobKind =
+  | "plan_week"
+  | "post_draft"
+  | "sales_scan"
+  | "competitor_research"
+  | "pull_metrics"
+  | "summarize_memory"
+  | "review_week"
+  | "write_video_brief"
+  | "write_caption"
+  | "write_slides";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -23,6 +34,9 @@ export const MEMORY_TOPICS: MemoryTopic[] = ["general", "post", "sales", "video"
 export type MemoryEvent = { kind: "preference" | "fact" | "feedback" | "result"; topic: MemoryTopic; body: string; created_at: string };
 
 /** Tier 3: a weekly lesson for one topic; `week` is the Monday it covers. */
+/** A voice note as `voice_notes_for` returns it: the founder's own words from one decision, and its platform. */
+export type VoiceNoteRow = { body: string; platform: string | null; created_at: string; weight: number };
+
 export type Lesson = { week: string; topic: MemoryTopic; body: string };
 
 /** Điều W7 học được từ đối thủ: mọi mẫu đều có URL bài làm bằng chứng. */
@@ -115,10 +129,19 @@ export interface CmoStore {
   step(run: QueuedRun, steps: Step[]): Promise<boolean>;
   complete(run: QueuedRun, ok: boolean, output: Record<string, unknown> | null, error: string | null): Promise<boolean>;
   documents(userId: string): Promise<Documents>;
-  /** Unexpired notes, most important first; with a topic, that topic plus `general`. */
-  memories(userId: string, limit: number, topic?: MemoryTopic): Promise<string[]>;
+  /**
+   * Unexpired notes, most important first; with a topic, that topic plus `general`. `voice: false` leaves out the
+   * voice notes (rows learned from a decision), for a writer that reads them on their own through `voiceNotes`.
+   */
+  memories(userId: string, limit: number, topic?: MemoryTopic, opts?: { voice?: boolean }): Promise<string[]>;
+  /** The founder's voice notes (`voice_notes_for`), newest first, with a weight that falls from 1 to 0 with age. */
+  voiceNotes(userId: string, limit: number): Promise<VoiceNoteRow[]>;
   /** Every note written since `since` (ISO), newest first, for the weekly summary. */
   memoryEvents(userId: string, since: string): Promise<MemoryEvent[]>;
+  /** An edit's own words for its captions (read as the founder, under RLS); null when the edit is not theirs. */
+  videoSource(userId: string, clipId: string): Promise<VideoSource | null>;
+  /** One caption for one edit and profile (`cmo_save_caption`, which checks it again); a founder's edit is kept. */
+  saveCaption(userId: string, runId: string, clipId: string, profile: string, text: string, title: string | null, gen: Record<string, unknown>): Promise<void>;
   /** Memory tier 0: the founder's active rules (`cmo_corrections`), newest first. */
   corrections(userId: string): Promise<string[]>;
   /** The latest lesson for each topic. */

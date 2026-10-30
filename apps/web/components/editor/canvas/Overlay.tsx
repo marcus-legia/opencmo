@@ -41,8 +41,8 @@ const HANDLE = 8;
 const ROTATE_ZONE = 18;
 const CLICK = 4;
 const DROP_DWELL_MS = 250;
-const PICKABLE = new Set(["rect", "path", "scene3d", "lottie", "text", "video", "image", "group", "captions", "scene", "adjustmentLayer"]);
-const RESIZABLE = new Set(["rect", "path", "scene3d", "lottie", "text", "video", "image", "scene", "adjustmentLayer", "group", "captions"]);
+const PICKABLE = new Set(["rect", "path", "text", "video", "image", "group", "captions", "scene", "adjustmentLayer"]);
+const RESIZABLE = new Set(["rect", "path", "text", "video", "image", "scene", "adjustmentLayer", "group", "captions"]);
 /** Phụ đề chỉ đổi cỡ theo tỉ lệ (`fontScale`): tay nắm góc, không có tay nắm cạnh. */
 const CORNERS: Handle[] = ["nw", "ne", "se", "sw"];
 

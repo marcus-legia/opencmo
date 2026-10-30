@@ -10,8 +10,9 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
+import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
-import { PRIMARY_ACTION, type ApprovalCard as Card } from "@/lib/screens/approval-card";
+import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption } from "@/lib/screens/approval-card";
 
 import {
   CorrectionBody,
@@ -25,24 +26,28 @@ import {
   ShortsBody,
   SlideshowBody,
 } from "./bodies";
-import { blockedReason, type Decision } from "./decide";
+import { POST_TARGET, blockedReason, editCaption, postPlatform, type Decision } from "./decide";
 import { NUMERAL, cardHead, headNote } from "./labels";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
 type Variant = "primary" | "secondary" | "quiet";
-type Action = { label: string; variant: Variant; run: () => void; disabled?: string } | { label: string; variant: Variant; href: string };
+type Action =
+  | { label: string; variant: Variant; run: () => void; disabled?: string; /** Set on declines: checked on its own. */ declines?: boolean }
+  | { label: string; variant: Variant; href: string };
 
 const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
 
 /** The decline action of each kind: its label and the decision it sends with the optional reason. */
-const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "dismissed" | "reject" }>> = {
+const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "dismissed" | "reject" | "cancel" | "send_back" }>> = {
   post: { label: "Skip with reason", action: "skip" },
   reply: { label: "Dismiss", action: "dismissed" },
   goal: { label: "Reject", action: "reject" },
-  price: { label: "Cancel", action: "skip" },
-  shorts_batch: { label: "Send back", action: "skip" },
-  correction: { label: "Reject", action: "reject" },
+  script: { label: "Cancel", action: "cancel" },
+  price: { label: "Cancel", action: "cancel" },
+  finished_video: { label: "Send back", action: "send_back" },
+  shorts_batch: { label: "Send back", action: "send_back" },
+  correction: { label: "Dismiss", action: "reject" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */
@@ -61,7 +66,7 @@ function decidedNote(card: Card): string | null {
 }
 
 export function ApprovalCard({
-  card,
+  card: given,
   sample,
   onDecide,
   open = true,
@@ -79,14 +84,24 @@ export function ApprovalCard({
   headingLevel?: "h2" | "h3";
 }) {
   const { toast } = useShellState();
+  // A saved caption changes the card in place (new hash); a newer card from the parent replaces it.
+  const [changed, setChanged] = useState<{ from: Card; card: Card } | null>(null);
+  const card = changed && changed.from === given ? changed.card : given;
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [declining, setDeclining] = useState(false);
+  /** Price card: the keyframe picker is open. */
+  const [redoing, setRedoing] = useState(false);
+  const [keyframe, setKeyframe] = useState(0);
+  /** Script card: the beat being edited. */
+  const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
   const [shown, setShown] = useState(() => firstText(card));
   const [draft, setDraft] = useState(() => firstText(card));
+  const beats = card.body.kind === "script" ? card.body.beats : [];
 
   const blocked = blockedReason(card, sample);
+  const captionsBlocked = blocked ?? (busy ? "Wait for the decision to finish." : null);
   const Heading = headingLevel;
   const head = cardHead(card);
   const numeral = NUMERAL[card.department];
@@ -94,21 +109,59 @@ export function ApprovalCard({
   const bodyId = `card-${card.id}-body`;
   const decline = DECLINE[card.kind];
 
-  async function run(decision: Decision) {
-    if (busy || blocked) return;
+  async function run(decision: Decision): Promise<boolean> {
+    if (busy || blockedReason(card, sample, decision.action)) return false;
     setBusy(true);
     const ok = await onDecide(card, decision);
     // A decided card leaves the queue and unmounts; only a refused one comes back to edit.
     if (!ok) setBusy(false);
+    return ok;
+  }
+
+  /**
+   * Threads and LinkedIn are posted by the founder until Schedule posts them (P4): approve, then open the platform's
+   * composer. The tab opens inside the click (a later one is blocked as a pop-up) and goes to the platform only once
+   * the approval went through; LinkedIn's text is copied inside the click for the same reason. A sample card opens
+   * nothing and copies nothing: its text is not the founder's and nothing was approved.
+   */
+  async function approvePost(text: string) {
+    const platform = postPlatform(card);
+    const target = platform ? POST_TARGET[platform] : undefined;
+    if (!target || sample || blockedReason(card, sample, "approve") || busy) return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+    const copied = !target.copy ? Promise.resolve(true) : navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false);
+    // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
+    const ok = await run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    if (!ok) {
+      tab?.close();
+      return;
+    }
+    if (tab) tab.location.href = target.url(text);
+    else toast("Your browser blocked the new tab. Open the platform yourself and post it from your account.");
+    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
+  }
+
+  async function saveCaption(caption: Caption): Promise<boolean> {
+    try {
+      const next = await editCaption(card, caption, sample);
+      setChanged({ from: given, card: next });
+      toast(sample ? "Caption saved (sample, nothing was sent)." : "Caption saved. Approve the card when the words are right.");
+      return true;
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+      return false;
+    }
   }
 
   function approve() {
-    if (card.kind === "post") {
-      const text = editing ? draft.trim() : shown;
-      // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
-      return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
-    }
+    if (card.kind === "post") return void approvePost(editing ? draft.trim() : shown);
     if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
+    if (card.kind === "script" && editing) {
+      const words = draft.trim();
+      // An unchanged beat approves the script as the card's hash covers it.
+      return run(words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" });
+    }
     return run({ action: "approve" });
   }
 
@@ -127,18 +180,22 @@ export function ApprovalCard({
     label: editing ? "Stop editing" : label,
     variant: "secondary",
     run: () => {
-      if (!editing) setDraft(card.kind === "post" ? shown : card.body.kind === "correction" ? card.body.rule : draft);
+      if (!editing) setDraft(card.kind === "post" ? shown : card.body.kind === "correction" ? card.body.rule : card.body.kind === "script" ? (beats[beat]?.words ?? "") : draft);
       setEditing((was) => !was);
     },
   });
-  const declineAction: Action[] = decline ? [{ label: decline.label, variant: "quiet", run: () => setDeclining(true) }] : [];
+  const declineAction: Action[] = decline ? [{ label: decline.label, variant: "quiet", run: () => setDeclining(true), declines: true }] : [];
+  const declineBlocked = decline ? blockedReason(card, sample, decline.action) : blocked;
   const primary = (label = PRIMARY_ACTION[card.kind]): Action => ({ label, variant: "primary", run: approve });
   const later = (label: string): Action => ({ label, variant: "secondary", run: () => undefined, disabled: LATER });
 
   const actions: Action[] = (() => {
     switch (card.body.kind) {
-      case "post":
-        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
+      case "post": {
+        const platform = postPlatform(card);
+        const opens = platform ? (POST_TARGET[platform]?.label ?? "") : "";
+        return [primary(`${editing ? "Approve edit" : "Approve"}${opens}`), editAction(), ...declineAction];
+      }
       case "reply":
         return [
           { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
@@ -148,11 +205,12 @@ export function ApprovalCard({
       case "goal":
         return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
       case "script":
-        return [primary(), later("Edit a beat")];
+        return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
-        return [primary(), later("Redo a keyframe"), ...declineAction];
+        // Redo exists only for a contact sheet: a price for shots alone has no keyframe to make again.
+        return [primary(), ...(card.body.keyframes.length > 0 ? [{ label: "Redo a keyframe", variant: "secondary" as const, run: () => setRedoing(true) }] : []), ...declineAction];
       case "finished_video":
-        return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }];
+        return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }, ...declineAction];
       case "shorts_batch":
         return [primary(), ...declineAction];
       case "slideshow":
@@ -203,13 +261,24 @@ export function ApprovalCard({
           ) : card.body.kind === "goal" ? (
             <GoalBody body={card.body} />
           ) : card.body.kind === "script" ? (
-            <ScriptBody body={card.body} />
+            <ScriptBody
+              body={card.body}
+              cardId={card.id}
+              editing={editing}
+              beat={beat}
+              draft={draft}
+              onDraft={setDraft}
+              onBeat={(index) => {
+                setBeat(index);
+                setDraft(beats[index]?.words ?? "");
+              }}
+            />
           ) : card.body.kind === "price" ? (
             <PriceBody body={card.body} price={card.priceCredits} />
           ) : card.body.kind === "finished_video" ? (
-            <FinishedVideoBody body={card.body} />
+            <FinishedVideoBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
           ) : card.body.kind === "shorts_batch" ? (
-            <ShortsBody body={card.body} />
+            <ShortsBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (
@@ -233,7 +302,39 @@ export function ApprovalCard({
             </p>
           ) : null}
 
-          {declining && decline ? (
+          {redoing && card.body.kind === "price" ? (
+            <form
+              className="v2-card-decline"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run({ action: "redo", index: keyframe });
+              }}
+            >
+              <fieldset className="v2-field">
+                <legend>Which keyframe should be made again? Only that one is redone; its price comes on a new card.</legend>
+                <div className="v2-card-keyframes">
+                  {card.body.keyframes.map((frame) => (
+                    <label key={frame.index} className="v2-card-keyframe" title={frame.label}>
+                      <input type="radio" name={`${card.id}-keyframe`} value={frame.index} checked={keyframe === frame.index} onChange={() => setKeyframe(frame.index)} />
+                      <span>
+                        <span className="v2-visually-hidden">Keyframe </span>
+                        {String(frame.index + 1).padStart(2, "0")}
+                        {frame.garbled ? <span className="v2-visually-hidden"> (text may be garbled)</span> : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="v2-actions">
+                <Button type="submit" variant="primary" compact disabled={busy}>
+                  Redo keyframe {keyframe + 1}
+                </Button>
+                <Button variant="quiet" compact onClick={() => setRedoing(false)}>
+                  Keep it
+                </Button>
+              </div>
+            </form>
+          ) : declining && decline ? (
             <form
               className="v2-card-decline"
               onSubmit={(event) => {
@@ -266,8 +367,8 @@ export function ApprovalCard({
                     key={action.label}
                     variant={action.variant}
                     compact
-                    disabled={busy || !!action.disabled || (!!blocked && action.label !== "Stop editing")}
-                    title={action.disabled ?? blocked ?? undefined}
+                    disabled={busy || !!action.disabled || (!!(action.declines ? declineBlocked : blocked) && action.label !== "Stop editing")}
+                    title={action.disabled ?? (action.declines ? declineBlocked : blocked) ?? undefined}
                     onClick={action.run}
                   >
                     {action.label}

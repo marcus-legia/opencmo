@@ -42,13 +42,6 @@ export function nodeFor(
         : null;
   const W = Number(scene.width) || 0;
   const H = Number(scene.height) || 0;
-  // Lottie vẽ theo vector: cỡ gốc của file (thường 400–1080) chẳng nói gì về
-  // cỡ trên clip — đặt cạnh dài bằng 40% cạnh ngắn của khung, giữ tỉ lệ.
-  if (record.type === "LOTTIE" && size && W && H) {
-    const factor = (0.4 * Math.min(W, H)) / Math.max(size.width, size.height);
-    size.width = Math.round(size.width * factor);
-    size.height = Math.round(size.height * factor);
-  }
   const position = size
     ? options.at
       ? { x: Math.round(options.at.x - size.width / 2), y: Math.round(options.at.y - size.height / 2) }
@@ -76,8 +69,6 @@ export function nodeFor(
       return { kind: "audio", name, ...position, ...AUDIO_SIZE, ...timing, src: record.path };
     case "TRANSCRIPT":
       return { kind: "captions", src: record.path, ...timing };
-    case "LOTTIE":
-      return { kind: "lottie", name, ...position, ...(size ?? {}), ...timing, src: record.path };
     default:
       return null;
   }

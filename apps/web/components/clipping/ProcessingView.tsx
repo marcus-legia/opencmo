@@ -27,7 +27,7 @@ const WORKING = "Preparing your video…";
 /** The steps light up from `project.stage` — what the worker really writes. */
 const STEPS: { label: string; stages: string[] }[] = [
   { label: "Read", stages: ["probe", "download"] },
-  { label: "Prepare", stages: ["render"] },
+  { label: "Prepare", stages: ["render", "reframe"] },
   { label: "Transcribe", stages: ["transcribe"] },
 ];
 

@@ -18,7 +18,6 @@ import { exportJob } from './export.ts';
 import { lookJob } from './look.ts';
 
 const FONTS = fileURLToPath(new URL('../../clip-media/fonts', import.meta.url));
-const LOTTIE = fileURLToPath(new URL('../../clip-media/lottie', import.meta.url));
 
 describe('lookJob (real ffmpeg)', () => {
   let dir = '';
@@ -47,7 +46,7 @@ describe('lookJob (real ffmpeg)', () => {
       }],
     },
   });
-  const base = () => ({ document, media: [{ src: 'assets/master.mp4', file: join(dir, 'master.mp4') }], transcripts: [], fonts: FONTS, lottie: LOTTIE });
+  const base = () => ({ document, media: [{ src: 'assets/master.mp4', file: join(dir, 'master.mp4') }], transcripts: [], fonts: FONTS });
 
   /** Mean gray of a 20×20 patch at the top left of a JPEG cell (no text there). */
   const grayOf = async (base64: string, x = 30, y = 60) => {

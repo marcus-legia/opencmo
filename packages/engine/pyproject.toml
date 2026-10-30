@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Face tracking on upload (opencmo/steps/reframe.py). Optional: without it the editor frames in the centre.
+# MediaPipe ships wheels a few Python versions behind: Python <= 3.12.
+face = ["mediapipe>=0.10"]
 # Chỉ cần trên máy deploy worker.
 worker = ["modal>=0.64"]
 dev = ["pytest>=8.0", "ruff>=0.4"]

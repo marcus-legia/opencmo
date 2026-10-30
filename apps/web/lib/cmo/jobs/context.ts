@@ -77,6 +77,17 @@ export function avoidList(docs: Documents): string[] {
   return Array.isArray(avoid) ? avoid.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : [];
 }
 
+/** The product's own name(s) from the product document: "Cal.com" names the product, it is not a link. */
+export function productNames(docs: Documents): string[] {
+  const name = docs.product?.name;
+  return typeof name === "string" && name.trim() ? [name.trim()] : [];
+}
+
+/** What the code checks hold a draft to (`CheckRules` in check-post.ts), from the founder's documents. */
+export function checkRules(docs: Documents): { avoid: string[]; known: Set<string>; names: string[] } {
+  return { avoid: avoidList(docs), known: knownNumbers(docs), names: productNames(docs) };
+}
+
 /** Mọi con số xuất hiện trong document — bài nháp chỉ được dùng số có ở đây. */
 export function knownNumbers(docs: Documents): Set<string> {
   const text = JSON.stringify(docs);

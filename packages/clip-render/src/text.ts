@@ -357,6 +357,19 @@ export function drawText(
     for (const line of lines.values()) {
       const pad = line.height * 0.12;
       ctx.beginPath();
+      if (block.angle) {
+        // A tilted slab (`slam`): turned about its own centre, the word stays level on top.
+        const cx = (line.x0 + line.x1) / 2;
+        const cy = line.top + line.height / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        const radians = (block.angle * Math.PI) / 180;
+        ctx.transform(Math.cos(radians), Math.sin(radians), -Math.sin(radians), Math.cos(radians), 0, 0);
+        ctx.roundRect(-(line.x1 - line.x0) / 2 - pad * 2, -line.height / 2 - pad * 0.3, line.x1 - line.x0 + pad * 4, line.height + pad * 0.6, line.height * 0.08);
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
       ctx.roundRect(line.x0 - pad * 1.4, line.top - pad * 0.4, line.x1 - line.x0 + pad * 2.8, line.height + pad * 0.8, line.height * 0.22);
       ctx.fill();
     }

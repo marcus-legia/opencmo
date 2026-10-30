@@ -18,6 +18,6 @@
     "resolveJsonModule": true
   },
   "include": ["src", "scripts"],
-  // stress.mts dựng document bằng editor-core (có cú pháp không "erasable") — chạy bằng tsx, không vào tsc của gói.
-  "exclude": ["scripts/stress.mts"]
+  // stress.mts and short.test.ts build documents with editor-core (syntax that is not "erasable"): tsx/vitest run them, the package's tsc does not.
+  "exclude": ["scripts/stress.mts", "src/short.test.ts"]
 }

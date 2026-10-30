@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { parseJob, prepare } from './prepare.ts';
+import { EXPLAINER_EXAMPLE, EXPLAINER_EXAMPLE_BEATS } from './guide-example.ts';
 import { previewJob, renderStills } from './preview.ts';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
@@ -184,11 +185,203 @@ describe('kit device frames and the display face', () => {
 	});
 });
 
+describe('kit.Mark', () => {
+	const job = (code: string) => {
+		const parsed = parseJob({ title: 'Mark', code, beats: [{ say: 'The disc.', seconds: 3 }], kind: 'clip', format: '16:9', duration: 3 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+	const scene = (at: number) =>
+		`const { Stage, Mark } = kit;\nreturn function Scene() { return <Stage><Mark name="disc" x={400} y={200} w={500} h={300} at={${at}}><svg width="100%" height="100%"><ellipse cx="250" cy="150" rx="240" ry="140" fill="#f5b700" /></svg></Mark></Stage>; };`;
+
+	it('draws its children and reports its box as a mark with the given name', { timeout: 120_000 }, async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-mark-'));
+		const [still] = await renderStills(job(scene(0)), prepare(job(scene(0))).compiled, [45], dir, { scale: 0.25, format: 'png' });
+		expect(still!.boxes).toContainEqual({ kind: 'mark', name: 'Mark disc', x: 400, y: 200, w: 500, h: 300 });
+		const { data, width } = pixels(still!.file);
+		// Centre of the box at quarter size: the ellipse's yellow.
+		const [r] = [...data.subarray((87 * width + 162) * 3, (87 * width + 162) * 3 + 3)];
+		expect(r).toBeGreaterThan(200);
+	});
+
+	it('renders nothing before at', { timeout: 120_000 }, async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-mark-'));
+		const [still] = await renderStills(job(scene(60)), prepare(job(scene(60))).compiled, [30], dir, { scale: 0.25, format: 'png' });
+		expect((still!.boxes ?? []).some((box) => box.name === 'Mark disc')).toBe(false);
+	});
+});
+
+describe('vaccine-drawn fixture (the eval scene of a model following the guide)', () => {
+	it('keeps the scene file and the job fixture in sync, and previews clean', { timeout: 240_000 }, async () => {
+		const job = JSON.parse(readFileSync(join(fixtures, 'vaccine-drawn.job.json'), 'utf8'));
+		expect(job.code).toBe(readFileSync(join(fixtures, 'vaccine-drawn.scene.jsx'), 'utf8'));
+		expect(job.code).not.toMatch(/<(Icon|Stage|Headline)\b/);
+		const parsed = parseJob(job);
+		if (!parsed.ok) throw new Error(parsed.message);
+		const result = await previewJob(parsed.job, mkdtempSync(join(tmpdir(), 'clip-motion-vaccine-drawn-')));
+		if (!result.ok) throw new Error(`${result.phase}: ${result.message}`);
+		expect(result.issues).toEqual([]);
+	});
+});
+
+describe('font library', () => {
+	it('matches the editor font catalog (files and weight ranges)', async () => {
+		const { LIBRARY } = await import('./remotion/fonts.ts');
+		const { FONTS } = await import('../../clip-render/src/fonts.ts');
+		expect(Object.fromEntries(Object.entries(LIBRARY).map(([name, font]) => [name, [font.file, ...font.weights]]))).toEqual(
+			Object.fromEntries(Object.entries(FONTS).map(([name, font]) => [name, [font.file, ...font.weights]])),
+		);
+	});
+});
+
+describe('kit core: Text, Shot, fx', () => {
+	const job = (code: string, beats = [{ say: 'One.', seconds: 1.5 }, { say: 'Two.', seconds: 1.5 }]) => {
+		const parsed = parseJob({ title: 'Core', code, beats, kind: 'clip', format: '16:9', duration: 3 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+	const still = async (code: string, frame: number) => {
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-core-'));
+		const [one] = await renderStills(job(code), prepare(job(code)).compiled, [frame], dir, { scale: 0.25, format: 'png' });
+		return one!;
+	};
+
+	it('Text reports its box and size, in any colour and font', { timeout: 120_000 }, async () => {
+		const scene = "const { Text, fx } = kit;\nreturn function Scene() { return <><fx.Fill color=\"#101010\" /><Text text=\"Launch\" x={960} y={400} size={160} font=\"title\" weight={700} color=\"#ff5a36\" align=\"center\" tracking={-0.03} /></>; };";
+		const shot = await still(scene, 15);
+		const box = (shot.boxes ?? []).find((item) => item.kind === 'text' && item.name === 'Launch');
+		expect(box?.size).toBeCloseTo(160, 0);
+		expect(Math.abs(box!.x + box!.w / 2 - 960)).toBeLessThan(2);
+		const { data, width } = pixels(shot.file);
+		// Somewhere inside the word at quarter size is the orange; the corner is the fill.
+		const row = Math.round((box!.y + box!.h / 2) / 4);
+		const reds = Array.from({ length: Math.round(box!.w / 4) }, (_, i) => data[(row * width + Math.round(box!.x / 4) + i) * 3]!);
+		expect(Math.max(...reds)).toBeGreaterThan(200);
+		expect(data[0]).toBeLessThan(30);
+	});
+
+	it('Shot renders only inside its beat, with a frame counted from the beat', { timeout: 120_000 }, async () => {
+		const scene = "const { Shot, Text, useShot } = kit;\nfunction Second() { const s = useShot(); return <Text text={'local ' + s.frame} x={100} y={100} size={60} />; }\nreturn function Scene() { return <Shot beat={1}><Second /></Shot>; };";
+		expect((await still(scene, 10)).boxes ?? []).toEqual([]);
+		const inside = await still(scene, 55);
+		expect((inside.boxes ?? []).map((box) => box.name)).toEqual(['local 10']);
+	});
+
+	it('GradientField is a moving field, not a flat colour', { timeout: 120_000 }, async () => {
+		const scene = "const { fx } = kit;\nreturn function Scene() { return <fx.GradientField colors={['#0b1026', '#ff5a36', '#3b82f6', '#22c55e']} speed={3} />; };";
+		const { data } = pixels((await still(scene, 0)).file);
+		let spread = 0;
+		for (let c = 0; c < 3; c++) {
+			let lo = 255;
+			let hi = 0;
+			for (let i = c; i < data.length; i += 3) {
+				lo = Math.min(lo, data[i]!);
+				hi = Math.max(hi, data[i]!);
+			}
+			spread = Math.max(spread, hi - lo);
+		}
+		expect(spread).toBeGreaterThan(60);
+		const later = pixels((await still(scene, 50)).file).data;
+		let moved = 0;
+		for (let i = 0; i < data.length; i += 97) moved += Math.abs(data[i]! - later[i]!);
+		expect(moved / (data.length / 97)).toBeGreaterThan(2);
+	});
+});
+
+describe('guide example', () => {
+	it('previews with a clean layout report (no beat without a drawing, nothing still, no jumps)', { timeout: 240_000 }, async () => {
+		const parsed = parseJob({
+			title: 'Why the sea looks flat',
+			code: EXPLAINER_EXAMPLE,
+			beats: EXPLAINER_EXAMPLE_BEATS.map(({ say, label }) => ({ say, label })),
+			format: '9:16',
+			duration: 15,
+		});
+		if (!parsed.ok) throw new Error(parsed.message);
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-example-'));
+		const result = await previewJob(parsed.job, dir);
+		if (!result.ok) throw new Error(`${result.phase}: ${result.message}`);
+		expect(result.issues).toEqual([]);
+		expect(result.stills.length).toBeGreaterThanOrEqual(EXPLAINER_EXAMPLE_BEATS.length);
+	});
+
+	it('draws without icons', () => {
+		expect(EXPLAINER_EXAMPLE).toContain('<Mark ');
+		expect(EXPLAINER_EXAMPLE).not.toMatch(/<Icon\b/);
+		expect(EXPLAINER_EXAMPLE).not.toMatch(/<(Stage|Headline)\b/);
+		expect(EXPLAINER_EXAMPLE).toContain('<Shot beat={0}>');
+		expect(EXPLAINER_EXAMPLE).toContain('kit.travel(');
+		expect(EXPLAINER_EXAMPLE).toContain('kit.drawOn(');
+	});
+});
+
 describe('kit.color', () => {
 	it('follows the job theme', async () => {
 		const { makeKit } = await import('./kit/index.ts');
 		const job = (theme: 'paper' | 'blueprint') => ({ title: 'T', code: 'x', beats: [{ say: 'a' }, { say: 'b' }, { say: 'c' }], format: '16:9' as const, duration: 15, seed: 0, theme });
 		expect(makeKit(job('paper'), { width: 1920, height: 1080 }).color.text).toBe('#1D2733');
 		expect(makeKit(job('blueprint'), { width: 1920, height: 1080 }).color.text).toBe('#EAF0FA');
+	});
+});
+
+describe('craft pieces (MotionBlur, TypeStream, shot camera, Goo, ShaderField)', () => {
+	const code = `
+const { Text, TypeStream, Camera, fx, tween, curves } = kit;
+return function Scene() {
+  const f = R.useCurrentFrame();
+  const split = tween(f, [70, 92], [0, 1], curves.expand);
+  return (
+    <R.AbsoluteFill>
+      <fx.ShaderField colors={['#ff7f73', '#b6dcee', '#144b41']} />
+      <Camera shots={[{ from: 24, to: 40, pose: { scale: 1.1 } }]}>
+        <TypeStream name="headline" text={['Ship the week', 'in one click.']} x={160} y={140} size={110} font="Fraunces" color="#0b1d1a" at={0} dur={40} />
+        <fx.MotionBlur samples={24}>
+          {(t) => <Text name="mover" text="GO" x={tween(t, [48, 64], [200, 1600], curves.glide)} y={520} size={90} color="#0b1d1a" />}
+        </fx.MotionBlur>
+        <fx.Goo>
+          {[-1, 0, 1].map((k) => <div key={k} style={{ position: 'absolute', left: 960 - (k === 0 ? 60 + (1 - split) * 150 : 60) + k * split * 170, top: 800, width: k === 0 ? 120 + (1 - split) * 300 : 120, height: 120, borderRadius: 60, background: '#111111' }} />)}
+        </fx.Goo>
+      </Camera>
+    </R.AbsoluteFill>
+  );
+};`;
+	it('streams, blurs only while moving, measures each text once, and splits the goo', { timeout: 180_000 }, async () => {
+		const parsed = parseJob({ kind: 'clip', title: 'Craft', code, beats: [{ say: 'Craft.', seconds: 4 }], format: '16:9', duration: 4 });
+		if (!parsed.ok) throw new Error(parsed.message);
+		const dir = mkdtempSync(join(tmpdir(), 'clip-motion-craft-'));
+		const [mid, rest] = await renderStills(parsed.job, prepare(parsed.job).compiled, [56, 119], dir, { scale: 0.5, format: 'png' });
+		// The MotionBlur's ghost samples are not measured: one "mover" box, and the stream is one text.
+		expect(mid!.boxes!.filter((box) => box.name === 'mover')).toHaveLength(1);
+		expect(rest!.boxes!.filter((box) => box.name === 'headline')).toHaveLength(1);
+		// Goo at rest: three separate dark discs on the row through their centres (y 860 → 430 at half size).
+		const { data, width } = pixels(rest!.file);
+		const row = Array.from({ length: width }, (_, x) => data[(430 * width + x) * 3]! < 60);
+		const runs = row.reduce((count, dark, x) => count + (dark && !row[x - 1] ? 1 : 0), 0);
+		expect(runs).toBe(3);
+	});
+});
+
+describe('style directions (variants)', () => {
+	const fill = (color: string) => `const { fx } = kit;\nreturn function Scene() { return <fx.Fill color="${color}" />; };`;
+	const job = (variants: { label: string; code: string }[]) => {
+		const parsed = parseJob({ title: 'Directions', code: variants[0]!.code, variants, beats: [{ say: 'One.', seconds: 2 }], kind: 'clip', format: '16:9', duration: 3, stills: [1] });
+		if (!parsed.ok) throw new Error(parsed.message);
+		return parsed.job;
+	};
+
+	it('renders each direction at the same moment, side by side, labelled left to right', { timeout: 180_000 }, async () => {
+		const result = await previewJob(job([{ label: 'Warm', code: fill('#e0301e') }, { label: 'Cool', code: fill('#1e50e0') }]), mkdtempSync(join(tmpdir(), 'clip-motion-variants-')));
+		if (!result.ok) throw new Error(result.message);
+		expect(result.stills).toHaveLength(1);
+		expect(result.stills[0]).toMatchObject({ kind: 'variants', labels: ['Warm', 'Cool'], t: 1 });
+		const { data, width, height } = pixels(result.stills[0]!.file);
+		const at = (x: number) => [...data.subarray((Math.round(height / 2) * width + x) * 3, (Math.round(height / 2) * width + x) * 3 + 3)];
+		expect(at(Math.round(width / 4))[0]).toBeGreaterThan(180);
+		expect(at(Math.round((3 * width) / 4))[2]).toBeGreaterThan(180);
+	});
+
+	it('names the direction whose code fails', { timeout: 120_000 }, async () => {
+		const result = await previewJob(job([{ label: 'Warm', code: fill('#e0301e') }, { label: 'Broken', code: 'return function Scene() { return <div>; };' }]), mkdtempSync(join(tmpdir(), 'clip-motion-variants-')));
+		expect(result).toMatchObject({ ok: false, message: expect.stringMatching(/^Broken: /) });
 	});
 });

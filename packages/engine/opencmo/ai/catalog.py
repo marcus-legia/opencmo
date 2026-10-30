@@ -103,8 +103,6 @@ _ALLOWED = {
 
 
 #: Same message as `ai_check_spec` (SQL): code_ref missing, malformed, or not the caller's.
-CODE_NOT_FOUND = "This 3D scene code was not found. Preview it again."
-#: Same rule for an explainer (`template: "explainer"`), worded for it.
 EXPLAINER_CODE_NOT_FOUND = "This explainer code was not found. Preview it again."
 EXPLAINER_INVALID = "This explainer script is not valid. Write it again."
 #: Silent motion clips (`motion-clip`, template "clip"): same words as `ai_check_spec`.
@@ -188,7 +186,7 @@ def narration(scene: dict[str, Any]) -> str:
 
 def _check_scene(model: AiModel, scene: Any, duration: Any = None) -> None:
     """Shape only: the full rules are zod on the route (layer 1) and the renderer itself
-    (`clip-three` / `clip-motion` re-parse; exit code 3 = invalid spec)."""
+    (`clip-motion` re-parses; exit code 3 = invalid spec)."""
     if not isinstance(scene, dict) or not isinstance(scene.get("template"), str):
         raise SpecError("Describe the 3D scene first.")
     # Each motion model takes only its own template (explainer or clip), and only they take them: each
@@ -198,7 +196,8 @@ def _check_scene(model: AiModel, scene: Any, duration: Any = None) -> None:
     measured = {k: v for k, v in scene.items() if k != "assets"} if template is not None else scene
     if len(json.dumps(measured, separators=(",", ":"), ensure_ascii=False).encode()) > SCENE_MAX_BYTES:
         raise SpecError("This 3D scene has too much data.")
-    if template is None and scene["template"] in ("explainer", "clip"):
+    # Only motion models take a scene since 3D was removed (same words as `ai_check_spec`).
+    if template is None:
         raise SpecError("Describe the 3D scene first.")
     if template is not None and scene["template"] != template:
         raise SpecError(EXPLAINER_INVALID if template == "explainer" else CLIP_INVALID)
@@ -206,9 +205,6 @@ def _check_scene(model: AiModel, scene: Any, duration: Any = None) -> None:
         _check_explainer(scene)
     if scene["template"] == "clip":
         _check_clip(scene, duration)
-    # Code scenes (code-scenes spec): the code lives in scene_codes; the scene carries only its sha256.
-    if scene["template"] == "code" and not _code_ref_ok(scene):
-        raise SpecError(CODE_NOT_FOUND)
 
 
 MEDIA_NOT_FOUND = "That image was not found in your media."

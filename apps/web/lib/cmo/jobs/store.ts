@@ -38,13 +38,14 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       }
       return out;
     },
-    async memories(userId, limit, topic) {
+    async memories(userId, limit, topic, opts) {
       let query = admin
         .from("cmo_memories")
         .select("body")
         .eq("user_id", userId)
         .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
       if (topic) query = query.in("topic", topic === "general" ? ["general"] : [topic, "general"]);
+      if (opts?.voice === false) query = query.is("source_outcome", null);
       const { data } = await query.order("importance", { ascending: false }).order("created_at", { ascending: false }).limit(limit);
       return ((data ?? []) as { body: string }[]).map((m) => m.body);
     },
@@ -58,6 +59,16 @@ export function supabaseStore(admin: BaseClient): CmoStore {
         .limit(100);
       if (error) throw new Error(`memoryEvents: ${error.message}`);
       return (data ?? []) as MemoryEvent[];
+    },
+    async voiceNotes(userId, limit) {
+      const { data, error } = await admin.rpc("voice_notes_for", { p_user: userId, p_limit: limit, p_platform: null });
+      if (error) throw new Error(`voice_notes_for: ${error.message}`);
+      return ((data ?? []) as { body: string; platform: string | null; created_at: string; weight: number }[]).map((n) => ({ body: n.body, platform: n.platform, created_at: n.created_at, weight: Number(n.weight) }));
+    },
+    // The editor's code loads only for a caption run.
+    videoSource: async (userId, clipId) => (await import("../writer/video-source")).readVideoSource(userId, clipId),
+    async saveCaption(userId, runId, clipId, profile, text, title, gen) {
+      await rpc("cmo_save_caption", { p_user: userId, p_run: runId, p_clip: clipId, p_profile: profile, p_text: text, p_title: title, p_gen: gen });
     },
     async corrections(userId) {
       const { data, error } = await admin

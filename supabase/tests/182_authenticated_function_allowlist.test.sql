@@ -72,8 +72,9 @@ insert into allowed values
   ('complete_caption_translation(uuid,text)'),
   ('create_api_key(text)'),
   ('create_blank_edit(text,text)'),
-  ('create_upload_edit(text,text,boolean)'),
   ('create_generation(uuid,uuid,text,jsonb,text,uuid)'),
+  ('create_upload_edit(text,text,boolean)'),
+  ('cut_shorts_order(uuid)'),
   ('credit_balance(uuid)'),
   ('delete_brand_kit(uuid)'),
   ('delete_editor_skill(text)'),
@@ -93,6 +94,7 @@ insert into allowed values
   ('is_paid(uuid)'),
   ('job_hold_credits()'),
   ('list_projects(timestamp with time zone,uuid,text,integer)'),
+  ('mark_finished(uuid,text)'),
   ('mcp_admit(integer)'),
   ('mcp_confirm_use(uuid)'),
   ('mcp_grant_record(text)'),
@@ -121,14 +123,24 @@ insert into allowed values
   ('send_feedback(text,text,text,text,uuid)'),
   ('set_default_brand_kit(uuid)'),
   ('set_project_pinned(uuid,boolean)'),
+  ('short_batch_create(uuid,text,uuid,jsonb)'),
+  ('short_render_refused(uuid)'),
+  ('studio_record_usage(uuid,text,integer,integer,integer,integer)'),
+  ('studio_brain_call()'),
   ('signup_credits()'),
   ('slice_transcript(jsonb,numeric,numeric)'),
   ('snapshot_editor_revision(uuid,text)'),
   ('snapshot_editor_variant(uuid,text,jsonb,text)'),
   ('start_cmo_run(text,jsonb)'),
+  ('studio_step_finish(uuid,text,text,uuid,jsonb,uuid[])'),
+  ('studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)'),
   ('upload_reservation_allows(text,text,jsonb)'),
   ('upload_usage()'),
-  ('use_media_transcript(uuid,uuid,numeric,numeric)');
+  ('use_media_transcript(uuid,uuid,numeric,numeric)'),
+  -- P3 A1: voice notes, the founder's own (owner check inside).
+  ('voice_note_add(uuid)'),
+  ('voice_note_delete(uuid)'),
+  ('voice_notes(integer,text)');
 
 create temp table callable on commit drop as
 select p.oid::regprocedure::text as signature

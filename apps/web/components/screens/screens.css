@@ -100,6 +100,13 @@
 .scr-doc-card .v2-button { align-self: flex-start; }
 .scr-cut-words { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .scr-cut-words s { padding: 2px 8px; background: var(--v2-paper3); font-size: 13px; color: var(--v2-ink2); }
+/* Library → Voice (P3 C1): a note's weight, and the delete confirm in its row */
+.scr-voice-weight { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.scr-voice-weight meter { width: 96px; height: 8px; }
+.scr-voice-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 100%; }
+@media (max-width: 760px) {
+  .scr-row-inline:has(.scr-voice-confirm) { flex-direction: column; align-items: stretch; }
+}
 .scr-brand-host .brand-head { display: none; }
 .scr-brand-host .brand-view { padding: 0; max-width: none; }
 
@@ -310,6 +317,8 @@
 .scr-team .is-running { font-weight: 600; }
 .scr-team .is-running .scr-team-mark { width: 16px; height: 6px; background: var(--v2-brand); }
 .scr-team .is-todo { color: var(--v2-ink2); }
+.scr-team.is-compact { padding: 4px 0 0; }
+.scr-team.is-compact li { padding: 3px 0; border-bottom: 0; font-size: 12px; font-weight: 400; }
 .scr-drawer { margin: 0 0 0 auto; height: 100vh; max-height: 100vh; width: min(480px, 100vw); border-radius: 0; }
 .scr-drawer .scr-dialog-body { min-height: 100%; }
 .scr-drawer-block { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 14px; border: 1px solid var(--v2-line); border-radius: 4px; background: var(--v2-paper2); }

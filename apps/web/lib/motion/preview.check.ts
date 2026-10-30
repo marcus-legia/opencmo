@@ -43,13 +43,13 @@ async function main() {
     writeFileSync(outdir + "/s0.jpg", "jpeg-0");
     writeFileSync(outdir + "/s1.jpg", "jpeg-1");
     process.stderr.write("bundling…\\n");
-    console.log(JSON.stringify({ ok: true, stills: [{ t: 1, file: "s0.jpg" }, { t: 5, file: outdir + "/s1.jpg" }], issues: ["Text under 36 px: " + job.title], estimated: true }));
+    console.log(JSON.stringify({ ok: true, stills: [{ t: 1, file: "s0.jpg" }, { t: 5, file: outdir + "/s1.jpg", kind: "sheet", times: [4, 5, 6], columns: 3 }], issues: ["Text under 36 px: " + job.title], estimated: true }));
   `);
   const ok = await previewMotion(job);
   assert.equal(ok.ok, true);
   assert.ok(ok.ok);
   assert.deepEqual(ok.images, [Buffer.from("jpeg-0").toString("base64"), Buffer.from("jpeg-1").toString("base64")], "stills as base64, same order");
-  assert.deepEqual(ok.stills, [{ t: 1, file: "s0.jpg" }, { t: 5, file: "s1.jpg" }], "file names only, no server paths");
+  assert.deepEqual(ok.stills, [{ t: 1, file: "s0.jpg" }, { t: 5, file: "s1.jpg", kind: "sheet", times: [4, 5, 6], columns: 3 }], "file names only, no server paths; a sheet keeps its times");
   assert.deepEqual(ok.issues, ["Text under 36 px: How Shazam hears a song"], "the job reached the CLI");
   assert.equal(previewDirs(), before, "the temp folder is removed");
 

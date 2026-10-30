@@ -16,8 +16,8 @@ describe('kho mẫu', () => {
     expect(validate(document)).toEqual(document);
   });
 
-  it('covers all 72 samples (67 from DS + 5 from OpenCMO)', () => {
-    expect(manifest.samples.length).toBe(72);
+  it('covers all 73 samples (67 from DS + 6 from OpenCMO)', () => {
+    expect(manifest.samples.length).toBe(73);
   });
 });
 
@@ -40,6 +40,25 @@ describe('migrate', () => {
       stage: { children: [{ kind: 'scene', name: 'S', width: 1080, height: 1920, active: true, children: [{ kind: 'rect', fill: '#fff' }] }] },
     });
     expect(migrate(JSON.parse(JSON.stringify(document)))).toEqual(document);
+  });
+
+  it('drops the removed Lottie and 3D layers from documents saved before 2026-10-24', () => {
+    const scene = {
+      kind: 'scene', name: 'S', width: 1080, height: 1920, active: true,
+      children: [
+        { kind: 'lottie', src: 'builtin:wave' },
+        { kind: 'group', children: [{ kind: 'scene3d', objects: [] }, { kind: 'rect', fill: '#fff', marks: { studio3d: { quote: 'hi' } } }] },
+        { kind: 'rect', fill: '#000', tracks: [{ property: 'cameraPhi', keyframes: [] }, { property: 'x', keyframes: [{ time: 0, value: 1 }] }] },
+      ],
+    };
+    const document = validate({ version: 1, stage: { children: [scene] } });
+    expect(document.stage.children[0]).toEqual({
+      kind: 'scene', name: 'S', width: 1080, height: 1920, active: true,
+      children: [
+        { kind: 'group', children: [{ kind: 'rect', fill: '#fff', marks: {} }] },
+        { kind: 'rect', fill: '#000', tracks: [{ property: 'x', keyframes: [{ time: 0, value: 1 }] }] },
+      ],
+    });
   });
 
   it('version lạ, thiếu, mới hơn editor', () => {
@@ -184,7 +203,6 @@ describe('schema của marks (R5)', () => {
     ok({ 'brand-logo': true }, 'group');
     ok({ markers: [{ id: 'm1', name: 'Fix this', time: 3, duration: 0, color: 'red', status: 'open' }] });
     ok({ visual: { op: 'add_chart', input: { anything: [1, 2] } } }, 'group');
-    ok({ studio3d: { quote: 'revenue doubled' } }, 'group');
   });
 
   it('từ chối mark sai thay vì để reader bỏ qua im lặng', () => {

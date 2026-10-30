@@ -11,9 +11,9 @@
 import type { CmoJobKind } from "./jobs/types";
 
 export type LoopState = {
-  /** 0 = Chủ nhật … 6 = thứ Bảy (UTC). */
+  /** 0 = Sunday … 6 = Saturday (UTC). */
   weekday: number;
-  /** Mục X/Reddit tới hạn hôm nay (đầu tiên mỗi loại); `id` is the calendar item, for linking its work order. */
+  /** The X and Reddit items due today (the first of each); `id` is the calendar item, for linking its work order. */
   duePost: { idea: string; id?: string } | null;
   dueSales: { idea: string; id?: string } | null;
   /** Đã có handle X của đối thủ trong Competitor Analysis. */

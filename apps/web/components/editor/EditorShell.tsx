@@ -18,12 +18,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
 import { createRenderer, type Renderer } from "@opencmo/clip-render";
-import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, keyframesOf, MOTION_CLIP_MODEL, isRow, MASTER_SRC, STUDIO_MODEL, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
+import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frameAspect, keyframesOf, MOTION_CLIP_MODEL, isRow, MASTER_SRC, readCaptionState, readFrame, readLayout, stamp, subtitleCues, timesOf, toSrt, toVtt, walk, type Frame, type OpContext, type Transcript } from "@opencmo/editor-core";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import type { RenderTask } from "@/lib/api/tasks";
 import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
+import { UI_V2 } from "@/lib/screens/flag";
 
 import { fitCamera, renderScale, zoomAt, type Camera, type Size } from "./camera";
 import { FrameBar } from "./FrameBar";
@@ -50,7 +51,6 @@ import { AssistantClient } from "./assistant/client";
 import { capture, grab, inspectColor, waveform, withoutText, type InspectColorInput } from "./assistant/capture";
 import { ClipPicker, createBlankEdit } from "./ClipPicker";
 import { GuidesMenu, GuidesOverlay, useGuides } from "./Guides";
-import { preview3d, type Preview3DInput } from "./assistant/preview3d";
 import { priceOf, type AiModel } from "@opencmo/editor-core/generate";
 import { liveModel, liveModels, storedImages, GeneratePanel, useEnabledModels, type EditSource } from "./generate/GeneratePanel";
 import { useExplainers } from "./generate/useExplainers";
@@ -1317,6 +1317,7 @@ function Workspace({
         onLoadLatest={() => void loadLatest()}
         onExport={() => void startExport()}
         onCancelExport={() => void cancelExport()}
+        finish={UI_V2 ? { clipId, documentHash: state.documentHash } : undefined}
       />
       <div className="ed2-body" ref={layout.bodyRef}>
       <aside
@@ -1360,8 +1361,6 @@ function Workspace({
                 return grab(media, input as { path: string }, record?.type ?? null);
               }
               if (request.name === "save_frame") return saveFrame(input as { time: number; name?: string });
-              // Cảnh code 3D: chạy trong iframe sandbox, không trên origin của editor (spec code-scenes).
-              if (request.name === "preview_3d") return preview3d(input as Preview3DInput);
               if (request.name !== "capture" && request.name !== "inspect_color") return { error: "This editor cannot run that tool." };
               const at = playback.frame;
               playback.pause();
@@ -1890,12 +1889,11 @@ const TRANSITION_PROMPT =
   "One continuous camera move that starts exactly on the first picture and ends exactly on the second picture. Smooth, natural motion, no cuts, no new people or objects, no text.";
 
 /** Models whose layers are rendered from code: no paid Regenerate, a rendering label instead of "Generating…". */
-const RENDERED_FROM_CODE: ReadonlySet<string> = new Set([STUDIO_MODEL, EXPLAINER_MODEL, MOTION_CLIP_MODEL]);
+const RENDERED_FROM_CODE: ReadonlySet<string> = new Set([EXPLAINER_MODEL, MOTION_CLIP_MODEL]);
 
-/** Nhãn chờ của phần tử AI: cảnh 3D render trên GPU, còn lại là sinh. */
+/** The waiting label of an AI layer: explainers and motion clips render, the rest generate. */
 function aiLabel(entity: Record<string, unknown>): string {
   const models = ownDeclarations(entity).map((declaration) => declaration.model);
-  if (models.includes(STUDIO_MODEL)) return "Rendering 3D…";
   if (models.includes(EXPLAINER_MODEL)) return "Rendering explainer…";
   return models.includes(MOTION_CLIP_MODEL) ? "Rendering animation…" : "Generating…";
 }

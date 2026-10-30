@@ -15,6 +15,9 @@ export type CardActions = {
   retry: (card: Card) => void;
   cancel: (card: Card) => void;
   remove: (card: Card) => void;
+  /** P2: mark the edit finished at the hash on screen; cut 3 shorts from a finished edit. */
+  markFinished: (clipId: string, documentHash: string) => void;
+  cutShorts: (clipId: string) => void;
 };
 
 /** Generated media: a picture of its kind until real thumbnails exist (the frame's drawings). */
@@ -235,18 +238,22 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
       ) : null;
     case "running":
       return (
-        <span>
+        <span className="scr-card-actions">
           <Chip tone="running">Running</Chip>
+          <MarkFinished card={card} busy={busy} actions={actions} />
         </span>
       );
     case "waiting_founder":
-      return card.approvalId ? (
-        <a href={`/app/inbox/${encodeURIComponent(card.approvalId)}`} className="scr-chip-link">
-          <Chip tone="waiting">{card.kind === "short" ? "Batch waits on you" : "Price waits on you"}</Chip>
-        </a>
-      ) : (
-        <span>
-          <Chip tone="waiting">Waits on you</Chip>
+      return (
+        <span className="scr-card-actions">
+          {card.approvalId ? (
+            <a href={`/app/inbox/${encodeURIComponent(card.approvalId)}`} className="scr-chip-link">
+              <Chip tone="waiting">{card.kind === "short" ? "Batch waits on you" : "Price waits on you"}</Chip>
+            </a>
+          ) : (
+            <Chip tone="waiting">Waits on you</Chip>
+          )}
+          <MarkFinished card={card} busy={busy} actions={actions} />
         </span>
       );
     case "failed":
@@ -274,12 +281,24 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
               Open in editor
             </Button>
           )}
-          {card.canMarkFinished && (
-            <Button compact variant="on-dark" disabled title="Marking an edit finished arrives with Studio's shorts">
-              Mark finished
+          <MarkFinished card={card} busy={busy} actions={actions} />
+          {card.canCutShorts && card.clipId && (
+            <Button compact variant="on-dark" disabled={busy} data-testid="studio-cut-shorts" onClick={() => actions.cutShorts(card.clipId!)}>
+              Cut shorts
             </Button>
           )}
         </span>
       );
   }
+}
+
+/** Marks a built video finished: the same decision as approving its finished-video card. */
+function MarkFinished({ card, busy, actions }: { card: Card; busy: boolean; actions: CardActions }) {
+  if (!card.canMarkFinished || !card.clipId || !card.documentHash) return null;
+  const { clipId, documentHash } = card;
+  return (
+    <Button compact variant="on-dark" disabled={busy} data-testid="studio-mark-finished" onClick={() => actions.markFinished(clipId, documentHash)}>
+      Mark finished
+    </Button>
+  );
 }

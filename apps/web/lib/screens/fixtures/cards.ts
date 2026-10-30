@@ -3,7 +3,7 @@
  * is the first five of `Main.dc.html`; the rest are here for the card sheet and `/app/inbox/[id]`.
  */
 
-import type { ApprovalCard } from "../approval-card";
+import type { ApprovalCard, StudioSnapshot } from "../approval-card";
 import { at } from "./shared";
 
 const base = {
@@ -40,12 +40,63 @@ export const POST_CARD: ApprovalCard = {
           "We built the editor before anything else. Cut by deleting words, then ask for B-roll on the exact line.",
         ],
         limit: 280,
+        visibleBeforeMore: null,
       },
-      { platform: "threads", versions: ["Most AI video tools stop at the first draft. We built the editor first."], limit: 500 },
-      { platform: "linkedin", versions: ["Most AI video tools stop at the first draft. Here is why we built the editor first."], limit: 3000 },
     ],
     checks: ["no links", "checker ok"],
     why: "Tuesday's insight, editor-first launches",
+  },
+};
+
+/** Threads and LinkedIn (P3 C0): one card per platform, drafted from the same idea; posted by copy and open until P4. */
+export const THREADS_POST_CARD: ApprovalCard = {
+  ...base,
+  id: "card-post-threads",
+  kind: "post",
+  department: "writer",
+  title: "I spent more time cutting my demo than building the feature.",
+  summary: "So the editor came first: delete a word in the transcript and the cut follows.",
+  meta: "2 versions · Threads · you post it on your account",
+  body: {
+    kind: "post",
+    platforms: [
+      {
+        platform: "threads",
+        versions: [
+          "I spent more time cutting my demo than building the feature. So the editor came first: delete a word in the transcript and the cut follows. Then ask for B-roll on the line you mean.",
+          "Cutting a demo used to take me longer than building the feature. Now I delete words in the transcript and the video follows.",
+        ],
+        limit: 500,
+        visibleBeforeMore: null,
+      },
+    ],
+    checks: ["no links", "no hashtags", "checker ok"],
+    why: "Tuesday's insight, editor-first launches",
+  },
+};
+
+export const LINKEDIN_POST_CARD: ApprovalCard = {
+  ...base,
+  id: "card-post-linkedin",
+  kind: "post",
+  department: "writer",
+  title: "Why we built the editor before anything else.",
+  summary: "Every launch video I made took longer to cut than the feature took to build.",
+  meta: "1 version · LinkedIn · you post it on your account",
+  body: {
+    kind: "post",
+    platforms: [
+      {
+        platform: "linkedin",
+        versions: [
+          "Why we built the editor before anything else.\n\nEvery launch video I made took longer to cut than the feature took to build. Scrubbing a timeline for one bad sentence is not a good use of a founder's evening.\n\nSo the first thing OpenCMO does is let you cut by deleting words. The transcript is the timeline. Ask for B-roll on the line you mean and it lands there.\n\nThe marketing team of one needs fewer tools, not more.",
+        ],
+        limit: 3000,
+        visibleBeforeMore: 140,
+      },
+    ],
+    checks: ["no links", "no hashtags", "checker ok"],
+    why: "Your content strategy: one founder story a week on LinkedIn",
   },
 };
 
@@ -59,7 +110,19 @@ export const PRICE_CARD: ApprovalCard = {
   meta: "Credits held until the video is done",
   priceCredits: 24,
   expiresAt: at("2026-10-29", "11:42"),
-  body: { kind: "price", what: "Long video “How the CMO plans a week”", shots: 12, seconds: 60, readyInMinutes: 25 },
+  body: {
+    kind: "price",
+    stepId: "step-sample-2",
+    what: "Long video “How the CMO plans a week”",
+    keyframes: [
+      { index: 0, label: "You recorded the demo.", thumbUrl: null, garbled: false, credits: 1 },
+      { index: 1, label: "Now cut it by words.", thumbUrl: null, garbled: true, credits: 1 },
+      { index: 2, label: "Ask for B-roll.", thumbUrl: null, garbled: false, credits: 1 },
+    ],
+    shots: 12,
+    seconds: 60,
+    readyInMinutes: 25,
+  },
 };
 
 export const SHORTS_CARD: ApprovalCard = {
@@ -72,11 +135,32 @@ export const SHORTS_CARD: ApprovalCard = {
   meta: "Cut from a finished edit · no generation credits",
   body: {
     kind: "shorts_batch",
+    batchId: "batch-sample",
+    parentClipId: "clip-sample",
     source: "Editor launch",
     shorts: [
-      { start: 0, end: 22, hook: "Cut by words", previewUrl: null },
-      { start: 18, end: 41, hook: "B-roll on the line", previewUrl: null },
-      { start: 38, end: 60, hook: "Edit by asking", previewUrl: null },
+      {
+        shortClipId: "short-sample-1",
+        start: 0,
+        end: 22,
+        hook: "Cut by words",
+        reason: "Opens on the pain every founder knows",
+        previewUrl: null,
+        captions: [
+          { id: "caption-1-tiktok", profile: "tiktok_caption", text: "Cut your demo by deleting words. #editing #buildinpublic", title: null },
+          { id: "caption-1-instagram", profile: "instagram_caption", text: "Your transcript is the timeline: delete a word and the cut follows. #videoediting #saas #founders", title: null },
+        ],
+      },
+      {
+        shortClipId: "short-sample-2",
+        start: 18,
+        end: 41,
+        hook: "B-roll on the line",
+        reason: "Shows the slash command working",
+        previewUrl: null,
+        captions: [{ id: "caption-2-tiktok", profile: "tiktok_caption", text: "Ask for B-roll on the exact line you mean. #editing", title: null }],
+      },
+      { shortClipId: "short-sample-3", start: 38, end: 60, hook: "Edit by asking", reason: "Ends on the strongest demo moment", previewUrl: null, captions: [] },
     ],
   },
 };
@@ -168,10 +252,13 @@ export const SCRIPT_CARD: ApprovalCard = {
   meta: "Nothing spent yet",
   body: {
     kind: "script",
+    stepId: "step-sample-1",
+    seconds: 60,
+    aspect: "9:16",
     beats: [
-      { words: "You recorded the demo.", picture: "Desk, laptop, morning light." },
-      { words: "Now cut it by words.", picture: "Transcript lines fade out." },
-      { words: "Ask for B-roll.", picture: "Slash command, shot drops in." },
+      { words: "You recorded the demo.", picture: "Desk, laptop, morning light.", motion: "Slow push in on the screen." },
+      { words: "Now cut it by words.", picture: "Transcript lines fade out.", motion: "Lines lift away one by one." },
+      { words: "Ask for B-roll.", picture: "Slash command, shot drops in.", motion: null },
     ],
     nextPriceCredits: 6,
   },
@@ -185,7 +272,22 @@ export const FINISHED_CARD: ApprovalCard = {
   title: "“Editor launch” is rendered · 1:00",
   summary: "Approving marks it finished: Shorts can be cut from it.",
   meta: "Open in the editor to tweak first",
-  body: { kind: "finished_video", clipId: "clip-sample", seconds: 60, previewUrl: null },
+  body: {
+    kind: "finished_video",
+    clipId: "clip-sample",
+    documentHash: "1".repeat(64),
+    seconds: 60,
+    previewUrl: null,
+    frameAt: 2,
+    captions: [
+      {
+        id: "caption-youtube",
+        profile: "youtube",
+        title: "Cut a product demo by deleting words",
+        text: "A one-minute look at the OpenCMO editor: cut by words, B-roll on the line you mean, and edits by asking. #videoediting #saas",
+      },
+    ],
+  },
 };
 
 export const SLIDESHOW_CARD: ApprovalCard = {
@@ -211,6 +313,8 @@ export const CORRECTION_CARD: ApprovalCard = {
     kind: "correction",
     correctionId: "correction-sample",
     rule: "Don't open posts with a question.",
+    editMode: "HOOK_REWRITTEN",
+    times: 3,
     examples: [
       { before: "Tired of editing demos?", after: "Editing a demo shouldn't take longer than building it." },
       { before: "What if you could cut by words?", after: "Cut a video by deleting words." },
@@ -245,4 +349,58 @@ export const ALL_KINDS: ApprovalCard[] = [
   SLIDESHOW_CARD,
   SCHEDULE_CARD,
   CORRECTION_CARD,
+];
+
+/** Every sample card `/app/inbox/[id]` can open outside production: each kind, the P3 platforms, the states. */
+export const SAMPLE_CARDS: ApprovalCard[] = [...ALL_KINDS, THREADS_POST_CARD, LINKEDIN_POST_CARD, ...STATE_CARDS];
+
+/**
+ * One snapshot per Studio kind, as `approval_snapshot` writes it. The script one is the exact output asserted in
+ * `supabase/tests/205_p2_studio.test.sql`, so the SQL and the TypeScript shape cannot drift apart unnoticed.
+ */
+export const STUDIO_SNAPSHOTS: StudioSnapshot[] = [
+  {
+    kind: "script",
+    step_id: "e2053000-0000-4000-8000-00000000000a",
+    clip_id: "e2052000-0000-4000-8000-00000000000a",
+    tool: "create_video",
+    title: "How the CMO plans a week",
+    seconds: 60,
+    aspect: "9:16",
+    beats: [{ words: "You recorded the demo.", picture: "Desk, laptop.", motion: "Slow push in." }],
+    price_credits: 6,
+  },
+  {
+    kind: "price",
+    step_id: "step-sample-2",
+    clip_id: "clip-sample",
+    tool: "animate_video",
+    title: "How the CMO plans a week",
+    what: "12 shots, voice-over, music",
+    seconds: 60,
+    wait_minutes: 25,
+    keyframes: [{ index: 0, words: "You recorded the demo.", path: "user/keyframes/00.png", garbled: false, credits: 1 }],
+    shots: 12,
+    price_credits: 24,
+  },
+  {
+    kind: "finished_video",
+    clip_id: "clip-sample",
+    title: "Editor launch",
+    document_hash: "1".repeat(64),
+    render_task_id: "task-sample",
+    render_path: "user/clip-sample/task-sample.mp4",
+    seconds: 60,
+  },
+  {
+    kind: "shorts_batch",
+    batch_id: "batch-sample",
+    parent_clip_id: "clip-sample",
+    title: "Editor launch",
+    parent_hash: "1".repeat(64),
+    shorts: [
+      { short_id: "s1", short_clip_id: "short-sample-1", start: 0, end: 22, hook: "Cut by words", reason: "Opens on the pain every founder knows" },
+      { short_id: "s2", short_clip_id: null, start: 18, end: 41, hook: "B-roll on the line", reason: "Shows the slash command working" },
+    ],
+  },
 ];

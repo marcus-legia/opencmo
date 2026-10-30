@@ -1,6 +1,6 @@
 /**
  * How the Assistant is put together, offline: which tool calls may run at the same time, which
- * tools each kind of clip gets, and what the system prompt promises.
+ * tools each kind of clip gets, what the system prompt promises, and how the explainer guide draws.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/agent-design.check.ts
  */
@@ -236,11 +236,34 @@ async function main(): Promise<void> {
     const named = new Set([...SYSTEM_PROMPT.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
     for (const word of ["untrusted_data", "user_answer", "clip_context", "project_state", "your_skills"]) named.delete(word);
     for (const name of named) assert.ok(offered.has(name), `the prompt names ${name}, which is not a tool`);
-    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "add_3d_scene", "preview_explainer", "add_explainer", "request_export", "find_retakes"]) {
+    for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "preview_explainer", "add_explainer", "request_export", "find_retakes"]) {
       assert.ok(named.has(route), `the routing names ${route}`);
     }
     assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");
     assert.ok(SYSTEM_PROMPT.length < 6000, `the prompt stays short (${SYSTEM_PROMPT.length} chars)`);
+  }
+
+  // 8. Explainers draw their subject in scene code (a Mark); icons are a library for small symbols.
+  // The review loop names a missing drawing, so it no longer pushes the model back to icons.
+  {
+    const { z } = await import("zod");
+    const { readGuide } = await import("./guides");
+    const { previewExplainerInput } = await import("./explainer-tool");
+    const guide = readGuide("explainer");
+    // Motion studio: art direction first (styles), the kit core, shots; the old two-themes/four-colours rules are gone.
+    for (const text of ["<Mark", "<Text ", "<Shot beat", "kit.travel", "<Streak", "kit.drawOn", "fx.GradientField", "list_motion_styles", "get_motion_style", "Art direction first", '"beat N shows nothing drawn"']) {
+      assert.ok(guide.includes(text), `the explainer guide names ${text}`);
+    }
+    // The example is the scene golden.test.ts renders, not a copy that can drift.
+    const { EXPLAINER_EXAMPLE } = await import("@opencmo/clip-motion/guide-example");
+    assert.ok(guide.includes(EXPLAINER_EXAMPLE), "the guide's example is the rendered example scene");
+    assert.ok(!/<Icon name="syringe"/.test(guide), "the icon-only example is gone");
+    for (const old of ["The subject's icon in every beat", "icons, built-in Lottie animations or kit shapes", "shows no icon, shape or Lottie", "Never pick other colours", "Wrap the whole scene in it", "<Lottie", "find_lotties"]) {
+      assert.ok(!guide.includes(old), `the explainer guide no longer says "${old}"`);
+    }
+    const schema = JSON.stringify(z.toJSONSchema(previewExplainerInput, { io: "input" }));
+    assert.ok(!schema.includes("naming the icons, Lotties or kit shapes"), "beats[].visual asks for a drawing, not icon names");
+    assert.ok(schema.includes("a flat disc tilts 30°"), "beats[].visual gives a drawn example");
   }
 
   console.log("agent-design.check: ok");
