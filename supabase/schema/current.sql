@@ -1554,7 +1554,7 @@ CREATE TABLE public.approvals (
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
     CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
-    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text]))),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text, 'schedule_slot'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
@@ -1582,6 +1582,7 @@ declare
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
   v_caption public.content_items;
   v_title text;
+  v_slot public.schedule_slots;
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1761,6 +1762,40 @@ begin
         end if;
         perform public.approval_close('short_batch', v_batch.id, 'skipped');
       end if;
+    when 'schedule' then
+      -- Time, account and platform fields change through schedule_change, which raises the card again; the
+      -- answer is the new card, so the founder looks at what they now approve.
+      if p_action in ('change_time', 'change_account', 'set_options') then
+        perform set_config('opencmo.decided_via', '', true);
+        return public.schedule_change(v_row.ref_id, p_action, v_payload);
+      end if;
+      if p_action not in ('approve', 'retry', 'cancel') then
+        raise exception 'Choose approve, change the time or account, or cancel.' using errcode = '22023';
+      end if;
+      select * into v_slot from public.schedule_slots where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_slot.status not in ('proposed', 'failed') then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'cancel' then
+        update public.schedule_slots set status = 'cancelled', updated_at = now() where id = v_slot.id;
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+      elsif v_slot.status = 'failed' and now() >= v_slot.window_ends_at then
+        -- Too late for this time: never post late. The founder's Retry asks for a new time instead.
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
+        perform public.schedule_propose(v_slot.deliverable_id);
+      else
+        if p_action = 'retry' and v_slot.status <> 'failed' then
+          raise exception 'There is nothing to retry.' using errcode = '22023';
+        end if;
+        perform public.schedule_ready_check(v_slot);
+        begin
+          update public.schedule_slots set status = 'waiting', updated_at = now() where id = v_slot.id;
+        exception when unique_violation then
+          raise exception 'This post already has another time on %.', public.schedule_platform_label(v_slot.platform)
+            using errcode = 'P0001';
+        end;
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
+      end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
   end case;
@@ -1797,6 +1832,8 @@ declare
   v_snapshot jsonb := public.approval_snapshot(p_ref_kind, p_ref_id);
   v_hash text;
   v_kind text;
+  v_id uuid;
+  v_expires timestamptz;
 begin
   if v_snapshot is null then
     return;
@@ -1809,13 +1846,28 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
   v_kind := v_snapshot->>'kind';
-  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits)
+  -- A failure card (it carries the last error) stays open while the slot's window lasts, so Retry can still post
+  -- at the approved time; any other schedule card expires at its time.
+  if v_kind = 'schedule' then
+    select case when s.error is not null then s.window_ends_at else s.publish_at end into v_expires
+    from public.schedule_slots s where s.id = p_ref_id;
+  end if;
+  -- A schedule card carries its time and account in the foot and expires when its time comes (rule 4).
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits,
+    post_at, account, expires_at)
   values (p_user, v_kind,
     case v_kind when 'post' then 'writer' when 'reply' then 'sales'
       when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
-      when 'shorts_batch' then 'studio' else 'brain' end,
+      when 'shorts_batch' then 'studio' when 'schedule' then 'schedule' else 'brain' end,
     p_ref_kind, p_ref_id, v_snapshot, v_hash,
-    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end);
+    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end,
+    case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end,
+    case when v_kind = 'schedule' then left(v_snapshot->>'handle', 100) end,
+    v_expires)
+  returning id into v_id;
+  if v_kind = 'schedule' then
+    update public.schedule_slots set approval_id = v_id, updated_at = now() where id = p_ref_id;
+  end if;
 end;
 $$;
 
@@ -1916,6 +1968,19 @@ begin
         select s.short_clip_id from public.shorts s
         where s.batch_id = p_ref_id and s.status <> 'failed' and s.short_clip_id is not null
         order by s.source_start, s.id));
+    when 'schedule_slot' then
+      -- Content, time, account and the platform's fields: everything the founder approves before it posts
+      -- (approval.md rule 1). `content_hash` covers the words and the edit, so a change to either supersedes it.
+      select jsonb_build_object('kind', 'schedule', 'slot_id', s.id, 'deliverable_id', s.deliverable_id,
+        'deliverable_kind', d.kind, 'platform', s.platform, 'mode', s.mode, 'account_id', s.account_id,
+        'handle', a.handle, 'publish_at', to_char(s.publish_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        'options', s.options, 'last_error', s.error->>'message')
+        || public.schedule_content(s.deliverable_id, s.platform)
+      into v
+      from public.schedule_slots s
+      join public.deliverables d on d.id = s.deliverable_id
+      left join public.social_accounts a on a.id = s.account_id
+      where s.id = p_ref_id;
     else
       raise exception 'Unknown card source.' using errcode = '22023';
   end case;
@@ -2194,7 +2259,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text, 'publish_media'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -2754,7 +2819,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -3432,7 +3497,7 @@ declare
     when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
     else public.cmo_job_price(p_kind)
   end;
-  v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides')
+  v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides', 'publish_post')
     then coalesce(p_input->>'item_id', p_input->>'order_id') end;
 begin
   if p_kind is null or p_kind = 'onboard' or public.cmo_job_daily_limit(p_kind) <= 0 then
@@ -3615,7 +3680,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10
+    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100
     else 0 end
 $$;
 
@@ -3629,7 +3694,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
-    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1
+    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0
     else 0 end
 $$;
 
@@ -5844,6 +5909,10 @@ CREATE FUNCTION public.enqueue_cmo_run(p_kind text, p_input jsonb DEFAULT '{}'::
     SET search_path TO 'public'
     AS $$
 begin
+  -- Posting is ordered only by Schedule, for a slot whose card the founder approved.
+  if p_kind = 'publish_post' then
+    raise exception 'Unknown task.' using errcode = '22023';
+  end if;
   return public.cmo_enqueue(public.require_user(), p_kind, p_input);
 end;
 $$;
@@ -5858,6 +5927,9 @@ CREATE FUNCTION public.enqueue_cmo_run_for(p_user uuid, p_kind text, p_input jso
     SET search_path TO 'public'
     AS $$
 begin
+  if p_kind = 'publish_post' then
+    raise exception 'Unknown task.' using errcode = '22023';
+  end if;
   return public.cmo_enqueue(p_user, p_kind, p_input);
 end;
 $$;
@@ -7161,6 +7233,260 @@ $$;
 
 
 --
+-- Name: publish_media_queue(uuid, uuid, uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.publish_media_queue(p_slot uuid, p_user uuid, p_order uuid, p_object text, p_upload_url text, p_public_url text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_slot public.schedule_slots := public.publish_slot_guard(p_slot, p_user, p_order);
+  v_task uuid;
+begin
+  if v_slot.status <> 'publishing' then
+    raise exception 'This post is not being published.' using errcode = 'P0001';
+  end if;
+  if p_object is null or p_object !~ ('^' || p_user::text || '/[0-9a-f-]{36}/[0-9a-f-]{36}\.mp4$') then
+    raise exception 'That export is not this founder''s.' using errcode = '22023';
+  end if;
+  if p_upload_url !~ '^https://' or char_length(p_upload_url) > 2048
+     or p_public_url !~ '^https://' or char_length(p_public_url) > 2048 then
+    raise exception 'The upload address is not valid.' using errcode = '22023';
+  end if;
+  insert into public.tasks (user_id, kind, clip_id, payload, request_id, status)
+  values (p_user, 'publish_media', (public.approval_snapshot('schedule_slot', p_slot)->>'clip_id')::uuid,
+    jsonb_build_object('bucket', 'exports', 'object', p_object, 'upload_url', p_upload_url, 'public_url', p_public_url,
+      'content_type', 'video/mp4', 'slot_id', p_slot),
+    gen_random_uuid(), 'queued')
+  returning id into v_task;
+  update public.schedule_slots set media_task_id = v_task, updated_at = now() where id = p_slot;
+  return v_task;
+end;
+$_$;
+
+
+--
+-- Name: schedule_slots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schedule_slots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    deliverable_id uuid NOT NULL,
+    platform text NOT NULL,
+    account_id uuid,
+    mode text DEFAULT 'publish'::text NOT NULL,
+    publish_at timestamp with time zone NOT NULL,
+    jitter_seconds integer DEFAULT 0 NOT NULL,
+    window_ends_at timestamp with time zone NOT NULL,
+    status text DEFAULT 'proposed'::text NOT NULL,
+    approval_id uuid,
+    options jsonb DEFAULT '{}'::jsonb NOT NULL,
+    idempotency_key text DEFAULT (gen_random_uuid())::text NOT NULL,
+    lease_until timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    external_id text,
+    external_url text,
+    error jsonb,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    media_task_id uuid,
+    CONSTRAINT schedule_slots_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT schedule_slots_check CHECK ((window_ends_at > publish_at)),
+    CONSTRAINT schedule_slots_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT schedule_slots_external_id_check CHECK ((char_length(external_id) <= 200)),
+    CONSTRAINT schedule_slots_external_url_check CHECK (((external_url ~ '^https://'::text) AND (char_length(external_url) <= 1000))),
+    CONSTRAINT schedule_slots_jitter_seconds_check CHECK (((jitter_seconds >= '-240'::integer) AND (jitter_seconds <= 240))),
+    CONSTRAINT schedule_slots_mode_check CHECK ((mode = ANY (ARRAY['publish'::text, 'intent'::text]))),
+    CONSTRAINT schedule_slots_options_check CHECK (((jsonb_typeof(options) = 'object'::text) AND (octet_length((options)::text) <= 1024))),
+    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT schedule_slots_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text, 'missed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: publish_slot_guard(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.publish_slot_guard(p_slot uuid, p_user uuid, p_order uuid) RETURNS public.schedule_slots
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots;
+begin
+  select * into v_slot from public.schedule_slots where id = p_slot and user_id = p_user for update;
+  if not found or not exists (select 1 from public.work_orders
+      where id = p_order and user_id = p_user and kind = 'publish_post' and brief->>'slot_id' = p_slot::text) then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  return v_slot;
+end;
+$$;
+
+
+--
+-- Name: publish_slot_read(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.publish_slot_read(p_slot uuid, p_user uuid, p_order uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots := public.publish_slot_guard(p_slot, p_user, p_order);
+  v_account public.social_accounts;
+  v_approval public.approvals;
+  v_current jsonb := public.schedule_content(v_slot.deliverable_id, v_slot.platform);
+  v_export jsonb;
+  v_task public.tasks;
+  v_media jsonb := '{"state": "none"}'::jsonb;
+begin
+  select * into v_account from public.social_accounts where id = v_slot.account_id;
+  select * into v_approval from public.approvals where id = v_slot.approval_id;
+  if v_current->>'clip_id' is not null then
+    select jsonb_build_object('object', t.output_path, 'bytes', t.bytes) into v_export
+    from public.tasks t join public.editor_projects p on p.clip_id = t.clip_id
+    where t.clip_id = (v_current->>'clip_id')::uuid and t.kind = 'render_document' and t.status = 'done'
+      and t.settings_hash = public.editor_document_hash(p.document) and t.output_path is not null
+    order by t.finished_at desc nulls last limit 1;
+  end if;
+  select * into v_task from public.tasks where id = v_slot.media_task_id;
+  if v_task.id is not null then
+    v_media := case v_task.status
+      when 'done' then jsonb_build_object('state', 'done', 'publicUrl', v_task.payload->>'public_url', 'contentType', 'video/mp4')
+      when 'failed' then jsonb_build_object('state', 'failed', 'error', coalesce(v_task.error, 'The video could not be uploaded.'))
+      when 'cancelled' then jsonb_build_object('state', 'failed', 'error', 'The video upload was cancelled.')
+      else jsonb_build_object('state', 'running', 'startedAt', to_jsonb(coalesce(v_task.started_at, v_task.created_at))) end;
+  end if;
+  return jsonb_build_object('id', v_slot.id, 'status', v_slot.status, 'platform', v_slot.platform, 'mode', v_slot.mode,
+    'accountId', v_slot.account_id, 'zernioAccountId', v_account.zernio_account_id, 'accountStatus', v_account.status,
+    'publishAt', to_jsonb(v_slot.publish_at), 'windowEndsAt', to_jsonb(v_slot.window_ends_at), 'options', v_slot.options,
+    -- One key per attempt: a re-run inside an attempt repeats safely; a Retry is a new post, not Zernio's cached answer.
+    'idempotencyKey', v_slot.idempotency_key || ':' || v_slot.attempts, 'approvalStatus', v_approval.status, 'snapshot', v_approval.snapshot,
+    'current', v_current, 'export', v_export, 'media', v_media);
+end;
+$$;
+
+
+--
+-- Name: publish_slot_start(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.publish_slot_start(p_slot uuid, p_user uuid, p_order uuid) RETURNS public.schedule_slots
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots := public.publish_slot_guard(p_slot, p_user, p_order);
+begin
+  if v_slot.status = 'publishing' then
+    return v_slot;
+  end if;
+  if v_slot.status <> 'due' then
+    raise exception 'This post is not due (it is %).', v_slot.status using errcode = 'P0001';
+  end if;
+  if now() >= v_slot.window_ends_at then
+    raise exception 'This post missed its time window.' using errcode = 'P0001';
+  end if;
+  if public.cmo_paused(v_slot.user_id) then
+    raise exception 'Your CMO is paused.' using errcode = 'P0001';
+  end if;
+  if not public.schedule_approval_holds(v_slot) then
+    raise exception 'This post changed after it was approved.' using errcode = 'P0001';
+  end if;
+  -- A new attempt uploads again: the export of what is approved now, never an earlier attempt's file.
+  update public.schedule_slots set status = 'publishing', attempts = attempts + 1, media_task_id = null, updated_at = now()
+  where id = v_slot.id returning * into v_slot;
+  return v_slot;
+end;
+$$;
+
+
+--
+-- Name: publish_status(uuid, text, text, text, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.publish_status(p_slot uuid, p_status text, p_external_id text DEFAULT NULL::text, p_url text DEFAULT NULL::text, p_error jsonb DEFAULT NULL::jsonb, p_zernio_account_id text DEFAULT NULL::text) RETURNS public.schedule_slots
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots;
+  v_d public.deliverables;
+  v_url text := case when p_url ~ '^https://' and char_length(p_url) <= 500 then p_url end;
+begin
+  if char_length(p_external_id) > 200 then
+    raise exception 'The post id is too long.' using errcode = '22023';
+  end if;
+  if p_slot is not null then
+    select * into v_slot from public.schedule_slots where id = p_slot for update;
+  elsif nullif(trim(coalesce(p_external_id, '')), '') is not null then
+    select * into v_slot from public.schedule_slots where external_id = p_external_id order by updated_at desc limit 1 for update;
+  end if;
+  if v_slot.id is null then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  if p_zernio_account_id is not null and not exists (select 1 from public.social_accounts
+      where id = v_slot.account_id and zernio_account_id = p_zernio_account_id) then
+    raise exception 'That post is not on this account.' using errcode = 'P0001';
+  end if;
+  if v_slot.status in ('published', 'cancelled') then
+    return v_slot;
+  end if;
+  case p_status
+    when 'publishing', 'accepted' then
+      if v_slot.status in ('due', 'publishing') then
+        update public.schedule_slots set status = 'publishing', external_id = coalesce(p_external_id, external_id),
+          updated_at = now()
+        where id = v_slot.id returning * into v_slot;
+      end if;
+    when 'published' then
+      update public.schedule_slots
+      set status = 'published', external_id = coalesce(p_external_id, external_id),
+          external_url = coalesce(v_url, external_url), published_at = now(), lease_until = null, updated_at = now()
+      where id = v_slot.id returning * into v_slot;
+      -- Live: a Retry card left from an earlier failure is done with.
+      perform public.approval_close('schedule_slot', v_slot.id, 'approved');
+      select * into v_d from public.deliverables where id = v_slot.deliverable_id;
+      if v_d.ref_kind = 'content_item' then
+        update public.content_items set status = 'published', published_at = coalesce(published_at, now()),
+          external_url = coalesce(v_url, external_url), updated_at = now()
+        where id = v_d.ref_id and status <> 'published';
+      end if;
+    when 'failed' then
+      if v_slot.status <> 'failed' then
+        if p_error is null or jsonb_typeof(p_error) <> 'object' or jsonb_typeof(p_error->'message') <> 'string' then
+          raise exception 'Say why it failed.' using errcode = '22023';
+        end if;
+        update public.schedule_slots
+        set status = 'failed', lease_until = null, updated_at = now(),
+            error = jsonb_build_object('code', left(coalesce(p_error->>'code', 'failed'), 40),
+              'message', left(p_error->>'message', 500), 'retryable', coalesce(p_error->'retryable', 'true'::jsonb))
+        where id = v_slot.id returning * into v_slot;
+        perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+      end if;
+    when 'intent' then
+      if v_slot.status <> 'failed' then
+        update public.schedule_slots
+        set status = 'failed', mode = 'intent', account_id = null, lease_until = null, updated_at = now(),
+            error = jsonb_build_object('code', 'no_account', 'retryable', true,
+              'message', 'No connected ' || public.schedule_platform_label(v_slot.platform)
+                || ' account: copy it and post it yourself, or connect the account and retry.')
+        where id = v_slot.id returning * into v_slot;
+        perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+      end if;
+    else
+      raise exception 'Unknown post status.' using errcode = '22023';
+  end case;
+  return v_slot;
+end;
+$$;
+
+
+--
 -- Name: purge_expired_jobs(uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7451,6 +7777,10 @@ begin
       or (p_bucket = 'draft' and p_limit = 120 and p_window_seconds = 60)
       or (p_bucket = 'project-write' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'mcp' and p_limit = 600 and p_window_seconds = 3600)
+      -- P4: connecting and disconnecting social accounts (each call reaches Zernio).
+      or (p_bucket = 'accounts' and p_limit = 30 and p_window_seconds = 3600)
+      -- P4: moving a slot on the calendar and "I posted it" (`/api/v1/schedule/slots/[id]`).
+      or (p_bucket = 'schedule' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'editor-write' and p_limit = 240 and p_window_seconds = 60)
       or (p_bucket = 'zip' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
@@ -8790,6 +9120,609 @@ $$;
 
 
 --
+-- Name: schedule_approval_holds(public.schedule_slots); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_approval_holds(p_slot public.schedule_slots) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.approvals a
+    where a.id = p_slot.approval_id and a.ref_kind = 'schedule_slot' and a.ref_id = p_slot.id
+      and a.status in ('approved', 'edited')
+      and a.content_hash = public.approval_hash(public.approval_snapshot('schedule_slot', p_slot.id)))
+$$;
+
+
+--
+-- Name: schedule_change(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_change(p_slot uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_slot public.schedule_slots;
+  v_rules jsonb := public.schedule_rules();
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_at timestamptz;
+  v_account public.social_accounts;
+  v_row public.approvals;
+begin
+  select * into v_slot from public.schedule_slots where id = p_slot and user_id = v_user for update;
+  if not found then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  if v_slot.status not in ('proposed', 'waiting', 'failed') then
+    raise exception 'This post is already on its way.' using errcode = 'P0001';
+  end if;
+  case p_action
+    when 'change_time' then
+      begin
+        v_at := (v_payload->>'publish_at')::timestamptz;
+      exception when others then
+        v_at := null;
+      end;
+      if v_at is null or v_payload->>'publish_at' !~ '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$' then
+        raise exception 'Pick a time, with its time zone.' using errcode = '22023';
+      end if;
+      if v_at < now() + interval '5 minutes' or v_at > now() + interval '60 days' then
+        raise exception 'Pick a time between five minutes and 60 days from now.' using errcode = '22023';
+      end if;
+      if public.schedule_day_count(v_user, v_slot.platform, v_at, v_slot.id)
+         >= (v_rules->'platforms'->v_slot.platform->>'dailyCap')::integer then
+        raise exception 'That day already has % posts on %.', (v_rules->'platforms'->v_slot.platform->>'dailyCap'),
+          public.schedule_platform_label(v_slot.platform) using errcode = 'P0001';
+      end if;
+      v_slot.publish_at := v_at;
+      v_slot.window_ends_at := v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer);
+      v_slot.jitter_seconds := public.schedule_jitter();
+    when 'change_account' then
+      if v_payload->>'account_id' is null then
+        v_slot.account_id := null;
+        v_slot.mode := 'intent';
+      else
+        select * into v_account from public.social_accounts
+        where id::text = v_payload->>'account_id' and user_id = v_user and platform = v_slot.platform and status = 'connected';
+        if not found then
+          raise exception 'Choose one of your connected % accounts.', public.schedule_platform_label(v_slot.platform)
+            using errcode = '22023';
+        end if;
+        v_slot.account_id := v_account.id;
+        v_slot.mode := 'publish';
+      end if;
+    when 'set_options' then
+      v_slot.options := public.schedule_options_merge(v_slot.platform, v_slot.options, v_payload->'options');
+      if octet_length(v_slot.options::text) > 1024 then
+        raise exception 'The platform settings are too long.' using errcode = '22023';
+      end if;
+    else
+      raise exception 'Choose a new time, another account or the platform settings.' using errcode = '22023';
+  end case;
+  begin
+    update public.schedule_slots
+    set publish_at = v_slot.publish_at, window_ends_at = v_slot.window_ends_at, jitter_seconds = v_slot.jitter_seconds,
+        account_id = v_slot.account_id, mode = v_slot.mode, options = v_slot.options,
+        status = 'proposed', error = null, updated_at = now()
+    where id = v_slot.id;
+  exception when unique_violation then
+    raise exception 'This post already has another time on %.', public.schedule_platform_label(v_slot.platform)
+      using errcode = 'P0001';
+  end;
+  perform public.approval_raise(v_user, 'schedule_slot', v_slot.id);
+  select * into v_row from public.approvals where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
+  return v_row;
+end;
+$_$;
+
+
+--
+-- Name: schedule_claim_due(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_claim_due() RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots;
+  v_root public.work_orders;
+  v_order public.work_orders;
+  v_missed integer := 0;
+  v_fired integer := 0;
+  v_reminded integer := 0;
+  v_failed integer := 0;
+  v_unconfirmed integer := 0;
+begin
+  -- Never late: past its window, a slot that has not started posting is missed.
+  for v_slot in
+    select s.* from public.schedule_slots s
+    where s.status in ('proposed', 'waiting', 'due') and s.window_ends_at <= now() and not public.cmo_paused(s.user_id)
+    order by s.publish_at limit 200
+    for update skip locked
+  loop
+    perform public.schedule_miss(v_slot, case when v_slot.status = 'proposed' then null
+      else 'It could not go out within its time window.' end);
+    v_missed := v_missed + 1;
+  end loop;
+
+  for v_slot in
+    select s.* from public.schedule_slots s
+    where s.status = 'waiting' and s.publish_at + make_interval(secs => s.jitter_seconds) <= now()
+      and now() < s.window_ends_at and not public.cmo_paused(s.user_id)
+    order by s.publish_at limit 100
+    for update skip locked
+  loop
+    -- Approved, then changed (the words, the video, the account): never post what the founder did not see.
+    if not public.schedule_approval_holds(v_slot) then
+      perform public.schedule_miss(v_slot, 'It changed after you approved it.');
+      v_missed := v_missed + 1;
+      continue;
+    end if;
+    -- No connected account: the founder posts it. Their card (copy and open, "I posted it") comes now and waits for
+    -- them, unlike a time card: the words are theirs to post whenever they get to it.
+    if v_slot.mode = 'intent' then
+      perform public.publish_status(v_slot.id, 'intent');
+      update public.approvals set expires_at = null
+      where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
+      v_reminded := v_reminded + 1;
+      continue;
+    end if;
+    begin
+      v_root := public.work_order_week_root(v_slot.user_id);
+      v_order := public.work_order_create(v_slot.user_id, v_root.week, v_root.id, 'publish_post',
+        'Post on ' || public.schedule_platform_label(v_slot.platform),
+        jsonb_build_object('objective', 'Post the approved ' || public.schedule_platform_label(v_slot.platform) || ' post at its time.',
+          'slot_id', v_slot.id),
+        0, v_slot.window_ends_at, '{}', 'event', null, 'publish');
+      perform public.cmo_enqueue(v_slot.user_id, 'publish_post',
+        jsonb_build_object('slot_id', v_slot.id, 'order_id', v_order.id, 'source', 'event'));
+      -- The lease lasts as long as the window: nothing else claims it, and it never fires after.
+      update public.schedule_slots set status = 'due', lease_until = window_ends_at, updated_at = now() where id = v_slot.id;
+      v_fired := v_fired + 1;
+    exception when others then
+      update public.schedule_slots
+      set status = 'failed', updated_at = now(),
+          error = jsonb_build_object('code', 'not_started', 'message', left('It could not start: ' || sqlerrm, 500))
+      where id = v_slot.id;
+      perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+      v_failed := v_failed + 1;
+    end;
+  end loop;
+
+  -- Zernio took a post but never confirmed it an hour after its window: say so, and never post it again by ourselves.
+  -- Its card waits for the founder (no expiry): "It went out" or a new time, never a blind Retry.
+  for v_slot in
+    select s.* from public.schedule_slots s
+    where s.status = 'publishing' and s.window_ends_at + interval '1 hour' <= now()
+    for update skip locked
+  loop
+    update public.schedule_slots
+    set status = 'failed', lease_until = null, updated_at = now(),
+        error = jsonb_build_object('code', 'unconfirmed', 'retryable', false,
+          'message', 'We could not confirm it went out. Check your account before posting it again.')
+    where id = v_slot.id;
+    perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    update public.approvals set expires_at = null
+    where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
+    v_unconfirmed := v_unconfirmed + 1;
+  end loop;
+
+  return jsonb_build_object('fired', v_fired, 'reminded', v_reminded, 'missed', v_missed, 'failed', v_failed,
+    'unconfirmed', v_unconfirmed);
+end;
+$$;
+
+
+--
+-- Name: schedule_content(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_content(p_deliverable uuid, p_platform text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_d public.deliverables;
+  v_text text;
+  v_title text;
+  v_doc text;
+begin
+  select * into v_d from public.deliverables where id = p_deliverable;
+  if not found then
+    return null;
+  end if;
+  if v_d.ref_kind = 'content_item' then
+    select coalesce(body->>'text', '') into v_text from public.content_items where id = v_d.ref_id;
+    return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
+      'content_hash', public.approval_hash(jsonb_build_object('text', v_text)));
+  elsif v_d.ref_kind = 'clip' then
+    select public.editor_document_hash(document) into v_doc from public.editor_projects where clip_id = v_d.ref_id;
+    select body->>'text', body->>'title' into v_text, v_title
+    from public.content_items
+    where clip_id = v_d.ref_id and department = 'video' and platform = public.platform_profile_id(p_platform)
+      and status in ('approved', 'published');
+    return jsonb_build_object('clip_id', v_d.ref_id, 'text', v_text, 'title', v_title,
+      'content_hash', public.approval_hash(jsonb_strip_nulls(jsonb_build_object('document_hash', v_doc, 'text', v_text,
+        'title', v_title))));
+  end if;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: schedule_day_count(uuid, text, timestamp with time zone, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_day_count(p_user uuid, p_platform text, p_at timestamp with time zone, p_except uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*)::integer from public.schedule_slots
+  where user_id = p_user and platform = p_platform and id is distinct from p_except
+    and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+    and (publish_at at time zone public.schedule_timezone(p_user))::date
+      = (p_at at time zone public.schedule_timezone(p_user))::date
+$$;
+
+
+--
+-- Name: schedule_follow_content(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_follow_content() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_deliverable uuid;
+begin
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+  begin
+    if new.status = 'approved' and new.department = 'video' and new.clip_id is not null then
+      select id into v_deliverable from public.deliverables
+      where ref_kind = 'clip' and ref_id = new.clip_id and kind = 'short' and user_id = new.user_id;
+      if v_deliverable is not null then
+        perform public.schedule_propose(v_deliverable);
+      end if;
+    elsif new.status = 'published' and new.department = 'post' then
+      -- Posted by hand (copy and open, or marked posted): what still waits for its time is dropped with its card.
+      update public.approvals a set status = 'cancelled', decided_at = now()
+      from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+      where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'
+        and d.ref_kind = 'content_item' and d.ref_id = new.id and s.status in ('proposed', 'waiting');
+      update public.schedule_slots s set status = 'cancelled', updated_at = now()
+      from public.deliverables d
+      where d.id = s.deliverable_id and d.ref_kind = 'content_item' and d.ref_id = new.id
+        and s.status in ('proposed', 'waiting');
+    end if;
+  exception when others then
+    raise warning 'schedule rule for content item % failed: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: schedule_follow_deliverable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_follow_deliverable() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if (new.kind = 'post' and new.status = 'decided' and (tg_op = 'INSERT' or old.status is distinct from 'decided'))
+     or (new.kind = 'short' and tg_op = 'INSERT') then
+    begin
+      perform public.schedule_propose(new.id);
+    exception when others then
+      -- Scheduling is never a reason to undo the founder's approval of the work itself.
+      raise warning 'schedule rule for deliverable % failed: %', new.id, sqlerrm;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: schedule_jitter(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_jitter() RETURNS integer
+    LANGUAGE sql
+    SET search_path TO 'public'
+    AS $$ select (round((random() * 2 - 1) * (public.schedule_rules()->>'jitterSeconds')::integer))::integer $$;
+
+
+--
+-- Name: schedule_mark_posted(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_mark_posted(p_slot uuid) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_slot public.schedule_slots;
+  v_d public.deliverables;
+  v_row public.approvals;
+begin
+  select * into v_slot from public.schedule_slots where id = p_slot and user_id = v_user for update;
+  if not found then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  if v_slot.status <> 'published' then
+    -- A post the founder posted themselves, or one we could not confirm that they checked is live.
+    if not ((v_slot.mode = 'intent' and v_slot.status in ('failed', 'reminded'))
+            or (v_slot.status = 'failed' and v_slot.error->>'code' = 'unconfirmed')) then
+      raise exception 'Only a post you copy and post yourself can be marked as posted.' using errcode = 'P0001';
+    end if;
+    update public.schedule_slots
+    set status = 'published', published_at = now(), lease_until = null, error = null, updated_at = now()
+    where id = v_slot.id;
+    perform public.approval_close('schedule_slot', v_slot.id, 'approved');
+    select * into v_d from public.deliverables where id = v_slot.deliverable_id;
+    if v_d.ref_kind = 'content_item' then
+      update public.content_items set status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
+      where id = v_d.ref_id and user_id = v_user and status <> 'published';
+    end if;
+  end if;
+  select * into v_row from public.approvals
+  where ref_kind = 'schedule_slot' and ref_id = v_slot.id order by created_at desc limit 1;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: schedule_miss(public.schedule_slots, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_miss(p_slot public.schedule_slots, p_reason text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_new public.schedule_slots;
+begin
+  update public.schedule_slots
+  set status = 'missed', lease_until = null, updated_at = now(),
+      error = case when p_reason is null then error else jsonb_build_object('code', 'missed', 'message', p_reason) end
+  where id = p_slot.id;
+  update public.approvals set status = 'expired', decided_at = now()
+  where ref_kind = 'schedule_slot' and ref_id = p_slot.id and status = 'waiting';
+  begin
+    perform public.schedule_propose(p_slot.deliverable_id);
+    -- The new card says why it asks again (the slot keeps it in `last_error`).
+    if p_reason is not null then
+      for v_new in select * from public.schedule_slots
+        where deliverable_id = p_slot.deliverable_id and platform = p_slot.platform and status = 'proposed' and id <> p_slot.id
+      loop
+        update public.schedule_slots set error = jsonb_build_object('code', 'missed', 'message', p_reason) where id = v_new.id;
+        perform public.approval_raise(v_new.user_id, 'schedule_slot', v_new.id);
+      end loop;
+    end if;
+  exception when others then
+    raise warning 'schedule: could not propose again for slot %: %', p_slot.id, sqlerrm;
+  end;
+end;
+$$;
+
+
+--
+-- Name: schedule_options_merge(text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_options_merge(p_platform text, p_current jsonb, p_new jsonb) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_key text;
+  v_value jsonb;
+begin
+  if p_new is null or jsonb_typeof(p_new) <> 'object' then
+    raise exception 'The platform settings are malformed.' using errcode = '22023';
+  end if;
+  for v_key, v_value in select key, value from jsonb_each(p_new) loop
+    if v_key not in ('privacy', 'allow_comment', 'allow_duet', 'allow_stitch', 'brand_organic', 'brand_content', 'ai_label') then
+      raise exception 'Unknown platform setting "%".', left(v_key, 40) using errcode = '22023';
+    end if;
+    if v_key <> 'ai_label' and p_platform <> 'tiktok' then
+      raise exception 'That setting is only for TikTok.' using errcode = '22023';
+    end if;
+    if v_key = 'privacy' then
+      if jsonb_typeof(v_value) <> 'string' or v_value #>> '{}' not in
+         ('PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY') then
+        raise exception 'Choose who can see it from TikTok''s list.' using errcode = '22023';
+      end if;
+    elsif jsonb_typeof(v_value) <> 'boolean' then
+      raise exception 'A platform toggle is on or off.' using errcode = '22023';
+    end if;
+  end loop;
+  return coalesce(p_current, '{}'::jsonb) || p_new;
+end;
+$$;
+
+
+--
+-- Name: schedule_pick_time(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_pick_time(p_user uuid, p_platform text, p_deliverable uuid) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rules jsonb := public.schedule_rules();
+  v_tz text := public.schedule_timezone(p_user);
+  v_gap interval := make_interval(hours => (v_rules->>'minGapHours')::integer);
+  v_earliest timestamptz := now() + make_interval(mins => (v_rules->>'leadMinutes')::integer);
+  v_cap integer := (v_rules->'platforms'->p_platform->>'dailyCap')::integer;
+  v_today date := (now() at time zone v_tz)::date;
+  v_parent uuid;
+  v_day integer;
+  v_time text;
+  v_at timestamptz;
+begin
+  if v_cap is null then
+    return null;
+  end if;
+  select c.parent_clip_id into v_parent
+  from public.deliverables d join public.clips c on c.id = d.ref_id
+  where d.id = p_deliverable and d.ref_kind = 'clip';
+  for v_day in 0 .. (v_rules->>'horizonDays')::integer loop
+    for v_time in select jsonb_array_elements_text(v_rules->'platforms'->p_platform->'times') loop
+      v_at := ((v_today + v_day) + v_time::time) at time zone v_tz;
+      continue when v_at < v_earliest;
+      continue when exists (select 1 from public.schedule_slots
+        where user_id = p_user and platform = p_platform
+          and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+          and publish_at > v_at - v_gap and publish_at < v_at + v_gap);
+      continue when public.schedule_day_count(p_user, p_platform, v_at, null) >= v_cap;
+      continue when v_parent is not null and exists (select 1 from public.schedule_slots s
+        join public.deliverables d on d.id = s.deliverable_id
+        where s.user_id = p_user and s.platform = p_platform and d.ref_kind = 'clip' and d.ref_id = v_parent
+          and s.status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+          and (s.publish_at at time zone v_tz)::date = (v_at at time zone v_tz)::date);
+      return v_at;
+    end loop;
+  end loop;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: schedule_platform_label(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_platform_label(p_platform text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_platform when 'x' then 'X' when 'threads' then 'Threads' when 'linkedin' then 'LinkedIn'
+    when 'tiktok' then 'TikTok' when 'instagram' then 'Instagram' when 'youtube' then 'YouTube' else p_platform end
+$$;
+
+
+--
+-- Name: schedule_propose(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_propose(p_deliverable uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_d public.deliverables;
+  v_rules jsonb := public.schedule_rules();
+  v_platform text;
+  v_platforms text[];
+  v_at timestamptz;
+  v_account uuid;
+  v_slot uuid;
+  v_n integer := 0;
+begin
+  select * into v_d from public.deliverables where id = p_deliverable;
+  if not found then
+    return 0;
+  end if;
+  if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
+    -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
+    select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
+    where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
+  elsif v_d.kind = 'short' and v_d.ref_kind = 'clip' then
+    select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
+    where exists (select 1 from public.content_items c
+      where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'
+        and c.platform = public.platform_profile_id(p));
+  end if;
+  foreach v_platform in array coalesce(v_platforms, '{}') loop
+    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
+      and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published'));
+    -- A failure still in its window waits on its Retry card; an unconfirmed one may have gone out. Neither gets a twin.
+    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
+      and status = 'failed' and (window_ends_at > now() or error->>'code' = 'unconfirmed'));
+    continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
+      >= (v_rules->>'maxProposals')::integer;
+    v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
+    continue when v_at is null;
+    select id into v_account from public.social_accounts
+    where user_id = v_d.user_id and platform = v_platform and status = 'connected';
+    -- TikTok's posting guidelines: the founder picks the audience and turns on each interaction and disclosure;
+    -- nothing starts on.
+    insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, jitter_seconds,
+      window_ends_at, options)
+    values (v_d.user_id, v_d.id, v_platform, v_account, case when v_account is null then 'intent' else 'publish' end,
+      v_at, public.schedule_jitter(), v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer),
+      case when v_platform = 'tiktok' then '{"allow_comment": false, "allow_duet": false, "allow_stitch": false,
+        "brand_organic": false, "brand_content": false}'::jsonb else '{}'::jsonb end)
+    returning id into v_slot;
+    perform public.approval_raise(v_d.user_id, 'schedule_slot', v_slot);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: schedule_ready_check(public.schedule_slots); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_ready_check(p_slot public.schedule_slots) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_slot.mode = 'intent' then
+    if p_slot.platform in ('tiktok', 'instagram', 'youtube') then
+      raise exception 'Connect your % account to post this.', public.schedule_platform_label(p_slot.platform)
+        using errcode = 'P0001';
+    end if;
+    return;
+  end if;
+  if not exists (select 1 from public.social_accounts where id = p_slot.account_id and status = 'connected') then
+    raise exception 'Reconnect your % account first.', public.schedule_platform_label(p_slot.platform) using errcode = 'P0001';
+  end if;
+  if p_slot.platform = 'tiktok' and jsonb_typeof(p_slot.options->'privacy') is distinct from 'string' then
+    raise exception 'Choose who can see it on TikTok.' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: schedule_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_rules() RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+
+
+--
+-- Name: schedule_timezone(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_timezone(p_user uuid) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select coalesce((select timezone from public.profiles where id = p_user), 'UTC') $$;
+
+
+--
 -- Name: send_feedback(text, text, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9235,6 +10168,120 @@ begin
   return v_revision;
 end;
 $_$;
+
+
+--
+-- Name: social_account_mark(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_mark(p_zernio_account_id text, p_status text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_account public.social_accounts;
+  v_slot public.schedule_slots;
+  v_n integer := 0;
+begin
+  if p_status not in ('connected', 'disconnected', 'error') then
+    raise exception 'Unknown account status.' using errcode = '22023';
+  end if;
+  update public.social_accounts set status = p_status, updated_at = now()
+  where zernio_account_id = p_zernio_account_id returning * into v_account;
+  if v_account.id is null or p_status = 'connected' then
+    return 0;
+  end if;
+  for v_slot in select * from public.schedule_slots where account_id = v_account.id and status = 'waiting' for update loop
+    update public.schedule_slots set status = 'proposed', updated_at = now() where id = v_slot.id;
+    perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: social_account_remove(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_remove(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_slots uuid[];
+  v_slot uuid;
+begin
+  if not exists (select 1 from public.social_accounts where id = p_id and user_id = v_user) then
+    raise exception 'Account not found.' using errcode = 'P0002';
+  end if;
+  -- Its slots not yet posting ask again without it: copy and open where the platform allows, else "connect it".
+  with moved as (
+    update public.schedule_slots
+    set account_id = null, mode = 'intent', status = 'proposed', updated_at = now()
+    where account_id = p_id and user_id = v_user and status in ('proposed', 'waiting')
+    returning id
+  )
+  select coalesce(array_agg(id), '{}') into v_slots from moved;
+  delete from public.social_accounts where id = p_id and user_id = v_user;
+  foreach v_slot in array v_slots loop
+    perform public.approval_raise(v_user, 'schedule_slot', v_slot);
+  end loop;
+end;
+$$;
+
+
+--
+-- Name: social_accounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.social_accounts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider text DEFAULT 'zernio'::text NOT NULL,
+    platform text NOT NULL,
+    handle text NOT NULL,
+    avatar_url text,
+    zernio_account_id text NOT NULL,
+    status text DEFAULT 'connected'::text NOT NULL,
+    connected_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT social_accounts_avatar_url_check CHECK (((avatar_url ~ '^https://'::text) AND (char_length(avatar_url) <= 1000))),
+    CONSTRAINT social_accounts_handle_check CHECK (((char_length(handle) >= 1) AND (char_length(handle) <= 100))),
+    CONSTRAINT social_accounts_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT social_accounts_provider_check CHECK ((provider = 'zernio'::text)),
+    CONSTRAINT social_accounts_status_check CHECK ((status = ANY (ARRAY['connected'::text, 'disconnected'::text, 'error'::text]))),
+    CONSTRAINT social_accounts_zernio_account_id_check CHECK (((char_length(zernio_account_id) >= 1) AND (char_length(zernio_account_id) <= 100)))
+);
+
+
+--
+-- Name: social_account_save(uuid, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_save(p_user uuid, p_platform text, p_handle text, p_avatar_url text, p_zernio_account_id text) RETURNS public.social_accounts
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.social_accounts;
+begin
+  if not exists (select 1 from public.zernio_profiles where user_id = p_user) then
+    raise exception 'Connect starts with a Zernio profile.' using errcode = 'P0001';
+  end if;
+  insert into public.social_accounts (user_id, platform, handle, avatar_url, zernio_account_id)
+  values (p_user, p_platform, left(trim(p_handle), 100), nullif(trim(coalesce(p_avatar_url, '')), ''), p_zernio_account_id)
+  on conflict (user_id, platform) do update
+    set handle = excluded.handle, avatar_url = excluded.avatar_url, zernio_account_id = excluded.zernio_account_id,
+        status = 'connected', connected_at = case when social_accounts.zernio_account_id = excluded.zernio_account_id
+          then social_accounts.connected_at else now() end,
+        updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
 
 
 --
@@ -10310,7 +11357,7 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
     when 'build_video' then 'studio' when 'cut_shorts' then 'studio'
-    when 'write_caption' then 'writer' when 'write_video_brief' then 'writer' when 'write_slides' then 'writer'
+    when 'publish_post' then 'publish' when 'write_caption' then 'writer' when 'write_video_brief' then 'writer' when 'write_slides' then 'writer'
     else 'brain' end
 $$;
 
@@ -10952,6 +11999,42 @@ begin
     perform public.work_order_move(p_order.id, 'failed', null, jsonb_build_object('code', 'not_started',
       'message', left(sqlerrm, 200), 'retryable', true));
   end;
+end;
+$$;
+
+
+--
+-- Name: zernio_profile_save(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.zernio_profile_save(p_user uuid, p_profile text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.zernio_profiles (user_id, zernio_profile_id) values (p_user, p_profile)
+  on conflict (user_id) do nothing;
+  if not exists (select 1 from public.zernio_profiles where user_id = p_user and zernio_profile_id = p_profile) then
+    raise exception 'This founder already has another Zernio profile.' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: zernio_receipt_claim(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.zernio_receipt_claim(p_event_id text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_event_id is null or char_length(p_event_id) not between 1 and 200 then
+    raise exception 'The event id is not valid.' using errcode = '22023';
+  end if;
+  insert into public.zernio_receipts (event_id) values (p_event_id) on conflict do nothing;
+  return found;
 end;
 $$;
 
@@ -11712,6 +12795,29 @@ CREATE TABLE public.write_budget_ledger (
 
 
 --
+-- Name: zernio_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.zernio_profiles (
+    user_id uuid NOT NULL,
+    zernio_profile_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT zernio_profiles_zernio_profile_id_check CHECK (((char_length(zernio_profile_id) >= 1) AND (char_length(zernio_profile_id) <= 100)))
+);
+
+
+--
+-- Name: zernio_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.zernio_receipts (
+    event_id text NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT zernio_receipts_event_id_check CHECK (((char_length(event_id) >= 1) AND (char_length(event_id) <= 200)))
+);
+
+
+--
 -- Name: storage_deletions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -12231,6 +13337,22 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: schedule_slots schedule_slots_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: schedule_slots schedule_slots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: short_batches short_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12252,6 +13374,30 @@ ALTER TABLE ONLY public.shorts
 
 ALTER TABLE ONLY public.shorts
     ADD CONSTRAINT shorts_short_clip_id_key UNIQUE (short_clip_id);
+
+
+--
+-- Name: social_accounts social_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: social_accounts social_accounts_user_id_platform_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_user_id_platform_key UNIQUE (user_id, platform);
+
+
+--
+-- Name: social_accounts social_accounts_zernio_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_zernio_account_id_key UNIQUE (zernio_account_id);
 
 
 --
@@ -12348,6 +13494,30 @@ ALTER TABLE ONLY public.worker_draft_initializations
 
 ALTER TABLE ONLY public.worker_operations
     ADD CONSTRAINT worker_operations_pkey PRIMARY KEY (operation_key);
+
+
+--
+-- Name: zernio_profiles zernio_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: zernio_profiles zernio_profiles_zernio_profile_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_zernio_profile_id_key UNIQUE (zernio_profile_id);
+
+
+--
+-- Name: zernio_receipts zernio_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_receipts
+    ADD CONSTRAINT zernio_receipts_pkey PRIMARY KEY (event_id);
 
 
 --
@@ -12792,6 +13962,34 @@ CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, 
 
 
 --
+-- Name: schedule_slots_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_due_idx ON public.schedule_slots USING btree (publish_at) WHERE (status = 'waiting'::text);
+
+
+--
+-- Name: schedule_slots_external_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_external_idx ON public.schedule_slots USING btree (external_id) WHERE (external_id IS NOT NULL);
+
+
+--
+-- Name: schedule_slots_one_live; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX schedule_slots_one_live ON public.schedule_slots USING btree (deliverable_id, platform) WHERE (status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text]));
+
+
+--
+-- Name: schedule_slots_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_user_idx ON public.schedule_slots USING btree (user_id, publish_at);
+
+
+--
 -- Name: short_batches_parent_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13118,6 +14316,20 @@ CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.med
 --
 
 CREATE TRIGGER reject_credit_ledger_change BEFORE DELETE OR UPDATE ON public.credit_ledger FOR EACH ROW EXECUTE FUNCTION public.reject_credit_ledger_change();
+
+
+--
+-- Name: content_items schedule_follow_content; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_follow_content AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.schedule_follow_content();
+
+
+--
+-- Name: deliverables schedule_follow_deliverable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON public.deliverables FOR EACH ROW EXECUTE FUNCTION public.schedule_follow_deliverable();
 
 
 --
@@ -13775,6 +14987,46 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: schedule_slots schedule_slots_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.social_accounts(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_slots schedule_slots_approval_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_approval_id_fkey FOREIGN KEY (approval_id) REFERENCES public.approvals(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_slots schedule_slots_deliverable_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_deliverable_id_fkey FOREIGN KEY (deliverable_id) REFERENCES public.deliverables(id) ON DELETE CASCADE;
+
+
+--
+-- Name: schedule_slots schedule_slots_media_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_media_task_id_fkey FOREIGN KEY (media_task_id) REFERENCES public.tasks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_slots schedule_slots_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: short_batches short_batches_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13828,6 +15080,14 @@ ALTER TABLE ONLY public.shorts
 
 ALTER TABLE ONLY public.shorts
     ADD CONSTRAINT shorts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: social_accounts social_accounts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -14012,6 +15272,14 @@ ALTER TABLE ONLY public.worker_operations
 
 ALTER TABLE ONLY public.write_budget_ledger
     ADD CONSTRAINT write_budget_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: zernio_profiles zernio_profiles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -14387,6 +15655,13 @@ CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO aut
 
 
 --
+-- Name: schedule_slots read own schedule slots; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own schedule slots" ON public.schedule_slots FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: short_batches read own short batches; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -14398,6 +15673,13 @@ CREATE POLICY "read own short batches" ON public.short_batches FOR SELECT TO aut
 --
 
 CREATE POLICY "read own shorts" ON public.shorts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: social_accounts read own social accounts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own social accounts" ON public.social_accounts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -14415,10 +15697,23 @@ CREATE POLICY "read own work orders" ON public.work_orders FOR SELECT TO authent
 
 
 --
+-- Name: zernio_profiles read own zernio profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own zernio profile" ON public.zernio_profiles FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: scene_codes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.scene_codes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schedule_slots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.schedule_slots ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: short_batches; Type: ROW SECURITY; Schema: public; Owner: -
@@ -14431,6 +15726,12 @@ ALTER TABLE public.short_batches ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: social_accounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.social_accounts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: storage_deletions; Type: ROW SECURITY; Schema: public; Owner: -
@@ -14491,6 +15792,18 @@ ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: zernio_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.zernio_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: zernio_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.zernio_receipts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets đọc B-roll của chính mình; Type: POLICY; Schema: public; Owner: -

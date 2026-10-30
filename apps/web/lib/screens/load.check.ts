@@ -1,5 +1,5 @@
 /**
- * The P3 loaders turn real rows into their screen contracts (A3):
+ * The P3 and P4 loaders turn real rows into their screen contracts (A3):
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/screens/load.check.ts
  *
@@ -32,6 +32,7 @@ function stubClient(tables: Record<string, Row[]>, rpcs: Record<string, unknown[
         return q;
       },
       gte: (col: string, value: string) => ((out = out.filter((r) => String(r[col]) >= value)), q),
+      lt: (col: string, value: string) => ((out = out.filter((r) => String(r[col]) < value)), q),
       order: () => q,
       limit: (n: number) => ((out = out.slice(0, n)), q),
       maybeSingle: async () => ({ data: out[0] ?? null, error: null }),
@@ -70,6 +71,7 @@ const tables: Record<string, Row[]> = {
     { id: "card-post", ref_kind: "content_item", ref_id: "p-x", status: "waiting" },
     { id: "card-video", ref_kind: "editor_project", ref_id: "clip-video", status: "waiting" },
     { id: "card-batch", ref_kind: "short_batch", ref_id: "batch-1", status: "waiting" },
+    { id: "card-time", ref_kind: "schedule_slot", ref_id: "sl-wait", status: "waiting" },
   ],
   shorts: [{ short_clip_id: "clip-short", batch_id: "batch-1", created_at: now }],
   cmo_corrections: [
@@ -82,6 +84,20 @@ const tables: Record<string, Row[]> = {
   editor_skills: [{ id: "sk-1", name: "demo-cut", description: "How I cut a product demo", created_at: now }],
   cmo_runs: [{ kind: "onboard", input: { site: "https://opencmo.io/" }, created_at: now }],
   brand_kits: [],
+  profiles: [{ id: "u", timezone: "Asia/Ho_Chi_Minh", weekly_credit_budget: 50, digest_hour: null, cmo_paused_at: null, plan: "free" }],
+  social_accounts: [
+    { id: "acc-x", platform: "x", handle: "@founder", avatar_url: "https://pbs.example/x.png", status: "connected", updated_at: now },
+    { id: "acc-tt", platform: "tiktok", handle: "@founder", avatar_url: null, status: "error", updated_at: now },
+  ],
+  // Embedded relations come back nested, as PostgREST returns them.
+  schedule_slots: [
+    { id: "sl-wait", platform: "x", status: "proposed", publish_at: `${today}T02:00:00Z`, error: null, approval_id: "card-time", account: { handle: "@founder" }, deliverable: { kind: "post", ref_kind: "content_item", ref_id: "p-li" } },
+    { id: "sl-ok", platform: "x", status: "published", publish_at: `${today}T05:00:00Z`, error: null, approval_id: "card-old", account: { handle: "@founder" }, deliverable: { kind: "post", ref_kind: "content_item", ref_id: "p-x" } },
+    { id: "sl-miss", platform: "tiktok", status: "missed", publish_at: `${today}T09:00:00Z`, error: null, approval_id: null, account: null, deliverable: { kind: "short", ref_kind: "clip", ref_id: "clip-short" } },
+    { id: "sl-gone", platform: "x", status: "cancelled", publish_at: `${today}T10:00:00Z`, error: null, approval_id: null, account: null, deliverable: { kind: "post", ref_kind: "content_item", ref_id: "p-th" } },
+    { id: "sl-far", platform: "x", status: "waiting", publish_at: "2099-01-01T09:00:00Z", error: null, approval_id: null, account: null, deliverable: null },
+  ],
+  clips: [{ id: "clip-short", hook: "Cut by words" }],
 };
 
 const rpcs: Record<string, unknown[]> = {
@@ -129,7 +145,36 @@ async function main(): Promise<void> {
   assert.deepEqual(library.data.skills.video.filter((s) => s.origin === "yours").map((s) => s.name), ["demo-cut"], "and the founder's own");
   assert.equal(library.data.site, "opencmo.io");
 
-  console.log("load.check: Writer and Library loaders ok");
+  // P4 A3: Schedule reads this week's slots in the founder's time; Settings lists every platform to connect.
+  const week = new URLSearchParams({ from: today });
+  const sched = compose("schedule", (await LOADERS.schedule!({ ...(ctx as object), params: week } as never)) as never, { production: true, sample: false });
+  assert.ok(sched.live.slots && sched.live.accounts && sched.live.timezone, "Schedule's slots, accounts and timezone are live");
+  assert.equal(sched.data.timezone, "Asia/Ho_Chi_Minh");
+  // The week starts at Monday midnight in Ho Chi Minh (17:00 UTC on Sunday), not at UTC midnight.
+  assert.match(sched.data.from, /T17:00:00(\.000)?Z$/, "the week starts at the founder's Monday midnight");
+  assert.equal(new Date(sched.data.from).getUTCDay(), 0);
+  assert.deepEqual(
+    sched.data.slots.map((x) => [x.id, x.status, x.note, x.approvalId]),
+    [
+      ["sl-wait", "waiting_founder", null, "card-time"],
+      ["sl-ok", "posted", null, null],
+      ["sl-miss", "failed", "missed", null],
+    ],
+    "a card waiting makes it the founder's turn; cancelled and other weeks are left out",
+  );
+  assert.deepEqual(sched.data.slots.map((x) => x.title), ["Week one, longer.", "Week one.", "Short · Cut by words"]);
+  assert.deepEqual(sched.data.accounts.map((a) => [a.platform, a.status]), [["x", "connected"], ["tiktok", "reconnect"]], "only accounts the founder has");
+  assert.ok(sched.data.rules.some((r) => r.includes("5 posts a day on X")));
+
+  const settings = compose("settings", (await LOADERS.settings!(ctx)) as never, { production: true, sample: false });
+  assert.ok(settings.live.accounts, "Settings → Accounts is live");
+  assert.deepEqual(
+    settings.data.accounts.map((a) => [a.platform, a.status, a.avatarUrl ?? null]),
+    [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null], ["instagram", "not_connected", null]],
+    "every platform OpenCMO posts to, in one order",
+  );
+
+  console.log("load.check: Writer, Library, Schedule and Settings loaders ok");
 }
 
 main().catch((err) => {

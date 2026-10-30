@@ -45,6 +45,7 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   summarize_memory: "Memory summary",
   competitor_research: "Competitor research",
   pull_metrics: "Post metrics",
+  publish_post: "Scheduled post",
 };
 
 /** Longest a poll waits inside one request: Modal cuts web requests at 150 s. */
@@ -114,7 +115,7 @@ const getInput = z.object({
   id: z.string().uuid(),
   wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional().describe(`Up to ${MAX_WAIT_SECONDS}: wait while a submitted answer is being checked.`),
 });
-const rubricInput = z.object({ kind: z.enum(CMO_JOB_KINDS.filter((kind) => kind !== "pull_metrics") as [CmoJobKind, ...CmoJobKind[]]) });
+const rubricInput = z.object({ kind: z.enum(CMO_JOB_KINDS.filter((kind) => kind !== "pull_metrics" && kind !== "publish_post") as [CmoJobKind, ...CmoJobKind[]]) });
 
 async function listInbox(_input: unknown, { supabase }: CmoToolContext) {
   const { data, error } = await supabase.rpc("inbox_list");

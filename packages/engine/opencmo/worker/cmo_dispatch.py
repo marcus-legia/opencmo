@@ -80,6 +80,31 @@ def count_studio_work(supabase_url: str, service_role_key: str, *, client: httpx
             http.close()
 
 
+def claim_due_slots(supabase_url: str, service_role_key: str, *, client: httpx.Client | None = None) -> dict:
+    """Fire the schedule slots whose time has come (`schedule_claim_due`, P4 A2).
+
+    SQL does the work: past-window slots are missed, due ones become `publish_post` runs that `dispatch` then sends.
+    Returns its counts. A database without the function (before its migration) claims nothing rather than failing
+    the sweep.
+    """
+    own = client is None
+    http = client or httpx.Client(timeout=_CALL_TIMEOUT)
+    try:
+        resp = http.post(
+            f"{supabase_url.rstrip('/')}/rest/v1/rpc/schedule_claim_due",
+            json={},
+            headers={"apikey": service_role_key, "Authorization": f"Bearer {service_role_key}"},
+        )
+        if resp.status_code == 404:
+            return {}
+        resp.raise_for_status()
+        body = resp.json()
+        return body if isinstance(body, dict) else {}
+    finally:
+        if own:
+            http.close()
+
+
 def dispatch(web_url: str, secret: str, count: int, *, client: httpx.Client | None = None) -> int:
     """Calls the run route `count` times in parallel. Returns how many calls were accepted."""
     count = max(0, min(count, MAX_DISPATCH))

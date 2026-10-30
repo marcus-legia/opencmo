@@ -83,12 +83,20 @@ export const SCREENS = {
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
   // Mentions and the stuck banner come with Sales safety (R1).
   sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week"], release: ["threads", "week"] }),
-  schedule: entry({ schema: ScheduleScreenSchema, fixture: scheduleFixture, empty: scheduleEmpty, live: [], release: ["slots", "accounts"] }),
+  // P4 A3: slots, accounts and rules read schedule_slots and social_accounts.
+  schedule: entry({
+    schema: ScheduleScreenSchema,
+    fixture: scheduleFixture,
+    empty: scheduleEmpty,
+    live: ["timezone", "from", "to", "slots", "accounts", "rules"],
+    release: ["slots", "accounts"],
+  }),
   settings: entry({
     schema: SettingsScreenSchema,
     fixture: settingsFixture,
     empty: settingsEmpty,
-    live: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
+    // P4 A3: accounts read social_accounts (every publish platform, connected or not).
+    live: ["accounts", "cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
     release: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
   }),
   setup: entry({ schema: SetupScreenSchema, fixture: setupFixture, empty: setupEmpty, live: [], release: ["site", "step", "done", "documents"] }),

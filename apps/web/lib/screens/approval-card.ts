@@ -275,12 +275,105 @@ const SlideshowBody = z.object({
   formats: z.array(z.enum(["mp4", "png"])).min(1),
 });
 
+/**
+ * The platform's own fields on a schedule card (P4 F4), stored on the slot (`schedule_slots.options`) and part of what
+ * the founder approves. TikTok's privacy and interaction toggles come from the account's creator info; the
+ * AI-generated label is the founder's toggle on every platform, off by default (owner, 2026-10-26).
+ */
+export const ScheduleOptionsSchema = z
+  .object({
+    /** One of the account's privacy levels from TikTok creator info (`PUBLIC_TO_EVERYONE`…); TikTok only. */
+    privacy: z.string().max(40).optional(),
+    allow_comment: z.boolean().optional(),
+    allow_duet: z.boolean().optional(),
+    allow_stitch: z.boolean().optional(),
+    /** TikTok's commercial content disclosure: promoting the founder's own business, or a paid partnership. */
+    brand_organic: z.boolean().optional(),
+    brand_content: z.boolean().optional(),
+    ai_label: z.boolean().optional(),
+  })
+  .strict();
+export type ScheduleOptions = z.infer<typeof ScheduleOptionsSchema>;
+
+/**
+ * What `approval_snapshot('schedule_slot', …)` (SQL, 20261230090000) stores, field for field: the content going out,
+ * the time in UTC, the account and the platform fields. `content_hash` covers the words (and the edit for a video), so
+ * editing either after approving supersedes the card; jitter is not part of it.
+ */
+export const ScheduleSnapshotSchema = z.object({
+  kind: z.literal("schedule"),
+  slot_id: z.string(),
+  deliverable_id: z.string(),
+  deliverable_kind: z.enum(["post", "video", "short", "slideshow"]),
+  platform: PlatformSchema.exclude(["reddit"]),
+  /** `intent`: no connected account for the platform, so the founder copies and opens it themselves. */
+  mode: z.enum(["publish", "intent"]),
+  account_id: z.string().nullable(),
+  handle: z.string().max(100).nullable(),
+  /** UTC, `YYYY-MM-DDTHH:MM:SSZ`; shown in the founder's timezone. */
+  publish_at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/),
+  options: ScheduleOptionsSchema,
+  /** Why the last attempt failed; set on the card a failed or missed slot raises. */
+  last_error: z.string().max(500).nullable(),
+  /** The edit for a video or short; null for a text post. */
+  clip_id: z.string().nullable(),
+  /** The post, or the video's caption for this platform; null while a video has no caption for it. */
+  text: z.string().max(5000).nullable(),
+  /** The YouTube title; null elsewhere. */
+  title: z.string().max(100).nullable(),
+  content_hash: sha256,
+});
+export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
+
+/**
+ * A schedule time as the routes take it: with its offset, and to the second at most. The card's snapshot keeps whole
+ * seconds, so a fraction would make the approved time never match the slot's.
+ */
+export const PublishAtSchema = z.iso
+  .datetime({ offset: true })
+  .refine((value) => !/\.\d/.test(value), "Pick a time to the minute (no fractions of a second).");
+
+/** `approvals.ref_kind` of a schedule card; `ref_id` is the slot. */
+export const SCHEDULE_REF_KIND = "schedule_slot" as const;
+
 const ScheduleBody = z.object({
   kind: z.literal("schedule"),
+  slotId: z.string(),
   what: z.string().max(200),
   where: WhereSchema,
+  /** The founder's connected account; null = no account for the platform (copy and open instead, F9). */
+  accountId: z.string().nullable(),
+  avatarUrl: z.url().nullable(),
+  mode: z.enum(["publish", "intent"]),
   at: iso,
+  /** IANA name the time is shown and picked in (`profiles.timezone`). */
+  timezone: z.string().max(64),
   why: z.string().max(200).nullable(),
+  /** What goes out: the words, the YouTube title, and the video's signed preview URL (null for a text post). */
+  preview: z.object({ text: z.string().max(5000).nullable(), title: z.string().max(100).nullable(), videoUrl: z.url().nullable() }),
+  options: ScheduleOptionsSchema,
+  /**
+   * TikTok's creator info for the account (read live through the publish adapter, not part of the hash): the privacy
+   * levels the selector offers and the toggles the account has turned off. Null on other platforms.
+   */
+  tiktok: z
+    .object({
+      privacyLevels: z.array(z.string().max(40)).min(1),
+      commentDisabled: z.boolean(),
+      duetDisabled: z.boolean(),
+      stitchDisabled: z.boolean(),
+    })
+    .nullable(),
+  /** The reason the last attempt failed or was missed; the card offers Retry. */
+  lastError: z.string().max(500).nullable(),
+  /**
+   * The slot behind the card (`schedule-enrich.ts`, from `schedule_slots`): `failed` offers Retry, `missed` is a new
+   * time after the old one passed, `no_account` is the copy-and-open moment of a post with no connected account,
+   * `unconfirmed` is a post Zernio took but never confirmed (the founder checks; never a blind Retry).
+   */
+  state: z.enum(["waiting", "failed", "missed", "no_account", "unconfirmed"]),
+  /** The live post, once it went out. */
+  publishedUrl: z.url().nullable(),
 });
 
 const CorrectionBody = z.object({
@@ -369,7 +462,15 @@ export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "sho
 };
 
 /**
- * Kinds whose decision works now (wave 1 A0; P2 A1 Studio steps and the finished video, A3 the shorts batch); the others show their
+ * Schedule actions (`approval_decide`, P4 A1). `approve` and `retry` take the card as it is; `change_time {publish_at}`,
+ * `change_account {account_id}` and `set_options {options}` change the slot and raise a new card (the old one is
+ * superseded); `cancel` drops the slot.
+ */
+export const SCHEDULE_ACTIONS = ["approve", "change_time", "change_account", "set_options", "cancel", "retry"] as const;
+export type ScheduleAction = (typeof SCHEDULE_ACTIONS)[number];
+
+/**
+ * Kinds whose decision works now (wave 1 A0; P2 A1 Studio steps and the finished video, A3 the shorts batch; P4 A1 schedule); the others show their
  * button disabled with the reason. The name stays so `components/cards/decide.ts` keeps reading it.
  */
-export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video", "shorts_batch"]);
+export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video", "shorts_batch", "schedule"]);

@@ -10,6 +10,7 @@ import { profileIdOf, profileOf } from "../cmo/platforms";
 import {
   FinishedVideoSnapshotSchema,
   PriceSnapshotSchema,
+  ScheduleSnapshotSchema,
   ScriptSnapshotSchema,
   ShortsBatchSnapshotSchema,
   type ApprovalCard,
@@ -26,7 +27,7 @@ export type ApprovalRow = {
   id: string;
   kind: CardKind;
   department: Department;
-  ref_kind: "content_item" | "opportunity" | "goal" | "correction" | "studio_step" | "editor_project" | "short_batch";
+  ref_kind: "content_item" | "opportunity" | "goal" | "correction" | "studio_step" | "editor_project" | "short_batch" | "schedule_slot";
   ref_id: string;
   status: ApprovalCard["status"];
   snapshot: Record<string, unknown>;
@@ -54,6 +55,8 @@ function firstSentence(text: string): { head: string; rest: string } {
 }
 
 type Built = Pick<ApprovalCard, "title" | "summary" | "meta" | "body">;
+
+const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
 
 type CaptionRow = { caption_id: string; clip_id: string; profile: string; text: string; title: string | null };
 
@@ -214,8 +217,46 @@ function build(row: ApprovalRow): Built | null {
         },
       };
     }
+    case "schedule": {
+      const parsed = ScheduleSnapshotSchema.safeParse(s);
+      if (!parsed.success) return null;
+      const v = parsed.data;
+      const where = PLATFORM_NAME[v.platform];
+      const what = v.deliverable_kind === "post" ? firstSentence(v.text ?? "").head || "Your post" : v.title || firstSentence(v.text ?? "").head || "Your short";
+      return {
+        title: clip(`${what} · ${where}${v.handle ? ` ${v.handle}` : ""}`, 300),
+        summary: v.last_error
+          ? `It did not go out: ${v.last_error}`
+          : v.mode === "publish"
+            ? "You approve when it posts: at this time, on your account. Changing the time or account asks you again."
+            : `No ${where} account connected: at this time you copy it and post it yourself.`,
+        meta: v.mode === "publish" ? `Posts from ${v.handle ?? where}` : "Copy and open",
+        body: {
+          kind: "schedule",
+          slotId: v.slot_id,
+          what: clip(what, 200),
+          where: { platform: v.platform, handle: v.handle ?? "" },
+          accountId: v.account_id,
+          avatarUrl: null,
+          mode: v.mode,
+          at: new Date(v.publish_at).toISOString(),
+          // The founder's timezone, the avatar, the video and TikTok's creator info are added on the server
+          // (`schedule-enrich.ts`): none of them is part of what the card approves.
+          timezone: "UTC",
+          why: null,
+          preview: { text: v.text, title: v.title, videoUrl: null },
+          options: v.options,
+          tiktok: null,
+          lastError: v.last_error,
+          // Read from the slot on the server (`schedule-enrich.ts`): a missed card and a failed one share a snapshot
+          // shape, so nothing is guessed here. Every route and loader that builds cards enriches them.
+          state: "waiting",
+          publishedUrl: null,
+        },
+      };
+    }
     default:
-      // Slideshow and Schedule cards arrive with their phases; until then a row of those kinds is not shown.
+      // Slideshow cards arrive with their phase; until then a row of that kind is not shown.
       return null;
   }
 }
@@ -233,7 +274,7 @@ export function approvalToCard(row: ApprovalRow, now = new Date()): ApprovalCard
     ...built,
     priceCredits: row.price_credits,
     postAt: ts(row.post_at),
-    account: null,
+    account: built.body.kind === "schedule" ? built.body.where : null,
     raisedAt: ts(row.created_at)!,
     expiresAt: ts(row.expires_at),
     decidedAt: ts(row.decided_at),

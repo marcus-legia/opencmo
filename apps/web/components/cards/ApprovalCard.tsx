@@ -12,7 +12,9 @@ import { useState } from "react";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
-import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption } from "@/lib/screens/approval-card";
+import { intentFor } from "@/lib/departments/publish/intent";
+import { isPublishPlatform } from "@/lib/departments/publish/types";
+import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
 
 import {
   CorrectionBody,
@@ -26,15 +28,27 @@ import {
   ShortsBody,
   SlideshowBody,
 } from "./bodies";
-import { POST_TARGET, blockedReason, editCaption, postPlatform, type Decision } from "./decide";
+import { blockedReason, editCaption, type Decision } from "./decide";
 import { NUMERAL, cardHead, headNote } from "./labels";
+import { approveBlocked, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
 type Variant = "primary" | "secondary" | "quiet";
 type Action =
-  | { label: string; variant: Variant; run: () => void; disabled?: string; /** Set on declines: checked on its own. */ declines?: boolean }
+  | {
+      label: string;
+      variant: Variant;
+      run: () => void;
+      disabled?: string;
+      /** Set on declines: checked on its own. */
+      declines?: boolean;
+      /** The decision this button sends, when a card's problem allows some actions and not others. */
+      checks?: Decision["action"];
+    }
   | { label: string; variant: Variant; href: string };
+
+const STATE_LABEL = { failed: "Failed", missed: "Missed", no_account: "Copy and open", unconfirmed: "Not confirmed" } as const;
 
 const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
 
@@ -48,6 +62,7 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   finished_video: { label: "Send back", action: "send_back" },
   shorts_batch: { label: "Send back", action: "send_back" },
   correction: { label: "Dismiss", action: "reject" },
+  schedule: { label: "Cancel", action: "cancel" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */
@@ -96,6 +111,10 @@ export function ApprovalCard({
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
+  /** Schedule card: the platform's fields as the founder is changing them, and the change-time picker. */
+  const [options, setOptions] = useState<ScheduleOptions>(() => (card.body.kind === "schedule" ? card.body.options : {}));
+  const [moving, setMoving] = useState(false);
+  const [newTime, setNewTime] = useState("");
   const [shown, setShown] = useState(() => firstText(card));
   const [draft, setDraft] = useState(() => firstText(card));
   const beats = card.body.kind === "script" ? card.body.beats : [];
@@ -119,27 +138,19 @@ export function ApprovalCard({
   }
 
   /**
-   * Threads and LinkedIn are posted by the founder until Schedule posts them (P4): approve, then open the platform's
-   * composer. The tab opens inside the click (a later one is blocked as a pop-up) and goes to the platform only once
-   * the approval went through; LinkedIn's text is copied inside the click for the same reason. A sample card opens
-   * nothing and copies nothing: its text is not the founder's and nothing was approved.
+   * The copy-and-open moment of a post with no connected account (P4 F9): X and Threads open their composer with the
+   * words in it, LinkedIn's text is copied first. The tab opens and the text is copied inside the click (later ones
+   * are blocked); the founder then says "I posted it". A sample card opens nothing and copies nothing.
    */
-  async function approvePost(text: string) {
-    const platform = postPlatform(card);
-    const target = platform ? POST_TARGET[platform] : undefined;
-    if (!target || sample || blockedReason(card, sample, "approve") || busy) return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
-    const tab = window.open("about:blank", "_blank");
-    if (tab) tab.opener = null;
-    const copied = !target.copy ? Promise.resolve(true) : navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false);
-    // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
-    const ok = await run({ action: "approve", text: text !== firstText(card) ? text : undefined });
-    if (!ok) {
-      tab?.close();
-      return;
-    }
-    if (tab) tab.location.href = target.url(text);
-    else toast("Your browser blocked the new tab. Open the platform yourself and post it from your account.");
+  async function copyAndOpen(body: Extract<Card["body"], { kind: "schedule" }>) {
+    const text = body.preview.text ?? "";
+    const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, text) : null;
+    if (!target) return;
+    if (sample) return toast("Sample card: nothing was copied or opened.");
+    const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
+    const tab = window.open(target.url, "_blank", "noopener,noreferrer");
     if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
+    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
   }
 
   async function saveCaption(caption: Caption): Promise<boolean> {
@@ -155,7 +166,11 @@ export function ApprovalCard({
   }
 
   function approve() {
-    if (card.kind === "post") return void approvePost(editing ? draft.trim() : shown);
+    // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
+    if (card.kind === "post") {
+      const text = editing ? draft.trim() : shown;
+      return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    }
     if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
     if (card.kind === "script" && editing) {
       const words = draft.trim();
@@ -186,16 +201,15 @@ export function ApprovalCard({
   });
   const declineAction: Action[] = decline ? [{ label: decline.label, variant: "quiet", run: () => setDeclining(true), declines: true }] : [];
   const declineBlocked = decline ? blockedReason(card, sample, decline.action) : blocked;
+  const blockedFor = (action: Extract<Action, { run: () => void }>) =>
+    action.declines ? declineBlocked : action.checks ? blockedReason(card, sample, action.checks) : blocked;
   const primary = (label = PRIMARY_ACTION[card.kind]): Action => ({ label, variant: "primary", run: approve });
   const later = (label: string): Action => ({ label, variant: "secondary", run: () => undefined, disabled: LATER });
 
   const actions: Action[] = (() => {
     switch (card.body.kind) {
-      case "post": {
-        const platform = postPlatform(card);
-        const opens = platform ? (POST_TARGET[platform]?.label ?? "") : "";
-        return [primary(`${editing ? "Approve edit" : "Approve"}${opens}`), editAction(), ...declineAction];
-      }
+      case "post":
+        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
       case "reply":
         return [
           { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
@@ -215,8 +229,37 @@ export function ApprovalCard({
         return [primary(), ...declineAction];
       case "slideshow":
         return [primary(), later("Open in Slides")];
-      case "schedule":
-        return [primary(), later("Change time")];
+      case "schedule": {
+        const body = card.body;
+        const changeTime: Action = {
+          label: "Change time",
+          variant: "secondary",
+          checks: "change_time",
+          run: () => {
+            setNewTime(toLocalInput(body.at, body.timezone));
+            setMoving(true);
+          },
+        };
+        if (body.state === "no_account") {
+          const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, body.preview.text ?? "") : null;
+          return [
+            ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
+            { label: "I posted it", variant: target ? ("secondary" as const) : ("primary" as const), checks: "posted", run: () => void run({ action: "posted" }) },
+            ...declineAction,
+          ];
+        }
+        // Zernio took it and never confirmed it: it may be live, so the founder checks. No Retry: it could post twice.
+        if (body.state === "unconfirmed")
+          return [{ label: "It went out", variant: "primary", checks: "posted", run: () => void run({ action: "posted" }) }, changeTime, ...declineAction];
+        // A failed post keeps its card open with the reason while its window lasts (A1); Retry posts it now.
+        if (card.problem?.kind === "failed" || body.state === "failed") return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
+        if (!sameOptions(options, body.options))
+          return [
+            { label: "Save changes", variant: "primary", run: () => void run({ action: "set_options", options: savedOptions(body, options) }) },
+            { label: "Undo changes", variant: "secondary", run: () => setOptions(body.options) },
+          ];
+        return [{ ...primary(), disabled: approveBlocked(body, options) ?? undefined }, changeTime, ...declineAction];
+      }
       case "correction":
         return [primary(editing ? "Keep edited rule" : PRIMARY_ACTION.correction), editAction(), ...declineAction];
     }
@@ -282,12 +325,30 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
           ) : (
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
 
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
+
+          {card.body.kind === "schedule" && card.body.lastError && !card.problem && card.status === "waiting" && card.body.state !== "waiting" ? (
+            <p className={`v2-card-state ${card.body.state === "failed" || card.body.state === "unconfirmed" ? "is-failed" : "is-expired"}`}>
+              <b>{STATE_LABEL[card.body.state]}</b>
+              <span>
+                {card.body.lastError}
+                {card.body.state === "missed" ? " This is a new time: approve it, change it or cancel." : ""}
+              </span>
+            </p>
+          ) : null}
+          {card.body.kind === "schedule" && card.body.publishedUrl ? (
+            <p className="v2-card-state is-decided_elsewhere">
+              <b>Published</b>
+              <a href={card.body.publishedUrl} target="_blank" rel="noopener noreferrer">
+                Open the post
+              </a>
+            </p>
+          ) : null}
 
           {card.problem ? (
             <p className={`v2-card-state is-${card.problem.kind}`}>
@@ -302,7 +363,30 @@ export function ApprovalCard({
             </p>
           ) : null}
 
-          {redoing && card.body.kind === "price" ? (
+          {moving && card.body.kind === "schedule" ? (
+            <form
+              className="v2-card-decline"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (card.body.kind !== "schedule") return;
+                const at = fromLocalInput(newTime, card.body.timezone);
+                if (at) void run({ action: "change_time", publishAt: at });
+              }}
+            >
+              <label className="v2-field" htmlFor={`${card.id}-time`}>
+                <span>New time, your time ({card.body.timezone}). A new card asks you to approve it.</span>
+                <input id={`${card.id}-time`} className="v2-input is-compact" type="datetime-local" required value={newTime} autoFocus onChange={(event) => setNewTime(event.target.value)} />
+              </label>
+              <div className="v2-actions">
+                <Button type="submit" variant="primary" compact disabled={busy || !fromLocalInput(newTime, card.body.timezone)}>
+                  Save new time
+                </Button>
+                <Button variant="quiet" compact onClick={() => setMoving(false)}>
+                  Keep this time
+                </Button>
+              </div>
+            </form>
+          ) : redoing && card.body.kind === "price" ? (
             <form
               className="v2-card-decline"
               onSubmit={(event) => {
@@ -367,8 +451,8 @@ export function ApprovalCard({
                     key={action.label}
                     variant={action.variant}
                     compact
-                    disabled={busy || !!action.disabled || (!!(action.declines ? declineBlocked : blocked) && action.label !== "Stop editing")}
-                    title={action.disabled ?? (action.declines ? declineBlocked : blocked) ?? undefined}
+                    disabled={busy || !!action.disabled || (!!blockedFor(action) && action.label !== "Stop editing")}
+                    title={action.disabled ?? blockedFor(action) ?? undefined}
                     onClick={action.run}
                   >
                     {action.label}

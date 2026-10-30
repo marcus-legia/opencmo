@@ -56,24 +56,23 @@ for (const sample of CARDS) {
   });
 }
 
-test("LinkedIn shows where “more” cuts the post; Threads and LinkedIn approve and open their composer", async ({ page }) => {
+test("LinkedIn shows where “more” cuts the post; approving opens nothing (Schedule asks for the time)", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.goto("/app/inbox/card-post-linkedin");
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText("The first 140 characters show before “more” on a phone.");
   await expect(card.locator(".v2-card-fold")).toHaveCount(1);
   await expect(card).toContainText("/3000");
-  await expect(card.getByRole("button", { name: "Approve, copy and open LinkedIn" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
 
   await page.goto("/app/inbox/card-post-threads");
   const threads = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(threads).toContainText("/500");
   await expect(threads.locator(".v2-card-fold")).toHaveCount(0);
-  // A sample card opens no composer: its text is not the founder's and nothing was approved (live cards below do).
   const popups: unknown[] = [];
   page.on("popup", (tab) => popups.push(tab));
-  await threads.getByRole("button", { name: "Approve and open Threads" }).click();
-  await expect(page.getByText("Approved (sample, nothing was sent).")).toBeVisible();
+  await threads.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved. A schedule card asks you for its time (sample, nothing was sent).")).toBeVisible();
   expect(popups).toHaveLength(0);
 });
 
@@ -236,40 +235,41 @@ async function postCard(db: SupabaseClient, userId: string, platform: string, te
   return { itemId: id, cardId: (data as { id: string }).id };
 }
 
-test("a Threads draft is approved and opens Threads with the text; a LinkedIn one is copied and opens LinkedIn", async ({ page }) => {
+test("an approved Threads draft opens nothing: it gets a slot and a schedule card (copy and open at its time)", async ({ page }) => {
   const db = admin();
   const user = await founder(db);
   const threadsText = "I spent more time cutting my demo than building the feature. So the editor came first: delete a word and the cut follows. ".repeat(3).trim();
   expect(threadsText.length).toBeGreaterThan(280);
   const threads = await postCard(db, user.id, "Threads", threadsText);
-  const linkedinText = "Why we built the editor before anything else.\n\nEvery launch video took longer to cut than to build. So the first thing OpenCMO does is let you cut by deleting words.";
-  const linkedin = await postCard(db, user.id, "LinkedIn", linkedinText);
+  // Writer's run files a deliverable under its order; Schedule follows the deliverable once it is decided (A3).
+  const week = new Date();
+  week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
+  const order = await db
+    .from("work_orders")
+    .insert({ user_id: user.id, week: week.toISOString().slice(0, 10), kind: "post_draft", title: "Threads post", brief: {}, department: "writer", status: "waiting_founder" })
+    .select("id")
+    .single();
+  expect(order.error).toBeNull();
+  expect(
+    (await db.from("deliverables").insert({ user_id: user.id, order_id: order.data!.id, kind: "post", ref_kind: "content_item", ref_id: threads.itemId, status: "waiting_founder" })).error,
+  ).toBeNull();
 
   await signIn(page, user);
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.context().route(/https:\/\/www\.(threads|linkedin)\.com\/.*/, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>Composer</title>" }));
-
+  const popups: unknown[] = [];
+  page.on("popup", (tab) => popups.push(tab));
   await page.goto(`/app/inbox/${threads.cardId}`);
-  let card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText(`${threadsText.length}/500`);
-  let popup = page.waitForEvent("popup");
-  await card.getByRole("button", { name: "Approve and open Threads" }).click();
-  let tab = await popup;
-  await expect.poll(() => tab.url()).toBe(`https://www.threads.com/intent/post?text=${encodeURIComponent(threadsText)}`);
-  await tab.close();
+  await card.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved. A schedule card asks you for its time.")).toBeVisible();
+  expect(popups).toHaveLength(0);
   await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
   await expect.poll(async () => (await db.from("cmo_draft_outcomes").select("platform").eq("item_id", threads.itemId).single()).data?.platform).toBe("threads");
-
-  await page.goto(`/app/inbox/${linkedin.cardId}`);
-  card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(card).toContainText("/3000");
-  popup = page.waitForEvent("popup");
-  await card.getByRole("button", { name: "Approve, copy and open LinkedIn" }).click();
-  tab = await popup;
-  await expect.poll(() => tab.url()).toContain("linkedin.com/feed/?shareActive=true");
-  await tab.close();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(linkedinText);
-  await expect.poll(async () => (await db.from("content_items").select("status").eq("id", linkedin.itemId).single()).data?.status).toBe("approved");
+  // P4 A3: the approved post gets a proposed slot (no Threads account connected: copy and open) and its card.
+  await expect
+    .poll(async () => (await db.from("schedule_slots").select("platform, mode, status").eq("user_id", user.id)).data)
+    .toEqual([{ platform: "threads", mode: "intent", status: "proposed" }]);
+  await expect.poll(async () => (await db.from("approvals").select("kind").eq("user_id", user.id).eq("status", "waiting").eq("kind", "schedule")).data?.length).toBe(1);
 });
 
 test("a caption is edited on a live shorts card: same card, new hash, a stale hash refused, delivered under its short", async ({ page }) => {

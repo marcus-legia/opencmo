@@ -13,7 +13,7 @@ import type { ApprovalRow } from "./cards";
 
 const SECONDS = 3600;
 
-async function sign(supabase: SupabaseClient, bucket: "media" | "exports", paths: string[]): Promise<Map<string, string>> {
+export async function sign(supabase: SupabaseClient, bucket: "media" | "exports", paths: string[]): Promise<Map<string, string>> {
   const unique = [...new Set(paths.filter((p) => p && !p.includes("..")))];
   if (!unique.length) return new Map();
   const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, SECONDS);
@@ -24,7 +24,7 @@ const paths = (v: unknown, key: string): string[] =>
   Array.isArray(v) ? v.map((x) => (x as Record<string, unknown>)?.[key]).filter((p): p is string => typeof p === "string") : [];
 
 /** The latest done render of each short's own edit, as `short clip id → exports path`. */
-async function shortRenders(supabase: SupabaseClient, clipIds: string[]): Promise<Map<string, string>> {
+export async function shortRenders(supabase: SupabaseClient, clipIds: string[]): Promise<Map<string, string>> {
   if (!clipIds.length) return new Map();
   const { data } = await supabase
     .from("tasks")

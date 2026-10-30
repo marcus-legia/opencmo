@@ -9,11 +9,16 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
+import { localMidnight, localMonday } from "@/lib/time-zone";
+import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { SITE_URL } from "@/lib/site";
+
+import scheduleDefaults from "../../../../packages/contracts/schedule-defaults.json";
 
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
+import { enrichScheduleCards } from "./schedule-enrich";
 import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
@@ -21,6 +26,7 @@ import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
+import type { ScheduleScreen } from "./schedule";
 import type { SettingsScreen } from "./settings";
 import type { StudioItem, StudioScreen, TeamStep } from "./studio";
 import { videoSteps, type VideoStepRow } from "./video-steps";
@@ -65,13 +71,14 @@ async function cmoState(supabase: SupabaseClient, userId: string, p: Promise<Pro
   return { mode: mode.brain, pausedAt: iso(prof.cmo_paused_at) };
 }
 
-/** The queue: waiting cards, oldest first, Studio pictures signed. Kinds the app cannot show yet are left out. */
-async function waitingCards(supabase: SupabaseClient): Promise<ApprovalCard[]> {
+/** The queue: waiting cards, oldest first, Studio pictures signed, schedule cards in the founder's time. Kinds the app cannot show yet are left out. */
+async function waitingCards(supabase: SupabaseClient, userId: string): Promise<ApprovalCard[]> {
   const rows = must(
     await supabase.from("approvals").select(APPROVAL_COLUMNS).eq("status", "waiting").order("created_at", { ascending: true }).limit(100),
     "approvals",
   ) as ApprovalRow[];
-  return signStudioCards(supabase, rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null), rows);
+  const cards = await signStudioCards(supabase, rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null), rows);
+  return enrichScheduleCards(supabase, userId, cards);
 }
 
 type OrderDb = OrderLedgerRow & { user_id: string; root_id: string | null; week: string; created_at: string; done_reason: string | null };
@@ -166,7 +173,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
   const now = new Date();
   const prof = profile(supabase, userId);
   const tree = weekTree(supabase);
-  const queue = waitingCards(supabase);
+  const queue = waitingCards(supabase, userId);
   return parts<DashboardScreen>("dashboard", {
     cmo: () => cmoState(supabase, userId, prof),
     queue: () => queue,
@@ -550,6 +557,7 @@ type BrandKitJson = {
 async function settings({ supabase, userId }: LoadContext): Promise<Partial<SettingsScreen>> {
   const prof = profile(supabase, userId);
   return parts<SettingsScreen>("settings", {
+    accounts: async () => accountList(await socialAccounts(supabase), true),
     cmo: () => cmoState(supabase, userId, prof),
     weeklyCreditBudget: async () => (await prof).weekly_credit_budget,
     timezone: async () => (await prof).timezone,
@@ -559,6 +567,141 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
       const name = p.plan.charAt(0).toUpperCase() + p.plan.slice(1);
       return { name: name.slice(0, 40), credits: typeof balance.data === "number" ? balance.data : null };
     },
+  });
+}
+
+type SocialAccountDb = { id: string; platform: string; handle: string; avatar_url: string | null; status: string; updated_at: string };
+
+async function socialAccounts(supabase: SupabaseClient): Promise<SocialAccountDb[]> {
+  return must(
+    await supabase.from("social_accounts").select("id, platform, handle, avatar_url, status, updated_at").order("connected_at"),
+    "social_accounts",
+  ) as SocialAccountDb[];
+}
+
+/**
+ * Every platform OpenCMO posts to, connected or not (P4 F1): Settings offers Connect for the rest. `reconnect` when
+ * Zernio reports the account refused or gone; then posts to it wait until the founder connects it again.
+ */
+function accountList(rows: SocialAccountDb[], all: boolean): SettingsScreen["accounts"] {
+  const byPlatform = new Map(rows.map((r) => [r.platform, r]));
+  return PUBLISH_PLATFORMS.flatMap((platform): SettingsScreen["accounts"] => {
+    const r = byPlatform.get(platform);
+    if (!r) return all ? [{ id: `connect-${platform}`, platform, handle: "", status: "not_connected" as const, syncedAt: null, noDataSince: null, avatarUrl: null }] : [];
+    const connected = r.status === "connected";
+    return [{
+      id: r.id,
+      platform,
+      handle: r.handle.slice(0, 80),
+      status: connected ? ("connected" as const) : ("reconnect" as const),
+      syncedAt: connected ? iso(r.updated_at) : null,
+      noDataSince: connected ? null : iso(r.updated_at),
+      avatarUrl: r.avatar_url,
+    }];
+  });
+}
+
+type SlotDb = {
+  id: string;
+  platform: string;
+  status: string;
+  publish_at: string;
+  error: { message?: string } | null;
+  external_url: string | null;
+  approval_id: string | null;
+  account: { handle: string } | null;
+  deliverable: { kind: string; ref_kind: string; ref_id: string } | null;
+};
+
+/** SQL's slot statuses on the calendar's five (`SLOT_STATUSES`); a card still waiting makes it the founder's turn. */
+function slotStatus(s: SlotDb, waiting: Set<string>): { status: ScheduleScreen["slots"][number]["status"]; note: string | null } {
+  switch (s.status) {
+    case "proposed":
+      return { status: s.approval_id && waiting.has(s.approval_id) ? "waiting_founder" : "proposed", note: null };
+    case "waiting":
+    case "due":
+    case "publishing":
+      return { status: "scheduled", note: null };
+    case "reminded":
+      return { status: "scheduled", note: "post it yourself" };
+    case "published":
+      return { status: "posted", note: null };
+    case "missed":
+      return { status: "failed", note: "missed" };
+    default:
+      return { status: "failed", note: s.error?.message ? s.error.message.slice(0, 80) : "failed" };
+  }
+}
+
+const SCHEDULE_RULES: string[] = [
+  `At most ${scheduleDefaults.platforms.x.dailyCap} posts a day on X; on other platforms as many as their best times. ${scheduleDefaults.minGapHours} hours apart.`,
+  "Times start from common best times (Buffer's 2026 study) in your time zone, until your own results say better.",
+  "A short and its long video never go out on one platform the same day.",
+  "Drag a slot to move it. A new time or account asks you again.",
+  `A post that misses its time by ${scheduleDefaults.windowMinutes} minutes is never posted late: you get a new time to approve.`,
+];
+
+async function schedule({ supabase, userId, params }: LoadContext): Promise<Partial<ScheduleScreen>> {
+  const prof = profile(supabase, userId);
+  // The week starts at Monday midnight where the founder is: a Monday 06:00 post in UTC+7 is Monday's, not Sunday's.
+  // A profile that cannot be read leaves the timezone field to fail on its own, as each field does.
+  const timezone = await prof.then((p) => p.timezone, () => "UTC");
+  const asked = params.get("from");
+  const askedDay = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(Date.parse(`${asked}T12:00:00Z`)) ? asked : null;
+  const monday = askedDay ? localMonday(Date.parse(`${askedDay}T12:00:00Z`), "UTC") : localMonday(Date.now(), timezone);
+  const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const from = new Date(localMidnight(monday, timezone) ?? `${monday}T00:00:00Z`);
+  const to = new Date(localMidnight(nextMonday, timezone) ?? `${nextMonday}T00:00:00Z`);
+  return parts<ScheduleScreen>("schedule", {
+    timezone: async () => (await prof).timezone,
+    from: async () => from.toISOString(),
+    to: async () => to.toISOString(),
+    slots: async () => {
+      const slots = must(
+        await supabase
+          .from("schedule_slots")
+          .select("id, platform, status, publish_at, error, external_url, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
+          .gte("publish_at", from.toISOString())
+          .lt("publish_at", to.toISOString())
+          .neq("status", "cancelled")
+          .order("publish_at")
+          .limit(300),
+        "schedule_slots",
+      ) as unknown as SlotDb[];
+      const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
+      const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
+      const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
+      const [itemRows, clipRows, waitingRows] = await Promise.all([
+        items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
+        clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
+        approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
+      ]);
+      const titles = new Map<string, string>([
+        ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
+          (r) => [r.id, (r.body?.text?.split("\n")[0] || r.idea || "Post").slice(0, 300)] as [string, string],
+        ),
+        ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, `Short · ${r.hook || "Untitled"}`.slice(0, 300)] as [string, string]),
+      ]);
+      const waiting = new Set(((waitingRows.data ?? []) as { id: string }[]).map((r) => r.id));
+      return slots.flatMap((s) => {
+        const platform = PUBLISH_PLATFORMS.find((p) => p === s.platform);
+        if (!platform) return [];
+        const { status, note } = slotStatus(s, waiting);
+        return [{
+          id: s.id,
+          at: iso(s.publish_at)!,
+          where: { platform, handle: (s.account?.handle ?? "").slice(0, 80) },
+          title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
+          status,
+          note,
+          // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
+          approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
+          url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
+        }];
+      });
+    },
+    accounts: async () => accountList(await socialAccounts(supabase), false),
+    rules: async () => SCHEDULE_RULES,
   });
 }
 
@@ -944,4 +1087,4 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
  * Live readers, one per screen, under the founder's RLS session (no service role). A loader returns only the
  * fields it reads for real; `registry.ts` `live` must list them too before they replace sample data.
  */
-export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, research, writer, studio: studioScreen, sales };
+export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, schedule, research, writer, studio: studioScreen, sales };
