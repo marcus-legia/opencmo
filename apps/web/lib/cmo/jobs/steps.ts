@@ -7,7 +7,7 @@
 
 import type { z } from "zod";
 
-import { X_LIMIT } from "./check-post";
+import { POST_PROFILES } from "../platforms";
 import { InsightSchema } from "./competitor-research";
 import { DraftSchema, REVIEW_SYSTEM } from "./draft-post";
 import { PlanSchema } from "./plan-week";
@@ -64,10 +64,10 @@ export function checkRubric(kind: CmoJobKind): string {
         REVIEW_SYSTEM,
         "",
         "Code checks after you submit (a version that fails one is dropped; if all fail, the item comes back with the reasons):",
-        `- At most ${X_LIMIT} characters.`,
+        `- Within the platform's limit (the <platform> block says which): ${POST_PROFILES.map((p) => `${p.label} ${p.limit}`).join(", ")} characters.`,
         "- None of the strategy's words to avoid.",
         "- Any number of 10 or more, and any percentage, must appear in the documents (years are fine).",
-        "- At most two hashtags.",
+        "- No links and no hashtags.",
         "",
         ...shared.map((line) => `- ${line}`),
       ].join("\n");

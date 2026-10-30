@@ -3,6 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@/lib/api/handler";
 import { brainMode } from "@/lib/cmo/brain";
 import { loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
+import { profileIdOf, profileOf, POST_PROFILES } from "@/lib/cmo/platforms";
+import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
@@ -14,7 +17,7 @@ import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
 import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
-import type { LibraryScreen } from "./library";
+import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
@@ -389,8 +392,106 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
   });
 }
 
+// ------------------------------------------------------------------ voice and skills (P3 A3)
+
+/** A row of `voice_notes` (A1): the founder's own words from one decision, its profile and its weight today. */
+type VoiceNoteRow = {
+  id: string;
+  body: string;
+  platform: string | null;
+  source: "approved" | "edited" | "skipped";
+  edit_mode: string | null;
+  created_at: string;
+  weight: number;
+};
+
+/** What an edit mode says the founder did, as Library → Voice names where a note came from. */
+const EDIT_SOURCE: Record<string, string> = {
+  TOO_SALESY: "less selling",
+  WRONG_VOICE: "your own voice",
+  INVENTED_CLAIM: "a claim taken out",
+  TOO_LONG: "shorter",
+  HOOK_REWRITTEN: "a new first line",
+  CTA_REMOVED: "no closing ask",
+  FULL_REWRITE: "rewritten",
+};
+
+function voiceSource(note: VoiceNoteRow): string {
+  if (note.source === "approved") return "Approved as written";
+  if (note.source === "skipped") return "From a skip reason";
+  return `From your edit: ${EDIT_SOURCE[note.edit_mode ?? ""] ?? "rewritten"}`;
+}
+
+/** The founder's live voice notes, newest (heaviest) first, under their own session. */
+async function voiceNotes(supabase: SupabaseClient, limit: number): Promise<VoiceNoteRow[]> {
+  const rows = must(await supabase.rpc("voice_notes", { p_limit: limit, p_platform: null }), "voice_notes") as VoiceNoteRow[];
+  return rows.map((r) => ({ ...r, weight: Math.min(1, Math.max(0, Number(r.weight))) }));
+}
+
+/** The words the strategy says to avoid: what Writer cuts from every draft. */
+async function wordsCut(supabase: SupabaseClient): Promise<string[]> {
+  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "strategy").maybeSingle();
+  if (r.error) throw new Error(`marketing_documents_latest: ${r.error.message}`);
+  const avoid = (r.data as { body?: { avoid?: unknown } } | null)?.body?.avoid;
+  return Array.isArray(avoid)
+    ? avoid.filter((w): w is string => typeof w === "string").map((w) => w.trim()).filter((w) => w && w.length <= 40).slice(0, 20)
+    : [];
+}
+
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+const shortDate = (at: string) => new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** The registry agents a built-in writing skill names, as the Library calls them. */
+function readersOf(agents: readonly string[]): LibraryScreen["skills"]["writing"][number]["readBy"] {
+  const name = (agent: string): (typeof SKILL_READERS)[number] | null =>
+    agent === "writer" || agent.endsWith("_writer") ? "Writer" : agent === "checker" ? "Checker" : agent === "sales" ? "Sales" : agent === "cmo" ? "CMO chat" : null;
+  return [...new Set(agents.map(name).filter((r): r is (typeof SKILL_READERS)[number] => r !== null))];
+}
+
 async function library({ supabase }: LoadContext): Promise<Partial<LibraryScreen>> {
   return parts<LibraryScreen>("library", {
+    voice: async () => {
+      const [notes, words] = await Promise.all([voiceNotes(supabase, 40), wordsCut(supabase)]);
+      return {
+        notes: notes.map((n) => ({
+          id: n.id,
+          text: clip(n.body, 600),
+          platform: (n.platform && profileOf(n.platform)?.platform) || null,
+          source: voiceSource(n),
+          at: new Date(n.created_at).toISOString(),
+          weight: n.weight,
+          replaces: null,
+        })),
+        wordsCut: words,
+      };
+    },
+    // Read only (brain.md §8b): the writing guidance and profiles we ship, the style skills, and the founder's own
+    // saved from the editor Assistant. Department playbooks stay with their departments.
+    skills: async () => {
+      const own = must(await supabase.from("editor_skills").select("id, name, description, created_at").order("created_at").limit(50), "editor_skills") as {
+        id: string;
+        name: string;
+        description: string;
+        created_at: string;
+      }[];
+      const slop = CMO_SKILLS["no-ai-slop"];
+      return {
+        writing: [
+          { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in" as const, note: clip(`Guidance, never a hard filter: ${slop.description}`, 200), readBy: readersOf(slop.agents) },
+          {
+            id: "platform-profiles",
+            name: "Platform profiles",
+            origin: "built_in" as const,
+            note: clip(`Length, the cut before “more” and the tone for ${POST_PROFILES.map((p) => p.label).join(", ")} and video captions. No links; hashtags only on video captions.`, 200),
+            readBy: ["Writer", "Checker"],
+          },
+        ],
+        video: [
+          ...readyStyles().map((style) => ({ id: `style-${style.name}`, name: style.name, origin: "built_in" as const, note: clip(style.description, 200), readBy: ["Studio", "Editor Assistant"] as ("Studio" | "Editor Assistant")[] })),
+          ...own.map((skill) => ({ id: skill.id, name: skill.name.slice(0, 80), origin: "yours" as const, note: clip(`${skill.description} · saved ${shortDate(skill.created_at)}`, 200), readBy: ["Editor Assistant"] as "Editor Assistant"[] })),
+        ],
+      };
+    },
     site: async () => {
       const r = await supabase.from("cmo_runs").select("input").eq("kind", "onboard").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
@@ -569,40 +670,109 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
   });
 }
 
+/** The screen platform of a calendar label or profile id ("LinkedIn" → linkedin, "tiktok_caption" → tiktok). */
+function screenPlatform(label: string | null | undefined, fallback: WriterScreen["drafts"][number]["platform"]): WriterScreen["drafts"][number]["platform"] {
+  return profileOf(profileIdOf(label) ?? "")?.platform ?? fallback;
+}
+
 async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
   return parts<WriterScreen>("writer", {
+    // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
+    // wrote for Studio, over the last two weeks.
     drafts: async () => {
       const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-      const [rows, cards] = await Promise.all([
-        supabase
-          .from("content_items")
-          .select("id, day, idea, status, body, final_text, published_at")
-          .eq("department", "post")
-          .in("status", ["planned", "drafting", "in_review", "approved", "published"])
-          .gte("day", since)
-          .order("day")
-          .limit(100),
+      type ItemRow = {
+        id: string;
+        day: string;
+        idea: string;
+        platform: string;
+        status: "planned" | "drafting" | "in_review" | "approved" | "published";
+        body: { text?: string; title?: string; alternates?: unknown[]; edited_at?: string };
+        final_text: string | null;
+        published_at: string | null;
+        clip_id: string | null;
+      };
+      const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
+      const statuses = ["planned", "drafting", "in_review", "approved", "published"];
+      const [posts, captions, briefs, cards, videoCards, batchCards, shorts] = await Promise.all([
+        supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
+        supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
+        supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
         waitingByRef(supabase, "content_item"),
+        waitingByRef(supabase, "editor_project"),
+        waitingByRef(supabase, "short_batch"),
+        supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
       ]);
       const column = { planned: "drafting", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
-      return (must(rows, "content_items") as { id: string; day: string; idea: string; status: keyof typeof column; body: { text?: string; alternates?: unknown[] }; final_text: string | null; published_at: string | null }[]).map(
-        (r) => {
-          const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
-          const edited = r.final_text !== null && r.final_text !== r.body.text;
-          return {
-            id: r.id,
-            kind: "post" as const,
-            platform: "x" as const,
-            at: iso(r.published_at),
-            dayText: r.published_at ? null : WEEKDAY[new Date(`${r.day}T00:00:00Z`).getUTCDay()]!,
-            title: (r.final_text ?? text).slice(0, 300),
-            column: column[r.status],
-            versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
-            note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
-            approvalId: cards.get(r.id) ?? null,
-          };
-        },
-      );
+      const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
+      const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
+      const postDrafts = (must(posts, "content_items") as ItemRow[]).map((r) => {
+        const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
+        const edited = r.final_text !== null && r.final_text !== r.body.text;
+        return {
+          id: r.id,
+          kind: "post" as const,
+          platform: screenPlatform(r.platform, "x"),
+          at: iso(r.published_at),
+          dayText: r.published_at ? null : dayText(r.day),
+          title: (r.final_text ?? text).slice(0, 300),
+          column: column[r.status],
+          versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
+          note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
+          approvalId: cards.get(r.id) ?? null,
+        };
+      });
+      const captionDrafts = (must(captions, "content_items") as ItemRow[]).map((r) => {
+        const card = videoCards.get(r.clip_id!) ?? batchCards.get(batchOf.get(r.clip_id!) ?? "") ?? null;
+        return {
+          id: r.id,
+          kind: "caption" as const,
+          platform: screenPlatform(r.platform, "tiktok"),
+          at: iso(r.published_at),
+          dayText: r.published_at ? null : dayText(r.day),
+          title: (typeof r.body.title === "string" && r.body.title ? r.body.title : typeof r.body.text === "string" ? r.body.text : r.idea).slice(0, 300),
+          column: column[r.status],
+          versions: 1,
+          note: r.body.edited_at ? "You edited it on the card" : r.status === "in_review" ? "On the video's card" : null,
+          approvalId: card,
+        };
+      });
+      const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string }; due_at: string | null; created_at: string }[]).map((o) => ({
+        id: o.id,
+        kind: "video_brief" as const,
+        platform: screenPlatform(o.brief.platform, "youtube"),
+        at: null,
+        dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
+        title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
+        column: o.status === "done" ? ("posted" as const) : ("drafting" as const),
+        versions: 1,
+        note: o.status === "done" ? "Fed the Studio team" : null,
+        approvalId: null,
+      }));
+      return [...postDrafts, ...captionDrafts, ...briefDrafts];
+    },
+    // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
+    voice: async () => {
+      const [rules, notes, words] = await Promise.all([
+        supabase.from("cmo_corrections").select("rule, created_at, decided_at").eq("status", "active").order("created_at", { ascending: false }).limit(10),
+        voiceNotes(supabase, 8),
+        wordsCut(supabase),
+      ]);
+      const label = (platform: string | null) => (platform ? (profileOf(platform)?.label ?? "") : "");
+      return {
+        lines: [
+          ...(must(rules, "cmo_corrections") as { rule: string; created_at: string; decided_at: string | null }[]).map((r) => ({
+            text: clip(r.rule, 200),
+            source: `Rule you approved · ${shortDate(r.decided_at ?? r.created_at)}`,
+          })),
+          ...notes.map((n) => ({
+            text: clip(n.body, 200),
+            source: clip([voiceSource(n), label(n.platform), `weight ${n.weight.toFixed(2)}`].filter(Boolean).join(" · "), 120),
+          })),
+          { text: "No links, no hashtags in posts.", source: "Product rule · hashtags only on video captions" },
+        ],
+        wordsCut: words,
+      };
     },
   });
 }

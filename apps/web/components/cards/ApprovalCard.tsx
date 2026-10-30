@@ -10,8 +10,9 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
+import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
-import { PRIMARY_ACTION, type ApprovalCard as Card } from "@/lib/screens/approval-card";
+import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption } from "@/lib/screens/approval-card";
 
 import {
   CorrectionBody,
@@ -25,7 +26,7 @@ import {
   ShortsBody,
   SlideshowBody,
 } from "./bodies";
-import { blockedReason, type Decision } from "./decide";
+import { POST_TARGET, blockedReason, editCaption, postPlatform, type Decision } from "./decide";
 import { NUMERAL, cardHead, headNote } from "./labels";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
@@ -46,7 +47,7 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   price: { label: "Cancel", action: "cancel" },
   finished_video: { label: "Send back", action: "send_back" },
   shorts_batch: { label: "Send back", action: "send_back" },
-  correction: { label: "Reject", action: "reject" },
+  correction: { label: "Dismiss", action: "reject" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */
@@ -65,7 +66,7 @@ function decidedNote(card: Card): string | null {
 }
 
 export function ApprovalCard({
-  card,
+  card: given,
   sample,
   onDecide,
   open = true,
@@ -83,6 +84,9 @@ export function ApprovalCard({
   headingLevel?: "h2" | "h3";
 }) {
   const { toast } = useShellState();
+  // A saved caption changes the card in place (new hash); a newer card from the parent replaces it.
+  const [changed, setChanged] = useState<{ from: Card; card: Card } | null>(null);
+  const card = changed && changed.from === given ? changed.card : given;
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [declining, setDeclining] = useState(false);
@@ -97,6 +101,7 @@ export function ApprovalCard({
   const beats = card.body.kind === "script" ? card.body.beats : [];
 
   const blocked = blockedReason(card, sample);
+  const captionsBlocked = blocked ?? (busy ? "Wait for the decision to finish." : null);
   const Heading = headingLevel;
   const head = cardHead(card);
   const numeral = NUMERAL[card.department];
@@ -104,20 +109,53 @@ export function ApprovalCard({
   const bodyId = `card-${card.id}-body`;
   const decline = DECLINE[card.kind];
 
-  async function run(decision: Decision) {
-    if (busy || blockedReason(card, sample, decision.action)) return;
+  async function run(decision: Decision): Promise<boolean> {
+    if (busy || blockedReason(card, sample, decision.action)) return false;
     setBusy(true);
     const ok = await onDecide(card, decision);
     // A decided card leaves the queue and unmounts; only a refused one comes back to edit.
     if (!ok) setBusy(false);
+    return ok;
+  }
+
+  /**
+   * Threads and LinkedIn are posted by the founder until Schedule posts them (P4): approve, then open the platform's
+   * composer. The tab opens inside the click (a later one is blocked as a pop-up) and goes to the platform only once
+   * the approval went through; LinkedIn's text is copied inside the click for the same reason. A sample card opens
+   * nothing and copies nothing: its text is not the founder's and nothing was approved.
+   */
+  async function approvePost(text: string) {
+    const platform = postPlatform(card);
+    const target = platform ? POST_TARGET[platform] : undefined;
+    if (!target || sample || blockedReason(card, sample, "approve") || busy) return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+    const copied = !target.copy ? Promise.resolve(true) : navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false);
+    // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
+    const ok = await run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+    if (!ok) {
+      tab?.close();
+      return;
+    }
+    if (tab) tab.location.href = target.url(text);
+    else toast("Your browser blocked the new tab. Open the platform yourself and post it from your account.");
+    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
+  }
+
+  async function saveCaption(caption: Caption): Promise<boolean> {
+    try {
+      const next = await editCaption(card, caption, sample);
+      setChanged({ from: given, card: next });
+      toast(sample ? "Caption saved (sample, nothing was sent)." : "Caption saved. Approve the card when the words are right.");
+      return true;
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+      return false;
+    }
   }
 
   function approve() {
-    if (card.kind === "post") {
-      const text = editing ? draft.trim() : shown;
-      // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
-      return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
-    }
+    if (card.kind === "post") return void approvePost(editing ? draft.trim() : shown);
     if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
     if (card.kind === "script" && editing) {
       const words = draft.trim();
@@ -153,8 +191,11 @@ export function ApprovalCard({
 
   const actions: Action[] = (() => {
     switch (card.body.kind) {
-      case "post":
-        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
+      case "post": {
+        const platform = postPlatform(card);
+        const opens = platform ? (POST_TARGET[platform]?.label ?? "") : "";
+        return [primary(`${editing ? "Approve edit" : "Approve"}${opens}`), editAction(), ...declineAction];
+      }
       case "reply":
         return [
           { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
@@ -235,9 +276,9 @@ export function ApprovalCard({
           ) : card.body.kind === "price" ? (
             <PriceBody body={card.body} price={card.priceCredits} />
           ) : card.body.kind === "finished_video" ? (
-            <FinishedVideoBody body={card.body} />
+            <FinishedVideoBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
           ) : card.body.kind === "shorts_batch" ? (
-            <ShortsBody body={card.body} />
+            <ShortsBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (

@@ -6,6 +6,7 @@ import { Tabs } from "@/components/ui";
 import type { CardBody } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
+import { CaptionList, charCount, type SaveCaption } from "./captions";
 import { formatSeconds } from "./labels";
 
 type Body<K extends CardBody["kind"]> = Extract<CardBody, { kind: K }>;
@@ -42,8 +43,9 @@ export function PostBody({
     onPick(list[Math.min(nextVersion, list.length - 1)] ?? "");
   }
 
-  const length = (editing ? draft : text).length;
+  const length = charCount(editing ? draft : text);
   const limit = current?.limit ?? 0;
+  const fold = current?.visibleBeforeMore ?? null;
 
   return (
     <>
@@ -63,7 +65,7 @@ export function PostBody({
             <textarea className="v2-input" value={draft} maxLength={4000} onChange={(event) => onDraft(event.target.value)} />
           </label>
         ) : (
-          <p className="v2-card-text">{text}</p>
+          <FoldedText text={text} fold={fold} />
         )}
       </div>
       <div className="v2-card-chips">
@@ -88,8 +90,28 @@ export function PostBody({
           </span>
         ) : null}
         {body.why ? <span>Why: {body.why}</span> : null}
+        {fold ? <span>The first {fold} characters show before “more” on a phone.</span> : null}
       </div>
     </>
+  );
+}
+
+/** The post as the platform shows it: what is past the "more" cut is set apart, so the hook is judged on its own. */
+function FoldedText({ text, fold }: { text: string; fold: number | null }) {
+  const chars = Array.from(text);
+  if (!fold || chars.length <= fold) return <p className="v2-card-text">{text}</p>;
+  // The platform cuts before the word that crosses the limit.
+  const space = chars.slice(0, fold + 1).findLastIndex((c) => /\s/.test(c));
+  const cut = space > fold / 2 ? space : fold;
+  return (
+    <p className="v2-card-text">
+      {chars.slice(0, cut).join("")}
+      <span className="v2-card-fold">
+        <span aria-hidden="true">…more</span>
+        <span className="v2-visually-hidden"> (on a phone the post is cut here behind “more”) </span>
+      </span>
+      <span className="v2-card-after-fold">{chars.slice(cut).join("")}</span>
+    </p>
   );
 }
 
@@ -237,7 +259,10 @@ export function PriceBody({ body, price }: { body: Body<"price">; price: number 
   );
 }
 
-export function FinishedVideoBody({ body }: { body: Body<"finished_video"> }) {
+/** `editable`: null when captions may be edited now, else why not. */
+type CaptionProps = { cardId: string; editable: string | null; onSaveCaption: SaveCaption };
+
+export function FinishedVideoBody({ body, cardId, editable, onSaveCaption }: { body: Body<"finished_video"> } & CaptionProps) {
   return (
     <>
       <div className="v2-card-player">
@@ -253,28 +278,41 @@ export function FinishedVideoBody({ body }: { body: Body<"finished_video"> }) {
         )}
       </div>
       <div className="v2-card-meta">Approving marks it finished: Shorts can be cut from it</div>
+      <CaptionList captions={body.captions} idBase={`${cardId}-captions`} heading="Captions and YouTube text" editable={editable} onSave={onSaveCaption} />
     </>
   );
 }
 
-export function ShortsBody({ body }: { body: Body<"shorts_batch"> }) {
+export function ShortsBody({ body, cardId, editable, onSaveCaption }: { body: Body<"shorts_batch"> } & CaptionProps) {
   return (
-    <ul className="v2-card-shorts">
-      {body.shorts.map((short) => (
-        <li key={`${short.start}-${short.end}`}>
-          {short.previewUrl ? <video className="v2-card-poster" src={short.previewUrl} controls preload="metadata" playsInline /> : <span className="v2-card-poster" aria-hidden="true" />}
-          <span>
-            <b>
-              {formatSeconds(short.start)}–{formatSeconds(short.end)}
-            </b>
-            <br />
-            <span className="v2-muted">Hook: “{short.hook}”</span>
-            <br />
-            <span>{short.reason}</span>
-          </span>
-        </li>
+    <>
+      <ul className="v2-card-shorts">
+        {body.shorts.map((short) => (
+          <li key={`${short.start}-${short.end}`}>
+            {short.previewUrl ? <video className="v2-card-poster" src={short.previewUrl} controls preload="metadata" playsInline /> : <span className="v2-card-poster" aria-hidden="true" />}
+            <span>
+              <b>
+                {formatSeconds(short.start)}–{formatSeconds(short.end)}
+              </b>
+              <br />
+              <span className="v2-muted">Hook: “{short.hook}”</span>
+              <br />
+              <span>{short.reason}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {body.shorts.map((short, index) => (
+        <CaptionList
+          key={`${short.start}-${short.end}`}
+          captions={short.captions}
+          idBase={`${cardId}-short-${index + 1}`}
+          heading={`Captions for short ${index + 1} · “${short.hook}”`}
+          editable={editable}
+          onSave={onSaveCaption}
+        />
       ))}
-    </ul>
+    </>
   );
 }
 
@@ -328,6 +366,17 @@ export function ScheduleBody({ body }: { body: Body<"schedule"> }) {
   );
 }
 
+/** What the founder kept doing, per edit mode (`cmo_draft_outcomes.edit_mode`). */
+const EDIT_SEEN: Record<string, string> = {
+  TOO_SALESY: "You toned down the selling",
+  WRONG_VOICE: "You rewrote drafts in your own words",
+  INVENTED_CLAIM: "You removed a claim that was not true",
+  TOO_LONG: "You cut drafts shorter",
+  HOOK_REWRITTEN: "You rewrote the first line",
+  CTA_REMOVED: "You cut the closing ask",
+  FULL_REWRITE: "You rewrote most of the draft",
+};
+
 export function CorrectionBody({
   body,
   editing,
@@ -349,11 +398,19 @@ export function CorrectionBody({
       ) : (
         <p className="v2-card-rule">“{body.rule}”</p>
       )}
+      {body.editMode && EDIT_SEEN[body.editMode] ? (
+        <p className="v2-card-meta">
+          {EDIT_SEEN[body.editMode]} in {body.times} {body.times === 1 ? "post" : "posts"} these two weeks.
+        </p>
+      ) : null}
       {body.examples.length > 0 ? (
-        <ul className="v2-card-edits">
+        <ul className="v2-card-edits" aria-label="Your edits">
           {body.examples.map((edit, index) => (
             <li key={index}>
-              <s className="v2-muted">{edit.before}</s> → {edit.after}
+              <span className="v2-card-edit-label">Draft</span>
+              <s className="v2-muted">{edit.before}</s>
+              <span className="v2-card-edit-label">You wrote</span>
+              <span>{edit.after}</span>
             </li>
           ))}
         </ul>

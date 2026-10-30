@@ -72,7 +72,10 @@ async function move(admin: SupabaseClient, orderId: string, to: "waiting_founder
   });
 }
 
-/** The week plan's video item → the adapter's brief (objective, angle, seconds, aspect; the Director writes the rest). */
+/**
+ * The order's brief → the adapter's brief. From the week plan's video item (objective, angle, seconds, aspect), or from
+ * Writer's `write_video_brief` once it ran (P3: three hooks, key points, a call to action too; SQL copies them in).
+ */
 export function briefOf(order: Order) {
   const b = order.brief;
   return VideoBriefSchema.parse({
@@ -80,6 +83,7 @@ export function briefOf(order: Order) {
     angle: typeof b.angle === "string" ? b.angle.slice(0, 300) : "",
     ...(Array.isArray(b.hooks) ? { hooks: b.hooks.filter((h): h is string => typeof h === "string").slice(0, 3) } : {}),
     ...(Array.isArray(b.key_points) ? { keyPoints: b.key_points.filter((k): k is string => typeof k === "string").slice(0, 6) } : {}),
+    ...(typeof b.cta === "string" ? { cta: b.cta.slice(0, 160) } : {}),
     ...(typeof b.seconds === "number" ? { seconds: Math.min(90, Math.max(5, Math.round(b.seconds))) } : {}),
     ...(b.aspect === "9:16" || b.aspect === "16:9" || b.aspect === "1:1" ? { aspect: b.aspect } : {}),
   });

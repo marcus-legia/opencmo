@@ -5,7 +5,17 @@
  * Pure (no server-only): `screens.check.ts` runs it on sample rows.
  */
 
-import { FinishedVideoSnapshotSchema, PriceSnapshotSchema, ScriptSnapshotSchema, ShortsBatchSnapshotSchema, type ApprovalCard, type CardKind } from "./approval-card";
+import { profileIdOf, profileOf } from "../cmo/platforms";
+
+import {
+  FinishedVideoSnapshotSchema,
+  PriceSnapshotSchema,
+  ScriptSnapshotSchema,
+  ShortsBatchSnapshotSchema,
+  type ApprovalCard,
+  type Caption,
+  type CardKind,
+} from "./approval-card";
 import type { Department, ScorePart } from "./common";
 
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
@@ -45,18 +55,38 @@ function firstSentence(text: string): { head: string; rest: string } {
 
 type Built = Pick<ApprovalCard, "title" | "summary" | "meta" | "body">;
 
+type CaptionRow = { caption_id: string; clip_id: string; profile: string; text: string; title: string | null };
+
+/** The captions of one edit, in `platforms.json` order (the snapshot orders them the same way). */
+function captionsOf(rows: CaptionRow[] | undefined, clipId: string | null): Caption[] {
+  if (!rows || !clipId) return [];
+  return rows.filter((c) => c.clip_id === clipId).map((c) => ({ id: c.caption_id, profile: c.profile, text: c.text, title: c.title }));
+}
+
 function build(row: ApprovalRow): Built | null {
   const s = row.snapshot;
   switch (row.kind) {
     case "post": {
+      // The calendar writes labels ("X", "LinkedIn"); a label without a post profile was planned for X, as SQL's
+      // `cmo_decide_post` decides it (every post before P3 was for X).
+      const named = profileOf(profileIdOf(str(s.platform)) ?? "x");
+      const profile = named && named.kind === "post" ? named : profileOf("x");
+      if (!profile) return null;
       const text = str(s.text);
       const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3);
       const { head, rest } = firstSentence(text);
       return {
         title: head || clip(str(s.idea), 200),
         summary: clip(rest || str(s.rationale) || text, 400),
-        meta: `${versions.length} ${versions.length === 1 ? "version" : "versions"} · X · you post it on your account`,
-        body: { kind: "post", platforms: [{ platform: "x", versions: versions.length ? versions : [str(s.idea)], limit: 280 }], checks: [], why: str(s.rationale) || null },
+        meta: `${versions.length} ${versions.length === 1 ? "version" : "versions"} · ${profile.label} · you post it on your account`,
+        body: {
+          kind: "post",
+          platforms: [
+            { platform: profile.platform, versions: versions.length ? versions : [str(s.idea)], limit: profile.limit, visibleBeforeMore: profile.visibleBeforeMore },
+          ],
+          checks: [],
+          why: str(s.rationale) || null,
+        },
       };
     }
     case "reply": {
@@ -98,11 +128,13 @@ function build(row: ApprovalRow): Built | null {
       const examples = edits
         .filter((e) => typeof e.before === "string" && typeof e.after === "string")
         .map((e) => ({ before: clip(e.before as string, 300), after: clip(e.after as string, 300) }));
+      const times = typeof s.times === "number" && Number.isInteger(s.times) && s.times >= 0 ? s.times : examples.length;
       return {
         title: clip(`“${str(s.rule)}”`, 300),
-        summary: examples.length ? `Learned from ${examples.length} of your edits.` : "Learned from your edits and skip reasons.",
+        summary: times ? `Learned from ${times} of your edits.` : "Learned from your edits and skip reasons.",
         meta: "Keep it and every draft follows it",
-        body: { kind: "correction", correctionId: row.ref_id, rule: str(s.rule), examples },
+        // The card shows two examples; the rule itself says what repeats.
+        body: { kind: "correction", correctionId: row.ref_id, rule: str(s.rule), editMode: str(s.edit_mode) || null, times, examples: examples.slice(0, 2) },
       };
     }
     // Studio (P2): the snapshot holds paths, never URLs; the screen loader signs them (`signStudioCard`), so a card built
@@ -146,7 +178,15 @@ function build(row: ApprovalRow): Built | null {
         title: clip(`“${v.title || "Your video"}” is rendered · ${Math.floor(v.seconds! / 60)}:${String(Math.round(v.seconds!) % 60).padStart(2, "0")}`, 300),
         summary: "Approving marks it finished: shorts can be cut from it.",
         meta: "Open it in the editor to tweak first",
-        body: { kind: "finished_video", clipId: v.clip_id, documentHash: v.document_hash, seconds: v.seconds!, previewUrl: null, frameAt: Math.min(2, v.seconds! / 2) },
+        body: {
+          kind: "finished_video",
+          clipId: v.clip_id,
+          documentHash: v.document_hash,
+          seconds: v.seconds!,
+          previewUrl: null,
+          frameAt: Math.min(2, v.seconds! / 2),
+          captions: captionsOf(v.captions, v.clip_id),
+        },
       };
     }
     case "shorts_batch": {
@@ -162,7 +202,15 @@ function build(row: ApprovalRow): Built | null {
           batchId: v.batch_id,
           parentClipId: v.parent_clip_id,
           source: v.title,
-          shorts: v.shorts.map((x) => ({ shortClipId: x.short_clip_id, start: x.start, end: x.end, hook: x.hook, reason: x.reason, previewUrl: null })),
+          shorts: v.shorts.map((x) => ({
+            shortClipId: x.short_clip_id,
+            start: x.start,
+            end: x.end,
+            hook: x.hook,
+            reason: x.reason,
+            previewUrl: null,
+            captions: captionsOf(v.captions, x.short_clip_id),
+          })),
         },
       };
     }

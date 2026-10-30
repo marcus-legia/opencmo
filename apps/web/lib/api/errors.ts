@@ -83,6 +83,8 @@ export function apiErrorFromPostgrest(error: PostgrestLikeError): ApiError {
       error.message === "You can rebuild your plan 5 times a day. Try again tomorrow, or edit the documents directly." ||
       error.message === "You have reached today's limit for this task. Try again tomorrow." ||
       error.message === "You can approve 5 posts for X a day. Try again tomorrow." ||
+      error.message === "You can approve 5 posts for Threads a day. Try again tomorrow." ||
+      error.message === "You can approve 5 posts for LinkedIn a day. Try again tomorrow." ||
       error.message === "You can cut shorts 10 times a day. Try again tomorrow.")
   ) {
     status = 429;

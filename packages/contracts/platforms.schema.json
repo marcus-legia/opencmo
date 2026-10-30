@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencmo.io/contracts/platforms.schema.json",
+  "title": "OpenCMO platform profiles",
+  "description": "What Writer may write for each platform (docs/architecture/writer.md §7): read by Writer's prompt, the code checks, the cards and SQL's platform_profile(). apps/web/lib/cmo/platforms.check.ts validates platforms.json against the same rules in check:contracts; packages/engine/opencmo/platforms.py reads the same file.",
+  "type": "object",
+  "required": ["profiles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/profile" }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "required": ["id", "label", "platform", "kind", "limit", "title", "visibleBeforeMore", "hashtags", "links", "tone"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z_]{0,19}$", "description": "Stored in content_items.platform and cmo_draft_outcomes.platform (20 characters at most)." },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40, "description": "What the cards call it." },
+        "platform": {
+          "enum": ["x", "threads", "linkedin", "tiktok", "youtube", "instagram", "reddit"],
+          "description": "The account it goes out on (lib/screens/common.ts PLATFORMS)."
+        },
+        "kind": {
+          "enum": ["post", "caption", "youtube"],
+          "description": "post: text that goes out on its own; caption: the words under a video; youtube: a long video's title and description."
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Characters of the text (the description for youtube), with headroom under the platform's own limit." },
+        "title": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Characters of the title; only the youtube kind has one."
+        },
+        "visibleBeforeMore": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Characters shown before the platform's \"more\" on a phone; null when the whole text shows."
+        },
+        "hashtags": { "type": "integer", "minimum": 0, "maximum": 30, "description": "Most hashtags allowed; 0 for every post (decided 2026-10-26: hashtags only on videos)." },
+        "links": { "const": false, "description": "No links anywhere (decided 2026-10-26)." },
+        "tone": { "type": "string", "minLength": 1, "maxLength": 200, "description": "One line for the writer, read after the cached prompt prefix." }
+      }
+    }
+  }
+}

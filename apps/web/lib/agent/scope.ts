@@ -599,7 +599,7 @@ export function cmoScope(supabase: SupabaseClient): Scope {
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,
-    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy):\n${cmoSkillIndex("cmo")}`,
+    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy, and no-ai-slop before writing any text that goes out):\n${cmoSkillIndex("cmo")}`,
     context: () => cmoContext(supabase),
     state: () => cmoState(supabase),
     async plan() {

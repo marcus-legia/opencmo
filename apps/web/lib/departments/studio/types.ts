@@ -9,10 +9,9 @@
  * behind an approval card. The team owns how a video is made; callers only say what they want.
  */
 
-import { z } from "zod";
-
 import type { SupabaseClient } from "@/lib/api/handler";
 import type { ToolOutcome } from "@/lib/agent/tools";
+import type { VideoBrief } from "@/lib/cmo/writer/types";
 
 /** Who calls Studio. `ui` is the founder's own buttons (Mark finished, Cut shorts) over `/api/v1/studio`. */
 export const STUDIO_CALLERS = ["brain", "assistant", "mcp", "ui"] as const;
@@ -40,28 +39,11 @@ export const STUDIO_ACCESS: Record<StudioEntry, readonly StudioCaller[]> = {
 
 export const mayCall = (caller: StudioCaller, entry: StudioEntry): boolean => STUDIO_ACCESS[entry].includes(caller);
 
-/** Long-video frames, the same list as `editor-core`'s `VIDEO_ASPECTS`. */
-export const BRIEF_ASPECTS = ["9:16", "16:9", "1:1"] as const;
-
 /**
- * What the brain asks Studio for (a `build_video` order's input): the week plan's video item, never
- * a shot list. `buildVideo` turns it into `create_video` input; the Director writes the script.
+ * The video brief is Writer's (`lib/cmo/writer/types.ts`, P3 B0): Writer writes it before a video and
+ * `buildVideo` takes it, so both sides share one type.
  */
-export const VideoBriefSchema = z.object({
-  /** What the video should achieve: "show founders how a slash command makes a demo video". */
-  objective: z.string().trim().min(3).max(300),
-  /** The strategy angle it takes. */
-  angle: z.string().trim().max(300).default(""),
-  /** Opening lines to choose from; the first is preferred. */
-  hooks: z.array(z.string().trim().min(1).max(160)).max(3).default([]),
-  /** Facts the script may use; the Director invents none. */
-  keyPoints: z.array(z.string().trim().min(1).max(200)).max(6).default([]),
-  seconds: z.number().int().min(5).max(90).default(30),
-  aspect: z.enum(BRIEF_ASPECTS).default("9:16"),
-  /** A premade voice name; absent → the strategy voice, else the model's default. */
-  voice: z.string().trim().max(40).optional(),
-});
-export type VideoBrief = z.infer<typeof VideoBriefSchema>;
+export { BRIEF_ASPECTS, VideoBriefSchema, type VideoBrief } from "@/lib/cmo/writer/types";
 
 /** The Studio tools that are planned and decided (MCP's `PRICED` set). */
 export type StudioTool = string;

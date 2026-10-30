@@ -65,7 +65,7 @@ export function headNote(card: ApprovalCard, now = Date.now()): string | null {
     case "schedule":
       return card.expiresAt ? untilLabel(card.expiresAt, now) : null;
     case "correction":
-      return body.examples.length ? `from ${body.examples.length} edits` : null;
+      return body.times ? `from ${body.times} ${body.times === 1 ? "edit" : "edits"}` : null;
   }
 }
 

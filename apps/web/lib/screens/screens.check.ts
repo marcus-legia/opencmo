@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
-import { ALL_KINDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
+import { ALL_KINDS, SAMPLE_CARDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
@@ -69,7 +69,7 @@ for (const name of SCREEN_NAMES) {
 
 check("cards: one sample of each of the ten kinds", () => {
   assert.deepEqual(ALL_KINDS.map((c) => c.kind), [...CARD_KINDS]);
-  for (const card of [...ALL_KINDS, ...STATE_CARDS]) ApprovalCardSchema.parse(card);
+  for (const card of SAMPLE_CARDS) ApprovalCardSchema.parse(card);
 });
 
 check("cards: a body of another kind is refused", () => {
@@ -131,6 +131,20 @@ check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
   ]);
   const reply = approvalToCard(rows[1]!)!;
   assert.equal(reply.body.kind === "reply" && reply.body.parts.length, 1, "a malformed score part is dropped");
+});
+
+check("cards: a post planned with the calendar's label shows, with its platform's limits", () => {
+  const post = (platform: string) =>
+    approvalToCard(row("post", { kind: "post", platform, day: "2026-10-29", idea: "Idea", text: "One line.", alternates: [], rationale: "" }));
+  const x = post("X");
+  assert.ok(x && x.body.kind === "post", "a post planned as X is shown");
+  assert.deepEqual(x.body.platforms.map((p) => [p.platform, p.limit]), [["x", 280]]);
+  const linkedin = post("LinkedIn");
+  assert.ok(linkedin && linkedin.body.kind === "post");
+  assert.deepEqual(linkedin.body.platforms.map((p) => [p.platform, p.limit, p.visibleBeforeMore]), [["linkedin", 3000, 140]]);
+  assert.match(linkedin.meta, /LinkedIn/);
+  const unknown = post("Mastodon");
+  assert.ok(unknown && unknown.body.kind === "post" && unknown.body.platforms[0]!.platform === "x", "an unknown label is decided as X, so shown as X");
 });
 
 check("cards: Studio kinds are not shown before A1; expired and elsewhere states", () => {
