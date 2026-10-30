@@ -46,7 +46,7 @@ async function founder(db: SupabaseClient): Promise<{ user: E2EUser; me: Supabas
   return { user, me };
 }
 
-type SlideGroup = { kind: string; start: number; end: number; marks?: { visual?: { op?: string } }; children: { name: string; text?: string }[] };
+type SlideGroup = { kind: string; start: number; end: number; marks?: { visual?: { op?: string } }; children: { name: string; text?: string; fill?: string }[] };
 
 /** The slides of the edit as saved, in play order. */
 async function savedSlides(page: Page, clipId: string): Promise<SlideGroup[]> {
@@ -110,6 +110,20 @@ test("New slideshow: build 5 slides in the Slides view, reorder, retime, and swi
   expect(saved[1]!.end - saved[1]!.start).toBe(6);
   expect(saved[1]!.children.find((child) => child.name === "Body")?.text).toBe("No timeline needed.");
   for (let index = 1; index < saved.length; index++) expect(saved[index]!.start).toBe(saved[index - 1]!.end);
+
+  // Drag the last slide onto the first; delete one; give one a colour of its own.
+  await strip.getByTestId("slide-item").nth(4).dragTo(strip.getByTestId("slide-item").nth(0));
+  await expect(strip.getByTestId("slide-item").first()).toContainText(words[3]!);
+  await strip.getByTestId("slide-item").nth(4).getByTestId("slide-delete").click();
+  await expect(strip.getByTestId("slide-item")).toHaveCount(4);
+  await strip.getByTestId("slide-item").nth(0).getByRole("button", { name: /^Slide 1:/ }).click();
+  await panel.getByTestId("slide-color").fill("#ffd400");
+  await panel.getByTestId("slide-color").blur();
+  await expect
+    .poll(async () => (await savedSlides(page, clipId)).map((slide) => [heading(slide), slide.children.find((child) => child.name === "Background")?.fill]), { timeout: 30_000 })
+    .toEqual([[words[3], "#FFD400"], [words[4], expect.anything()], [words[0], expect.anything()], [words[1], expect.anything()]]);
+  await strip.getByTestId("slide-add").click();
+  await expect(strip.getByTestId("slide-item")).toHaveCount(5);
 
   await page.screenshot({ path: test.info().outputPath("slides-view-1440.png") });
 
@@ -235,14 +249,42 @@ test("Help-only Sales card says why and has no post button", async ({ page }) =>
   expect(thread.error).toBeNull();
   const { data: card } = await db.from("approvals").select("id").eq("ref_kind", "opportunity").eq("ref_id", thread.data!.id).single();
 
+  // A thread the community's rules rule out: on the Sales screen with why, no draft and no card.
+  const skipped = await db
+    .from("opportunities")
+    .insert({
+      user_id: user.id,
+      url: "https://www.reddit.com/r/marketing/comments/e2e/do_ai_captions_hurt_reach/",
+      community: "r/marketing",
+      title: "Do AI captions hurt reach?",
+      score: 61,
+      rule: "skip",
+      rule_why: "Skipped: r/marketing bans tool mentions",
+    })
+    .select("id")
+    .single();
+  expect(skipped.error).toBeNull();
+  expect((await db.from("approvals").select("id").eq("ref_id", skipped.data!.id)).data).toEqual([]);
+
   await signIn(page, user);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+    await page.goto(`/app/inbox/${card!.id}`);
+    const shown = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+    await expect(shown.getByTestId("reply-help-only")).toContainText("r/startups bans self-promotion: help only");
+    await expect(shown.getByRole("button", { name: "Copy and open thread" })).toBeVisible();
+    await expect(shown.getByRole("button", { name: /post/i })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await noSeriousAxe(page);
+  }
+
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/app/inbox/${card!.id}`);
-  const shown = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(shown.getByTestId("reply-help-only")).toContainText("r/startups bans self-promotion: help only");
-  await expect(shown.getByRole("button", { name: "Copy and open thread" })).toBeVisible();
-  await expect(shown.getByRole("button", { name: /post/i })).toHaveCount(0);
-  await noSeriousAxe(page);
+  await page.goto("/app/sales");
+  const threads = page.getByRole("list", { name: "Threads" });
+  await expect(threads).toContainText("r/startups bans self-promotion: help only");
+  await threads.getByRole("button", { name: /Do AI captions hurt reach\?/ }).click();
+  await expect(page.getByText("Sales did not draft a reply.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /post/i })).toHaveCount(0);
 });
 
 test("Sales settings save live; a stuck scan points at them, not at credits", async ({ page }) => {

@@ -391,7 +391,8 @@ export function SlideshowBody({
         </div>
       ) : null}
       <div className="v2-card-meta">
-        {body.slides.length} slides · {formatSeconds(total)} · MP4 + PNG set
+        {/* The head already names the slide count and the formats. */}
+        {formatSeconds(total)} in all
         {body.pngSetUrl ? (
           <>
             {" · "}
