@@ -15,7 +15,8 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
 
 ## Todo
 
-- [ ] **C0 Schedule card** on A0's types with fixtures: content preview, platform, account picker (connected ones),
+- [x] **C0 Schedule card** (published link waits on request 4 to A; one account per platform, so the account
+      picker is the connected account or "no account connected", no list) on A0's types with fixtures: content preview, platform, account picker (connected ones),
       time in the founder's timezone, TikTok fields (privacy from creator info, comment/duet/stitch, AI-generated
       label off by default with one line of help), change time, cancel; states: waiting, published (link), failed
       (reason, Retry), missed (new time). Axe clean at 1440 and 390.
@@ -31,3 +32,6 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
 ## Requests
 
 (Others append `[from → C] what, why`; answer here with the commit.)
+
+
+Sent: requests C1–C6 to A, in `A.md` under Requests.

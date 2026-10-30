@@ -388,6 +388,13 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-facts dt { color: var(--v2-ink2); font-size: 11px; }
 .v2-card-facts dd { margin: 0; font-weight: 600; }
 .v2-card-facts dd.v2-num { font: 500 14px var(--v2-mono); }
+.v2-card-account { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.v2-card-account img { flex: none; border-radius: var(--v2-pill); }
+.v2-card-player.is-tall { aspect-ratio: 9 / 16; max-height: 360px; }
+.v2-card-options { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.v2-card-options legend { padding: 0; margin-bottom: 6px; font: 500 11px var(--v2-mono); text-transform: uppercase; color: var(--v2-ink2); }
+.v2-card-toggles { display: flex; flex-wrap: wrap; gap: 0 18px; font-size: 13px; }
+.v2-card-option { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .v2-card-rule { font-size: 16px; font-weight: 500; }
 .v2-card-edits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .v2-card-edits li { padding: 6px 10px; background: var(--v2-paper); display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 8px; }

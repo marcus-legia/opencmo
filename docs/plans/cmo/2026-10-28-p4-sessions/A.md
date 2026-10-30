@@ -61,3 +61,26 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   `task-kinds.json` and the `tasks_kind_check`). Payload `{ bucket: "exports", object: "<user>/<clip>/<task>.mp4",
   upload_url, content_type: "video/mp4" }`; the object must be the task owner's export. B3 queues it, so if the
   queuing RPC is yours, it needs those four fields (upload_url ≤ 2048 chars, https).
+
+- **[from C → A] C1. Decide the schedule card.** `components/cards/decide.ts` sends, with `contentHash`: `approve`,
+  `change_time {publish_at}` (UTC `YYYY-MM-DDTHH:MM:SSZ`), `set_options {options}` (`ScheduleOptionsSchema`),
+  `retry`, `cancel {reason?}`. Please accept these in `/api/v1/approvals/[id]` and add `schedule` to
+  `DECIDABLE_IN_WAVE_1` with A1; until then a live card shows its buttons disabled with the release reason.
+- **[from C → A] C2. Fixtures for the states** in `SAMPLE_CARDS` (C4 and the look check open them at `/app/inbox/[id]`):
+  `card-time-failed` (`problem {kind: "failed", text}` and `lastError`), `card-time-missed` (`lastError`, no
+  problem, a new `at`), `card-time-intent` (LinkedIn, `mode: "intent"`, `accountId: null`, `tiktok: null`),
+  `card-time-choose` (TikTok with `options.privacy` unset), `card-time-youtube` (a title, `ai_label`).
+- **[from C → A] C3. TikTok's posting guidelines** (needed for Zernio's/TikTok's audit): the founder picks the audience,
+  so `schedule_propose` leaves `options.privacy` unset and `allow_comment`/`allow_duet`/`allow_stitch` false; the card
+  blocks Approve until a privacy level is saved, and `approval_decide` should refuse `approve` on a TikTok `publish`
+  slot without one. The card shows TikTok's Music Usage Confirmation line. TikTok also asks for a commercial content
+  disclosure ("your brand" / "branded content"): when you add it to `ScheduleOptionsSchema`
+  (`brand_organic`, `brand_content`), tell me and I render the toggles. B's `CreatorInfo` also has `canPostMore` (TikTok's daily
+  limit) and `maxVideoSeconds`: please carry both into the body's `tiktok` so the card can say "TikTok's daily limit is
+  reached: pick another day" instead of offering Approve.
+- **[from C → A] C4. Published link.** C0 shows "published (link)" only if the body carries it: please add
+  `publishedUrl: z.url().nullable()` to the schedule body (A3 loader from `schedule_slots`), or say where it lives.
+- **[from C → A] C5. How states map** (what C0 reads): a failed post → card with `problem.kind = "failed"` (Retry, Change
+  time, Cancel stay enabled); a missed slot → new card with `lastError` and no problem ("Approve new time").
+- **[from C → A] C6. Foot line.** The body already shows the account, the time and the why; the fixture's `meta` repeats
+  the why. Keep `meta` empty (or credits) on schedule cards.

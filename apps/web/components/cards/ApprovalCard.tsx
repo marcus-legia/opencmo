@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
-import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption } from "@/lib/screens/approval-card";
+import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
 
 import {
   CorrectionBody,
@@ -28,12 +28,22 @@ import {
 } from "./bodies";
 import { POST_TARGET, blockedReason, editCaption, postPlatform, type Decision } from "./decide";
 import { NUMERAL, cardHead, headNote } from "./labels";
+import { approveBlocked, fromLocalInput, sameOptions, toLocalInput } from "./schedule";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
 type Variant = "primary" | "secondary" | "quiet";
 type Action =
-  | { label: string; variant: Variant; run: () => void; disabled?: string; /** Set on declines: checked on its own. */ declines?: boolean }
+  | {
+      label: string;
+      variant: Variant;
+      run: () => void;
+      disabled?: string;
+      /** Set on declines: checked on its own. */
+      declines?: boolean;
+      /** The decision this button sends, when a card's problem allows some actions and not others. */
+      checks?: Decision["action"];
+    }
   | { label: string; variant: Variant; href: string };
 
 const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
@@ -48,6 +58,7 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   finished_video: { label: "Send back", action: "send_back" },
   shorts_batch: { label: "Send back", action: "send_back" },
   correction: { label: "Dismiss", action: "reject" },
+  schedule: { label: "Cancel", action: "cancel" },
 };
 
 /** A secondary action that belongs to a later phase: shown, disabled, with the reason. */
@@ -96,6 +107,10 @@ export function ApprovalCard({
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
+  /** Schedule card: the platform's fields as the founder is changing them, and the change-time picker. */
+  const [options, setOptions] = useState<ScheduleOptions>(() => (card.body.kind === "schedule" ? card.body.options : {}));
+  const [moving, setMoving] = useState(false);
+  const [newTime, setNewTime] = useState("");
   const [shown, setShown] = useState(() => firstText(card));
   const [draft, setDraft] = useState(() => firstText(card));
   const beats = card.body.kind === "script" ? card.body.beats : [];
@@ -186,6 +201,8 @@ export function ApprovalCard({
   });
   const declineAction: Action[] = decline ? [{ label: decline.label, variant: "quiet", run: () => setDeclining(true), declines: true }] : [];
   const declineBlocked = decline ? blockedReason(card, sample, decline.action) : blocked;
+  const blockedFor = (action: Extract<Action, { run: () => void }>) =>
+    action.declines ? declineBlocked : action.checks ? blockedReason(card, sample, action.checks) : blocked;
   const primary = (label = PRIMARY_ACTION[card.kind]): Action => ({ label, variant: "primary", run: approve });
   const later = (label: string): Action => ({ label, variant: "secondary", run: () => undefined, disabled: LATER });
 
@@ -215,8 +232,25 @@ export function ApprovalCard({
         return [primary(), ...declineAction];
       case "slideshow":
         return [primary(), later("Open in Slides")];
-      case "schedule":
-        return [primary(), later("Change time")];
+      case "schedule": {
+        const body = card.body;
+        const changeTime: Action = {
+          label: "Change time",
+          variant: "secondary",
+          checks: "change_time",
+          run: () => {
+            setNewTime(toLocalInput(body.at, body.timezone));
+            setMoving(true);
+          },
+        };
+        if (card.problem?.kind === "failed") return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
+        if (!sameOptions(options, body.options))
+          return [
+            { label: "Save changes", variant: "primary", run: () => void run({ action: "set_options", options }) },
+            { label: "Undo changes", variant: "secondary", run: () => setOptions(body.options) },
+          ];
+        return [{ ...primary(body.lastError ? "Approve new time" : PRIMARY_ACTION.schedule), disabled: approveBlocked(body, options) ?? undefined }, changeTime, ...declineAction];
+      }
       case "correction":
         return [primary(editing ? "Keep edited rule" : PRIMARY_ACTION.correction), editAction(), ...declineAction];
     }
@@ -282,12 +316,19 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : null)} />
           ) : (
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
 
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
+
+          {card.body.kind === "schedule" && card.body.lastError && !card.problem ? (
+            <p className="v2-card-state is-expired">
+              <b>Missed</b>
+              <span>{card.body.lastError} This is a new time: approve it, change it or cancel.</span>
+            </p>
+          ) : null}
 
           {card.problem ? (
             <p className={`v2-card-state is-${card.problem.kind}`}>
@@ -302,7 +343,30 @@ export function ApprovalCard({
             </p>
           ) : null}
 
-          {redoing && card.body.kind === "price" ? (
+          {moving && card.body.kind === "schedule" ? (
+            <form
+              className="v2-card-decline"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (card.body.kind !== "schedule") return;
+                const at = fromLocalInput(newTime, card.body.timezone);
+                if (at) void run({ action: "change_time", publish_at: at });
+              }}
+            >
+              <label className="v2-field" htmlFor={`${card.id}-time`}>
+                <span>New time, your time ({card.body.timezone}). A new card asks you to approve it.</span>
+                <input id={`${card.id}-time`} className="v2-input is-compact" type="datetime-local" required value={newTime} autoFocus onChange={(event) => setNewTime(event.target.value)} />
+              </label>
+              <div className="v2-actions">
+                <Button type="submit" variant="primary" compact disabled={busy || !fromLocalInput(newTime, card.body.timezone)}>
+                  Save new time
+                </Button>
+                <Button variant="quiet" compact onClick={() => setMoving(false)}>
+                  Keep this time
+                </Button>
+              </div>
+            </form>
+          ) : redoing && card.body.kind === "price" ? (
             <form
               className="v2-card-decline"
               onSubmit={(event) => {
@@ -367,8 +431,8 @@ export function ApprovalCard({
                     key={action.label}
                     variant={action.variant}
                     compact
-                    disabled={busy || !!action.disabled || (!!(action.declines ? declineBlocked : blocked) && action.label !== "Stop editing")}
-                    title={action.disabled ?? (action.declines ? declineBlocked : blocked) ?? undefined}
+                    disabled={busy || !!action.disabled || (!!blockedFor(action) && action.label !== "Stop editing")}
+                    title={action.disabled ?? blockedFor(action) ?? undefined}
                     onClick={action.run}
                   >
                     {action.label}
