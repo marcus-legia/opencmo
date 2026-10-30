@@ -74,12 +74,30 @@ export function sameOptions(a: ScheduleOptions, b: ScheduleOptions): boolean {
   return OPTION_KEYS.every((key) => (a[key] ?? null) === (b[key] ?? null));
 }
 
+const isTikTok = (body: Body) => body.mode === "publish" && body.where.platform === "tiktok";
+
 /**
- * Why Approve cannot go yet, or null. TikTok's posting guidelines want the founder to pick the audience themselves:
- * no privacy level is chosen for them.
+ * The fields as they are saved: on TikTok every toggle the card showed is sent as on or off, because approving needs
+ * the founder's answer for each (`schedule_ready_check`), and one left untouched means off, never a default on.
+ */
+export function savedOptions(body: Body, options: ScheduleOptions): ScheduleOptions {
+  if (!isTikTok(body) || !body.tiktok) return options;
+  return {
+    ...options,
+    allow_comment: !body.tiktok.commentDisabled && !!options.allow_comment,
+    allow_duet: !body.tiktok.duetDisabled && !!options.allow_duet,
+    allow_stitch: !body.tiktok.stitchDisabled && !!options.allow_stitch,
+  };
+}
+
+/**
+ * Why Approve cannot go yet, or null. TikTok's posting guidelines want the founder to pick the audience and the
+ * interactions themselves: nothing is chosen for them.
  */
 export function approveBlocked(body: Body, options: ScheduleOptions): string | null {
   if (!sameOptions(options, body.options)) return "Save your changes first: the card asks you again with them.";
-  if (body.mode === "publish" && body.where.platform === "tiktok" && !options.privacy) return "Choose who can see it on TikTok first.";
+  if (!isTikTok(body)) return null;
+  if (!body.tiktok) return "TikTok's settings for this account could not be read. Reload the card in a minute.";
+  if (!options.privacy || typeof options.allow_comment !== "boolean") return "Choose who can see it on TikTok and save first.";
   return null;
 }

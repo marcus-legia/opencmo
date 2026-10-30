@@ -28,7 +28,7 @@ import {
 } from "./bodies";
 import { POST_TARGET, blockedReason, editCaption, postPlatform, type Decision } from "./decide";
 import { NUMERAL, cardHead, headNote } from "./labels";
-import { approveBlocked, fromLocalInput, sameOptions, toLocalInput } from "./schedule";
+import { approveBlocked, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
@@ -243,13 +243,14 @@ export function ApprovalCard({
             setMoving(true);
           },
         };
-        if (card.problem?.kind === "failed") return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
+        // A failed post keeps its card open with the reason while its window lasts (A1); Retry posts it now.
+        if (card.problem?.kind === "failed" || body.lastError) return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
         if (!sameOptions(options, body.options))
           return [
-            { label: "Save changes", variant: "primary", run: () => void run({ action: "set_options", options }) },
+            { label: "Save changes", variant: "primary", run: () => void run({ action: "set_options", options: savedOptions(body, options) }) },
             { label: "Undo changes", variant: "secondary", run: () => setOptions(body.options) },
           ];
-        return [{ ...primary(body.lastError ? "Approve new time" : PRIMARY_ACTION.schedule), disabled: approveBlocked(body, options) ?? undefined }, changeTime, ...declineAction];
+        return [{ ...primary(), disabled: approveBlocked(body, options) ?? undefined }, changeTime, ...declineAction];
       }
       case "correction":
         return [primary(editing ? "Keep edited rule" : PRIMARY_ACTION.correction), editAction(), ...declineAction];
@@ -316,17 +317,17 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : null)} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.lastError ? "Retry posts it as you approved it; change the time to start again." : null)} />
           ) : (
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
 
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
 
-          {card.body.kind === "schedule" && card.body.lastError && !card.problem ? (
-            <p className="v2-card-state is-expired">
-              <b>Missed</b>
-              <span>{card.body.lastError} This is a new time: approve it, change it or cancel.</span>
+          {card.body.kind === "schedule" && card.body.lastError && !card.problem && card.status === "waiting" ? (
+            <p className="v2-card-state is-failed">
+              <b>Failed</b>
+              <span>{card.body.lastError}</span>
             </p>
           ) : null}
 
@@ -350,7 +351,7 @@ export function ApprovalCard({
                 event.preventDefault();
                 if (card.body.kind !== "schedule") return;
                 const at = fromLocalInput(newTime, card.body.timezone);
-                if (at) void run({ action: "change_time", publish_at: at });
+                if (at) void run({ action: "change_time", publishAt: at });
               }}
             >
               <label className="v2-field" htmlFor={`${card.id}-time`}>

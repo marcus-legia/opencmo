@@ -8,12 +8,12 @@ import { ApiKeys } from "@/components/clipping/web/ApiKeys";
 import { ConnectedApps } from "@/components/clipping/web/ConnectedApps";
 import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
-import { PLATFORM_LABEL } from "@/lib/screens/common";
 import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/screens/settings";
 
 import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
+import { AccountsPanel } from "./AccountsPanel";
 
 const DIGEST_HOURS = [6, 7, 8, 9, 10, 12, 18];
 
@@ -85,37 +85,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
 
   return (
     <>
-      <Panel id="settings-connected-accounts"
-        title="Connected accounts"
-        sub="Posts go out on your own accounts, only at times you approved."
-        actions={
-          <Button variant="primary" disabled title="Connecting accounts arrives with Schedule's publishing">
-            Connect an account
-          </Button>
-        }
-      >
-        {data.accounts.length === 0 ? (
-          <p className="v2-panel-body scr-muted">No accounts connected yet.</p>
-        ) : (
-          <div className="scr-accounts">
-            {data.accounts.map((a) => (
-              <div key={a.id} className={cx("scr-account", a.status === "reconnect" && "is-stuck")}>
-                <span>
-                  <b>{PLATFORM_LABEL[a.platform]}</b>
-                  {a.handle ? ` · ${a.handle}` : ""}
-                </span>
-                {a.status === "connected" ? (
-                  <span className="scr-status is-ok">Connected</span>
-                ) : (
-                  <Button compact variant="danger" disabled title="Reconnecting arrives with Schedule's publishing">
-                    {a.status === "reconnect" ? "Reconnect" : "Connect"}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+      <AccountsPanel accounts={data.accounts} live={live.accounts} />
 
       <div className="scr-settings-grid">
         <Panel id="settings-your-cmo" title="Your CMO" className="scr-settings-cmo">

@@ -26,7 +26,7 @@ export type Decision =
   /** Finished video and shorts batch: not yet, with what to change. */
   | { action: "send_back"; reason?: string }
   /** Schedule (P4): a new time in UTC `YYYY-MM-DDTHH:MM:SSZ`; the slot moves and a new card asks again. */
-  | { action: "change_time"; publish_at: string }
+  | { action: "change_time"; publishAt: string }
   /** Schedule: the platform's fields changed; a new card asks again. */
   | { action: "set_options"; options: ScheduleOptions }
   /** Schedule: a failed post goes again on the same approval while its time is still in the window. */
@@ -118,7 +118,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "set_options":
       return `Changes saved. A new card asks you to approve them${suffix}.`;
     case "retry":
-      return `Trying again now. The card comes back if it fails${suffix}.`;
+      return `Trying again. If its time has passed, a card with a new time comes instead${suffix}.`;
     case "cancel":
       if (card.kind === "schedule") return `Cancelled. Nothing will be posted${suffix}.`;
       // Card 2 comes after the keyframes were made and paid for: only card 1 is cancelled before any spend.

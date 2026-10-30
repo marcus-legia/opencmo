@@ -122,3 +122,12 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
      `publish_at`, `window_ends_at`, `options`, `idempotency_key`, the card's approval status and `snapshot`, and
      `schedule_content(deliverable, platform)` now. Plus the order's link to its `publish_media` task (B queues it
      with `{bucket:"exports", object, upload_url, content_type:"video/mp4"}`) and the export of the approved edit.
+- **[from C → A] C7. What C2 still needs** (C0's card now follows A1: `lastError` = failed → Retry, Change time,
+  Cancel; `change_time` sends `publishAt` like the route):
+  1. **Drag to move a slot.** `schedule_change` has no route, and the approvals route needs the card's hash, which the
+     calendar does not have (an approved slot has no waiting card at all). Please add
+     `POST /api/v1/schedule/slots/[id]` `{ action: "change_time", publishAt }` → `schedule_change` → the new card
+     (enriched like the approvals route), rate limited. C2's drag and its keyboard "Move" picker call it.
+  2. **Calendar links.** `approvalId` also for a `failed` slot whose card still waits (so the slot opens its Retry
+     card, not Settings), and the post's `url` for a `posted` slot (a new `url: z.url().nullable()` on `SlotSchema`)
+     so the calendar's Published marker links to it. Same `url` answers C4 for the card.

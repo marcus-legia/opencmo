@@ -332,6 +332,12 @@
 .scr-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
 .scr-account { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; min-height: 58px; border-bottom: 1px solid var(--v2-line); }
 .scr-account.is-stuck { background: var(--v2-stuck-soft); }
+.scr-account-who { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.scr-account-who img { flex: none; border-radius: var(--v2-pill); }
+.scr-account-note { display: block; }
+.scr-status-line { margin: 0; font-size: 13px; }
+.scr-status-line.is-ok { background: var(--v2-ok-soft); color: var(--v2-ok); }
+.scr-status-line.is-stuck { background: var(--v2-stuck-soft); color: var(--v2-stuck); }
 .scr-settings-grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch; }
 .scr-settings-cmo { flex: 1 1 420px; }
 .scr-form { display: flex; flex-direction: column; gap: 16px; }

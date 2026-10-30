@@ -19,7 +19,7 @@ const VIEWS = [
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
-const FILTERS = ["all", "x", "linkedin", "threads", "tiktok", "youtube"] as const;
+const FILTERS = ["all", "x", "linkedin", "threads", "tiktok", "youtube", "instagram"] as const;
 type Filter = (typeof FILTERS)[number];
 
 const STATUS_TEXT: Record<SlotStatus, string> = {
@@ -117,7 +117,7 @@ export function ScheduleScreen() {
                     {a.status === "connected" ? (
                       <span className="scr-status is-ok">Connected</span>
                     ) : (
-                      <a href="/app/settings" className="scr-status is-stuck">
+                      <a href="/app/settings#settings-connected-accounts" className="scr-status is-stuck">
                         {a.status === "reconnect" ? "Reconnect" : "Connect"}
                       </a>
                     )}
@@ -260,7 +260,7 @@ function SlotCard({ slot, zone, inline }: { slot: Slot; zone: Zone; inline?: boo
   }
   if (slot.status === "failed") {
     return (
-      <a href="/app/settings" className={cls}>
+      <a href="/app/settings#settings-connected-accounts" className={cls}>
         {body}
       </a>
     );
