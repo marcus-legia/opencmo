@@ -1607,8 +1607,8 @@ begin
 
   -- Words on a finished video or a shorts batch: one caption changes, nothing is decided.
   if p_action = 'edit_caption' then
-    if v_row.kind not in ('finished_video', 'shorts_batch') then
-      raise exception 'Only a video''s or a batch''s captions are edited here.' using errcode = '22023';
+    if v_row.kind not in ('finished_video', 'shorts_batch', 'slideshow') then
+      raise exception 'Only a video''s, a batch''s or a slideshow''s captions are edited here.' using errcode = '22023';
     end if;
     if coalesce(v_payload->>'caption', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
       raise exception 'Say which caption to change.' using errcode = '22023';
@@ -1975,6 +1975,9 @@ begin
           'shots', coalesce(s.card->'shots', '0'::jsonb), 'price_credits', s.price_credits)
         end
       into v from public.studio_steps s where s.id = p_ref_id;
+      if v->>'kind' = 'slideshow' then
+        v_captions := public.caption_snapshots(array[(v->>'clip_id')::uuid]);
+      end if;
     when 'editor_project' then
       select jsonb_build_object('kind', 'finished_video', 'clip_id', c.id, 'title', coalesce(c.hook, ''),
         'document_hash', public.editor_document_hash(p.document),
@@ -2065,7 +2068,7 @@ CREATE FUNCTION public.approvals_caption_approve() RETURNS trigger
     SET search_path TO 'public'
     AS $_$
 begin
-  if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'approved' or old.status <> 'waiting'
+  if new.kind not in ('finished_video', 'shorts_batch', 'slideshow') or new.status <> 'approved' or old.status <> 'waiting'
      or coalesce(jsonb_typeof(new.snapshot->'captions'), '') <> 'array' then
     return new;
   end if;
@@ -2094,9 +2097,9 @@ declare
   v_profiles text[];
   -- The cut the captions describe: a finished video's document (sent back, edited and raised again, it is a new
   -- cut that needs new words; raised again for its render alone, it is not); a shorts batch is its own cut.
-  v_cut text := case when new.kind = 'finished_video' then new.snapshot->>'document_hash' end;
+  v_cut text := case when new.kind in ('finished_video', 'slideshow') then new.snapshot->>'document_hash' end;
 begin
-  if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'waiting' then
+  if new.kind not in ('finished_video', 'shorts_batch', 'slideshow') or new.status <> 'waiting' then
     return new;
   end if;
   begin
@@ -2108,6 +2111,7 @@ begin
     end if;
     v_clips := case new.kind
       when 'finished_video' then array[new.ref_id]
+      when 'slideshow' then array[(new.snapshot->>'clip_id')::uuid]
       else array(select s.short_clip_id from public.shorts s where s.batch_id = new.ref_id and s.status = 'ready'
                    and s.short_clip_id is not null order by s.source_start, s.id) end;
     if cardinality(v_clips) = 0 then
@@ -2471,6 +2475,9 @@ begin
   for v_batch in select distinct s.batch_id from public.shorts s where s.short_clip_id = p_clip loop
     perform public.approval_refresh('short_batch', v_batch);
   end loop;
+  for v_batch in select st.id from public.studio_steps st where st.clip_id = p_clip and st.kind = 'slideshow' and st.status = 'waiting' loop
+    perform public.approval_refresh('studio_step', v_batch);
+  end loop;
 end;
 $$;
 
@@ -2562,7 +2569,7 @@ declare
   v_parent public.deliverables;
 begin
   select * into v_parent from public.deliverables
-  where ref_kind = 'clip' and ref_id = p_caption.clip_id and kind in ('video', 'short') and user_id = p_caption.user_id
+  where ref_kind = 'clip' and ref_id = p_caption.clip_id and kind in ('video', 'short', 'slideshow') and user_id = p_caption.user_id
   order by created_at limit 1;
   if not found then
     return;
@@ -7377,7 +7384,7 @@ begin
   if v_slot.status <> 'publishing' then
     raise exception 'This post is not being published.' using errcode = 'P0001';
   end if;
-  if p_object is null or p_object !~ ('^' || p_user::text || '/[0-9a-f-]{36}/[0-9a-f-]{36}\.mp4$') then
+  if p_object is null or p_object !~ ('^' || p_user::text || '/[0-9a-f-]{36}/[0-9a-f-]{36}(\.mp4|-[0-9]{2}\.png)$') then
     raise exception 'That export is not this founder''s.' using errcode = '22023';
   end if;
   if p_upload_url !~ '^https://' or char_length(p_upload_url) > 2048
@@ -7385,9 +7392,10 @@ begin
     raise exception 'The upload address is not valid.' using errcode = '22023';
   end if;
   insert into public.tasks (user_id, kind, clip_id, payload, request_id, status)
-  values (p_user, 'publish_media', (public.approval_snapshot('schedule_slot', p_slot)->>'clip_id')::uuid,
+  values (p_user, 'publish_media', coalesce(public.approval_snapshot('schedule_slot', p_slot)->>'clip_id',
+      public.approval_snapshot('schedule_slot', p_slot)->'image'->>'clip_id')::uuid,
     jsonb_build_object('bucket', 'exports', 'object', p_object, 'upload_url', p_upload_url, 'public_url', p_public_url,
-      'content_type', 'video/mp4', 'slot_id', p_slot),
+      'content_type', case when p_object like '%.png' then 'image/png' else 'video/mp4' end, 'slot_id', p_slot),
     gen_random_uuid(), 'queued')
   returning id into v_task;
   update public.schedule_slots set media_task_id = v_task, updated_at = now() where id = p_slot;
@@ -7477,16 +7485,19 @@ begin
   select * into v_account from public.social_accounts where id = v_slot.account_id;
   select * into v_approval from public.approvals where id = v_slot.approval_id;
   if v_current->>'clip_id' is not null then
-    select jsonb_build_object('object', t.output_path, 'bytes', t.bytes) into v_export
+    select jsonb_build_object('object', t.output_path, 'bytes', t.bytes, 'contentType', 'video/mp4') into v_export
     from public.tasks t join public.editor_projects p on p.clip_id = t.clip_id
     where t.clip_id = (v_current->>'clip_id')::uuid and t.kind = 'render_document' and t.status = 'done'
       and t.settings_hash = public.editor_document_hash(p.document) and t.output_path is not null
     order by t.finished_at desc nulls last limit 1;
+  elsif v_current->'image'->>'object' is not null then
+    v_export := jsonb_build_object('object', v_current->'image'->>'object', 'bytes', v_current->'image'->'bytes', 'contentType', 'image/png');
   end if;
   select * into v_task from public.tasks where id = v_slot.media_task_id;
   if v_task.id is not null then
     v_media := case v_task.status
-      when 'done' then jsonb_build_object('state', 'done', 'publicUrl', v_task.payload->>'public_url', 'contentType', 'video/mp4')
+      when 'done' then jsonb_build_object('state', 'done', 'publicUrl', v_task.payload->>'public_url',
+        'contentType', coalesce(v_task.payload->>'content_type', 'video/mp4'))
       when 'failed' then jsonb_build_object('state', 'failed', 'error', coalesce(v_task.error, 'The video could not be uploaded.'))
       when 'cancelled' then jsonb_build_object('state', 'failed', 'error', 'The video upload was cancelled.')
       else jsonb_build_object('state', 'running', 'startedAt', to_jsonb(coalesce(v_task.started_at, v_task.created_at))) end;
@@ -9598,6 +9609,8 @@ declare
   v_text text;
   v_title text;
   v_doc text;
+  v_image_clip uuid;
+  v_image jsonb;
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
@@ -9605,8 +9618,27 @@ begin
   end if;
   if v_d.ref_kind = 'content_item' then
     select coalesce(body->>'text', '') into v_text from public.content_items where id = v_d.ref_id;
+    -- The post's newest image (P5 B4), as its cover still of the image's document as it is now. Only a post with an
+    -- image carries the key, so the hash of a post without one is what it was before P5.
+    select i.ref_id into v_image_clip from public.deliverables i
+    where i.post_id = v_d.ref_id and i.kind = 'image' order by i.created_at desc limit 1;
+    if v_image_clip is not null then
+      select jsonb_build_object('clip_id', v_image_clip,
+          'object', t.output->'stills'->coalesce((t.output->>'cover_index')::integer, 0)->>'object',
+          'bytes', t.output->'stills'->coalesce((t.output->>'cover_index')::integer, 0)->'bytes')
+        into v_image
+      from public.tasks t join public.editor_projects p on p.clip_id = t.clip_id
+      where t.clip_id = v_image_clip and t.kind = 'render_stills' and t.status = 'done'
+        and t.settings_hash = public.editor_document_hash(p.document)
+      order by t.finished_at desc nulls last limit 1;
+      if v_image->>'object' is null then
+        v_image := null;
+      end if;
+    end if;
     return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
-      'content_hash', public.approval_hash(jsonb_build_object('text', v_text)));
+      'content_hash', public.approval_hash(jsonb_build_object('text', v_text)
+        || case when v_image is not null then jsonb_build_object('image', v_image->>'object') else '{}'::jsonb end))
+      || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end;
   elsif v_d.ref_kind = 'clip' then
     select public.editor_document_hash(document) into v_doc from public.editor_projects where clip_id = v_d.ref_id;
     select body->>'text', body->>'title' into v_text, v_title
@@ -9655,7 +9687,7 @@ begin
   begin
     if new.status = 'approved' and new.department = 'video' and new.clip_id is not null then
       select id into v_deliverable from public.deliverables
-      where ref_kind = 'clip' and ref_id = new.clip_id and kind = 'short' and user_id = new.user_id;
+      where ref_kind = 'clip' and ref_id = new.clip_id and kind in ('short', 'slideshow') and user_id = new.user_id;
       if v_deliverable is not null then
         perform public.schedule_propose(v_deliverable);
       end if;
@@ -9688,7 +9720,7 @@ CREATE FUNCTION public.schedule_follow_deliverable() RETURNS trigger
     AS $$
 begin
   if (new.kind = 'post' and new.status = 'decided' and (tg_op = 'INSERT' or old.status is distinct from 'decided'))
-     or (new.kind = 'short' and tg_op = 'INSERT') then
+     or (new.kind in ('short', 'slideshow') and tg_op = 'INSERT') then
     begin
       perform public.schedule_propose(new.id);
     exception when others then
@@ -9696,7 +9728,41 @@ begin
       raise warning 'schedule rule for deliverable % failed: %', new.id, sqlerrm;
     end;
   end if;
+  -- A post's image arrived (P5 B4): the post's schedule cards change. One still waiting is refreshed; one already
+  -- approved goes back to the founder, so nothing posts with an image they did not see.
+  if new.kind = 'image' and tg_op = 'INSERT' and new.post_id is not null then
+    begin
+      perform public.schedule_image_changed(new.post_id);
+    exception when others then
+      raise warning 'image rule for deliverable % failed: %', new.id, sqlerrm;
+    end;
+  end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: schedule_image_changed(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_image_changed(p_post uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots;
+begin
+  for v_slot in
+    select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+    where d.ref_kind = 'content_item' and d.ref_id = p_post and s.status in ('proposed', 'waiting')
+    for update of s
+  loop
+    if v_slot.status = 'waiting' then
+      update public.schedule_slots set status = 'proposed', updated_at = now() where id = v_slot.id;
+    end if;
+    perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+  end loop;
 end;
 $$;
 
@@ -9910,7 +9976,7 @@ begin
     -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
     select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
     where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
-  elsif v_d.kind = 'short' and v_d.ref_kind = 'clip' then
+  elsif v_d.kind in ('short', 'slideshow') and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c
       where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'

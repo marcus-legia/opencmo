@@ -181,6 +181,8 @@ export const SlideshowSnapshotSchema = z.object({
   document_hash: sha256.nullable(),
   mp4_path: z.string().max(500).nullable(),
   png_set_path: z.string().max(500).nullable(),
+  /** P5 A3: captions per platform, ordered when the card is raised and approved with it, as a finished video's. */
+  captions: z.array(CaptionSnapshotSchema).max(12).optional(),
 });
 
 /** Card 3: the render of the edit as it is now (`ref_kind = 'editor_project'`, `ref_id` = clip id). */
@@ -322,6 +324,8 @@ const SlideshowBody = z.object({
   /** Signed URLs; null until rendered. */
   previewUrl: z.url().nullable(),
   pngSetUrl: z.url().nullable(),
+  /** P5 A3: one per platform it will be posted to, editable before approving (`edit_caption`), as on a finished video. */
+  captions: z.array(CaptionSchema).max(12).optional(),
 });
 
 /**
@@ -371,6 +375,11 @@ export const ScheduleSnapshotSchema = z.object({
   /** The YouTube title; null elsewhere. */
   title: z.string().max(100).nullable(),
   content_hash: sha256,
+  /**
+   * A post's image (P5 B4): its cover still, part of `content_hash`. Present only when the post has one, so cards of
+   * posts without an image keep the hash they had.
+   */
+  image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 

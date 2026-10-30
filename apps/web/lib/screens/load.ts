@@ -755,9 +755,11 @@ async function waitingByRef(supabase: SupabaseClient, refKind: string): Promise<
 async function research({ supabase }: LoadContext): Promise<Partial<ResearchScreen>> {
   const now = new Date();
   const latest = supabase.from("cmo_insights").select("body, created_at").eq("kind", "competitors").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  // P5 R2: what works on video in the founder's niche, the newest run.
+  const niche = supabase.from("cmo_insights").select("body, created_at").eq("kind", "niche_video").order("created_at", { ascending: false }).limit(1).maybeSingle();
   return parts<ResearchScreen>("research", {
     lastRunAt: async () => {
-      const r = await supabase.from("cmo_runs").select("finished_at").eq("kind", "competitor_research").eq("status", "done").order("finished_at", { ascending: false }).limit(1).maybeSingle();
+      const r = await supabase.from("cmo_runs").select("finished_at").in("kind", ["competitor_research", "niche_video_research"]).eq("status", "done").order("finished_at", { ascending: false }).limit(1).maybeSingle();
       if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
       return iso((r.data as { finished_at: string | null } | null)?.finished_at);
     },
@@ -768,11 +770,32 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
       return next.toISOString();
     },
     insights: async () => {
-      const r = await latest;
+      const [r, n] = await Promise.all([latest, niche]);
       if (r.error) throw new Error(`cmo_insights: ${r.error.message}`);
+      if (n.error) throw new Error(`cmo_insights: ${n.error.message}`);
+      type NicheRow = { platform?: string; url?: string; hook?: string; format?: string; why?: string; views?: number; lift?: number };
+      const videos = (((n.data as { body?: { videos?: NicheRow[] } } | null)?.body?.videos ?? []) as NicheRow[])
+        .filter((v) => typeof v.hook === "string" && v.hook && isHttps(v.url))
+        .slice(0, 12)
+        .map((v, i) => ({
+          id: `video-${i}`,
+          type: "hook" as const,
+          scope: "niche_video" as const,
+          platform: v.platform === "youtube" ? "Shorts" : "TikTok",
+          text: v.hook!.slice(0, 300),
+          evidence: [typeof v.lift === "number" ? `${v.lift}× the search's median` : "", v.format ?? "", v.why ?? ""].filter(Boolean).join(" · ").slice(0, 200),
+          usedIn: null,
+          sources: [v.url!],
+          video: {
+            views: typeof v.views === "number" ? Math.max(0, Math.round(v.views)) : null,
+            outlier: typeof v.lift === "number" ? v.lift : null,
+            seconds: null,
+            format: v.format ? v.format.slice(0, 60) : null,
+          },
+        }));
       const body = ((r.data as { body?: { hooks?: unknown[] } } | null)?.body ?? {}) as { hooks?: { pattern?: string; example?: string; url?: string; lift?: number }[] };
       // Every insight points to the post it came from: one without a link is dropped (counted in `dropped`).
-      return (body.hooks ?? [])
+      const hooks: ResearchScreen["insights"] = (body.hooks ?? [])
         .filter((h) => typeof h.pattern === "string" && h.pattern && isHttps(h.url))
         .slice(0, 20)
         .map((h, i) => ({
@@ -785,6 +808,7 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
           usedIn: null,
           sources: [h.url!],
         }));
+      return [...hooks, ...videos];
     },
     dropped: async () => {
       const r = await latest;
@@ -1017,7 +1041,54 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
           edits: [],
         };
       });
-      return [...videoItems, ...batchItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      // P5 S3: the Slideshow and Post image squads' orders, each with the step that holds its edit and card.
+      const made = must(
+        await supabase
+          .from("work_orders")
+          .select("id, kind, title, status, created_at, error")
+          .in("kind", ["build_slideshow", "build_post_image"])
+          .neq("status", "cancelled")
+          .order("created_at", { ascending: false })
+          .limit(20),
+        "work_orders",
+      ) as { id: string; kind: "build_slideshow" | "build_post_image"; title: string; status: OrderDb["status"]; created_at: string; error: { message?: string } | null }[];
+      const madeSteps = made.length
+        ? (must(await supabase.from("studio_steps").select("id, order_id, clip_id, kind, status").in("order_id", made.map((o) => o.id)).order("created_at", { ascending: true }), "studio_steps") as {
+            id: string;
+            order_id: string;
+            clip_id: string;
+            kind: string;
+            status: string;
+          }[])
+        : [];
+      const madeItems = made.map((o) => {
+        const step = madeSteps.filter((s) => s.order_id === o.id).at(-1);
+        const slideshow = o.kind === "build_slideshow";
+        const status: StudioItem["status"] =
+          o.status === "done" ? "finished" : o.status === "failed" ? "failed" : o.status === "waiting_founder" ? "waiting_founder" : "running";
+        const now = step?.status === "running" ? "rendering" : status === "running" ? "building" : status === "finished" ? (slideshow ? "approved" : "ready for its post") : "";
+        return {
+          id: o.id,
+          kind: slideshow ? ("slideshow" as const) : ("post_image" as const),
+          title: o.title.slice(0, 200),
+          subtitle: `${slideshow ? "Slideshow · MP4 + PNG set" : "Post image"}${now ? ` · ${now}` : ""}`.slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(o.created_at).toISOString(),
+          editedAt: step ? (editOf.get(step.clip_id) ? new Date(editOf.get(step.clip_id)!.updated_at).toISOString() : null) : null,
+          failure: o.status === "failed" ? (o.error?.message ?? (slideshow ? "The slideshow could not be made." : "The image could not be made.")).slice(0, 200) : null,
+          projectId: null,
+          editorHref: step ? `/app/editor/${step.clip_id}` : null,
+          approvalId: step ? (stepCards.get(step.id) ?? null) : null,
+          canMarkFinished: false,
+          clipId: step?.clip_id ?? null,
+          documentHash: step ? (editOf.get(step.clip_id)?.document_hash ?? null) : null,
+          canCutShorts: false,
+          edits: [],
+        };
+      });
+      return [...videoItems, ...batchItems, ...madeItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     team: async () => {
       const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);

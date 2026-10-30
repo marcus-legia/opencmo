@@ -239,6 +239,7 @@ function build(row: ApprovalRow): Built | null {
           slides: v.slides.map((x) => ({ text: x.text, stillUrl: null, seconds: x.seconds })),
           previewUrl: null,
           pngSetUrl: null,
+          captions: captionsOf(v.captions, v.clip_id),
         },
       };
     }
