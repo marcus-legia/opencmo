@@ -29,7 +29,7 @@ import { studioItemHref } from "@/components/screens/studio/href";
 import { CHAT, DEFAULT_PREF, RAIL, applyColumns, clampColumns, readPref, writePref, type ColumnsPref } from "./columns";
 
 import { Logo } from "./Logo";
-import { NAV_DEPARTMENTS, NAV_MAIN, NAV_SETTINGS, isShown, type DepartmentName, type NavEntry } from "./nav";
+import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_SETTINGS, isShown, type DepartmentName, type NavEntry } from "./nav";
 import { Rail } from "./Rail";
 import { Sash } from "./Sash";
 import { ShellStateContext, type ShellState } from "./ShellState";
@@ -50,8 +50,10 @@ type Props = {
   children: ReactNode;
 };
 
-/** Segments that keep today's shell: the editor needs the whole width and keeps its current look. */
-const CLASSIC: ReadonlySet<string> = new Set(["editor", "video"]);
+/** Segments that keep today's shell. `video` only redirects to the editor. */
+const CLASSIC: ReadonlySet<string> = new Set(["video"]);
+/** The editor sits in column 3; column 2 then holds the clip's Assistant and the rail is the icon strip. */
+const EDITOR = "editor";
 const TABS_KEY = "opencmo.tabs";
 const MAX_TABS = 8;
 /** Segments drawn without the rail and tab bar (Setup.dc.html): first run has nothing to navigate to yet. */
@@ -157,7 +159,9 @@ function V2Frame({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const columns = clampColumns(viewport, pref);
+  const inEditor = segment === EDITOR;
+  // The editor needs the width: the rail is the icon strip there, whatever was chosen elsewhere.
+  const columns = clampColumns(viewport, inEditor ? { ...pref, railCollapsed: true } : pref);
   useLayoutEffect(() => applyColumns(columns), [columns.rail, columns.chat, columns.railCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
   const choose = useCallback((next: Partial<ColumnsPref>) => {
     setPref((was) => {
@@ -180,9 +184,10 @@ function V2Frame({
     requestAnimationFrame(() => chatColumn.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus());
   }, []);
   const [workVersion, setWorkVersion] = useState(0);
+  const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
   // Open tabs: every screen visited this session, Dashboard first and pinned.
-  const tabEntries = useMemo(() => [...entries(NAV_MAIN), ...entries(NAV_DEPARTMENTS), NAV_SETTINGS], [entries]);
+  const tabEntries = useMemo(() => [...entries(NAV_MAIN), ...entries(NAV_DEPARTMENTS), ...NAV_MAKE, NAV_SETTINGS], [entries]);
   const currentEntry = tabEntries.find((entry) => entry.segments.includes(segment)) ?? null;
   const [openHrefs, setOpenHrefs] = useState<string[]>(["/app"]);
   useEffect(() => {
@@ -230,14 +235,15 @@ function V2Frame({
       if (event.key === "\\") {
         event.preventDefault();
         togglePanel();
-      } else if (event.key.toLowerCase() === "b" && !(event.target instanceof HTMLElement && event.target.isContentEditable)) {
+      } else if (event.key.toLowerCase() === "b" && !inEditor && !(event.target instanceof HTMLElement && event.target.isContentEditable)) {
+        // Not in the editor: ⌘B splits a clip there.
         event.preventDefault();
         toggleRail();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePanel, toggleRail]);
+  }, [togglePanel, toggleRail, inEditor]);
 
   const chatSource = useMemo<ChatSource>(() => ({ live: { chat: chatLive }, chat: [], chatTitle: null, demo: false }), [chatLive]);
 
@@ -249,8 +255,9 @@ function V2Frame({
       toast: setMessage,
       focusChat,
       workVersion,
+      clipAssistantSlot,
     }),
-    [queue, account.pending, reportQueue, focusChat, workVersion],
+    [queue, account.pending, reportQueue, focusChat, workVersion, clipAssistantSlot],
   );
 
   const shown = message ?? jobToast?.text ?? null;
@@ -309,13 +316,15 @@ function V2Frame({
               onCommit={(rail) => choose({ rail })}
               onReset={() => choose({ rail: RAIL.base })}
             />
-            <aside className="v2-chatcol" id="v2-chat" aria-label="Your CMO" ref={chatColumn}>
+            <aside className="v2-chatcol" id="v2-chat" aria-label={inEditor ? "Assistant" : "Your CMO"} data-clip={inEditor ? "" : undefined} ref={chatColumn}>
               <div className="v2-chatcol-head">
                 <button type="button" className="v2-button is-quiet is-compact" onClick={() => setChatOpen(false)}>
                   Close
                 </button>
               </div>
+              {/* Hidden, not unmounted, in the editor: the CMO chat keeps its draft for the way back. */}
               <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} />
+              {inEditor ? <div className="v2-clip-slot" ref={setClipAssistantSlot} /> : null}
             </aside>
             <Sash
               label="Resize the chat"

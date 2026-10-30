@@ -14,6 +14,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 
 import { isPartial, type LibraryRecord } from "@opencmo/clip-assets";
 import { DocumentInvalidError, type ClipDocument } from "@opencmo/clip-doc";
@@ -22,6 +23,7 @@ import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frame
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
+import { useOptionalShellState } from "@/components/shell-v2/ShellState";
 import type { RenderTask } from "@/lib/api/tasks";
 import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
 import { UI_V2 } from "@/lib/screens/flag";
@@ -581,6 +583,9 @@ function Workspace({
   // Menu dự án (B7c): hộp thoại đang mở, ẩn UI / ẩn timeline, menu chuột phải.
   const [dialog, setDialog] = useState<"history" | "style" | "brand" | "shortcuts" | null>(null);
   const [hideUI, setHideUI] = useState(false);
+  // Inside the v2 three-column shell (null under the classic shell): the Assistant moves to its column 2.
+  const shell = useOptionalShellState();
+  const clipAssistantSlot = shell?.clipAssistantSlot ?? null;
   const [hideTimeline, setHideTimeline] = useState(false);
   const [contextAt, setContextAt] = useState<{ x: number; y: number } | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -1137,7 +1142,8 @@ function Workspace({
     extend: (plan) => void extendVideo(plan),
     redoKeyframe: (text) => {
       setAssistantPrefill({ text, nonce: Date.now() });
-      if (!layout.visible.agent) layout.toggle("agent");
+      if (shell?.clipAssistantSlot) shell.focusChat();
+      else if (!layout.visible.agent) layout.toggle("agent");
     },
     editVideo: (edit) => {
       setGenerateInitial((current) => ({ key: (current?.key ?? 0) + 1, kind: "video", edit }));
@@ -1263,6 +1269,60 @@ function Workspace({
     );
   };
 
+  const assistant = (
+    <AssistantPanel
+            client={assistantClient}
+            busy={assistantBusy}
+            onBusy={(next) => {
+              setAssistantBusy(next);
+              // Lượt Assistant vừa kết toán: header phải trừ đúng số nó tiêu.
+              if (!next) refreshAccount();
+            }}
+            notify={setNotice}
+            onTouched={flashLayers}
+            speech={hasSpeech}
+            prefill={assistantPrefill}
+            runTool={async (request) => {
+              const input = (request.input ?? {}) as Record<string, unknown>;
+              if (request.name === "media_waveform") {
+                return waveform(media, input, "assets/master.mp4", readCaptionState(session.current)?.window ?? null);
+              }
+              if (request.name === "media_grab") {
+                const path = String(input.path ?? "");
+                const record = library.manifest.assets.find((item) => item.path === path);
+                return grab(media, input as { path: string }, record?.type ?? null);
+              }
+              if (request.name === "save_frame") return saveFrame(input as { time: number; name?: string });
+              if (request.name !== "capture" && request.name !== "inspect_color") return { error: "This editor cannot run that tool." };
+              const at = playback.frame;
+              playback.pause();
+              try {
+                if (request.name === "inspect_color") {
+                  const playhead = Math.max(0, at / 30 - (activeScene(session.current).workarea?.[0] ?? 0));
+                  return await inspectColor(session.current, media, input as InspectColorInput, playhead, (next) => playback.seek(next));
+                }
+                return await capture(session.current, media, input, (next) => playback.seek(next));
+              } finally {
+                playback.seek(at);
+              }
+            }}
+            context={{
+              // Giây trên timeline BẢN XUẤT (từ đầu vùng làm việc) — cùng thang với `capture`.
+              playhead: () => Math.max(0, playback.frame / 30 - (activeScene(session.current).workarea?.[0] ?? 0)),
+              selection: () => selection,
+              frame: async () => {
+                const shot = await capture(session.current, media, {
+                  times: [Math.max(0, playback.frame / 30 - (activeScene(session.current).workarea?.[0] ?? 0))],
+                  separate: true,
+                  // Ảnh người dùng đính kèm: giữ đúng như họ thấy, không kẻ lưới.
+                  grid: false,
+                }, () => undefined);
+                return shot.images?.[0] ?? "";
+              },
+            }}
+          />
+  );
+
   return (
     <div
       className="ed2"
@@ -1328,11 +1388,13 @@ function Workspace({
         finish={UI_V2 ? { clipId, documentHash: state.documentHash } : undefined}
       />
       <div className="ed2-body" ref={layout.bodyRef}>
+      {/* In the v2 shell the Assistant is column 2 of the frame; here it would be a second chat beside it. */}
+      {clipAssistantSlot ? createPortal(<div className="ed2-agent is-shell">{assistant}</div>, clipAssistantSlot) : null}
       <aside
         className="ed2-agent"
         {...panel("agent")}
         style={layout.maximized === "agent" ? undefined : { width: layout.agentWidth }}
-        hidden={hideUI || !layout.visible.agent || (layout.maximized !== null && layout.maximized !== "agent")}
+        hidden={Boolean(clipAssistantSlot) || hideUI || !layout.visible.agent || (layout.maximized !== null && layout.maximized !== "agent")}
         aria-label="Assistant"
       >
         {layout.maximized ? null : (
@@ -1346,57 +1408,7 @@ function Workspace({
             testid="split-agent"
           />
         )}
-        <AssistantPanel
-            client={assistantClient}
-            busy={assistantBusy}
-            onBusy={(next) => {
-              setAssistantBusy(next);
-              // Lượt Assistant vừa kết toán: header phải trừ đúng số nó tiêu.
-              if (!next) refreshAccount();
-            }}
-            notify={setNotice}
-            onTouched={flashLayers}
-            speech={hasSpeech}
-            prefill={assistantPrefill}
-            runTool={async (request) => {
-              const input = (request.input ?? {}) as Record<string, unknown>;
-              if (request.name === "media_waveform") {
-                return waveform(media, input, "assets/master.mp4", readCaptionState(session.current)?.window ?? null);
-              }
-              if (request.name === "media_grab") {
-                const path = String(input.path ?? "");
-                const record = library.manifest.assets.find((item) => item.path === path);
-                return grab(media, input as { path: string }, record?.type ?? null);
-              }
-              if (request.name === "save_frame") return saveFrame(input as { time: number; name?: string });
-              if (request.name !== "capture" && request.name !== "inspect_color") return { error: "This editor cannot run that tool." };
-              const at = playback.frame;
-              playback.pause();
-              try {
-                if (request.name === "inspect_color") {
-                  const playhead = Math.max(0, at / 30 - (activeScene(session.current).workarea?.[0] ?? 0));
-                  return await inspectColor(session.current, media, input as InspectColorInput, playhead, (next) => playback.seek(next));
-                }
-                return await capture(session.current, media, input, (next) => playback.seek(next));
-              } finally {
-                playback.seek(at);
-              }
-            }}
-            context={{
-              // Giây trên timeline BẢN XUẤT (từ đầu vùng làm việc) — cùng thang với `capture`.
-              playhead: () => Math.max(0, playback.frame / 30 - (activeScene(session.current).workarea?.[0] ?? 0)),
-              selection: () => selection,
-              frame: async () => {
-                const shot = await capture(session.current, media, {
-                  times: [Math.max(0, playback.frame / 30 - (activeScene(session.current).workarea?.[0] ?? 0))],
-                  separate: true,
-                  // Ảnh người dùng đính kèm: giữ đúng như họ thấy, không kẻ lưới.
-                  grid: false,
-                }, () => undefined);
-                return shot.images?.[0] ?? "";
-              },
-            }}
-          />
+        {clipAssistantSlot ? null : assistant}
       </aside>
       <div
         className="ed2-area"

@@ -512,6 +512,19 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-chatcol-head { display: none; justify-content: flex-end; padding: 4px 8px; border-bottom: 1px solid var(--v2-line); }
 .v2-chat-scrim { display: none; }
 
+/* the editor in column 3 (step S4): it is `position: fixed` over the whole window in the classic shell; here it fills
+   the panel under the tab strip. Its Assistant is portaled into column 2, replacing the CMO chat (kept, hidden). */
+.v2-main-body { position: relative; }
+.v2-shell.is-cols .v2-main-body .ed2 { position: absolute; inset: 0; z-index: auto; grid-template-columns: minmax(0, 1fr); }
+/* The editor's grid sized itself to its top bar's full width; in a column it must fit the column instead. */
+.v2-shell.is-cols .v2-main-body .ed2-top { min-width: 0; overflow-x: auto; }
+.v2-shell.is-cols .v2-main-body:has(.ed2) { overflow: hidden; }
+/* The frame already shows the credits (rail) and the theme follows the app: the editor's top bar keeps room for Export. */
+.v2-shell.is-cols .v2-main-body .ed2-top :is(.ed2-theme, .ed2-credits) { display: none; }
+.v2-chatcol[data-clip] > .cmo-chat { display: none; }
+.v2-clip-slot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.v2-clip-slot > .ed2-agent.is-shell { flex: 1; width: auto; border-right: 0; color: var(--ds-text); font-family: var(--ds-font-sans); }
+
 /* column 3's strip: the screens opened this session */
 .v2-tabstrip { display: flex; align-items: center; gap: 4px; flex: none; height: 52px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--v2-line); background: var(--v2-paper); }
 .v2-tabstrip-tabs { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }

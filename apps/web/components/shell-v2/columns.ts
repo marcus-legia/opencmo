@@ -84,12 +84,13 @@ export function applyColumns(columns: Pick<Columns, "rail" | "chat" | "railColla
 const L = { rm: RAIL.min, rM: RAIL.max, rb: RAIL.base, rc: RAIL.collapsed, cm: CHAT.min, cM: CHAT.max, cb: CHAT.base, p: PANEL_MIN, s: SASHES };
 
 /**
- * `clampColumns` + `applyColumns` before the first frame, for `app/app/layout.tsx`. Hand-written ES5: it runs as an
+ * `clampColumns` + `applyColumns` before the first frame, for `app/app/layout.tsx`. In the editor the rail is always
+ * the icon strip (`ShellV2` passes `railCollapsed: true` there), so the script does the same from the path. Hand-written ES5: it runs as an
  * inline script, outside the bundle. `columns.check.ts` runs it against `clampColumns` on the same inputs.
  */
 export const COLUMNS_BOOT =
   `try{var L=${JSON.stringify(L)},c,w=innerWidth;try{c=JSON.parse(localStorage.getItem('${KEY}'))}catch(e){}c=c||{};` +
-  "var n=function(v){return typeof v=='number'&&isFinite(v)};var col=c.railCollapsed===true,r=col?L.rc:Math.min(L.rM,Math.max(L.rm,n(c.rail)?c.rail:L.rb));" +
+  "var n=function(v){return typeof v=='number'&&isFinite(v)};var col=c.railCollapsed===true||location.pathname.indexOf('/app/editor')===0,r=col?L.rc:Math.min(L.rM,Math.max(L.rm,n(c.rail)?c.rail:L.rb));" +
   "var mx=function(r){var f=w-r-L.s;return Math.min(L.cM,Math.floor(f/2),f-L.p)};var m=mx(r);" +
   "if(!col&&m<L.cm){col=true;r=L.rc;m=mx(r)}m=Math.max(L.cm,m);" +
   "var ch=Math.min(m,Math.max(L.cm,n(c.chat)?c.chat:L.cb)),d=document.documentElement;" +

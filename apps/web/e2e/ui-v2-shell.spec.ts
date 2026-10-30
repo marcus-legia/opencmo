@@ -110,7 +110,8 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
     for (const width of [1440, 1280, 1024, 390]) {
       await page.setViewportSize({ width, height: width < 500 ? 844 : width === 1024 ? 768 : 900 });
       await page.goto(path);
-      await expect(page.getByTestId(ready)).toBeVisible();
+      // Visible only: during a navigation the outgoing page can briefly share the DOM with the new one.
+      await expect(page.getByTestId(ready).filter({ visible: true })).toBeVisible();
       await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${name}-${width}.png`) });
@@ -128,4 +129,49 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
   const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
   const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+});
+
+test("the editor opens in the frame: its Assistant in column 2, the rail as the icon strip", async ({ page }) => {
+  mkdirSync(OUT, { recursive: true });
+  await signIn(page, state().users.a);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/app/studio");
+  await page.getByTestId("studio-new").click();
+  await page.getByTestId("new-slideshow").click();
+  await expect(page).toHaveURL(/\/app\/editor\/[0-9a-f-]{36}/);
+
+  const editor = page.getByTestId("editor-v2");
+  await expect(editor).toBeVisible();
+  // Inside column 3, under the tab strip, not over the whole window.
+  const box = (await editor.boundingBox())!;
+  expect(box.x).toBeGreaterThan(300);
+  await expect(page.getByRole("navigation", { name: "Open tabs" }).getByRole("link", { name: "Editor" })).toBeVisible();
+
+  // One chat on screen: the clip's Assistant in column 2, none inside the editor.
+  const column = page.getByRole("complementary", { name: "Assistant" });
+  await expect(column.locator(".ed2-asst")).toBeVisible();
+  await expect(editor.locator(".ed2-agent")).toBeHidden();
+  expect(Math.round((await widths(page)).rail)).toBe(56);
+  await page.screenshot({ path: join(OUT, "editor-1440.png") });
+
+  // ⌘B is the editor's split, not the shell's rail toggle.
+  await editor.click({ position: { x: 10, y: 10 } }).catch(() => undefined);
+  await page.keyboard.press("ControlOrMeta+b");
+  expect(Math.round((await widths(page)).rail)).toBe(56);
+
+  for (const [width, height] of [[1280, 800], [1024, 768]] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(editor).toBeVisible();
+    await page.screenshot({ path: join(OUT, `editor-${width}.png`) });
+  }
+  await page.getByRole("button", { name: "Chat" }).click();
+  await expect(column.locator(".ed2-asst")).toBeVisible();
+  await page.screenshot({ path: join(OUT, "editor-1024-chat.png") });
+
+  // Back on a CMO screen, the CMO chat is in column 2 again.
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("navigation", { name: "Open tabs" }).getByRole("link", { name: "Dashboard" }).click();
+  await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
 });

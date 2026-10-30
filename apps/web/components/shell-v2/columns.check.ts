@@ -35,12 +35,12 @@ assert.deepEqual(parsePref("not json"), DEFAULT_PREF, "a broken value falls back
 assert.deepEqual(parsePref('{"rail":"x","chat":450}'), { ...DEFAULT_PREF, chat: 450 });
 
 // The boot script runs outside the bundle; run it against the same inputs and compare.
-function boot(viewport: number, stored: string | null) {
+function boot(viewport: number, stored: string | null, pathname = "/app") {
   const vars: Record<string, string> = {};
   const dataset: Record<string, string> = {};
   const document = { documentElement: { style: { setProperty: (name: string, value: string) => (vars[name] = value) }, dataset } };
   const localStorage = { getItem: () => stored };
-  new Function("localStorage", "innerWidth", "document", COLUMNS_BOOT)(localStorage, viewport, document);
+  new Function("localStorage", "innerWidth", "document", "location", COLUMNS_BOOT)(localStorage, viewport, document, { pathname });
   return { rail: parseInt(vars["--v2-col-rail"], 10), chat: parseInt(vars["--v2-col-chat"], 10), railCollapsed: dataset.v2Rail === "collapsed" };
 }
 
@@ -49,6 +49,11 @@ for (const viewport of [900, COMPACT_BELOW, 1280, 1440, 1920]) {
     const { chatMax: _chatMax, ...expected } = clampColumns(viewport, parsePref(stored));
     assert.deepEqual(boot(viewport, stored), expected, `boot agrees with clampColumns at ${viewport} for ${stored}`);
   }
+}
+
+for (const viewport of [1280, 1440]) {
+  const { chatMax: _chatMax, ...expected } = clampColumns(viewport, { ...DEFAULT_PREF, railCollapsed: true });
+  assert.deepEqual(boot(viewport, null, "/app/editor/abc"), expected, `the editor boots with the rail as the icon strip at ${viewport}`);
 }
 
 console.log("columns.check: ok");
