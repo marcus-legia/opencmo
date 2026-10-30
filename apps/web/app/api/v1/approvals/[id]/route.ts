@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
+import { ScheduleOptionsSchema } from "@/lib/screens/approval-card";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 import { signStudioCards } from "@/lib/screens/studio-sign";
 
@@ -25,7 +26,10 @@ export const GET = withApi({}, async ({ supabase, params }) => {
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 const body = z.object({
-  action: z.enum(["approve", "skip", "replied", "dismissed", "reject", "edit", "redo", "cancel", "send_back", "edit_caption"]),
+  action: z.enum([
+    "approve", "skip", "replied", "dismissed", "reject", "edit", "redo", "cancel", "send_back", "edit_caption",
+    "change_time", "change_account", "set_options", "retry",
+  ]),
   /** The `contentHash` of the card the founder saw. */
   contentHash: hash,
   /** Up to a YouTube description (5,000); each kind's RPC holds its own limit. */
@@ -40,24 +44,37 @@ const body = z.object({
   reason: z.string().trim().max(400).optional(),
   goal: z.string().trim().max(300).optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
+  /** Schedule card, `change_time`: the new time, with its offset. */
+  publishAt: z.iso.datetime({ offset: true }).optional(),
+  /** Schedule card, `change_account`: one of the founder's connected accounts; null = copy and open instead. */
+  accountId: z.uuid().nullable().optional(),
+  /** Schedule card, `set_options`: the platform fields to change (merged into the slot's). */
+  options: ScheduleOptionsSchema.optional(),
 });
 
 /**
  * Decides one card through `approval_decide`: owner, "already decided" and the snapshot hash are checked there,
  * then the kind's own RPC runs with its caps and outcomes. A Studio decision is carried out by the brain's order
  * runner (`studio-orders.ts`), kicked here so it starts as soon as the answer is sent.
- * Answers the card as it is now.
+ * Answers the card as it is now; a schedule card's change (time, account, platform fields) answers with the new card
+ * that supersedes it.
  */
 export const POST = withApi(
   { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
   async ({ supabase, body, params }) => {
     if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Card not found.");
-    const { action, contentHash, ...rest } = body;
+    const { action, contentHash, publishAt, accountId, options, ...rest } = body;
+    // SQL reads the schedule fields by their column names.
+    const schedule = {
+      ...(publishAt !== undefined && { publish_at: publishAt }),
+      ...(accountId !== undefined && { account_id: accountId }),
+      ...(options !== undefined && { options }),
+    };
     const row = firstRow(
       await rpcOrThrow<ApprovalRow | ApprovalRow[]>(supabase, "approval_decide", {
         p_id: params.id,
         p_action: action,
-        p_payload: { ...rest, content_hash: contentHash, via: "app" },
+        p_payload: { ...rest, ...schedule, content_hash: contentHash, via: "app" },
       }),
     );
     if (row?.ref_kind === "studio_step" || row?.ref_kind === "short_batch") kickStudioOrders();

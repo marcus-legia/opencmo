@@ -1582,6 +1582,7 @@ declare
   v_reason text := left(nullif(trim(coalesce(v_payload->>'reason', '')), ''), 400);
   v_caption public.content_items;
   v_title text;
+  v_slot public.schedule_slots;
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1761,6 +1762,40 @@ begin
         end if;
         perform public.approval_close('short_batch', v_batch.id, 'skipped');
       end if;
+    when 'schedule' then
+      -- Time, account and platform fields change through schedule_change, which raises the card again; the
+      -- answer is the new card, so the founder looks at what they now approve.
+      if p_action in ('change_time', 'change_account', 'set_options') then
+        perform set_config('opencmo.decided_via', '', true);
+        return public.schedule_change(v_row.ref_id, p_action, v_payload);
+      end if;
+      if p_action not in ('approve', 'retry', 'cancel') then
+        raise exception 'Choose approve, change the time or account, or cancel.' using errcode = '22023';
+      end if;
+      select * into v_slot from public.schedule_slots where id = v_row.ref_id and user_id = v_user for update;
+      if not found or v_slot.status not in ('proposed', 'failed') then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'cancel' then
+        update public.schedule_slots set status = 'cancelled', updated_at = now() where id = v_slot.id;
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+      elsif v_slot.status = 'failed' and now() >= v_slot.window_ends_at then
+        -- Too late for this time: never post late. The founder's Retry asks for a new time instead.
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
+        perform public.schedule_propose(v_slot.deliverable_id);
+      else
+        if p_action = 'retry' and v_slot.status <> 'failed' then
+          raise exception 'There is nothing to retry.' using errcode = '22023';
+        end if;
+        perform public.schedule_ready_check(v_slot);
+        begin
+          update public.schedule_slots set status = 'waiting', updated_at = now() where id = v_slot.id;
+        exception when unique_violation then
+          raise exception 'This post already has another time on %.', public.schedule_platform_label(v_slot.platform)
+            using errcode = 'P0001';
+        end;
+        perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
+      end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
   end case;
@@ -1797,6 +1832,8 @@ declare
   v_snapshot jsonb := public.approval_snapshot(p_ref_kind, p_ref_id);
   v_hash text;
   v_kind text;
+  v_id uuid;
+  v_expires timestamptz;
 begin
   if v_snapshot is null then
     return;
@@ -1809,6 +1846,12 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
   v_kind := v_snapshot->>'kind';
+  -- A failure card (it carries the last error) stays open while the slot's window lasts, so Retry can still post
+  -- at the approved time; any other schedule card expires at its time.
+  if v_kind = 'schedule' then
+    select case when s.error is not null then s.window_ends_at else s.publish_at end into v_expires
+    from public.schedule_slots s where s.id = p_ref_id;
+  end if;
   -- A schedule card carries its time and account in the foot and expires when its time comes (rule 4).
   insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits,
     post_at, account, expires_at)
@@ -1820,7 +1863,11 @@ begin
     case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end,
     case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end,
     case when v_kind = 'schedule' then left(v_snapshot->>'handle', 100) end,
-    case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end);
+    v_expires)
+  returning id into v_id;
+  if v_kind = 'schedule' then
+    update public.schedule_slots set approval_id = v_id, updated_at = now() where id = p_ref_id;
+  end if;
 end;
 $$;
 
@@ -8808,6 +8855,90 @@ $$;
 
 
 --
+-- Name: schedule_change(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_change(p_slot uuid, p_action text, p_payload jsonb DEFAULT '{}'::jsonb) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_slot public.schedule_slots;
+  v_rules jsonb := public.schedule_rules();
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_at timestamptz;
+  v_account public.social_accounts;
+  v_row public.approvals;
+begin
+  select * into v_slot from public.schedule_slots where id = p_slot and user_id = v_user for update;
+  if not found then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  if v_slot.status not in ('proposed', 'waiting', 'failed') then
+    raise exception 'This post is already on its way.' using errcode = 'P0001';
+  end if;
+  case p_action
+    when 'change_time' then
+      begin
+        v_at := (v_payload->>'publish_at')::timestamptz;
+      exception when others then
+        v_at := null;
+      end;
+      if v_at is null or v_payload->>'publish_at' !~ '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$' then
+        raise exception 'Pick a time, with its time zone.' using errcode = '22023';
+      end if;
+      if v_at < now() + interval '5 minutes' or v_at > now() + interval '60 days' then
+        raise exception 'Pick a time between five minutes and 60 days from now.' using errcode = '22023';
+      end if;
+      if public.schedule_day_count(v_user, v_slot.platform, v_at, v_slot.id)
+         >= (v_rules->'platforms'->v_slot.platform->>'dailyCap')::integer then
+        raise exception 'That day already has % posts on %.', (v_rules->'platforms'->v_slot.platform->>'dailyCap'),
+          public.schedule_platform_label(v_slot.platform) using errcode = 'P0001';
+      end if;
+      v_slot.publish_at := v_at;
+      v_slot.window_ends_at := v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer);
+      v_slot.jitter_seconds := public.schedule_jitter();
+    when 'change_account' then
+      if v_payload->>'account_id' is null then
+        v_slot.account_id := null;
+        v_slot.mode := 'intent';
+      else
+        select * into v_account from public.social_accounts
+        where id::text = v_payload->>'account_id' and user_id = v_user and platform = v_slot.platform and status = 'connected';
+        if not found then
+          raise exception 'Choose one of your connected % accounts.', public.schedule_platform_label(v_slot.platform)
+            using errcode = '22023';
+        end if;
+        v_slot.account_id := v_account.id;
+        v_slot.mode := 'publish';
+      end if;
+    when 'set_options' then
+      v_slot.options := public.schedule_options_merge(v_slot.platform, v_slot.options, v_payload->'options');
+      if octet_length(v_slot.options::text) > 1024 then
+        raise exception 'The platform settings are too long.' using errcode = '22023';
+      end if;
+    else
+      raise exception 'Choose a new time, another account or the platform settings.' using errcode = '22023';
+  end case;
+  begin
+    update public.schedule_slots
+    set publish_at = v_slot.publish_at, window_ends_at = v_slot.window_ends_at, jitter_seconds = v_slot.jitter_seconds,
+        account_id = v_slot.account_id, mode = v_slot.mode, options = v_slot.options,
+        status = 'proposed', error = null, updated_at = now()
+    where id = v_slot.id;
+  exception when unique_violation then
+    raise exception 'This post already has another time on %.', public.schedule_platform_label(v_slot.platform)
+      using errcode = 'P0001';
+  end;
+  perform public.approval_raise(v_user, 'schedule_slot', v_slot.id);
+  select * into v_row from public.approvals where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
+  return v_row;
+end;
+$_$;
+
+
+--
 -- Name: schedule_content(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8842,6 +8973,268 @@ begin
   return null;
 end;
 $$;
+
+
+--
+-- Name: schedule_day_count(uuid, text, timestamp with time zone, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_day_count(p_user uuid, p_platform text, p_at timestamp with time zone, p_except uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*)::integer from public.schedule_slots
+  where user_id = p_user and platform = p_platform and id is distinct from p_except
+    and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+    and (publish_at at time zone public.schedule_timezone(p_user))::date
+      = (p_at at time zone public.schedule_timezone(p_user))::date
+$$;
+
+
+--
+-- Name: schedule_jitter(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_jitter() RETURNS integer
+    LANGUAGE sql
+    SET search_path TO 'public'
+    AS $$ select (round((random() * 2 - 1) * (public.schedule_rules()->>'jitterSeconds')::integer))::integer $$;
+
+
+--
+-- Name: schedule_options_merge(text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_options_merge(p_platform text, p_current jsonb, p_new jsonb) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_key text;
+  v_value jsonb;
+begin
+  if p_new is null or jsonb_typeof(p_new) <> 'object' then
+    raise exception 'The platform settings are malformed.' using errcode = '22023';
+  end if;
+  for v_key, v_value in select key, value from jsonb_each(p_new) loop
+    if v_key not in ('privacy', 'allow_comment', 'allow_duet', 'allow_stitch', 'ai_label') then
+      raise exception 'Unknown platform setting "%".', left(v_key, 40) using errcode = '22023';
+    end if;
+    if v_key <> 'ai_label' and p_platform <> 'tiktok' then
+      raise exception 'That setting is only for TikTok.' using errcode = '22023';
+    end if;
+    if v_key = 'privacy' then
+      if jsonb_typeof(v_value) <> 'string' or v_value #>> '{}' not in
+         ('PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY') then
+        raise exception 'Choose who can see it from TikTok''s list.' using errcode = '22023';
+      end if;
+    elsif jsonb_typeof(v_value) <> 'boolean' then
+      raise exception 'A platform toggle is on or off.' using errcode = '22023';
+    end if;
+  end loop;
+  return coalesce(p_current, '{}'::jsonb) || p_new;
+end;
+$$;
+
+
+--
+-- Name: schedule_pick_time(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_pick_time(p_user uuid, p_platform text, p_deliverable uuid) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rules jsonb := public.schedule_rules();
+  v_tz text := public.schedule_timezone(p_user);
+  v_gap interval := make_interval(hours => (v_rules->>'minGapHours')::integer);
+  v_earliest timestamptz := now() + make_interval(mins => (v_rules->>'leadMinutes')::integer);
+  v_cap integer := (v_rules->'platforms'->p_platform->>'dailyCap')::integer;
+  v_today date := (now() at time zone v_tz)::date;
+  v_parent uuid;
+  v_day integer;
+  v_time text;
+  v_at timestamptz;
+begin
+  if v_cap is null then
+    return null;
+  end if;
+  select c.parent_clip_id into v_parent
+  from public.deliverables d join public.clips c on c.id = d.ref_id
+  where d.id = p_deliverable and d.ref_kind = 'clip';
+  for v_day in 0 .. (v_rules->>'horizonDays')::integer loop
+    for v_time in select jsonb_array_elements_text(v_rules->'platforms'->p_platform->'times') loop
+      v_at := ((v_today + v_day) + v_time::time) at time zone v_tz;
+      continue when v_at < v_earliest;
+      continue when exists (select 1 from public.schedule_slots
+        where user_id = p_user and platform = p_platform
+          and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+          and publish_at > v_at - v_gap and publish_at < v_at + v_gap);
+      continue when public.schedule_day_count(p_user, p_platform, v_at, null) >= v_cap;
+      continue when v_parent is not null and exists (select 1 from public.schedule_slots s
+        join public.deliverables d on d.id = s.deliverable_id
+        where s.user_id = p_user and s.platform = p_platform and d.ref_kind = 'clip' and d.ref_id = v_parent
+          and s.status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+          and (s.publish_at at time zone v_tz)::date = (v_at at time zone v_tz)::date);
+      return v_at;
+    end loop;
+  end loop;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: schedule_platform_label(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_platform_label(p_platform text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_platform when 'x' then 'X' when 'threads' then 'Threads' when 'linkedin' then 'LinkedIn'
+    when 'tiktok' then 'TikTok' when 'instagram' then 'Instagram' when 'youtube' then 'YouTube' else p_platform end
+$$;
+
+
+--
+-- Name: schedule_propose(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_propose(p_deliverable uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_d public.deliverables;
+  v_rules jsonb := public.schedule_rules();
+  v_platform text;
+  v_platforms text[];
+  v_at timestamptz;
+  v_account uuid;
+  v_slot uuid;
+  v_n integer := 0;
+begin
+  select * into v_d from public.deliverables where id = p_deliverable;
+  if not found then
+    return 0;
+  end if;
+  if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
+    select array_agg(platform) into v_platforms from public.content_items
+    where id = v_d.ref_id and status = 'approved' and platform in ('x', 'threads', 'linkedin');
+  elsif v_d.kind = 'short' and v_d.ref_kind = 'clip' then
+    select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
+    where exists (select 1 from public.content_items c
+      where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'
+        and c.platform = public.platform_profile_id(p));
+  end if;
+  foreach v_platform in array coalesce(v_platforms, '{}') loop
+    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
+      and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published'));
+    continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
+      >= (v_rules->>'maxProposals')::integer;
+    v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
+    continue when v_at is null;
+    select id into v_account from public.social_accounts
+    where user_id = v_d.user_id and platform = v_platform and status = 'connected';
+    insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, jitter_seconds,
+      window_ends_at)
+    values (v_d.user_id, v_d.id, v_platform, v_account, case when v_account is null then 'intent' else 'publish' end,
+      v_at, public.schedule_jitter(), v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer))
+    returning id into v_slot;
+    perform public.approval_raise(v_d.user_id, 'schedule_slot', v_slot);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: schedule_slots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schedule_slots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    deliverable_id uuid NOT NULL,
+    platform text NOT NULL,
+    account_id uuid,
+    mode text DEFAULT 'publish'::text NOT NULL,
+    publish_at timestamp with time zone NOT NULL,
+    jitter_seconds integer DEFAULT 0 NOT NULL,
+    window_ends_at timestamp with time zone NOT NULL,
+    status text DEFAULT 'proposed'::text NOT NULL,
+    approval_id uuid,
+    options jsonb DEFAULT '{}'::jsonb NOT NULL,
+    idempotency_key text DEFAULT (gen_random_uuid())::text NOT NULL,
+    lease_until timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    external_id text,
+    external_url text,
+    error jsonb,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT schedule_slots_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT schedule_slots_check CHECK ((window_ends_at > publish_at)),
+    CONSTRAINT schedule_slots_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT schedule_slots_external_id_check CHECK ((char_length(external_id) <= 200)),
+    CONSTRAINT schedule_slots_external_url_check CHECK (((external_url ~ '^https://'::text) AND (char_length(external_url) <= 1000))),
+    CONSTRAINT schedule_slots_jitter_seconds_check CHECK (((jitter_seconds >= '-240'::integer) AND (jitter_seconds <= 240))),
+    CONSTRAINT schedule_slots_mode_check CHECK ((mode = ANY (ARRAY['publish'::text, 'intent'::text]))),
+    CONSTRAINT schedule_slots_options_check CHECK (((jsonb_typeof(options) = 'object'::text) AND (octet_length((options)::text) <= 1024))),
+    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT schedule_slots_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text, 'missed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: schedule_ready_check(public.schedule_slots); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_ready_check(p_slot public.schedule_slots) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_slot.mode = 'intent' then
+    if p_slot.platform in ('tiktok', 'instagram', 'youtube') then
+      raise exception 'Connect your % account to post this.', public.schedule_platform_label(p_slot.platform)
+        using errcode = 'P0001';
+    end if;
+    return;
+  end if;
+  if not exists (select 1 from public.social_accounts where id = p_slot.account_id and status = 'connected') then
+    raise exception 'Reconnect your % account first.', public.schedule_platform_label(p_slot.platform) using errcode = 'P0001';
+  end if;
+  if p_slot.platform = 'tiktok' and (jsonb_typeof(p_slot.options->'privacy') is distinct from 'string'
+     or jsonb_typeof(p_slot.options->'allow_comment') is distinct from 'boolean') then
+    raise exception 'Choose who can see it on TikTok and whether people can comment.' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: schedule_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_rules() RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+
+
+--
+-- Name: schedule_timezone(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_timezone(p_user uuid) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select coalesce((select timezone from public.profiles where id = p_user), 'UTC') $$;
 
 
 --
@@ -11657,45 +12050,6 @@ CREATE TABLE public.scene_codes (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT scene_codes_code_check CHECK (((char_length(code) >= 1) AND (char_length(code) <= 32000))),
     CONSTRAINT scene_codes_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text))
-);
-
-
---
--- Name: schedule_slots; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schedule_slots (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    deliverable_id uuid NOT NULL,
-    platform text NOT NULL,
-    account_id uuid,
-    mode text DEFAULT 'publish'::text NOT NULL,
-    publish_at timestamp with time zone NOT NULL,
-    jitter_seconds integer DEFAULT 0 NOT NULL,
-    window_ends_at timestamp with time zone NOT NULL,
-    status text DEFAULT 'proposed'::text NOT NULL,
-    approval_id uuid,
-    options jsonb DEFAULT '{}'::jsonb NOT NULL,
-    idempotency_key text DEFAULT (gen_random_uuid())::text NOT NULL,
-    lease_until timestamp with time zone,
-    attempts integer DEFAULT 0 NOT NULL,
-    external_id text,
-    external_url text,
-    error jsonb,
-    published_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT schedule_slots_attempts_check CHECK ((attempts >= 0)),
-    CONSTRAINT schedule_slots_check CHECK ((window_ends_at > publish_at)),
-    CONSTRAINT schedule_slots_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
-    CONSTRAINT schedule_slots_external_id_check CHECK ((char_length(external_id) <= 200)),
-    CONSTRAINT schedule_slots_external_url_check CHECK (((external_url ~ '^https://'::text) AND (char_length(external_url) <= 1000))),
-    CONSTRAINT schedule_slots_jitter_seconds_check CHECK (((jitter_seconds >= '-240'::integer) AND (jitter_seconds <= 240))),
-    CONSTRAINT schedule_slots_mode_check CHECK ((mode = ANY (ARRAY['publish'::text, 'intent'::text]))),
-    CONSTRAINT schedule_slots_options_check CHECK (((jsonb_typeof(options) = 'object'::text) AND (octet_length((options)::text) <= 1024))),
-    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
-    CONSTRAINT schedule_slots_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text, 'missed'::text, 'failed'::text, 'cancelled'::text])))
 );
 
 

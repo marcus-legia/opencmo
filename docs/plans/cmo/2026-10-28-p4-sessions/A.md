@@ -35,10 +35,16 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   - [x] 3. Screen types: the `schedule` card body (slot, account, mode, timezone, preview, options, TikTok creator
         info, last error); `Account.avatarUrl`; fixtures. `schedule.*` and `settings.accounts` keep their shapes; the
         A3 loader maps SQL slot statuses onto the screen's.
-- [ ] **A1 Slots and cards**: `schedule_propose(deliverable_id)` (default slots from `schedule-defaults.json` loaded
-      into a table by the migration, founder timezone, 3 h gap, X 5 a day, short vs its long video not the same
-      day); raises a `schedule` card that expires at `publish_at`; `approval_decide` for `schedule`: approve → slot
-      `waiting`; change time or account → supersede and raise a new card; cancel. pgTAP per transition, stale hash.
+- [x] **A1 Slots and cards** (`20261230100000_p4_slots`, pgTAP 216): `packages/contracts/schedule-defaults.json`
+      (Buffer 2026 study, cited; `schedule_rules()` in SQL, `schedule-defaults.check.ts` compares them);
+      `schedule_propose(deliverable)` (a post on its platform, a short on each platform with an approved caption;
+      founder timezone, 3 h gap, daily caps, not the day of the short's long video, ±240 s jitter, 15 min window,
+      at most 3 proposals per platform; no connected account → `intent`); `schedule_change` (time, account, platform
+      fields; the slot asks again with a new card, even after approval; also for the calendar's drag);
+      `approval_decide` `schedule`: approve / retry (TikTok needs privacy and the comment toggle; an intent slot on
+      TikTok, Instagram or YouTube asks to connect; retry past the window proposes a new time), change → the new card,
+      cancel. Failure cards expire with the window. Route actions `change_time`, `change_account`, `set_options`,
+      `retry`; schedule cards build in `cards.ts` and are decidable.
 - [ ] **A3 Loaders and rule**: event rule approved `post`/`short` deliverable → `schedule_propose`; loaders for
       `schedule.*` and `settings.accounts`; flip `live`; release gating.
 - [ ] **A2 Firing**: `schedule_claim_due()` (service role; leases due `waiting` slots, marks past-window ones

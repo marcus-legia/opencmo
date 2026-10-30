@@ -171,6 +171,13 @@ check("compose: a live field that breaks the contract drops back alone", () => {
 
 // P4 A0: the schedule snapshot (SQL `approval_snapshot`) parses; platform fields are a closed set.
 check("schedule snapshot parses", () => void ScheduleSnapshotSchema.parse(SCHEDULE_SNAPSHOT));
+check("a schedule snapshot builds a card that parses, with its account in the foot", () => {
+  const card = approvalToCard(row("schedule", { ...SCHEDULE_SNAPSHOT }, { department: "schedule", ref_kind: "schedule_slot" }))!;
+  assert.ok(card, "the schedule row builds no card");
+  ApprovalCardSchema.parse(card);
+  assert.deepEqual(card.account, { platform: "tiktok", handle: "@opencmo" });
+  assert.equal(card.body.kind === "schedule" && card.body.mode, "publish");
+});
 check("schedule options refuse unknown fields", () => {
   assert.equal(ScheduleOptionsSchema.safeParse({ ai_label: true, autopost: true }).success, false);
 });
