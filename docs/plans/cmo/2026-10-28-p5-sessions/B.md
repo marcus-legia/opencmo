@@ -21,7 +21,7 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
       timeline, built from the groups and markers `clip-doc` already has; a `clip-doc` schema change only if
       unavoidable, then B owns it with a `clip-doc` migration and flags it at M1); adapter types `buildSlideshow(brief)` and `buildPostImage(brief)`; `render_stills` task input and
       output (one PNG per slide, a cover index).
-- [ ] **B1 Slide ops** in `editor-core` with golden-document tests; listed in the ops registry so the Assistant and
+- [x] **B1 Slide ops** in `editor-core` with golden-document tests; listed in the ops registry so the Assistant and
       MCP get them; a slideshow document validates with `clip-doc`.
 - [ ] **B2 `render_stills`**: one still per slide from `clip-render` (Node) at the slide's midpoint, on top of
       `clip-export/src/look.ts`'s single-frame path with text kept (not a second exporter), PNG set zipped;
