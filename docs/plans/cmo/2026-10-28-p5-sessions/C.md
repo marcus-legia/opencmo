@@ -21,7 +21,7 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
 - [x] **C1 Slides view**: "New" offers New video and New slideshow; strip on the left (add, delete, drag), frame in the
       middle, text/image/colour/duration on the right, timeline hidden, "Timeline" switches to the full editor;
       every change through B's slide ops.
-- [ ] **C2 Sales and Research live** (UI and the settings route done on fixtures; live once A3's loaders land): Sales settings (excluded subreddits, co-occurrence pairs), the mention counter and
+- [x] **C2 Sales and Research live**: Sales settings (excluded subreddits, co-occurrence pairs), the mention counter and
       stuck banner; Research → "What works on video in your niche" with hook, length, format and URL.
 - [x] **C3 e2e**: build a 5-slide slideshow in the Slides view, approve a slideshow card, a help-only Sales card shows
       why and has no post button.
@@ -37,3 +37,6 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
   works on slideshow cards in SQL; `components/cards/decide.ts` `editCaption`/`withCaption` only handle finished video and
   shorts, so please add the slideshow case and show the captions on the card. Schedule snapshot has optional `image`
   (`{clip_id, object, bytes}`) for a post with its image: the schedule card could show it (sign `object` in `exports`).
+  → [C] Captions: done (`decide.ts` handles slideshow captions, `SlideshowBody` lists them with Edit; e2e edits one and
+  approves with the new hash). Schedule image: the card cannot sign it (signing is in `lib/screens/`), so a request to A
+  for `preview.imageUrl` is in `A.md`; C shows it once the field exists.

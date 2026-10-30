@@ -339,6 +339,7 @@ export function SlideshowBody({
   editable,
   edited,
   onSaveSlide,
+  onSaveCaption,
 }: {
   body: Body<"slideshow">;
   cardId: string;
@@ -346,6 +347,7 @@ export function SlideshowBody({
   editable: string | null;
   edited: boolean;
   onSaveSlide: SaveSlide;
+  onSaveCaption: SaveCaption;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [heading, setHeading] = useState("");
@@ -404,6 +406,9 @@ export function SlideshowBody({
           <b>Text changed</b>
           <span>The MP4 and PNGs above show the old words. The slideshow renders again and comes back as a new card.</span>
         </p>
+      ) : null}
+      {body.captions?.length ? (
+        <CaptionList captions={body.captions} idBase={`${cardId}-captions`} heading="Captions" editable={editable} onSave={onSaveCaption} />
       ) : null}
       {picked !== null ? (
         <form
