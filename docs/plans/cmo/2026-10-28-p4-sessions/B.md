@@ -20,9 +20,13 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
       `{ status, externalId, url, error }`, `connectLink(platform, returnUrl)`, `disconnect(accountId)`,
       `creatorInfo(accountId)`; `fake.ts` with the same interface (used by tests, e2e and acceptance, selected by
       `OPENCMO_PUBLISH_FAKE=1`); `intent.ts` (X intent, Threads web intent, LinkedIn/Facebook copy + open).
-- [ ] **B4 `publish_media` task**: signed download from Storage → streamed PUT to Zernio's presigned URL; explicit
+- [x] **B4 `publish_media` task**: signed download from Storage → streamed PUT to Zernio's presigned URL; explicit
       format and the demuxer allowlist where it probes; no full file in memory; test against a local fake server;
       measure peak RSS with `/usr/bin/time -v` on a long short.
+      *Measured 2026-10-30: 3 min 1080×1920 export (272 MB) streamed in 0.56 s locally, peak RSS 60 MB (ffprobe
+      included). Payload: `{ bucket: "exports", object: "<user>/<clip>/<task>.mp4", upload_url, content_type:
+      "video/mp4" }`; output `{ bytes, content_type, duration, width, height }`. The web side presigns with its own
+      key; the worker never holds a Zernio key.*
 - [ ] **B1 Zernio client**: profiles, connect link, accounts, presigned media, post, creator info (TikTok); typed
       errors with English messages for cards; idempotency key per slot; timeouts and one retry on 5xx. Fake first; the
       real API only after the owner gates.

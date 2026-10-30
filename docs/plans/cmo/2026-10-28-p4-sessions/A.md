@@ -57,3 +57,7 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   (your block). Why: B0's adapter contract and fake (`lib/departments/publish/`) are checked there; it needs no
   `react-server` condition. No change asked to A0's snapshot: B3 maps `ScheduleSnapshot` (+ the slot's
   `idempotency_key` and the account's `zernio_account_id`) onto the adapter's `PublishDeliverable`/`PublishSlot`.
+- [from B → A] B4's handler is importable: `opencmo.worker.publish_media_task:process` (for your A2 row in
+  `task-kinds.json` and the `tasks_kind_check`). Payload `{ bucket: "exports", object: "<user>/<clip>/<task>.mp4",
+  upload_url, content_type: "video/mp4" }`; the object must be the task owner's export. B3 queues it, so if the
+  queuing RPC is yours, it needs those four fields (upload_url ≤ 2048 chars, https).
