@@ -195,7 +195,10 @@ export function createZernioAdapter(options: ZernioOptions): PublishAdapter {
       // One profile per founder, found again by our user id: a retried connect never makes a second one.
       const externalId = `opencmo:${userId}`;
       const found = await call("GET", `/profiles?externalId=${encodeURIComponent(externalId)}`, "connecting");
-      const existing = (Array.isArray(obj(found.body).profiles) ? (obj(found.body).profiles as unknown[]) : []).map(obj).find((p) => str(p._id));
+      // Matched again here, not trusted to the query filter: a profile of another founder is never taken.
+      const existing = (Array.isArray(obj(found.body).profiles) ? (obj(found.body).profiles as unknown[]) : [])
+        .map(obj)
+        .find((p) => str(p._id) && str(p.externalId) === externalId);
       if (existing) return { zernioProfileId: str(existing._id)! };
       const name = `opencmo-${createHash("sha256").update(userId).digest("hex").slice(0, 16)}`;
       const made = await call("POST", "/profiles", "connecting", { body: { name, externalId }, idempotencyKey: `profile:${userId}`, okStatuses: [409] });

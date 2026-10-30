@@ -62,6 +62,11 @@ async function main() {
     assert.ok(seen[0]!.url.startsWith("https://zernio.com/api/v1/profiles?externalId=opencmo%3Auser-1"));
     assert.equal(seen[1]!.headers["Idempotency-Key"], "profile:user-1");
     assert.equal((seen[1]!.body as { externalId: string }).externalId, "opencmo:user-1");
+    // Zernio ignoring the filter must not hand us another founder's profile.
+    const loose = fakeFetch([{ status: 200, body: { profiles: [{ _id: "prof_other", externalId: "opencmo:user-2" }] } }, { status: 201, body: { profile: { _id: "prof_mine" } } }]);
+    assert.deepEqual(await createZernioAdapter({ apiKey: "k", fetch: loose.f }).createProfile("user-1"), { zernioProfileId: "prof_mine" });
+    const found = fakeFetch([{ status: 200, body: { profiles: [{ _id: "prof_1", externalId: "opencmo:user-1" }] } }]);
+    assert.deepEqual(await createZernioAdapter({ apiKey: "k", fetch: found.f }).createProfile("user-1"), { zernioProfileId: "prof_1" });
     const again = fakeFetch([{ status: 200, body: { profiles: [] } }, { status: 409, body: { details: { existingProfileId: "prof_1" } } }]);
     assert.deepEqual(await createZernioAdapter({ apiKey: "k", fetch: again.f }).createProfile("user-1"), { zernioProfileId: "prof_1" });
   }

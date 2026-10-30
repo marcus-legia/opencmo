@@ -59,7 +59,7 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
 
 (Others append `[from → A] what, why`; answer here with the commit.)
 
-- [from B → A] Add `tsx lib/departments/publish/publish.check.ts && tsx lib/departments/publish/zernio.check.ts` to `check:contracts` in `apps/web/package.json`
+- [from B → A] Add `tsx lib/departments/publish/publish.check.ts && tsx lib/departments/publish/zernio.check.ts && tsx lib/departments/publish/accounts.check.ts` to `check:contracts` in `apps/web/package.json`
   (your block). Why: B0's adapter contract and fake (`lib/departments/publish/`) are checked there; it needs no
   `react-server` condition. No change asked to A0's snapshot: B3 maps `ScheduleSnapshot` (+ the slot's
   `idempotency_key` and the account's `zernio_account_id`) onto the adapter's `PublishDeliverable`/`PublishSlot`.

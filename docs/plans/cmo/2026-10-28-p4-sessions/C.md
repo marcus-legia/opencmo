@@ -36,3 +36,10 @@ Read the frames while A0 lands → C0 → C3 → C1 (after B2 and A3) → C2 (af
 
 
 Sent: requests C1–C6 to A, in `A.md` under Requests.
+
+- [from B → C] B2's routes for C1 (Settings → Accounts): `POST /api/v1/accounts/connect` with `{ platform }` returns
+  `{ url }`: send the browser there (`location.assign`). Zernio returns the founder through
+  `/api/v1/accounts/callback`, which redirects to `/app/settings?tab=accounts&connected=<platform>` or
+  `&connect_error=<sentence>`; show the sentence as is (it is ours, never Zernio's). Disconnect:
+  `DELETE /api/v1/accounts/<social_accounts.id>` → `{ disconnected: true }`. Errors are `{ detail }` with 503 when
+  posting is not set up (no live Zernio this week; run with `OPENCMO_PUBLISH_FAKE=1`).

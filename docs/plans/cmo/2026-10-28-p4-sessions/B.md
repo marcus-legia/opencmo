@@ -33,9 +33,13 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
       *Done against Zernio's OpenAPI (v1.420) with a fake `fetch`; no real call made. Real Zernio runs only with
       `ZERNIO_API_KEY` **and** `OPENCMO_PUBLISH_LIVE=1` (the key sits in prod `.env.local`). Owner (2026-10-30):
       real posting, the gates and review are next week's phase. Added `presignMedia` to the adapter for B3/B4.*
-- [ ] **B2 Connect routes**: `POST /api/v1/accounts/connect` → Zernio link (creates the founder's Zernio profile the
+- [x] **B2 Connect routes**: `POST /api/v1/accounts/connect` → Zernio link (creates the founder's Zernio profile the
       first time through A's RPC), callback stores the account, `DELETE /api/v1/accounts/[id]` disconnects at Zernio
       then here; zod, rate limits, English errors.
+      *`POST /api/v1/accounts/connect {platform}` → `{url}`; `GET /api/v1/accounts/callback` stores an account only
+      when Zernio lists it under this founder's profile on that platform, then 303 → `/app/settings?tab=accounts`
+      with `connected=<platform>` or `connect_error=<our sentence>`; `DELETE /api/v1/accounts/[id]` → `{disconnected}`.
+      Rules in `lib/departments/publish/accounts.ts` (checked in `accounts.check.ts`).*
 - [ ] **B3 `publish_post` handler**: reload the slot and its approval, check the snapshot hash again, start
       `publish_media` for a video and wait for its result, post through the adapter, call `publish_status`; no
       account → mark for the intent fallback card instead.
