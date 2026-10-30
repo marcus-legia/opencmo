@@ -245,6 +245,11 @@
 .scr .scr-slot.is-proposed, .scr .scr-slot.is-waiting_founder { background: var(--v2-brand-soft); border: 1px dashed var(--v2-brand-deep); }
 .scr .scr-slot.is-note { border: 1px dashed var(--v2-line2); background: transparent; color: var(--v2-ink2); font-family: var(--v2-sans); }
 .scr .scr-slot.is-inline { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.scr .scr-slot.is-movable { cursor: grab; }
+.scr-week-day.is-drop { outline: 2px dashed var(--v2-ink); outline-offset: -2px; }
+.scr-slot-wrap { display: flex; flex-direction: column; gap: 2px; }
+.scr-slot-move-open { align-self: flex-start; min-height: 32px; padding: 0 6px; border: 0; background: transparent; color: var(--v2-ink2); font: 500 10px var(--v2-mono); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; text-decoration: underline; }
+.scr-slot-move { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--v2-card); border: 1px solid var(--v2-line); }
 .scr-slot-status { font: 500 10px var(--v2-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--v2-ink); }
 .is-posted .scr-slot-status { color: var(--v2-ok); }
 .is-failed .scr-slot-status { color: var(--v2-stuck); }

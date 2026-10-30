@@ -606,6 +606,7 @@ type SlotDb = {
   status: string;
   publish_at: string;
   error: { message?: string } | null;
+  external_url: string | null;
   approval_id: string | null;
   account: { handle: string } | null;
   deliverable: { kind: string; ref_kind: string; ref_id: string } | null;
@@ -653,7 +654,7 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
       const slots = must(
         await supabase
           .from("schedule_slots")
-          .select("id, platform, status, publish_at, error, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
+          .select("id, platform, status, publish_at, error, external_url, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
           .gte("publish_at", from.toISOString())
           .lt("publish_at", to.toISOString())
           .neq("status", "cancelled")
@@ -687,7 +688,9 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
           title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
           status,
           note,
-          approvalId: status === "waiting_founder" ? s.approval_id : null,
+          // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
+          approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
+          url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
         }];
       });
     },

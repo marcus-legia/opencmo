@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 
+import { fromLocalInput, toLocalInput } from "@/components/cards/schedule";
+import { ApiError, api, jsonBody } from "@/components/clipping/api";
+import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, Segmented } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform, type SlotStatus } from "@/lib/screens/common";
 import type { ScheduleScreen as Data } from "@/lib/screens/schedule";
@@ -49,11 +52,39 @@ const addDays = (key: string, n: number) => new Date(keyDate(key).getTime() + n 
 
 export function ScheduleScreen() {
   const [from, setFrom] = useState<string | null>(null);
-  const [state] = useScreen("schedule", from ? { from } : {});
+  const [state, reload] = useScreen("schedule", from ? { from } : {});
+  const { toast } = useShellState();
+  /** A moved slot shows at its new time until the reload answers (or goes back if the move was refused). */
+  const [moved, setMoved] = useState<Record<string, string>>({});
   const [view, setView] = useTabParam<View>("view", VIEWS.map((v) => v.id), "week");
   const [filter, setFilter] = useState<Filter>("all");
   const data = state.status === "ready" ? state.data : null;
   const zone = useMemo(() => inZone(data?.timezone ?? "UTC"), [data?.timezone]);
+  const live = state.status === "ready" && state.live.slots;
+
+  /**
+   * Moving a slot asks again (P4 C2): `schedule_change` gives it a new card, even after it was approved. SQL checks
+   * the rules (five minutes ahead, the daily cap, the 3-hour gap) and says why when it refuses.
+   */
+  async function move(slot: Slot, publishAt: string) {
+    if (!live) {
+      toast("Sample calendar: nothing was moved.");
+      return;
+    }
+    setMoved((m) => ({ ...m, [slot.id]: publishAt }));
+    try {
+      await api(`/schedule/slots/${encodeURIComponent(slot.id)}`, jsonBody({ action: "change_time", publishAt }));
+      toast("New time saved. A new card asks you to approve it.");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not move it. Please try again.");
+    } finally {
+      setMoved((m) => {
+        const { [slot.id]: _, ...rest } = m;
+        return rest;
+      });
+      reload();
+    }
+  }
   const start = data ? zone.dayKey(data.from) : null;
   const end = data ? addDays(zone.dayKey(data.to), -1) : null;
 
@@ -98,10 +129,12 @@ export function ScheduleScreen() {
           <div className="scr-main">
             <Calendar
               view={view}
-              slots={data.slots.filter((s) => filter === "all" || s.where.platform === filter)}
+              slots={data.slots.filter((s) => filter === "all" || s.where.platform === filter).map((s) => (moved[s.id] ? { ...s, at: moved[s.id]! } : s))}
               start={start}
               end={end}
               zone={zone}
+              timezone={data.timezone}
+              onMove={move}
             />
           </div>
           <div className="scr-side">
@@ -145,7 +178,22 @@ export function ScheduleScreen() {
 
 type Zone = ReturnType<typeof inZone>;
 
-function Calendar({ view, slots, start, end, zone }: { view: View; slots: Slot[]; start: string; end: string; zone: Zone }) {
+/** Slots that have not started posting can move; posted and failed ones stay where they are. */
+const MOVABLE: ReadonlySet<SlotStatus> = new Set(["proposed", "waiting_founder", "scheduled"]);
+
+type Move = { timezone: string; onMove: (slot: Slot, publishAt: string) => void };
+
+function Calendar({ view, slots, start, end, zone, timezone, onMove }: { view: View; slots: Slot[]; start: string; end: string; zone: Zone } & Move) {
+  const [over, setOver] = useState<string | null>(null);
+  /** Dropped on another day: the same time of day there, in the founder's zone. */
+  function drop(event: DragEvent, key: string) {
+    event.preventDefault();
+    setOver(null);
+    const slot = slots.find((s) => s.id === event.dataTransfer.getData("text/x-opencmo-slot"));
+    if (!slot || zone.dayKey(slot.at) === key) return;
+    const at = fromLocalInput(`${key}T${zone.time(slot.at)}`, timezone);
+    if (at) onMove(slot, at);
+  }
   const byDay = useMemo(() => {
     const map = new Map<string, Slot[]>();
     for (const slot of [...slots].sort((a, b) => a.at.localeCompare(b.at))) {
@@ -166,7 +214,7 @@ function Calendar({ view, slots, start, end, zone }: { view: View; slots: Slot[]
             <div key={key} className="scr-list-day">
               <h3 className="scr-mono is-small">{label(key, { weekday: "short", day: "numeric", month: "short" })}</h3>
               {byDay.get(key)!.map((slot) => (
-                <SlotCard key={slot.id} slot={slot} zone={zone} inline />
+                <SlotCard key={slot.id} slot={slot} zone={zone} inline timezone={timezone} onMove={onMove} />
               ))}
             </div>
           ))}
@@ -216,14 +264,25 @@ function Calendar({ view, slots, start, end, zone }: { view: View; slots: Slot[]
           const list = byDay.get(key) ?? [];
           const sunday = keyDate(key).getUTCDay() === 0;
           return (
-            <section key={key} className={cx("scr-week-day", key === today && "is-today")} aria-label={label(key, { weekday: "long", day: "numeric", month: "long" })}>
+            <section
+              key={key}
+              className={cx("scr-week-day", key === today && "is-today", over === key && "is-drop")}
+              aria-label={label(key, { weekday: "long", day: "numeric", month: "long" })}
+              onDragOver={(event) => {
+                if (!event.dataTransfer.types.includes("text/x-opencmo-slot")) return;
+                event.preventDefault();
+                setOver(key);
+              }}
+              onDragLeave={() => setOver((k) => (k === key ? null : k))}
+              onDrop={(event) => drop(event, key)}
+            >
               <h3 className="scr-week-head scr-mono is-small">
                 {label(key, { weekday: "short" })} {Number(key.slice(8))}
                 {key === today ? " · today" : ""}
               </h3>
               <div className="scr-week-slots">
                 {list.map((slot) => (
-                  <SlotCard key={slot.id} slot={slot} zone={zone} />
+                  <SlotCard key={slot.id} slot={slot} zone={zone} timezone={timezone} onMove={onMove} />
                 ))}
                 {sunday && list.length === 0 && <p className="scr-slot is-note">Sunday review: no posts by default</p>}
               </div>
@@ -235,7 +294,10 @@ function Calendar({ view, slots, start, end, zone }: { view: View; slots: Slot[]
   );
 }
 
-function SlotCard({ slot, zone, inline }: { slot: Slot; zone: Zone; inline?: boolean }) {
+function SlotCard({ slot, zone, inline, timezone, onMove }: { slot: Slot; zone: Zone; inline?: boolean } & Move) {
+  const [picking, setPicking] = useState(false);
+  const [value, setValue] = useState("");
+  const movable = MOVABLE.has(slot.status);
   const status = slot.status === "failed" && slot.note ? `${STATUS_TEXT.failed} · ${slot.note}` : STATUS_TEXT[slot.status];
   const extra = slot.status === "posted" && slot.note ? ` · ${slot.note}` : "";
   const body = (
@@ -250,21 +312,75 @@ function SlotCard({ slot, zone, inline }: { slot: Slot; zone: Zone; inline?: boo
       </span>
     </>
   );
-  const cls = cx("scr-slot", `is-${slot.status}`, inline && "is-inline");
-  if (slot.approvalId) {
-    return (
-      <a href={`/app/inbox/${encodeURIComponent(slot.approvalId)}`} className={cls}>
-        {body}
-      </a>
-    );
-  }
-  if (slot.status === "failed") {
-    return (
-      <a href="/app/settings#settings-connected-accounts" className={cls}>
-        {body}
-      </a>
-    );
-  }
-  return <div className={cls}>{body}</div>;
+  const cls = cx("scr-slot", `is-${slot.status}`, inline && "is-inline", movable && "is-movable");
+  // A waiting card (a time to approve, a Retry, a copy-and-open) opens from its slot; a post opens where it went live.
+  const href = slot.approvalId
+    ? `/app/inbox/${encodeURIComponent(slot.approvalId)}`
+    : slot.status === "posted" && slot.url
+      ? slot.url
+      : slot.status === "failed"
+        ? "/app/settings#settings-connected-accounts"
+        : null;
+  const external = !slot.approvalId && slot.status === "posted" && !!slot.url;
+  const drag = movable
+    ? {
+        draggable: true,
+        onDragStart: (event: DragEvent) => {
+          event.dataTransfer.setData("text/x-opencmo-slot", slot.id);
+          event.dataTransfer.effectAllowed = "move";
+        },
+      }
+    : {};
+  const card = href ? (
+    <a href={href} className={cls} {...drag} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+      {body}
+    </a>
+  ) : (
+    <div className={cls} {...drag}>
+      {body}
+    </div>
+  );
+  if (!movable) return card;
+  return (
+    <div className="scr-slot-wrap" data-testid="schedule-slot" data-slot-id={slot.id}>
+      {card}
+      {picking ? (
+        <form
+          className="scr-slot-move"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const at = fromLocalInput(value, timezone);
+            if (!at) return;
+            setPicking(false);
+            onMove(slot, at);
+          }}
+        >
+          <label className="v2-field" htmlFor={`move-${slot.id}`}>
+            <span>New time ({timezone})</span>
+            <input id={`move-${slot.id}`} className="v2-input is-compact" type="datetime-local" required value={value} autoFocus onChange={(event) => setValue(event.target.value)} />
+          </label>
+          <span className="v2-actions">
+            <Button type="submit" variant="primary" compact disabled={!fromLocalInput(value, timezone)}>
+              Move
+            </Button>
+            <Button variant="quiet" compact onClick={() => setPicking(false)}>
+              Keep
+            </Button>
+          </span>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="scr-slot-move-open"
+          aria-label={`Move ${slot.title}, ${PLATFORM_LABEL[slot.where.platform]} at ${zone.time(slot.at)}`}
+          onClick={() => {
+            setValue(toLocalInput(slot.at, timezone));
+            setPicking(true);
+          }}
+        >
+          Move
+        </button>
+      )}
+    </div>
+  );
 }
-

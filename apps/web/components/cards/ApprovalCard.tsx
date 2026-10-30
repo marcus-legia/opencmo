@@ -15,7 +15,6 @@ import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
 import { isPublishPlatform } from "@/lib/departments/publish/types";
 import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
-import { PLATFORM_LABEL } from "@/lib/screens/common";
 
 import {
   CorrectionBody,
@@ -246,7 +245,6 @@ export function ApprovalCard({
           return [
             ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
             { label: "I posted it", variant: target ? ("secondary" as const) : ("primary" as const), checks: "posted", run: () => void run({ action: "posted" }) },
-            { label: `Connect ${PLATFORM_LABEL[body.where.platform]}`, variant: "secondary", href: "/app/settings#settings-connected-accounts" },
             ...declineAction,
           ];
         }

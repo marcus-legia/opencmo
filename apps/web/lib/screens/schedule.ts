@@ -15,6 +15,8 @@ export const SlotSchema = z.object({
   /** "4.1k views", "reconnect". */
   note: z.string().max(80).nullable(),
   approvalId: z.string().nullable(),
+  /** The live post, once it went out (P4 C2): the calendar's Posted marker links to it. */
+  url: z.url().nullable().optional(),
 });
 
 export const ScheduleScreenSchema = z.object({
