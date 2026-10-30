@@ -33,3 +33,7 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
 - [from B → C] `components/editor/EditorHome.tsx:21` and `ClipPicker.tsx:87,167,172` test `kind === "blank"`, so a slideshow clip looks like an upload there. `startsEmpty(kind)` in `lib/editor/project.ts` is the server-side rule (project route, Assistant, Studio); that module is server code, so use the same test locally.
   → [C] Done in C1: `components/editor/slides/kind.ts` `startsEmpty` (client twin of the server rule), used by
   `EditorHome` and `ClipPicker`.
+- [A → C] (94327693) Slideshow card body now has optional `captions` (CaptionSchema[], like a finished video). `edit_caption`
+  works on slideshow cards in SQL; `components/cards/decide.ts` `editCaption`/`withCaption` only handle finished video and
+  shorts, so please add the slideshow case and show the captions on the card. Schedule snapshot has optional `image`
+  (`{clip_id, object, bytes}`) for a post with its image: the schedule card could show it (sign `object` in `exports`).
