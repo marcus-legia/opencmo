@@ -71,7 +71,7 @@ const LATER = "Opens with this department's release.";
 function firstText(card: Card): string {
   if (card.body.kind === "post") return card.body.platforms[0]?.versions[0] ?? "";
   if (card.body.kind === "correction") return card.body.rule;
-  if (card.body.kind === "slideshow") return card.body.slides[0] ?? "";
+  if (card.body.kind === "slideshow") return card.body.slides[0]?.text ?? "";
   return "";
 }
 

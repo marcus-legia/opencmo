@@ -1858,7 +1858,7 @@ begin
   values (p_user, v_kind,
     case v_kind when 'post' then 'writer' when 'reply' then 'sales'
       when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
-      when 'shorts_batch' then 'studio' when 'schedule' then 'schedule' else 'brain' end,
+      when 'shorts_batch' then 'studio' when 'slideshow' then 'studio' when 'schedule' then 'schedule' else 'brain' end,
     p_ref_kind, p_ref_id, v_snapshot, v_hash,
     case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end,
     case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end,
@@ -1915,7 +1915,8 @@ begin
     when 'opportunity' then
       select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
         'reply', reply, 'score', score, 'score_parts', score_parts)
-      into v from public.opportunities where id = p_ref_id;
+        || case when rule is not null then jsonb_build_object('rule', rule, 'rule_why', coalesce(rule_why, '')) else '{}'::jsonb end
+      into v from public.opportunities where id = p_ref_id and (rule is distinct from 'skip');
     when 'goal' then
       select jsonb_build_object('kind', 'goal', 'week', week, 'goal', goal, 'metric', metric, 'target', target)
       into v from public.cmo_goals where id = p_ref_id;
@@ -1929,6 +1930,13 @@ begin
           'title', coalesce(s.card->>'title', ''), 'seconds', s.card->'seconds', 'aspect', s.card->'aspect',
           'beats', case when jsonb_typeof(s.card->'beats') = 'array' then s.card->'beats' else '[]'::jsonb end,
           'price_credits', s.price_credits)
+        -- The slideshow as built (B3): its slides, the MP4 and the PNG set of this exact document. Any edit to the
+        -- document changes `document_hash` and supersedes the card.
+        when 'slideshow' then jsonb_build_object('kind', 'slideshow', 'step_id', s.id, 'clip_id', s.clip_id,
+          'title', coalesce(s.card->>'title', ''), 'aspect', s.card->'aspect',
+          'slides', case when jsonb_typeof(s.card->'slides') = 'array' then s.card->'slides' else '[]'::jsonb end,
+          'document_hash', (select public.editor_document_hash(p.document) from public.editor_projects p where p.clip_id = s.clip_id),
+          'mp4_path', s.card->'mp4_path', 'png_set_path', s.card->'png_set_path')
         else jsonb_build_object('kind', 'price', 'step_id', s.id, 'clip_id', s.clip_id, 'tool', s.tool,
           'title', coalesce(s.card->>'title', ''), 'what', coalesce(s.card->>'what', ''), 'seconds', s.card->'seconds',
           'wait_minutes', s.card->'wait_minutes',
@@ -2259,7 +2267,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text, 'publish_media'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'render_stills'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text, 'publish_media'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -3233,12 +3241,14 @@ CREATE TABLE public.opportunities (
     comments integer DEFAULT 0 NOT NULL,
     score integer NOT NULL,
     score_parts jsonb DEFAULT '[]'::jsonb NOT NULL,
-    reply text NOT NULL,
+    reply text,
     priority text DEFAULT 'medium'::text NOT NULL,
     status text DEFAULT 'in_review'::text NOT NULL,
     decided_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     gen jsonb DEFAULT '{}'::jsonb NOT NULL,
+    rule text,
+    rule_why text,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
@@ -3246,6 +3256,9 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_platform_check CHECK ((platform = 'reddit'::text)),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
+    CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
+    CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['mention_ok'::text, 'help_only'::text, 'skip'::text]))),
+    CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
     CONSTRAINT opportunities_score_check CHECK (((score >= 0) AND (score <= 100))),
     CONSTRAINT opportunities_score_parts_check CHECK (((jsonb_typeof(score_parts) = 'array'::text) AND (octet_length((score_parts)::text) <= 8192))),
     CONSTRAINT opportunities_snippet_check CHECK ((char_length(snippet) <= 1200)),
@@ -4199,7 +4212,7 @@ CREATE TABLE public.cmo_insights (
     body jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT cmo_insights_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 32768))),
-    CONSTRAINT cmo_insights_kind_check CHECK ((kind = 'competitors'::text))
+    CONSTRAINT cmo_insights_kind_check CHECK ((kind = ANY (ARRAY['competitors'::text, 'niche_video'::text])))
 );
 
 
@@ -5339,6 +5352,38 @@ begin
   return jsonb_build_object('generation', to_jsonb(v_generation), 'reused', false);
 end;
 $_$;
+
+
+--
+-- Name: create_slideshow(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_slideshow(p_name text DEFAULT NULL::text, p_aspect text DEFAULT '9:16'::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_name text := nullif(left(btrim(coalesce(p_name, '')), 120), '');
+  v_job uuid;
+  v_clip uuid;
+begin
+  if p_aspect is null or p_aspect not in ('9:16', '1:1', '16:9') then
+    raise exception 'Choose a frame: 9:16, 1:1 or 16:9.' using errcode = '22023';
+  end if;
+  -- Same ceiling as every other way of creating a project.
+  if (select count(*) from public.jobs where user_id = v_user and kind = 'edit' and created_at > now() - interval '1 hour') >= 60 then
+    raise exception 'You have created many edits in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
+  insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at)
+  values (v_user, 'edit', 'editor://blank', coalesce(v_name, 'Untitled slideshow'), 'done', p_aspect, 0, 0, now())
+  returning id into v_job;
+  insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
+  values (v_job, -1, coalesce(v_name, 'Untitled slideshow'), 0, 0, null, null, 'slideshow')
+  returning id into v_clip;
+  return v_clip;
+end;
+$$;
 
 
 --
@@ -6948,7 +6993,7 @@ CREATE TABLE public.clips (
     settings jsonb,
     settings_hash text,
     parent_clip_id uuid,
-    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text, 'short'::text]))),
+    CONSTRAINT clips_kind_check CHECK ((kind = ANY (ARRAY['full'::text, 'blank'::text, 'short'::text, 'slideshow'::text]))),
     CONSTRAINT clips_parent_short_check CHECK (((parent_clip_id IS NULL) OR (kind = 'short'::text))),
     CONSTRAINT clips_settings_hash_check CHECK ((((settings IS NULL) AND (settings_hash IS NULL)) OR ((jsonb_typeof(settings) = 'object'::text) AND COALESCE((settings_hash ~ '^[0-9a-f]{64}$'::text), false)))),
     CONSTRAINT clips_settings_size_check CHECK (((settings IS NULL) OR (pg_column_size(settings) < 65536))),
@@ -8324,7 +8369,7 @@ begin
     raise exception 'Give the edit a name.' using errcode = '22023';
   end if;
   v_clip := public.owned_clip(p_clip_id, v_user);
-  if v_clip.kind <> 'blank' then
+  if v_clip.kind not in ('blank', 'slideshow') then
     raise exception 'Only edits started from a blank canvas can be renamed here.' using errcode = '22023';
   end if;
   update public.clips set hook = v_name where id = v_clip.id;
@@ -8588,6 +8633,77 @@ $$;
 
 
 --
+-- Name: request_stills_export(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.request_stills_export(p_clip_id uuid, p_revision_id uuid, p_request_id uuid) RETURNS public.tasks
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_plan text;
+  v_quota record;
+  v_revision public.editor_revisions;
+  v_manifest jsonb;
+  v_job_id uuid;
+  v_task public.tasks;
+  v_task_id uuid := gen_random_uuid();
+  v_prefix text;
+begin
+  if p_request_id is null then
+    raise exception 'Missing request id.' using errcode = '22023';
+  end if;
+  perform public.owned_clip(p_clip_id, v_user);
+  select r.* into v_revision from public.editor_revisions r where r.id = p_revision_id and r.clip_id = p_clip_id;
+  if not found then
+    raise exception 'Save the project before exporting it.' using errcode = 'P0002';
+  end if;
+  select c.job_id into v_job_id from public.clips c where c.id = p_clip_id;
+  select p.manifest into v_manifest from public.editor_projects p where p.clip_id = p_clip_id;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text, 1701));
+  select * into v_task from public.tasks where request_id = p_request_id;
+  if found then
+    if v_task.user_id is distinct from v_user or v_task.kind <> 'render_stills'
+       or v_task.clip_id is distinct from p_clip_id or v_task.editor_revision_id is distinct from p_revision_id then
+      raise exception 'This export request was already used for another clip or revision.' using errcode = '22023';
+    end if;
+    return v_task;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text, 1702));
+  if (select count(*) from public.tasks
+      where user_id = v_user
+        and kind in ('preview', 'export', 'client_export', 'finalize', 'render_document', 'render_stills')
+        and status in ('awaiting_upload', 'queued', 'running')) >= 20 then
+    raise exception 'You already have 20 previews or exports in progress. Please wait for one to finish.' using errcode = 'P0001';
+  end if;
+  select coalesce(plan, 'free') into v_plan from public.profiles where id = v_user;
+  select * into v_quota from public.plan_quota(v_plan);
+  if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
+    raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
+  end if;
+
+  v_prefix := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text;
+  insert into public.tasks (id, user_id, kind, clip_id, editor_revision_id, settings_hash, job_id, payload, status, request_id)
+  values (v_task_id, v_user, 'render_stills', p_clip_id, p_revision_id, v_revision.source_hash, v_job_id,
+    jsonb_build_object('bucket', 'exports', 'object', v_prefix || '.zip', 'still_prefix', v_prefix,
+      'editor_revision_id', p_revision_id, 'source_hash', v_revision.source_hash,
+      'manifest', coalesce(v_manifest, '{"version":1,"folders":[],"assets":[]}'::jsonb)),
+    'queued', p_request_id)
+  on conflict do nothing
+  returning * into v_task;
+  if not found then
+    perform public.release_rate_limit_for(v_user, 'export', now());
+    raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
+  end if;
+  return v_task;
+end;
+$$;
+
+
+--
 -- Name: require_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8835,6 +8951,70 @@ begin
   return found;
 end;
 $$;
+
+
+--
+-- Name: sales_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_settings (
+    user_id uuid NOT NULL,
+    excluded_subreddits text[] DEFAULT '{}'::text[] NOT NULL,
+    co_occurrence jsonb DEFAULT '[]'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sales_settings_co_occurrence_check CHECK (((jsonb_typeof(co_occurrence) = 'array'::text) AND (jsonb_array_length(co_occurrence) <= 20) AND (octet_length((co_occurrence)::text) <= 4096))),
+    CONSTRAINT sales_settings_excluded_subreddits_check CHECK ((cardinality(excluded_subreddits) <= 50))
+);
+
+
+--
+-- Name: sales_settings_save(text[], jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb) RETURNS public.sales_settings
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_excluded text[];
+  v_pairs jsonb;
+  v_row public.sales_settings;
+begin
+  select coalesce(array_agg(distinct n order by n), '{}') into v_excluded
+  from (select regexp_replace(lower(btrim(e)), '^/?r/', '') as n from unnest(coalesce(p_excluded, '{}')) e) s
+  where n <> '';
+  if cardinality(v_excluded) > 50 then
+    raise exception 'Exclude at most 50 subreddits.' using errcode = '22023';
+  end if;
+  if exists (select 1 from unnest(v_excluded) n where n !~ '^[a-z0-9_]{2,21}$') then
+    raise exception 'A subreddit name has 2 to 21 letters, digits or underscores.' using errcode = '22023';
+  end if;
+  if p_pairs is null or jsonb_typeof(p_pairs) <> 'array' then
+    raise exception 'Term pairs must be a list.' using errcode = '22023';
+  end if;
+  if jsonb_array_length(p_pairs) > 20 then
+    raise exception 'Add at most 20 term pairs.' using errcode = '22023';
+  end if;
+  if exists (select 1 from jsonb_array_elements(p_pairs) p
+             where jsonb_typeof(p) <> 'array' or jsonb_array_length(p) <> 2
+               or jsonb_typeof(p->0) <> 'string' or jsonb_typeof(p->1) <> 'string') then
+    raise exception 'Each pair has exactly two terms.' using errcode = '22023';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_array(a, b)), '[]'::jsonb) into v_pairs
+  from (select lower(btrim(p->>0)) as a, lower(btrim(p->>1)) as b from jsonb_array_elements(p_pairs) p) s;
+  if exists (select 1 from jsonb_array_elements(v_pairs) p
+             where char_length(p->>0) not between 1 and 60 or char_length(p->>1) not between 1 and 60 or p->>0 = p->>1) then
+    raise exception 'Each term has 1 to 60 characters, and the two terms of a pair differ.' using errcode = '22023';
+  end if;
+  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, updated_at)
+  values (v_user, v_excluded, v_pairs, now())
+  on conflict (user_id) do update
+    set excluded_subreddits = excluded.excluded_subreddits, co_occurrence = excluded.co_occurrence, updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$_$;
 
 
 --
@@ -10367,7 +10547,7 @@ CREATE FUNCTION public.studio_order_move(p_id uuid, p_to text, p_text text DEFAU
     SET search_path TO 'public'
     AS $$
 declare
-  v_status text := (select status from public.work_orders where id = p_id and kind in ('build_video', 'cut_shorts'));
+  v_status text := (select status from public.work_orders where id = p_id and kind in ('build_video', 'cut_shorts', 'build_slideshow', 'build_post_image'));
 begin
   if v_status is null or v_status in ('done', 'failed', 'cancelled') or v_status = p_to then
     return;
@@ -10451,7 +10631,7 @@ declare
 begin
   for v_id in
     select o.id from public.work_orders o
-    where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts') and (p_order is null or o.id = p_order)
+    where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts', 'build_slideshow', 'build_post_image') and (p_order is null or o.id = p_order)
       and not public.cmo_paused(o.user_id)
       and not exists (select 1 from unnest(o.depends_on) d(id) left join public.work_orders w on w.id = d.id
                       where w.status is distinct from 'done')
@@ -10483,7 +10663,7 @@ begin
   if not public.studio_brain_call() then
     raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind in ('build_video', 'cut_shorts')) then
+  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind in ('build_video', 'cut_shorts', 'build_slideshow', 'build_post_image')) then
     raise exception 'Order not found.' using errcode = 'P0002';
   end if;
   if p_input is null or p_output is null or p_cache_read is null or p_cache_write is null
@@ -10542,7 +10722,7 @@ CREATE TABLE public.studio_steps (
     CONSTRAINT studio_steps_decision_payload_check CHECK (((decision_payload IS NULL) OR ((jsonb_typeof(decision_payload) = 'object'::text) AND (octet_length((decision_payload)::text) <= 2048)))),
     CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
-    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text]))),
+    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text, 'slideshow'::text]))),
     CONSTRAINT studio_steps_next_check CHECK (((next IS NULL) OR ((jsonb_typeof(next) = 'object'::text) AND (next ? 'tool'::text) AND (octet_length((next)::text) <= 65536)))),
     CONSTRAINT studio_steps_plan_input_check CHECK (((plan_input IS NULL) OR ((jsonb_typeof(plan_input) = 'object'::text) AND (octet_length((plan_input)::text) <= 65536)))),
     CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
@@ -10798,7 +10978,7 @@ CREATE FUNCTION public.studio_work_count() RETURNS integer
     SET search_path TO 'public'
     AS $$
   select (
-    (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts')
+    (select count(*) from public.work_orders o where o.status = 'queued' and o.kind in ('build_video', 'cut_shorts', 'build_slideshow', 'build_post_image')
        and not public.cmo_paused(o.user_id)
        and not exists (select 1 from unnest(o.depends_on) d(id) left join public.work_orders w on w.id = d.id
                        where w.status is distinct from 'done'))
@@ -11356,7 +11536,8 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
   select case p_kind
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
-    when 'build_video' then 'studio' when 'cut_shorts' then 'studio'
+    when 'build_video' then 'studio' when 'cut_shorts' then 'studio' when 'build_slideshow' then 'studio' when 'build_post_image' then 'studio'
+    when 'niche_video_research' then 'research'
     when 'publish_post' then 'publish' when 'write_caption' then 'writer' when 'write_video_brief' then 'writer' when 'write_slides' then 'writer'
     else 'brain' end
 $$;
@@ -12153,6 +12334,7 @@ CREATE TABLE public.cmo_draft_outcomes (
     classified_at timestamp with time zone,
     platform text,
     voice_note_deleted_at timestamp with time zone,
+    mentioned_product boolean,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
@@ -12260,7 +12442,7 @@ CREATE TABLE public.deliverables (
     status text DEFAULT 'ready'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     parent_id uuid,
-    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
+    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
     CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
     CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
@@ -12679,6 +12861,21 @@ CREATE SEQUENCE public.storage_deletions_id_seq
 --
 
 ALTER SEQUENCE public.storage_deletions_id_seq OWNED BY public.storage_deletions.id;
+
+
+--
+-- Name: subreddit_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subreddit_rules (
+    subreddit text NOT NULL,
+    verdict text NOT NULL,
+    summary text DEFAULT ''::text NOT NULL,
+    read_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT subreddit_rules_subreddit_check CHECK ((subreddit ~ '^[a-z0-9_]{2,21}$'::text)),
+    CONSTRAINT subreddit_rules_summary_check CHECK ((char_length(summary) <= 200)),
+    CONSTRAINT subreddit_rules_verdict_check CHECK ((verdict = ANY (ARRAY['mention_ok'::text, 'help_only'::text, 'skip'::text])))
+);
 
 
 --
@@ -13329,6 +13526,14 @@ ALTER TABLE ONLY public.rate_limits
 
 
 --
+-- Name: sales_settings sales_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_settings
+    ADD CONSTRAINT sales_settings_pkey PRIMARY KEY (user_id);
+
+
+--
 -- Name: scene_codes scene_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13422,6 +13627,14 @@ ALTER TABLE ONLY public.storage_deletions
 
 ALTER TABLE ONLY public.studio_steps
     ADD CONSTRAINT studio_steps_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subreddit_rules subreddit_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subreddit_rules
+    ADD CONSTRAINT subreddit_rules_pkey PRIMARY KEY (subreddit);
 
 
 --
@@ -14979,6 +15192,14 @@ ALTER TABLE ONLY public.projects
 
 
 --
+-- Name: sales_settings sales_settings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_settings
+    ADD CONSTRAINT sales_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: scene_codes scene_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15655,6 +15876,13 @@ CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO aut
 
 
 --
+-- Name: sales_settings read own sales settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own sales settings" ON public.sales_settings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: schedule_slots read own schedule slots; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -15704,6 +15932,19 @@ CREATE POLICY "read own zernio profile" ON public.zernio_profiles FOR SELECT TO 
 
 
 --
+-- Name: subreddit_rules read subreddit rules; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read subreddit rules" ON public.subreddit_rules FOR SELECT TO authenticated USING (true);
+
+
+--
+-- Name: sales_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_settings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: scene_codes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -15744,6 +15985,12 @@ ALTER TABLE public.storage_deletions ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.studio_steps ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: subreddit_rules; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.subreddit_rules ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: tasks; Type: ROW SECURITY; Schema: public; Owner: -

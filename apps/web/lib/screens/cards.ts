@@ -13,6 +13,7 @@ import {
   ScheduleSnapshotSchema,
   ScriptSnapshotSchema,
   ShortsBatchSnapshotSchema,
+  SlideshowSnapshotSchema,
   type ApprovalCard,
   type Caption,
   type CardKind,
@@ -112,6 +113,9 @@ function build(row: ApprovalRow): Built | null {
           quotes,
           draft: str(s.reply),
           rules: "you post it yourself",
+          ...(s.rule === "mention_ok" || s.rule === "help_only"
+            ? { rule: { kind: s.rule === "mention_ok" ? ("mention_allowed" as const) : ("help_only" as const), text: clip(str(s.rule_why), 200) } }
+            : {}),
         },
       };
     }
@@ -214,6 +218,27 @@ function build(row: ApprovalRow): Built | null {
             previewUrl: null,
             captions: captionsOf(v.captions, x.short_clip_id),
           })),
+        },
+      };
+    }
+    case "slideshow": {
+      const parsed = SlideshowSnapshotSchema.safeParse(s);
+      if (!parsed.success) return null;
+      const v = parsed.data;
+      const n = v.slides.length;
+      return {
+        title: clip(`${v.title || v.slides[0].text} · ${n} ${n === 1 ? "slide" : "slides"}`, 300),
+        summary: "An MP4 and a PNG set from one document. Edit a slide's text here or open it in Slides.",
+        meta: "No generation credits",
+        body: {
+          kind: "slideshow",
+          stepId: v.step_id,
+          clipId: v.clip_id,
+          documentHash: v.document_hash,
+          aspect: v.aspect,
+          slides: v.slides.map((x) => ({ text: x.text, stillUrl: null, seconds: x.seconds })),
+          previewUrl: null,
+          pngSetUrl: null,
         },
       };
     }

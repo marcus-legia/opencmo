@@ -1047,7 +1047,7 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
         waitingByRef(supabase, "opportunity"),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string; status: "in_review" | "replied" | "dismissed" }[])
+      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed" }[])
         .map((r) => {
           const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
           return {

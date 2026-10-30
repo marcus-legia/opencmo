@@ -334,7 +334,7 @@ export function SlideshowBody({
       <ul className="v2-card-slides">
         {body.slides.slice(0, 3).map((slide, index) => (
           <li key={index} className={index === 0 ? "is-cover" : undefined}>
-            {index === 0 ? firstSlide : slide}
+            {index === 0 ? firstSlide : slide.text}
           </li>
         ))}
       </ul>
