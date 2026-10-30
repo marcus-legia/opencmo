@@ -117,7 +117,7 @@ export async function nicheVideoResearch(ctx: JobContext): Promise<JobOutput> {
         // Outliers are measured within one search: a video stands out against what the same query returns.
         const [tiktok, youtube] = await Promise.all([
           search(async () => outliers(await tiktokSearch(topic, budget)).items),
-          search(async () => outliers(await youtubeSearch(`${topic} #shorts`, budget)).items),
+          search(async () => outliers(await youtubeSearch(topic, budget, { type: "shorts" })).items),
         ]);
         return [...tiktok, ...youtube].filter((v) => v.label !== "normal" && /^https:\/\//.test(v.url));
       },

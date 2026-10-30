@@ -5417,8 +5417,9 @@ begin
     perform pg_advisory_xact_lock(hashtextextended(v_job::text, 1731));
     select least(-1, min(idx) - 1) into v_idx from public.clips where job_id = v_job;
   else
-    insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at)
-    values (v_user, 'edit', 'editor://blank', v_name, 'done', p_aspect, 0, 0, now())
+    insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at, watermark)
+    values (v_user, 'edit', 'editor://blank', v_name, 'done', p_aspect, 0, 0, now(),
+      (select coalesce(plan, 'free') = 'free' from public.profiles where id = v_user))
     returning id into v_job;
   end if;
   insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
@@ -5450,8 +5451,9 @@ begin
   if (select count(*) from public.jobs where user_id = v_user and kind = 'edit' and created_at > now() - interval '1 hour') >= 60 then
     raise exception 'You have created many edits in the last hour. Try again later.' using errcode = 'P0001';
   end if;
-  insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at)
-  values (v_user, 'edit', 'editor://blank', coalesce(v_name, 'Untitled slideshow'), 'done', p_aspect, 0, 0, now())
+  insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at, watermark)
+  values (v_user, 'edit', 'editor://blank', coalesce(v_name, 'Untitled slideshow'), 'done', p_aspect, 0, 0, now(),
+    (select coalesce(plan, 'free') = 'free' from public.profiles where id = v_user))
   returning id into v_job;
   insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
   values (v_job, -1, coalesce(v_name, 'Untitled slideshow'), 0, 0, null, null, 'slideshow')

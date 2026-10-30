@@ -17,7 +17,6 @@ import {
   type SocialPost,
   SocialReadError,
   str,
-  threadsPost,
   tiktokPost,
   xPost,
   youtubePost,
@@ -149,16 +148,49 @@ export async function tiktokSearch(query: string, budget?: ScBudget): Promise<So
   return keep(itemsOf(json, ["search_item_list", "aweme_list", "videos", "data"]).map(tiktokPost), 25);
 }
 
-export async function youtubeSearch(query: string, budget?: ScBudget): Promise<SocialPost[]> {
+export async function youtubeSearch(query: string, budget?: ScBudget, opts: { type?: "videos" | "shorts" } = {}): Promise<SocialPost[]> {
   if (scFakeAllowed()) return fakePosts("youtube", query, "Channel");
-  const json = await scGet("/v1/youtube/search", { query }, budget);
-  return keep(itemsOf(json, ["videos", "shorts", "results", "data"]).map(youtubePost), 25);
+  const json = await scGet("/v1/youtube/search", { query, ...(opts.type ? { type: opts.type } : {}) }, budget);
+  // Videos and Shorts come in separate lists of one answer; both are results.
+  return keep([...itemsOf(json, ["videos"]), ...itemsOf(json, ["shorts"]), ...itemsOf(json, ["results", "data"])].map(youtubePost), 25);
 }
 
+/**
+ * Threads has no post search through our reader (only user search), so this asks Google for Threads posts. Results
+ * carry the post's URL and snippet only, no numbers.
+ */
 export async function threadsSearch(query: string, budget?: ScBudget): Promise<SocialPost[]> {
   if (scFakeAllowed()) return fakePosts("threads", query, "@maker");
-  const json = await scGet("/v1/threads/search", { query }, budget);
-  return keep(itemsOf(json, ["posts", "threads", "data", "results"]).map(threadsPost), 25);
+  return (await googleSearch(`site:threads.net ${query}`, budget))
+    .filter((r) => /^https:\/\/(www\.)?threads\.(net|com)\/@[^/]+\/post\//.test(r.url))
+    .map((r) => ({
+      platform: "threads" as const,
+      url: r.url,
+      author: /\/(@[^/]+)\//.exec(r.url)?.[1] ?? "",
+      text: `${r.title}\n${r.description}`.trim().slice(0, 600),
+      postedAt: null,
+      views: 0,
+      likes: 0,
+      replies: 0,
+      reposts: 0,
+    }));
+}
+
+export type WebResult = { url: string; title: string; description: string };
+
+/** Google results (`/v1/google/search`). No results is an empty list, not an error (the provider answers 404). */
+export async function googleSearch(query: string, budget?: ScBudget): Promise<WebResult[]> {
+  let json: unknown;
+  try {
+    json = await scGet("/v1/google/search", { query }, budget);
+  } catch (error) {
+    if (error instanceof SocialReadError && /not found/.test(error.message)) return [];
+    throw error;
+  }
+  return itemsOf(json, ["results"])
+    .map((r) => ({ url: str(r.url), title: str(r.title).replace(/\s+/g, " ").slice(0, 300), description: str(r.description).replace(/\s+/g, " ").slice(0, 600) }))
+    .filter((r) => /^https:\/\//.test(r.url))
+    .slice(0, 10);
 }
 
 /** Transcript video công khai (< 2 phút với TikTok/IG/X). Cắt 6 000 ký tự. */
