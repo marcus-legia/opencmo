@@ -1,0 +1,18 @@
+{
+  "$schema": "./schedule-defaults.schema.json",
+  "$comment": "Default posting slots per platform until a founder has data of their own (P4 A1; schedule-publish.md §5). Times are the founder's local time (profiles.timezone), every day. Source: Buffer, 'Best time to post on social media in 2026' (State of Social Media Engagement, 52M+ posts, published 2026-03-25, times already local): https://buffer.com/resources/best-time-to-post-social-media/ — X 9 a.m. (Tue; Wed 9-10 a.m.), Threads 7 a.m.-12 p.m. weekdays (Thu 9 a.m.), LinkedIn 3-4 p.m. (Wed, Fri), TikTok 9 a.m. and 1 p.m. (Sun, Mon), Instagram 9 a.m. (Thu), YouTube Shorts 4 p.m. and 6-7 p.m. (Fri). The study's weekday ranking is not used yet (P6 best time). Slots closer than minGapHours keep only the best one. X's daily cap of 5 is the owner's (2026-10-26); the others allow as many posts a day as they have default slots. SQL's schedule_rules() holds the same values; lib/cmo/schedule-defaults.check.ts compares them.",
+  "minGapHours": 3,
+  "windowMinutes": 15,
+  "leadMinutes": 30,
+  "horizonDays": 14,
+  "maxProposals": 3,
+  "jitterSeconds": 240,
+  "platforms": {
+    "x": { "times": ["09:00"], "dailyCap": 5 },
+    "threads": { "times": ["09:00", "12:00"], "dailyCap": 2 },
+    "linkedin": { "times": ["16:00"], "dailyCap": 1 },
+    "tiktok": { "times": ["09:00", "13:00"], "dailyCap": 2 },
+    "instagram": { "times": ["09:00"], "dailyCap": 1 },
+    "youtube": { "times": ["16:00", "19:00"], "dailyCap": 2 }
+  }
+}

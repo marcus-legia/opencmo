@@ -95,6 +95,11 @@ function readEnv(): NodeJS.ProcessEnv {
     // mcp.spec starts the MCP server on this port; Settings shows it in the Claude Code command.
     OPENCMO_MCP_URL: "http://127.0.0.1:8787/mcp",
     E2E_INBUCKET_URL: values.INBUCKET_URL,
+    // P4: posting goes through the fake Zernio (connect, creator info, publish); a real key never posts from E2E.
+    OPENCMO_PUBLISH_FAKE: "1",
+    OPENCMO_PUBLISH_LIVE: "",
+    ZERNIO_API_KEY: "",
+    ZERNIO_WEBHOOK_SECRET: "e2e-zernio-webhook-secret",
   };
 }
 

@@ -19,7 +19,6 @@ import { evaluate } from './frame.ts';
  * cùng hàm renderer dùng. Màu trả về số RGBA đóng gói, không phải chuỗi.
  */
 export { sample as sampleTrack } from './frame.ts';
-export { builtinLottieName, lottieTime } from './draw.ts';
 import { buildTree, FPS, IDENTITY, type Mat, type RNode, type Values } from './tree.ts';
 export { toFrames } from './tree.ts';
 import type { Measurer } from './text.ts';
@@ -35,7 +34,7 @@ export { applyTable, bakeTable, colorFunction, colorTable, curveTable, gradeFram
 export { FPS, IDENTITY, multiply, type Mat, type Values } from './tree.ts';
 export { FONTS, type FontFamily } from './fonts.ts';
 export type { Transcript, TranscriptWord } from './captions.ts';
-export { captionPresetText, isEmphasized, sourceStart } from './captions.ts';
+export { captionPresetText, isEmphasized, placeCaption, sourceStart } from './captions.ts';
 export type { AudioClip } from './audio.ts';
 export { SEAM_FADE } from './audio.ts';
 
@@ -218,17 +217,13 @@ export function resolveTimes(
 /** Mọi nguồn media trong document — để nạp độ dài và file trước khi dựng renderer. */
 export function mediaSources(
   document: ClipDocument,
-): { kind: 'image' | 'video' | 'audio' | 'transcript' | 'lottie' | 'lut'; src: AssetInput }[] {
-  const out: { kind: 'image' | 'video' | 'audio' | 'transcript' | 'lottie' | 'lut'; src: AssetInput }[] = [];
+): { kind: 'image' | 'video' | 'audio' | 'transcript' | 'lut'; src: AssetInput }[] {
+  const out: { kind: 'image' | 'video' | 'audio' | 'transcript' | 'lut'; src: AssetInput }[] = [];
   const visit = (node: ClipNode) => {
     if (node.kind === 'captions' && node.src !== undefined) out.push({ kind: 'transcript', src: node.src });
     const record = node as ClipNode & { src?: AssetInput; paints?: { type: string; src?: AssetInput }[] };
     if ((node.kind === 'image' || node.kind === 'video' || node.kind === 'audio') && record.src !== undefined) {
       out.push({ kind: node.kind, src: record.src });
-    }
-    // `builtin:` là bộ có sẵn, đọc từ thư mục cài đặt — không phải tải.
-    if (node.kind === 'lottie' && !(typeof record.src === 'string' && record.src.startsWith('builtin:'))) {
-      out.push({ kind: 'lottie', src: record.src! });
     }
     for (const effect of (node as { effects?: { type: string; hidden?: boolean; params?: { src?: string } }[] }).effects ?? []) {
       if (effect.type === 'lut' && !effect.hidden && effect.params?.src) out.push({ kind: 'lut', src: effect.params.src });

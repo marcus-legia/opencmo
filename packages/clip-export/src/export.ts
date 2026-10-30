@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
 
-import { FRAME_RATE as FPS, type ClipDocument } from '@opencmo/clip-doc';
+import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
 import { createRenderer, mediaSources, parseCube, type MediaHost } from '@opencmo/clip-render';
 
 import { planMix } from './audio.ts';
@@ -36,26 +36,9 @@ const MIN_SEGMENT_FRAMES = 60;
  */
 const MEMORY_BUDGET_MB = 1500;
 
-export function parallelFor(videoSources: number, cores: number, visualMB = 0): number {
-  const perSegment = 150 + 250 + 170 * videoSources + visualMB;
+export function parallelFor(videoSources: number, cores: number): number {
+  const perSegment = 150 + 250 + 170 * videoSources;
   return Math.max(1, Math.min(cores, Math.floor((MEMORY_BUDGET_MB - 300) / perSegment)));
-}
-
-/**
- * RAM thêm mỗi đoạn cho visual nặng (MB). Stress 29/09 (1080×1920): ba cảnh
- * scene3d kín khung đẩy mỗi đoạn từ ~150 lên ~320 MB (rác JS của vòng chiếu mặt,
- * lưới cache); mỗi Lottie giữ một canvas riêng cỡ hộp của nó.
- */
-export function visualCost(document: ClipDocument): number {
-  let scenes = 0;
-  let lotties = 0;
-  const walk = (node: { kind?: string; children?: unknown[] }) => {
-    if (node.kind === 'scene3d') scenes++;
-    if (node.kind === 'lottie') lotties++;
-    for (const child of (node.children ?? []) as { kind?: string; children?: unknown[] }[]) walk(child);
-  };
-  for (const child of document.stage.children) walk(child as never);
-  return Math.min(400, scenes * 60 + lotties * 10);
 }
 
 export type ExportResult = { frames: number; width: number; height: number; segments: number; audioClips: number };
@@ -118,7 +101,7 @@ export async function exportJob(raw: unknown, log: (line: string) => void = () =
   const parallel = Math.max(
     1,
     Math.min(
-      job.parallel ?? parallelFor(Object.values(probes).filter((entry) => entry.video).length, cores, visualCost(document)),
+      job.parallel ?? parallelFor(Object.values(probes).filter((entry) => entry.video).length, cores),
       Math.floor(outFrames / MIN_SEGMENT_FRAMES) || 1,
     ),
   );

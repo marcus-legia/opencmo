@@ -19,7 +19,6 @@ import { css, hex } from './color.ts';
 import { hasTransition, partnerOf, subValue, transitionWindow } from './frame.ts';
 import { gradeFrame, gradeSteps, unstackAlpha, type CanvasFactory, type CubeLut, type PixelCanvas } from './grade.ts';
 import { drawText } from './text.ts';
-import { drawScene3D } from './three/render.ts';
 import { FPS, toFrames, type Mat, type RNode } from './tree.ts';
 import type { Ctx2D, Drawable, MediaHost, MediaNeed } from './types.ts';
 
@@ -72,12 +71,6 @@ function drawNode(scope: Scope, r: RNode): void {
       break;
     case 'path':
       drawPath(scope, r);
-      break;
-    case 'scene3d':
-      drawScene3D(ctx, r);
-      break;
-    case 'lottie':
-      drawLottie(scope, r);
       break;
     case 'text':
     case 'captions':
@@ -410,66 +403,6 @@ export function sourceSeconds(r: RNode): number {
   return Math.min(Math.max(r.local, inFrames), out) / FPS;
 }
 
-/**
- * Giây cần tua tới trong một file Lottie dài `length` giây: lặp thì quay vòng,
- * không lặp thì dừng ở khung cuối. Preview (CanvasKit) và export (Skottie của
- * Node) gọi CHUNG hàm này — chép hai nơi là lệch khung ngầm.
- */
-export function lottieTime(seconds: number, length: number, fps: number, loop: boolean): number {
-  if (!(length > 0)) return 0;
-  return loop ? seconds % length : Math.min(seconds, Math.max(0, length - 1 / (fps || 30)));
-}
-
-/**
- * `builtin:<tên>` → đường dẫn tương đối trong thư mục `lottie/` (không đuôi),
- * cho phép một cấp thư mục con (`emoji/fire`). Chỉ chữ thường, số, gạch nối —
- * không có đường nào thoát ra ngoài thư mục; null khi không hợp lệ.
- */
-export function builtinLottieName(src: unknown): string | null {
-  if (typeof src !== 'string' || !src.startsWith('builtin:')) return null;
-  const parts = src.slice(8).split('/');
-  return parts.length <= 2 && parts.every((part) => /^[a-z0-9-]+$/.test(part)) ? parts.join('/') : null;
-}
-
-/** Giây của animation Lottie ở khung này: thời gian cục bộ × tốc độ + offset. */
-export function lottieSeconds(r: RNode): number {
-  const node = r.node as { speed?: number; offset?: number };
-  return Math.max(0, (r.local / FPS) * (node.speed ?? 1) + (node.offset ?? 0));
-}
-
-/**
- * Lottie: nơi chạy vẽ khung ở đúng số PIXEL của hộp trên canvas (độ phóng lấy
- * từ ma trận), renderer chỉ đặt ảnh vào hộp — như khung video.
- */
-function drawLottie(scope: Scope, r: RNode): void {
-  const { ctx, media } = scope;
-  const node = r.node as { src?: AssetInput; loop?: boolean; shadows?: Shadow[] };
-  if (node.src === undefined || !media.lottie) return;
-  const { width, height } = r.values;
-  // Hai trục phóng riêng: scaleY 3 mà lấy độ phóng trục x thì ảnh bị kéo giãn, nhoè.
-  const zoomX = Math.hypot(r.worldMatrix[0], r.worldMatrix[1]) || 1;
-  const zoomY = Math.hypot(r.worldMatrix[2], r.worldMatrix[3]) || 1;
-  const pixelsW = Math.max(1, Math.min(2048, Math.round(width * zoomX)));
-  const pixelsH = Math.max(1, Math.min(2048, Math.round(height * zoomY)));
-  const frame = media.lottie(node.src, lottieSeconds(r), pixelsW, pixelsH, node.loop !== false);
-  if (frame === null) return;
-  if (frame === 'failed') {
-    ctx.fillStyle = MISSING;
-    ctx.fillRect(0, 0, width, height);
-    return;
-  }
-  const shadow = (node.shadows ?? []).find((item) => !item.hidden);
-  if (shadow) {
-    ctx.save();
-    ctx.shadowColor = hex(subValue(r, shadow, 'color', 0));
-    ctx.shadowBlur = subValue(r, shadow, 'blur', 0) * scope.shadowScale;
-    ctx.shadowOffsetX = subValue(r, shadow, 'offsetX', 0) * scope.shadowScale;
-    ctx.shadowOffsetY = subValue(r, shadow, 'offsetY', 0) * scope.shadowScale;
-  }
-  ctx.drawImage(frame as never, 0, 0, width, height);
-  if (shadow) ctx.restore();
-}
-
 function drawMedia(
   scope: Scope,
   r: RNode,
@@ -626,7 +559,6 @@ export function collectNeeds(root: RNode): MediaNeed[] {
     if (node.hidden) return;
     if (node.kind === 'image' && node.src !== undefined) needs.push({ kind: 'image', src: node.src });
     if (node.kind === 'video' && node.src !== undefined) needs.push({ kind: 'video', src: node.src, seconds: sourceSeconds(r) });
-    if (node.kind === 'lottie' && node.src !== undefined) needs.push({ kind: 'lottie', src: node.src, seconds: lottieSeconds(r) });
     for (const effect of (node as { effects?: Effect[] }).effects ?? []) {
       if (effect.type === 'lut' && !effect.hidden && effect.params?.src) needs.push({ kind: 'lut', src: effect.params.src });
     }

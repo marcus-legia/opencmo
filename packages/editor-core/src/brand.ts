@@ -65,7 +65,7 @@ export function themeFromBrand(kit: BrandKit | null): Theme {
 	const { primary, secondary, accent, text, background } = kit.colors;
 	const lead = [accent, primary, secondary];
 	const palette = [...lead, ...THEME.palette.filter((color) => !lead.some((item) => item.toLowerCase() === color.toLowerCase()))].slice(0, THEME.palette.length);
-	return { ...THEME, text, line: text, panel: background, accent, palette, font: kit.fonts.heading };
+	return { ...THEME, text, line: text, panel: background, onAccent: background, accent, palette, font: kit.fonts.heading };
 }
 
 const COLOR_KEYS = new Set(['color', 'color2', 'fill', 'edges', 'background']);
@@ -84,6 +84,7 @@ export function rebrand<T>(nodes: T, theme: Theme, from: Theme = THEME): T {
 	map.set(from.accent.toLowerCase(), theme.accent);
 	map.set(from.text.toLowerCase(), theme.text);
 	map.set(from.panel.toLowerCase(), theme.panel);
+	if (from.onAccent.toLowerCase() !== from.panel.toLowerCase()) map.set(from.onAccent.toLowerCase(), theme.onAccent);
 	const fromFont = from.font ?? 'Inter';
 	const visit = (value: unknown): unknown => {
 		if (Array.isArray(value)) return value.map(visit);

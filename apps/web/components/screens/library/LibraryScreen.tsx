@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 
+import { ApiError, api } from "@/components/clipping/api";
 import { BrandView } from "@/components/clipping/web/BrandView";
+import { useShellState } from "@/components/shell-v2/ShellState";
 
-import { Button, SampleTag, Tabs, Toggle } from "@/components/ui";
+import { Button, SampleTag, Tabs } from "@/components/ui";
+import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { LibraryScreen as Data } from "@/lib/screens/library";
 
 import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
@@ -91,9 +94,32 @@ function Gate({
   return <>{children(screen.data, { voice: !screen.live.voice, skills: !screen.live.skills })}</>;
 }
 
-/** Voice notes are learned by the brain (B0 corrections). Delete only hides the row until that RPC exists. */
+const noteDate = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(iso));
+
+/**
+ * Voice notes Writer learned from the founder's decisions (P3 F5), heaviest first. Deleting one asks first; a live
+ * note is deleted through `voice_note_delete` and never written again, a sample one only leaves this screen.
+ */
 function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: boolean } }) {
+  const { toast } = useShellState();
   const [notes, setNotes] = useState(voice.notes);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function remove(id: string) {
+    setBusy(true);
+    try {
+      if (!sample.voice) await api(`/library/voice/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setNotes((all) => all.filter((n) => n.id !== id));
+      setConfirming(null);
+      toast(sample.voice ? "Note deleted (sample, nothing was sent)." : "Note deleted. Writer stops using it.");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "The note could not be deleted. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Panel id="library-voice"
       white
@@ -108,23 +134,34 @@ function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: bo
       <div className="scr-rows">
         {notes.length === 0 && <p className="scr-row scr-muted">No notes yet. Writer learns them from what you change in its drafts.</p>}
         {notes.map((note) => (
-          <div key={note.id} className="scr-row scr-row-inline">
+          <div key={note.id} className="scr-row scr-row-inline" data-testid="voice-note">
             <span>
               <b>{note.text}</b>
               <br />
               <span className="scr-tiny scr-muted">
-                {note.source}
+                {note.platform ? PLATFORM_LABEL[note.platform] : "All platforms"} · {note.source} · {noteDate(note.at)}
                 {note.replaces ? ` · replaces an older note “${note.replaces}”` : ""}
               </span>
+              <span className="scr-voice-weight">
+                <meter min={0} max={1} value={note.weight} aria-label={`Weight of “${note.text}”`} />
+                <span className="scr-tiny scr-muted">weight {Math.round(note.weight * 100)}%</span>
+              </span>
             </span>
-            <Button
-              compact
-              variant="quiet"
-              aria-label={`Delete note: ${note.text}`}
-              onClick={() => setNotes((all) => all.filter((n) => n.id !== note.id))}
-            >
-              Delete
-            </Button>
+            {confirming === note.id ? (
+              <span className="scr-voice-confirm" role="group" aria-label={`Delete note: ${note.text}?`}>
+                <span className="scr-tiny">Writer stops using it.</span>
+                <Button compact variant="primary" disabled={busy} onClick={() => void remove(note.id)}>
+                  Delete note
+                </Button>
+                <Button compact variant="quiet" disabled={busy} onClick={() => setConfirming(null)}>
+                  Keep
+                </Button>
+              </span>
+            ) : (
+              <Button compact variant="quiet" aria-label={`Delete note: ${note.text}`} onClick={() => setConfirming(note.id)}>
+                Delete
+              </Button>
+            )}
           </div>
         ))}
         {voice.wordsCut.length > 0 && (
@@ -151,22 +188,19 @@ function SkillsTab({ skills, sample }: { skills: Data["skills"]; sample: { skill
   );
 }
 
+/** Read only (P3 C1): what each skill is for and which agents read it. Skills change through their own files. */
 function SkillList({ id, title, items, sample }: { id: string; title: string; items: Skill[]; sample: boolean }) {
-  const [on, setOn] = useState(() => new Map(items.map((item) => [item.id, item.enabled])));
   return (
     <Panel id={id} white title={<>{title} {sample && <SampleTag />}</>}>
       <div className="scr-rows">
         {items.length === 0 && <p className="scr-row scr-muted">None yet. Ask the editor Assistant to remember a recipe and it shows here.</p>}
         {items.map((item) => (
-          <div key={item.id} className="scr-row scr-row-inline">
-            <span>
-              <b>{item.name}</b>
-              <br />
-              <span className="scr-tiny scr-muted">{item.note}</span>
+          <div key={item.id} className="scr-row">
+            <b>{item.name}</b>
+            <span className="scr-tiny scr-muted">
+              {item.origin === "built_in" ? "Built in" : "Yours"} · {item.note}
             </span>
-            <Toggle checked={on.get(item.id) ?? false} onChange={(next) => setOn((map) => new Map(map).set(item.id, next))}>
-              <span className="scr-sr-only">{item.name}</span>
-            </Toggle>
+            <span className="scr-tiny">Read by {item.readBy.join(", ")}</span>
           </div>
         ))}
       </div>

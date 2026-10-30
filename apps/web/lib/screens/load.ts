@@ -3,22 +3,33 @@ import "server-only";
 import type { SupabaseClient } from "@/lib/api/handler";
 import { brainMode } from "@/lib/cmo/brain";
 import { loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
+import { profileIdOf, profileOf, POST_PROFILES } from "@/lib/cmo/platforms";
+import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
+import { localMidnight, localMonday } from "@/lib/time-zone";
+import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { SITE_URL } from "@/lib/site";
+
+import scheduleDefaults from "../../../../packages/contracts/schedule-defaults.json";
 
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
+import { enrichScheduleCards } from "./schedule-enrich";
+import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
-import type { LibraryScreen } from "./library";
+import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
+import type { ScheduleScreen } from "./schedule";
 import type { SettingsScreen } from "./settings";
-import type { StudioScreen } from "./studio";
+import type { StudioItem, StudioScreen, TeamStep } from "./studio";
+import { videoSteps, type VideoStepRow } from "./video-steps";
 import type { WriterScreen } from "./writer";
 
 export type LoadContext = { supabase: SupabaseClient; userId: string; params: URLSearchParams };
@@ -60,13 +71,14 @@ async function cmoState(supabase: SupabaseClient, userId: string, p: Promise<Pro
   return { mode: mode.brain, pausedAt: iso(prof.cmo_paused_at) };
 }
 
-/** The queue: waiting cards, oldest first. Kinds the app cannot show yet (A1, A3) are left out. */
-async function waitingCards(supabase: SupabaseClient): Promise<ApprovalCard[]> {
+/** The queue: waiting cards, oldest first, Studio pictures signed, schedule cards in the founder's time. Kinds the app cannot show yet are left out. */
+async function waitingCards(supabase: SupabaseClient, userId: string): Promise<ApprovalCard[]> {
   const rows = must(
     await supabase.from("approvals").select(APPROVAL_COLUMNS).eq("status", "waiting").order("created_at", { ascending: true }).limit(100),
     "approvals",
   ) as ApprovalRow[];
-  return rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null);
+  const cards = await signStudioCards(supabase, rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null), rows);
+  return enrichScheduleCards(supabase, userId, cards);
 }
 
 type OrderDb = OrderLedgerRow & { user_id: string; root_id: string | null; week: string; created_at: string; done_reason: string | null };
@@ -113,11 +125,15 @@ function stateText(o: OrderDb, now: Date): string {
 async function cardsByOrder(supabase: SupabaseClient, orderIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!orderIds.length) return out;
-  const deliverables = must(await supabase.from("deliverables").select("order_id, ref_kind, ref_id").in("order_id", orderIds), "deliverables") as {
-    order_id: string;
-    ref_kind: string;
-    ref_id: string;
-  }[];
+  const deliverables = [
+    ...(must(await supabase.from("deliverables").select("order_id, ref_kind, ref_id").in("order_id", orderIds), "deliverables") as {
+      order_id: string;
+      ref_kind: string;
+      ref_id: string;
+    }[]),
+    // Studio's cards hang off its steps, batches and edits, not deliverables (P2).
+    ...(await studioRefs(supabase, orderIds)),
+  ];
   if (!deliverables.length) return out;
   const waiting = must(
     await supabase.from("approvals").select("id, ref_id").eq("status", "waiting").in("ref_id", deliverables.map((d) => d.ref_id)),
@@ -157,7 +173,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
   const now = new Date();
   const prof = profile(supabase, userId);
   const tree = weekTree(supabase);
-  const queue = waitingCards(supabase);
+  const queue = waitingCards(supabase, userId);
   return parts<DashboardScreen>("dashboard", {
     cmo: () => cmoState(supabase, userId, prof),
     queue: () => queue,
@@ -183,7 +199,8 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
       const verdict = (o: OrderDb) => classifyOrder(o, now, JOB_PRICES[o.kind] ?? 0);
       const nodes = TEAM.map((department) => {
         const mine = orders.filter((o) => o.department === department);
-        const running = mine.find((o) => o.status === "running");
+        // An order waiting on its generations or renders (Studio) is at work, not idle.
+        const running = mine.find((o) => o.status === "running") ?? mine.find((o) => o.status === "waiting_order");
         const stuck = mine.find((o) => verdict(o) === "stuck" || verdict(o) === "over_budget");
         const next = mine.filter((o) => o.status === "queued").sort((a, b) => (a.due_at ?? "9").localeCompare(b.due_at ?? "9"))[0];
         const waitingOn = mine.find((o) => o.status === "waiting_founder");
@@ -283,7 +300,11 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
       const { root, orders } = await tree;
       if (!root) return [];
       const visible = orders.filter((o) => o.status !== "cancelled");
-      return orderRows(visible, await cardsByOrder(supabase, visible.map((o) => o.id)), root.id, now);
+      const [cards, steps] = await Promise.all([
+        cardsByOrder(supabase, visible.map((o) => o.id)),
+        videoStepsByOrder(supabase, visible.filter((o) => o.kind === "build_video")),
+      ]);
+      return orderRows(visible, cards, root.id, now).map((row) => (steps.has(row.id) ? { ...row, steps: steps.get(row.id) } : row));
     },
     learned: async () => {
       const [lessons, rules, skips] = await Promise.all([
@@ -378,8 +399,106 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
   });
 }
 
+// ------------------------------------------------------------------ voice and skills (P3 A3)
+
+/** A row of `voice_notes` (A1): the founder's own words from one decision, its profile and its weight today. */
+type VoiceNoteRow = {
+  id: string;
+  body: string;
+  platform: string | null;
+  source: "approved" | "edited" | "skipped";
+  edit_mode: string | null;
+  created_at: string;
+  weight: number;
+};
+
+/** What an edit mode says the founder did, as Library → Voice names where a note came from. */
+const EDIT_SOURCE: Record<string, string> = {
+  TOO_SALESY: "less selling",
+  WRONG_VOICE: "your own voice",
+  INVENTED_CLAIM: "a claim taken out",
+  TOO_LONG: "shorter",
+  HOOK_REWRITTEN: "a new first line",
+  CTA_REMOVED: "no closing ask",
+  FULL_REWRITE: "rewritten",
+};
+
+function voiceSource(note: VoiceNoteRow): string {
+  if (note.source === "approved") return "Approved as written";
+  if (note.source === "skipped") return "From a skip reason";
+  return `From your edit: ${EDIT_SOURCE[note.edit_mode ?? ""] ?? "rewritten"}`;
+}
+
+/** The founder's live voice notes, newest (heaviest) first, under their own session. */
+async function voiceNotes(supabase: SupabaseClient, limit: number): Promise<VoiceNoteRow[]> {
+  const rows = must(await supabase.rpc("voice_notes", { p_limit: limit, p_platform: null }), "voice_notes") as VoiceNoteRow[];
+  return rows.map((r) => ({ ...r, weight: Math.min(1, Math.max(0, Number(r.weight))) }));
+}
+
+/** The words the strategy says to avoid: what Writer cuts from every draft. */
+async function wordsCut(supabase: SupabaseClient): Promise<string[]> {
+  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "strategy").maybeSingle();
+  if (r.error) throw new Error(`marketing_documents_latest: ${r.error.message}`);
+  const avoid = (r.data as { body?: { avoid?: unknown } } | null)?.body?.avoid;
+  return Array.isArray(avoid)
+    ? avoid.filter((w): w is string => typeof w === "string").map((w) => w.trim()).filter((w) => w && w.length <= 40).slice(0, 20)
+    : [];
+}
+
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+const shortDate = (at: string) => new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** The registry agents a built-in writing skill names, as the Library calls them. */
+function readersOf(agents: readonly string[]): LibraryScreen["skills"]["writing"][number]["readBy"] {
+  const name = (agent: string): (typeof SKILL_READERS)[number] | null =>
+    agent === "writer" || agent.endsWith("_writer") ? "Writer" : agent === "checker" ? "Checker" : agent === "sales" ? "Sales" : agent === "cmo" ? "CMO chat" : null;
+  return [...new Set(agents.map(name).filter((r): r is (typeof SKILL_READERS)[number] => r !== null))];
+}
+
 async function library({ supabase }: LoadContext): Promise<Partial<LibraryScreen>> {
   return parts<LibraryScreen>("library", {
+    voice: async () => {
+      const [notes, words] = await Promise.all([voiceNotes(supabase, 40), wordsCut(supabase)]);
+      return {
+        notes: notes.map((n) => ({
+          id: n.id,
+          text: clip(n.body, 600),
+          platform: (n.platform && profileOf(n.platform)?.platform) || null,
+          source: voiceSource(n),
+          at: new Date(n.created_at).toISOString(),
+          weight: n.weight,
+          replaces: null,
+        })),
+        wordsCut: words,
+      };
+    },
+    // Read only (brain.md §8b): the writing guidance and profiles we ship, the style skills, and the founder's own
+    // saved from the editor Assistant. Department playbooks stay with their departments.
+    skills: async () => {
+      const own = must(await supabase.from("editor_skills").select("id, name, description, created_at").order("created_at").limit(50), "editor_skills") as {
+        id: string;
+        name: string;
+        description: string;
+        created_at: string;
+      }[];
+      const slop = CMO_SKILLS["no-ai-slop"];
+      return {
+        writing: [
+          { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in" as const, note: clip(`Guidance, never a hard filter: ${slop.description}`, 200), readBy: readersOf(slop.agents) },
+          {
+            id: "platform-profiles",
+            name: "Platform profiles",
+            origin: "built_in" as const,
+            note: clip(`Length, the cut before “more” and the tone for ${POST_PROFILES.map((p) => p.label).join(", ")} and video captions. No links; hashtags only on video captions.`, 200),
+            readBy: ["Writer", "Checker"],
+          },
+        ],
+        video: [
+          ...readyStyles().map((style) => ({ id: `style-${style.name}`, name: style.name, origin: "built_in" as const, note: clip(style.description, 200), readBy: ["Studio", "Editor Assistant"] as ("Studio" | "Editor Assistant")[] })),
+          ...own.map((skill) => ({ id: skill.id, name: skill.name.slice(0, 80), origin: "yours" as const, note: clip(`${skill.description} · saved ${shortDate(skill.created_at)}`, 200), readBy: ["Editor Assistant"] as "Editor Assistant"[] })),
+        ],
+      };
+    },
     site: async () => {
       const r = await supabase.from("cmo_runs").select("input").eq("kind", "onboard").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
@@ -438,6 +557,7 @@ type BrandKitJson = {
 async function settings({ supabase, userId }: LoadContext): Promise<Partial<SettingsScreen>> {
   const prof = profile(supabase, userId);
   return parts<SettingsScreen>("settings", {
+    accounts: async () => accountList(await socialAccounts(supabase), true),
     cmo: () => cmoState(supabase, userId, prof),
     weeklyCreditBudget: async () => (await prof).weekly_credit_budget,
     timezone: async () => (await prof).timezone,
@@ -450,7 +570,177 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
   });
 }
 
+type SocialAccountDb = { id: string; platform: string; handle: string; avatar_url: string | null; status: string; updated_at: string };
+
+async function socialAccounts(supabase: SupabaseClient): Promise<SocialAccountDb[]> {
+  return must(
+    await supabase.from("social_accounts").select("id, platform, handle, avatar_url, status, updated_at").order("connected_at"),
+    "social_accounts",
+  ) as SocialAccountDb[];
+}
+
+/**
+ * Every platform OpenCMO posts to, connected or not (P4 F1): Settings offers Connect for the rest. `reconnect` when
+ * Zernio reports the account refused or gone; then posts to it wait until the founder connects it again.
+ */
+function accountList(rows: SocialAccountDb[], all: boolean): SettingsScreen["accounts"] {
+  const byPlatform = new Map(rows.map((r) => [r.platform, r]));
+  return PUBLISH_PLATFORMS.flatMap((platform): SettingsScreen["accounts"] => {
+    const r = byPlatform.get(platform);
+    if (!r) return all ? [{ id: `connect-${platform}`, platform, handle: "", status: "not_connected" as const, syncedAt: null, noDataSince: null, avatarUrl: null }] : [];
+    const connected = r.status === "connected";
+    return [{
+      id: r.id,
+      platform,
+      handle: r.handle.slice(0, 80),
+      status: connected ? ("connected" as const) : ("reconnect" as const),
+      syncedAt: connected ? iso(r.updated_at) : null,
+      noDataSince: connected ? null : iso(r.updated_at),
+      avatarUrl: r.avatar_url,
+    }];
+  });
+}
+
+type SlotDb = {
+  id: string;
+  platform: string;
+  status: string;
+  publish_at: string;
+  error: { message?: string } | null;
+  external_url: string | null;
+  approval_id: string | null;
+  account: { handle: string } | null;
+  deliverable: { kind: string; ref_kind: string; ref_id: string } | null;
+};
+
+/** SQL's slot statuses on the calendar's five (`SLOT_STATUSES`); a card still waiting makes it the founder's turn. */
+function slotStatus(s: SlotDb, waiting: Set<string>): { status: ScheduleScreen["slots"][number]["status"]; note: string | null } {
+  switch (s.status) {
+    case "proposed":
+      return { status: s.approval_id && waiting.has(s.approval_id) ? "waiting_founder" : "proposed", note: null };
+    case "waiting":
+    case "due":
+    case "publishing":
+      return { status: "scheduled", note: null };
+    case "reminded":
+      return { status: "scheduled", note: "post it yourself" };
+    case "published":
+      return { status: "posted", note: null };
+    case "missed":
+      return { status: "failed", note: "missed" };
+    default:
+      return { status: "failed", note: s.error?.message ? s.error.message.slice(0, 80) : "failed" };
+  }
+}
+
+const SCHEDULE_RULES: string[] = [
+  `At most ${scheduleDefaults.platforms.x.dailyCap} posts a day on X; on other platforms as many as their best times. ${scheduleDefaults.minGapHours} hours apart.`,
+  "Times start from common best times (Buffer's 2026 study) in your time zone, until your own results say better.",
+  "A short and its long video never go out on one platform the same day.",
+  "Drag a slot to move it. A new time or account asks you again.",
+  `A post that misses its time by ${scheduleDefaults.windowMinutes} minutes is never posted late: you get a new time to approve.`,
+];
+
+async function schedule({ supabase, userId, params }: LoadContext): Promise<Partial<ScheduleScreen>> {
+  const prof = profile(supabase, userId);
+  // The week starts at Monday midnight where the founder is: a Monday 06:00 post in UTC+7 is Monday's, not Sunday's.
+  // A profile that cannot be read leaves the timezone field to fail on its own, as each field does.
+  const timezone = await prof.then((p) => p.timezone, () => "UTC");
+  const asked = params.get("from");
+  const askedDay = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(Date.parse(`${asked}T12:00:00Z`)) ? asked : null;
+  const monday = askedDay ? localMonday(Date.parse(`${askedDay}T12:00:00Z`), "UTC") : localMonday(Date.now(), timezone);
+  const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const from = new Date(localMidnight(monday, timezone) ?? `${monday}T00:00:00Z`);
+  const to = new Date(localMidnight(nextMonday, timezone) ?? `${nextMonday}T00:00:00Z`);
+  return parts<ScheduleScreen>("schedule", {
+    timezone: async () => (await prof).timezone,
+    from: async () => from.toISOString(),
+    to: async () => to.toISOString(),
+    slots: async () => {
+      const slots = must(
+        await supabase
+          .from("schedule_slots")
+          .select("id, platform, status, publish_at, error, external_url, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
+          .gte("publish_at", from.toISOString())
+          .lt("publish_at", to.toISOString())
+          .neq("status", "cancelled")
+          .order("publish_at")
+          .limit(300),
+        "schedule_slots",
+      ) as unknown as SlotDb[];
+      const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
+      const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
+      const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
+      const [itemRows, clipRows, waitingRows] = await Promise.all([
+        items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
+        clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
+        approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
+      ]);
+      const titles = new Map<string, string>([
+        ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
+          (r) => [r.id, (r.body?.text?.split("\n")[0] || r.idea || "Post").slice(0, 300)] as [string, string],
+        ),
+        ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, `Short · ${r.hook || "Untitled"}`.slice(0, 300)] as [string, string]),
+      ]);
+      const waiting = new Set(((waitingRows.data ?? []) as { id: string }[]).map((r) => r.id));
+      return slots.flatMap((s) => {
+        const platform = PUBLISH_PLATFORMS.find((p) => p === s.platform);
+        if (!platform) return [];
+        const { status, note } = slotStatus(s, waiting);
+        return [{
+          id: s.id,
+          at: iso(s.publish_at)!,
+          where: { platform, handle: (s.account?.handle ?? "").slice(0, 80) },
+          title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
+          status,
+          note,
+          // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
+          approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
+          url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
+        }];
+      });
+    },
+    accounts: async () => accountList(await socialAccounts(supabase), false),
+    rules: async () => SCHEDULE_RULES,
+  });
+}
+
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** The rows Studio's cards decide, per order: its steps, its shorts batches and its video's edit (card 3). */
+async function studioRefs(supabase: SupabaseClient, orderIds: string[]): Promise<{ order_id: string; ref_id: string }[]> {
+  const [steps, batches] = await Promise.all([
+    supabase.from("studio_steps").select("id, order_id, clip_id").in("order_id", orderIds),
+    supabase.from("short_batches").select("id, order_id").in("order_id", orderIds),
+  ]);
+  const stepRows = must(steps, "studio_steps") as { id: string; order_id: string; clip_id: string }[];
+  return [
+    ...stepRows.map((r) => ({ order_id: r.order_id, ref_id: r.id })),
+    ...[...new Map(stepRows.map((r) => [r.clip_id, r.order_id])).entries()].map(([clip, order]) => ({ order_id: order, ref_id: clip })),
+    ...(must(batches, "short_batches") as { id: string; order_id: string }[]).map((r) => ({ order_id: r.order_id, ref_id: r.id })),
+  ];
+}
+
+type StepDb = VideoStepRow & { id: string; order_id: string; clip_id: string; created_at: string };
+const STEP_COLUMNS = "id, order_id, clip_id, tool, kind, status, decision, card, next, next_done_at, created_at";
+
+/** Each video order's team steps, oldest step first. */
+async function videoStepsByOrder(supabase: SupabaseClient, orders: { id: string; status: string }[]): Promise<Map<string, TeamStep[]>> {
+  const out = new Map<string, TeamStep[]>();
+  if (!orders.length) return out;
+  const ids = orders.map((o) => o.id);
+  const [steps, card3] = await Promise.all([
+    supabase.from("studio_steps").select(STEP_COLUMNS).in("order_id", ids).order("created_at", { ascending: true }),
+    supabase.from("approvals").select("ref_id").eq("ref_kind", "editor_project").eq("status", "waiting"),
+  ]);
+  const rows = must(steps, "studio_steps") as StepDb[];
+  const waiting = new Set((must(card3, "approvals") as { ref_id: string }[]).map((r) => r.ref_id));
+  for (const o of orders) {
+    const mine = rows.filter((r) => r.order_id === o.id);
+    out.set(o.id, videoSteps(o as { status: OrderDb["status"] }, mine, mine.some((r) => waiting.has(r.clip_id))));
+  }
+  return out;
+}
+
 const isHttps = (u: unknown): u is string => typeof u === "string" && /^https:\/\/\S+$/.test(u) && u.length <= 500;
 
 /** Waiting cards keyed by the row they decide. */
@@ -523,50 +813,230 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
   });
 }
 
+/** The screen platform of a calendar label or profile id ("LinkedIn" → linkedin, "tiktok_caption" → tiktok). */
+function screenPlatform(label: string | null | undefined, fallback: WriterScreen["drafts"][number]["platform"]): WriterScreen["drafts"][number]["platform"] {
+  return profileOf(profileIdOf(label) ?? "")?.platform ?? fallback;
+}
+
 async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
   return parts<WriterScreen>("writer", {
+    // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
+    // wrote for Studio, over the last two weeks.
     drafts: async () => {
       const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-      const [rows, cards] = await Promise.all([
-        supabase
-          .from("content_items")
-          .select("id, day, idea, status, body, final_text, published_at")
-          .eq("department", "post")
-          .in("status", ["planned", "drafting", "in_review", "approved", "published"])
-          .gte("day", since)
-          .order("day")
-          .limit(100),
+      type ItemRow = {
+        id: string;
+        day: string;
+        idea: string;
+        platform: string;
+        status: "planned" | "drafting" | "in_review" | "approved" | "published";
+        body: { text?: string; title?: string; alternates?: unknown[]; edited_at?: string };
+        final_text: string | null;
+        published_at: string | null;
+        clip_id: string | null;
+      };
+      const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
+      const statuses = ["planned", "drafting", "in_review", "approved", "published"];
+      const [posts, captions, briefs, cards, videoCards, batchCards, shorts] = await Promise.all([
+        supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
+        supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
+        supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
         waitingByRef(supabase, "content_item"),
+        waitingByRef(supabase, "editor_project"),
+        waitingByRef(supabase, "short_batch"),
+        supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
       ]);
       const column = { planned: "drafting", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
-      return (must(rows, "content_items") as { id: string; day: string; idea: string; status: keyof typeof column; body: { text?: string; alternates?: unknown[] }; final_text: string | null; published_at: string | null }[]).map(
-        (r) => {
-          const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
-          const edited = r.final_text !== null && r.final_text !== r.body.text;
-          return {
-            id: r.id,
-            kind: "post" as const,
-            platform: "x" as const,
-            at: iso(r.published_at),
-            dayText: r.published_at ? null : WEEKDAY[new Date(`${r.day}T00:00:00Z`).getUTCDay()]!,
-            title: (r.final_text ?? text).slice(0, 300),
-            column: column[r.status],
-            versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
-            note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
-            approvalId: cards.get(r.id) ?? null,
-          };
-        },
-      );
+      const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
+      const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
+      const postDrafts = (must(posts, "content_items") as ItemRow[]).map((r) => {
+        const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
+        const edited = r.final_text !== null && r.final_text !== r.body.text;
+        return {
+          id: r.id,
+          kind: "post" as const,
+          platform: screenPlatform(r.platform, "x"),
+          at: iso(r.published_at),
+          dayText: r.published_at ? null : dayText(r.day),
+          title: (r.final_text ?? text).slice(0, 300),
+          column: column[r.status],
+          versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
+          note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
+          approvalId: cards.get(r.id) ?? null,
+        };
+      });
+      const captionDrafts = (must(captions, "content_items") as ItemRow[]).map((r) => {
+        const card = videoCards.get(r.clip_id!) ?? batchCards.get(batchOf.get(r.clip_id!) ?? "") ?? null;
+        return {
+          id: r.id,
+          kind: "caption" as const,
+          platform: screenPlatform(r.platform, "tiktok"),
+          at: iso(r.published_at),
+          dayText: r.published_at ? null : dayText(r.day),
+          title: (typeof r.body.title === "string" && r.body.title ? r.body.title : typeof r.body.text === "string" ? r.body.text : r.idea).slice(0, 300),
+          column: column[r.status],
+          versions: 1,
+          note: r.body.edited_at ? "You edited it on the card" : r.status === "in_review" ? "On the video's card" : null,
+          approvalId: card,
+        };
+      });
+      const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string }; due_at: string | null; created_at: string }[]).map((o) => ({
+        id: o.id,
+        kind: "video_brief" as const,
+        platform: screenPlatform(o.brief.platform, "youtube"),
+        at: null,
+        dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
+        title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
+        column: o.status === "done" ? ("posted" as const) : ("drafting" as const),
+        versions: 1,
+        note: o.status === "done" ? "Fed the Studio team" : null,
+        approvalId: null,
+      }));
+      return [...postDrafts, ...captionDrafts, ...briefDrafts];
+    },
+    // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
+    voice: async () => {
+      const [rules, notes, words] = await Promise.all([
+        supabase.from("cmo_corrections").select("rule, created_at, decided_at").eq("status", "active").order("created_at", { ascending: false }).limit(10),
+        voiceNotes(supabase, 8),
+        wordsCut(supabase),
+      ]);
+      const label = (platform: string | null) => (platform ? (profileOf(platform)?.label ?? "") : "");
+      return {
+        lines: [
+          ...(must(rules, "cmo_corrections") as { rule: string; created_at: string; decided_at: string | null }[]).map((r) => ({
+            text: clip(r.rule, 200),
+            source: `Rule you approved · ${shortDate(r.decided_at ?? r.created_at)}`,
+          })),
+          ...notes.map((n) => ({
+            text: clip(n.body, 200),
+            source: clip([voiceSource(n), label(n.platform), `weight ${n.weight.toFixed(2)}`].filter(Boolean).join(" · "), 120),
+          })),
+          { text: "No links, no hashtags in posts.", source: "Product rule · hashtags only on video captions" },
+        ],
+        wordsCut: words,
+      };
     },
   });
 }
 
 /**
- * Studio's uploads and edits are read live from `/api/v1/projects` on the page; this route only carries generated
- * items (long videos, shorts, slideshows), which arrive with Studio S1. Until then their honest live value is none.
+ * Studio (P2 A5): the long videos the brain's orders make and the shorts batches, with their cards; the Video team
+ * panel for the video in progress; and every recent edit's finished state (`editStates`), which the page puts on the
+ * upload cards it reads from `/api/v1/projects`. Uploads themselves stay on that route.
  */
-async function studio(): Promise<Partial<StudioScreen>> {
-  return { items: [] };
+async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
+  type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short"; hook: string | null } | null };
+  const videos = supabase
+    .from("work_orders")
+    .select("id, title, status, created_at, updated_at, error, brief")
+    .eq("kind", "build_video")
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .then((r) => must(r, "work_orders") as VideoOrder[]);
+  const edits = supabase
+    .from("editor_projects")
+    .select("clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook)")
+    .order("updated_at", { ascending: false })
+    .limit(100)
+    .then((r) => must(r, "editor_projects") as unknown as Edit[]);
+  const steps = videos.then(async (orders) =>
+    orders.length
+      ? (must(await supabase.from("studio_steps").select(STEP_COLUMNS).in("order_id", orders.map((o) => o.id)).order("created_at", { ascending: true }), "studio_steps") as StepDb[])
+      : [],
+  );
+  const cards = Promise.all([waitingByRef(supabase, "studio_step"), waitingByRef(supabase, "editor_project"), waitingByRef(supabase, "short_batch")]);
+
+  return parts<StudioScreen>("studio", {
+    items: async () => {
+      const [orders, stepRows, editRows, [stepCards, editCards, batchCards]] = await Promise.all([videos, steps, edits, cards]);
+      const editOf = new Map(editRows.map((e) => [e.clip_id, e]));
+      const videoItems = orders.map((o) => {
+        const mine = stepRows.filter((r) => r.order_id === o.id);
+        const clipId = mine.at(-1)?.clip_id ?? null;
+        const edit = clipId ? editOf.get(clipId) : undefined;
+        const finished = !!edit?.finished_hash && edit.finished_hash === edit.document_hash;
+        const waitingStep = mine.find((r) => stepCards.has(r.id));
+        const approvalId = (waitingStep && stepCards.get(waitingStep.id)) ?? (clipId ? editCards.get(clipId) : undefined) ?? null;
+        const status: StudioItem["status"] =
+          o.status === "done" ? (finished ? "finished" : "ready") : o.status === "failed" ? "failed" : o.status === "waiting_founder" ? "waiting_founder" : "running";
+        const seconds = typeof o.brief.seconds === "number" ? ` · ${o.brief.seconds} s` : "";
+        const now = videoSteps(o, mine, !!(clipId && editCards.has(clipId))).find((s) => s.state === "running");
+        return {
+          id: o.id,
+          kind: "video" as const,
+          title: o.title.slice(0, 200),
+          subtitle: `AI video${seconds}${status === "finished" ? " · finished" : now ? ` · ${now.label.toLowerCase()}` : ""}`.slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(o.created_at).toISOString(),
+          editedAt: edit ? new Date(edit.updated_at).toISOString() : null,
+          failure: o.status === "failed" ? (o.error?.message ?? "The video could not be made.").slice(0, 200) : null,
+          projectId: null,
+          editorHref: clipId ? `/app/editor/${clipId}` : null,
+          approvalId,
+          // Only a built video is finished: once the order reached its render, Mark finished is card 3's approval.
+          canMarkFinished: !!edit && !finished && o.status !== "failed" && (o.status === "done" || mine.some((r) => r.next?.tool === "render")),
+          clipId,
+          documentHash: edit?.document_hash ?? null,
+          canCutShorts: finished,
+          edits: [],
+        };
+      });
+
+      const batches = must(
+        await supabase.from("short_batches").select("id, parent_clip_id, status, error, created_at, decided_at, shorts(id, status)").order("created_at", { ascending: false }).limit(20),
+        "short_batches",
+      ) as { id: string; parent_clip_id: string; status: string; error: string | null; created_at: string; decided_at: string | null; shorts: { id: string; status: string }[] }[];
+      const batchItems = batches.map((b) => {
+        const parent = editOf.get(b.parent_clip_id)?.clips?.hook ?? "your video";
+        const count = b.shorts.filter((x) => x.status !== "failed").length;
+        const status: StudioItem["status"] =
+          b.status === "approved" ? "finished" : b.status === "waiting_founder" ? "waiting_founder" : b.status === "failed" ? "failed" : b.status === "sent_back" || b.status === "cancelled" ? "cancelled" : "running";
+        return {
+          id: b.id,
+          kind: "short" as const,
+          title: `${count} ${count === 1 ? "short" : "shorts"} · ${parent}`.slice(0, 200),
+          subtitle: (status === "running" ? "Cut from a finished edit · rendering" : status === "cancelled" ? "Sent back" : "Cut from a finished edit · 9:16").slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(b.created_at).toISOString(),
+          editedAt: iso(b.decided_at),
+          failure: b.status === "failed" ? (b.error ?? "The shorts could not be rendered.").slice(0, 200) : null,
+          projectId: null,
+          editorHref: null,
+          approvalId: batchCards.get(b.id) ?? null,
+          canMarkFinished: false,
+          clipId: null,
+          documentHash: null,
+          canCutShorts: false,
+          edits: [],
+        };
+      });
+      return [...videoItems, ...batchItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    team: async () => {
+      const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);
+      const live = orders.find((o) => ["queued", "running", "waiting_founder", "waiting_order", "deferred"].includes(o.status));
+      if (!live) return null;
+      const mine = stepRows.filter((r) => r.order_id === live.id);
+      const clip = mine.at(-1)?.clip_id;
+      return { title: live.title.slice(0, 200), steps: videoSteps(live, mine, !!(clip && editCards.has(clip))) };
+    },
+    editStates: async () =>
+      (await edits)
+        .filter((e) => e.clips)
+        .map((e) => ({
+          clipId: e.clip_id,
+          documentHash: e.document_hash,
+          finishedAt: e.finished_hash === e.document_hash ? iso(e.finished_at) : null,
+          kind: e.clips!.kind,
+        })),
+  });
 }
 
 async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
@@ -617,4 +1087,4 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
  * Live readers, one per screen, under the founder's RLS session (no service role). A loader returns only the
  * fields it reads for real; `registry.ts` `live` must list them too before they replace sample data.
  */
-export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, research, writer, studio, sales };
+export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, schedule, research, writer, studio: studioScreen, sales };

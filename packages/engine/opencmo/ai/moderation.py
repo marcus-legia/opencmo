@@ -104,8 +104,8 @@ PROMPT_MAX_CHARS = 8000
 #: Keys whose strings are not words for the model (`specText` on the web), plus the code a scene carries here.
 _NOT_TEXT = re.compile(r"(code_ref|code|model|voice|aspectRatio|theme|template|resolution|quality)")
 
-# Our own renderers (3D, explainers) do not draw from a prompt: their output is not checked, their text is (`check_prompt`).
-SKIP_PROVIDERS = {"opencmo-3d", "opencmo-motion"}
+# Our own renderer (explainers) does not draw from a prompt: its output is not checked, its text is (`check_prompt`).
+SKIP_PROVIDERS = {"opencmo-motion"}
 
 
 def _policy_for(model: AiModel, spec: dict | None = None) -> str:

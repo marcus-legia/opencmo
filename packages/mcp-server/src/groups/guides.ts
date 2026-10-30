@@ -46,7 +46,7 @@ const PROMPTS: Record<string, { guide: GuideName; steps: string }> = {
   explain: {
     guide: "explainer",
     steps:
-      "Pick the clip (or a blank New edit the user names) with list_projects / list_clips. Read get_explainer_kit. Show the storyboard (say, label and visual of every beat, the theme and personality) and wait for the user's go before writing code. Then write the direction (the motion spec with numbers: positions, seconds, curves per move) and code from it. preview_explainer with times around the main moves, answer the review checklist it returns, fix the one worst problem and preview again (up to 6 rounds, stop when a round finds nothing). Then add_explainer for the price, confirm only after the user agrees, and poll get_generation.",
+      "Pick the clip (or a blank New edit the user names) with list_projects / list_clips. Read get_explainer_kit. Choose the art direction first: list_motion_styles and get_motion_style (read its example code), or derive one from the user's brand. Show the storyboard (say, label and visual of every beat, and the direction in one line) and wait for the user's go before writing code. Then write the direction (the motion spec with numbers: positions, seconds, curves per move) and code from it. preview_explainer with times around the main moves, answer the review checklist it returns, fix the one worst problem and preview again (up to 6 rounds, stop when a round finds nothing). Then add_explainer for the price, confirm only after the user agrees, and poll get_generation.",
   },
   video: {
     guide: "video",
@@ -130,7 +130,7 @@ registerGroup({
       uri: "opencmo://kit/explainer",
       name: "kit-explainer",
       title: "Explainer scene-code kit",
-      description: "What explainer scene code may use: layout, icons, Lotties, shapes, text, data marks and timing helpers.",
+      description: "What explainer scene code may use: shots, the core (Mark for your drawings, Text and TypeStream for typography, intent curves, travel, Streak, MotionBlur, a shot-list Camera, retime, phases and handoff for scene changes, Goo, fx backgrounds and finish), timing helpers, and the library for small symbols and product frames.",
       mimeType: "text/markdown",
       read: async () => explainerKit(),
     },

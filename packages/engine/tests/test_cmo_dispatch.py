@@ -38,6 +38,44 @@ def test_count_dispatchable_uses_claim_rule():
     assert seen["auth"] == "Bearer key"
 
 
+def test_count_studio_work_reads_the_rpc():
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["auth"] = request.headers["authorization"]
+        return httpx.Response(200, json=3)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert cmo_dispatch.count_studio_work("https://db.example/", "key", client=client) == 3
+    assert seen["path"] == "/rest/v1/rpc/studio_work_count"
+    assert seen["auth"] == "Bearer key"
+
+
+def test_count_studio_work_before_the_migration_is_zero():
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404, json={}))) as client:
+        assert cmo_dispatch.count_studio_work("https://db.example", "key", client=client) == 0
+
+
+def test_claim_due_slots_calls_the_rpc():
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["auth"] = request.headers["authorization"]
+        return httpx.Response(200, json={"fired": 1, "reminded": 0, "missed": 2, "failed": 0, "unconfirmed": 0})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert cmo_dispatch.claim_due_slots("https://db.example/", "key", client=client)["missed"] == 2
+    assert seen["path"] == "/rest/v1/rpc/schedule_claim_due"
+    assert seen["auth"] == "Bearer key"
+
+
+def test_claim_due_slots_before_the_migration_claims_nothing():
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404, json={}))) as client:
+        assert cmo_dispatch.claim_due_slots("https://db.example", "key", client=client) == {}
+
+
 def test_dispatch_calls_run_route_once_per_run_and_caps():
     calls = []
     lock = threading.Lock()

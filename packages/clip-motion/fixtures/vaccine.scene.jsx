@@ -1,4 +1,4 @@
-const { Stage, Headline, Board, Icon, Shape, Arrow, Group, Burst, Check, Lottie } = kit;
+const { Stage, Headline, Board, Icon, Shape, Arrow, Group, Burst, Check } = kit;
 const b = kit.beat;
 const W = kit.width;
 const H = kit.height;
@@ -63,7 +63,7 @@ return function Scene() {
 
       {/* Beat 6: protected. */}
       <Check x={W / 2} y={mid} size={340} at={b(5).from + 6} />
-      <Lottie name="confetti" x={W / 2} y={mid - 40} size={720} loop={false} at={b(5).from + 18} />
+      <Burst x={W / 2} y={mid - 40} at={b(5).from + 18} color="answer" size={520} />
     </Stage>
   );
 };

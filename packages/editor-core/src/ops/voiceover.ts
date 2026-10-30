@@ -300,7 +300,7 @@ function setMark(entity: Entity, name: string, value: unknown): void {
 }
 
 /** Mỗi video master + mốc CLIP tuyệt đối của nó (cộng `start` của cha). */
-function masters(document: ClipDocument): { node: Entity; clipStart: number; sourceIn: number; sourceOut: number | null }[] {
+export function masters(document: ClipDocument): { node: Entity; clipStart: number; sourceIn: number; sourceOut: number | null }[] {
 	const out: { node: Entity; clipStart: number; sourceIn: number; sourceOut: number | null }[] = [];
 	const visit = (node: ClipNode, offset: number) => {
 		const entity = node as unknown as Entity;

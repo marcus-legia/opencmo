@@ -9,7 +9,7 @@
  * or scene comes back as `ok: false` and the loop goes on; it reopens the browser if it died, exits 0 on stdin
  * EOF, and exits 1 on any other failure (the caller starts a new process).
  *
- * Exit codes (same meaning as clip-three): 0 ok (a preview with layout issues is still 0) ·
+ * Exit codes: 0 ok (a preview with layout issues is still 0) ·
  * 2 bad arguments · 3 invalid job · 4 the scene code failed, last stderr line = message for the
  * agent, never retried · 1 anything else.
  *

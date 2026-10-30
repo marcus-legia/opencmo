@@ -8,9 +8,10 @@
  */
 import assert from "node:assert/strict";
 
-import { ApprovalCardSchema, CARD_KINDS } from "./approval-card";
+import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, ScheduleOptionsSchema, ScheduleSnapshotSchema, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
-import { ALL_KINDS, STATE_CARDS } from "./fixtures/cards";
+import { ALL_KINDS, SAMPLE_CARDS, SCHEDULE_SNAPSHOT, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
+import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
 
@@ -68,7 +69,7 @@ for (const name of SCREEN_NAMES) {
 
 check("cards: one sample of each of the ten kinds", () => {
   assert.deepEqual(ALL_KINDS.map((c) => c.kind), [...CARD_KINDS]);
-  for (const card of [...ALL_KINDS, ...STATE_CARDS]) ApprovalCardSchema.parse(card);
+  for (const card of SAMPLE_CARDS) ApprovalCardSchema.parse(card);
 });
 
 check("cards: a body of another kind is refused", () => {
@@ -132,6 +133,20 @@ check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
   assert.equal(reply.body.kind === "reply" && reply.body.parts.length, 1, "a malformed score part is dropped");
 });
 
+check("cards: a post planned with the calendar's label shows, with its platform's limits", () => {
+  const post = (platform: string) =>
+    approvalToCard(row("post", { kind: "post", platform, day: "2026-10-29", idea: "Idea", text: "One line.", alternates: [], rationale: "" }));
+  const x = post("X");
+  assert.ok(x && x.body.kind === "post", "a post planned as X is shown");
+  assert.deepEqual(x.body.platforms.map((p) => [p.platform, p.limit]), [["x", 280]]);
+  const linkedin = post("LinkedIn");
+  assert.ok(linkedin && linkedin.body.kind === "post");
+  assert.deepEqual(linkedin.body.platforms.map((p) => [p.platform, p.limit, p.visibleBeforeMore]), [["linkedin", 3000, 140]]);
+  assert.match(linkedin.meta, /LinkedIn/);
+  const unknown = post("Mastodon");
+  assert.ok(unknown && unknown.body.kind === "post" && unknown.body.platforms[0]!.platform === "x", "an unknown label is decided as X, so shown as X");
+});
+
 check("cards: Studio kinds are not shown before A1; expired and elsewhere states", () => {
   assert.equal(approvalToCard(row("price", { kind: "price" })), null);
   const past = approvalToCard(row("goal", { kind: "goal", week: "2026-10-26", goal: "Goal", metric: "posts", target: 3 }, { expires_at: "2026-10-01T00:00:00+00:00" }))!;
@@ -152,6 +167,78 @@ check("compose: a live field that breaks the contract drops back alone", () => {
   } finally {
     console.warn = warn;
   }
+});
+
+// P4 A0: the schedule snapshot (SQL `approval_snapshot`) parses; platform fields are a closed set.
+check("schedule snapshot parses", () => void ScheduleSnapshotSchema.parse(SCHEDULE_SNAPSHOT));
+// P4 A2 writes TikTok's commercial content toggles into every new TikTok slot: a card that does not parse is dropped.
+// A card built without its slot never offers Retry on a guess: the state comes from the slot (schedule-enrich.ts).
+check("an un-enriched schedule card with a last error is not called failed", () => {
+  const row = { id: "00000000-0000-4000-8000-000000000001", kind: "schedule", department: "schedule", ref_kind: "schedule_slot", ref_id: SCHEDULE_SNAPSHOT.slot_id, status: "waiting",
+    snapshot: { ...SCHEDULE_SNAPSHOT, last_error: "It could not go out within its time window." }, content_hash: "0".repeat(64), price_credits: null, post_at: null, account: null,
+    created_at: new Date().toISOString(), expires_at: null, decided_at: null, decided_via: null, reason: null } as unknown as ApprovalRow;
+  const card = approvalToCard(row);
+  assert.ok(card && card.body.kind === "schedule" && card.body.state === "waiting" && card.body.lastError);
+});
+check("schedule snapshot with TikTok's disclosure toggles parses", () => {
+  const options = { allow_comment: false, allow_duet: false, allow_stitch: false, brand_organic: false, brand_content: false };
+  void ScheduleSnapshotSchema.parse({ ...SCHEDULE_SNAPSHOT, options });
+});
+check("a schedule snapshot builds a card that parses, with its account in the foot", () => {
+  const card = approvalToCard(row("schedule", { ...SCHEDULE_SNAPSHOT }, { department: "schedule", ref_kind: "schedule_slot" }))!;
+  assert.ok(card, "the schedule row builds no card");
+  ApprovalCardSchema.parse(card);
+  assert.deepEqual(card.account, { platform: "tiktok", handle: "@opencmo" });
+  assert.equal(card.body.kind === "schedule" && card.body.mode, "publish");
+});
+check("schedule options refuse unknown fields", () => {
+  assert.equal(ScheduleOptionsSchema.safeParse({ ai_label: true, autopost: true }).success, false);
+});
+
+// P2 A0: the Studio snapshots (SQL `approval_snapshot`) parse, and every Studio kind has one.
+for (const snapshot of STUDIO_SNAPSHOTS) {
+  check(`studio snapshot ${snapshot.kind} parses`, () => void StudioSnapshotSchema.parse(snapshot));
+}
+check("every Studio kind has a snapshot and a source", () => {
+  for (const kind of Object.keys(STUDIO_REF_KIND)) assert.ok(STUDIO_SNAPSHOTS.some((s) => s.kind === kind), kind);
+});
+check("a Studio snapshot builds a card that parses", () => {
+  for (const snapshot of STUDIO_SNAPSHOTS) {
+    const card = approvalToCard({
+      id: `card-${snapshot.kind}`,
+      kind: snapshot.kind,
+      department: "studio",
+      ref_kind: STUDIO_REF_KIND[snapshot.kind],
+      ref_id: "ref",
+      status: "waiting",
+      snapshot: snapshot as unknown as Record<string, unknown>,
+      content_hash: "a".repeat(64),
+      price_credits: "price_credits" in snapshot ? snapshot.price_credits : null,
+      post_at: null,
+      account: null,
+      expires_at: null,
+      created_at: "2026-10-29T03:42:00.123+00:00",
+      decided_at: null,
+      decided_via: null,
+    });
+    assert.ok(card, snapshot.kind);
+    ApprovalCardSchema.parse(card);
+  }
+});
+check("the Video team's steps follow the order's steps", () => {
+  const script = { tool: "create_video", kind: "script" as const, card: { beats: [1, 2, 3] }, next: null, next_done_at: null };
+  const waiting = videoSteps({ status: "waiting_founder" }, [{ ...script, status: "waiting", decision: null }], false);
+  assert.equal(waiting.find((s) => s.state === "running")?.label, "Storyboard · waits on you");
+  assert.equal(waiting[1]!.label, "Director: 3 beats");
+  const making = videoSteps({ status: "waiting_order" }, [{ ...script, status: "running", decision: "approve" }], false);
+  assert.equal(making.find((s) => s.state === "running")?.label, "Keyframes");
+  const sheet = { tool: "animate_video", kind: "price" as const, card: { shots: 4 }, next: { tool: "render" }, next_done_at: "2026-10-29T00:00:00Z", status: "done" as const, decision: "approve" };
+  const rendering = videoSteps({ status: "waiting_order" }, [{ ...script, status: "done", decision: "approve", next_done_at: "x" }, sheet], false);
+  assert.equal(rendering.find((s) => s.state === "running")?.label, "Render → finished video card");
+  assert.ok(videoSteps({ status: "done" }, [{ ...script, status: "done", decision: "approve" }, sheet], false).every((s) => s.state === "done"));
+});
+check("a snapshot never holds a signed URL", () => {
+  for (const snapshot of STUDIO_SNAPSHOTS) assert.doesNotMatch(JSON.stringify(snapshot), /https?:\/\//, snapshot.kind);
 });
 
 if (failures.length) {

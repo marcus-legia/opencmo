@@ -5,7 +5,7 @@ Chromium through the `clip-motion` CLI. The voice is generated first (ElevenLabs
 only, through whatever provider the `elevenlabs-voice` catalog row names) because its word timings drive every beat and cue; the CLI muxes it into the MP4,
 so the explainer is one layer and nothing can drift.
 
-Two places to render, like 3D Studio:
+Two places to render:
 
 - `OPENCMO_MOTION=modal`: the worker makes the voice, then spawns `render_motion` on Modal (a CPU
   container with Chromium and no secrets) and polls it; the render does not count against the

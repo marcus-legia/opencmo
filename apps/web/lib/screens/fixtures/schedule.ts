@@ -6,7 +6,7 @@ export const scheduleFixture: ScheduleScreen = {
   from: at("2026-10-26", "00:00"),
   to: at("2026-11-02", "00:00"),
   slots: [
-    { id: "sl-1", at: at("2026-10-26", "09:00"), where: { platform: "x", handle: "@opencmo" }, title: "Editor launch teaser", status: "posted", note: "4.1k views", approvalId: null },
+    { id: "sl-1", at: at("2026-10-26", "09:00"), where: { platform: "x", handle: "@opencmo" }, title: "Editor launch teaser", status: "posted", note: "4.1k views", approvalId: null, url: "https://x.com/opencmo/status/1850000000000000001" },
     { id: "sl-2", at: at("2026-10-26", "16:00"), where: { platform: "linkedin", handle: "Marcus" }, title: "Why we built the editor first", status: "posted", note: null, approvalId: null },
     { id: "sl-3", at: at("2026-10-27", "09:10"), where: { platform: "x", handle: "@opencmo" }, title: "Cut by words, a 20 s demo", status: "posted", note: null, approvalId: null },
     { id: "sl-4", at: at("2026-10-28", "12:00"), where: { platform: "threads", handle: "@opencmo" }, title: "Slideshow: 3 ways to cut a demo", status: "posted", note: null, approvalId: null },

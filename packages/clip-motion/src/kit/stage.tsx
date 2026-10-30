@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 
+import { poseBlur, shots as shotList, type ShotMove } from './curves.ts';
 import { kitError, useMotion, usePalette, useTheme } from './context.tsx';
 import { ease, enter, random } from './motion.ts';
 import { alpha } from './theme.ts';
@@ -85,12 +86,57 @@ export function Stage({ children, grid = true, ambient }: StageProps) {
 }
 
 export type CameraKey = { at: number; focus?: [number, number]; zoom?: number; dur?: number };
-export type CameraProps = { children?: React.ReactNode; keys?: CameraKey[]; focus?: [number, number]; zoom?: number; at?: number; dur?: number };
+export type CameraProps = {
+	children?: React.ReactNode;
+	keys?: CameraKey[];
+	focus?: [number, number];
+	zoom?: number;
+	at?: number;
+	dur?: number;
+	/**
+	 * A shot list instead of keys: `[{ from, to, pose: { scale, x, y } }, …]` (kit.shots). The camera holds between
+	 * moves and blurs along the move in proportion to its speed, crisp again at rest.
+	 */
+	shots?: ShotMove[];
+	/** Shot list only: blur strength (0 turns it off). */
+	blur?: number;
+};
 
-/** Slow push-ins and pans over everything inside. Each key eases from the previous framing. */
-export function Camera({ children, keys, focus, zoom, at, dur }: CameraProps) {
+/** The shot-list camera: poses joined by impulses, with motion blur from the pose change between frames. */
+function ShotCamera({ children, moves, blur }: { children?: React.ReactNode; moves: ShotMove[]; blur: number }) {
+	const frame = useCurrentFrame();
+	const id = `camera-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+	const at = React.useMemo(() => shotList(moves), [moves]);
+	const pose = at(frame);
+	const smear = blur > 0 ? poseBlur(at(frame - 1), pose, { k: 0.13 * blur }) : { x: 0, y: 0 };
+	const moving = smear.x > 0 || smear.y > 0;
+	return (
+		<AbsoluteFill style={{ transform: `translate(${pose.x}px, ${pose.y}px) scale(${pose.scale})`, filter: moving ? `url(#${id})` : undefined }}>
+			{moving ? (
+				<svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+					<filter id={id} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+						<feGaussianBlur stdDeviation={`${smear.x} ${smear.y}`} />
+					</filter>
+				</svg>
+			) : null}
+			{children}
+		</AbsoluteFill>
+	);
+}
+
+/** Slow push-ins and pans over everything inside. Each key eases from the previous framing; or a shot list. */
+export function Camera({ children, keys, focus, zoom, at, dur, shots, blur = 1 }: CameraProps) {
 	const frame = useCurrentFrame();
 	const { width, height } = useVideoConfig();
+	if (shots !== undefined) {
+		if (!Array.isArray(shots)) throw kitError('Camera shots must be a list of { from, to, pose } moves.');
+		try {
+			shotList(shots);
+		} catch (error) {
+			throw kitError((error as Error).message);
+		}
+		return <ShotCamera moves={shots} blur={Number.isFinite(blur) ? Math.max(0, blur) : 1}>{children}</ShotCamera>;
+	}
 	const list: CameraKey[] = keys ?? (focus || zoom ? [{ at: at ?? 0, focus, zoom, dur }] : []);
 	let state = { x: width / 2, y: height / 2, zoom: 1 };
 	for (const key of [...list].sort((a, b) => a.at - b.at)) {

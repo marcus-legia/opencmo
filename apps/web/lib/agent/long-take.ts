@@ -46,7 +46,8 @@ export type KeyframeFile = { source: KeyframeSource; path: string; garbled: bool
 export type ReadKeyframes = (ids: string[]) => Promise<Map<string, KeyframeFile>>;
 
 /** One tile of the contact sheet. */
-export type SheetTile = { index: number; words: string; url: string | null; garbled: boolean; credits: number };
+/** `path` is the keyframe's `media` path: a stored card keeps it and signs a fresh URL on each read. */
+export type SheetTile = { index: number; words: string; url: string | null; path: string; garbled: boolean; credits: number };
 export type ContactSheet = { tiles: SheetTile[] };
 
 /** What the card approves, plus each keyframe's spec, so Redo on a tile makes the same image with a new seed. */
@@ -240,6 +241,7 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
           index,
           words: plan.shots[index]?.words ?? "Closing frame",
           url: urls[index] ?? null,
+          path: keyframe.path,
           garbled: keyframe.garbled,
           credits: model ? priceOf(model, keyframeSpec(keyframe.source)) : 0,
         };

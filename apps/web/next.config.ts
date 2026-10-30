@@ -4,30 +4,25 @@ import { CATEGORY_REDIRECTS } from "./content/blog/categories";
 import blogRedirects from "./content/blog/redirects.json";
 
 /**
- * Header bảo mật.
+ * Security headers.
  *
- * CSP viết theo đúng những thứ app này thật sự nạp; không có `unsafe-eval`,
- * không có wildcard host. Ba chỗ bắt buộc phải nới, kèm lý do:
+ * The CSP lists exactly what this app loads: no `unsafe-eval`, no wildcard host. Two places must be loosened,
+ * and why:
  *
- *   - `script-src 'unsafe-inline'`: Next nhúng dữ liệu hydration bằng thẻ
- *     `<script>` inline. Nonce cho từng request thì phải bỏ hẳn render tĩnh.
- *   - `style-src 'unsafe-inline'`: canvas editor đặt vị trí chữ bằng `style`
- *     trên từng phần tử — đó là cách người dùng kéo chữ trên khung hình.
- *   - `script-src 'wasm-unsafe-eval'`: CanvasKit (Skottie, vẽ Lottie ở preview)
- *     là WebAssembly; thiếu nó trình duyệt từ chối biên dịch wasm. Chỉ mở wasm,
- *     không mở `eval`.
+ *   - `script-src 'unsafe-inline'`: Next embeds hydration data in inline `<script>` tags. A per-request nonce
+ *     would mean giving up static rendering entirely.
+ *   - `style-src 'unsafe-inline'`: the editor canvas positions text with a `style` on each element; that is how
+ *     users drag text on the frame.
  *
- * `'unsafe-eval'` CHỈ thêm khi `next dev`: Fast Refresh của React chạy module
- * bằng `eval`, không có nó thì mỗi lần sửa file là một lỗi CSP và hot reload
- * chết. Bản production dựng sẵn không cần eval, nên không bao giờ nới ở đó —
- * điều kiện dựa vào `NODE_ENV`, thứ mà `next build` luôn đặt là `production`.
+ * `'unsafe-eval'` is added ONLY under `next dev`: React Fast Refresh runs modules through `eval`, and without it
+ * every edit is a CSP error and hot reload dies. A production build needs no eval, so it is never loosened there;
+ * the condition reads `NODE_ENV`, which `next build` always sets to `production`.
  *
- * `connect-src`/`media-src` phải có host Supabase: trình duyệt nói THẲNG với
- * Storage và Realtime (ràng buộc web số 3 và số 5 — file không đi qua Next).
+ * `connect-src`/`media-src` need the Supabase host: the browser talks DIRECTLY to Storage and Realtime (web rules
+ * 3 and 5: files never pass through Next).
  *
- * Biến môi trường đọc BÊN TRONG `headers()`, không ở thân module: `next start`
- * nạp `.env.local` sau khi require file config, nên đọc ở ngoài sẽ ra chuỗi
- * rỗng và CSP tự chặn chính Supabase của mình.
+ * Environment variables are read INSIDE `headers()`, not in the module body: `next start` loads `.env.local` after
+ * requiring the config file, so reading them outside gives empty strings and the CSP blocks our own Supabase.
  */
 /**
  * Host của trình phát YouTube.
@@ -65,7 +60,7 @@ function securityHeaders(): { key: string; value: string }[] {
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${YOUTUBE_SCRIPT}${
+    `script-src 'self' 'unsafe-inline' ${YOUTUBE_SCRIPT}${
       process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
     }`,
     "style-src 'self' 'unsafe-inline'",
@@ -78,8 +73,7 @@ function securityHeaders(): { key: string; value: string }[] {
     // Font phục vụ ở `/fonts/` (chép từ `packages/clip-media` lúc build) — cùng origin, không cần host ngoài.
     "font-src 'self'",
     "worker-src 'self' blob:",
-    // 'self': iframe sandbox preview cảnh 3D (/sandbox/three.html) của editor.
-    `frame-src 'self' ${YOUTUBE_FRAME}`,
+    `frame-src ${YOUTUBE_FRAME}`,
   ].join("; ");
 
   return [
@@ -100,31 +94,6 @@ function securityHeaders(): { key: string; value: string }[] {
   ];
 }
 
-/**
- * Trang sandbox preview cảnh 3D (spec code-scenes): chạy code three.js do
- * agent viết. `sandbox allow-scripts` cho nó origin mờ — không cookie, không
- * storage, không gọi được API của app; `connect-src 'none'` chặn mạng hẳn.
- * `unsafe-eval` CHỈ ở đây (code của cảnh là chương trình); trang chính vẫn cấm.
- * Script inline vì runtime nằm trong trang (origin mờ không nạp file cùng host).
- */
-function sandboxHeaders(): { key: string; value: string }[] {
-  const csp = [
-    "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval'",
-    "worker-src blob:",
-    "img-src data: blob:",
-    "connect-src 'none'",
-    "base-uri 'none'",
-    "form-action 'none'",
-    "frame-ancestors 'self'",
-    "sandbox allow-scripts",
-  ].join("; ");
-  return [
-    { key: "Content-Security-Policy", value: csp },
-    { key: "Cache-Control", value: "public, max-age=3600" },
-  ];
-}
-
 const e2eBuild = process.env.OPENCMO_E2E_BUILD === "1";
 const config: NextConfig = {
   // Test và dev có thể cùng mở trên máy: không ghi đè manifest của nhau.
@@ -138,18 +107,9 @@ const config: NextConfig = {
    * server, shell editor vẽ preview bằng chúng trong trình duyệt — Next phải
    * transpile.
    */
-  transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons", "@opencmo/clip-three"],
-  /**
-   * CanvasKit là bản Emscripten có nhánh Node (`require("fs")`) không bao giờ
-   * chạy trong trình duyệt; bundle phía client bỏ hai module đó.
-   */
-  webpack(config, { isServer }) {
-    if (!isServer) config.resolve.fallback = { ...config.resolve.fallback, fs: false, path: false };
-    return config;
-  },
+  transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons"],
   async headers() {
-    // Luật sau ghi đè luật trước cho cùng header: trang sandbox có CSP riêng.
-    return [{ source: "/:path*", headers: securityHeaders() }, { source: "/sandbox/three.html", headers: sandboxHeaders() }];
+    return [{ source: "/:path*", headers: securityHeaders() }];
   },
   /**
    * Slug bài viết là bất biến; đổi slug thì slug cũ phải vào

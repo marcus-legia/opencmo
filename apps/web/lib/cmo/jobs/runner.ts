@@ -17,6 +17,8 @@ import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
+import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
+import { publishPost } from "@/lib/departments/publish/job";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
 import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
 
@@ -61,6 +63,11 @@ export const JOBS: Record<CmoJobKind, Job> = {
   pull_metrics: pullMetrics,
   summarize_memory: summarizeMemory,
   review_week: reviewWeek,
+  write_video_brief: writeVideoBrief,
+  write_caption: writeCaption,
+  write_slides: writeSlides,
+  // P4: only Schedule's sweep queues it (enqueue_cmo_run refuses it), for one approved slot.
+  publish_post: publishPost,
 };
 
 /** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */
@@ -68,8 +75,16 @@ class LeaseLost extends Error {}
 
 export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions = {}): Promise<{ ok: boolean; error: string | null; deferred?: boolean; inbox?: string }> {
   const steps: Step[] = [];
+  // Writes go one after another, each with the steps as they are when it starts: steps that run side by side (Writer's
+  // captions) never land an older list over a newer one.
+  let saving: Promise<unknown> = Promise.resolve();
+  const save = (): Promise<boolean> => {
+    const next = saving.then(() => store.step(run, steps));
+    saving = next.catch(() => false);
+    return next;
+  };
   const write = async () => {
-    if (!(await store.step(run, steps))) throw new LeaseLost();
+    if (!(await save())) throw new LeaseLost();
   };
   const brain: Brain = run.input.brain === "claude" ? "claude" : "opencmo";
   const inboxId = brain === "claude" && typeof run.input.inbox === "string" ? run.input.inbox : null;
@@ -108,7 +123,7 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
           error instanceof NeedsClaude
             ? { tool, label: "Waiting for your Claude (Inbox)", status: "skipped" }
             : { tool, label, status: error instanceof Deferred ? "running" : "failed" };
-        await store.step(run, steps).catch(() => false);
+        await save().catch(() => false);
         throw error;
       }
     },

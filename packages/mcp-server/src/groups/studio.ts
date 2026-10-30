@@ -1,15 +1,14 @@
 /**
  * Studio: every clip tool of the editor Assistant, with `clip_id` (A4, A5).
  *
- * One codebase: each call builds the Assistant's own clip scope (`clipScopeWith`) and runs the tool
- * through it, so a cut, a caption, a generation or an explainer goes through exactly the code the
- * in-app Assistant uses — editor-core ops via `workspace.apply`, the same CAS and checks, a
- * checkpoint "MCP" in Version history for every write.
+ * One codebase: each call runs through the Studio adapter (`lib/departments/studio`), which builds
+ * the Assistant's own clip scope, so a cut, a caption, a generation or an explainer goes through
+ * exactly the code the in-app Assistant uses, with a checkpoint "MCP" in Version history for every write.
  *
  * What the Assistant puts on an approval card is a price step here: `scope.plan` prepares it (model,
  * seed, price, storyboard; nothing spent), the server signs it, and only the confirmed call runs
  * `scope.decide`. Not offered: tools that need the editor open in a browser (frame capture,
- * waveforms, 3D preview), `ask_user` and `update_plan` (Claude asks and plans itself) and `undo`
+ * waveforms), `ask_user` and `update_plan` (Claude asks and plans itself) and `undo`
  * (no request to undo; Version history restores any checkpoint).
  *
  * The thinking is the client's: `create_video` and `plan_video` take the client's finished plan
@@ -21,14 +20,13 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { clipContext } from "@/lib/api/clips";
 import { directorSchema, DIRECTOR } from "@/lib/agent/create-video";
 import { CAPTION_TOOLS } from "@/lib/agent/captions-tool";
-import { clipScopeWith, clipToolSpecs, type ClipHost, type Scope } from "@/lib/agent/scope";
-import { mediaCreditsShort } from "@/lib/cmo/mcp/account";
+import { clipToolSpecs } from "@/lib/agent/scope";
 import { isWriteTool, sanitize, type ToolOutcome, type ToolSpec } from "@/lib/agent/tools";
+import { studio } from "@/lib/departments/studio/adapter";
+import { studioSession } from "@/lib/departments/studio/session";
 import { introSpecSchema } from "@opencmo/editor-core";
-import { ensureBlankProject, ensureEditorProject } from "@/lib/editor/project";
 import { loadCatalog } from "@/lib/generate/models";
 
 import { PREVIEW_SECONDS, read as readCode, sha256, sign } from "../confirm";
@@ -37,12 +35,11 @@ import { errorResult, registerGroup, type McpResult, type McpTool, type McpToolC
 /** In-app only: they need the user at the screen, or a turn to belong to. */
 const SKIP = new Set(["update_plan", "ask_user", "undo"]);
 /** Need no clip: registered without clip_id by the guides and explainer groups. */
-export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "list_motion_templates", "get_motion_template"]);
+export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "list_motion_styles", "get_motion_style", "list_motion_templates", "get_motion_template"]);
 
 /** Tools whose in-app version waits on an approval card: here, price → confirm. */
 export const PRICED = new Set([
   "generate_media",
-  "add_3d_scene",
   "add_voiceover",
   "replace_background",
   "create_video",
@@ -128,35 +125,8 @@ export function fromOutcome(outcome: ToolOutcome, extra: Record<string, unknown>
   };
 }
 
-const problem = (content: string) => {
-  try {
-    const value = JSON.parse(content) as { INVALID_INPUT?: unknown; error?: unknown };
-    return String(value.INVALID_INPUT ?? value.error ?? content);
-  } catch {
-    return content;
-  }
-};
-
-type Session = { scope: Scope; context: Awaited<ReturnType<typeof clipContext>> };
-
-/** The Assistant's clip scope for one MCP call: checkpoint "MCP" on every write (as the Vercel route). */
-async function session(ctx: McpToolContext, clip: string, previewed: () => Promise<string[]>): Promise<Session> {
-  await loadCatalog(ctx.supabase);
-  const context = await clipContext(ctx.supabase, clip);
-  // The editor creates a clip's project the first time it opens it; over MCP nobody opens it, so the
-  // first call does the same (both keep a project that already exists).
-  if (context.clip.kind === "blank") await ensureBlankProject(ctx.supabase, context, clip);
-  else await ensureEditorProject(ctx.supabase, context, clip);
-  const host: ClipHost = {
-    checkpoint: { take: () => ({ kind: "agent" as const, label: "MCP" }), mark: async () => undefined },
-    // The plans come from the client, so the video team's models are never called over MCP.
-    recordUsage: async (usage) => {
-      console.warn("[mcp] unexpected model usage", usage.model);
-    },
-    previewed,
-  };
-  return { scope: await clipScopeWith(ctx.supabase, context, clip, host), context };
-}
+const adapter = (ctx: McpToolContext, previewed?: () => Promise<string[]>) =>
+  studio({ supabase: ctx.supabase, userId: ctx.userId, caller: "mcp" }, previewed ? { previewed } : {});
 
 /** add_explainer takes code the client previewed: the preview_token proves it, signed for this user. */
 function previewProof(ctx: McpToolContext, args: Record<string, unknown>) {
@@ -216,20 +186,19 @@ function toMcp(spec: ToolSpec): McpTool {
       if (priced) {
         // Confirmed: `args` is the signed price step, never the client's input.
         const prepared = args as { clipId: string; input: unknown };
-        const { scope } = await session(ctx, prepared.clipId, async () => []);
-        const approved = await scope.decide({ id: randomUUID(), name: spec.name, input: {} }, prepared.input, true);
-        const generation = approved.extra.generation_id ? { generation_id: approved.extra.generation_id, next: "Poll get_generation with this id (or wait_for_media)." } : {};
+        const decided = await adapter(ctx).decide({ prepared: { clipId: prepared.clipId, tool: spec.name, input: prepared.input } }, { kind: "approve" });
+        const generation = decided.generationId ? { generation_id: decided.generationId, next: "Poll get_generation with this id (or wait_for_media)." } : {};
         // The in-app note points at a Download button in the chat; here the link comes from get_export.
-        const exports = approved.extra.view
-          ? { ...(approved.extra.view as object), note: "The files are rendering.", next: "Poll get_export with each task_id for the download link." }
+        const exports = decided.exports
+          ? { exports: decided.exports, note: "The files are rendering.", next: "Poll get_export with each task_id for the download link." }
           : {};
-        return fromOutcome(approved.outcome, { ...generation, ...exports });
+        return fromOutcome(decided.outcome, { ...generation, ...exports });
       }
       const values = args as Record<string, unknown>;
       if (spec.name === "preview_explainer" && !(await previewAllowed(ctx))) {
         return errorResult(`You have used the ${PREVIEW_LIMIT} explainer previews of this hour. Wait a bit, or add the explainer from the last clean preview.`);
       }
-      const { scope } = await session(ctx, String(values.clip_id), async () => []);
+      const { scope } = await studioSession(ctx.supabase, "mcp", String(values.clip_id));
       const outcome = await scope.run(call(values));
       if (spec.name === "preview_explainer" && outcome.ok && typeof values.code === "string") {
         return fromOutcome(outcome, { preview_token: sign(ctx.userId, "preview", sha256(values.code), PREVIEW_SECONDS) });
@@ -242,19 +211,14 @@ function toMcp(spec: ToolSpec): McpTool {
     tool.price = async (args, ctx) => {
       const values = args as Record<string, unknown>;
       const clip = String(values.clip_id);
-      const { scope } = await session(ctx, clip, previewProof(ctx, values));
-      const plan = await scope.plan(call(values));
-      if (plan.kind === "invalid") return problem(plan.content);
-      if (plan.kind !== "approval") return "This tool could not be priced. Please try again.";
-      const card = plan.card as { changes?: string[]; credits?: number; storyboard?: unknown };
-      // Short of credits: say how to top up now, not after the user agreed to a price they cannot pay.
-      const short = card.credits ? await mediaCreditsShort(ctx.supabase, ctx.userId, card.credits) : null;
-      if (short) return short;
+      const plan = await adapter(ctx, previewProof(ctx, values)).plan(clip, spec.name, call(values).input);
+      if (plan.kind !== "priced") return plan.message;
       return {
-        credits: card.credits ?? 0,
-        lines: card.changes ?? [],
-        ...(card.storyboard ? { details: { storyboard: card.storyboard } } : {}),
-        prepared: { clipId: clip, input: plan.input },
+        credits: plan.credits,
+        lines: plan.lines,
+        ...(plan.storyboard ? { details: { storyboard: plan.storyboard } } : {}),
+        // Signed as before ({ clipId, input }): codes already handed out keep working.
+        prepared: { clipId: clip, input: plan.prepared.input },
       };
     };
   }

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { InboxCardPage } from "@/components/dashboard/InboxPages";
 import { isProduction } from "@/lib/production";
 import { requireUiV2 } from "@/lib/screens/flag";
-import { ALL_KINDS, STATE_CARDS } from "@/lib/screens/fixtures/cards";
+import { SAMPLE_CARDS } from "@/lib/screens/fixtures/cards";
 
 export const metadata: Metadata = { title: "Approve" };
 
@@ -13,6 +13,6 @@ export default async function InboxCard({ params }: { params: Promise<{ id: stri
   const id = (await params).id.slice(0, 100);
   // The component sheet's fixture cards open here for look checks; the server picks one, so no fixture text ships
   // in the client bundle, and production never serves them.
-  const sampleCard = isProduction() ? null : ([...ALL_KINDS, ...STATE_CARDS].find((card) => card.id === id) ?? null);
+  const sampleCard = isProduction() ? null : (SAMPLE_CARDS.find((card) => card.id === id) ?? null);
   return <InboxCardPage id={id} sampleCard={sampleCard} />;
 }

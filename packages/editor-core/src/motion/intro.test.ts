@@ -93,14 +93,13 @@ describe('intro builder', () => {
 		expect(issues).toMatch(/needs 1.2s to be read/);
 		const crowded: IntroSpec = {
 			...spec,
-			elements: [...spec.elements, { key: 'spark', kind: 'lottie', lottie: 'sparkle' }],
+			elements: [...spec.elements, { key: 'spark', kind: 'accent_line' }],
 			beats: [...spec.beats.map((beat) => ({ ...beat, at: 0.2, dur: 1 })), { target: 'spark', at: 0.2, dur: 1, motion: 'fade' }],
 		};
 		expect(reviewIntro(crowded, { hasLogo: false }).join('\n')).toMatch(/4 elements move at 0.2s/);
-		const broken: IntroSpec = { ...spec, elements: [...spec.elements, { key: 'logo', kind: 'logo' }, { key: 'x', kind: 'lottie', lottie: 'nope' }] };
+		const broken: IntroSpec = { ...spec, elements: [...spec.elements, { key: 'logo', kind: 'logo' }] };
 		const text = reviewIntro(broken, { hasLogo: false }).join('\n');
 		expect(text).toMatch(/no brand logo/);
-		expect(text).toMatch(/"nope" is not a built-in animation/);
 		expect(text).toMatch(/exactly one entrance beat/);
 		const late: IntroSpec = { ...spec, beats: [{ ...spec.beats[0]!, at: 1.5 }, ...spec.beats.slice(1).map((beat) => ({ ...beat, at: 0.1 }))] };
 		expect(reviewIntro(late, { hasLogo: false }).join('\n')).toMatch(/hero/);

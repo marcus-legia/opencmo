@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { beatIssues, jumpIssues, layoutIssues, type LaidBox } from './layout.ts';
+import { auditIssues, beatIssues, jumpIssues, layoutIssues, movingBoxes, type LaidBox } from './layout.ts';
 
 const frame = { width: 1920, height: 1080, seconds: 4 };
 const visual: LaidBox = { kind: 'mark', name: 'DotField', x: 200, y: 200, w: 1500, h: 600 };
@@ -51,13 +51,18 @@ describe('beatIssues', () => {
 
 	it('reports a beat with text only (a board is not a picture)', () => {
 		const board: LaidBox = { kind: 'mark', name: 'Board', x: 100, y: 300, w: 800, h: 300 };
-		expect(beatIssues([{ beat: 2, boxes: [label, board] }])).toEqual(['Beat 3 shows no icon, shape or Lottie: draw what its narration names.']);
+		expect(beatIssues([{ beat: 2, boxes: [label, board] }])).toEqual(['Beat 3 shows nothing drawn: draw what its narration names (a Mark you draw, a shape, an icon).']);
 	});
 
-	it('reports a beat where nothing moves, but not a Lottie or a dot field', () => {
+	it('reports a beat where nothing moves, but not a dot field', () => {
 		expect(beatIssues([{ beat: 1, boxes: [label, icon] }, { beat: 1, boxes: [label, icon] }])).toEqual(['Nothing moves during beat 2: add a change (a swap, a move, a reaction) or an ambient layer.']);
-		const lottie: LaidBox = { kind: 'mark', name: 'Lottie walk', x: 800, y: 400, w: 300, h: 300 };
-		expect(beatIssues([{ beat: 1, boxes: [lottie] }, { beat: 1, boxes: [lottie] }])).toEqual([]);
+		const field: LaidBox = { kind: 'mark', name: 'DotField', x: 800, y: 400, w: 300, h: 300 };
+		expect(beatIssues([{ beat: 1, boxes: [field] }, { beat: 1, boxes: [field] }])).toEqual([]);
+	});
+
+	it('counts a Mark as a picture that moves inside its box', () => {
+		const mark: LaidBox = { kind: 'mark', name: 'Mark disc', x: 0, y: 0, w: 100, h: 100 };
+		expect(beatIssues([{ beat: 0, boxes: [mark] }, { beat: 0, boxes: [mark] }])).toEqual([]);
 	});
 });
 
@@ -67,6 +72,10 @@ describe('jumpIssues', () => {
 
 	it('reports a box that moves 300 px in one frame on a 1080 frame', () => {
 		expect(jumpIssues([{ seconds: 2.5, a: [icon], b: [{ ...icon, x: 700 }] }], size)).toEqual(['"Icon rocket" jumps 300 px in one frame at 2.5 s: ease the move or cut on purpose.']);
+	});
+
+	it('lets a move blurred along its path pass (a streak bridges it)', () => {
+		expect(jumpIssues([{ seconds: 2.5, a: [{ ...icon, soft: true }], b: [{ ...icon, x: 700, soft: true }] }], size)).toEqual([]);
 	});
 
 	it('ignores a box that appears or disappears', () => {
@@ -83,3 +92,42 @@ describe('jumpIssues', () => {
 	});
 });
 
+
+describe('moving boxes and big type', () => {
+	const word: LaidBox = { kind: 'text', name: 'SHIP', x: 1700, y: 400, w: 400, h: 180, size: 176 };
+	it('skips the safe-area rule for a box in mid-move, entering or leaving', () => {
+		expect(layoutIssues([visual, word], frame)).toEqual(['Text "SHIP" leaves the safe area on the right at 4.0 s.']);
+		expect(layoutIssues([visual, word], frame, { moving: movingBoxes([word], [{ ...word, x: 1600 }]) })).toEqual([]);
+		expect(movingBoxes([word], [])).toEqual(new Set(['text:SHIP']));
+		expect(movingBoxes([word], [word])).toEqual(new Set());
+	});
+
+	it('counts display type as the picture of a beat', () => {
+		const big: LaidBox = { kind: 'text', name: 'WORDS.', x: 100, y: 400, w: 600, h: 180, size: 176 };
+		const small: LaidBox = { ...big, name: 'caption', size: 48 };
+		expect(beatIssues([{ beat: 0, boxes: [big] }], { width: 1080, height: 1920 })).toEqual([]);
+		expect(beatIssues([{ beat: 0, boxes: [small] }], { width: 1080, height: 1920 })[0]).toMatch(/^Beat 1 shows nothing drawn/);
+	});
+});
+
+describe('audit over time', () => {
+	const box = (name: string, x: number, y: number, w = 100, h = 100, extra: Partial<LaidBox> = {}): LaidBox => ({ kind: 'mark', name, x, y, w, h, ...extra });
+	it('reports a declared clearance that fails, with the worst frame', () => {
+		const frames = [
+			{ seconds: 1, boxes: [box('title', 0, 0), box('orbit', 150, 0)] },
+			{ seconds: 2, boxes: [box('title', 0, 0), box('orbit', 106, 0)] },
+			{ seconds: 3, boxes: [box('title', 0, 0), box('orbit', 80, 0)] },
+		];
+		expect(auditIssues([{ kind: 'clear', a: 'title', b: 'orbit', px: 24 }], frames)).toEqual(['Check clear("title", "orbit", 24 px) fails at 3.0 s (2 measured frames): they overlap by 20 px.']);
+		expect(auditIssues([{ kind: 'inside', name: 'orbit', box: { x: 0, y: 0, w: 260, h: 200 }, label: 'full' }], frames)).toEqual([]);
+		expect(auditIssues([{ kind: 'inside', name: 'orbit', box: { x: 0, y: 0, w: 220, h: 200 }, label: 'full' }], [{ seconds: 1, boxes: [box('orbit', 150, 0)] }])).toEqual(['Check inside("orbit", full) fails at 1.0 s (1 measured frame): 30 px outside.']);
+	});
+	it('flags a zoom that lurches, and blurred text at rest', () => {
+		const lurch = jumpIssues([{ seconds: 2, a: [box('hero', 500, 300, 200, 200)], b: [box('hero', 450, 250, 300, 300)] }], { width: 1920, height: 1080 });
+		expect(lurch).toEqual(['"hero" grows 1.50× in one frame at 2.0 s: lengthen or ease the zoom.']);
+		const soft: LaidBox = { kind: 'text', name: 'Launch', x: 200, y: 200, w: 400, h: 100, size: 80, soft: true };
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }, { moving: new Set() }).join(' ')).toMatch(/still blurred at rest/);
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }, { moving: new Set(['text:Launch']) }).join(' ')).not.toMatch(/blurred/);
+		expect(layoutIssues([soft], { width: 1920, height: 1080, seconds: 1 }).join(' ')).not.toMatch(/blurred/);
+	});
+});

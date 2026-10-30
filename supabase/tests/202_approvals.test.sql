@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(42);
+select plan(43);
 
 -- JCS is the same as canonicalJson() in apps/web/lib/settings-schema.ts (string computed there).
 select is(public.jcs('{"b":1,"a":[true,null,"x\ny \"q\" \\ \u0001"],"é":"é ✓","A":{"z":[],"y":{}},"n":-12}'::jsonb),
@@ -103,6 +103,8 @@ select is((pg_temp.decide('p5', 'approve', '{"via":"mcp"}')).decided_via, 'mcp',
 select throws_ok($$ select pg_temp.decide('o1', 'approve') $$, '22023', 'Choose replied or dismissed.', 'a reply has its own actions');
 select is((pg_temp.decide('o1', 'replied')).status, 'approved', 'replied');
 select is((pg_temp.decide('o2', 'dismissed', '{"reason":"agencies"}')).status, 'skipped', 'dismissed');
+select throws_ok($$ select pg_temp.decide('g1', 'approve', '{"target":2.5}') $$, '22023', 'The target must be a whole number.',
+  'a fraction is refused, not rounded');
 select is((pg_temp.decide('g1', 'approve', '{"target":5}')).status, 'edited', 'a new target is an edit');
 select is((select target from public.cmo_goals where id = (select id from t_ref where name = 'g1')), 5, 'the goal has the new target');
 select is((pg_temp.decide('c1', 'approve')).status, 'approved', 'keep the rule');
@@ -122,12 +124,12 @@ reset role;
 delete from public.content_items where id = (select id from t_ref where name = 'p7');
 select is((select status from public.approvals where id = (select id from t_card where name = 'p7')), 'cancelled', 'a deleted post cancels its card');
 insert into t_ref values ('p8', pg_temp.post('p8', 'Priced.'));
-update public.approvals set kind = 'price', department = 'studio' where ref_id = (select id from t_ref where name = 'p8') and status = 'waiting';
+update public.approvals set kind = 'slideshow', department = 'studio' where ref_id = (select id from t_ref where name = 'p8') and status = 'waiting';
 insert into t_card select 'p8', id, content_hash from public.approvals where ref_id = (select id from t_ref where name = 'p8') and status = 'waiting';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2020000-0000-4000-8000-00000000000a"}';
-select throws_ok($$ select pg_temp.decide('p8', 'approve') $$, 'P0001', 'This card cannot be decided yet.', 'Studio cards wait for A1');
-select is((select count(*)::int from public.approvals where status = 'waiting'), 1, 'only the Studio card still waits');
+select throws_ok($$ select pg_temp.decide('p8', 'approve') $$, 'P0001', 'This card cannot be decided yet.', 'slideshow cards wait for their phase (P5)');
+select is((select count(*)::int from public.approvals where status = 'waiting'), 1, 'only the slideshow card still waits');
 
 select * from finish();
 rollback;

@@ -9,7 +9,7 @@ DS là **oracle**: fork Diffusion Studio (đã xoá ở C3) vẽ từng mẫu ra
 phải do người duyệt bằng mắt, không có đáp án tự động.
 
 ```
-samples/           71 mẫu document JSON (<id>.json) + manifest.json — đã chốt cùng references/
+samples/           73 document JSON samples (<id>.json) + manifest.json, fixed together with references/ (cap-flare and cap-slam were drawn by OpenCMO and approved by eye)
 fixtures/          ảnh, video VP9, transcript dùng chung (nhỏ, có trong git)
 references/        PNG tham chiếu do DS vẽ — <id>/<giây>s.png, dấu . thành _
 thresholds.json    ngưỡng so ảnh (mặc định + ghi đè theo mẫu)
@@ -61,9 +61,6 @@ Hai cờ trong manifest:
 - `oracle: "opencmo"`: tính năng DS không có (node `path`, spec visuals). Ảnh
   tham chiếu do đích `node` của clip-render vẽ rồi được duyệt bằng mắt; mẫu này
   giữ preview (Chromium) và export (Node) vẽ giống nhau và bắt hồi quy.
-  `three-scene` (3D chiếu CPU) có ngưỡng tile 6: lưới 1.5 px trên mặt cong khử
-  răng cưa khác nhau giữa hai bản Skia (đã xem ảnh diff: chỉ nét lưới, hình học
-  trùng, mean 0.14).
 
 - `perTarget: true` (only `anim-units`): letters moving at sub-pixel positions rasterize further apart
   between Skia (Node) and Chromium (tile 20–44 on this sample) than a real regression lands from either
@@ -75,6 +72,9 @@ Hai cờ trong manifest:
   motion blur, and Chromium and Node round those translucent passes differently: a uniform mean of
   1.0–1.2 over the whole frame with no edge out of place (diff looked at, 2026-10-16). Its own
   `mean: 1.3`; the tile threshold stays 4, so a moved or missing shot still fails.
+- `cap-flare`: the payoff word lands with a scale-in in Fraunces italic at 1.7x; mid-landing (1.4 s) Skia and
+  Chromium 141 rasterize it tile 7.3 apart (CI, 2026-10-25), with every other frame and text sample under 4. Its own
+  `tile: 14`, the Node text threshold; a missing word or wrong font lands at tile 50+.
 - Drawing references on a dev machine: hide system copies of the bundled fonts first (a system Inter,
   e.g. `/usr/share/fonts/opentype/inter`, wins over `inter.woff2` in `@napi-rs/canvas` and widens text by
   tile ~100). The bundled brand fonts are Latin subsets: Vietnamese letters (ư, ơ, ễ…) come from a

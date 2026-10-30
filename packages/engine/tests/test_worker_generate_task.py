@@ -246,29 +246,6 @@ def test_generation_cua_task_khac_thi_hong_ngay(monkeypatch):
     assert store.uploaded == []
 
 
-def test_canh_code_tai_code_cua_dung_nguoi_roi_moi_render(monkeypatch):
-    # Cảnh code: spec chỉ mang code_ref; worker tải code của CHÍNH chủ task.
-    spec = {"prompt": "Staircase", "aspectRatio": "1:1", "duration": 5, "scene": {"template": "code", "code_ref": "c" * 64}}
-    store = FakeStore(_generation(model="studio-3d", spec=spec, spec_hash=generate_task.spec_hash("studio-3d", spec)))
-    seen = {}
-
-    class Adapter:
-        def run(self, model, spec, workdir, alive):
-            seen["code"] = spec.get("code")
-            raise generate_task.ProviderError("stop here")
-
-    monkeypatch.setattr(generate_task, "adapter_for", lambda model: Adapter())
-    store.codes = {}
-    generate_task.process(store, _task())
-    assert store.failed == ["This 3D scene code was not found. Preview it again."]
-    assert seen == {}, "không có code thì không render"
-
-    store = FakeStore(_generation(model="studio-3d", spec=spec, spec_hash=generate_task.spec_hash("studio-3d", spec)))
-    store.codes = {("user-1", "c" * 64): "return (t) => {};"}
-    generate_task.process(store, _task())
-    assert seen["code"] == "return (t) => {};"
-
-
 def test_anh_bi_kiem_duyet_chan_thi_hong_va_khong_len_bucket(monkeypatch):
     # Đầu ra bị gắn cờ: không file nào lên `media`, task hỏng bằng câu tiếng Anh
     # (trigger trên `tasks` hoàn credit), không retry — gọi lại là trả tiền lại.
@@ -293,12 +270,12 @@ def test_a_blocked_prompt_fails_the_task_before_the_provider_runs(monkeypatch):
     assert ran == [] and store.uploaded == []
 
 
-def test_kiem_duyet_bo_qua_canh_3d_cua_minh():
+def test_kiem_duyet_bo_qua_renderer_cua_minh():
     from opencmo.ai.catalog import get_model
     from opencmo.ai.moderation import needs_check
 
     assert needs_check(get_model("gemini-image")) and needs_check(get_model("gemini-video"))
-    assert not needs_check(get_model("studio-3d")), "3D tự render: lời đã kiểm ở web"
+    assert not needs_check(get_model("motion-explainer")), "our own renderer: its words were checked on the web"
     assert not needs_check(get_model("gemini-voice"))
 
 

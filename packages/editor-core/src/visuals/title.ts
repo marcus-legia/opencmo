@@ -232,7 +232,7 @@ export function buildTitle(input: TitleInput, frame: { width: number; height: nu
 		} else {
 			const onBand = input.look === 'kicker';
 			out.push({
-				...textNode(part.lines!.join('\n'), rect, { size: part.size!, align: layout.align, weight: 600, color: onBand ? THEME.panel : THEME.text, shadow: !onBand }),
+				...textNode(part.lines!.join('\n'), rect, { size: part.size!, align: layout.align, weight: 600, color: onBand ? THEME.onAccent : THEME.text, shadow: !onBand }),
 				...(onBand ? {} : shadows()),
 				name: 'Subtitle',
 				// Line by line from behind its line box, after the title (on the kicker: out of the band).

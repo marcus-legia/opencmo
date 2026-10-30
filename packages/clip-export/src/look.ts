@@ -37,7 +37,7 @@ const COLOR_EDGE = 512;
 export const MAX_TIMES = MAX_LOOK_TIMES;
 export { captureTimes, withoutText };
 
-export const LookSchema = JobSchema.pick({ document: true, media: true, transcripts: true, fonts: true, lottie: true, scene: true }).extend({
+export const LookSchema = JobSchema.pick({ document: true, media: true, transcripts: true, fonts: true, scene: true }).extend({
   op: z.enum(['capture', 'inspect_color', 'grab', 'frame']),
   times: z.array(z.number().min(0)).max(MAX_TIMES).optional(),
   start: z.number().min(0).optional(),

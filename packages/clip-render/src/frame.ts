@@ -252,9 +252,6 @@ function applyNodeTrack(r: RNode, track: Track): void {
     case 'trimStart':
     case 'trimEnd':
     case 'dashOffset':
-    case 'cameraPhi':
-    case 'cameraTheta':
-    case 'cameraDistance':
       v[track.property] = value;
       break;
     case 'scale':
@@ -487,7 +484,7 @@ function bounds(m: Mat, w: number, h: number) {
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
-const SPATIAL = new Set<ClipNode['kind']>(['rect', 'path', 'scene3d', 'lottie', 'text', 'video', 'image', 'audio', 'group', 'sequence', 'captions']);
+const SPATIAL = new Set<ClipNode['kind']>(['rect', 'path', 'text', 'video', 'image', 'audio', 'group', 'sequence', 'captions']);
 
 // Lề an toàn hai bên khung và số dòng tối đa của phụ đề khi phải ngắt.
 const CAPTION_SAFE = 0.05;

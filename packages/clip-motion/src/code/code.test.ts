@@ -41,6 +41,7 @@ describe('compileScene', () => {
 		['new Function("return 1")', 'Function'],
 		['Date.now()', 'Date'],
 		['Math.random()', 'Math.random'],
+		['ref.current.getContext("webgl2")', 'Canvas contexts'],
 		['setTimeout(() => 0, 1)', 'setTimeout'],
 		['document.body', 'document'],
 		['window.innerWidth', 'window'],

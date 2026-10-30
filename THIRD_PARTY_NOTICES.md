@@ -8,19 +8,20 @@ live next to the files.
 |---|---|---|
 | Clip fonts (32 families, e.g. Inter, Montserrat, Raleway, Bebas Neue) | `packages/clip-media/fonts/`, `apps/web/assets/fonts/` | SIL Open Font License 1.1 (`LICENSE-OFL.txt`) |
 | DejaVu fonts | `packages/clip-media/fonts/DejaVu*` | Bitstream Vera / DejaVu license (`LICENSE-DejaVu.txt`) |
-| Noto Emoji Animation by Google | `packages/clip-media/lottie/emoji/`; also drawn in explainer videos through the explainer kit's `<Lottie>` (`packages/clip-motion`) | CC BY 4.0 (`packages/clip-media/lottie/LICENSE.md`) |
-| OpenCMO starter Lottie animations | `packages/clip-media/lottie/` | CC0-1.0 |
 | Lucide icons | `packages/clip-icons/data/`, `apps/web/components/icons/` | ISC (`LUCIDE-LICENSE`, `LICENSE-lucide.txt`) |
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
+| No AI Slop writing guidance by Peter Yang (adapted), Copyright (c) 2026 Peter Yang | `apps/web/lib/cmo/skills/no-ai-slop.md` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
 | Story design guidance from HyperFrames by HeyGen (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `explainer`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-hyperframes.md`) |
 | Motion design skill by LottieFiles (adapted) | `apps/web/lib/agent/motion-guide.ts` (incl. `EXPLAINER_MOTION`), `apps/web/lib/agent/guides.ts` (guide `explainer`, motion section), `packages/editor-core/src/motion/intro.ts` | MIT (`apps/web/lib/agent/LICENSE-motion-design.md`) |
 | Rough-cut editing rules from video-use, cut-video, claude-code-video-editing-skill and takecut (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`), `apps/web/lib/agent/retakes.ts` | MIT (`apps/web/lib/agent/LICENSE-roughcut.md`) |
 | Talking-head editing order from palmier-skills `ugc-editing` (adapted, rewritten) | `apps/web/lib/agent/guides.ts` (guide `roughcut`) | Apache-2.0 (`apps/web/lib/agent/LICENSE-roughcut.md`) |
-| Motion templates ported from opus-pro/opusclip-video-tools `remakes/opus-5.5` (`pf-mark-lockup`, `pf-phone-carousel`, `template-analytics-glow`), Copyright (c) 2026 OpusClip; code only, no media | `packages/clip-motion/templates/` | MIT (`packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
+| Motion templates ported from opus-pro/opusclip-video-tools `remakes/opus-5.5` (`pf-mark-lockup`, `pf-phone-carousel`, `template-analytics-glow`, `pf-type-snap`, `study-brand-bloom`), Copyright (c) 2026 OpusClip; code only, no media | `packages/clip-motion/templates/` | MIT (`packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
+| Motion helpers ported from opus-pro/opusclip-video-tools `remakes/opus-5.5/pf-type-snap` (`cappedTravel` → `kit.travel`, `snapProgress` → `kit.snap`, motion smear → `kit.smear` / `kit.Streak`), Copyright (c) 2026 OpusClip | `packages/clip-motion/src/kit/curves.ts`, `packages/clip-motion/src/kit/streak.tsx` | MIT (`packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
+| Motion craft ported from opus-pro/opusclip-video-tools `templates/agent-opus` (intent curves, the monotone time warp → `kit.retime`, the shot-list camera and pose blur → `kit.shots` / `kit.poseBlur`, the screenplay stream → `kit.TypeStream`), and ideas from `remakes/opus-5.5/pf-cart-checkout` (`kit.fx.Goo`) and `pf-color-field` (`kit.fx.ShaderField`, our own shader), Copyright (c) 2026 OpusClip | `packages/clip-motion/src/kit/curves.ts`, `type.tsx`, `stage.tsx`, `fx.tsx` | MIT (`packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
+| Camera-move recipes (impact shake, white flash, whip, push-in, handheld, beat pulse: formulas and ranges) and the caption pattern ideas behind `flare` and `slam` (`lead-in-flare`, `tilt-slam`) from opus-pro/ai-producer-plugin `aip-composition/references/motion-recipes.md` and `aip-dynamic-caption`, Copyright (c) 2026 OpusClip; rewritten as document keyframes and our own caption drawing | `packages/editor-core/src/ops/camera.ts`, `packages/clip-render/src/captions.ts` | MIT (same holder and text as `packages/clip-motion/templates/LICENSE-opus-remakes.md`) |
 
 Explainer videos are rendered with Remotion (`remotion`, `@remotion/bundler`, `@remotion/renderer`,
-`@remotion/lottie`, installed from npm in `packages/clip-motion`), which is distributed under the
-Remotion License (free for individuals and small companies; larger companies need a company
+installed from npm in `packages/clip-motion`), which is distributed under the Remotion License (free for individuals and small companies; larger companies need a company
 license: https://remotion.dev/license).
 
 Voice previews in `apps/web/public/voices/` and demo clips in `apps/web/public/demos/` were
