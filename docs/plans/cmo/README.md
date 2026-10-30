@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-10-30 | [Three-column shell for UI v2](2026-10-30-three-column-shell-plan.md) (rail · chat · tab panel, resizable) | Owner conversation 2026-10-30 + mock https://claude.ai/artifact/5E6W7sADybZEkzpEZVHurF | `cmo-p4` |
 | 2026-10-28 | [P4 Schedule and Publish through Zernio](2026-10-28-p4-schedule-publish-plan.md) · [P4 sessions](2026-10-28-p4-sessions/) (draft, refreshed before start) | Owner conversation 2026-10-28 + `docs/architecture/` | `cmo-p4` → `cmo-build` |
 | 2026-10-28 | [P3 Writer for every platform](2026-10-28-p3-writer-plan.md) · [P3 sessions](2026-10-28-p3-sessions/) (draft, refreshed before start) | Owner conversation 2026-10-28 + `docs/architecture/` | `cmo-p3` → `cmo-build` |
 | 2026-10-28 | [Backend roadmap P2–P6](2026-10-28-backend-roadmap.md) · [P2 Studio joins the brain](2026-10-28-p2-studio-brain-plan.md) · [P2 sessions](2026-10-28-p2-sessions/) | Owner conversation 2026-10-28 + `docs/architecture/` | [#124](https://github.com/marcus-legia/opencmo/pull/124) (merged) |
