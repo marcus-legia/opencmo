@@ -26,6 +26,8 @@ import {
 } from "./types";
 
 export type FakeOptions = {
+  /** Where the fake's presigned uploads go: a local sink the acceptance run starts (`publish_media` PUTs there). */
+  uploadBase?: string;
   /**
    * `now`: the post comes back `published` (e2e on live rows). `webhook`: it comes back `accepted` and
    * the signed webhook confirms it (the acceptance run, F11).
@@ -107,6 +109,7 @@ function post(deliverable: PublishDeliverable, slot: PublishSlot, confirm: "now"
 
 export function createFakePublishAdapter(options: FakeOptions = {}): PublishAdapter {
   const confirm = options.confirm ?? "now";
+  const uploadBase = (options.uploadBase ?? "http://127.0.0.1:8789").replace(/\/+$/, "");
   return {
     name: "fake",
     async createProfile(userId) {
@@ -139,6 +142,10 @@ export function createFakePublishAdapter(options: FakeOptions = {}): PublishAdap
         duetEnabled: true,
         stitchEnabled: false,
       };
+    },
+    async presignMedia(file) {
+      const key = id("fake_media", file.filename, String(file.bytes));
+      return { uploadUrl: `${uploadBase}/upload/${key}`, publicUrl: `https://media.example.com/${key}`, expiresInSeconds: 3600 };
     },
     async publish(deliverable, slot) {
       return post(PublishDeliverableSchema.parse(deliverable), PublishSlotSchema.parse(slot), confirm);

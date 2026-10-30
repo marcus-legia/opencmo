@@ -153,6 +153,8 @@ export type CreatorInfo = {
   stitchEnabled: boolean | null;
 };
 
+export type PresignedMedia = { uploadUrl: string; publicUrl: string; expiresInSeconds: number };
+
 export interface PublishAdapter {
   /** `"zernio"` or `"fake"`: logged with each attempt, never shown as a feature. */
   readonly name: "zernio" | "fake";
@@ -166,6 +168,11 @@ export interface PublishAdapter {
   disconnect(zernioAccountId: string): Promise<void>;
   /** TikTok only. */
   creatorInfo(zernioAccountId: string): Promise<CreatorInfo>;
+  /**
+   * A one-hour upload URL for `publish_media` (the worker PUTs the bytes, never Next.js) and the public URL the
+   * post then names. Uploads older than 7 days cannot be posted, so this runs at fire time.
+   */
+  presignMedia(file: { filename: string; contentType: PublishMedia["contentType"]; bytes: number }): Promise<PresignedMedia>;
   /**
    * Posts now (we fire at the approved time; Zernio's own scheduler is never used). Never throws for a
    * refusal: a failed post comes back as `failed` with the reason; only a bug in our input throws.

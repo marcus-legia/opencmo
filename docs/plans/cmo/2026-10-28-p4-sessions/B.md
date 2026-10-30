@@ -27,9 +27,12 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
       included). Payload: `{ bucket: "exports", object: "<user>/<clip>/<task>.mp4", upload_url, content_type:
       "video/mp4" }`; output `{ bytes, content_type, duration, width, height }`. The web side presigns with its own
       key; the worker never holds a Zernio key.*
-- [ ] **B1 Zernio client**: profiles, connect link, accounts, presigned media, post, creator info (TikTok); typed
+- [x] **B1 Zernio client**: profiles, connect link, accounts, presigned media, post, creator info (TikTok); typed
       errors with English messages for cards; idempotency key per slot; timeouts and one retry on 5xx. Fake first; the
       real API only after the owner gates.
+      *Done against Zernio's OpenAPI (v1.420) with a fake `fetch`; no real call made. Real Zernio runs only with
+      `ZERNIO_API_KEY` **and** `OPENCMO_PUBLISH_LIVE=1` (the key sits in prod `.env.local`). Owner (2026-10-30):
+      real posting, the gates and review are next week's phase. Added `presignMedia` to the adapter for B3/B4.*
 - [ ] **B2 Connect routes**: `POST /api/v1/accounts/connect` → Zernio link (creates the founder's Zernio profile the
       first time through A's RPC), callback stores the account, `DELETE /api/v1/accounts/[id]` disconnects at Zernio
       then here; zod, rate limits, English errors.
