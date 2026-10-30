@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, CompetitorInsight, Documents, NicheVideoInsight, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, CompetitorInsight, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -149,6 +149,24 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
     },
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
+    async subredditRule(subreddit) {
+      const { data, error } = await admin.from("subreddit_rules").select("subreddit, verdict, summary, read_at").eq("subreddit", subreddit.toLowerCase()).maybeSingle();
+      if (error) throw new Error(`subreddit_rules: ${error.message}`);
+      return (data as SubredditRule | null) ?? null;
+    },
+    async saveSubredditRule(rule) {
+      const { error } = await admin
+        .from("subreddit_rules")
+        .upsert({ subreddit: rule.subreddit.toLowerCase(), verdict: rule.verdict, summary: rule.summary.slice(0, 200), read_at: new Date().toISOString() });
+      if (error) throw new Error(`subreddit_rules: ${error.message}`);
+    },
+    async salesSettings(userId) {
+      const { data, error } = await admin.from("sales_settings").select("excluded_subreddits, co_occurrence").eq("user_id", userId).maybeSingle();
+      if (error) throw new Error(`sales_settings: ${error.message}`);
+      const row = data as { excluded_subreddits: string[]; co_occurrence: [string, string][] } | null;
+      return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [] };
+    },
+    recentMentions: (userId) => rpc<number>("sales_mention_count_for", { p_user: userId }),
     defer: (run, seconds, steps) => rpc<boolean>("cmo_defer_run", { p_run: run.id, p_attempt: run.attempt, p_seconds: seconds, p_steps: steps }),
     async saveInsight(userId, runId, body) {
       await rpc("cmo_save_insight", { p_user: userId, p_run: runId, p_kind: "competitors", p_body: body });

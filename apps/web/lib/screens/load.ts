@@ -1114,11 +1114,11 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
   return parts<SalesScreen>("sales", {
     threads: async () => {
       const [rows, cards] = await Promise.all([
-        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status").order("created_at", { ascending: false }).limit(30),
+        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why").order("created_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed" }[])
+      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: "mention_ok" | "help_only" | "skip" | null; rule_why: string | null }[])
         .map((r) => {
           const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
           return {
@@ -1129,12 +1129,15 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
             comments: r.comments,
             title: r.title.slice(0, 300),
             url: r.url,
-            // Subreddit rules are read with Sales safety (R1); until then every thread is help first, no product mention.
-            rule: { kind: "help_only" as const, text: "Rules not checked yet: help first" },
+            // P5 R1: the rule the draft was written under. Threads from before it are help first, no product mention.
+            rule: {
+              kind: r.rule === "mention_ok" ? ("mention_allowed" as const) : r.rule === "skip" ? ("skipped" as const) : ("help_only" as const),
+              text: (r.rule_why ?? (r.rule ? "" : "Rules not checked: help first")).slice(0, 200) || (r.rule === "skip" ? "Skipped by the community's rules" : "Help only"),
+            },
             parts: parts.map((p) => ({ label: p.label as "Pain", score: p.score!, max: p.max! })),
             quotes: parts.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: p.evidence!.slice(0, 400), from: p.label!.toLowerCase() })),
-            draft: r.reply,
-            draftChecks: null,
+            draft: r.rule === "skip" ? null : r.reply,
+            draftChecks: r.rule === "skip" || !r.reply ? null : `No links · under 120 words · ${r.rule === "mention_ok" ? "product named at most once" : "no product mention"}`,
             status: r.status === "in_review" ? ("open" as const) : r.status,
             approvalId: cards.get(r.id) ?? null,
           };
@@ -1150,6 +1153,26 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
       };
       const [replied, dismissed] = await Promise.all([count("replied"), count("dismissed")]);
       return { replied, dismissed };
+    },
+    // P5 F3: product mentions in the last ten posted replies (at most one in ten).
+    mentions: async () => {
+      const r = await supabase.rpc("sales_mention_count");
+      if (r.error) throw new Error(`sales_mention_count: ${r.error.message}`);
+      return { used: Number(r.data ?? 0), window: 10 };
+    },
+    // P5 F6: the last two scans found nothing worth joining; the banner offers a scan with a new brief.
+    stuck: async () => {
+      const r = await supabase.from("cmo_runs").select("status, output").eq("kind", "sales_scan").in("status", ["done", "failed"]).order("created_at", { ascending: false }).limit(2);
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      const runs = (r.data ?? []) as { status: string; output: { cards?: number } | null }[];
+      if (runs.length < 2 || runs.some((x) => x.status !== "done" || (x.output?.cards ?? 0) > 0)) return null;
+      return { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 };
+    },
+    settings: async () => {
+      const r = await supabase.from("sales_settings").select("excluded_subreddits, co_occurrence").maybeSingle();
+      if (r.error) throw new Error(`sales_settings: ${r.error.message}`);
+      const row = r.data as { excluded_subreddits: string[]; co_occurrence: [string, string][] } | null;
+      return { excludedSubreddits: (row?.excluded_subreddits ?? []).slice(0, 50), pairs: (row?.co_occurrence ?? []).slice(0, 20) };
     },
   });
 }

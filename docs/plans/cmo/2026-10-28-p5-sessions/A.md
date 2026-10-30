@@ -29,12 +29,12 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
       YouTube Shorts (outliers vs median; Reels only if R0 finds an Instagram search), transcripts for the top few,
       hooks with their URL; store text, metrics and URL only, never the video; budget per run; an insight without a
       URL is dropped; runs when the plan has a video item; Writer's brief reads it.
-- [ ] **A1 Sales safety (R1)**: a new reader call for subreddit rules (none exists; source per R0) → classify the rules
+- [x] **A1 Sales safety (R1)**: a new reader call for subreddit rules (none exists; source per R0) → classify the rules
       page as data → cache 7 days; `mentioned_product` set in code from the final approved text in
       `cmo_decide_opportunity` (last 10 approved replies, 1-in-10 rule → help only); excluded subreddits and
       co-occurrence applied before scoring; reply checks in code (no links, < 120 words); voice notes in Sales drafts
       (No AI Slop is already loaded). Tests: a hostile rules page; a help-only draft edited to name the product counts.
-- [ ] **A3 Loaders, rules and publish**: `sales.mentions`, `sales.stuck`, Research niche, Studio slideshows and images;
+- [x] **A3 Loaders, rules and publish**: `sales.mentions`, `sales.stuck`, Research niche, Studio slideshows and images;
       event rule: slideshow or image approved → schedule (P4); the P4 publish step handles `slideshow` (MP4 via its
       clip) and `image` (attached to its post), with pgTAP; flip `live`.
 - [ ] **A4 Acceptance** with fake providers (F13), one real slideshow made in the Slides view kept as landing material, peak RSS of the slideshow render and stills, screenshots at 1440 and
@@ -98,3 +98,10 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   `settings` part only has to read `sales_settings` (`excluded_subreddits`, `co_occurrence`). Research's new "What works
   on video in your niche" table reads `scope = "niche_video"` insights and their `video` fields; the fixture's niche rows
   have no `video` yet (length and format show "—"): please add one with `video: { views, outlier, seconds, format }`.
+- [A] A1 (owner 2026-10-31: fix, do not upgrade Sales yet; the multi-platform Sales finder is its own PR #133): the rules
+  source is the provider's `subreddit/details` (`rules` text, cached 7 days by the provider and in `subreddit_rules`),
+  classified as data by a `check_rules` step (an inbox step too, for mode B). One mention per scan while none of the
+  last ten posted replies named the product, else help only with why. Excluded subreddits and pairs before scoring;
+  code drops drafts with a link, over 120 words, or the product named in a help-only reply. `cmo_decide_opportunity`
+  takes the posted text (`p_text`); `product_mentioned` reads it. pgTAP `227`.
+

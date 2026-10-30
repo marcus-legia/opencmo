@@ -124,10 +124,20 @@ export type Opportunity = {
   comments: number;
   score: number;
   score_parts: ScorePart[];
+  /** Empty for a skipped thread: it is kept for the Sales screen, with no draft and no card. */
   reply: string;
   /** Which model and prompt drafted the reply (`edit-taxonomy.ts`). */
   gen?: { model: string; prompt_version: string };
+  /** P5 R1: the rule the draft was written under, and why ("r/x forbids self-promotion"). */
+  rule?: SubredditVerdict;
+  rule_why?: string;
 };
+
+/** What a subreddit's rules allow (P5 R1): name the product, help only, or stay out. */
+export type SubredditVerdict = "mention_ok" | "help_only" | "skip";
+export type SubredditRule = { subreddit: string; verdict: SubredditVerdict; summary: string; read_at: string };
+/** The founder's Sales settings (`sales_settings`). */
+export type SalesSettings = { excluded: string[]; pairs: [string, string][] };
 
 /** Who thinks for a run: OpenCMO's own models, or the founder's Claude through the inbox. */
 export type Brain = "opencmo" | "claude";
@@ -184,6 +194,12 @@ export interface CmoStore {
   /** Link thread đã từng thành thẻ (kể cả đã bỏ) — W4 không đưa lại. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
+  subredditRule(subreddit: string): Promise<SubredditRule | null>;
+  saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;
+  salesSettings(userId: string): Promise<SalesSettings>;
+  /** Product mentions in the founder's last ten posted replies (SQL `sales_mention_count_for`). */
+  recentMentions(userId: string): Promise<number>;
   /** Trả lượt về hàng đợi, hoãn `seconds` giây; false khi lượt đã bị nhận lại. */
   defer(run: QueuedRun, seconds: number, steps: Step[]): Promise<boolean>;
   /** W7: lưu điều học được; đọc bản mới nhất (Planner, X writer, CMO chat). */

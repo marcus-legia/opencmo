@@ -1643,7 +1643,7 @@ begin
       if p_action not in ('replied', 'dismissed') then
         raise exception 'Choose replied or dismissed.' using errcode = '22023';
       end if;
-      perform public.cmo_decide_opportunity(v_row.ref_id, p_action, v_payload->>'reason');
+      perform public.cmo_decide_opportunity(v_row.ref_id, p_action, v_payload->>'reason', v_payload->>'text');
     when 'goal' then
       if p_action not in ('approve', 'reject') then
         raise exception 'Choose approve or reject.' using errcode = '22023';
@@ -3307,22 +3307,27 @@ CREATE TABLE public.opportunities (
 
 
 --
--- Name: cmo_decide_opportunity(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_decide_opportunity(uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_decide_opportunity(p_id uuid, p_action text, p_reason text DEFAULT NULL::text) RETURNS public.opportunities
+CREATE FUNCTION public.cmo_decide_opportunity(p_id uuid, p_action text, p_reason text DEFAULT NULL::text, p_text text DEFAULT NULL::text) RETURNS public.opportunities
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   v_user uuid := public.require_user();
   v_row public.opportunities;
+  v_final text := nullif(trim(coalesce(p_text, '')), '');
 begin
   if p_action is null or p_action not in ('replied', 'dismissed') then
     raise exception 'Unknown action.' using errcode = '22023';
   end if;
-  update public.opportunities set status = p_action, decided_at = now()
-  where id = p_id and user_id = v_user and status = 'in_review'
+  if v_final is not null and (p_action <> 'replied' or char_length(v_final) > 3000) then
+    raise exception 'Only a reply you posted, up to 3000 characters, is saved with it.' using errcode = '22023';
+  end if;
+  -- The founder edits and posts by hand: the reply that counts is the one they say they posted (P5 F3).
+  update public.opportunities set status = p_action, decided_at = now(), reply = coalesce(v_final, reply)
+  where id = p_id and user_id = v_user and status = 'in_review' and (p_action = 'dismissed' or reply is not null)
   returning * into v_row;
   if not found then
     if exists(select 1 from public.opportunities where id = p_id and user_id = v_user) then
@@ -3334,8 +3339,11 @@ begin
     insert into public.cmo_memories (user_id, type, body)
     values (v_user, 'feedback', left('Dismissed the Reddit thread "' || left(v_row.title, 120) || '": ' || trim(p_reason), 600));
   end if;
-  insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version)
-  values (v_user, p_id, 'sales', p_action, left(coalesce(v_row.gen->>'model', ''), 100), left(coalesce(v_row.gen->>'prompt_version', ''), 40))
+  -- Whether the product was named is read from that final text, never from the draft's intent: the 1-in-10 rule
+  -- counts what went out.
+  insert into public.cmo_draft_outcomes (user_id, item_id, department, action, model, prompt_version, mentioned_product)
+  values (v_user, p_id, 'sales', p_action, left(coalesce(v_row.gen->>'model', ''), 100), left(coalesce(v_row.gen->>'prompt_version', ''), 40),
+    case when p_action = 'replied' then public.product_mentioned(v_user, v_row.reply) end)
   on conflict (department, item_id) do nothing;
   return v_row;
 end;
@@ -4353,6 +4361,7 @@ declare
   v_count integer := 0;
   v_score integer;
   v_gen jsonb;
+  v_rule text;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 10 then
     raise exception 'These conversations are not valid.' using errcode = '22023';
@@ -4362,15 +4371,22 @@ begin
     v_gen := case when jsonb_typeof(v_item->'gen') = 'object' then jsonb_strip_nulls(jsonb_build_object(
       'model', left(v_item->'gen'->>'model', 100),
       'prompt_version', left(v_item->'gen'->>'prompt_version', 40))) else '{}'::jsonb end;
+    -- The subreddit's rule the draft was written under (P5 R1); a skipped thread is kept without a draft.
+    v_rule := case when v_item->>'rule' in ('mention_ok', 'help_only', 'skip') then v_item->>'rule' end;
+    if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
+      continue;
+    end if;
     insert into public.opportunities (
-      user_id, run_id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, gen
+      user_id, run_id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, gen,
+      rule, rule_why
     ) values (
       p_user, p_run, v_item->>'url', left(coalesce(v_item->>'community', ''), 100), left(v_item->>'title', 400),
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
-      v_score, coalesce(v_item->'score_parts', '[]'::jsonb), left(v_item->>'reply', 3000),
+      v_score, coalesce(v_item->'score_parts', '[]'::jsonb),
+      case when v_rule = 'skip' then null else left(v_item->>'reply', 3000) end,
       case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end,
-      v_gen
+      v_gen, v_rule, left(nullif(trim(coalesce(v_item->>'rule_why', '')), ''), 200)
     )
     on conflict (user_id, url) do nothing;
     if found then
@@ -7353,6 +7369,27 @@ $_$;
 
 
 --
+-- Name: product_mentioned(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_mentioned(p_user uuid, p_text text) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_name text;
+begin
+  select nullif(trim(body->>'name'), '') into v_name from public.marketing_documents
+  where user_id = p_user and kind = 'product' order by version desc, created_at desc limit 1;
+  if v_name is null or char_length(v_name) < 3 or p_text is null then
+    return false;
+  end if;
+  return p_text ~* ('(^|[^[:alnum:]])' || regexp_replace(v_name, '([.^$*+?()\[\]{}|\\-])', '\\\1', 'g') || '($|[^[:alnum:]])');
+end;
+$_$;
+
+
+--
 -- Name: project_from_job(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9050,6 +9087,31 @@ begin
   where id = p_id and user_id = v_user and revoked_at is null;
   return found;
 end;
+$$;
+
+
+--
+-- Name: sales_mention_count(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sales_mention_count() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public.sales_mention_count_for(public.require_user()) $$;
+
+
+--
+-- Name: sales_mention_count_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sales_mention_count_for(p_user uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*) filter (where mentioned_product)::integer from (
+    select mentioned_product from public.cmo_draft_outcomes
+    where user_id = p_user and department = 'sales' and action = 'replied'
+    order by decided_at desc limit 10) last_ten
 $$;
 
 

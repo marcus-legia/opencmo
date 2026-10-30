@@ -5,7 +5,7 @@
 
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type NicheVideoInsight, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 
 export type InboxItem = {
   id: string;
@@ -34,6 +34,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
+  const rules = new Map<string, SubredditRule>();
+  const salesSettings: SalesSettings = { excluded: [], pairs: [] };
+  const mentions = { used: 0 };
   const insights: CompetitorInsight[] = [];
   const niche: NicheVideoInsight[] = [];
   const metrics: MetricRow[] = [];
@@ -118,6 +121,12 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
+    subredditRule: async (name) => rules.get(name.toLowerCase()) ?? null,
+    async saveSubredditRule(rule) {
+      rules.set(rule.subreddit.toLowerCase(), { ...rule, subreddit: rule.subreddit.toLowerCase(), read_at: new Date().toISOString() });
+    },
+    salesSettings: async () => salesSettings,
+    recentMentions: async () => mentions.used,
     async saveOpportunities(_u, _r, list) {
       const fresh = list.filter((o) => !opps.some((x) => x.url === o.url));
       opps.push(...fresh);
@@ -184,5 +193,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, insights, niche, metrics, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
+  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
 }
