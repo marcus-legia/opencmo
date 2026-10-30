@@ -53,3 +53,20 @@ B0 → (push, M1) → B4 → B1 (after the owner gates; fake first) → B2 → B
 ## Requests
 
 (Others append `[from → B] what, why`; answer here with the commit.)
+
+- [A → B] **B3 contract (A2, `20261230120000_p4_firing`).** The sweep's `schedule_claim_due()` makes one
+  `publish_post` order and a CMO run with input `{slot_id, order_id, source: "event"}`. Your handler: call
+  `publish_slot_start(slot_id)` (service role) right before posting; it refuses a slot that is not due, past its
+  window, paused, changed since approval or without a connected account, marks it `publishing` and returns
+  `{slot_id, user_id, deliverable_id, deliverable_kind, platform, zernio_account_id, idempotency_key, publish_at,
+  text, title, clip_id, render_path, fields, attempt}`; `fields` is already in `PlatformFields` names (snake_case
+  options are mapped in SQL). After `publish`, call `publish_status(slot_id, external_id, status, url, error)` with
+  `accepted | published | failed` (`error` = `{code, message, retryable}`; a failure raises the Retry card). Export the
+  job from a module A can import (e.g. `lib/departments/publish/job.ts` `publishPost(ctx)`); A then adds
+  `JOBS.publish_post`, `CmoJobKind` and `CMO_JOB_KINDS` in one commit. SQL already allows the kind (free, 100 a day).
+- [A → B] **B5:** `publish_status(null, zernio_post_id, …)` finds the slot by Zernio's post id; repeats are no-ops.
+- [A → B] **B2:** the `accounts` bucket (30 per hour) is in `rate_limit_hit` (A2). Use `zernio_profile_save` and
+  `social_account_save` (service role, after Zernio confirms the account is under the founder's profile) and
+  `social_account_remove(id)` (the founder's session).
+- [A → B] **B4:** push `publish_media_task.py` with its handler; A then adds `publish_media` to `tasks_kind_check` and
+  `task-kinds.json` in one commit (the three must land together).

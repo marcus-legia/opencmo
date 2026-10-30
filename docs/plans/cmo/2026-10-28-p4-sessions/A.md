@@ -53,11 +53,19 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
       calendar's; titles from the post or the short's hook; rules from `schedule-defaults.json`) and
       `settings.accounts` (every publish platform: connected, reconnect, or Connect). `live` flipped for both;
       `load.check.ts` covers them.
-- [ ] **A2 Firing**: `schedule_claim_due()` (service role; leases due `waiting` slots, marks past-window ones
-      `missed` and raises a new card, skips everything while the brain is paused) → one `publish_post` work order per
-      slot; `sweep()` calls it every minute; `publish_status(slot_id, status, external_id, url, error)` for B's
-      handler and webhook; a failure raises a card whose Retry reuses the approval if `publish_at` is still in the
-      window. pgTAP: lease, never twice, missed, paused, retry.
+- [ ] **A2 Firing** (`20261230120000_p4_firing`, pgTAP 218): SQL and the sweep are in; two lines wait on B.
+  - [x] `schedule_claim_due()` (service role): past-window slots missed and proposed again (never late); due slots
+        whose approval still covers what goes out → one `publish_post` order (Publish, under the week's root) and its
+        run, leased to the window end (never twice); changed after approval → missed; intent → `reminded`; paused
+        founders skipped; `publishing` an hour past the window → failed "unconfirmed", never re-posted by itself.
+  - [x] `publish_slot_start(slot)` for B3 (re-checks lease, window, pause, approval and account; returns what to post,
+        `PlatformFields` names) and `publish_status(slot | external id, status, url, error)` for B3 and B5 (published
+        → the post row too; failed → the Retry card, which posts with the same key while the window lasts).
+  - [x] `publish_post` job kind in SQL (free, 100 a day, keyed by order), department `publish`, `capabilities.json`;
+        the `accounts` rate-limit bucket for B2. `modal_app.py` `sweep()` calls `cmo_dispatch.claim_due_slots`
+        before dispatching (tests in `test_cmo_dispatch.py`).
+  - [ ] `JOBS.publish_post` + `CmoJobKind`, once B3's handler is pushed (request in `B.md`).
+  - [ ] `publish_media` in `tasks_kind_check` + `task-kinds.json`, once B4's handler is pushed (request in `B.md`).
 - [ ] **A4 Acceptance** on a local stack with the fake Zernio (F11), peak RSS of one `publish_media` run, screenshots
       at 1440 and 390 into `docs/plans/cmo/2026-10-28-p4-acceptance/`.
 

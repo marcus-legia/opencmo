@@ -617,6 +617,13 @@ def _dispatch_cmo() -> None:
         return
     try:
         db = (os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        # Schedule's clock (P4 A2): due slots become publish_post runs first, so this same sweep dispatches them.
+        try:
+            fired = cmo_dispatch.claim_due_slots(*db)
+            if any(fired.values()):
+                log.info("Schedule: %s", fired)
+        except Exception:
+            log.warning("Schedule claim failed; next sweep tries again", exc_info=True)
         # One route runs both queues; Studio's orders (P2 A2) are counted apart and capped by `dispatch`.
         waiting = cmo_dispatch.count_dispatchable(*db) + cmo_dispatch.count_studio_work(*db)
         if waiting:

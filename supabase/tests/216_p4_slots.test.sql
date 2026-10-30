@@ -35,7 +35,8 @@ insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, 
   ('e2163000-0000-4000-8000-00000000000d', 'e2160000-0000-4000-8000-00000000000a', 'e2161000-0000-4000-8000-00000000000a', 'post', 'content_item', 'e2162000-0000-4000-8000-00000000000d', 'waiting_founder');
 
 -- Proposing.
-select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000a'), 1, 'an approved post gets one slot');
+select is((select count(*)::int from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000a'), 1,
+  'an approved post gets one slot (the event rule proposes it)');
 select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000a'), 0, 'proposing again changes nothing');
 select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000d'), 0, 'a post still in review gets none');
 

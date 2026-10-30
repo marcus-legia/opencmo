@@ -40,10 +40,10 @@ select is((select count(*)::int from public.social_accounts where user_id = 'e21
 select throws_ok($$ select public.social_account_save('e2150000-0000-4000-8000-00000000000a', 'reddit', 'r', null, 'acc-r') $$,
   '23514', null, 'Reddit is never posted to');
 
--- A deliverable to schedule: an approved X post.
+-- A deliverable to schedule: an X post, kept in review so the event rule (A3) proposes nothing by itself.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e2151000-0000-4000-8000-00000000000a', 'e2150000-0000-4000-8000-00000000000a', 'post', 'x', current_date, 'Launch',
-   'approved', '{"text":"We shipped cut by words."}');
+   'in_review', '{"text":"We shipped cut by words."}');
 insert into public.work_orders (id, user_id, week, kind, title, brief, department, status)
 values ('e2152000-0000-4000-8000-00000000000a', 'e2150000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
   'post_draft', 'Post', '{}', 'writer', 'done');
