@@ -35,7 +35,6 @@ export function TabStrip({
           return (
             <span key={entry.href} className="v2-tab" data-current={current ? "" : undefined}>
               <Link href={entry.href} className="v2-tab-link" aria-current={current ? "page" : undefined}>
-                <span className="v2-tab-mark" aria-hidden="true" />
                 {entry.label}
               </Link>
               {pinned ? null : (

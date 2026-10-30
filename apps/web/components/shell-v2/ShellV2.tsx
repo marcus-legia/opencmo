@@ -295,7 +295,6 @@ function V2Frame({
               processing={active.length}
               credits={account.credits}
               email={email ?? null}
-              open={new Set(openHrefs)}
               collapsed={columns.railCollapsed}
               onToggleCollapsed={toggleRail}
               onCurrent={togglePanel}

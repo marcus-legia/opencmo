@@ -16,8 +16,6 @@ export type RailProps = {
   processing: number;
   credits: number | null;
   email: string | null;
-  /** Routes open in the tab strip: an outlined square before their title. */
-  open: ReadonlySet<string>;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   /** Clicking the screen already open hides the tab panel (and shows it again). */
@@ -50,11 +48,9 @@ function RailLink({ entry, props }: { entry: NavEntry; props: RailProps }) {
       aria-current={current ? "page" : undefined}
       aria-label={name}
       title={props.collapsed ? name : undefined}
-      data-open={props.open.has(entry.href) ? "" : undefined}
       data-flag={status?.tone}
       onClick={onClick}
     >
-      <span className="v2-rail-mark" aria-hidden="true" />
       <NavIcon href={entry.href} />
       <span className="v2-rail-text">
         <span className="v2-rail-label">{entry.label}</span>
