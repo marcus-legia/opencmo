@@ -153,42 +153,29 @@ function NicheVideo({ insights }: { insights: Insight[] }) {
   return (
     <Panel id="research-niche-video" className="scr-niche" title="What works on video in your niche" foot="Read from the top shorts on TikTok and YouTube Shorts. Only words, numbers and the link are kept.">
       {insights.length ? (
-        <TableWrap label="What works on video in your niche">
-          <table className="v2-table scr-table-compact" data-testid="research-niche-video">
-            <thead>
-              <tr>
-                <th>Hook</th>
-                <th>Length</th>
-                <th>Format</th>
-                <th>Why it counts</th>
-                <th>Link</th>
-              </tr>
-            </thead>
-            <tbody>
-              {insights.map((insight) => (
-                <tr key={insight.id}>
-                  <td>
-                    <span className="scr-mono is-small">{insight.platform} · </span>
-                    {insight.text}
-                  </td>
-                  <td className="scr-num">{seconds(insight.video?.seconds)}</td>
-                  <td>{insight.video?.format ?? (insight.type === "format" ? "See the hook" : "—")}</td>
-                  <td className="scr-small">
-                    {insight.video?.outlier != null ? `${insight.video.outlier.toFixed(1)}× the median` : insight.evidence}
-                    {insight.video?.views != null ? ` · ${int(insight.video.views)} views` : ""}
-                  </td>
-                  <td>
-                    {insight.sources.map((url, i) => (
-                      <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="scr-mono-link">
-                        {insight.sources.length === 1 ? "Open" : `Open ${i + 1}`} ↗
-                      </a>
-                    ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableWrap>
+        <div className="scr-rows" data-testid="research-niche-video">
+          {insights.map((insight) => (
+            <article key={insight.id} className="scr-insight">
+              <span className="scr-mono is-small">
+                {[insight.platform, seconds(insight.video?.seconds), insight.video?.format].filter((part) => part && part !== "—").join(" · ")}
+              </span>
+              <div>
+                <b>{insight.text}</b>
+                <span className="scr-small scr-muted">
+                  {insight.video?.outlier != null ? `${insight.video.outlier.toFixed(1)}× the median views` : insight.evidence}
+                  {insight.video?.views != null ? ` · ${int(insight.video.views)} views` : ""}
+                </span>
+              </div>
+              <span className="scr-insight-sources">
+                {insight.sources.map((url, i) => (
+                  <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="scr-mono-link">
+                    {insight.sources.length === 1 ? "Watch" : `Watch ${i + 1}`} ↗
+                  </a>
+                ))}
+              </span>
+            </article>
+          ))}
+        </div>
       ) : (
         <p className="v2-panel-body scr-muted">Nothing read yet. When the week plan has a video, Research reads the top shorts in your niche first.</p>
       )}
