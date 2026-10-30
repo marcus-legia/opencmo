@@ -56,19 +56,20 @@ export type PublishMedia = z.infer<typeof PublishMediaSchema>;
 
 /**
  * What goes out, as approved: the handler builds it from the deliverable and checks the card's snapshot
- * hash before calling `publish`. A `short` carries its media; a `post` may not.
+ * hash before calling `publish`. Kinds match the schedule snapshot's `deliverable_kind`; a video, short or
+ * slideshow carries its media, a `post` may not.
  */
 export const PublishDeliverableSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(["post", "short"]),
+    kind: z.enum(["post", "video", "short", "slideshow"]),
     text: z.string().max(10000),
     /** YouTube's title; null elsewhere. */
     title: z.string().min(1).max(100).nullable(),
     media: z.array(PublishMediaSchema).max(35),
   })
   .strict()
-  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A short needs its video." })
+  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A video, short or slideshow needs its media." })
   .refine((d) => d.text.trim().length > 0 || d.media.length > 0, { message: "Nothing to post." });
 export type PublishDeliverable = z.infer<typeof PublishDeliverableSchema>;
 
