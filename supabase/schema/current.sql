@@ -7364,7 +7364,8 @@ begin
   return jsonb_build_object('id', v_slot.id, 'status', v_slot.status, 'platform', v_slot.platform, 'mode', v_slot.mode,
     'accountId', v_slot.account_id, 'zernioAccountId', v_account.zernio_account_id, 'accountStatus', v_account.status,
     'publishAt', to_jsonb(v_slot.publish_at), 'windowEndsAt', to_jsonb(v_slot.window_ends_at), 'options', v_slot.options,
-    'idempotencyKey', v_slot.idempotency_key, 'approvalStatus', v_approval.status, 'snapshot', v_approval.snapshot,
+    -- One key per attempt: a re-run inside an attempt repeats safely; a Retry is a new post, not Zernio's cached answer.
+    'idempotencyKey', v_slot.idempotency_key || ':' || v_slot.attempts, 'approvalStatus', v_approval.status, 'snapshot', v_approval.snapshot,
     'current', v_current, 'export', v_export, 'media', v_media);
 end;
 $$;
@@ -7396,7 +7397,8 @@ begin
   if not public.schedule_approval_holds(v_slot) then
     raise exception 'This post changed after it was approved.' using errcode = 'P0001';
   end if;
-  update public.schedule_slots set status = 'publishing', attempts = attempts + 1, updated_at = now()
+  -- A new attempt uploads again: the export of what is approved now, never an earlier attempt's file.
+  update public.schedule_slots set status = 'publishing', attempts = attempts + 1, media_task_id = null, updated_at = now()
   where id = v_slot.id returning * into v_slot;
   return v_slot;
 end;
@@ -7446,6 +7448,8 @@ begin
       set status = 'published', external_id = coalesce(p_external_id, external_id),
           external_url = coalesce(v_url, external_url), published_at = now(), lease_until = null, updated_at = now()
       where id = v_slot.id returning * into v_slot;
+      -- Live: a Retry card left from an earlier failure is done with.
+      perform public.approval_close('schedule_slot', v_slot.id, 'approved');
       select * into v_d from public.deliverables where id = v_slot.deliverable_id;
       if v_d.ref_kind = 'content_item' then
         update public.content_items set status = 'published', published_at = coalesce(published_at, now()),
@@ -7775,6 +7779,8 @@ begin
       or (p_bucket = 'mcp' and p_limit = 600 and p_window_seconds = 3600)
       -- P4: connecting and disconnecting social accounts (each call reaches Zernio).
       or (p_bucket = 'accounts' and p_limit = 30 and p_window_seconds = 3600)
+      -- P4: moving a slot on the calendar and "I posted it" (`/api/v1/schedule/slots/[id]`).
+      or (p_bucket = 'schedule' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'editor-write' and p_limit = 240 and p_window_seconds = 60)
       or (p_bucket = 'zip' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
@@ -9287,12 +9293,22 @@ begin
   end loop;
 
   -- Zernio took a post but never confirmed it an hour after its window: say so, and never post it again by ourselves.
-  update public.schedule_slots
-  set status = 'failed', lease_until = null, updated_at = now(),
-      error = jsonb_build_object('code', 'unconfirmed',
-        'message', 'We could not confirm it went out. Check your account before posting it again.')
-  where status = 'publishing' and window_ends_at + interval '1 hour' <= now();
-  get diagnostics v_unconfirmed = row_count;
+  -- Its card waits for the founder (no expiry): "It went out" or a new time, never a blind Retry.
+  for v_slot in
+    select s.* from public.schedule_slots s
+    where s.status = 'publishing' and s.window_ends_at + interval '1 hour' <= now()
+    for update skip locked
+  loop
+    update public.schedule_slots
+    set status = 'failed', lease_until = null, updated_at = now(),
+        error = jsonb_build_object('code', 'unconfirmed', 'retryable', false,
+          'message', 'We could not confirm it went out. Check your account before posting it again.')
+    where id = v_slot.id;
+    perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    update public.approvals set expires_at = null
+    where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
+    v_unconfirmed := v_unconfirmed + 1;
+  end loop;
 
   return jsonb_build_object('fired', v_fired, 'reminded', v_reminded, 'missed', v_missed, 'failed', v_failed,
     'unconfirmed', v_unconfirmed);
@@ -9445,7 +9461,9 @@ begin
     raise exception 'Slot not found.' using errcode = 'P0002';
   end if;
   if v_slot.status <> 'published' then
-    if v_slot.mode <> 'intent' or v_slot.status not in ('failed', 'reminded') then
+    -- A post the founder posted themselves, or one we could not confirm that they checked is live.
+    if not ((v_slot.mode = 'intent' and v_slot.status in ('failed', 'reminded'))
+            or (v_slot.status = 'failed' and v_slot.error->>'code' = 'unconfirmed')) then
       raise exception 'Only a post you copy and post yourself can be marked as posted.' using errcode = 'P0001';
     end if;
     update public.schedule_slots
@@ -9632,6 +9650,9 @@ begin
   foreach v_platform in array coalesce(v_platforms, '{}') loop
     continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
       and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published'));
+    -- A failure still in its window waits on its Retry card; an unconfirmed one may have gone out. Neither gets a twin.
+    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
+      and status = 'failed' and (window_ends_at > now() or error->>'code' = 'unconfirmed'));
     continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
       >= (v_rules->>'maxProposals')::integer;
     v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
@@ -10190,11 +10211,24 @@ CREATE FUNCTION public.social_account_remove(p_id uuid) RETURNS void
     AS $$
 declare
   v_user uuid := public.require_user();
+  v_slots uuid[];
+  v_slot uuid;
 begin
-  delete from public.social_accounts where id = p_id and user_id = v_user;
-  if not found then
+  if not exists (select 1 from public.social_accounts where id = p_id and user_id = v_user) then
     raise exception 'Account not found.' using errcode = 'P0002';
   end if;
+  -- Its slots not yet posting ask again without it: copy and open where the platform allows, else "connect it".
+  with moved as (
+    update public.schedule_slots
+    set account_id = null, mode = 'intent', status = 'proposed', updated_at = now()
+    where account_id = p_id and user_id = v_user and status in ('proposed', 'waiting')
+    returning id
+  )
+  select coalesce(array_agg(id), '{}') into v_slots from moved;
+  delete from public.social_accounts where id = p_id and user_id = v_user;
+  foreach v_slot in array v_slots loop
+    perform public.approval_raise(v_user, 'schedule_slot', v_slot);
+  end loop;
 end;
 $$;
 

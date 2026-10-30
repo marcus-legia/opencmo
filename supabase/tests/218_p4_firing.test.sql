@@ -83,8 +83,9 @@ create temp table started as select public.publish_slot_start('e2184000-0000-400
 create temp table readback as select public.publish_slot_read('e2184000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000a',
   (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000a')) as r;
 select is((select r->>'zernioAccountId' from readback), 'acc-a2-x', 'it posts from the approved account');
-select is((select r->>'idempotencyKey' from readback), (select idempotency_key from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'),
-  'with the slot''s key');
+select is((select r->>'idempotencyKey' from readback),
+  (select idempotency_key || ':' || attempts from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'),
+  'with the slot''s key for this attempt (20261230140000)');
 select is((select r->>'approvalStatus' from readback), 'approved', 'on an approved card');
 select is((select r->'current'->>'text' from readback), 'Post a.', 'the approved words');
 select is((select (r).status || ' ' || (r).attempts from started), 'publishing 1', 'publishing, attempt 1');
