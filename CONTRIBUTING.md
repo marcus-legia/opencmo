@@ -109,10 +109,10 @@ OpenCMO assists; it does not act on the user's behalf. Contributions must not ad
   (≤ 72 characters) and a body explaining why when it isn't obvious:
 
   ```
-  Reject Lottie files that reference external assets
+  Read uploads with an explicit demuxer
 
-  Skottie resolves `assets[].p` against the worker's filesystem, so an uploaded
-  Lottie could read local files during export.
+  ffmpeg picks a demuxer from file content, so an uploaded "video" could be an
+  HLS playlist that makes the worker fetch arbitrary URLs.
   ```
 
 - Keep pull requests focused: one logical change per PR. Large features are easier to review

@@ -5,10 +5,10 @@
  * the Assistant's own clip scope, so a cut, a caption, a generation or an explainer goes through
  * exactly the code the in-app Assistant uses, with a checkpoint "MCP" in Version history for every write.
  *
- * What the Assistant puts on an approval card is a price step here: the adapter's `plan` prepares it
- * (model, seed, price, storyboard; nothing spent), the server signs it, and only the confirmed call
- * runs the adapter's `decide`. Not offered: tools that need the editor open in a browser (frame capture,
- * waveforms, 3D preview), `ask_user` and `update_plan` (Claude asks and plans itself) and `undo`
+ * What the Assistant puts on an approval card is a price step here: `scope.plan` prepares it (model,
+ * seed, price, storyboard; nothing spent), the server signs it, and only the confirmed call runs
+ * `scope.decide`. Not offered: tools that need the editor open in a browser (frame capture,
+ * waveforms), `ask_user` and `update_plan` (Claude asks and plans itself) and `undo`
  * (no request to undo; Version history restores any checkpoint).
  *
  * The thinking is the client's: `create_video` and `plan_video` take the client's finished plan
@@ -35,12 +35,11 @@ import { errorResult, registerGroup, type McpResult, type McpTool, type McpToolC
 /** In-app only: they need the user at the screen, or a turn to belong to. */
 const SKIP = new Set(["update_plan", "ask_user", "undo"]);
 /** Need no clip: registered without clip_id by the guides and explainer groups. */
-export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "find_lotties", "list_motion_templates", "get_motion_template"]);
+export const CLIP_FREE = new Set(["read_guide", "read_skill", "save_skill", "find_icons", "list_motion_styles", "get_motion_style", "list_motion_templates", "get_motion_template"]);
 
 /** Tools whose in-app version waits on an approval card: here, price → confirm. */
 export const PRICED = new Set([
   "generate_media",
-  "add_3d_scene",
   "add_voiceover",
   "replace_background",
   "create_video",

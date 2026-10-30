@@ -143,37 +143,6 @@
       }
     },
     {
-      "id": "studio-3d",
-      "kind": "video",
-      "provider": "opencmo-3d",
-      "name": "3D Studio",
-      "description": "Studio-lit 3D charts, numbers and objects rendered on a GPU. Exact data, your colors.",
-      "price": {
-        "unit": "generation",
-        "credits": 1
-      },
-      "limits": {
-        "maxPromptChars": 200,
-        "aspectRatios": [
-          "9:16",
-          "1:1",
-          "4:5",
-          "16:9"
-        ],
-        "durations": [
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10
-        ],
-        "scene": true
-      }
-    },
-    {
       "id": "motion-explainer",
       "kind": "video",
       "provider": "opencmo-motion",

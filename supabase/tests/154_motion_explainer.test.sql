@@ -92,15 +92,7 @@ select throws_ok($$ select pg_temp.create_with(pg_temp.spec_with('{scene,accent}
 select throws_ok($$ select pg_temp.create_with(pg_temp.spec_with('{scene,beats}', (select jsonb_agg(jsonb_build_object('say', repeat('x', 240))) from generate_series(1, 16)))) $$,
   '22023', 'This 3D scene has too much data.', 'the scene stays under 4000 bytes');
 
--- The 3D model does not take explainer scenes or a voice.
-select throws_ok($$ select public.create_generation('e1541000-0000-4000-8000-00000000000a', null, 'studio-3d',
-    jsonb_set(pg_temp.spec_without('voice'), '{duration}', '5') || '{"aspectRatio":"9:16"}', repeat('a', 64), gen_random_uuid()) $$,
-  '22023', 'Describe the 3D scene first.', '3D Studio refuses an explainer scene');
-select throws_ok($$ select public.create_generation('e1541000-0000-4000-8000-00000000000a', null, 'studio-3d',
-    jsonb_set((select spec from t_spec where name = 'ok'), '{duration}', '5') || '{"aspectRatio":"9:16"}', repeat('b', 64), gen_random_uuid()) $$,
-  '22023', 'This request has settings the model does not take.', '3D Studio takes no voice');
-
--- An explainer turn that previewed its scene gets the bigger hold, like a 3D turn.
+-- An explainer turn that previewed its scene gets the bigger hold.
 reset role;
 insert into public.clips (id, job_id, idx, start_seconds, end_seconds, source_start, source_end) values
   ('e1542000-0000-4000-8000-00000000000a', 'e1541000-0000-4000-8000-00000000000a', 0, 1, 20, 1, 20);

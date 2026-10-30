@@ -1,0 +1,24 @@
+{
+  "id": "type-snap",
+  "title": "Headline snap",
+  "description": "Three big words snap in from the right row by row with a capped overshoot and a speed smear, hold, then get pushed out while a second set of three snaps in behind a feathered seam. For a feature launch or a claim. 5 s, silent, 9:16.",
+  "kind": "clip",
+  "format": "9:16",
+  "seconds": 5,
+  "slots": [
+    { "name": "first", "kind": "text", "note": "Three words split by |, at most 9 characters each; the third takes the accent.", "default": "MAKE|SOMETHING|MATTER." },
+    { "name": "second", "kind": "text", "note": "The three words that replace them, split by |, at most 9 characters each.", "default": "IDEAS|INTO|ACTION." },
+    { "name": "label", "kind": "text", "note": "A short top label (brand or event), at most 20 characters.", "default": "FIELD DAYS" },
+    { "name": "footer", "kind": "text", "note": "The bright start of the bottom line (a date, a URL).", "default": "OCT 24-25" },
+    { "name": "footerRest", "kind": "text", "note": "The muted rest of the bottom line, starting with a space.", "default": " / SAN FRANCISCO" },
+    { "name": "background", "kind": "color", "note": "The field; dark works best.", "default": "#181B1C" },
+    { "name": "ink", "kind": "color", "note": "The words and the label.", "default": "#EEF0EA" },
+    { "name": "muted", "kind": "color", "note": "The muted part of the bottom line.", "default": "#8D938F" },
+    { "name": "accent", "kind": "color", "note": "The third word of each set and the dot.", "default": "#C9EF8A" }
+  ],
+  "beats": [
+    { "say": "Three words snap in.", "label": "First set", "visual": "Three big words snap in from the right, row by row, overshoot a little and settle crisp.", "seconds": 1.85 },
+    { "say": "The second set takes over.", "label": "Second set", "visual": "The first set is pushed out left while the second set snaps in behind a feathered seam, row by row.", "seconds": 3.15 }
+  ],
+  "source": { "repo": "opus-pro/opusclip-video-tools", "path": "remakes/opus-5.5/pf-type-snap", "license": "MIT" }
+}

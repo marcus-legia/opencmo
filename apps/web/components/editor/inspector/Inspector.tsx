@@ -180,8 +180,6 @@ function NodeSections({ ctx, parent, tab, onTab }: { ctx: InspectorContext; pare
   );
   const look = (
     <>
-      {kind === "scene3d" ? <Scene3DSection ctx={ctx} /> : null}
-      {kind === "lottie" ? <LottieSection ctx={ctx} /> : null}
       {mediaOf(node) && ctx.clipId ? <GenerateCaptionsSection ctx={ctx} parent={parent} clipId={ctx.clipId} /> : null}
       {kind === "audio" ? <VoiceoverCaptionsSection ctx={ctx} /> : null}
       {has(kind, "src") && kind !== "captions" ? <SourceSection ctx={ctx} /> : null}
@@ -500,44 +498,6 @@ function PathSection({ ctx }: { ctx: InspectorContext }) {
   );
 }
 
-/** Cảnh 3D: camera (vật thể sửa ở bảng Visuals). */
-function Scene3DSection({ ctx }: { ctx: InspectorContext }) {
-  const { node } = ctx;
-  const camera = (node.camera as Record<string, number> | undefined) ?? {};
-  const set = (key: string, value: number) => setProps(ctx, node, { camera: { ...camera, [key]: value } });
-  return (
-    <Section title="3D camera" testid="ins-scene3d">
-      <Row label="Angle">
-        <NumberField label="Tilt" value={camera.phi ?? 65} min={0} max={180} unit="°" testid="ins-3d-phi" onCommit={(value) => set("phi", value)} />
-        <NumberField label="Turn" value={camera.theta ?? -50} unit="°" testid="ins-3d-theta" onCommit={(value) => set("theta", value)} />
-      </Row>
-      <Row label="View">
-        <NumberField label="Dist" value={camera.distance ?? 12} min={1} step={0.5} testid="ins-3d-distance" onCommit={(value) => set("distance", value)} />
-        <NumberField label="Orbit" value={camera.orbit ?? 0} unit="°/s" testid="ins-3d-orbit" onCommit={(value) => set("orbit", value)} />
-      </Row>
-    </Section>
-  );
-}
-
-/** Lottie: tốc độ, lặp, giây bắt đầu của animation. */
-function LottieSection({ ctx }: { ctx: InspectorContext }) {
-  const { node } = ctx;
-  return (
-    <Section title="Animation playback" testid="ins-lottie">
-      <Row label="Timing">
-        <NumberField label="Speed" value={Number(node.speed ?? 1)} min={0.1} max={8} step={0.1} unit="×" testid="ins-lottie-speed" onCommit={(value) => setProps(ctx, node, { speed: value === 1 ? undefined : value })} />
-        <NumberField label="Start" value={Number(node.offset ?? 0)} min={0} step={0.1} unit="s" testid="ins-lottie-offset" onCommit={(value) => setProps(ctx, node, { offset: value || undefined })} />
-      </Row>
-      <Row label="Loop">
-        <label className="ed2-check">
-          <input type="checkbox" data-testid="ins-lottie-loop" checked={node.loop !== false} onChange={(event) => setProps(ctx, node, { loop: event.target.checked ? undefined : false })} />
-          Repeat
-        </label>
-      </Row>
-    </Section>
-  );
-}
-
 function LayoutSection({ ctx }: { ctx: InspectorContext }) {
   const { node, scene } = ctx;
   const kind = node.kind as string;
@@ -759,6 +719,8 @@ const HIGHLIGHTS: [string, string][] = [
 /** Ô màu theo từng preset phụ đề, và màu preset tự dùng khi ô để trống. */
 const CAPTION_SLOTS: Record<string, { label: string; color: string }[]> = {
   spotlight: [{ label: "Highlight", color: "#24D5FF" }],
+  flare: [{ label: "Payoff", color: "#FFFFFF" }],
+  slam: [{ label: "Slab", color: "#FFD400" }],
   guinea: [
     { label: "Color 1", color: "#F55353" },
     { label: "Color 2", color: "#FEB139" },
@@ -974,7 +936,7 @@ function SourceSection({ ctx }: { ctx: InspectorContext }) {
   const src = node.src;
   const label = typeof src === "string" ? src.replace(/^assets\//, "") : src && typeof src === "object" ? `Generated ${String((src as Entity).generate ?? "media")}` : "None";
   // Loại asset của thư viện viết HOA (`VIDEO`…); `src` là `path` của asset.
-  const type = kind === "audio" ? "AUDIO" : kind === "image" ? "IMAGE" : kind === "lottie" ? "LOTTIE" : "VIDEO";
+  const type = kind === "audio" ? "AUDIO" : kind === "image" ? "IMAGE" : "VIDEO";
   const choices = (manifest?.assets ?? []).filter(
     (asset) => typeof asset.path === "string" && asset.type === type && asset.state !== "pending" && asset.state !== "error",
   );

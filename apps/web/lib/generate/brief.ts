@@ -80,7 +80,7 @@ const MISUSE = /\b(diagrams?|charts?|graphs?|infographics?|flow ?charts?|formula
 export function briefMisuse(brief: Pick<Brief, "idea" | "subject" | "action">): string | null {
   const text = [brief.subject, brief.action ?? ""].join(" ");
   if (!MISUSE.test(text)) return null;
-  return "AI images and video get diagrams, charts, numbers and text wrong. Draw it instead with add_diagram, add_chart, add_graph, add_3d, add_icon or add_text (pass the same quote); use generate_media only for a concrete real-world scene.";
+  return "AI images and video get diagrams, charts, numbers and text wrong. Draw it instead with add_diagram, add_chart, add_graph, add_icon or add_text (pass the same quote); use generate_media only for a concrete real-world scene.";
 }
 
 const sentence = (text: string): string => {

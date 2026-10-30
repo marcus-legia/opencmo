@@ -31,8 +31,8 @@ describe('motion templates', () => {
 		expect(spawnSync(process.execPath, [script, '--check'], { encoding: 'utf8' }).status).toBe(0);
 	});
 
-	it('has the three ported templates, MIT, each with a usable direction', () => {
-		expect(MOTION_TEMPLATES.map((template) => template.id)).toEqual(['analytics-glow', 'mark-lockup', 'phone-carousel']);
+	it('has the ported templates and our own, MIT, each with a usable direction', () => {
+		expect(MOTION_TEMPLATES.map((template) => template.id)).toEqual(['analytics-glow', 'logo-bloom', 'mark-lockup', 'phone-carousel', 'product-tour', 'type-snap']);
 		expect(motionTemplate('nope')).toBeUndefined();
 		for (const template of MOTION_TEMPLATES) {
 			expect(template.source.license).toBe('MIT');

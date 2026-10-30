@@ -12,7 +12,7 @@ export type Node = Record<string, unknown>;
 export type Point = [number, number];
 export type Box = { x: number; y: number; width: number; height: number };
 
-export type Theme = { text: string; panel: string; panelOpacity: number; line: string; accent: string; palette: string[]; /** Font chữ của visual (Brand Kit); thiếu = Inter. */ font?: string };
+export type Theme = { text: string; panel: string; panelOpacity: number; /** Ink on an accent fill (the kicker band). */ onAccent: string; line: string; accent: string; palette: string[]; /** Font chữ của visual (Brand Kit); thiếu = Inter. */ font?: string };
 
 /**
  * Màu mặc định đọc được TRÊN VIDEO: chữ trắng, ô nền tối gần đặc, nét vàng.
@@ -22,6 +22,8 @@ export const THEME: Theme = {
 	text: '#FFFFFF',
 	panel: '#0F172A',
 	panelOpacity: 0.9,
+	// Not the panel colour: a light panel turns the cards light, and text on the accent band must stay dark.
+	onAccent: '#111827',
 	line: '#FFFFFF',
 	accent: '#FACC15',
 	palette: ['#FACC15', '#38BDF8', '#F472B6', '#4ADE80', '#A78BFA', '#FB923C', '#F87171', '#2DD4BF'],

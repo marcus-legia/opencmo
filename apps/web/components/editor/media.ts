@@ -21,7 +21,6 @@ import { BRAND_SRC_PREFIX, CAPTURE_SRC_PREFIX } from "@opencmo/editor-core";
 
 import { watchFrames } from "./frames";
 import { readLocal } from "./library/store";
-import { builtinLottieUrl, LottieFrames } from "./lottie";
 
 export type EditorMedia = {
   project_id: string;
@@ -164,17 +163,6 @@ export class BrowserMedia implements MediaHost {
   private transcripts = new Map<string, Transcript | "failed" | "loading">();
   private luts = new Map<string, CubeLut | "failed" | "loading">();
   private audio: AudioContext | null = null;
-  private lottieFrames = new LottieFrames(
-    async (src) => {
-      const builtin = builtinLottieUrl(src);
-      if (builtin) {
-        const response = await fetch(builtin).catch(() => null);
-        return response?.ok ? response.text() : null;
-      }
-      return (await this.bytesOf(src))?.text() ?? null;
-    },
-    () => this.onChange(),
-  );
   private refreshing: Promise<void> | null = null;
   /** Đang phát thì thẻ video tự chạy; dừng thì mỗi lượt vẽ tua thẻ về đúng giây. */
   playing = false;
@@ -206,7 +194,6 @@ export class BrowserMedia implements MediaHost {
     for (const [key, value] of this.images) if (value === "failed") (this.images.delete(key), (retry = true));
     for (const [key, value] of this.luts) if (value === "failed") (this.luts.delete(key), (retry = true));
     for (const [key, value] of this.transcripts) if (value === "failed") (this.transcripts.delete(key), (retry = true));
-    if (this.lottieFrames.retryFailed()) retry = true;
     for (const [key, entry] of this.elements) {
       if (!entry.failed) continue;
       entry.el.removeAttribute("src");
@@ -245,10 +232,6 @@ export class BrowserMedia implements MediaHost {
     return el as HTMLVideoElement;
   }
 
-  lottie(src: AssetInput, seconds: number, width: number, height: number, loop: boolean): MediaResult {
-    return this.lottieFrames.frame(src, seconds, width, height, loop);
-  }
-
   duration(src: AssetInput): number | null {
     return (this.elements.get(keyOf(src)) ?? this.elements.get(audioKeyOf(src)))?.duration ?? null;
   }
@@ -280,9 +263,6 @@ export class BrowserMedia implements MediaHost {
         if (kind === "transcript") return typeof src === "string" ? this.loadTranscript(src) : undefined;
         if (kind === "image") return this.loadImage(src);
         if (kind === "lut") return typeof src === "string" ? this.loadLut(src) : undefined;
-        // Lottie nạp khi renderer xin khung đầu (không chặn dựng cây: độ dài
-        // node lottie không phụ thuộc file).
-        if (kind === "lottie") return undefined;
         const entry = this.element(src, kind);
         await this.whenReady(entry);
       }),
@@ -336,7 +316,6 @@ export class BrowserMedia implements MediaHost {
     }
     this.elements.clear();
     for (const image of this.images.values()) if (typeof image === "object") image.close();
-    this.lottieFrames.dispose();
     for (const url of this.localUrls.values()) URL.revokeObjectURL(url);
     void this.audio?.close();
   }

@@ -1,0 +1,29 @@
+{
+  "id": "product-tour",
+  "title": "Product tour",
+  "description": "A whole product moment in one flow: the opening lines stream in, a prompt box types the ask and a cursor presses the button, the box grows into the product's dashboard, the camera pushes in on the key number as it rolls up, then the name and the call to action. 14 s, silent, 16:9.",
+  "kind": "clip",
+  "format": "16:9",
+  "seconds": 14,
+  "slots": [
+    { "name": "name", "kind": "text", "note": "The product name, 3-14 characters.", "default": "Lumen" },
+    { "name": "opening", "kind": "text", "note": "Two short opening lines split by |, at most 20 characters each.", "default": "One idea.|A finished video." },
+    { "name": "prompt", "kind": "text", "note": "What the user types into the product, at most 48 characters.", "default": "Turn my launch notes into a 30-second demo" },
+    { "name": "button", "kind": "text", "note": "The button label, one or two words.", "default": "Create" },
+    { "name": "metricLabel", "kind": "text", "note": "What the key number counts, at most 18 characters.", "default": "Shipped this week" },
+    { "name": "metric", "kind": "text", "note": "The key number, digits with an optional suffix like % or k. Only a number the user gave you.", "default": "128" },
+    { "name": "cta", "kind": "text", "note": "The call to action, at most 16 characters.", "default": "Try it free" },
+    { "name": "screenshot", "kind": "image", "note": "The user's own dashboard screenshot from the library, as an asset name; null draws a simple dashboard.", "default": "null" },
+    { "name": "background", "kind": "color", "note": "The field; light works best.", "default": "#F6F4EF" },
+    { "name": "ink", "kind": "color", "note": "Text and the dark metric card.", "default": "#16181D" },
+    { "name": "accent", "kind": "color", "note": "The button, the chart line and the call to action.", "default": "#FF6A55" }
+  ],
+  "beats": [
+    { "say": "The opening lines stream in.", "label": "Opening lines", "visual": "Two big lines stream in letter by letter from a blur in the centre, then rise away.", "seconds": 2.4 },
+    { "say": "The ask is typed and the button pressed.", "visual": "A white prompt box rises in; the prompt types itself with a caret; a cursor glides to the button and presses it.", "seconds": 3.2 },
+    { "say": "The box grows into the dashboard.", "visual": "The prompt box's rectangle grows into a large dashboard panel; three cards rise in one after another and a chart line draws on.", "seconds": 3.6 },
+    { "say": "The camera pushes in on the key number.", "label": "Key number", "visual": "The camera pushes in on the dark metric card while its number rolls up.", "seconds": 2.4 },
+    { "say": "The name and the call to action.", "label": "Name and CTA", "visual": "The camera pulls back as the panel leaves; the product name and a call-to-action pill rise in.", "seconds": 2.4 }
+  ],
+  "source": { "repo": "opus-pro/opusclip-video-tools", "path": "templates/agent-opus (method; the scene is OpenCMO's own)", "license": "MIT" }
+}

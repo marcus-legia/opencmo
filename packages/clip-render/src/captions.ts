@@ -1,5 +1,5 @@
 /**
- * `<captions>`: 7 preset, giống hệt cái người dùng chọn trong fork (spec Q3).
+ * `<captions>`: 9 presets: the 7 of the fork (spec Q3), plus `flare` and `slam` learned from AI Producer's patterns.
  *
  * Mỗi khung, preset dựng một `<text>` ẢO (chữ của nhóm từ đang nói, kiểu chữ của
  * preset, range nhấn, bóng, paint) rồi đi đúng đường dàn dòng và vẽ của chữ.
@@ -88,7 +88,29 @@ const PRESETS: Record<NonNullable<CaptionsNode['preset']>, Preset> = {
     style: { fontFamily: 'Figtree', fontWeight: 800, fontSize: 70, textAlign: 'center', textBaseline: 'middle', textCase: 'upper', leading: 1 },
     fill: null,
   },
+  // AI Producer's `lead-in-flare` (MIT, learned from the pattern's description; our own drawing): the phrase runs in
+  // a quiet sans, then its payoff word lands on its own line in a big serif italic in the accent.
+  flare: {
+    box: [860, 260],
+    align: 'center',
+    limit: { length: 26 },
+    style: { fontFamily: 'Inter', fontWeight: 600, fontSize: 52, textAlign: 'center', textBaseline: 'middle', textCase: 'original', leading: 1.05 },
+    fill: '#FFFFFF',
+  },
+  // AI Producer's `tilt-slam`: loud uppercase phrases, the loudest word on a tilted accent slab (sticker energy).
+  slam: {
+    box: [820, 220],
+    align: 'center',
+    limit: { length: 16 },
+    style: { fontFamily: 'Archivo Black', fontWeight: 400, fontSize: 66, textAlign: 'center', textBaseline: 'middle', textCase: 'upper', leading: 1.1 },
+    fill: '#FFFFFF',
+  },
 };
+
+const FLARE_FONT = 'Fraunces';
+const FLARE_SCALE = 1.7;
+const SLAM_COLOR = '#FFD400';
+const SLAM_ANGLE = -4;
 
 const SPOTLIGHT = '#24D5FF';
 const GUINEA = ['#F55353', '#FEB139', '#F6F54D'];
@@ -289,6 +311,19 @@ function emphasisRanges(node: CaptionsNode, shown: TranscriptWord[], t: number, 
 
 // ------------------------------------------------------------------ một khung
 
+/** The word a pattern lands on: the first emphasized one, else the last word or the longest (ties: the later). */
+function payoffIndex(node: CaptionsNode, group: TranscriptWord[], fallback: 'last' | 'longest'): number {
+  const emphasis = node.emphasis ?? [];
+  const marked = emphasis.length ? group.findIndex((word) => isEmphasized(word, emphasis)) : -1;
+  if (marked >= 0) return marked;
+  if (fallback === 'last') return group.length - 1;
+  let best = 0;
+  group.forEach((word, index) => {
+    if (word.text.replace(/\W/g, '').length >= group[best]!.text.replace(/\W/g, '').length) best = index;
+  });
+  return best;
+}
+
 export type CaptionFrame = {
   /** Chữ nền trước animation chữ. */
   text: string;
@@ -296,8 +331,8 @@ export type CaptionFrame = {
   node: TextNode;
   /** Khoá trạng thái (nhóm + dòng nhấn) — guinea đếm số lần nó đổi. */
   state: string | null;
-  /** `highlight: 'block'`: range (cùng tham chiếu trong `node.ranges`) của từ đang nói + màu hộp. */
-  block?: { range: TextRange; color: string };
+  /** `highlight: 'block'` (the word being spoken) or `slam` (the loudest word): its range in `node.ranges`, the box colour, and a tilt in degrees. */
+  block?: { range: TextRange; color: string; angle?: number };
   /** `highlight: 'pop'` (E4): range của từ đang nói, phóng `scale` quanh tâm từ, chữ màu nhấn. */
   pop?: { range: TextRange; scale: number };
 };
@@ -405,12 +440,48 @@ export function captionFrame(node: CaptionsNode, groups: TranscriptWord[][], t: 
       break;
     case 'whisper':
       break;
+    case 'flare':
+    case 'slam':
+      base.shadows = [{ color: '#000000', blur: 24, offsetX: 0, offsetY: 4, opacity: 0.85 } satisfies Shadow];
+      break;
   }
   const shown = node.preset === 'cascade' ? group.filter((word) => word.start <= t) : group;
   ranges.push(...emphasisRanges(node, shown, t, base, preset.fill ? (node.color ?? preset.fill) : null));
+  let slab: CaptionFrame['block'];
+  if (node.preset === 'flare' && group.length > 1) {
+    // The payoff is the emphasized word, else the phrase's last; it lands only once it is spoken, so the line reads
+    // as a lead-in that resolves.
+    const payoff = payoffIndex(node, group, 'last');
+    const lead = group.filter((_, index) => index !== payoff);
+    const word = group[payoff]!;
+    text = joined(lead);
+    // Emphasis ranges were measured on the whole phrase; the flare re-sets the text and is the emphasis itself.
+    ranges.length = 0;
+    if (t >= word.start) {
+      const start = text.length + 1;
+      text = `${text}\n${word.text}`;
+      const rise = Math.min(1, Math.max(0, (t - word.start) / 0.12));
+      ranges.push({
+        start,
+        end: text.length,
+        fontFamily: node.emphasisStyle?.fontFamily ?? FLARE_FONT,
+        fontStyle: node.emphasisStyle?.fontStyle ?? 'italic',
+        fontWeight: 600,
+        fontSize: (base.fontSize ?? 52) * FLARE_SCALE * (1.12 - 0.12 * rise),
+        // Full ink at once (a mix toward black reads as grey on video); the landing is the size settling.
+        paints: [{ type: 'solid', color: node.emphasisStyle?.color ?? colors[0] ?? '#FFFFFF' }],
+      });
+    }
+  } else if (node.preset === 'slam') {
+    const loud = payoffIndex(node, group, 'longest');
+    const range: TextRange = { start: joined(group.slice(0, loud)).length + (loud > 0 ? 1 : 0), end: joined(group.slice(0, loud + 1)).length, color: BLOCK_TEXT };
+    ranges.push(range);
+    slab = { range, color: colors[0] ?? SLAM_COLOR, angle: SLAM_ANGLE };
+  }
   if (ranges.length) base.ranges = ranges;
   base.text = text;
   const frame: CaptionFrame = { text, node: base, state };
+  if (slab) frame.block = slab;
   // Hộp nhấn chỉ khi chữ trên màn đúng là các từ của nhóm theo thứ tự (paper/guinea xuống dòng riêng).
   if (node.highlight === 'pop' && text === joined(group.filter((word) => word.start <= t || node.preset !== 'cascade'))) {
     const spoken = group.findIndex((word) => t >= word.start && t <= word.end);

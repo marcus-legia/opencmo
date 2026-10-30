@@ -1,21 +1,19 @@
 # clip-media
 
-Font và bộ Lottie có sẵn của clip — **một bản** cho mọi nơi vẽ chữ/Lottie (R7c).
+Clip fonts — **one copy** for every place that draws text (R7c).
 
-| Thư mục | Ai đọc |
+| Folder | Read by |
 |---|---|
-| `fonts/` (32 họ, OFL/Apache) | clip-render (Node + trình duyệt), clip-export, clip-three (Brand Kit), parity, eval agent, web (`/fonts/`) |
-| `lottie/` (bộ tự vẽ CC0 + `emoji/` Noto CC BY 4.0) | clip-export (`builtin:<tên>`), editor-core (`find_lotties`), web (`/lottie/`) |
+| `fonts/` (32 families, OFL/Apache) | clip-render (Node + browser), clip-export, clip-motion, parity, the agent eval, web (`/fonts/`) |
 
-Web không đọc thẳng ở đây: CSP `font-src 'self'` bắt font cùng origin, nên
-`apps/web/scripts/sync-media.mts` chép hai thư mục sang `apps/web/public/` trước
-`next dev`/`next build` (hai đích đó nằm trong `.gitignore`). Chép chứ không symlink:
-build trên Vercel không giữ symlink trỏ ra ngoài thư mục app.
+The web does not read from here directly: CSP `font-src 'self'` needs same-origin fonts, so
+`apps/web/scripts/sync-media.mts` copies the folder into `apps/web/public/` before `next dev` /
+`next build` (the target is in `.gitignore`). Copied, not symlinked: a Vercel build does not keep a
+symlink that points outside the app folder.
 
-Worker/Modal đọc qua `OPENCMO_EDITOR_FONTS` và `OPENCMO_EDITOR_LOTTIE`. Lottie
-`builtin:` KHÔNG suy từ thư mục font: dời một bên mà quên bên kia là Lottie rỗng mà
-không lỗi nào báo.
+The worker on Modal reads it through `OPENCMO_EDITOR_FONTS`.
 
-Không phải workspace npm: không ai import nó như module, chỉ đọc file.
-Thêm font: `apps/web/scripts/fetch-fonts.mts`; thêm Lottie: `build-lottie-pack.mts`,
-`fetch-noto-emoji.mts` — cả ba ghi thẳng vào đây.
+Not an npm workspace: nothing imports it as a module, files are only read.
+Add a font with `apps/web/scripts/fetch-fonts.mts`, which writes straight here.
+
+The Lottie pack (`lottie/`, with the Noto animated emoji) was removed on 2026-10-24 with Lottie support.

@@ -8,8 +8,6 @@ import { area, place, plotPoint, type AreaName, type Box } from './areas.ts';
 import { DotField, Spectrogram, Waveform } from './canvas.tsx';
 import { kitError } from './context.tsx';
 import { spectrogram, trend } from './data.ts';
-import { LOTTIE_NAMES } from './lotties.ts';
-import { Lottie } from './lottie.tsx';
 import { Board, BOARD_KINDS, Headline } from './board.tsx';
 import { Arrow, Burst, Group, Path, Shape, SHAPE_KINDS } from './shapes.tsx';
 import { Axes, Box as BoxMark, Check, FitLine, Icon, ICON_NAMES, Link, Scatter } from './marks.tsx';
@@ -17,7 +15,15 @@ import { ease, enter, lerp, morph, random, stagger } from './motion.ts';
 import { Camera, Stage } from './stage.tsx';
 import { makeDevices } from './devices.tsx';
 import { makeImage } from './image.tsx';
-import { FAMILY } from '../remotion/fonts.ts';
+import { Mark } from './mark.tsx';
+import { curves, drawOn, handoff, noise, phases, poseBlur, retime, shots, smear, snap, speedBlur, travel, tween } from './curves.ts';
+import { oklab } from './color.ts';
+import { auditChecks, makeAudit, type AuditCheck } from './audit.ts';
+import { Streak } from './streak.tsx';
+import { Fill, Goo, GradientField, Grain, LightSweep, MotionBlur, ShaderField, Vignette } from './fx.tsx';
+import { makeShot, useShot } from './shot.tsx';
+import { measure, Text, TypeStream } from './type.tsx';
+import { FAMILY, fontFamily, LIBRARY } from '../remotion/fonts.ts';
 import { Counter, Label, Mono, Title } from './text.tsx';
 import { makePalette } from './theme.ts';
 import { buildTimeline, cueFrame, type Timeline } from './timing.ts';
@@ -32,7 +38,37 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		if (!Number.isInteger(i) || !span) throw kitError(`kit.beat(${i}): this job has ${timeline.beats.length} beats (0–${timeline.beats.length - 1}).`);
 		return span;
 	};
-	return Object.freeze({
+	const Shot = makeShot(beatAt, timeline.beats.length);
+	const owner = {};
+	const audit = makeAudit(owner, (name) => area(name, size.width, size.height));
+	const kit = Object.freeze({
+		// Core: free-form scenes are built from these (read_guide "explainer", "Core")
+		Mark,
+		Text,
+		TypeStream,
+		measure,
+		Shot,
+		useShot,
+		curves,
+		tween,
+		noise,
+		drawOn,
+		speedBlur,
+		travel,
+		snap,
+		smear,
+		Streak,
+		retime,
+		shots,
+		poseBlur,
+		phases,
+		handoff,
+		oklab,
+		audit,
+		fx: Object.freeze({ GradientField, ShaderField, Grain, Vignette, LightSweep, Fill, MotionBlur, Goo }),
+		font: Object.freeze({ ...FAMILY, ...Object.fromEntries(Object.keys(LIBRARY).map((name) => [name, fontFamily(name)])) }),
+		fonts: Object.freeze(Object.fromEntries(Object.entries(LIBRARY).map(([name, { weights }]) => [name, weights]))),
+		// Library: ready-made pieces, used only when they are the clearest picture
 		// Layout
 		Stage,
 		Camera,
@@ -70,16 +106,12 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		Check,
 		Icon,
 		icons: ICON_NAMES,
-		Lottie,
-		lotties: LOTTIE_NAMES,
 		// The user's own images (job.assets), by name
 		Image,
 		images: Object.freeze((job.assets ?? []).map((asset) => asset.name)),
 		// Device frames for product moments
 		Phone,
 		Browser,
-		// CSS font families, for text a scene sets itself (display: brand moments and product titles)
-		font: Object.freeze({ ...FAMILY }),
 		Shape,
 		shapes: SHAPE_KINDS,
 		Path,
@@ -108,6 +140,16 @@ export function makeKit(job: MotionJob, size: { width: number; height: number },
 		// Colour
 		color: Object.freeze({ ...palette }),
 	});
+	owners.set(kit, owner);
+	return kit;
+}
+
+const owners = new WeakMap<object, object>();
+
+/** The checks a scene declared with kit.audit (read by the layout probe). */
+export function kitAudit(kit: object): AuditCheck[] {
+	const owner = owners.get(kit);
+	return owner ? auditChecks(owner) : [];
 }
 
 export type Kit = ReturnType<typeof makeKit>;

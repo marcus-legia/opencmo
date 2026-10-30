@@ -81,7 +81,7 @@ export function getBundle(log?: Log): Promise<string> {
 	return bundled;
 }
 
-/** Chromium flags from clip-three: no background traffic, no network outside the bundle server. */
+/** Chromium flags: no background traffic, no network outside the bundle server. */
 const QUIET = ['--disable-background-networking', '--disable-component-update', '--disable-sync', '--no-first-run', '--disable-default-apps'];
 const OFFLINE = [
 	'--proxy-server=http://127.0.0.1:9',

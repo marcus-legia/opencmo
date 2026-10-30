@@ -3093,26 +3093,6 @@ html[data-theme] .rail-avatar {
   background: var(--ds-peach);
   color: var(--ds-accent-ink);
 }
-.ed2-emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-  gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-.ed2-emoji {
-  height: 36px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-.ed2-emoji:hover:not(:disabled) {
-  background: var(--ds-raised);
-  border-color: var(--ds-line);
-}
 .ed2-primary {
   background: var(--ds-peach);
   border-color: var(--ds-peach);

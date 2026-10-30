@@ -26,14 +26,12 @@ MAX_MEDIA_BYTES = 2 * 1024 * 1024 * 1024
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
 # LUT 65³ dạng chữ ~8 MB; trần 12 MB đủ mọi LUT thật mà không cho file rác lớn.
 MAX_LUT_BYTES = 12 * 1024 * 1024
-# Lottie: JSON có ảnh nhúng base64 có thể vài MB; trần 8 MB đủ mọi hoạt hình thật.
-MAX_LOTTIE_BYTES = 8 * 1024 * 1024
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 # Music and sound effects the user adds: Export runs on the server and needs a stored copy (they
 # used to stay on the device that imported them, and Export failed with "only saved on the device").
 AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "ogg", "flac"}
 MAX_AUDIO_BYTES = 200 * 1024 * 1024
-BAD_MEDIA = "Choose a playable video, an MP3, WAV, M4A, AAC, OGG or FLAC sound, a PNG, JPEG or WebP image, a Lottie .json animation, or a 3D .cube LUT."
+BAD_MEDIA = "Choose a playable video, an MP3, WAV, M4A, AAC, OGG or FLAC sound, a PNG, JPEG or WebP image, or a 3D .cube LUT."
 
 
 def cube_size(text: str) -> int:
@@ -96,7 +94,8 @@ def process(store: Any, task: Task) -> None:
         _probe_lut(store, task, object_name)
         return
     if extension == "json":
-        _probe_lottie(store, task, object_name)
+        # Lottie uploads were removed (2026-10-24): a .json is refused without being read.
+        _reject(store, task, object_name)
         return
     if extension in AUDIO_EXTENSIONS:
         _probe_audio(store, task, object_name)
@@ -172,54 +171,13 @@ def _probe_audio(store: Any, task: Task, object_name: str) -> None:
                 store.remove_objects("media", [object_name])
 
 
-def lottie_info(text: str) -> tuple[int, int, float]:
-    """(rộng, cao, giây) của một Lottie đọc được — cùng luật `lottieInfo` (clip-assets), ném
-    ValueError/TypeError khi không phải Lottie. Worker kiểm trước để export không gặp file hỏng."""
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise TypeError("not a Lottie object")
-    fr, w, h = data.get("fr"), data.get("w"), data.get("h")
-    if not isinstance(data.get("v"), str) or not isinstance(data.get("layers"), list):
-        raise TypeError("missing Lottie fields")
-    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 for value in (fr, w, h)):
-        raise ValueError("bad Lottie size or frame rate")
-    # Skottie (native) vẽ file này trên worker export: tài nguyên NGOÀI (`u` + `p` là đường dẫn)
-    # có thể trỏ tới file khác trên máy rồi lên video xuất ra. Chỉ nhận ảnh nhúng `data:`.
-    assets = data.get("assets") or []
-    if not isinstance(assets, list):
-        raise TypeError("bad Lottie assets")
-    for asset in assets:
-        if not isinstance(asset, dict):
-            raise TypeError("bad Lottie asset")
-        if "p" in asset and not (asset.get("e") == 1 and str(asset.get("p", "")).startswith("data:")):
-            raise ValueError("Lottie references an external file")
-    ip = data.get("ip") if isinstance(data.get("ip"), (int, float)) else 0
-    op = data.get("op") if isinstance(data.get("op"), (int, float)) else 0
-    return int(w), int(h), max(0.0, round((op - ip) / fr, 3))
-
-
-def _probe_lottie(store: Any, task: Task, object_name: str) -> None:
-    """Lottie `.json` (G4): lên Storage để export trên server vẽ được bằng Skottie. Chỉ đọc
-    JSON — không chạy gì, không ffmpeg; width/height/duration để thư viện hiện như mọi media."""
-    with tempfile.TemporaryDirectory(prefix="opencmo-probe-") as tmp:
-        local = Path(tmp) / "animation.json"
-        try:
-            store.download_object("media", object_name, local, max_bytes=MAX_LOTTIE_BYTES)
-            width, height, duration = lottie_info(local.read_text(encoding="utf-8", errors="strict"))
-        except TransientError:
-            raise
-        except Exception:
-            log.info("Lottie %s không đọc được", task.asset_id, exc_info=True)
-            won = store.complete_media_probe(
-                task.asset_id, task.attempt_id,
-                duration=None, width=None, height=None, ok=False, error=BAD_MEDIA,
-            )
-            if won:
-                store.remove_objects("media", [object_name])
-            return
-        store.complete_media_probe(
-            task.asset_id, task.attempt_id, duration=duration or None, width=width, height=height, ok=True, error=None,
-        )
+def _reject(store: Any, task: Task, object_name: str) -> None:
+    won = store.complete_media_probe(
+        task.asset_id, task.attempt_id,
+        duration=None, width=None, height=None, ok=False, error=BAD_MEDIA,
+    )
+    if won:
+        store.remove_objects("media", [object_name])
 
 
 def _probe_lut(store: Any, task: Task, object_name: str) -> None:
