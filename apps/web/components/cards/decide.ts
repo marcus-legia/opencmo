@@ -5,8 +5,10 @@
  */
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { CAPTION_ACTION, DECIDABLE_IN_WAVE_1, type ApprovalCard, type Caption } from "@/lib/screens/approval-card";
-import type { Platform } from "@/lib/screens/common";
+import { CAPTION_ACTION, DECIDABLE_IN_WAVE_1, type ApprovalCard, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
+import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
+
+import { formatWhen } from "./schedule";
 
 /** The actions `approval_decide` accepts, per kind (contract doc S3). */
 export type Decision =
@@ -22,14 +24,25 @@ export type Decision =
   /** Script and price cards: stop the video here; nothing more is spent (keyframes already made stay paid for). */
   | { action: "cancel"; reason?: string }
   /** Finished video and shorts batch: not yet, with what to change. */
-  | { action: "send_back"; reason?: string };
+  | { action: "send_back"; reason?: string }
+  /** Schedule (P4): a new time in UTC `YYYY-MM-DDTHH:MM:SSZ`; the slot moves and a new card asks again. */
+  | { action: "change_time"; publish_at: string }
+  /** Schedule: the platform's fields changed; a new card asks again. */
+  | { action: "set_options"; options: ScheduleOptions }
+  /** Schedule: a failed post goes again on the same approval while its time is still in the window. */
+  | { action: "retry" };
 
 /** Declining spends nothing, so a card that waits on credits can still be cancelled or set aside. */
 const DECLINES: ReadonlySet<Decision["action"]> = new Set(["skip", "dismissed", "reject", "cancel", "send_back"]);
 
+/** What a schedule card whose post failed still offers: try again, move it, or drop it. */
+const AFTER_FAILURE: ReadonlySet<Decision["action"]> = new Set(["retry", "change_time", "cancel"]);
+
 /** Why the card cannot be decided here (with `action`, that decision), or null when it can. */
 export function blockedReason(card: ApprovalCard, sample: boolean, action?: Decision["action"]): string | null {
-  if (card.problem && !(card.problem.kind === "needs_credits" && action && DECLINES.has(action))) return card.problem.text;
+  const allowed =
+    (card.problem?.kind === "needs_credits" && action && DECLINES.has(action)) || (card.problem?.kind === "failed" && card.kind === "schedule" && action && AFTER_FAILURE.has(action));
+  if (card.problem && !allowed) return card.problem.text;
   if (card.status !== "waiting") return "This card was already decided.";
   if (sample) return null;
   if (!DECIDABLE_IN_WAVE_1.has(card.kind)) return "Decisions on this card open with its department's release.";
@@ -100,7 +113,14 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       return card.kind === "correction" ? `Dismissed. Drafts stay as they are${suffix}.` : `Rejected${suffix}.`;
     case "redo":
       return `Making keyframe ${decision.index + 1} again. A new card comes when it is ready${suffix}.`;
+    case "change_time":
+      return `New time saved. A new card asks you to approve it${suffix}.`;
+    case "set_options":
+      return `Changes saved. A new card asks you to approve them${suffix}.`;
+    case "retry":
+      return `Trying again now. The card comes back if it fails${suffix}.`;
     case "cancel":
+      if (card.kind === "schedule") return `Cancelled. Nothing will be posted${suffix}.`;
       // Card 2 comes after the keyframes were made and paid for: only card 1 is cancelled before any spend.
       return card.kind === "price" ? `Cancelled. Nothing more will be spent${suffix}.` : `Cancelled. No credits were spent${suffix}.`;
     case "send_back":
@@ -120,6 +140,12 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
       if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;
       if (card.kind === "correction") return `Kept as a rule. Every draft follows it${suffix}.`;
+      if (card.body.kind === "schedule") {
+        const when = formatWhen(card.body.at, card.body.timezone);
+        return card.body.mode === "publish"
+          ? `Approved. It posts on ${PLATFORM_LABEL[card.body.where.platform]} on ${when}, your time${suffix}.`
+          : `Approved. On ${when} a card gives you the post to copy and open${suffix}.`;
+      }
       if (card.body.kind === "shorts_batch") return `Approved ${card.body.shorts.length} shorts. They are ready to schedule${suffix}.`;
       return `Approved${suffix}.`;
   }

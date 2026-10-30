@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
-import { Tabs } from "@/components/ui";
-import type { CardBody } from "@/lib/screens/approval-card";
+import { Tabs, Toggle } from "@/components/ui";
+import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
 import { CaptionList, charCount, type SaveCaption } from "./captions";
 import { formatSeconds } from "./labels";
+import { AI_LABEL_PLATFORMS, PRIVACY_LABEL, TIKTOK_MUSIC_TERMS, formatWhen } from "./schedule";
 
 type Body<K extends CardBody["kind"]> = Extract<CardBody, { kind: K }>;
 
@@ -344,24 +346,129 @@ export function SlideshowBody({
   );
 }
 
-export function ScheduleBody({ body }: { body: Body<"schedule"> }) {
-  const when = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(body.at));
+/**
+ * Schedule: what goes out, where and when (in the founder's zone), and the platform's own fields. Changing a field
+ * here is a draft: saving it raises a new card, because what was approved must be exactly what posts.
+ */
+export function ScheduleBody({
+  body,
+  cardId,
+  options,
+  onOptions,
+  editable,
+}: {
+  body: Body<"schedule">;
+  cardId: string;
+  options: ScheduleOptions;
+  onOptions: (options: ScheduleOptions) => void;
+  /** Null when the fields may be changed now, else why not. */
+  editable: string | null;
+}) {
+  const platform = PLATFORM_LABEL[body.where.platform];
+  const tiktok = body.mode === "publish" && body.where.platform === "tiktok" ? body.tiktok : null;
+  const aiLabel = body.mode === "publish" && AI_LABEL_PLATFORMS.has(body.where.platform);
+  const set = (patch: Partial<ScheduleOptions>) => onOptions({ ...options, ...patch });
+  const off = (account: boolean) => (account ? "Turned off for this account in TikTok." : (editable ?? undefined));
+
   return (
     <>
       <p className="v2-card-strong">{body.what}</p>
+      {body.preview.videoUrl ? (
+        <div className="v2-card-player is-tall">
+          <video src={body.preview.videoUrl} controls preload="metadata" playsInline />
+        </div>
+      ) : null}
+      {body.preview.title || body.preview.text ? (
+        <div className="v2-card-draft">
+          {body.preview.title ? <b>{body.preview.title}</b> : null}
+          {body.preview.title && body.preview.text ? <br /> : null}
+          {body.preview.text}
+        </div>
+      ) : null}
       <dl className="v2-card-facts">
         <div>
           <dt>Where</dt>
-          <dd>
-            {PLATFORM_LABEL[body.where.platform]} · {body.where.handle}
+          <dd className="v2-card-account">
+            {body.mode === "publish" ? (
+              <>
+                {body.avatarUrl ? <img src={body.avatarUrl} alt="" width={20} height={20} /> : null}
+                <span>
+                  {platform} · {body.where.handle}
+                </span>
+              </>
+            ) : (
+              <span>{platform} · no account connected</span>
+            )}
           </dd>
         </div>
         <div>
-          <dt>When (your time)</dt>
-          <dd className="v2-num">{when}</dd>
+          <dt>When (your time, {body.timezone})</dt>
+          <dd className="v2-num">{formatWhen(body.at, body.timezone)}</dd>
         </div>
       </dl>
-      {body.why ? <div className="v2-card-meta">Why: {body.why}</div> : null}
+
+      {tiktok ? (
+        <fieldset className="v2-card-options">
+          <legend>TikTok</legend>
+          <label className="v2-field" htmlFor={`${cardId}-privacy`}>
+            Who can see it
+            <select
+              id={`${cardId}-privacy`}
+              className="v2-input is-compact"
+              value={options.privacy ?? ""}
+              disabled={!!editable}
+              title={editable ?? undefined}
+              onChange={(event) => set({ privacy: event.target.value || undefined })}
+            >
+              <option value="">Choose who can see it</option>
+              {tiktok.privacyLevels.map((level) => (
+                <option key={level} value={level}>
+                  {PRIVACY_LABEL[level] ?? level}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="v2-card-toggles">
+            <Toggle checked={!tiktok.commentDisabled && !!options.allow_comment} disabled={tiktok.commentDisabled || !!editable} title={off(tiktok.commentDisabled)} onChange={(on) => set({ allow_comment: on })}>
+              Comments
+            </Toggle>
+            <Toggle checked={!tiktok.duetDisabled && !!options.allow_duet} disabled={tiktok.duetDisabled || !!editable} title={off(tiktok.duetDisabled)} onChange={(on) => set({ allow_duet: on })}>
+              Duet
+            </Toggle>
+            <Toggle checked={!tiktok.stitchDisabled && !!options.allow_stitch} disabled={tiktok.stitchDisabled || !!editable} title={off(tiktok.stitchDisabled)} onChange={(on) => set({ allow_stitch: on })}>
+              Stitch
+            </Toggle>
+          </div>
+        </fieldset>
+      ) : null}
+      {aiLabel ? (
+        <div className="v2-card-option">
+          <Toggle checked={!!options.ai_label} disabled={!!editable} title={editable ?? undefined} onChange={(on) => set({ ai_label: on })}>
+            AI-generated label
+          </Toggle>
+          <span className="v2-field-hint">Turn it on when the picture was made with AI. {platform} shows the label on the post.</span>
+        </div>
+      ) : null}
+
+      <div className="v2-card-meta">
+        {body.why ? <span>Why this time: {body.why}</span> : null}
+        {body.mode === "publish" ? (
+          <span>You approve when it posts: it goes out on your {platform} account at this time, as shown here.</span>
+        ) : (
+          <span>
+            No account connected: at this time a card gives you the post to copy and open. <Link href="/app/settings#settings-connected-accounts">Connect {platform}</Link> to have it posted.
+          </span>
+        )}
+        {tiktok ? (
+          <span>
+            By posting, you agree to TikTok’s{" "}
+            <a href={TIKTOK_MUSIC_TERMS} target="_blank" rel="noopener noreferrer">
+              Music Usage Confirmation
+            </a>
+            .
+          </span>
+        ) : null}
+      </div>
     </>
   );
 }
