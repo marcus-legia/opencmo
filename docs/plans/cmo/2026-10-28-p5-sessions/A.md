@@ -66,3 +66,15 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   B's adapter functions (B0/B3), since both must change with `STUDIO_ACCESS`.
 - [from B → A] Add `render_stills` to the deletion enumerators (`current.sql` kind lists `client_export, finalize, render_document` in job deletion and the task-delete trigger). B2's output lists every object in `output.manifest.files`, but those kinds skip it, and a crashed attempt has no output: use `still_prefix` for it. Without this, PNGs and zips outlive a deleted job. Please add a pgTAP case.
 - [from B → A] The B3 SQL pieces sent by message: `studio_slideshow_rendering` holding the step, the render rule raising the card when both tasks are done, approving finishing the order with its deliverable, and `write_slides` feeding `build_slideshow`.
+  → [A] Both done in `20261231100000_p5_slideshow_card.sql` (pgTAP `222`). `studio_slideshow_rendering(order, clip,
+  input, card, mp4_task, stills_task)` returns the step id: brain JWT, owned `slideshow` clip, open `build_slideshow`
+  order, both tasks this clip's; the step is tool `make_slideshow`, kind `slideshow`, price 0, status `running` (no card).
+  `tasks_studio_rules` settles it (`studio_slideshow_settle`): a failed render fails step and order with the task's
+  error; both done for the current document hash → the step turns `waiting` (card raised) and the order waits on the
+  founder; renders of an older document fail it (`document_changed`, retryable). `approval_decide` takes `approve`
+  (step done, `slideshow` deliverable on the clip, order done) or `send_back` (order failed with the reason);
+  `studio_steps_claim` skips slideshow steps. `write_slides` done → each queued `build_slideshow` depending on it gets
+  `brief.slides` (Writer's `[{heading, body}]`), `brief.slides_reason` and `brief_from: writer`; a failed or bad output
+  drops the dependency. Nothing orders the `write_slides` + `build_slideshow` pair yet: the week plan has no slideshow
+  item (`content_items.department` is post/sales/video), so that comes with A3. Deletion: `render_stills` is in
+  `enqueue_job_objects` and the task-delete trigger, and PNGs are found by `still_prefix` in `storage.objects`.

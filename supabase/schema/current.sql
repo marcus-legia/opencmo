@@ -1664,7 +1664,7 @@ begin
         raise exception '%', case v_row.kind when 'script' then 'Choose approve, edit a beat or cancel.'
           else 'Choose approve, redo a keyframe or cancel.' end using errcode = '22023';
       end if;
-      select * into v_step from public.studio_steps where id = v_row.ref_id and user_id = v_user for update;
+      select * into v_step from public.studio_steps where id = v_row.ref_id and user_id = v_user and kind in ('script', 'price') for update;
       if not found or v_step.status <> 'waiting' then
         raise exception 'This card was already decided.' using errcode = 'P0001';
       end if;
@@ -1761,6 +1761,37 @@ begin
             'repair_hint', 'Cut different ranges from the same finished edit.'));
         end if;
         perform public.approval_close('short_batch', v_batch.id, 'skipped');
+      end if;
+    when 'slideshow' then
+      -- Rendered before the card was raised, so approving runs nothing: the step and its order finish here and the
+      -- MP4 becomes the slideshow deliverable Schedule picks up (A3). Text edits happen in the Slides view, which
+      -- changes the document and raises a new card.
+      if p_action not in ('approve', 'send_back') then
+        raise exception 'Choose approve or send back.' using errcode = '22023';
+      end if;
+      select * into v_step from public.studio_steps where id = v_row.ref_id and user_id = v_user and kind = 'slideshow' for update;
+      if not found or v_step.status <> 'waiting' then
+        raise exception 'This card was already decided.' using errcode = 'P0001';
+      end if;
+      if p_action = 'approve' then
+        update public.studio_steps set status = 'done', decision = 'approve', decided_at = now() where id = v_step.id;
+        if v_step.order_id is not null then
+          insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+          values (v_user, v_step.order_id, 'slideshow', 'clip', v_step.clip_id, 'ready')
+          on conflict (ref_kind, ref_id) do nothing;
+          if exists (select 1 from public.work_orders where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+            perform public.work_order_move(v_step.order_id, 'done', 'Slideshow approved');
+          end if;
+        end if;
+      else
+        update public.studio_steps set status = 'cancelled', decision = 'cancel', decided_at = now() where id = v_step.id;
+        -- A failure is data: the order fails with the founder's reason and the progress check replans it.
+        if v_step.order_id is not null and exists (select 1 from public.work_orders
+            where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+          perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'sent_back',
+            'message', coalesce(v_reason, 'The founder sent the slideshow back.'), 'retryable', true,
+            'repair_hint', 'Change what the founder asked, then build the slideshow again.'));
+        end if;
       end if;
     when 'schedule' then
       -- Time, account and platform fields change through schedule_change, which raises the card again; the
@@ -6041,7 +6072,7 @@ $$;
 CREATE FUNCTION public.enqueue_job_objects(p_job_id uuid) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_job public.jobs%rowtype;
   v_rows int;
@@ -6084,7 +6115,15 @@ begin
       from public.tasks t
       left join public.clips c on c.id = t.clip_id
      where (t.job_id = p_job_id or c.job_id = p_job_id)
-       and t.kind in ('client_export', 'finalize', 'render_document')
+       and t.kind in ('client_export', 'finalize', 'render_document', 'render_stills')
+    union
+    -- A still export's PNGs (P5 B2): a crashed attempt has no output manifest, so they are found by the prefix.
+    select 'exports', o.name
+      from public.tasks t
+      left join public.clips c on c.id = t.clip_id
+      join storage.objects o on o.bucket_id = 'exports' and o.name like (t.payload->>'still_prefix') || '-%'
+     where (t.job_id = p_job_id or c.job_id = p_job_id)
+       and t.kind = 'render_stills' and t.payload->>'still_prefix' ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}$'
     union
     select 'media', substring(m.storage_path from 7)
       from public.media_assets m
@@ -6122,7 +6161,7 @@ begin
   get diagnostics v_rows = row_count;
   return v_rows;
 end;
-$$;
+$_$;
 
 
 --
@@ -8055,7 +8094,7 @@ $$;
 CREATE FUNCTION public.record_task_storage_deletions() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare v_job uuid;
 begin
   if public.purge_in_progress() then return old; end if;
@@ -8080,14 +8119,18 @@ begin
     select 'renders', old.output_path
     union
     select coalesce(old.payload->>'bucket', 'exports'), old.payload->>'object'
-      where old.kind in ('client_export', 'finalize', 'render_document')
+      where old.kind in ('client_export', 'finalize', 'render_document', 'render_stills')
+    union
+    select 'exports', o.name from storage.objects o
+     where old.kind = 'render_stills' and old.payload->>'still_prefix' ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}$'
+       and o.bucket_id = 'exports' and o.name like (old.payload->>'still_prefix') || '-%'
   ) as source
   where source.path is not null and source.path <> '' and source.path not like '%..%'
     and source.bucket in ('clips', 'sources', 'renders', 'media', 'exports')
   on conflict (bucket, path) do nothing;
   return old;
 end;
-$$;
+$_$;
 
 
 --
@@ -10691,6 +10734,105 @@ $$;
 
 
 --
+-- Name: studio_slideshow_rendering(uuid, uuid, jsonb, jsonb, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_slideshow_rendering(p_order_id uuid, p_clip_id uuid, p_input jsonb, p_card jsonb, p_mp4_task uuid, p_stills_task uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_clip public.clips;
+  v_id uuid;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  v_clip := public.owned_clip(p_clip_id, v_user);
+  if v_clip.kind <> 'slideshow' then
+    raise exception 'Only a slideshow gets a slideshow card.' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind = 'build_slideshow'
+                 and status not in ('done', 'failed', 'cancelled')) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if p_input is null or jsonb_typeof(p_input) <> 'object' or p_card is null or jsonb_typeof(p_card) <> 'object'
+     or jsonb_typeof(p_card->'slides') is distinct from 'array' or jsonb_array_length(p_card->'slides') not between 1 and 20 then
+    raise exception 'This step is malformed.' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.tasks where id = p_mp4_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_document')
+     or not exists (select 1 from public.tasks where id = p_stills_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_stills') then
+    raise exception 'Queue the MP4 and the PNG set of this slideshow first.' using errcode = '22023';
+  end if;
+  if (select count(*) from public.studio_steps where user_id = v_user and status = 'waiting') >= 20 then
+    raise exception 'Too many Studio cards are waiting. Decide some first.' using errcode = 'P0001';
+  end if;
+  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status)
+  values (v_user, p_clip_id, 'make_slideshow', 'slideshow',
+    p_input || jsonb_build_object('mp4_task', p_mp4_task, 'stills_task', p_stills_task), p_card, 0, p_order_id, 'running')
+  returning id into v_id;
+  -- Both renders may already have ended (a fast worker): settle now rather than wait for a status change.
+  perform public.studio_slideshow_settle(v_id);
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: studio_slideshow_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_slideshow_settle(p_step uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_step public.studio_steps;
+  v_mp4 public.tasks;
+  v_stills public.tasks;
+  v_hash text;
+begin
+  select * into v_step from public.studio_steps where id = p_step and kind = 'slideshow' and status = 'running' for update;
+  if not found then
+    return;
+  end if;
+  select * into v_mp4 from public.tasks where id = (v_step.input->>'mp4_task')::uuid;
+  select * into v_stills from public.tasks where id = (v_step.input->>'stills_task')::uuid;
+  if v_mp4.status in ('failed', 'cancelled') or v_stills.status in ('failed', 'cancelled') then
+    update public.studio_steps set status = 'failed',
+      error = left(coalesce(nullif(case when v_mp4.status in ('failed', 'cancelled') then v_mp4.error else v_stills.error end, ''),
+        'The slideshow render failed.'), 500)
+    where id = v_step.id;
+    if v_step.order_id is not null then
+      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'render_failed',
+        'message', left(coalesce(nullif(case when v_mp4.status in ('failed', 'cancelled') then v_mp4.error else v_stills.error end, ''),
+          'The slideshow render failed.'), 200), 'retryable', true));
+    end if;
+    return;
+  end if;
+  if v_mp4.status <> 'done' or v_stills.status <> 'done' then
+    return;
+  end if;
+  select public.editor_document_hash(document) into v_hash from public.editor_projects where clip_id = v_step.clip_id;
+  if v_mp4.settings_hash is distinct from v_hash or v_stills.settings_hash is distinct from v_hash then
+    update public.studio_steps set status = 'failed', error = 'The slideshow changed while it was rendering.' where id = v_step.id;
+    if v_step.order_id is not null then
+      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'document_changed',
+        'message', 'The slideshow changed while it was rendering.', 'retryable', true));
+    end if;
+    return;
+  end if;
+  -- `studio_steps_sync` raises the card when the step turns `waiting`.
+  update public.studio_steps set status = 'waiting' where id = v_step.id;
+  if v_step.order_id is not null then
+    perform public.work_order_wait_founder(v_step.order_id, 'Your slideshow is rendered');
+  end if;
+end;
+$$;
+
+
+--
 -- Name: studio_steps; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10882,7 +11024,7 @@ begin
   for v_row in
     select s.* from public.studio_steps s
     join public.work_orders o on o.id = s.order_id
-    where s.status = 'approved' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
+    where s.status = 'approved' and s.kind <> 'slideshow' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
       and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes')
     order by s.decided_at
     limit greatest(1, least(coalesce(p_limit, 5), 10))
@@ -11150,8 +11292,25 @@ declare
   v_short public.shorts;
   v_order uuid;
   v_user uuid;
+  v_step uuid;
 begin
-  if new.kind <> 'render_document' or new.status not in ('done', 'failed') or old.status = new.status or new.clip_id is null then
+  if new.kind not in ('render_document', 'render_stills') or new.status not in ('done', 'failed') or old.status = new.status
+     or new.clip_id is null then
+    return new;
+  end if;
+  -- A slideshow step waiting on its two renders (P5 S3): its card is raised once both are done.
+  select s.id into v_step from public.studio_steps s
+  where s.kind = 'slideshow' and s.status = 'running' and s.clip_id = new.clip_id
+    and (s.input->>'mp4_task' = new.id::text or s.input->>'stills_task' = new.id::text);
+  if v_step is not null then
+    begin
+      perform public.studio_slideshow_settle(v_step);
+    exception when others then
+      raise warning 'slideshow render rule failed for task %: %', new.id, sqlerrm;
+    end;
+    return new;
+  end if;
+  if new.kind <> 'render_document' then
     return new;
   end if;
   begin
@@ -11872,7 +12031,41 @@ declare
   v_brief jsonb;
   v_video public.work_orders;
 begin
-  if new.kind <> 'write_video_brief' or new.status = old.status or new.status not in ('done', 'failed', 'cancelled') then
+  if new.kind not in ('write_video_brief', 'write_slides') or new.status = old.status or new.status not in ('done', 'failed', 'cancelled') then
+    return new;
+  end if;
+  -- Writer's slides (P5 S3) go into the slideshow order waiting on them, as the video brief goes into its video.
+  if new.kind = 'write_slides' then
+    begin
+      if new.status = 'done' then
+        select r.output into v_brief from public.cmo_runs r where r.id = new.run_id;
+        if jsonb_typeof(v_brief->'slides') is distinct from 'array' or jsonb_array_length(v_brief->'slides') not between 1 and 20
+           or octet_length((v_brief->'slides')::text) > 16384 then
+          v_brief := null;
+        end if;
+      end if;
+      for v_video in
+        select * from public.work_orders where user_id = new.user_id and new.id = any(depends_on) and status = 'queued'
+          and kind = 'build_slideshow' for update
+      loop
+        if v_brief is not null then
+          update public.work_orders
+          set brief = (brief - array['slides', 'slides_reason'])
+                || jsonb_strip_nulls(jsonb_build_object('slides', v_brief->'slides', 'slides_reason', v_brief->>'reason',
+                     'brief_from', 'writer')),
+              updated_at = now()
+          where id = v_video.id;
+          perform public.work_order_event(v_video, 'note', 'Writer wrote the slides for “' || v_video.title || '”');
+        else
+          update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now() where id = v_video.id;
+          perform public.work_order_event(v_video, 'note', '“' || v_video.title || '” goes on without Writer''s slides');
+        end if;
+      end loop;
+    exception when others then
+      raise warning 'slides rule for order % failed: %', new.id, sqlerrm;
+      update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now()
+      where user_id = new.user_id and new.id = any(depends_on) and status = 'queued';
+    end;
     return new;
   end if;
   begin

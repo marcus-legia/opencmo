@@ -140,6 +140,7 @@ insert into allowed values
   ('start_cmo_run(text,jsonb)'),
   ('studio_step_finish(uuid,text,text,uuid,jsonb,uuid[])'),
   ('studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)'),
+  ('studio_slideshow_rendering(uuid,uuid,jsonb,jsonb,uuid,uuid)'),
   ('upload_reservation_allows(text,text,jsonb)'),
   ('upload_usage()'),
   ('use_media_transcript(uuid,uuid,numeric,numeric)'),

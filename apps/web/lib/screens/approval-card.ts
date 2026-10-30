@@ -503,11 +503,13 @@ export const CAPTION_ACTION = "edit_caption";
  * contact sheet, cancel a script or a price (releases any hold), send back a finished video or a shorts batch.
  * Editing a beat (`edit {beat, text}`) re-plans the script and raises a new card.
  */
-export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch", readonly string[]> = {
+export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch" | "slideshow", readonly string[]> = {
   script: ["approve", "edit", "cancel"],
   price: ["approve", "redo", "cancel"],
   finished_video: ["approve", "send_back"],
   shorts_batch: ["approve", "send_back"],
+  /** P5: rendered before the card, so approving runs nothing; text edits go through the Slides view. */
+  slideshow: ["approve", "send_back"],
 };
 
 /**
@@ -522,4 +524,15 @@ export type ScheduleAction = (typeof SCHEDULE_ACTIONS)[number];
  * Kinds whose decision works now (wave 1 A0; P2 A1 Studio steps and the finished video, A3 the shorts batch; P4 A1 schedule); the others show their
  * button disabled with the reason. The name stays so `components/cards/decide.ts` keeps reading it.
  */
-export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video", "shorts_batch", "schedule"]);
+export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set([
+  "post",
+  "reply",
+  "goal",
+  "correction",
+  "script",
+  "price",
+  "finished_video",
+  "shorts_batch",
+  "slideshow",
+  "schedule",
+]);
