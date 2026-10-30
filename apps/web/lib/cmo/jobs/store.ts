@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, CompetitorInsight, Documents, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, CompetitorInsight, Documents, NicheVideoInsight, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -156,6 +156,13 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async latestInsight(userId) {
       const { data } = await admin.from("cmo_insights").select("body").eq("user_id", userId).eq("kind", "competitors").order("created_at", { ascending: false }).limit(1).maybeSingle();
       return ((data as { body?: CompetitorInsight } | null)?.body ?? null);
+    },
+    async saveNicheInsight(userId, runId, body) {
+      await rpc("cmo_save_insight", { p_user: userId, p_run: runId, p_kind: "niche_video", p_body: body });
+    },
+    async latestNicheInsight(userId) {
+      const { data } = await admin.from("cmo_insights").select("body").eq("user_id", userId).eq("kind", "niche_video").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      return ((data as { body?: NicheVideoInsight } | null)?.body ?? null);
     },
     saveMetrics: (userId, rows) => rpc<number>("cmo_save_metrics", { p_user: userId, p_rows: rows }),
     async inbox(userId, inboxId) {

@@ -44,6 +44,7 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   sales_scan: "Reddit scan",
   summarize_memory: "Memory summary",
   competitor_research: "Competitor research",
+  niche_video_research: "Niche video research",
   pull_metrics: "Post metrics",
   publish_post: "Scheduled post",
 };

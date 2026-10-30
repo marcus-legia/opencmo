@@ -104,6 +104,10 @@ export type WriterContext = {
   recent: string[];
   /** Competitor research (`insightBlock`): outside text, data only. */
   insight?: string;
+  /** Niche video research (`nicheBlock`, P5 R2), for the video brief: outside text, data only. */
+  niche?: string;
+  /** The URLs `niche` cites: the only ones a brief may say it learned from. */
+  nicheUrls?: string[];
 };
 
 const angle = z.string().describe("The hook in a few words");
@@ -144,6 +148,7 @@ export const VideoBriefDraftSchema = z.object({
   seconds: z.number().int().describe("Length in seconds, 5 to 90"),
   aspect: z.enum(BRIEF_ASPECTS),
   rationale: z.string().describe("One sentence: why this video now"),
+  learnedFrom: z.array(z.string()).describe("URLs of the niche videos whose hooks or format this brief adapts, copied exactly; empty when none"),
 });
 export type VideoBriefDraft = z.infer<typeof VideoBriefDraftSchema>;
 
@@ -165,7 +170,7 @@ export type WriterOutputs = {
   caption: CaptionDraft;
   youtube: YoutubeDraft;
   /** The brief as Studio takes it (parsed), plus why. */
-  video_brief: { brief: VideoBrief; rationale: string };
+  video_brief: { brief: VideoBrief; rationale: string; learnedFrom: string[] };
   slides: SlidesDraft;
 };
 export type WriterOutput<K extends WriterKind = WriterKind> = WriterOutputs[K];

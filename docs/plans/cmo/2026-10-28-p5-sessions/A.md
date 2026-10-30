@@ -25,7 +25,7 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
         and Studio cards use `ref_kind = 'studio_step'`: no change there.
   - [x] 2. Snapshot types: `slideshow` (slides with text and still, MP4 preview, PNG set), Sales card states
         (help only + why, skipped + why); screen types for `sales.mentions`, `sales.stuck`, Research niche.
-- [ ] **A2 Niche video research (R2)**: `niche_video_research` job: the strategy's topics → top shorts on TikTok and
+- [x] **A2 Niche video research (R2)**: `niche_video_research` job: the strategy's topics → top shorts on TikTok and
       YouTube Shorts (outliers vs median; Reels only if R0 finds an Instagram search), transcripts for the top few,
       hooks with their URL; store text, metrics and URL only, never the video; budget per run; an insight without a
       URL is dropped; runs when the plan has a video item; Writer's brief reads it.

@@ -2858,7 +2858,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -3724,7 +3724,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100
+    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
     else 0 end
 $$;
 
@@ -3738,7 +3738,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
-    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0
+    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     else 0 end
 $$;
 
@@ -11826,7 +11826,7 @@ begin
     v_row := public.work_order_create(p_run.user_id, v_root.week, v_root.id, p_run.kind,
       case p_run.kind
         when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Scan Reddit')
-        when 'competitor_research' then 'Competitor research' when 'pull_metrics' then 'Pull post metrics'
+        when 'competitor_research' then 'Competitor research' when 'niche_video_research' then 'What works on video in your niche' when 'pull_metrics' then 'Pull post metrics'
         when 'summarize_memory' then 'Weekly memory' when 'review_week' then 'Sunday review' else p_run.kind end,
       jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), 0, null, '{}',
       case when v_source in ('chat', 'mcp') then v_source when v_source = 'schedule' then 'loop' else 'founder' end);
@@ -12029,9 +12029,23 @@ CREATE FUNCTION public.work_orders_brief_rules() RETURNS trigger
     AS $$
 declare
   v_brief jsonb;
+  v_sources jsonb;
   v_video public.work_orders;
 begin
-  if new.kind not in ('write_video_brief', 'write_slides') or new.status = old.status or new.status not in ('done', 'failed', 'cancelled') then
+  if new.kind not in ('write_video_brief', 'write_slides', 'niche_video_research') or new.status = old.status or new.status not in ('done', 'failed', 'cancelled') then
+    return new;
+  end if;
+  -- Niche research ended, however it ended: the video briefs waiting on it start now (P5 R2), with the plan's input.
+  if new.kind = 'niche_video_research' then
+    for v_video in
+      select * from public.work_orders where user_id = new.user_id and new.id = any(depends_on) and status = 'queued'
+        and kind = 'write_video_brief' for update
+    loop
+      update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now()
+      where id = v_video.id returning * into v_video;
+      perform public.writer_order_start(v_video, jsonb_build_object('idea', v_video.brief->>'objective',
+        'reason', coalesce(v_video.brief->>'reason', ''), 'seconds', 30, 'aspect', '9:16', 'platform', v_video.brief->>'platform'));
+    end loop;
     return new;
   end if;
   -- Writer's slides (P5 S3) go into the slideshow order waiting on them, as the video brief goes into its video.
@@ -12070,7 +12084,12 @@ begin
   end if;
   begin
     if new.status = 'done' then
-      select r.output->'brief' into v_brief from public.cmo_runs r where r.id = new.run_id;
+      select r.output->'brief', r.output->'sources' into v_brief, v_sources from public.cmo_runs r where r.id = new.run_id;
+      -- The niche videos the brief learned from (P5 F8): links only, the job keeps only those its research read.
+      if jsonb_typeof(v_sources) is distinct from 'array' or jsonb_array_length(v_sources) > 6
+         or octet_length(v_sources::text) > 4096 then
+        v_sources := null;
+      end if;
       if jsonb_typeof(v_brief) is distinct from 'object' or char_length(coalesce(v_brief->>'objective', '')) not between 3 and 300 then
         v_brief := null;
       end if;
@@ -12080,10 +12099,11 @@ begin
     loop
       if v_brief is not null then
         update public.work_orders
-        set brief = (brief - array['objective', 'angle', 'hooks', 'key_points', 'cta', 'seconds', 'aspect'])
+        set brief = (brief - array['objective', 'angle', 'hooks', 'key_points', 'cta', 'seconds', 'aspect', 'sources'])
               || jsonb_strip_nulls(jsonb_build_object('objective', v_brief->'objective', 'angle', v_brief->'angle',
                    'hooks', v_brief->'hooks', 'key_points', coalesce(v_brief->'keyPoints', v_brief->'key_points'),
-                   'cta', v_brief->'cta', 'seconds', v_brief->'seconds', 'aspect', v_brief->'aspect', 'brief_from', 'writer')),
+                   'cta', v_brief->'cta', 'seconds', v_brief->'seconds', 'aspect', v_brief->'aspect', 'brief_from', 'writer',
+                   'sources', v_sources)),
             updated_at = now()
         where id = v_video.id;
         perform public.work_order_event(v_video, 'note', 'Writer wrote the brief for “' || v_video.title || '”');
@@ -12239,6 +12259,7 @@ declare
   v_brief public.work_orders;
   v_due timestamptz;
   v_run public.cmo_runs;
+  v_niche public.work_orders;
 begin
   v_root := public.work_order_week_root(p_user);
   update public.work_orders set run_id = coalesce(run_id, p_run), updated_at = now() where id = v_root.id returning * into v_root;
@@ -12290,6 +12311,29 @@ begin
     end loop;
   end loop;
 
+  -- Niche video research (P5 R2): once a week, when the plan has a new video item. Its briefs wait on it, so Writer
+  -- cites what works on video in the founder's niche; a research run that cannot start leaves them to go on alone.
+  if exists (select 1 from public.content_items c
+             where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department = 'video'
+               and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id))
+     and not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'niche_video_research'
+                     and status not in ('failed', 'cancelled'))
+     -- Research from the last six days is still fresh: the briefs read it, nothing is paid twice.
+     and not exists (select 1 from public.cmo_insights where user_id = p_user and kind = 'niche_video'
+                     and created_at > now() - interval '6 days') then
+    v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+    v_price := public.cmo_job_price('niche_video_research');
+    v_niche := public.work_order_create(p_user, v_week, v_root.id, 'niche_video_research', 'What works on video in your niche',
+      jsonb_build_object('objective', 'Find what works on short video in the founder''s niche.',
+        'done_when', 'The week''s video briefs can cite standout videos.'),
+      least(v_price, greatest(v_free, 0)), null, '{}', 'loop');
+    perform public.writer_order_start(v_niche, '{}'::jsonb);
+  end if;
+  select * into v_niche from public.work_orders where root_id = v_root.id and kind = 'niche_video_research'
+    and status not in ('done', 'failed', 'cancelled') order by created_at desc limit 1;
+
   for v_item in
     select c.id, c.department, c.idea, c.reason, c.platform, c.day from public.content_items c
     where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department in ('post', 'sales', 'video')
@@ -12307,14 +12351,17 @@ begin
         left('Brief for “' || v_item.idea || '”', 200),
         jsonb_build_object('objective', v_item.idea, 'reason', coalesce(v_item.reason, ''), 'platform', v_item.platform,
           'done_when', 'Studio has the brief for this video.'),
-        least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop');
+        least(v_price, greatest(v_free, 0)), v_due, case when v_niche.id is null then '{}'::uuid[] else array[v_niche.id] end, 'loop');
       perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
         jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
           'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
         least(public.studio_video_budget(), greatest(v_free - least(v_price, greatest(v_free, 0)), 0)), v_due,
         array[v_brief.id], 'loop', v_item.id);
-      perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, ''),
-        'seconds', 30, 'aspect', '9:16', 'platform', v_item.platform));
+      -- With research under way, the brief starts when it ends (`work_orders_brief_rules`).
+      if v_niche.id is null then
+        perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, ''),
+          'seconds', 30, 'aspect', '9:16', 'platform', v_item.platform));
+      end if;
       continue;
     end if;
     v_price := public.cmo_job_price(case v_item.department when 'post' then 'post_draft' else 'sales_scan' end);

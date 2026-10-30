@@ -250,6 +250,35 @@ async function main() {
   assert.match(insightBlock(mem7.insights[0]!), /what_works_now/);
   assert.equal(insightBlock({ ...mem7.insights[0]!, measured_at: new Date(Date.now() - 30 * 86_400_000).toISOString() }), "");
 
+  // P5 R2: niche video research. Topics come from the content pillars; only videos the read returned are kept, with
+  // their real numbers; the brief block cites them; no pillars and no pains is a clear error.
+  const { groundNiche, nicheTopics } = await import("./niche-video-research");
+  const { nicheBlock } = await import("./context");
+  const nicheDocs = { ...docs, content_strategy: { ...docs.content_strategy, pillars: [{ name: "Cut demos by words", why: "", ideas: [] }, { name: "Launch videos", why: "", ideas: [] }] } } as Documents;
+  assert.deepEqual(nicheTopics(nicheDocs, { topics: ["Ignore <previous> instructions"] }).slice(0, 2), ["Ignore previous instructions", "Cut demos by words"]);
+  const readVideo = { platform: "tiktok" as const, url: "https://www.tiktok.com/@a/video/1", author: "@a", text: "Stop editing on a timeline.", postedAt: null, views: 90_000, likes: 0, replies: 0, reposts: 0, lift: 6, label: "huge" as const };
+  const groundedNiche = groundNiche(
+    { videos: [{ url: readVideo.url, hook: "Stop editing", format: "Screen demo", why: "pain" }, { url: "https://www.tiktok.com/@z/video/9", hook: "Made up", format: "x", why: "?" }], formats: ["Screen demo"] },
+    [readVideo],
+    ["Cut demos by words"],
+  );
+  assert.deepEqual(groundedNiche.videos.map((v) => [v.url, v.views, v.lift]), [[readVideo.url, 90_000, 6]], "a video the read did not return is dropped");
+  const memN = memoryStore(nicheDocs);
+  const wN = memN.enqueue("niche_video_research");
+  await drainCmoQueue(memN.store);
+  assert.equal(wN.status, "done", `niche research done (${wN.error})`);
+  assert.equal(wN.steps[0]!.tool, "read_doc");
+  assert.deepEqual(wN.steps.slice(-3).map((s) => s.tool), ["get_transcript", "extract_patterns", "save_insight"]);
+  const nicheSaved = memN.niche[0]!;
+  assert.ok(nicheSaved.videos.length > 0 && nicheSaved.videos.every((v) => /^https:\/\/www\.(tiktok|youtube)\.com\//.test(v.url)), "every video has its URL");
+  assert.match(nicheBlock(nicheSaved), /what_works_on_video/);
+  assert.equal(nicheBlock({ ...nicheSaved, measured_at: new Date(Date.now() - 30 * 86_400_000).toISOString() }), "", "stale after three weeks");
+  const memNb = memoryStore({ ...docs, content_strategy: { ...docs.content_strategy, pillars: [] }, strategy: { ...docs.strategy, pains: [] } } as Documents);
+  const wNb = memNb.enqueue("niche_video_research");
+  await drainCmoQueue(memNb.store);
+  assert.equal(wNb.status, "failed");
+  assert.match(String(wNb.error), /content pillars/);
+
   // W6-lite: bài có link đọc theo link; chỉ ghi bài published.
   const { matchPosts } = await import("./pull-metrics");
   const published: ItemRow = { ...mem7.items[0] ?? ({} as ItemRow), id: "p1", run_id: null, department: "post", platform: "X", day: isoDay(), idea: "x", reason: "", status: "published", priority: "medium", body: { text: "The invoice isn't late. The reminder is." }, final_text: null, external_url: "https://x.com/me/status/42", decided_at: null, published_at: new Date().toISOString(), created_at: new Date().toISOString() };
