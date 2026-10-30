@@ -135,7 +135,7 @@ select is((select snapshot->>'handle' from public.schedule_change((select t_slot
   'the founder picks the account');
 select throws_ok($$ select public.approval_decide((select approval_id from public.schedule_slots where id = (select t_slot from ids)), 'approve',
   jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select approval_id from public.schedule_slots where id = (select t_slot from ids))))) $$,
-  'P0001', 'Choose who can see it on TikTok and whether people can comment.', 'TikTok''s fields have no default');
+  'P0001', 'Choose who can see it on TikTok.', 'TikTok''s privacy has no default');
 select throws_ok($$ select public.schedule_change((select t_slot from ids), 'set_options', '{"options":{"privacy":"EVERYONE"}}') $$,
   '22023', 'Choose who can see it from TikTok''s list.', 'privacy comes from TikTok''s list');
 select public.schedule_change((select t_slot from ids), 'set_options', '{"options":{"privacy":"PUBLIC_TO_EVERYONE","allow_comment":true}}');

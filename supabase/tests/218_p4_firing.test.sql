@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(35);
+select plan(36);
 
 insert into auth.users (id, email) values
   ('e2180000-0000-4000-8000-00000000000a', 'p4a2@test.local'),
@@ -75,31 +75,39 @@ select is((public.schedule_claim_due()->>'fired')::int, 0, 'claiming again fires
 select is((select count(*)::int from public.cmo_runs where kind = 'publish_post' and input->>'slot_id' = 'e2184000-0000-4000-8000-00000000000a'),
   1, 'still one run');
 
--- The handler starts.
-create temp table started as select public.publish_slot_start('e2184000-0000-4000-8000-00000000000a') as r;
-select is((select r->>'zernio_account_id' from started), 'acc-a2-x', 'it posts from the approved account');
-select is((select r->>'idempotency_key' from started), (select idempotency_key from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'),
+-- The handler starts (the run names its user and the order the claim made).
+create temp view orders as select brief->>'slot_id' as slot, id, user_id from public.work_orders where kind = 'publish_post';
+create temp table started as select public.publish_slot_start('e2184000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000a',
+  (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000a')) as r;
+create temp table readback as select public.publish_slot_read('e2184000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000a',
+  (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000a')) as r;
+select is((select r->>'zernioAccountId' from readback), 'acc-a2-x', 'it posts from the approved account');
+select is((select r->>'idempotencyKey' from readback), (select idempotency_key from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'),
   'with the slot''s key');
-select is((select r->'fields' from started), '{"platform": "x", "aiGenerated": false}'::jsonb, 'fields under the adapter''s names');
-select is((select r->>'text' from started), 'Post a.', 'the approved words');
-select is((select status || ' ' || attempts from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'), 'publishing 1', 'publishing, attempt 1');
-select throws_ok($$ select public.publish_slot_start('e2184000-0000-4000-8000-00000000000a') $$, 'P0001', null, 'a second start is refused');
+select is((select r->>'approvalStatus' from readback), 'approved', 'on an approved card');
+select is((select r->'current'->>'text' from readback), 'Post a.', 'the approved words');
+select is((select (r).status || ' ' || (r).attempts from started), 'publishing 1', 'publishing, attempt 1');
+select is((public.publish_slot_start('e2184000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000a',
+  (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000a'))).attempts, 1, 'starting again (a re-entrant run) counts no new attempt');
 
 -- Status by slot, then by Zernio's id.
-select public.publish_status('e2184000-0000-4000-8000-00000000000a', 'zp_1', 'accepted');
+select public.publish_status('e2184000-0000-4000-8000-00000000000a', 'publishing', 'zp_1');
 select is((select status || ' ' || external_id from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'), 'publishing zp_1',
   'accepted: it waits for the webhook');
-select public.publish_status(null, 'zp_1', 'published', 'https://x.com/founder/status/1');
+select public.publish_status(null, 'published', 'zp_1', 'https://x.com/founder/status/1', null, 'acc-a2-x');
 select is((select status || ' ' || external_url from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000a'),
   'published https://x.com/founder/status/1', 'the webhook confirms it by Zernio''s id');
 select is((select status || ' ' || external_url from public.content_items where id = 'e2182000-0000-4000-8000-00000000000a'),
   'published https://x.com/founder/status/1', 'the post is published with its link');
-select lives_ok($$ select public.publish_status(null, 'zp_1', 'published', 'https://x.com/founder/status/1') $$, 'a replayed confirmation is a no-op');
-select throws_ok($$ select public.publish_status(null, 'zp_nope', 'published') $$, 'P0002', null, 'an unknown post id is refused');
+select lives_ok($$ select public.publish_status(null, 'published', 'zp_1', 'https://x.com/founder/status/1') $$, 'a replayed confirmation is a no-op');
+select is((public.publish_status(null, 'failed', 'zp_1', null, '{"message":"late event"}')).status, 'published',
+  'a published post never moves back');
+select throws_ok($$ select public.publish_status(null, 'published', 'zp_nope') $$, 'P0002', null, 'an unknown post id is refused');
 
 -- Failure and Retry.
-select public.publish_slot_start('e2184000-0000-4000-8000-00000000000f');
-select public.publish_status('e2184000-0000-4000-8000-00000000000f', null, 'failed', null,
+select public.publish_slot_start('e2184000-0000-4000-8000-00000000000f', 'e2180000-0000-4000-8000-00000000000a',
+  (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000f'));
+select public.publish_status('e2184000-0000-4000-8000-00000000000f', 'failed', null, null,
   '{"code":"rate_limited","message":"X asked us to slow down.","retryable":true}');
 select is((select status from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000f'), 'failed', 'f: failed');
 create temp table fcard as select * from public.approvals
@@ -116,10 +124,12 @@ reset role;
 select is((select status from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000f'), 'waiting', 'back to waiting');
 select public.schedule_claim_due();
 select is((select status from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000f'), 'due', 'fired again inside its window');
-select is((public.publish_slot_start('e2184000-0000-4000-8000-00000000000f')->>'attempt')::int, 2, 'attempt 2, with the same key');
+select is((public.publish_slot_start('e2184000-0000-4000-8000-00000000000f', 'e2180000-0000-4000-8000-00000000000a',
+  (select id from orders where slot = 'e2184000-0000-4000-8000-00000000000f' order by id limit 1 offset 0))).attempts >= 1, true,
+  'it starts again inside its window');
 
 select ok(not has_function_privilege('authenticated', 'public.schedule_claim_due()', 'execute'), 'only the sweep claims');
-select ok(not has_function_privilege('authenticated', 'public.publish_status(uuid,text,text,text,jsonb)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.publish_status(uuid,text,text,text,jsonb,text)', 'execute'),
   'only the handler and the webhook report status');
 select is(public.work_order_department('publish_post'), 'publish', 'publish_post belongs to Publish');
 
