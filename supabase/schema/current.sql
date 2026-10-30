@@ -9255,8 +9255,12 @@ begin
       v_missed := v_missed + 1;
       continue;
     end if;
+    -- No connected account: the founder posts it. Their card (copy and open, "I posted it") comes now and waits for
+    -- them, unlike a time card: the words are theirs to post whenever they get to it.
     if v_slot.mode = 'intent' then
-      update public.schedule_slots set status = 'reminded', updated_at = now() where id = v_slot.id;
+      perform public.publish_status(v_slot.id, 'intent');
+      update public.approvals set expires_at = null
+      where ref_kind = 'schedule_slot' and ref_id = v_slot.id and status = 'waiting';
       v_reminded := v_reminded + 1;
       continue;
     end if;
@@ -9420,6 +9424,45 @@ CREATE FUNCTION public.schedule_jitter() RETURNS integer
     LANGUAGE sql
     SET search_path TO 'public'
     AS $$ select (round((random() * 2 - 1) * (public.schedule_rules()->>'jitterSeconds')::integer))::integer $$;
+
+
+--
+-- Name: schedule_mark_posted(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_mark_posted(p_slot uuid) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_slot public.schedule_slots;
+  v_d public.deliverables;
+  v_row public.approvals;
+begin
+  select * into v_slot from public.schedule_slots where id = p_slot and user_id = v_user for update;
+  if not found then
+    raise exception 'Slot not found.' using errcode = 'P0002';
+  end if;
+  if v_slot.status <> 'published' then
+    if v_slot.mode <> 'intent' or v_slot.status not in ('failed', 'reminded') then
+      raise exception 'Only a post you copy and post yourself can be marked as posted.' using errcode = 'P0001';
+    end if;
+    update public.schedule_slots
+    set status = 'published', published_at = now(), lease_until = null, error = null, updated_at = now()
+    where id = v_slot.id;
+    perform public.approval_close('schedule_slot', v_slot.id, 'approved');
+    select * into v_d from public.deliverables where id = v_slot.deliverable_id;
+    if v_d.ref_kind = 'content_item' then
+      update public.content_items set status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
+      where id = v_d.ref_id and user_id = v_user and status <> 'published';
+    end if;
+  end if;
+  select * into v_row from public.approvals
+  where ref_kind = 'schedule_slot' and ref_id = v_slot.id order by created_at desc limit 1;
+  return v_row;
+end;
+$$;
 
 
 --

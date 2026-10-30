@@ -18,6 +18,7 @@ import { salesScan } from "./sales-scan";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
 import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
+import { publishPost } from "@/lib/departments/publish/job";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
 import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
 
@@ -65,6 +66,8 @@ export const JOBS: Record<CmoJobKind, Job> = {
   write_video_brief: writeVideoBrief,
   write_caption: writeCaption,
   write_slides: writeSlides,
+  // P4: only Schedule's sweep queues it (enqueue_cmo_run refuses it), for one approved slot.
+  publish_post: publishPost,
 };
 
 /** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */

@@ -16,8 +16,9 @@ export type CmoJobKind =
   | "review_week"
   | "write_video_brief"
   | "write_caption"
-  | "write_slides";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides"];
+  | "write_slides"
+  | "publish_post";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";

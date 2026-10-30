@@ -121,6 +121,7 @@ insert into allowed values
   ('save_marketing_document(text,jsonb,uuid)'),
   ('save_scene_code(text)'),
   ('schedule_change(uuid,text,jsonb)'),
+  ('schedule_mark_posted(uuid)'),
   ('send_feedback(text,text,text,text,uuid)'),
   ('set_default_brand_kit(uuid)'),
   ('set_project_pinned(uuid,boolean)'),

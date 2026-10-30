@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 
 import { createFakePublishAdapter, fakeAccountId, fakePublishCount, resetFakePublish } from "@/lib/departments/publish/fake";
+import { publishDeps } from "@/lib/departments/publish/job";
 import type { PublishAdapter } from "@/lib/departments/publish/types";
 import type { ScheduleSnapshot } from "@/lib/screens/approval-card";
 
@@ -197,6 +198,30 @@ async function main() {
   // TikTok without every field the card must show is a bug, not a default.
   assert.throws(() => platformFields("tiktok", { ai_label: false }));
   assert.deepEqual(platformFields("x", {}), { platform: "x", aiGenerated: false });
+
+  // The job's deps over A2's RPCs: every call but publish_status names the run's user and order; a `due` slot is
+  // started (re-checked in SQL) before the handler sees it; status goes back in A2's argument names.
+  {
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    let status = "due";
+    const rpc = async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      if (name === "publish_slot_start") status = "publishing";
+      if (name === "publish_slot_read") return { data: { id: SLOT, status, export: { object: "u/c/t.mp4", bytes: 9 }, media: { state: "none" } }, error: null };
+      return { data: name === "publish_media_queue" ? "task-1" : null, error: null };
+    };
+    const deps = publishDeps(rpc, createFakePublishAdapter(), "user-1", "order-1");
+    assert.equal((await deps.slot(SLOT))?.status, "publishing");
+    assert.deepEqual(calls.map((c) => c.name), ["publish_slot_read", "publish_slot_start", "publish_slot_read"]);
+    assert.ok(calls.every((c) => c.args.p_user === "user-1" && c.args.p_order === "order-1"));
+    assert.deepEqual(await deps.exportFor("clip", "hash"), { object: "u/c/t.mp4", bytes: 9 });
+    assert.equal(await deps.startMedia(SLOT, { object: "u/c/t.mp4", bytes: 9 }, { uploadUrl: "https://up", publicUrl: "https://pub", expiresInSeconds: 3600 }), "task-1");
+    assert.deepEqual(calls.at(-1)!.args, { p_slot: SLOT, p_object: "u/c/t.mp4", p_upload_url: "https://up", p_public_url: "https://pub", p_user: "user-1", p_order: "order-1" });
+    await deps.status(SLOT, { status: "published", externalId: "ext", url: "https://x.com/p/1" });
+    assert.deepEqual(calls.at(-1), { name: "publish_status", args: { p_slot: SLOT, p_status: "published", p_external_id: "ext", p_url: "https://x.com/p/1", p_error: null } });
+    await deps.status(SLOT, { status: "intent" });
+    assert.deepEqual(calls.at(-1)!.args, { p_slot: SLOT, p_status: "intent", p_external_id: null, p_url: null, p_error: null });
+  }
 
   console.log("publish_post checks passed");
 }

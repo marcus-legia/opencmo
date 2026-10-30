@@ -9,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
  * Client dùng SERVICE ROLE KEY — đi vòng qua RLS.
  *
  * Chỉ những chỗ chạy KHÔNG thay mặt một người dùng đang đăng nhập: webhook
- * Polar (cộng credit), các cron, bộ chạy việc CMO (`lib/cmo/jobs/start.ts`,
+ * Polar (cộng credit) và Zernio (trạng thái bài đăng, `app/api/webhooks/zernio`), các cron, bộ chạy việc CMO (`lib/cmo/jobs/start.ts`,
  * như worker Python — gọi RPC chỉ-service kèm user id tường minh), và bước tra
  * chủ khoá API của MCP (`lib/mcp/auth.ts`: chỉ `api_key_owner`; mọi tool sau đó
  * chạy dưới RLS bằng JWT ngắn hạn của chính user), and the Assistant's ledger (`lib/agent/ledger.ts`:

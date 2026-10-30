@@ -63,7 +63,8 @@ select is((select department from public.work_orders where kind = 'publish_post'
   'publish', 'in Publish');
 select is((select count(*)::int from public.cmo_runs where kind = 'publish_post' and input->>'slot_id' = 'e2184000-0000-4000-8000-00000000000a'),
   1, 'and its run, queued for the web app');
-select is((select status from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000b'), 'reminded', 'b: no account, a reminder');
+select is((select status || ':' || (error->>'code') from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000b'), 'failed:no_account',
+  'b: no account, its copy-and-open card (20261230140000)');
 select is((select status || ' · ' || (error->>'message') from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000c'),
   'missed · It changed after you approved it.', 'c: changed after approval, never posted');
 select is((select status from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000d'), 'missed', 'd: past its window, never late');
