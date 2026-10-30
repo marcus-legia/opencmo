@@ -3,8 +3,9 @@
 Plan: [`../2026-10-28-p5-research-sales-slides-plan.md`](../2026-10-28-p5-research-sales-slides-plan.md). Read it first; this folder says who
 does what. **Branch `cmo-p5`, PR into `cmo-build`; every session works there.** No session opens its own branch or PR.
 
-**Before any session starts:** the phase before this one has merged into `cmo-build`, the planner has merged
-`cmo-build` into this branch and refreshed the plan's §3 from what was actually built.
+**Before any session starts:** done 2026-10-30. P4 merged into `cmo-build` (#126); `cmo-build` (`2304588`) is merged
+into this branch and the plan's §3 is refreshed. Order is editor first: slideshows and niche research (M2) before
+Sales safety (M3).
 
 | Session | File | Builds | First push (others wait on it) |
 |---|---|---|---|

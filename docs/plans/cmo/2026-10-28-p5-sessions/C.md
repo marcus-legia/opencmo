@@ -11,7 +11,7 @@ Plan: [`../2026-10-28-p5-research-sales-slides-plan.md`](../2026-10-28-p5-resear
 
 ## Order
 
-Read the frames while A0 and B0 land → C0 → C1 (after B1) → C2 (after A3) → C3.
+Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after B1) → C0 Sales part → C2 (after A3) → C3.
 
 ## Todo
 
