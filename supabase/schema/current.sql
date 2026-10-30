@@ -5386,6 +5386,50 @@ $_$;
 
 
 --
+-- Name: create_post_image_edit(text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.create_post_image_edit(p_name text, p_aspect text, p_source_clip uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_name text := coalesce(nullif(left(btrim(coalesce(p_name, '')), 120), ''), 'Post image');
+  v_source public.clips;
+  v_job uuid;
+  v_idx integer := -1;
+  v_clip uuid;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  if p_aspect is null or p_aspect not in ('9:16', '1:1', '16:9') then
+    raise exception 'Choose a frame: 9:16, 1:1 or 16:9.' using errcode = '22023';
+  end if;
+  if (select count(*) from public.jobs where user_id = v_user and kind = 'edit' and created_at > now() - interval '1 hour') >= 60 then
+    raise exception 'You have created many edits in the last hour. Try again later.' using errcode = 'P0001';
+  end if;
+  if p_source_clip is not null then
+    v_source := public.owned_clip(p_source_clip, v_user);
+    v_job := v_source.job_id;
+    -- Another edit in the same job: the lowest free index below the job's own clips.
+    perform pg_advisory_xact_lock(hashtextextended(v_job::text, 1731));
+    select least(-1, min(idx) - 1) into v_idx from public.clips where job_id = v_job;
+  else
+    insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at)
+    values (v_user, 'edit', 'editor://blank', v_name, 'done', p_aspect, 0, 0, now())
+    returning id into v_job;
+  end if;
+  insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
+  values (v_job, v_idx, v_name, 0, 0, null, null, 'slideshow')
+  returning id into v_clip;
+  return v_clip;
+end;
+$$;
+
+
+--
 -- Name: create_slideshow(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10689,6 +10733,97 @@ $$;
 
 
 --
+-- Name: studio_post_image_rendering(uuid, uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_post_image_rendering(p_order_id uuid, p_clip_id uuid, p_post_id uuid, p_stills_task uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_clip public.clips;
+  v_id uuid;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  v_clip := public.owned_clip(p_clip_id, v_user);
+  if v_clip.kind <> 'slideshow' then
+    raise exception 'A post image is made in its own edit.' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind = 'build_post_image'
+                 and status not in ('done', 'failed', 'cancelled')) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.content_items where id = p_post_id and user_id = v_user and department = 'post') then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.tasks where id = p_stills_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_stills') then
+    raise exception 'Queue the image of this edit first.' using errcode = '22023';
+  end if;
+  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status)
+  values (v_user, p_clip_id, 'make_post_image', 'post_image',
+    jsonb_build_object('post_id', p_post_id, 'stills_task', p_stills_task), '{}', 0, p_order_id, 'running')
+  returning id into v_id;
+  perform public.studio_post_image_settle(v_id);
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: studio_post_image_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_post_image_settle(p_step uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_step public.studio_steps;
+  v_stills public.tasks;
+  v_hash text;
+  v_why text;
+begin
+  select * into v_step from public.studio_steps where id = p_step and kind = 'post_image' and status = 'running' for update;
+  if not found then
+    return;
+  end if;
+  select * into v_stills from public.tasks where id = (v_step.input->>'stills_task')::uuid;
+  if v_stills.status not in ('done', 'failed', 'cancelled') then
+    return;
+  end if;
+  select public.editor_document_hash(document) into v_hash from public.editor_projects where clip_id = v_step.clip_id;
+  if v_stills.status <> 'done' then
+    v_why := left(coalesce(nullif(v_stills.error, ''), 'The post image could not be drawn.'), 200);
+  elsif v_stills.settings_hash is distinct from v_hash then
+    v_why := 'The post image changed while it was rendering.';
+  end if;
+  if v_why is not null then
+    update public.studio_steps set status = 'failed', error = v_why where id = v_step.id;
+    if exists (select 1 from public.work_orders where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code',
+        case when v_stills.status = 'done' then 'document_changed' else 'render_failed' end, 'message', v_why, 'retryable', true));
+    end if;
+    return;
+  end if;
+  update public.studio_steps set status = 'done', decided_at = now() where id = v_step.id;
+  -- A post may get a new image later; the publish step takes its newest (`created_at`).
+  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status, post_id)
+  values (v_step.user_id, v_step.order_id, 'image', 'clip', v_step.clip_id, 'ready', (v_step.input->>'post_id')::uuid)
+  on conflict (ref_kind, ref_id) do nothing;
+  if exists (select 1 from public.work_orders where id = v_step.order_id and status = 'queued') then
+    perform public.work_order_move(v_step.order_id, 'running');
+  end if;
+  if exists (select 1 from public.work_orders where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
+    perform public.work_order_move(v_step.order_id, 'done', 'Post image ready');
+  end if;
+end;
+$$;
+
+
+--
 -- Name: studio_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10864,7 +10999,7 @@ CREATE TABLE public.studio_steps (
     CONSTRAINT studio_steps_decision_payload_check CHECK (((decision_payload IS NULL) OR ((jsonb_typeof(decision_payload) = 'object'::text) AND (octet_length((decision_payload)::text) <= 2048)))),
     CONSTRAINT studio_steps_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT studio_steps_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 65536))),
-    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text, 'slideshow'::text]))),
+    CONSTRAINT studio_steps_kind_check CHECK ((kind = ANY (ARRAY['script'::text, 'price'::text, 'slideshow'::text, 'post_image'::text]))),
     CONSTRAINT studio_steps_next_check CHECK (((next IS NULL) OR ((jsonb_typeof(next) = 'object'::text) AND (next ? 'tool'::text) AND (octet_length((next)::text) <= 65536)))),
     CONSTRAINT studio_steps_plan_input_check CHECK (((plan_input IS NULL) OR ((jsonb_typeof(plan_input) = 'object'::text) AND (octet_length((plan_input)::text) <= 65536)))),
     CONSTRAINT studio_steps_price_credits_check CHECK ((price_credits >= 0)),
@@ -11024,7 +11159,7 @@ begin
   for v_row in
     select s.* from public.studio_steps s
     join public.work_orders o on o.id = s.order_id
-    where s.status = 'approved' and s.kind <> 'slideshow' and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
+    where s.status = 'approved' and s.kind not in ('slideshow', 'post_image') and o.status not in ('done', 'failed', 'cancelled') and not public.cmo_paused(s.user_id)
       and (s.claimed_at is null or s.claimed_at < now() - interval '10 minutes')
     order by s.decided_at
     limit greatest(1, least(coalesce(p_limit, 5), 10))
@@ -11293,18 +11428,24 @@ declare
   v_order uuid;
   v_user uuid;
   v_step uuid;
+  v_kind text;
 begin
   if new.kind not in ('render_document', 'render_stills') or new.status not in ('done', 'failed') or old.status = new.status
      or new.clip_id is null then
     return new;
   end if;
-  -- A slideshow step waiting on its two renders (P5 S3): its card is raised once both are done.
-  select s.id into v_step from public.studio_steps s
-  where s.kind = 'slideshow' and s.status = 'running' and s.clip_id = new.clip_id
+  -- A slideshow step waiting on its two renders (P5 S3): its card is raised once both are done. A post image step
+  -- (P5 S3, B4) waits on its still only and needs no card: its post's card shows it.
+  select s.id, s.kind into v_step, v_kind from public.studio_steps s
+  where s.kind in ('slideshow', 'post_image') and s.status = 'running' and s.clip_id = new.clip_id
     and (s.input->>'mp4_task' = new.id::text or s.input->>'stills_task' = new.id::text);
   if v_step is not null then
     begin
-      perform public.studio_slideshow_settle(v_step);
+      if v_kind = 'post_image' then
+        perform public.studio_post_image_settle(v_step);
+      else
+        perform public.studio_slideshow_settle(v_step);
+      end if;
     exception when others then
       raise warning 'slideshow render rule failed for task %: %', new.id, sqlerrm;
     end;
@@ -12682,8 +12823,10 @@ CREATE TABLE public.deliverables (
     status text DEFAULT 'ready'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     parent_id uuid,
+    post_id uuid,
     CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
     CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
+    CONSTRAINT deliverables_post_image_check CHECK (((post_id IS NOT NULL) = (kind = 'image'::text))),
     CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
@@ -14212,6 +14355,13 @@ CREATE INDEX deliverables_parent_idx ON public.deliverables USING btree (parent_
 
 
 --
+-- Name: deliverables_post_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX deliverables_post_idx ON public.deliverables USING btree (post_id) WHERE (post_id IS NOT NULL);
+
+
+--
 -- Name: editor_feedback_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -15149,6 +15299,14 @@ ALTER TABLE ONLY public.deliverables
 
 ALTER TABLE ONLY public.deliverables
     ADD CONSTRAINT deliverables_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.deliverables(id) ON DELETE CASCADE;
+
+
+--
+-- Name: deliverables deliverables_post_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.deliverables
+    ADD CONSTRAINT deliverables_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.content_items(id) ON DELETE CASCADE;
 
 
 --

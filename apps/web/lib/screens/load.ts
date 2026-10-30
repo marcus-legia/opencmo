@@ -927,7 +927,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
  */
 async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
   type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
-  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short"; hook: string | null } | null };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null } | null };
   const videos = supabase
     .from("work_orders")
     .select("id, title, status, created_at, updated_at, error, brief")

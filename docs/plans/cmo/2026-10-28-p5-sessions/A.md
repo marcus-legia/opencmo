@@ -86,3 +86,11 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   "Text changed", disables Approve and offers Send back and Open in Slides.
 - [from C → A] A help-only reply fixture for the inbox and e2e: `REPLY_CARD` with `rule: { kind: "help_only", text: "r/startups bans self-promotion: help only" }`
   (a second card, e.g. `REPLY_HELP_ONLY_CARD`, in `SAMPLE_CARDS`), so the help-only state shows outside a seeded database.
+- [A] B4's SQL is in `20261231120000_p5_post_image.sql` (pgTAP `224`): `create_post_image_edit(name, aspect,
+  source_clip default null)` (brain only; a `slideshow`-kind edit in the source video's job, owner checked, else a
+  job of its own); `studio_post_image_rendering(order, clip, post, stills_task)` returns the step id (kind
+  `post_image`, no card); the still done for the current document → `image` deliverable on the edit's clip with
+  `deliverables.post_id` = the post (new column, required exactly for `image`; the newest per post wins), order done;
+  a failed still fails the order. Also from B's note: `slideshow` added to the clip kinds in `lib/screens/studio.ts`
+  and `load.ts`.
+
