@@ -96,3 +96,21 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
   time, Cancel stay enabled); a missed slot → new card with `lastError` and no problem ("Approve new time").
 - **[from C → A] C6. Foot line.** The body already shows the account, the time and the why; the fixture's `meta` repeats
   the why. Keep `meta` empty (or credits) on schedule cards.
+- [from B → A] What B3 and B5 need from A2 (B wires them as soon as it lands; rules already checked in
+  `lib/cmo/jobs/publish-post.ts` `PublishPostDeps` and `lib/departments/publish/webhook.ts`):
+  1. **`publish_status(p_slot, p_status, p_external_id, p_url, p_error jsonb, p_zernio_account_id text default null)`**,
+     service role. Statuses B sends: `published` (id + https url or null), `publishing` (Zernio accepted, webhook
+     confirms; keeps `external_id`), `failed` (`error` = `{code, message, retryable}`, message English for the card),
+     `intent` (no connected account: raise the copy-and-open card). Please make it monotonic: a `published` slot
+     never goes back to `failed` (Zernio retries webhooks up to 7 times and events can arrive out of order), and
+     a repeat of the same status is a no-op. With `p_zernio_account_id` set (webhook), refuse when it is not the
+     slot's account.
+  2. **A receipt claim** for the webhook, e.g. `zernio_receipt_claim(p_event_id text) returns boolean` (service role,
+     `insert … on conflict do nothing`, true when new). The id is the **signed body's `id`**, not the
+     `X-Zernio-Event-Id` header (Zernio does not sign headers or a timestamp).
+  3. **`account.disconnected`**: something like `social_account_mark(p_zernio_account_id, 'disconnected')`
+     (service role) so waiting slots on it raise their card.
+  4. For the runner, one read per slot with: status, platform, mode, account id + `zernio_account_id` + its status,
+     `publish_at`, `window_ends_at`, `options`, `idempotency_key`, the card's approval status and `snapshot`, and
+     `schedule_content(deliverable, platform)` now. Plus the order's link to its `publish_media` task (B queues it
+     with `{bucket:"exports", object, upload_url, content_type:"video/mp4"}`) and the export of the approved edit.
