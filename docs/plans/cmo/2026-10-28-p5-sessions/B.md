@@ -23,7 +23,7 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
       output (one PNG per slide, a cover index).
 - [x] **B1 Slide ops** in `editor-core` with golden-document tests; listed in the ops registry so the Assistant and
       MCP get them; a slideshow document validates with `clip-doc`.
-- [ ] **B2 `render_stills`**: one still per slide from `clip-render` (Node) at the slide's midpoint, on top of
+- [x] **B2 `render_stills`**: one still per slide from `clip-render` (Node) at the slide's midpoint, on top of
       `clip-export/src/look.ts`'s single-frame path with text kept (not a second exporter), PNG set zipped;
       measure peak RSS; MP4 keeps going through `render_document`.
 - [ ] **B3 Slideshow squad**: `write_slides` (P3) → reviewer (code: text fits the frame, no invented numbers, words to
@@ -43,6 +43,11 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
 - `buildSlideshow` and `buildPostImage` join `STUDIO_ENTRIES` and `StudioAdapter` in B3, with their rows in
   `capabilities.json` (A), so `capabilities.check.ts` stays green; B0 ships their types only.
 - `render_stills` must honour `jobs.watermark`, or the PNG set would be a way round the free plan's watermark.
+- **B2 measured (2026-10-31):** 35 slides at 1080×1920, half with a 1920×1920 image: peak RSS 497 MB, 3 s, 6.1 MB of
+  PNG (`/usr/bin/time -v`, the Node drawing only). Slides 1 and 2 opened and looked at: right slide, text kept; that look
+  added the scrim on image backgrounds. Not yet run: an upload to real Storage or `request_stills_export` end to end
+  (fake store in `test_worker_render_stills.py`); A4's acceptance covers it. The worker's ffmpeg watermark ran on PNGs
+  in the test.
 
 ## Requests
 

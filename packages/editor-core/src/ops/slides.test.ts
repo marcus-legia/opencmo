@@ -44,6 +44,9 @@ describe('slide ops', () => {
 		const next = await run(document, { op: 'add_slide', after, heading: 'Between', background: { src: 'shot.png' } });
 		expect(headings(next)).toEqual(['One', 'Between', 'Two', 'Three']);
 		expect(sceneOf(next).children[1]!.children[0]).toMatchObject({ kind: 'image', src: 'shot.png', objectFit: 'cover' });
+		// White text must read on a bright screenshot.
+		expect(sceneOf(next).children[1]!.children[1]).toMatchObject({ name: 'Scrim', kind: 'rect', opacity: 0.45 });
+		expect(() => validate(next)).not.toThrow();
 	});
 
 	it('move_slide reorders and keeps every duration', async () => {

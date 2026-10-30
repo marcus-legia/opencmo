@@ -5,8 +5,8 @@
  * Document shape, with no `clip-doc` schema change:
  * - A slide is a group directly under the scene with `start` and `end`, marked `marks.visual = { op: 'add_slide',
  *   input }` (`slideSpans` in `clip-doc` finds them). Slides touch: the first starts at 0, each next where the last ends.
- * - Its children are `Background` (a rect, or an image for `{src}`), `Heading` and `Body` (text layers, never text
- *   inside an image), timed from the group's start. A child with no `end` would stop at the renderer's default length,
+ * - Its children are `Background` (a rect, or an image for `{src}` with a dark `Scrim` over it so white text reads on a
+ *   bright screenshot), `Heading` and `Body` (text layers, never text inside an image), timed from the group's start. A child with no `end` would stop at the renderer's default length,
  *   so each carries `start: 0` and `end` = the slide's duration.
  * - The group is the truth. Each slide also has one marker in the scene's `marks.markers`, for navigation; every slide
  *   op rebuilds them, so a deleted marker comes back and none can drift.
@@ -27,7 +27,7 @@ import { activeScene } from './timeline';
 /** TikTok photo mode's limit: the PNG set must fit it. */
 export const MAX_SLIDES = 35;
 export const SLIDE_SECONDS = { min: 1, max: 30, default: 4 } as const;
-export const SLIDE_LAYERS = { background: 'Background', heading: 'Heading', body: 'Body' } as const;
+export const SLIDE_LAYERS = { background: 'Background', scrim: 'Scrim', heading: 'Heading', body: 'Body' } as const;
 
 const slideId = z.string().min(1).max(40);
 const heading = z.string().trim().min(1).max(200);
@@ -140,8 +140,8 @@ function textLayer(scene: Entity, name: string, text: string, box: { y: number; 
 	};
 }
 
-const HEADING_BOX = { y: 0.2, height: 0.32, size: 0.085, weight: 700 };
-const BODY_BOX = { y: 0.54, height: 0.26, size: 0.05, weight: 400 };
+const HEADING_BOX = { y: 0.26, height: 0.24, size: 0.085, weight: 700 };
+const BODY_BOX = { y: 0.5, height: 0.16, size: 0.05, weight: 400 };
 
 const bodyLayer = (scene: Entity, text: string, seconds: number, theme: { text: string; font?: string }) => textLayer(scene, SLIDE_LAYERS.body, text, BODY_BOX, theme, seconds);
 
@@ -179,6 +179,7 @@ export const addSlide = {
 			marks: { visual: { op: SLIDE_OP, input: {} } },
 			children: [
 				background,
+				...(input.background && 'src' in input.background ? [{ kind: 'rect', name: SLIDE_LAYERS.scrim, ...frame, fill: '#000000', opacity: 0.45, start: 0, end: seconds }] : []),
 				textLayer(scene, SLIDE_LAYERS.heading, input.heading, HEADING_BOX, theme, seconds),
 				...(input.body ? [bodyLayer(scene, input.body, seconds, theme)] : []),
 			],
