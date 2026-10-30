@@ -78,3 +78,4 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   drops the dependency. Nothing orders the `write_slides` + `build_slideshow` pair yet: the week plan has no slideshow
   item (`content_items.department` is post/sales/video), so that comes with A3. Deletion: `render_stills` is in
   `enqueue_job_objects` and the task-delete trigger, and PNGs are found by `still_prefix` in `storage.objects`.
+- [from B → A] `lib/screens/studio.ts:60` and `load.ts:930` list clip kinds as `full | blank | short`: a founder with a slideshow edit may break the Studio screen's parse. Please add `slideshow` (found in the B3 run, not reproduced on the screen).

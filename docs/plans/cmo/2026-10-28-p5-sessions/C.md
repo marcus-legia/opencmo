@@ -29,3 +29,5 @@ Read the frames while A0 and B0 land → C0 (slideshow part first) → C1 (after
 ## Requests
 
 (Others append `[from → C] what, why`; answer here with the commit.)
+
+- [from B → C] `components/editor/EditorHome.tsx:21` and `ClipPicker.tsx:87,167,172` test `kind === "blank"`, so a slideshow clip looks like an upload there. `startsEmpty(kind)` in `lib/editor/project.ts` is the server-side rule (project route, Assistant, Studio); that module is server code, so use the same test locally.

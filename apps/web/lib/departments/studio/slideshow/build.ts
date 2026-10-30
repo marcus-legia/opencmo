@@ -18,6 +18,7 @@ import { defaultBrandKit } from "@/lib/brand";
 import type { Slide } from "@/lib/cmo/writer/types";
 import { applyToClip, readEditorProject } from "@/lib/editor/apply";
 import { exportPlan, startDocumentExport } from "@/lib/editor/export";
+import { ensureProject } from "@/lib/editor/project";
 
 import { renderRequestId } from "../render";
 import { SlideshowBriefSchema, type BuiltSlideshow, type SlideshowBrief, type StudioContext } from "../types";
@@ -75,6 +76,8 @@ export async function buildSlideshow(ctx: StudioContext, input: SlideshowBrief):
 
   const clipId = await rpcOrThrow<string>(ctx.supabase, "create_slideshow", { p_name: brief.idea.slice(0, 60), p_aspect: brief.aspect });
   const context = await clipContext(ctx.supabase, clipId);
+  // Nobody opens this edit before the render, so the project the editor would create is made here.
+  await ensureProject(ctx.supabase, context, clipId);
   const kit = await defaultBrandKit(ctx.supabase);
   // Brand last: its logo must sit on top of the slides, and it recolours what they drew.
   const ops = [...slideOps(brief.slides, await readyCaptures(ctx, brief.slides.length)), ...(kit ? [{ op: "apply_brand", kit: kit.kit, frame: false }] : [])];

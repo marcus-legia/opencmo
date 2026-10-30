@@ -179,7 +179,10 @@ export async function ensureBlankProject(supabase: SupabaseClient, context: Clip
   return withDocument(created);
 }
 
+/** Kinds with no upload behind them: their first document is empty, and nothing is spoken until the founder adds it. */
+export const startsEmpty = (kind: string | null | undefined): boolean => kind === "blank" || kind === "slideshow";
+
 /** The clip's project, made on first open: a blank edit gets an empty document, an upload its generated edit. */
 export function ensureProject(supabase: SupabaseClient, context: ClipContext, clipId: string): Promise<EditorProject> {
-  return context.clip.kind === "blank" ? ensureBlankProject(supabase, context, clipId) : ensureEditorProject(supabase, context, clipId);
+  return startsEmpty(context.clip.kind) ? ensureBlankProject(supabase, context, clipId) : ensureEditorProject(supabase, context, clipId);
 }

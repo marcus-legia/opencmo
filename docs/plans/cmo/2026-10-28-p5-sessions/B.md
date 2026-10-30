@@ -26,7 +26,7 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
 - [x] **B2 `render_stills`**: one still per slide from `clip-render` (Node) at the slide's midpoint, on top of
       `clip-export/src/look.ts`'s single-frame path with text kept (not a second exporter), PNG set zipped;
       measure peak RSS; MP4 keeps going through `render_document`.
-- [ ] **B3 Slideshow squad**: `write_slides` (P3) → reviewer (code: text fits the frame, no invented numbers, words to
+- [x] **B3 Slideshow squad**: `write_slides` (P3) → reviewer (code: text fits the frame, no invented numbers, words to
       avoid; sends back once) → visuals (captured pages and the founder's screenshots first, `/image` with
       moderation otherwise, never text inside the image) → builder (slide ops, Brand Kit) → MP4 + PNG set → one
       `slideshow` card through A's step RPC.
@@ -48,9 +48,11 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
   added the scrim on image backgrounds. Not yet run: an upload to real Storage or `request_stills_export` end to end
   (fake store in `test_worker_render_stills.py`); A4's acceptance covers it. The worker's ffmpeg watermark ran on PNGs
   in the test.
-- **B3 status (2026-10-31): code in, not done.** `buildSlideshow`, its reviewer, visuals and builder are pushed and
-  checked with pure checks only. It calls `studio_slideshow_rendering`, which A has not written yet, so no real order
-  has run and no card has been raised. Tick B3 after A's SQL lands and one order runs on the local stack.
+- **B3 run (2026-10-31):** one `build_slideshow` order on the local stack with its worker
+  (`slideshow/slideshow.e2e.ts`): one card with 5 slides, a 17 s 1080×1920 MP4 with audio, a zip of 5 PNGs in Storage,
+  approve → order done, deliverable ready, no credits spent. A frame of the full-size MP4 and the PNGs were looked at:
+  right slide, text and watermark on both. Real Storage upload is now covered. Not covered: captured-page backgrounds on
+  a real order, and the `write_slides` → `build_slideshow` pair, which nothing orders until A3 (A's pgTAP 222 covers the rule). No real model ran.
 - **Visuals:** captured pages or the Brand Kit background. The founder's library screenshots are not used: a library
   belongs to one job, and a new slideshow edit starts with an empty one.
 
