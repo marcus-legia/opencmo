@@ -287,6 +287,9 @@ export const ScheduleOptionsSchema = z
     allow_comment: z.boolean().optional(),
     allow_duet: z.boolean().optional(),
     allow_stitch: z.boolean().optional(),
+    /** TikTok's commercial content disclosure: promoting the founder's own business, or a paid partnership. */
+    brand_organic: z.boolean().optional(),
+    brand_content: z.boolean().optional(),
     ai_label: z.boolean().optional(),
   })
   .strict();
@@ -355,6 +358,13 @@ const ScheduleBody = z.object({
     .nullable(),
   /** The reason the last attempt failed or was missed; the card offers Retry. */
   lastError: z.string().max(500).nullable(),
+  /**
+   * The slot behind the card (`schedule-enrich.ts`, from `schedule_slots`): `failed` offers Retry, `missed` is a new
+   * time after the old one passed, `no_account` is the copy-and-open moment of a post with no connected account.
+   */
+  state: z.enum(["waiting", "failed", "missed", "no_account"]),
+  /** The live post, once it went out. */
+  publishedUrl: z.url().nullable(),
 });
 
 const CorrectionBody = z.object({

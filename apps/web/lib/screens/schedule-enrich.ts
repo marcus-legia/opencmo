@@ -39,6 +39,21 @@ async function creatorInfo(accounts: Map<string, string>, ids: string[]): Promis
   return out;
 }
 
+type SlotRow = {
+  id: string;
+  status: string;
+  error: { code?: string } | null;
+  external_url: string | null;
+  deliverable: { ref_kind: string; ref_id: string } | null;
+};
+
+/** What the card offers, from the slot: SQL keeps the reason's code (`missed`, `no_account`, a platform's refusal). */
+function slotState(slot: SlotRow): Extract<ApprovalCard["body"], { kind: "schedule" }>["state"] {
+  if (slot.error?.code === "missed" && slot.status === "proposed") return "missed";
+  if (slot.status !== "failed") return "waiting";
+  return slot.error?.code === "no_account" ? "no_account" : "failed";
+}
+
 export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
   const schedule = cards.filter((c) => c.body.kind === "schedule");
   if (!schedule.length) return cards;
@@ -51,13 +66,15 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
     accountIds.length
       ? supabase.from("social_accounts").select("id, avatar_url, zernio_account_id").in("id", accountIds)
       : Promise.resolve({ data: [] as { id: string; avatar_url: string | null; zernio_account_id: string }[] }),
-    supabase.from("schedule_slots").select("id, deliverable:deliverables(ref_kind, ref_id)").in("id", slotIds),
+    supabase.from("schedule_slots").select("id, status, error, external_url, deliverable:deliverables(ref_kind, ref_id)").in("id", slotIds),
   ]);
   const timezone = (profile.data as { timezone?: string } | null)?.timezone ?? "UTC";
   const accountRows = (accounts.data ?? []) as { id: string; avatar_url: string | null; zernio_account_id: string }[];
   const avatar = new Map(accountRows.map((a) => [a.id, a.avatar_url]));
+  const slotRows = (slots.data ?? []) as unknown as SlotRow[];
+  const slotOf = new Map(slotRows.map((s) => [s.id, s]));
   const clipOf = new Map(
-    ((slots.data ?? []) as unknown as { id: string; deliverable: { ref_kind: string; ref_id: string } | null }[]).flatMap((s) =>
+    slotRows.flatMap((s) =>
       s.deliverable?.ref_kind === "clip" ? [[s.id, s.deliverable.ref_id] as const] : [],
     ),
   );
@@ -76,6 +93,7 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
     const clip = clipOf.get(b.slotId);
     const render = clip ? renders.get(clip) : undefined;
     const creator = b.accountId ? info.get(b.accountId) : undefined;
+    const slot = slotOf.get(b.slotId);
     return {
       ...card,
       body: {
@@ -83,6 +101,8 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
         timezone,
         avatarUrl: (b.accountId ? avatar.get(b.accountId) : null) ?? null,
         preview: { ...b.preview, videoUrl: render ? signed.get(render) ?? null : null },
+        state: slot ? slotState(slot) : b.state,
+        publishedUrl: slot?.status === "published" && slot.external_url?.startsWith("https://") ? slot.external_url : null,
         tiktok:
           creator && creator.privacyLevels.length > 0
             ? {

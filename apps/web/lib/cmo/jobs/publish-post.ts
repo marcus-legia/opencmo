@@ -107,6 +107,8 @@ export function platformFields(platform: PublishSlot["platform"], options: Sched
       allowComment: o.allow_comment,
       allowDuet: o.allow_duet ?? null,
       allowStitch: o.allow_stitch ?? null,
+      brandOrganic: o.brand_organic ?? false,
+      brandContent: o.brand_content ?? false,
       aiGenerated,
     });
   }

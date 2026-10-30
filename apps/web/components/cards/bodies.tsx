@@ -439,6 +439,18 @@ export function ScheduleBody({
               Stitch
             </Toggle>
           </div>
+          <div className="v2-card-option">
+            <Toggle checked={!!options.brand_organic} disabled={!!editable} title={editable ?? undefined} onChange={(on) => set({ brand_organic: on })}>
+              Your brand
+            </Toggle>
+            <span className="v2-field-hint">Turn it on when the post promotes your own product or business. TikTok labels it “Promotional content”.</span>
+          </div>
+          <div className="v2-card-option">
+            <Toggle checked={!!options.brand_content} disabled={!!editable} title={editable ?? undefined} onChange={(on) => set({ brand_content: on })}>
+              Branded content
+            </Toggle>
+            <span className="v2-field-hint">Turn it on when someone paid you or gave you something for it. TikTok labels it “Paid partnership”.</span>
+          </div>
         </fieldset>
       ) : null}
       {aiLabel ? (
@@ -456,7 +468,8 @@ export function ScheduleBody({
           <span>You approve when it posts: it goes out on your {platform} account at this time, as shown here.</span>
         ) : (
           <span>
-            No account connected: at this time a card gives you the post to copy and open. <Link href="/app/settings#settings-connected-accounts">Connect {platform}</Link> to have it posted.
+            {body.state === "no_account" ? "No account connected: copy and open. Post it from your account, then tell us here." : "No account connected: at this time a card gives you the post to copy and open."}{" "}
+            <Link href="/app/settings#settings-connected-accounts">Connect {platform}</Link> to have it posted.
           </span>
         )}
         {tiktok ? (

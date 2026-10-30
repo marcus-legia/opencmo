@@ -171,6 +171,11 @@ check("compose: a live field that breaks the contract drops back alone", () => {
 
 // P4 A0: the schedule snapshot (SQL `approval_snapshot`) parses; platform fields are a closed set.
 check("schedule snapshot parses", () => void ScheduleSnapshotSchema.parse(SCHEDULE_SNAPSHOT));
+// P4 A2 writes TikTok's commercial content toggles into every new TikTok slot: a card that does not parse is dropped.
+check("schedule snapshot with TikTok's disclosure toggles parses", () => {
+  const options = { allow_comment: false, allow_duet: false, allow_stitch: false, brand_organic: false, brand_content: false };
+  void ScheduleSnapshotSchema.parse({ ...SCHEDULE_SNAPSHOT, options });
+});
 check("a schedule snapshot builds a card that parses, with its account in the foot", () => {
   const card = approvalToCard(row("schedule", { ...SCHEDULE_SNAPSHOT }, { department: "schedule", ref_kind: "schedule_slot" }))!;
   assert.ok(card, "the schedule row builds no card");

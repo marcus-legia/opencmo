@@ -161,7 +161,7 @@ async function main() {
     assert.deepEqual(await runPublishPost(d, SLOT), { kind: "done", status: "published" });
     const call = seen[0] as { dl: { media: { url: string }[] }; sl: { fields: unknown } };
     assert.equal(call.dl.media[0]!.url, "https://media.example.com/fake_media_1");
-    assert.deepEqual(call.sl.fields, { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: false, allowStitch: false, aiGenerated: true });
+    assert.deepEqual(call.sl.fields, { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: false, allowStitch: false, brandOrganic: false, brandContent: false, aiGenerated: true });
     assert.equal(updates.at(-1)!.status, "published");
 
     // Edited while it uploaded: the re-check refuses it before posting.

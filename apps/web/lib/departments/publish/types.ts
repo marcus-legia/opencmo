@@ -38,6 +38,9 @@ export const PlatformFieldsSchema = z.discriminatedUnion("platform", [
       /** Null for a photo post: TikTok applies duet and stitch to videos only. */
       allowDuet: z.boolean().nullable(),
       allowStitch: z.boolean().nullable(),
+      /** Commercial content disclosure: the founder's own business, and/or a paid partnership. */
+      brandOrganic: z.boolean(),
+      brandContent: z.boolean(),
       aiGenerated: z.boolean(),
     })
     .strict(),

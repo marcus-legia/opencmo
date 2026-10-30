@@ -6,7 +6,7 @@
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { CAPTION_ACTION, DECIDABLE_IN_WAVE_1, type ApprovalCard, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
-import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
+import { PLATFORM_LABEL } from "@/lib/screens/common";
 
 import { formatWhen } from "./schedule";
 
@@ -30,13 +30,15 @@ export type Decision =
   /** Schedule: the platform's fields changed; a new card asks again. */
   | { action: "set_options"; options: ScheduleOptions }
   /** Schedule: a failed post goes again on the same approval while its time is still in the window. */
-  | { action: "retry" };
+  | { action: "retry" }
+  /** Schedule, no account connected: the founder copied it and posted it themselves (`schedule_mark_posted`). */
+  | { action: "posted" };
 
 /** Declining spends nothing, so a card that waits on credits can still be cancelled or set aside. */
 const DECLINES: ReadonlySet<Decision["action"]> = new Set(["skip", "dismissed", "reject", "cancel", "send_back"]);
 
 /** What a schedule card whose post failed still offers: try again, move it, or drop it. */
-const AFTER_FAILURE: ReadonlySet<Decision["action"]> = new Set(["retry", "change_time", "cancel"]);
+const AFTER_FAILURE: ReadonlySet<Decision["action"]> = new Set(["retry", "change_time", "cancel", "posted"]);
 
 /** Why the card cannot be decided here (with `action`, that decision), or null when it can. */
 export function blockedReason(card: ApprovalCard, sample: boolean, action?: Decision["action"]): string | null {
@@ -54,6 +56,10 @@ export async function decide(card: ApprovalCard, decision: Decision, sample: boo
   if (sample) return null;
   const reason = blockedReason(card, sample, decision.action);
   if (reason) throw new ApiError(reason, 0, null);
+  // Not a decision on the card: the slot route marks the copied post as posted and closes the card itself.
+  if (decision.action === "posted" && card.body.kind === "schedule") {
+    return api<ApprovalCard>(`/schedule/slots/${encodeURIComponent(card.body.slotId)}`, jsonBody({ action: "posted" }));
+  }
   const { action, ...rest } = decision;
   return api<ApprovalCard>(`/approvals/${encodeURIComponent(card.id)}`, jsonBody({ action, contentHash: card.contentHash, ...rest }));
 }
@@ -85,20 +91,6 @@ export async function editCaption(card: ApprovalCard, caption: Caption, sample: 
   return { ...withCaption(card, saved ?? caption), contentHash: next.contentHash };
 }
 
-/**
- * Where an approved post goes until Schedule posts it (P4): Threads opens its composer with the text in it;
- * LinkedIn's composer takes no text, so the post is copied first. X keeps "post it when you are ready".
- */
-export const POST_TARGET: Partial<Record<Platform, { url: (text: string) => string; copy: boolean; label: string }>> = {
-  threads: { url: (text) => `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`, copy: false, label: " and open Threads" },
-  linkedin: { url: () => "https://www.linkedin.com/feed/?shareActive=true", copy: true, label: ", copy and open LinkedIn" },
-};
-
-/** The platform of a post card (one platform per card since P3). */
-export function postPlatform(card: ApprovalCard): Platform | null {
-  return card.body.kind === "post" ? (card.body.platforms[0]?.platform ?? null) : null;
-}
-
 /** What the toast says after a decision went through. */
 export function decidedMessage(card: ApprovalCard, decision: Decision, sample: boolean): string {
   const suffix = sample ? " (sample, nothing was sent)" : "";
@@ -117,6 +109,8 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       return `New time saved. A new card asks you to approve it${suffix}.`;
     case "set_options":
       return `Changes saved. A new card asks you to approve them${suffix}.`;
+    case "posted":
+      return `Marked as posted. Nothing else goes out for it${suffix}.`;
     case "retry":
       return `Trying again. If its time has passed, a card with a new time comes instead${suffix}.`;
     case "cancel":
@@ -130,12 +124,8 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
       return `Approved${suffix}.`;
     default:
-      if (card.kind === "post" && !sample) {
-        const platform = postPlatform(card);
-        if (platform === "threads") return "Approved. Threads opened with your post: check it and post it from your account.";
-        if (platform === "linkedin") return "Approved and copied. Paste it in LinkedIn and post it from your account.";
-        return "Approved. Post it on X when you are ready.";
-      }
+      // Since P4 an approved post gets its time on a schedule card; it is never opened or posted from here.
+      if (card.kind === "post") return `Approved. A schedule card asks you for its time${suffix}.`;
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
       if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;

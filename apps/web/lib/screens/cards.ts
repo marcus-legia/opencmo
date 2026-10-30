@@ -226,7 +226,7 @@ function build(row: ApprovalRow): Built | null {
       return {
         title: clip(`${what} · ${where}${v.handle ? ` ${v.handle}` : ""}`, 300),
         summary: v.last_error
-          ? `It did not go out: ${v.last_error} Retry posts it now, while its time window lasts.`
+          ? `It did not go out: ${v.last_error}`
           : v.mode === "publish"
             ? "You approve when it posts: at this time, on your account. Changing the time or account asks you again."
             : `No ${where} account connected: at this time you copy it and post it yourself.`,
@@ -248,6 +248,9 @@ function build(row: ApprovalRow): Built | null {
           options: v.options,
           tiktok: null,
           lastError: v.last_error,
+          // Read from the slot on the server (`schedule-enrich.ts`); a missed card and a failed one share a snapshot shape.
+          state: v.last_error ? "failed" : "waiting",
+          publishedUrl: null,
         },
       };
     }

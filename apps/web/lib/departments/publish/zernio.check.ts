@@ -45,7 +45,7 @@ const slot: PublishSlot = {
   zernioAccountId: ACC,
   idempotencyKey: "slot:00000000-0000-4000-8000-0000000000b1:1",
   publishAt: "2026-11-02T09:00:00Z",
-  fields: { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: null, allowStitch: false, aiGenerated: true },
+  fields: { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: null, allowStitch: false, brandOrganic: true, brandContent: false, aiGenerated: true },
 };
 
 async function main() {
@@ -150,7 +150,7 @@ async function main() {
           allowComment: true,
           allowStitch: false,
           videoMadeWithAi: true,
-          commercialContentType: "none",
+          commercialContentType: "brand_organic",
           contentPreviewConfirmed: true,
           expressConsentGiven: true,
         },

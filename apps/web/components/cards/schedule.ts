@@ -68,7 +68,7 @@ export const AI_LABEL_PLATFORMS: ReadonlySet<Platform> = new Set(["tiktok", "you
 export const TIKTOK_MUSIC_TERMS = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en";
 
 /** Option keys in a fixed order, so two option sets compare the same whatever order their keys came in. */
-const OPTION_KEYS = ["privacy", "allow_comment", "allow_duet", "allow_stitch", "ai_label"] as const;
+const OPTION_KEYS = ["privacy", "allow_comment", "allow_duet", "allow_stitch", "brand_organic", "brand_content", "ai_label"] as const;
 
 export function sameOptions(a: ScheduleOptions, b: ScheduleOptions): boolean {
   return OPTION_KEYS.every((key) => (a[key] ?? null) === (b[key] ?? null));
@@ -87,6 +87,8 @@ export function savedOptions(body: Body, options: ScheduleOptions): ScheduleOpti
     allow_comment: !body.tiktok.commentDisabled && !!options.allow_comment,
     allow_duet: !body.tiktok.duetDisabled && !!options.allow_duet,
     allow_stitch: !body.tiktok.stitchDisabled && !!options.allow_stitch,
+    brand_organic: !!options.brand_organic,
+    brand_content: !!options.brand_content,
   };
 }
 
@@ -99,5 +101,6 @@ export function approveBlocked(body: Body, options: ScheduleOptions): string | n
   if (!isTikTok(body)) return null;
   if (!body.tiktok) return "TikTok's settings for this account could not be read. Reload the card in a minute.";
   if (!options.privacy || typeof options.allow_comment !== "boolean") return "Choose who can see it on TikTok and save first.";
+  if (options.brand_content && options.privacy === "SELF_ONLY") return "Branded content cannot be private on TikTok: choose who can see it.";
   return null;
 }

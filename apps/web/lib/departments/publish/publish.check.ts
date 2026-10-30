@@ -67,7 +67,7 @@ async function main() {
     PublishSlotSchema.safeParse({
       ...slot,
       platform: "tiktok",
-      fields: { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: null, allowStitch: null, aiGenerated: true },
+      fields: { platform: "tiktok", privacy: "SELF_ONLY", allowComment: true, allowDuet: null, allowStitch: null, brandOrganic: false, brandContent: false, aiGenerated: true },
     }).success,
     true,
   );

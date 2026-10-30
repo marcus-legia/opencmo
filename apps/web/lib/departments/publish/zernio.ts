@@ -82,6 +82,17 @@ export function zernioError(status: number, body: unknown, what: string): Publis
   return new PublishError("unavailable", "The posting service did not answer. Try again in a few minutes.", true);
 }
 
+/**
+ * TikTok's commercial content disclosure as Zernio takes it: one type, and both flags when the founder disclosed both
+ * (Zernio's TikTok platform data: `commercialContentType`, `isBrandOrganicPost`, `brandPartnerPromote`).
+ */
+function commercialContent(organic: boolean, branded: boolean): Json {
+  if (organic && branded) return { commercialContentType: "brand_content", isBrandOrganicPost: true, brandPartnerPromote: true };
+  if (branded) return { commercialContentType: "brand_content" };
+  if (organic) return { commercialContentType: "brand_organic" };
+  return { commercialContentType: "none" };
+}
+
 /** TikTok and YouTube take the founder's approved fields; the AI label goes where the platform has one. */
 export function platformData(deliverable: PublishDeliverable, slot: PublishSlot): Json | undefined {
   const f = slot.fields;
@@ -92,7 +103,7 @@ export function platformData(deliverable: PublishDeliverable, slot: PublishSlot)
       ...(f.allowDuet !== null ? { allowDuet: f.allowDuet } : {}),
       ...(f.allowStitch !== null ? { allowStitch: f.allowStitch } : {}),
       videoMadeWithAi: f.aiGenerated,
-      commercialContentType: "none",
+      ...commercialContent(f.brandOrganic, f.brandContent),
       // The founder saw the content, the account and these settings on the schedule card and approved them.
       contentPreviewConfirmed: true,
       expressConsentGiven: true,

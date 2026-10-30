@@ -222,8 +222,51 @@ export const SCHEDULE_CARD: ApprovalCard = {
     options: { privacy: "PUBLIC_TO_EVERYONE", allow_comment: true, allow_duet: false, allow_stitch: false, ai_label: false },
     tiktok: { privacyLevels: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: true },
     lastError: null,
+    state: "waiting",
+    publishedUrl: null,
   },
 };
+
+type ScheduleBodyFixture = Extract<ApprovalCard["body"], { kind: "schedule" }>;
+const scheduleBody = (patch: Partial<ScheduleBodyFixture>): ScheduleBodyFixture => ({ ...(SCHEDULE_CARD.body as ScheduleBodyFixture), ...patch });
+
+/** The schedule card's states (P4 C0/C3), each a card of its own for `/app/inbox/[id]` and the e2e. */
+export const SCHEDULE_STATE_CARDS: ApprovalCard[] = [
+  {
+    ...SCHEDULE_CARD,
+    id: "card-time-failed",
+    summary: "It did not go out: TikTok refused the post.",
+    body: scheduleBody({ state: "failed", lastError: "TikTok refused the post: the account needs reconnecting." }),
+  },
+  {
+    ...SCHEDULE_CARD,
+    id: "card-time-missed",
+    body: scheduleBody({ state: "missed", lastError: "It could not go out within its time window." }),
+  },
+  {
+    ...SCHEDULE_CARD,
+    id: "card-time-intent",
+    title: "Most AI video tools stop at the first draft · LinkedIn",
+    account: { platform: "linkedin", handle: "" },
+    expiresAt: null,
+    body: scheduleBody({
+      what: "Most AI video tools stop at the first draft",
+      where: { platform: "linkedin", handle: "" },
+      accountId: null,
+      mode: "intent",
+      state: "no_account",
+      lastError: "No connected LinkedIn account: copy it and post it yourself, or connect the account and retry.",
+      preview: { text: "Most AI video tools stop at the first draft. Ours starts there: you edit by asking.", title: null, videoUrl: null },
+      options: {},
+      tiktok: null,
+    }),
+  },
+  {
+    ...SCHEDULE_CARD,
+    id: "card-time-choose",
+    body: scheduleBody({ options: { allow_comment: false, allow_duet: false, allow_stitch: false, brand_organic: false, brand_content: false } }),
+  },
+];
 
 export const GOAL_CARD: ApprovalCard = {
   ...base,
@@ -361,7 +404,7 @@ export const ALL_KINDS: ApprovalCard[] = [
 ];
 
 /** Every sample card `/app/inbox/[id]` can open outside production: each kind, the P3 platforms, the states. */
-export const SAMPLE_CARDS: ApprovalCard[] = [...ALL_KINDS, THREADS_POST_CARD, LINKEDIN_POST_CARD, ...STATE_CARDS];
+export const SAMPLE_CARDS: ApprovalCard[] = [...ALL_KINDS, THREADS_POST_CARD, LINKEDIN_POST_CARD, ...STATE_CARDS, ...SCHEDULE_STATE_CARDS];
 
 /**
  * One snapshot per Studio kind, as `approval_snapshot` writes it. The script one is the exact output asserted in
