@@ -48,7 +48,7 @@ type Action =
     }
   | { label: string; variant: Variant; href: string };
 
-const STATE_LABEL = { failed: "Failed", missed: "Missed", no_account: "Copy and open" } as const;
+const STATE_LABEL = { failed: "Failed", missed: "Missed", no_account: "Copy and open", unconfirmed: "Not confirmed" } as const;
 
 const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_credits: "Credits", failed: "Failed" } as const;
 
@@ -248,6 +248,9 @@ export function ApprovalCard({
             ...declineAction,
           ];
         }
+        // Zernio took it and never confirmed it: it may be live, so the founder checks. No Retry: it could post twice.
+        if (body.state === "unconfirmed")
+          return [{ label: "It went out", variant: "primary", checks: "posted", run: () => void run({ action: "posted" }) }, changeTime, ...declineAction];
         // A failed post keeps its card open with the reason while its window lasts (A1); Retry posts it now.
         if (card.problem?.kind === "failed" || body.state === "failed") return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
         if (!sameOptions(options, body.options))
@@ -322,7 +325,7 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} firstSlide={shown} onFirstSlide={setShown} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" ? "It posts as you approved it; change the time to start again." : null)} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
           ) : (
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
@@ -330,7 +333,7 @@ export function ApprovalCard({
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
 
           {card.body.kind === "schedule" && card.body.lastError && !card.problem && card.status === "waiting" && card.body.state !== "waiting" ? (
-            <p className={`v2-card-state ${card.body.state === "failed" ? "is-failed" : "is-expired"}`}>
+            <p className={`v2-card-state ${card.body.state === "failed" || card.body.state === "unconfirmed" ? "is-failed" : "is-expired"}`}>
               <b>{STATE_LABEL[card.body.state]}</b>
               <span>
                 {card.body.lastError}

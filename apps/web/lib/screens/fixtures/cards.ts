@@ -263,6 +263,12 @@ export const SCHEDULE_STATE_CARDS: ApprovalCard[] = [
   },
   {
     ...SCHEDULE_CARD,
+    id: "card-time-unconfirmed",
+    expiresAt: null,
+    body: scheduleBody({ state: "unconfirmed", lastError: "We could not confirm it went out. Check your account before posting it again." }),
+  },
+  {
+    ...SCHEDULE_CARD,
     id: "card-time-choose",
     body: scheduleBody({ options: { allow_comment: false, allow_duet: false, allow_stitch: false, brand_organic: false, brand_content: false } }),
   },

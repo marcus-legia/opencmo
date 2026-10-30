@@ -172,6 +172,14 @@ check("compose: a live field that breaks the contract drops back alone", () => {
 // P4 A0: the schedule snapshot (SQL `approval_snapshot`) parses; platform fields are a closed set.
 check("schedule snapshot parses", () => void ScheduleSnapshotSchema.parse(SCHEDULE_SNAPSHOT));
 // P4 A2 writes TikTok's commercial content toggles into every new TikTok slot: a card that does not parse is dropped.
+// A card built without its slot never offers Retry on a guess: the state comes from the slot (schedule-enrich.ts).
+check("an un-enriched schedule card with a last error is not called failed", () => {
+  const row = { id: "00000000-0000-4000-8000-000000000001", kind: "schedule", department: "schedule", ref_kind: "schedule_slot", ref_id: SCHEDULE_SNAPSHOT.slot_id, status: "waiting",
+    snapshot: { ...SCHEDULE_SNAPSHOT, last_error: "It could not go out within its time window." }, content_hash: "0".repeat(64), price_credits: null, post_at: null, account: null,
+    created_at: new Date().toISOString(), expires_at: null, decided_at: null, decided_via: null, reason: null } as unknown as ApprovalRow;
+  const card = approvalToCard(row);
+  assert.ok(card && card.body.kind === "schedule" && card.body.state === "waiting" && card.body.lastError);
+});
 check("schedule snapshot with TikTok's disclosure toggles parses", () => {
   const options = { allow_comment: false, allow_duet: false, allow_stitch: false, brand_organic: false, brand_content: false };
   void ScheduleSnapshotSchema.parse({ ...SCHEDULE_SNAPSHOT, options });

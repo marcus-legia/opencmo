@@ -199,6 +199,38 @@ async function main() {
   assert.throws(() => platformFields("tiktok", { ai_label: false }));
   assert.deepEqual(platformFields("x", {}), { platform: "x", aiGenerated: false });
 
+  // A time kept with a fraction of a second still matches the snapshot's whole seconds (review #9).
+  {
+    const { d, updates } = deps([fired({ publishAt: "2026-11-02T09:00:00.400+00:00" })]);
+    assert.deepEqual(await runPublishPost(d, SLOT), { kind: "done", status: "published" });
+    assert.equal(updates[0]!.status, "published");
+  }
+
+  // An adapter that throws after the slot is posting settles it failed, never left to read "unconfirmed" (review #4).
+  {
+    const throwing: PublishAdapter = { ...adapter, publish: async () => { throw new Error("boom"); } };
+    const { d, updates } = deps([fired({ idempotencyKey: "slot-key-throw" })], { adapter: throwing });
+    assert.deepEqual(await runPublishPost(d, SLOT), { kind: "done", status: "failed" });
+    assert.ok(updates[0]!.status === "failed" && updates[0]!.error.retryable);
+  }
+
+  // A refused start (changed after approval) goes on the slot's card with SQL's reason; a dropped call is retried (review #5).
+  {
+    const sent: { name: string; args: Record<string, unknown> }[] = [];
+    let status = "due";
+    const rpc = async (name: string, args: Record<string, unknown>) => {
+      sent.push({ name, args });
+      if (name === "publish_slot_start") return { data: null, error: { code: "P0001", message: "This post changed after it was approved." } };
+      if (name === "publish_status") status = "failed";
+      return { data: name === "publish_slot_read" ? { id: SLOT, status, export: null, media: { state: "none" } } : null, error: null };
+    };
+    const slot = await publishDeps(rpc, adapter, "user-1", "order-1").slot(SLOT);
+    assert.equal(slot?.status, "failed");
+    assert.deepEqual(sent.find((c) => c.name === "publish_status")!.args.p_error, { code: "invalid", message: "This post changed after it was approved.", retryable: true });
+    const down = async (name: string) => ({ data: name === "publish_slot_read" ? { id: SLOT, status: "due" } : null, error: name === "publish_slot_start" ? { message: "fetch failed" } : null });
+    await assert.rejects(publishDeps(down, adapter, "user-1", "order-1").slot(SLOT), /fetch failed/);
+  }
+
   // The job's deps over A2's RPCs: every call but publish_status names the run's user and order; a `due` slot is
   // started (re-checked in SQL) before the handler sees it; status goes back in A2's argument names.
   {

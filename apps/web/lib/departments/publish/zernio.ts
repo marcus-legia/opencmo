@@ -297,8 +297,13 @@ export function createZernioAdapter(options: ZernioOptions): PublishAdapter {
     },
 
     async publish(deliverable, slot) {
-      const d = PublishDeliverableSchema.parse(deliverable);
-      const s = PublishSlotSchema.parse(slot);
+      // A post the platform cannot take (no text, a title too long) is a refusal on the card, not a crash that
+      // leaves the slot posting until it reads "unconfirmed".
+      const parsed = { d: PublishDeliverableSchema.safeParse(deliverable), s: PublishSlotSchema.safeParse(slot) };
+      if (!parsed.d.success || !parsed.s.success) {
+        return { status: "failed", externalId: null, url: null, error: { code: "invalid", message: NOT_POSTABLE, retryable: false } };
+      }
+      const [d, s] = [parsed.d.data, parsed.s.data];
       try {
         // 207 = saved but not fully published: `post.status` says which.
         const { body } = await call("POST", "/posts", "posting", { body: postBody(d, s), idempotencyKey: s.idempotencyKey, timeoutMs: PUBLISH_TIMEOUT_MS, okStatuses: [207] });
@@ -310,3 +315,5 @@ export function createZernioAdapter(options: ZernioOptions): PublishAdapter {
     },
   };
 }
+
+const NOT_POSTABLE = "This post is missing what the platform needs (its text or title). Edit it and approve it again.";

@@ -2,16 +2,17 @@ import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
+import { PublishAtSchema } from "@/lib/screens/approval-card";
 import { approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 import { enrichScheduleCards } from "@/lib/screens/schedule-enrich";
 
 export const dynamic = "force-dynamic";
 
-const UUID = /^[0-9a-f-]{36}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const body = z.discriminatedUnion("action", [
   /** The calendar's drag (or its Move picker): a new time, with its offset; the slot asks again with a new card. */
-  z.object({ action: z.literal("change_time"), publishAt: z.iso.datetime({ offset: true }) }).strict(),
+  z.object({ action: z.literal("change_time"), publishAt: PublishAtSchema }).strict(),
   /** "I posted it" on a copy-and-open card: the founder posted it themselves. */
   z.object({ action: z.literal("posted") }).strict(),
 ]);
@@ -22,7 +23,8 @@ const body = z.discriminatedUnion("action", [
  * slot's state and the rules (gap, daily cap, window) are checked in SQL. Answers the card that now stands for it.
  */
 export const POST = withApi(
-  { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
+  // Its own bucket (`rate_limit_hit` 'schedule'): moving slots must not use up the card decisions' quota.
+  { body, rateLimit: { bucket: "schedule", limit: 120, windowSeconds: 3600 } },
   async ({ supabase, user, body, params }) => {
     if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Slot not found.");
     const row = firstRow(

@@ -126,12 +126,15 @@ export function refusal(slot: FiredSlot, now: Date): PublishStatusUpdate | null 
   if (!slot.current || slot.current.content_hash !== s.content_hash) {
     return fail("invalid", "The post changed after you approved it. Approve the new version.");
   }
-  if (s.slot_id !== slot.id || s.platform !== slot.platform || s.account_id !== slot.accountId || Date.parse(s.publish_at) !== Date.parse(slot.publishAt)) {
+  if (s.slot_id !== slot.id || s.platform !== slot.platform || s.account_id !== slot.accountId || wholeSeconds(s.publish_at) !== wholeSeconds(slot.publishAt)) {
     return fail("invalid", "The time or account changed after you approved it. Approve the new card.");
   }
   if (!sameOptions(s.options, slot.options)) return fail("invalid", "The post's settings changed after you approved them. Approve the new card.");
   return null;
 }
+
+/** The snapshot keeps the time to the second; the slot keeps whatever it was given. */
+const wholeSeconds = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 /** The approved content → the adapter's deliverable and slot. */
 export function adapterInput(slot: FiredSlot, mediaUrl: string | null): { deliverable: PublishDeliverable; slot: PublishSlot } {
@@ -217,6 +220,14 @@ export async function runPublishPost(deps: PublishPostDeps, slotId: string): Pro
     // A card without a field the platform requires (TikTok's privacy or comment toggle) never gets a default.
     return settle(fail("invalid", "This post is missing a setting the platform needs. Open its card and approve it again."), "failed");
   }
-  const result = await deps.adapter.publish(input.deliverable, input.slot);
+  let result: PublishResult;
+  try {
+    result = await deps.adapter.publish(input.deliverable, input.slot);
+  } catch (error) {
+    // The slot is `publishing`: anything that is not an answer from the platform settles it, so it never sits there
+    // until it reads "unconfirmed" for a post that was never sent.
+    console.error("[publish] adapter threw", error instanceof Error ? error.message : error);
+    return settle(fail("unavailable", "Something went wrong before it was sent. Retry posts it again.", true), "failed");
+  }
   return settle(resultUpdate(result), result.status === "published" ? "published" : result.status === "accepted" ? "accepted" : "failed");
 }

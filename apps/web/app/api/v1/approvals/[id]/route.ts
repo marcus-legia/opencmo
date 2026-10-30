@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
-import { ScheduleOptionsSchema } from "@/lib/screens/approval-card";
+import { PublishAtSchema, ScheduleOptionsSchema } from "@/lib/screens/approval-card";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 import { enrichScheduleCards } from "@/lib/screens/schedule-enrich";
 import { signStudioCards } from "@/lib/screens/studio-sign";
@@ -46,7 +46,7 @@ const body = z.object({
   goal: z.string().trim().max(300).optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
   /** Schedule card, `change_time`: the new time, with its offset. */
-  publishAt: z.iso.datetime({ offset: true }).optional(),
+  publishAt: PublishAtSchema.optional(),
   /** Schedule card, `change_account`: one of the founder's connected accounts; null = copy and open instead. */
   accountId: z.uuid().nullable().optional(),
   /** Schedule card, `set_options`: the platform fields to change (merged into the slot's). */

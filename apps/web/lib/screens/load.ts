@@ -9,6 +9,7 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
+import { localMidnight, localMonday } from "@/lib/time-zone";
 import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { SITE_URL } from "@/lib/site";
 
@@ -642,10 +643,15 @@ const SCHEDULE_RULES: string[] = [
 
 async function schedule({ supabase, userId, params }: LoadContext): Promise<Partial<ScheduleScreen>> {
   const prof = profile(supabase, userId);
+  // The week starts at Monday midnight where the founder is: a Monday 06:00 post in UTC+7 is Monday's, not Sunday's.
+  // A profile that cannot be read leaves the timezone field to fail on its own, as each field does.
+  const timezone = await prof.then((p) => p.timezone, () => "UTC");
   const asked = params.get("from");
-  const start = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? new Date(`${asked}T00:00:00Z`) : new Date(`${mondayOf()}T00:00:00Z`);
-  const from = Number.isNaN(start.getTime()) ? new Date(`${mondayOf()}T00:00:00Z`) : start;
-  const to = new Date(from.getTime() + 7 * 86_400_000);
+  const askedDay = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(Date.parse(`${asked}T12:00:00Z`)) ? asked : null;
+  const monday = askedDay ? localMonday(Date.parse(`${askedDay}T12:00:00Z`), "UTC") : localMonday(Date.now(), timezone);
+  const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const from = new Date(localMidnight(monday, timezone) ?? `${monday}T00:00:00Z`);
+  const to = new Date(localMidnight(nextMonday, timezone) ?? `${nextMonday}T00:00:00Z`);
   return parts<ScheduleScreen>("schedule", {
     timezone: async () => (await prof).timezone,
     from: async () => from.toISOString(),

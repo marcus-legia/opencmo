@@ -110,7 +110,9 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "set_options":
       return `Changes saved. A new card asks you to approve them${suffix}.`;
     case "posted":
-      return `Marked as posted. Nothing else goes out for it${suffix}.`;
+      return card.body.kind === "schedule" && card.body.state === "unconfirmed"
+        ? `Marked as live. It will not be posted again${suffix}.`
+        : `Marked as posted. Nothing else goes out for it${suffix}.`;
     case "retry":
       return `Trying again. If its time has passed, a card with a new time comes instead${suffix}.`;
     case "cancel":

@@ -325,6 +325,14 @@ export const ScheduleSnapshotSchema = z.object({
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 
+/**
+ * A schedule time as the routes take it: with its offset, and to the second at most. The card's snapshot keeps whole
+ * seconds, so a fraction would make the approved time never match the slot's.
+ */
+export const PublishAtSchema = z.iso
+  .datetime({ offset: true })
+  .refine((value) => !/\.\d/.test(value), "Pick a time to the minute (no fractions of a second).");
+
 /** `approvals.ref_kind` of a schedule card; `ref_id` is the slot. */
 export const SCHEDULE_REF_KIND = "schedule_slot" as const;
 
@@ -360,9 +368,10 @@ const ScheduleBody = z.object({
   lastError: z.string().max(500).nullable(),
   /**
    * The slot behind the card (`schedule-enrich.ts`, from `schedule_slots`): `failed` offers Retry, `missed` is a new
-   * time after the old one passed, `no_account` is the copy-and-open moment of a post with no connected account.
+   * time after the old one passed, `no_account` is the copy-and-open moment of a post with no connected account,
+   * `unconfirmed` is a post Zernio took but never confirmed (the founder checks; never a blind Retry).
    */
-  state: z.enum(["waiting", "failed", "missed", "no_account"]),
+  state: z.enum(["waiting", "failed", "missed", "no_account", "unconfirmed"]),
   /** The live post, once it went out. */
   publishedUrl: z.url().nullable(),
 });

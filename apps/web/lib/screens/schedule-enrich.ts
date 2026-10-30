@@ -51,6 +51,7 @@ type SlotRow = {
 function slotState(slot: SlotRow): Extract<ApprovalCard["body"], { kind: "schedule" }>["state"] {
   if (slot.error?.code === "missed" && slot.status === "proposed") return "missed";
   if (slot.status !== "failed") return "waiting";
+  if (slot.error?.code === "unconfirmed") return "unconfirmed";
   return slot.error?.code === "no_account" ? "no_account" : "failed";
 }
 

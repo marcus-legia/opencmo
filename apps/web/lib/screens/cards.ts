@@ -248,8 +248,9 @@ function build(row: ApprovalRow): Built | null {
           options: v.options,
           tiktok: null,
           lastError: v.last_error,
-          // Read from the slot on the server (`schedule-enrich.ts`); a missed card and a failed one share a snapshot shape.
-          state: v.last_error ? "failed" : "waiting",
+          // Read from the slot on the server (`schedule-enrich.ts`): a missed card and a failed one share a snapshot
+          // shape, so nothing is guessed here. Every route and loader that builds cards enriches them.
+          state: "waiting",
           publishedUrl: null,
         },
       };

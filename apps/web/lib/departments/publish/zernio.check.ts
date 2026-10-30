@@ -192,6 +192,12 @@ async function main() {
     const d = await createZernioAdapter({ apiKey: "k", fetch: dropped.f }).publish(post, slot);
     assert.ok(d.status === "failed" && d.error.code === "unavailable" && d.error.retryable);
     assert.equal(dropped.seen.length, 2);
+
+    // Nothing to post (empty text): a refusal for the card, nothing sent (review #4).
+    const none = fakeFetch([]);
+    const e = await createZernioAdapter({ apiKey: "k", fetch: none.f }).publish({ ...post, text: "  ", media: [] }, { ...slot, platform: "x", fields: { platform: "x", aiGenerated: false } });
+    assert.ok(e.status === "failed" && e.error.code === "invalid" && !e.error.retryable);
+    assert.equal(none.seen.length, 0);
   }
 
   // Presign: the worker's size cap, a filename Zernio accepts, https URLs only.

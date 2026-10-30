@@ -12,7 +12,7 @@ import { Deferred, type JobContext, type JobOutput } from "@/lib/cmo/jobs/runner
 
 import type { PublishAdapter } from "./types";
 
-type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** An upload is checked again this often; Zernio's presigned URL lasts an hour. */
@@ -36,7 +36,14 @@ export function publishDeps(rpc: Rpc, adapter: PublishAdapter, userId: string, o
       let s = await read(slotId);
       // The sweep leaves it `due`; starting re-checks window, pause and approval, then marks it `publishing`.
       if (s?.status === "due") {
-        await call("publish_slot_start", { p_slot: slotId });
+        const { error } = await rpc("publish_slot_start", { p_slot: slotId, p_user: userId, p_order: orderId });
+        // A refusal (changed after approval, window passed, paused) goes on the slot's card with its reason; anything
+        // else (a dropped connection) fails the run so it is tried again.
+        if (error?.code === "P0001") {
+          await setStatus(slotId, { status: "failed", error: { code: "invalid", message: error.message.slice(0, 500), retryable: true } });
+        } else if (error) {
+          throw new Error(`publish_slot_start: ${error.message}`);
+        }
         s = await read(slotId);
       }
       return s;
@@ -45,17 +52,19 @@ export function publishDeps(rpc: Rpc, adapter: PublishAdapter, userId: string, o
     media: async (slotId) => (last?.id === slotId ? last.media : (await read(slotId)).media),
     startMedia: async (slotId, file, presigned) =>
       call<string>("publish_media_queue", { p_slot: slotId, p_object: file.object, p_upload_url: presigned.uploadUrl, p_public_url: presigned.publicUrl }),
-    status: async (slotId, update: PublishStatusUpdate) => {
-      const { error } = await rpc("publish_status", {
-        p_slot: slotId,
-        p_status: update.status,
-        p_external_id: "externalId" in update ? update.externalId : null,
-        p_url: update.status === "published" ? update.url : null,
-        p_error: update.status === "failed" ? update.error : null,
-      });
-      if (error) throw new Error(`publish_status: ${error.message}`);
-    },
+    status: (slotId, update) => setStatus(slotId, update),
   };
+
+  async function setStatus(slotId: string, update: PublishStatusUpdate): Promise<void> {
+    const { error } = await rpc("publish_status", {
+      p_slot: slotId,
+      p_status: update.status,
+      p_external_id: "externalId" in update ? update.externalId : null,
+      p_url: update.status === "published" ? update.url : null,
+      p_error: update.status === "failed" ? update.error : null,
+    });
+    if (error) throw new Error(`publish_status: ${error.message}`);
+  }
 }
 
 export async function publishPost(ctx: JobContext): Promise<JobOutput> {

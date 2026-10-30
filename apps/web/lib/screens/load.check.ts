@@ -150,6 +150,9 @@ async function main(): Promise<void> {
   const sched = compose("schedule", (await LOADERS.schedule!({ ...(ctx as object), params: week } as never)) as never, { production: true, sample: false });
   assert.ok(sched.live.slots && sched.live.accounts && sched.live.timezone, "Schedule's slots, accounts and timezone are live");
   assert.equal(sched.data.timezone, "Asia/Ho_Chi_Minh");
+  // The week starts at Monday midnight in Ho Chi Minh (17:00 UTC on Sunday), not at UTC midnight.
+  assert.match(sched.data.from, /T17:00:00(\.000)?Z$/, "the week starts at the founder's Monday midnight");
+  assert.equal(new Date(sched.data.from).getUTCDay(), 0);
   assert.deepEqual(
     sched.data.slots.map((x) => [x.id, x.status, x.note, x.approvalId]),
     [
