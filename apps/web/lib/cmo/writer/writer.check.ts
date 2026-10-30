@@ -96,6 +96,13 @@ assert.equal(captionText({ text: "Hook line ", hashtags: ["saas", "#founder"] })
 assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d", "e", "f"] }, tiktok, rules), ["It has 6 hashtags; the TikTok caption takes at most 5."]);
 assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, tiktok3, rules), ["It has 4 hashtags; the TikTok caption takes at most 3."], "tags in the text count too");
 assert.ok(checkCaption({ text: "See paylane.app", hashtags: [] }, instagram, rules).some((issue) => issue.includes("link")));
+// The founder's product may be named like a domain: its bare name is not a link; any other domain, or a path, is.
+const calRules = { ...rules, names: ["Cal.com"] };
+assert.deepEqual(checkCaption({ text: "Booked in a minute with Cal.com.", hashtags: [] }, instagram, calRules), [], "the product's own name");
+assert.ok(checkCaption({ text: "Booked with Cal.com, see acme.io", hashtags: [] }, instagram, calRules).some((issue) => issue.includes("link")), "another domain");
+assert.ok(checkCaption({ text: "Pricing at cal.com/pricing", hashtags: [] }, instagram, calRules).some((issue) => issue.includes("link")), "a path");
+assert.ok(checkPost("We shipped it on Cal.com today.", calRules).every((issue) => !issue.includes("link")), "a post may name the product");
+assert.deepEqual(checkCaption({ text: "Built on Next.js and Node.js.", hashtags: [] }, instagram, rules), [], "a framework is not a link");
 assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, instagram, rules)[0]?.includes("2202 characters"), "the limit counts the published caption with its hashtags");
 assert.deepEqual(checkYoutube({ title: "How Paylane chases late invoices", description: "A walk through.", hashtags: ["saas"] }, youtube, rules), []);
 assert.ok(checkYoutube({ title: "t".repeat(101), description: "d", hashtags: [] }, youtube, rules)[0]?.includes("101 characters"));

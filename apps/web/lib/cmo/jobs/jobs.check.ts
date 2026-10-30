@@ -72,7 +72,7 @@ async function main() {
   assert.equal(pickDueItem([mk("2026-10-07", "planned")], "2026-10-05"), null, "chưa tới hạn");
   const named = [mk("2026-10-03", "planned"), mk("2026-10-04", "planned")];
   assert.equal(pickDueItem(named, "2026-10-05", named[1]!.id)?.day, "2026-10-04", "the item the schedule named wins");
-  assert.equal(pickDueItem(named, "2026-10-05", "gone")?.day, "2026-10-03", "a named item no longer planned falls back to the oldest");
+  assert.equal(pickDueItem(named, "2026-10-05", "gone"), null, "a named item no longer planned is not swapped for another");
 
   // W1 rồi W2 chạy hết hàng đợi với LLM giả.
   const mem = memoryStore(docs);
@@ -90,6 +90,12 @@ async function main() {
   assert.ok(card, "có thẻ chờ duyệt");
   assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
   assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
+  // A run named for an item that is no longer planned drafts nothing and gives the credit back.
+  const gone = mem.enqueue("post_draft", { item_id: card!.id });
+  const drafted = mem.items.filter((i) => i.status === "in_review").length;
+  assert.equal(await drainCmoQueue(mem.store), 1);
+  assert.deepEqual(gone.output, { refund: true, reason: "That post is no longer planned." }, "the named item was drafted already");
+  assert.equal(mem.items.filter((i) => i.status === "in_review").length, drafted, "no other post drafted in its place");
   assert.equal((card!.body.alternates as string[]).length, 2, "kèm 2 phiên bản khác");
   const gen = card!.body.gen as { model: string; prompt_version: string };
   assert.equal(gen.model, "fake", "the draft records which model wrote it");

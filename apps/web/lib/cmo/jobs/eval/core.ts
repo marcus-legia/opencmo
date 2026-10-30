@@ -15,7 +15,7 @@
 import type { CaseResult } from "@/lib/eval/compare";
 
 import { checkPost } from "../check-post";
-import { avoidList, knownNumbers, normalizeNumber } from "../context";
+import { avoidList, checkRules, knownNumbers, normalizeNumber } from "../context";
 import { cascade } from "../judge";
 import { memoryStore } from "../memory-store";
 import type { Documents } from "../types";
@@ -81,7 +81,7 @@ const w2: EvalCase = {
     const item = mem.items.find((i) => i.run_id === run.id);
     if (item?.body.gen) env.recordGen("w2", item.body.gen);
     const texts = item ? [String(item.body.text ?? ""), ...((item.body.alternates as string[] | undefined) ?? [])] : [];
-    const rules = { avoid: avoidList(fixture.docs), known: knownNumbers(fixture.docs) };
+    const rules = checkRules(fixture.docs);
     const results: CaseResult[] = [runResult(`w2:${fixture.name}:run`, env.epoch, run.status === "done", run.error ? [run.error] : [])];
     // Always three outputs, so a run that drafted fewer pairs as fails, not as missing cases.
     for (let index = 0; index < 3; index++) {

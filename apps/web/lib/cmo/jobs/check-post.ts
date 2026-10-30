@@ -14,12 +14,20 @@ import { normalizeNumber } from "./context";
 
 export const X_LIMIT = 280;
 
-export type CheckRules = { avoid: string[]; known: Set<string> };
+/** `names`: the founder's own product name(s), which may look like a domain ("Cal.com") and are not links. */
+export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[] };
 
-/** A URL, a `www.` address, or a bare domain on a TLD people link to ("opencmo.io/pricing"); not "Next.js". */
-const LINK = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+|\b[a-z0-9][a-z0-9-]*\.(?:com|io|ai|co|app|dev|net|org|so|xyz|me|ly|gg|sh|to|tv|link|site|online|store|tech|page|info|biz|us|uk)\b(?!\.\w)/i;
+/** Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"). SQL's `caption_check` holds the same. */
+const URL_LIKE = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+|\b[a-z0-9][a-z0-9-]*\.[a-z]{2,}\/\S/i;
+/** A bare domain on a TLD people link to ("acme.io"); not "Next.js". */
+const BARE_DOMAIN = /\b[a-z0-9][a-z0-9-]*\.(?:com|io|ai|co|app|dev|net|org|so|xyz|me|ly|gg|sh|to|tv|link|site|online|store|tech|page|info|biz|us|uk)\b(?!\.\w)/gi;
 
-export const hasLink = (text: string): boolean => LINK.test(text);
+/** A link, except a bare domain that is the founder's own product name (`names`, from the product document). */
+export function hasLink(text: string, names: readonly string[] = []): boolean {
+  if (URL_LIKE.test(text)) return true;
+  const own = new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean));
+  return [...text.matchAll(BARE_DOMAIN)].some((m) => !own.has(m[0].toLowerCase()));
+}
 /** Hashtags the way the platforms count them ("#buildinpublic", not "#1" or "C#"), the same count the cards show. */
 export const hashtagCount = countHashtags;
 
@@ -49,7 +57,7 @@ export function checkPost(text: string, rules: CheckRules, profile: { limit: num
   const length = [...t].length;
   if (length > profile.limit) issues.push(`It is ${length} characters; ${profile.platform} allows ${profile.limit}.`);
   issues.push(...factIssues(t, rules));
-  if (hasLink(t)) issues.push("It has a link. Posts carry no links.");
+  if (hasLink(t, rules.names)) issues.push("It has a link. Posts carry no links.");
   if (hashtagCount(t)) issues.push("It has a hashtag. Posts carry no hashtags; they go only on video captions.");
   return issues;
 }

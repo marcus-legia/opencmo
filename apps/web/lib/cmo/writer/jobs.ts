@@ -95,6 +95,25 @@ export async function writeSlides(ctx: JobContext): Promise<JobOutput> {
   return { slides: out.slides, reason: out.rationale };
 }
 
+const CAPTION_CONCURRENCY = 3;
+
+/** Runs `tasks` with at most `limit` at once. The first failure fails the whole and starts nothing more, as a loop would. */
+async function inPool(tasks: readonly (() => Promise<void>)[], limit: number): Promise<void> {
+  let next = 0;
+  let stopped = false;
+  const lane = async () => {
+    while (!stopped && next < tasks.length) {
+      try {
+        await tasks[next++]!();
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, lane));
+}
+
 /**
  * Captions for each edit and each profile the plan targets. One that fails our checks twice is left out (the card
  * shows the others); a run that saves none fails, and its credit is refunded.
@@ -110,33 +129,40 @@ export async function writeCaption(ctx: JobContext): Promise<JobOutput> {
   const context = await readContext(ctx, "video", false);
   let saved = 0;
   const failed: string[] = [];
+  const tasks: (() => Promise<void>)[] = [];
   for (const [index, clipId] of clipIds.entries()) {
     const video: VideoSource | null = await ctx.step(`read_video_${index}`, "Reading what the video says", () => store.videoSource(run.user_id, clipId), (v) => (v ? `${v.title} · ${Math.round(v.seconds)} s` : "Video not found"));
     if (!video) {
       failed.push(`A video is gone (${clipId}).`);
       continue;
     }
-    const { writer, gen } = runWriter(ctx, clipIds.length > 1 ? `_${index}` : "");
+    const suffix = clipIds.length > 1 ? `_${index}` : "";
     for (const profile of profiles) {
-      const step = `write_caption_${profile.id}${clipIds.length > 1 ? `_${index}` : ""}`;
-      try {
-        await ctx.step(step, `Writing the ${profile.label}`, async () => {
-          if (profile.kind === "youtube") {
-            const out = await writer.draft("youtube", profile, { video }, context);
-            await store.saveCaption(run.user_id, run.id, clipId, profile.id, captionText({ text: out.description, hashtags: out.hashtags }), out.title, gen("youtube"));
-          } else {
-            const out = await writer.draft("caption", profile, { video }, context);
-            await store.saveCaption(run.user_id, run.id, clipId, profile.id, captionText(out), null, gen("caption"));
-          }
-          saved += 1;
-        }, () => `${profile.label} on the card`);
-      } catch (error) {
-        // A check that failed twice drops this caption only; anything else (the store, the network) fails the run.
-        if (!(error instanceof LlmError)) throw error;
-        failed.push(`${profile.label}: ${error.message}`);
-      }
+      // A writer per caption, so each records the model that wrote it even while they run side by side.
+      const { writer, gen } = runWriter(ctx, suffix);
+      tasks.push(async () => {
+        try {
+          await ctx.step(`write_caption_${profile.id}${suffix}`, `Writing the ${profile.label}`, async () => {
+            if (profile.kind === "youtube") {
+              const out = await writer.draft("youtube", profile, { video }, context);
+              await store.saveCaption(run.user_id, run.id, clipId, profile.id, captionText({ text: out.description, hashtags: out.hashtags }), out.title, gen("youtube"));
+            } else {
+              const out = await writer.draft("caption", profile, { video }, context);
+              await store.saveCaption(run.user_id, run.id, clipId, profile.id, captionText(out), null, gen("caption"));
+            }
+            saved += 1;
+          }, () => `${profile.label} on the card`);
+        } catch (error) {
+          // A check that failed twice drops this caption only; anything else (the store, the network) fails the run.
+          if (!(error instanceof LlmError)) throw error;
+          failed.push(`${profile.label}: ${error.message}`);
+        }
+      });
     }
   }
+  // Up to 6 clips × 4 profiles is 24 captions, each one to three model calls: a few at a time keeps a run short. The founder's
+  // Claude answers one inbox question at a time, so an inbox run asks in order.
+  await inPool(tasks, ctx.brain === "opencmo" && !fakeAllowed() ? CAPTION_CONCURRENCY : 1);
   if (!saved) throw new LlmError(`No caption passed our checks. ${failed.join(" ")}`.slice(0, 480));
   const reason = `${saved} ${saved === 1 ? "caption" : "captions"} on the card${failed.length ? `; ${failed.length} left out` : ""}.`;
   return { reason, saved, failed };

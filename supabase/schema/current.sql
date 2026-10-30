@@ -1953,6 +1953,28 @@ $$;
 
 
 --
+-- Name: approvals_caption_approve(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_caption_approve() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+begin
+  if new.kind not in ('finished_video', 'shorts_batch') or new.status <> 'approved' or old.status <> 'waiting'
+     or coalesce(jsonb_typeof(new.snapshot->'captions'), '') <> 'array' then
+    return new;
+  end if;
+  update public.content_items c set status = 'approved', decided_at = coalesce(c.decided_at, now()), updated_at = now()
+  where c.user_id = new.user_id and c.department = 'video' and c.status = 'in_review'
+    and c.id in (select (e->>'caption_id')::uuid from jsonb_array_elements(new.snapshot->'captions') e
+                 where e->>'caption_id' ~ '^[0-9a-f-]{36}$');
+  return new;
+end;
+$_$;
+
+
+--
 -- Name: approvals_caption_rules(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2375,7 +2397,7 @@ begin
   elsif p_title is not null then
     raise exception 'Only YouTube has a title.' using errcode = '22023';
   end if;
-  if concat_ws(' ', p_title, p_text) ~* '(https?://|www\.)' then
+  if concat_ws(' ', p_title, p_text) ~* '(https?://|www\.|\m[a-z0-9][a-z0-9-]*\.[a-z]{2,}/[^[:space:]])' then
     raise exception 'Captions carry no links.' using errcode = '22023';
   end if;
   -- `countHashtags` in lib/cmo/platforms.ts: `#word` with a letter in it, not `#1` or `a#b`.
@@ -12935,6 +12957,13 @@ CREATE TRIGGER agent_messages_immutable BEFORE UPDATE ON public.agent_messages F
 --
 
 CREATE TRIGGER apply_credit_ledger_insert AFTER INSERT ON public.credit_ledger FOR EACH ROW EXECUTE FUNCTION public.apply_credit_ledger_insert();
+
+
+--
+-- Name: approvals approvals_caption_approve; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_caption_approve AFTER UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_caption_approve();
 
 
 --

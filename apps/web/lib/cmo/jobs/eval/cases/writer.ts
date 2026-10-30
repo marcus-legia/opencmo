@@ -15,7 +15,7 @@ import type { CaseResult } from "@/lib/eval/compare";
 import { CAPTION_PROFILES, countHashtags, profileOf } from "../../../platforms";
 import { checkPostFor, checkVideoBrief } from "../../../writer/checks";
 import { VideoBriefSchema } from "../../../writer/types";
-import { avoidList, knownNumbers } from "../../context";
+import { checkRules } from "../../context";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
 import { isoDay, type ItemRow } from "../../types";
@@ -50,7 +50,7 @@ function platformCase(platform: (typeof PLATFORMS)[number]): EvalCase {
     job,
     async run(fixture, env) {
       const profile = profileOf(platform)!;
-      const rules = { avoid: avoidList(fixture.docs), known: knownNumbers(fixture.docs) };
+      const rules = checkRules(fixture.docs);
       const mem = memoryStore(fixture.docs, []);
       const row = item(platform, fixture.brief);
       mem.items.push(row);
@@ -84,7 +84,7 @@ const briefCase: EvalCase = {
     await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
     const parsed = VideoBriefSchema.safeParse((run.output as { brief?: unknown } | null)?.brief);
     const results: CaseResult[] = [{ id: `w3-brief:${fixture.name}:run`, epoch: env.epoch, pass: run.status === "done", decided_by: "code", ...(run.error ? { notes: [run.error] } : {}) }];
-    const rules = { avoid: avoidList(fixture.docs), known: knownNumbers(fixture.docs) };
+    const rules = checkRules(fixture.docs);
     const issues = parsed.success ? checkVideoBrief(parsed.data, rules) : ["no brief"];
     const text = parsed.success ? [`Objective: ${parsed.data.objective}`, `Hooks: ${parsed.data.hooks.join(" | ")}`, `Key points: ${parsed.data.keyPoints.join(" | ")}`, `Call to action: ${parsed.data.cta}`].join("\n") : "";
     env.log(text);

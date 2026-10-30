@@ -14,7 +14,7 @@ import { z } from "zod";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { postProfile } from "../jobs/draft-post";
-import { avoidList, knownNumbers } from "../jobs/context";
+import { avoidList, checkRules } from "../jobs/context";
 import { checkRubric, INBOX_STEPS, isInboxStep, parseAnswer, stepsFor, type InboxStepName, type SubmitTool } from "../jobs/steps";
 import { CMO_JOB_KINDS, type CmoJobKind, type Documents, type InboxRequest } from "../jobs/types";
 import { checkPostFor } from "../writer/checks";
@@ -175,7 +175,7 @@ async function precheck(supabase: SupabaseClient, id: string, step: InboxStepNam
   const { data: row } = await supabase.from("cmo_inbox").select("request").eq("id", id).maybeSingle<{ request: InboxRequest }>();
   const profile = postProfile(profileFromPrompt(row?.request?.prompt ?? ""));
   const docs = await documents(supabase);
-  const rules = { avoid: avoidList(docs), known: knownNumbers(docs) };
+  const rules = checkRules(docs);
   const versions = (answer as { versions: { text: string }[] }).versions;
   if (!versions.length) return "Write three versions.";
   const problems = versions.map((version) => checkPostFor(version.text, profile, rules));

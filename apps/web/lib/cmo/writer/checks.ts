@@ -32,7 +32,8 @@ function tagIssues(text: string, tags: readonly string[], profile: WriterProfile
   return [profile.hashtags ? `It has ${count} hashtags; the ${profile.label} takes at most ${profile.hashtags}.` : `It has a hashtag; the ${profile.label} takes none.`];
 }
 
-const linkIssues = (text: string, profile: WriterProfile): string[] => (!profile.links && hasLink(text) ? [`It has a link; the ${profile.label} takes none.`] : []);
+const linkIssues = (text: string, profile: WriterProfile, rules: CheckRules): string[] =>
+  !profile.links && hasLink(text, rules.names) ? [`It has a link; the ${profile.label} takes none.`] : [];
 
 export function checkPostFor(text: string, profile: WriterProfile, rules: CheckRules): string[] {
   return checkPost(text, rules, { limit: profile.limit, platform: profile.label });
@@ -57,7 +58,7 @@ export function checkCaption(draft: Pick<CaptionDraft, "text" | "hashtags">, pro
   return [
     ...(chars(full) > profile.limit ? [`It is ${chars(full)} characters; the ${profile.label} allows ${profile.limit}.`] : []),
     ...factIssues(text, rules),
-    ...linkIssues(text, profile),
+    ...linkIssues(text, profile, rules),
     ...tagIssues(text, draft.hashtags, profile),
   ];
 }
@@ -73,7 +74,7 @@ export function checkYoutube(draft: Pick<YoutubeDraft, "title" | "description" |
     ...(chars(full) > profile.limit ? [`The description is ${chars(full)} characters; YouTube allows ${profile.limit}.`] : []),
     ...(hashtagCount(title) ? ["The title has a hashtag; hashtags go in the description."] : []),
     ...factIssues(`${title}\n${description}`, rules),
-    ...linkIssues(`${title}\n${description}`, profile),
+    ...linkIssues(`${title}\n${description}`, profile, rules),
     ...tagIssues(description, draft.hashtags, profile),
   ];
 }
@@ -93,7 +94,7 @@ export function checkSlides(slides: readonly Slide[], rules: CheckRules): string
   if (slides.length < 5 || slides.length > 10) issues.push(`It has ${slides.length} slides; a slideshow has 5 to 10.`);
   if (slides.some((slide) => !slide.heading.trim())) issues.push("A slide has no heading.");
   const text = slides.map((slide) => `${slide.heading}\n${slide.body}`).join("\n");
-  if (hasLink(text)) issues.push("A slide has a link.");
+  if (hasLink(text, rules.names)) issues.push("A slide has a link.");
   if (hashtagCount(text)) issues.push("A slide has a hashtag.");
   issues.push(...factIssues(text, rules));
   return issues;

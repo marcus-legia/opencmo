@@ -10,7 +10,7 @@
 import type { z } from "zod";
 
 import type { AgentId } from "../agents/registry";
-import { avoidList, knownNumbers, normalizeNumber } from "../jobs/context";
+import { checkRules, normalizeNumber } from "../jobs/context";
 import { promptVersion } from "../jobs/edit-taxonomy";
 import { LlmError } from "../jobs/llm-error";
 import type { ThinkOptions } from "../jobs/think";
@@ -66,9 +66,9 @@ export function writerPromptVersion(kind: WriterKind, postSystem = ""): string {
 
 /** Numbers the founder's documents hold, plus those said in the video a caption is written for. */
 export function rulesFor(context: WriterContext, video?: VideoSource): CheckRules {
-  const known = knownNumbers(context.documents);
-  for (const raw of video?.transcript.match(/\d[\d,.]*/g) ?? []) known.add(normalizeNumber(raw));
-  return { avoid: avoidList(context.documents), known };
+  const rules = checkRules(context.documents);
+  for (const raw of video?.transcript.match(/\d[\d,.]*/g) ?? []) rules.known.add(normalizeNumber(raw));
+  return rules;
 }
 
 function videoBlock(video: VideoSource): string {
@@ -100,20 +100,24 @@ function briefBlock(kind: WriterKind, brief: WriterBrief): string {
   }
 }
 
+/** The CI stand-in for a post: three plain versions of the idea, with no stock pattern, link or hashtag. */
+export function fakePost(idea: string, product: string): PostDraft {
+  const base = idea.replace(/\.$/, "") || "What we are building this week";
+  return {
+    versions: [
+      { text: `${base}.\n\nWe learned it building ${product} this week.`, angle: "lesson" },
+      { text: `We tried the usual advice first and it did not work for us. ${base}.`, angle: "contrarian" },
+      { text: `We changed one small thing in ${product} this week. ${base}.`, angle: "build in public" },
+    ],
+    rationale: "From today's item in your calendar.",
+  };
+}
+
 /** CI stand-ins: plain text with no stock pattern, link or hashtag in a post, from the brief alone. */
 function fakeOutput(kind: WriterKind, profile: WriterProfile | null, brief: WriterBrief, product: string): unknown {
   switch (kind) {
-    case "post": {
-      const idea = (brief as WriterBrief<"post">).idea.replace(/\.$/, "") || "What we are building this week";
-      return {
-        versions: [
-          { text: `${idea}.\n\nWe learned it building ${product} this week.`, angle: "lesson" },
-          { text: `We tried the usual advice first and it did not work for us. ${idea}.`, angle: "contrarian" },
-          { text: `We changed one small thing in ${product} this week. ${idea}.`, angle: "build in public" },
-        ],
-        rationale: "From today's item in your calendar.",
-      };
-    }
+    case "post":
+      return fakePost((brief as WriterBrief<"post">).idea, product);
     case "caption": {
       const video = (brief as WriterBrief<"caption">).video;
       const tags = ["buildinpublic", "founder", "saas", "startup", "indiehacker"].slice(0, profile?.hashtags ?? 0);
