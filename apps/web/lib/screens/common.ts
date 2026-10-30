@@ -52,6 +52,8 @@ export type Where = z.infer<typeof WhereSchema>;
  */
 export const AccountSchema = WhereSchema.extend({
   id: z.string(),
+  /** The platform's avatar, as Zernio reports it on connect (P4 F1); absent before an account is connected. */
+  avatarUrl: z.url().nullable().optional(),
   status: z.enum(["connected", "reconnect", "not_connected"]),
   syncedAt: iso.nullable(),
   noDataSince: iso.nullable(),

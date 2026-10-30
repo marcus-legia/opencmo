@@ -18,16 +18,23 @@ A0 → (push, M1) → A1 → A3 → A2 (after B0) → A4. Post "M1/M2/M3 ready f
 
 ## Todo
 
-- [ ] **A0 Contracts (push first)**
-  - [ ] 1. Migration skeleton with grants, RLS read-own and pgTAP: `zernio_profiles` (user, zernio_profile_id),
-        `social_accounts` (id, user, provider `zernio`, platform, handle, avatar_url, zernio_account_id, status
-        `connected|disconnected|error`, connected_at; unique per user + platform), `schedule_slots`
-        (`schedule-publish.md` §5 fields, plus `idempotency_key`, `window_ends_at`, `lease_until`),
-        `zernio_receipts` (event id, received_at; unique), `approvals.ref_kind` `schedule_slot`, `tasks_kind_check`
-        gains `publish_media`.
-  - [ ] 2. Snapshot type for the `schedule` card (content hash of the deliverable, platform, account, publish_at,
-        platform fields such as TikTok privacy and toggles, AI-generated label) and its `approval_snapshot` case.
-  - [ ] 3. Screen types: `schedule.*` and `settings.accounts`; fixtures.
+- [x] **A0 Contracts (push first)**
+  - [x] 1. Migration `20261230090000_p4_contracts` with grants, RLS read-own and pgTAP 215: `zernio_profiles`,
+        `social_accounts` (unique per user + platform; Reddit refused), `schedule_slots` (§5 fields plus
+        `idempotency_key`, `window_ends_at`, `lease_until`, `options`, `attempts`; one live slot per deliverable and
+        platform), `zernio_receipts`, `approvals.ref_kind` `schedule_slot`. Account RPCs for B2:
+        `zernio_profile_save` and `social_account_save` (service role only: a founder could otherwise name an account
+        id that is not theirs) and `social_account_remove` (owner). `schedule_content()` gives what goes out and its
+        hash. **`tasks_kind_check` gains `publish_media` in A2, together with its `task-kinds.json` row, once B4's
+        handler exists:** the CHECK, the row and an importable handler must change together
+        (`task-kinds.check.ts`, `test_task_kinds.py`, the worker's handler table).
+  - [x] 2. `ScheduleSnapshotSchema` (field for field with SQL, checked in `screens.check.ts`),
+        `ScheduleOptionsSchema` (TikTok privacy and toggles, AI-generated label), `SCHEDULE_ACTIONS`; the
+        `approval_snapshot` case and `approval_raise` (department `schedule`, foot time and account, expires at
+        `publish_at`).
+  - [x] 3. Screen types: the `schedule` card body (slot, account, mode, timezone, preview, options, TikTok creator
+        info, last error); `Account.avatarUrl`; fixtures. `schedule.*` and `settings.accounts` keep their shapes; the
+        A3 loader maps SQL slot statuses onto the screen's.
 - [ ] **A1 Slots and cards**: `schedule_propose(deliverable_id)` (default slots from `schedule-defaults.json` loaded
       into a table by the migration, founder timezone, 3 h gap, X 5 a day, short vs its long video not the same
       day); raises a `schedule` card that expires at `publish_at`; `approval_decide` for `schedule`: approve → slot

@@ -8,9 +8,9 @@
  */
 import assert from "node:assert/strict";
 
-import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, StudioSnapshotSchema } from "./approval-card";
+import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, ScheduleOptionsSchema, ScheduleSnapshotSchema, StudioSnapshotSchema } from "./approval-card";
 import { approvalToCard, type ApprovalRow } from "./cards";
-import { ALL_KINDS, SAMPLE_CARDS, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
+import { ALL_KINDS, SAMPLE_CARDS, SCHEDULE_SNAPSHOT, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
@@ -167,6 +167,12 @@ check("compose: a live field that breaks the contract drops back alone", () => {
   } finally {
     console.warn = warn;
   }
+});
+
+// P4 A0: the schedule snapshot (SQL `approval_snapshot`) parses; platform fields are a closed set.
+check("schedule snapshot parses", () => void ScheduleSnapshotSchema.parse(SCHEDULE_SNAPSHOT));
+check("schedule options refuse unknown fields", () => {
+  assert.equal(ScheduleOptionsSchema.safeParse({ ai_label: true, autopost: true }).success, false);
 });
 
 // P2 A0: the Studio snapshots (SQL `approval_snapshot`) parse, and every Studio kind has one.

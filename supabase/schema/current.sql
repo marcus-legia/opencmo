@@ -1554,7 +1554,7 @@ CREATE TABLE public.approvals (
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
     CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
-    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text]))),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text, 'schedule_slot'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
@@ -1809,13 +1809,18 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
   v_kind := v_snapshot->>'kind';
-  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits)
+  -- A schedule card carries its time and account in the foot and expires when its time comes (rule 4).
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits,
+    post_at, account, expires_at)
   values (p_user, v_kind,
     case v_kind when 'post' then 'writer' when 'reply' then 'sales'
       when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
-      when 'shorts_batch' then 'studio' else 'brain' end,
+      when 'shorts_batch' then 'studio' when 'schedule' then 'schedule' else 'brain' end,
     p_ref_kind, p_ref_id, v_snapshot, v_hash,
-    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end);
+    case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end,
+    case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end,
+    case when v_kind = 'schedule' then left(v_snapshot->>'handle', 100) end,
+    case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end);
 end;
 $$;
 
@@ -1916,6 +1921,19 @@ begin
         select s.short_clip_id from public.shorts s
         where s.batch_id = p_ref_id and s.status <> 'failed' and s.short_clip_id is not null
         order by s.source_start, s.id));
+    when 'schedule_slot' then
+      -- Content, time, account and the platform's fields: everything the founder approves before it posts
+      -- (approval.md rule 1). `content_hash` covers the words and the edit, so a change to either supersedes it.
+      select jsonb_build_object('kind', 'schedule', 'slot_id', s.id, 'deliverable_id', s.deliverable_id,
+        'deliverable_kind', d.kind, 'platform', s.platform, 'mode', s.mode, 'account_id', s.account_id,
+        'handle', a.handle, 'publish_at', to_char(s.publish_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        'options', s.options, 'last_error', s.error->>'message')
+        || public.schedule_content(s.deliverable_id, s.platform)
+      into v
+      from public.schedule_slots s
+      join public.deliverables d on d.id = s.deliverable_id
+      left join public.social_accounts a on a.id = s.account_id
+      where s.id = p_ref_id;
     else
       raise exception 'Unknown card source.' using errcode = '22023';
   end case;
@@ -8790,6 +8808,43 @@ $$;
 
 
 --
+-- Name: schedule_content(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_content(p_deliverable uuid, p_platform text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_d public.deliverables;
+  v_text text;
+  v_title text;
+  v_doc text;
+begin
+  select * into v_d from public.deliverables where id = p_deliverable;
+  if not found then
+    return null;
+  end if;
+  if v_d.ref_kind = 'content_item' then
+    select coalesce(body->>'text', '') into v_text from public.content_items where id = v_d.ref_id;
+    return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
+      'content_hash', public.approval_hash(jsonb_build_object('text', v_text)));
+  elsif v_d.ref_kind = 'clip' then
+    select public.editor_document_hash(document) into v_doc from public.editor_projects where clip_id = v_d.ref_id;
+    select body->>'text', body->>'title' into v_text, v_title
+    from public.content_items
+    where clip_id = v_d.ref_id and department = 'video' and platform = public.platform_profile_id(p_platform)
+      and status in ('approved', 'published');
+    return jsonb_build_object('clip_id', v_d.ref_id, 'text', v_text, 'title', v_title,
+      'content_hash', public.approval_hash(jsonb_strip_nulls(jsonb_build_object('document_hash', v_doc, 'text', v_text,
+        'title', v_title))));
+  end if;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: send_feedback(text, text, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9235,6 +9290,76 @@ begin
   return v_revision;
 end;
 $_$;
+
+
+--
+-- Name: social_account_remove(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_remove(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  delete from public.social_accounts where id = p_id and user_id = v_user;
+  if not found then
+    raise exception 'Account not found.' using errcode = 'P0002';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: social_accounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.social_accounts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider text DEFAULT 'zernio'::text NOT NULL,
+    platform text NOT NULL,
+    handle text NOT NULL,
+    avatar_url text,
+    zernio_account_id text NOT NULL,
+    status text DEFAULT 'connected'::text NOT NULL,
+    connected_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT social_accounts_avatar_url_check CHECK (((avatar_url ~ '^https://'::text) AND (char_length(avatar_url) <= 1000))),
+    CONSTRAINT social_accounts_handle_check CHECK (((char_length(handle) >= 1) AND (char_length(handle) <= 100))),
+    CONSTRAINT social_accounts_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT social_accounts_provider_check CHECK ((provider = 'zernio'::text)),
+    CONSTRAINT social_accounts_status_check CHECK ((status = ANY (ARRAY['connected'::text, 'disconnected'::text, 'error'::text]))),
+    CONSTRAINT social_accounts_zernio_account_id_check CHECK (((char_length(zernio_account_id) >= 1) AND (char_length(zernio_account_id) <= 100)))
+);
+
+
+--
+-- Name: social_account_save(uuid, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_save(p_user uuid, p_platform text, p_handle text, p_avatar_url text, p_zernio_account_id text) RETURNS public.social_accounts
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.social_accounts;
+begin
+  if not exists (select 1 from public.zernio_profiles where user_id = p_user) then
+    raise exception 'Connect starts with a Zernio profile.' using errcode = 'P0001';
+  end if;
+  insert into public.social_accounts (user_id, platform, handle, avatar_url, zernio_account_id)
+  values (p_user, p_platform, left(trim(p_handle), 100), nullif(trim(coalesce(p_avatar_url, '')), ''), p_zernio_account_id)
+  on conflict (user_id, platform) do update
+    set handle = excluded.handle, avatar_url = excluded.avatar_url, zernio_account_id = excluded.zernio_account_id,
+        status = 'connected', connected_at = case when social_accounts.zernio_account_id = excluded.zernio_account_id
+          then social_accounts.connected_at else now() end,
+        updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
 
 
 --
@@ -10957,6 +11082,24 @@ $$;
 
 
 --
+-- Name: zernio_profile_save(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.zernio_profile_save(p_user uuid, p_profile text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.zernio_profiles (user_id, zernio_profile_id) values (p_user, p_profile)
+  on conflict (user_id) do nothing;
+  if not exists (select 1 from public.zernio_profiles where user_id = p_user and zernio_profile_id = p_profile) then
+    raise exception 'This founder already has another Zernio profile.' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11518,6 +11661,45 @@ CREATE TABLE public.scene_codes (
 
 
 --
+-- Name: schedule_slots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schedule_slots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    deliverable_id uuid NOT NULL,
+    platform text NOT NULL,
+    account_id uuid,
+    mode text DEFAULT 'publish'::text NOT NULL,
+    publish_at timestamp with time zone NOT NULL,
+    jitter_seconds integer DEFAULT 0 NOT NULL,
+    window_ends_at timestamp with time zone NOT NULL,
+    status text DEFAULT 'proposed'::text NOT NULL,
+    approval_id uuid,
+    options jsonb DEFAULT '{}'::jsonb NOT NULL,
+    idempotency_key text DEFAULT (gen_random_uuid())::text NOT NULL,
+    lease_until timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    external_id text,
+    external_url text,
+    error jsonb,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT schedule_slots_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT schedule_slots_check CHECK ((window_ends_at > publish_at)),
+    CONSTRAINT schedule_slots_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT schedule_slots_external_id_check CHECK ((char_length(external_id) <= 200)),
+    CONSTRAINT schedule_slots_external_url_check CHECK (((external_url ~ '^https://'::text) AND (char_length(external_url) <= 1000))),
+    CONSTRAINT schedule_slots_jitter_seconds_check CHECK (((jitter_seconds >= '-240'::integer) AND (jitter_seconds <= 240))),
+    CONSTRAINT schedule_slots_mode_check CHECK ((mode = ANY (ARRAY['publish'::text, 'intent'::text]))),
+    CONSTRAINT schedule_slots_options_check CHECK (((jsonb_typeof(options) = 'object'::text) AND (octet_length((options)::text) <= 1024))),
+    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT schedule_slots_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text, 'missed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: short_batches; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11708,6 +11890,29 @@ CREATE TABLE public.write_budget_ledger (
     table_name text NOT NULL,
     bytes bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: zernio_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.zernio_profiles (
+    user_id uuid NOT NULL,
+    zernio_profile_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT zernio_profiles_zernio_profile_id_check CHECK (((char_length(zernio_profile_id) >= 1) AND (char_length(zernio_profile_id) <= 100)))
+);
+
+
+--
+-- Name: zernio_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.zernio_receipts (
+    event_id text NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT zernio_receipts_event_id_check CHECK (((char_length(event_id) >= 1) AND (char_length(event_id) <= 200)))
 );
 
 
@@ -12231,6 +12436,22 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: schedule_slots schedule_slots_idempotency_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_idempotency_key_key UNIQUE (idempotency_key);
+
+
+--
+-- Name: schedule_slots schedule_slots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: short_batches short_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12252,6 +12473,30 @@ ALTER TABLE ONLY public.shorts
 
 ALTER TABLE ONLY public.shorts
     ADD CONSTRAINT shorts_short_clip_id_key UNIQUE (short_clip_id);
+
+
+--
+-- Name: social_accounts social_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: social_accounts social_accounts_user_id_platform_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_user_id_platform_key UNIQUE (user_id, platform);
+
+
+--
+-- Name: social_accounts social_accounts_zernio_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_zernio_account_id_key UNIQUE (zernio_account_id);
 
 
 --
@@ -12348,6 +12593,30 @@ ALTER TABLE ONLY public.worker_draft_initializations
 
 ALTER TABLE ONLY public.worker_operations
     ADD CONSTRAINT worker_operations_pkey PRIMARY KEY (operation_key);
+
+
+--
+-- Name: zernio_profiles zernio_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: zernio_profiles zernio_profiles_zernio_profile_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_zernio_profile_id_key UNIQUE (zernio_profile_id);
+
+
+--
+-- Name: zernio_receipts zernio_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_receipts
+    ADD CONSTRAINT zernio_receipts_pkey PRIMARY KEY (event_id);
 
 
 --
@@ -12789,6 +13058,27 @@ CREATE UNIQUE INDEX profiles_polar_customer_unique ON public.profiles USING btre
 --
 
 CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, created_at DESC, id DESC);
+
+
+--
+-- Name: schedule_slots_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_due_idx ON public.schedule_slots USING btree (publish_at) WHERE (status = 'waiting'::text);
+
+
+--
+-- Name: schedule_slots_one_live; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX schedule_slots_one_live ON public.schedule_slots USING btree (deliverable_id, platform) WHERE (status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text]));
+
+
+--
+-- Name: schedule_slots_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_user_idx ON public.schedule_slots USING btree (user_id, publish_at);
 
 
 --
@@ -13775,6 +14065,38 @@ ALTER TABLE ONLY public.scene_codes
 
 
 --
+-- Name: schedule_slots schedule_slots_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.social_accounts(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_slots schedule_slots_approval_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_approval_id_fkey FOREIGN KEY (approval_id) REFERENCES public.approvals(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_slots schedule_slots_deliverable_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_deliverable_id_fkey FOREIGN KEY (deliverable_id) REFERENCES public.deliverables(id) ON DELETE CASCADE;
+
+
+--
+-- Name: schedule_slots schedule_slots_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_slots
+    ADD CONSTRAINT schedule_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: short_batches short_batches_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13828,6 +14150,14 @@ ALTER TABLE ONLY public.shorts
 
 ALTER TABLE ONLY public.shorts
     ADD CONSTRAINT shorts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: social_accounts social_accounts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.social_accounts
+    ADD CONSTRAINT social_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -14012,6 +14342,14 @@ ALTER TABLE ONLY public.worker_operations
 
 ALTER TABLE ONLY public.write_budget_ledger
     ADD CONSTRAINT write_budget_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: zernio_profiles zernio_profiles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.zernio_profiles
+    ADD CONSTRAINT zernio_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -14387,6 +14725,13 @@ CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO aut
 
 
 --
+-- Name: schedule_slots read own schedule slots; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own schedule slots" ON public.schedule_slots FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: short_batches read own short batches; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -14398,6 +14743,13 @@ CREATE POLICY "read own short batches" ON public.short_batches FOR SELECT TO aut
 --
 
 CREATE POLICY "read own shorts" ON public.shorts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: social_accounts read own social accounts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own social accounts" ON public.social_accounts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -14415,10 +14767,23 @@ CREATE POLICY "read own work orders" ON public.work_orders FOR SELECT TO authent
 
 
 --
+-- Name: zernio_profiles read own zernio profile; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own zernio profile" ON public.zernio_profiles FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: scene_codes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.scene_codes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schedule_slots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.schedule_slots ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: short_batches; Type: ROW SECURITY; Schema: public; Owner: -
@@ -14431,6 +14796,12 @@ ALTER TABLE public.short_batches ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: social_accounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.social_accounts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: storage_deletions; Type: ROW SECURITY; Schema: public; Owner: -
@@ -14491,6 +14862,18 @@ ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: zernio_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.zernio_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: zernio_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.zernio_receipts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: media_assets đọc B-roll của chính mình; Type: POLICY; Schema: public; Owner: -

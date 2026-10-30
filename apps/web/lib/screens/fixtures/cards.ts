@@ -209,10 +209,19 @@ export const SCHEDULE_CARD: ApprovalCard = {
   expiresAt: at("2026-10-29", "18:00"),
   body: {
     kind: "schedule",
+    slotId: "sl-8",
     what: "Short 1 “Edit by asking”",
     where: { platform: "tiktok", handle: "@opencmo" },
+    accountId: "acc-tiktok",
+    avatarUrl: null,
+    mode: "publish",
     at: at("2026-10-29", "18:00"),
+    timezone: "Asia/Ho_Chi_Minh",
     why: "your last 4 shorts did best after work",
+    preview: { text: "Edit a video by asking for it. No timeline.", title: null, videoUrl: null },
+    options: { privacy: "PUBLIC_TO_EVERYONE", allow_comment: true, allow_duet: false, allow_stitch: false, ai_label: false },
+    tiktok: { privacyLevels: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"], commentDisabled: false, duetDisabled: false, stitchDisabled: true },
+    lastError: null,
   },
 };
 
@@ -404,3 +413,22 @@ export const STUDIO_SNAPSHOTS: StudioSnapshot[] = [
     ],
   },
 ];
+
+/** A schedule snapshot exactly as `approval_snapshot('schedule_slot', …)` writes it (P4 A0; pgTAP 215 makes the same). */
+export const SCHEDULE_SNAPSHOT = {
+  kind: "schedule",
+  slot_id: "e2154000-0000-4000-8000-00000000000a",
+  deliverable_id: "e2153000-0000-4000-8000-00000000000a",
+  deliverable_kind: "short",
+  platform: "tiktok",
+  mode: "publish",
+  account_id: "e2155000-0000-4000-8000-00000000000a",
+  handle: "@opencmo",
+  publish_at: "2030-01-07T09:00:00Z",
+  options: { privacy: "PUBLIC_TO_EVERYONE", allow_comment: true, allow_duet: false, allow_stitch: false, ai_label: false },
+  last_error: null,
+  clip_id: "e2156000-0000-4000-8000-00000000000a",
+  text: "Edit a video by asking for it. No timeline.",
+  title: null,
+  content_hash: "0".repeat(64),
+} as const;
