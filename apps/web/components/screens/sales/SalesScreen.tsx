@@ -9,6 +9,7 @@ import type { SalesScreen as Data } from "@/lib/screens/sales";
 import { ago } from "../format";
 import { cx, ErrorNote, PageHeader, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
+import { SalesSettings } from "./SalesSettings";
 
 type Thread = Data["threads"][number];
 
@@ -34,7 +35,12 @@ export function SalesScreen() {
       />
       {state.status === "loading" && <SkeletonBlocks />}
       {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
-      {state.status === "ready" && <SalesBody data={state.data} live={!!state.live.threads} />}
+      {state.status === "ready" && (
+        <>
+          <SalesBody data={state.data} live={!!state.live.threads} />
+          <SalesSettings initial={state.data.settings} live={!!state.live.settings} />
+        </>
+      )}
     </Screen>
   );
 }

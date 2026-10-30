@@ -93,4 +93,8 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
   `deliverables.post_id` = the post (new column, required exactly for `image`; the newest per post wins), order done;
   a failed still fails the order. Also from B's note: `slideshow` added to the clip kinds in `lib/screens/studio.ts`
   and `load.ts`.
-
+- [from C → A] For A3: C2 added `POST /api/v1/sales/settings` (`app/api/v1/sales/settings/route.ts`, zod → `sales_settings_save`,
+  answers `{excludedSubreddits, pairs}`); the Sales screen saves through it once `live.settings` is true, so the loader's
+  `settings` part only has to read `sales_settings` (`excluded_subreddits`, `co_occurrence`). Research's new "What works
+  on video in your niche" table reads `scope = "niche_video"` insights and their `video` fields; the fixture's niche rows
+  have no `video` yet (length and format show "—"): please add one with `video: { views, outlier, seconds, format }`.
