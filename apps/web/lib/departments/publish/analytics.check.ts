@@ -12,6 +12,8 @@ import { memoryStore } from "@/lib/cmo/jobs/memory-store";
 import { isoDay, type ItemRow } from "@/lib/cmo/jobs/types";
 import { AnalyticsScreenSchema } from "@/lib/screens/analytics";
 import { buildAnalytics, buildResults, median, type AccountDayIn, type PostIn } from "@/lib/screens/analytics-build";
+import { MeasureSchema } from "@/lib/screens/brain";
+import { buildMeasures, type WeekCounts } from "@/lib/screens/brain-measures";
 import { ResultRowSchema } from "@/lib/screens/dashboard";
 import { bestTimeWhy, hourLabel } from "@/lib/screens/schedule-enrich";
 
@@ -175,6 +177,16 @@ async function main() {
     assert.match(xr.best ?? "", /^Post a · 4(\.\d)?×$/);
     assert.equal(results.rows.find((r) => r.where.platform === "threads")!.series.at(-1), null);
   }
+
+  // A4: the brain's measures; an empty week is dashes, not zeros.
+  const none: WeekCounts = { plans: { asIs: 0, decided: 0 }, drafts: { asIs: 0, total: 0 }, orders: { onTime: 0, due: 0 }, credits: { spent: 0, approved: 0 }, replans: 0 };
+  const week: WeekCounts = { plans: { asIs: 1, decided: 2 }, drafts: { asIs: 8, total: 13 }, orders: { onTime: 12, due: 14 }, credits: { spent: 42, approved: 13 }, replans: 1 };
+  const m = buildMeasures(week, { ...none, drafts: { asIs: 5, total: 10 } });
+  m.forEach((x) => MeasureSchema.parse(x));
+  assert.deepEqual(m.map((x) => x.value), [50, 62, 86, 3.2, 1]);
+  assert.deepEqual(m.map((x) => x.change), [null, 12, null, null, 1], "a change only against a week with data");
+  assert.equal(m[3]!.note, "13 approved, 42 credits");
+  assert.ok(buildMeasures(none, none).every((x) => x.value === null && x.note === null));
 
   // A2: the schedule card's one-line reason for its time.
   assert.deepEqual([0, 9, 12, 16].map(hourLabel), ["12 am", "9 am", "12 pm", "4 pm"]);

@@ -19,12 +19,14 @@ import { RangeSchema, type AnalyticsScreen } from "./analytics";
 import { buildAnalytics, buildResults, type AccountDayIn, type AccountIn, type PostIn } from "./analytics-build";
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
+import { buildMeasures, type WeekCounts } from "./brain-measures";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
 import { enrichScheduleCards } from "./schedule-enrich";
 import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
 import { SKILL_READERS, type LibraryScreen } from "./library";
+import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
@@ -285,11 +287,42 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
   });
 }
 
+/** One week's counts for the brain's measures, read under the founder's session. */
+async function weekCounts(supabase: SupabaseClient, monday: string, now: Date): Promise<WeekCounts> {
+  const from = `${monday}T00:00:00Z`;
+  const to = new Date(Date.parse(from) + 7 * 86_400_000).toISOString();
+  const [plans, drafts, orders, approved] = await Promise.all([
+    supabase.from("approvals").select("status").eq("kind", "goal").in("status", ["approved", "edited", "skipped"]).gte("decided_at", from).lt("decided_at", to).limit(500),
+    supabase.from("cmo_draft_outcomes").select("similarity").not("similarity", "is", null).gte("decided_at", from).lt("decided_at", to).limit(2000),
+    supabase.from("work_orders").select("id, parent_id, status, due_at, finished_at, spent_credits, brief").eq("week", monday).limit(1000),
+    supabase.from("approvals").select("id", { count: "exact", head: true }).in("status", ["approved", "edited"]).gte("decided_at", from).lt("decided_at", to),
+  ]);
+  const planRows = must(plans, "approvals") as { status: string }[];
+  const draftRows = must(drafts, "cmo_draft_outcomes") as { similarity: number }[];
+  const orderRows = must(orders, "work_orders") as { id: string; parent_id: string | null; status: string; due_at: string | null; finished_at: string | null; spent_credits: number; brief: Record<string, unknown> | null }[];
+  if (approved.error) throw new Error(`approvals: ${approved.error.message}`);
+  const children = orderRows.filter((o) => o.parent_id && o.status !== "cancelled");
+  const due = children.filter((o) => o.due_at && (o.status === "done" || Date.parse(o.due_at) < now.getTime()));
+  return {
+    plans: { asIs: planRows.filter((r) => r.status === "approved").length, decided: planRows.length },
+    drafts: { asIs: draftRows.filter((r) => r.similarity >= 0.95).length, total: draftRows.length },
+    orders: { onTime: due.filter((o) => o.status === "done" && o.finished_at && o.finished_at <= o.due_at!).length, due: due.length },
+    credits: { spent: orderRows.filter((o) => !o.parent_id).reduce((n, o) => n + o.spent_credits, 0), approved: approved.count ?? 0 },
+    replans: children.filter((o) => o.brief && "replan_of" in o.brief).length,
+  };
+}
+
 async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainScreen>> {
   const now = new Date();
   const prof = profile(supabase, userId);
   const tree = weekTree(supabase);
   return parts<BrainScreen>("brain", {
+    measures: async () => {
+      const monday = mondayOf(now);
+      const before = mondayOf(new Date(Date.parse(`${monday}T00:00:00Z`) - 86_400_000));
+      const [week, last] = await Promise.all([weekCounts(supabase, monday, now), weekCounts(supabase, before, now)]);
+      return buildMeasures(week, last);
+    },
     cmo: () => cmoState(supabase, userId, prof),
     week: async () => {
       const [{ root, orders }, goal, p] = await Promise.all([tree, weekGoal(supabase), prof]);
@@ -1261,6 +1294,20 @@ async function analytics({ supabase, params }: LoadContext): Promise<Partial<Ana
   const m = await measured(supabase, range, now);
   const { brainReads: _unused, ...screen } = buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published });
   return screen;
+}
+
+/**
+ * The rail's two status lines (P6 F14): the next slot waiting to go out (schedule cards wait on the founder, so only
+ * approved slots count) and how many accounts Analytics reads. Null fields draw no line.
+ */
+export async function loadRailStatus({ supabase, userId }: Omit<LoadContext, "params">): Promise<RailStatus> {
+  const [p, next, accounts] = await Promise.all([
+    profile(supabase, userId),
+    supabase.from("schedule_slots").select("publish_at").eq("status", "waiting").gt("publish_at", new Date().toISOString()).order("publish_at").limit(1).maybeSingle(),
+    supabase.from("social_accounts").select("id", { count: "exact", head: true }).eq("status", "connected"),
+  ]);
+  const at = (next.data as { publish_at?: string } | null)?.publish_at ?? null;
+  return { nextPostAt: at ? new Date(at).toISOString() : null, connectedAccounts: accounts.count ? accounts.count : null, timezone: p.timezone };
 }
 
 /**

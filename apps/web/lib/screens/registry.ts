@@ -60,7 +60,7 @@ export const SCREENS = {
     schema: BrainScreenSchema,
     fixture: brainFixture,
     empty: brainEmpty,
-    live: ["cmo", "week", "orders", "learned", "corrections", "pastWeeks"],
+    live: ["cmo", "week", "orders", "learned", "corrections", "pastWeeks", "measures"],
     release: ["cmo", "week", "orders", "learned", "corrections"],
   }),
   library: entry({

@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /**
- * Sends the morning digest to founders whose local hour is their `digest_hour`. Meant to be called once an hour
+ * Releases held cards whose day has come, then sends the morning digest to founders whose local hour is their
+ * `digest_hour`. Meant to be called once an hour
  * (calling it twice in one hour sends twice). With no sender (production until A2) it only counts: the digest is
  * on the Dashboard either way.
  */
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
   const admin = createAdminClient(AbortSignal.timeout((maxDuration - 10) * 1000));
+  // Cards held past a day's budget (P6 A4) come back first, so the morning digest names them.
+  const released = await admin.rpc("approval_release_held", { p_limit: 500 });
+  if (released.error) console.warn("[cron] cmo-digest: held cards not released", released.error.message);
   const send = digestSender();
   const now = new Date();
   type Profile = { id: string; email: string | null; timezone: string; digest_hour: number };
@@ -47,5 +51,5 @@ export async function GET(request: NextRequest) {
       console.warn("[cron] cmo-digest: not sent", profile.id, err instanceof Error ? err.message : err);
     }
   }
-  return NextResponse.json({ due, sent, sender: send ? "local" : null });
+  return NextResponse.json({ due, sent, released: released.data ?? 0, sender: send ? "local" : null });
 }
