@@ -46,7 +46,8 @@ export type KeyframeFile = { source: KeyframeSource; path: string; garbled: bool
 export type ReadKeyframes = (ids: string[]) => Promise<Map<string, KeyframeFile>>;
 
 /** One tile of the contact sheet. */
-export type SheetTile = { index: number; words: string; url: string | null; garbled: boolean; credits: number };
+/** `path` is the keyframe's `media` path: a stored card keeps it and signs a fresh URL on each read. */
+export type SheetTile = { index: number; words: string; url: string | null; path: string; garbled: boolean; credits: number };
 export type ContactSheet = { tiles: SheetTile[] };
 
 /** What the card approves, plus each keyframe's spec, so Redo on a tile makes the same image with a new seed. */
@@ -240,6 +241,7 @@ export async function prepareAnimateVideo(input: unknown, env: AnimateEnv): Prom
           index,
           words: plan.shots[index]?.words ?? "Closing frame",
           url: urls[index] ?? null,
+          path: keyframe.path,
           garbled: keyframe.garbled,
           credits: model ? priceOf(model, keyframeSpec(keyframe.source)) : 0,
         };
@@ -276,7 +278,7 @@ export async function redoSheetKeyframe(env: RedoEnv & { addToLibrary: ListKeyfr
       await env.addToLibrary({ model, spec, folder: `Generated/${title}/keyframes`, name: `${String(index + 1).padStart(2, "0")} Keyframe (redo)` }, generation.id);
     } catch (err) {
       console.error("[agent] redo keyframe: library record failed", generation.id, err);
-      const message = `The new keyframe ${index + 1} was started (${credits(generation.credits_reserved)}) but could not be added to the library. Reload the editor and try Redo again before approving the video.`;
+      const message = `The new keyframe ${index + 1} was started (${credits(generation.credits_reserved)}) but could not be added to your media. Reload the editor and try Redo again before approving the video.`;
       return { ok: false, content: JSON.stringify({ error: message, generation_id: generation.id }), summary: message };
     }
     return {
@@ -377,7 +379,7 @@ export function prepareRedoKeyframe(input: unknown, document: ClipDocument): Pre
       `Redo keyframe ${index + 1}: a new image and ${shots.length === 1 ? "1 shot" : `${shots.length} shots`} · ${credits(total)}`,
       `Shots made again: ${shots.map((shot) => shot.label).join(", ")}`,
       ...(parsed.data.keyframe ? [`New keyframe: ${parsed.data.keyframe}`] : []),
-      "The old keyframe and shots stay in your library.",
+      "The old keyframe and shots stay in your media.",
     ],
   };
 }
@@ -444,14 +446,14 @@ export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): 
     return fail(err instanceof ApiError && err.status < 500 ? err.message : "The new keyframe could not be started.");
   }
   // From here the keyframe is paid for: every refusal says so.
-  const spent = (message: string) => fail(`${message} The new keyframe (${credits(keyframeCredits)}) stays in your library; the scene is unchanged.`);
+  const spent = (message: string) => fail(`${message} The new keyframe (${credits(keyframeCredits)}) stays in your media; the scene is unchanged.`);
   // The shots name the keyframe by its declaration and the editor finds its file through this
   // record, so without it the redone shots could never be made: stop before paying for them.
   try {
     await env.addToLibrary({ model: prepared.image.model, spec: prepared.image.spec, folder: prepared.library.folder, name: prepared.library.name }, keyframeId);
   } catch (err) {
     console.error("[agent] redo keyframe: library record failed", keyframeId, err);
-    return spent("The new keyframe could not be added to the library. Reload the editor and try again.");
+    return spent("The new keyframe could not be added to your media. Reload the editor and try again.");
   }
   const sleep = env.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const started = Date.now();
@@ -479,7 +481,7 @@ export async function runRedoKeyframe(env: RunRedoEnv, prepared: PreparedRedo): 
     const { declaration } = shot;
     const start = shot.start ? keyframeId : await fileOf(declaration.startFrame);
     const end = shot.end ? keyframeId : declaration.endFrame ? await fileOf(declaration.endFrame) : undefined;
-    if (!start || end === null) return spent("A keyframe next to this one is no longer in the library. Redo that keyframe first.");
+    if (!start || end === null) return spent("A keyframe next to this one is no longer in your media. Redo that keyframe first.");
     runs.push({ model: shot.model, spec: { ...pricedSpec(declaration), seed: Number(declaration.seed), startImage: start, ...(end ? { endImage: end } : {}) } });
   }
   return runGeneration(

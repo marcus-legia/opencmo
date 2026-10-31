@@ -50,7 +50,7 @@ def test_gia_nhan_he_so_do_phan_giai_lam_tron_len():
     [
         ("fal-kling", {"prompt": "x", "aspectRatio": "9:16", "duration": 5, "endImage": f"{UID}/a.png"}, "settings the model does not take"),
         ("fal-seedance", {"prompt": "x", "aspectRatio": "9:16", "duration": 5, "resolution": "1080p"}, "does not support that resolution"),
-        ("fal-seedance", {"prompt": "x", "aspectRatio": "9:16", "duration": 5, "startImage": "../etc/passwd"}, "not found in your library"),
+        ("fal-seedance", {"prompt": "x", "aspectRatio": "9:16", "duration": 5, "startImage": "../etc/passwd"}, "not found in your media"),
         ("fal-nano-banana", {"prompt": "x", "aspectRatio": "1:1", "references": [f"{UID}/{i}.png" for i in range(5)]}, "up to 4 reference images"),
     ],
 )

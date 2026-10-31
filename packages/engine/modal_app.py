@@ -108,7 +108,8 @@ def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
     # thiếu file này thì task `generate` nào cũng hỏng (opencmo/ai/catalog.py).
     # Bảng task kind (opencmo/worker/kinds.py): thiếu thì worker không phân được việc nào.
     # The edit-length cap the web Upload panel shares (opencmo/worker/process_job.py).
-    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json"):
+    # Platform profiles Writer and the cards share (opencmo/platforms.py).
+    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json"):
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )
@@ -615,9 +616,16 @@ def _dispatch_cmo() -> None:
         log.info("OPENCMO_WEB_URL or CRON_SECRET missing: AI CMO runs are not dispatched")
         return
     try:
-        waiting = cmo_dispatch.count_dispatchable(
-            os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-        )
+        db = (os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        # Schedule's clock (P4 A2): due slots become publish_post runs first, so this same sweep dispatches them.
+        try:
+            fired = cmo_dispatch.claim_due_slots(*db)
+            if any(fired.values()):
+                log.info("Schedule: %s", fired)
+        except Exception:
+            log.warning("Schedule claim failed; next sweep tries again", exc_info=True)
+        # One route runs both queues; Studio's orders (P2 A2) are counted apart and capped by `dispatch`.
+        waiting = cmo_dispatch.count_dispatchable(*db) + cmo_dispatch.count_studio_work(*db)
         if waiting:
             sent = cmo_dispatch.dispatch(*web, waiting)
             log.info("AI CMO: %s waiting, %s dispatched", waiting, sent)

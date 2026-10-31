@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · OpenCMO redesign</title>
+<!-- Static export of Settings.dc.html from the design canvas, initial state only. Source of truth: the canvas and the .dc.html file. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#c93a0f;text-decoration:none}a:hover{color:#2b2723}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f3f3ee; color: #2b2723; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+<nav aria-label="Main" style="flex: 1 1 232px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 20px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #2b2723"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="#2b2723" stroke-width="8"></path><circle cx="49" cy="32" r="5" fill="#ef4a1a"></circle></svg><span style="font-weight: 600; font-size: 19px; letter-spacing: -0.04em">OpenCMO</span></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; color: #2b2723"><span style="flex: 1">Dashboard</span><span style="padding: 1px 7px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 11px 'Source Code Pro', monospace">5</span></a>
+<a href="Analytics.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Analytics</a>
+<a href="Brain.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Brain</a>
+<a href="Library.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Library</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 0 10px 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Departments</span>
+<a href="Research.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Research</a>
+<a href="Writer.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Writer</a>
+<a href="Studio.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Studio</a>
+<a href="Sales.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Sales</a>
+<a href="Schedule.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Schedule</a>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #d6d6c9; padding-top: 14px">
+<a href="Settings.html" aria-current="page" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 4px; background: #2b2723; color: #f3f3ee; font-weight: 500">Settings</a>
+<span style="display: flex; justify-content: space-between; padding: 8px 10px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Credits</span><span style="font: 500 13px 'Source Code Pro', monospace">312</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1040px">
+<header style="display: flex; flex-direction: column; gap: 8px">
+<span style="font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Settings</span>
+<h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.045em">Accounts, budget, and the off switch.</h1>
+</header>
+
+<section aria-labelledby="acc-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #d6d6c9">
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 id="acc-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Connected accounts</h2><span style="font-size: 12px; color: #69695d">Posts go out on your own accounts, only at times you approved.</span></div>
+<button type="button" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Connect an account</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr))">
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #e8e8de"><span><b style="font-weight: 600">X</b> · @opencmo</span><span style="color: #2f7d57; font: 500 11px 'Source Code Pro', monospace; text-transform: uppercase">Connected</span></span>
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #e8e8de"><span><b style="font-weight: 600">LinkedIn</b> · Marcus</span><span style="color: #2f7d57; font: 500 11px 'Source Code Pro', monospace; text-transform: uppercase">Connected</span></span>
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #e8e8de"><span><b style="font-weight: 600">TikTok</b> · @opencmo</span><span style="color: #2f7d57; font: 500 11px 'Source Code Pro', monospace; text-transform: uppercase">Connected</span></span>
+<span style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #e8e8de; background: #fbeeea"><span><b style="font-weight: 600">Threads</b> · @opencmo</span><button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #b23a2e; border-radius: 999px; background: #ffffff; color: #b23a2e; font: 500 11px 'Source Code Pro', monospace; text-transform: uppercase">Reconnect</button></span>
+</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 20px">
+<section aria-labelledby="cmo-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px">
+<h2 id="cmo-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Your CMO</h2>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #69695d">Weekly credit budget<span style="display: flex; gap: 8px; align-items: center"><input type="number" value="80" style="width: 120px; min-height: 44px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 4px; background: #ffffff; color: #2b2723; font: 500 14px 'Source Code Pro', monospace"><span style="color: #2b2723">credits · paid video always asks you first</span></span></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #69695d">Your time zone<select style="min-height: 44px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 4px; background: #ffffff; color: #2b2723; font: 400 14px Inter, sans-serif"><option>Asia/Ho_Chi_Minh (UTC+7)</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #69695d">Morning email<select style="min-height: 44px; padding: 0 12px; border: 1px solid #b9b9aa; border-radius: 4px; background: #ffffff; color: #2b2723; font: 400 14px Inter, sans-serif"><option>07:30 · what waits, what went out, what is stuck</option></select></label>
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+<legend style="padding: 0 0 6px; font-size: 13px; color: #69695d">Who does the thinking</legend>
+<label style="display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #2b2723; border-radius: 4px; background: #ffffff"><input type="radio" name="mode" checked style="margin-top: 3px"><span><b style="font-weight: 600">OpenCMO</b><br><span style="font-size: 12px; color: #69695d">Runs on its own schedule, uses your credits.</span></span></label>
+<label style="display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #d6d6c9; border-radius: 4px; background: #ffffff"><input type="radio" name="mode" style="margin-top: 3px"><span><b style="font-weight: 600">Your own Claude, through MCP</b><br><span style="font-size: 12px; color: #69695d">Your assistant plans; OpenCMO drafts, makes and posts what you approve.</span></span></label>
+</fieldset>
+</section>
+
+<section aria-labelledby="stop-title" style="background: #26282c; color: #f3f3ee; border-radius: 4px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="stop-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a89a">Off switch</h2>
+<p style="margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.02em">Pause stops every order and every scheduled post within a minute.</p>
+<p style="margin: 0; font-size: 13px; color: #a8a89a">Nothing is deleted. Resume picks up where it stopped; posts whose time passed ask you again.</p>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: #f3f3ee; color: #b23a2e; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Pause CMO</button>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid #34363b">
+<span style="display: flex; justify-content: space-between; font-size: 13px"><span>Plan</span><span style="font-family: 'Source Code Pro', monospace">[PLAN] · 312 credits</span></span>
+<span style="display: flex; flex-wrap: wrap; gap: 14px"><a href="Settings.html" style="color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; text-transform: uppercase; text-decoration: underline">Billing</a><a href="Settings.html" style="color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; text-transform: uppercase; text-decoration: underline">Brand Kit</a><a href="Settings.html" style="color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; text-transform: uppercase; text-decoration: underline">API keys</a></span>
+</div>
+</section>
+</div>
+</main>
+</div>
+</body>
+</html>

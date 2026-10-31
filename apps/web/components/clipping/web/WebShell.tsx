@@ -21,6 +21,7 @@ import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navig
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { studioHref, studioItemHref } from "@/components/screens/studio/href";
 import { useApplyTheme } from "@/components/theme";
 
 import { api } from "../api";
@@ -32,7 +33,7 @@ const HREF: Record<WorkspaceNavView, string> = {
   // Not on the rail (G1-c); the N key opens the editor's Upload tab.
   video: "/app/editor?panel=upload",
   editor: "/app/editor",
-  projects: "/app/projects",
+  projects: studioHref(),
   brand: "/app/brand",
   settings: "/app/settings",
   billing: "/app/billing",
@@ -50,6 +51,7 @@ const NAV_BY_SEGMENT: Record<string, WorkspaceNavView> = {
   video: "editor",
   editor: "editor",
   projects: "projects",
+  studio: "projects",
   brand: "brand",
   settings: "settings",
   billing: "billing",
@@ -63,14 +65,15 @@ function navViewFor(segment: string | null, doc: string | null): WorkspaceNavVie
 }
 
 /** Chỉ `credits` và `plan` đổi trong một phiên; email và userId thì không. */
-type ShellAccountState = {
+export type ShellAccountState = {
   credits: number | null;
   plan: string | null;
   userId: string | null;
   refreshAccount: () => void;
 };
 
-const ShellAccountContext = createContext<ShellAccountState | null>(null);
+// Exported for the v2 shell (`components/shell-v2/`), so pages read the account the same way under both shells.
+export const ShellAccountContext = createContext<ShellAccountState | null>(null);
 
 /** Dùng ở màn tạo job để số credit trừ ngay, không đợi tới lần điều hướng sau. */
 export function useShellAccount(): ShellAccountState {
@@ -79,7 +82,7 @@ export function useShellAccount(): ShellAccountState {
   return value;
 }
 
-type AccountSummary = { credits: number; plan: string; cmo_pending: number | null };
+export type AccountSummary = { credits: number; plan: string; cmo_pending: number | null };
 
 export function WebShell({
   credits,
@@ -155,7 +158,7 @@ export function WebShell({
         userId={userId}
         hrefFor={(item) => HREF[item]}
         onSettled={refreshAccount}
-        onOpenProject={(id) => router.push(`/app/projects/${id}`)}
+        onOpenProject={(id) => router.push(studioItemHref(id))}
       >
         {children}
       </WorkspaceShell>

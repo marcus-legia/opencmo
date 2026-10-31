@@ -101,7 +101,7 @@ export function useLibrary({
           const applied = await applyOps(latest, [{ op: "replace_src", renames }], context());
           return { document: applied.document as ClipDocument, manifest: next };
         },
-        { label: "Library change" },
+        { label: "Media change" },
       );
     },
     [context, session],
@@ -279,7 +279,7 @@ export function useLibrary({
 
   // Fire-and-forget library edits still tell the user when the queued write was refused.
   const fire = (update: (current: Manifest) => Change) =>
-    void change(update).catch((error: Error) => notify(error.message || "That library change could not be saved."));
+    void change(update).catch((error: Error) => notify(error.message || "That media change could not be saved."));
 
   return {
     manifest,

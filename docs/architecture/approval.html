@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Approval Department</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+
+/* Layout: two diagrams (workflow, then system design with providers), a department map table, provider and skill audits. */
+:root{
+  --bg:#f5f6f8; --paper:#ffffff; --fg:#1b2333; --muted:#5b6578; --line:#c9cfdb;
+  --lapis:#2747a8; --lapis-soft:#e6ebf8; --gate:#a86a12; --gate-soft:#fbf1e1;
+  --warn:#b4322a; --warn-soft:#fbe9e7; --ok:#21734a; --ok-soft:#e3f3ea;
+  --ext:#6b4fa3; --ext-soft:#efeaf8;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1060px;margin:0 auto;padding-block:32px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:44px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1,h2{font-family:var(--display);font-weight:600}
+h1{font-size:2rem;line-height:1.15}
+h2{font-size:1.4rem}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+code{font-family:var(--mono);font-size:.84em;background:var(--lapis-soft);padding:1px 5px;border-radius:4px}
+a{color:var(--lapis)}
+.lede{color:var(--muted);max-width:64ch;margin-top:8px}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sec{display:grid;gap:14px}
+.sec-head{display:grid;gap:4px}
+
+.diagram{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:820px;height:auto}
+.hint{display:none;font-size:.8rem;color:var(--muted)}
+@media (max-width:860px){.hint{display:block}}
+
+.n-dept{fill:var(--paper);stroke:var(--lapis);stroke-width:1.5}
+.n-bar{fill:var(--lapis)}
+.n-in{fill:var(--lapis-soft);stroke:none}
+.n-user{fill:var(--gate-soft);stroke:var(--gate);stroke-width:2}
+.n-ext{fill:var(--ext-soft);stroke:var(--ext);stroke-width:1.2}
+.n-chip{fill:var(--lapis-soft)}
+.n-chip-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1}
+.n-chip-user{fill:var(--gate)}
+.t{fill:var(--fg);font-family:var(--body);font-size:14px}
+.t-title{fill:var(--fg);font-family:var(--display);font-size:21px;font-weight:600}
+.t-title-s{fill:var(--fg);font-family:var(--display);font-size:17px;font-weight:600}
+.t-eye{fill:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-user{fill:var(--gate);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-ext{fill:var(--ext);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-b{fill:var(--fg);font-family:var(--body);font-size:14px;font-weight:600}
+.t-s{fill:var(--muted);font-family:var(--body);font-size:12px}
+.t-m{fill:var(--fg);font-family:var(--body);font-size:13px}
+.t-warn{fill:var(--warn);font-family:var(--body);font-size:12px}
+.t-new{fill:var(--ok);font-family:var(--mono);font-size:11px}
+.t-chip{fill:var(--lapis);font-family:var(--mono);font-size:11px}
+.t-chip-user{fill:var(--paper);font-family:var(--mono);font-size:11px}
+.t-edge{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.e{fill:none;stroke:var(--muted);stroke-width:1.6}
+.e-dash{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4}
+.e-ok{fill:none;stroke:var(--ok);stroke-width:2}
+.m{fill:var(--muted)}
+.m-ok{fill:var(--ok)}
+.div{stroke:var(--line);stroke-width:1}
+
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.82rem;color:var(--muted)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+.tbl{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;margin:1px 2px 1px 0;white-space:nowrap}
+.p-new{background:var(--ok-soft);color:var(--ok)}
+.p-plan{background:var(--gate-soft);color:var(--gate)}
+.p-no{background:var(--warn-soft);color:var(--warn)}
+.p-ok{background:var(--lapis-soft);color:var(--lapis)}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:10px;align-content:start;min-width:0}
+.card .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+.card.r .k{color:var(--warn)} .card.y .k{color:var(--gate)} .card.g .k{color:var(--ok)} .card.b .k{color:var(--lapis)}
+.plist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.plist li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.plist li:last-child{border-bottom:0}
+.plist .what{color:var(--muted);font-size:.86rem}
+.order{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.order li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+.order li::before{content:counter(s);font-family:var(--mono);font-size:.8rem;width:24px;height:24px;border-radius:50%;background:var(--lapis-soft);color:var(--lapis);display:grid;place-items:center}
+
+/* Additions: brain node, proposed nodes, status dots, state nodes. */
+.n-brain{fill:var(--paper);stroke:var(--lapis);stroke-width:2.5}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-new2{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.dot-ok{fill:var(--ok)} .dot-part{fill:var(--gate)} .dot-miss{fill:var(--warn)}
+.diagram svg.wide{min-width:1000px}
+.t-cap{fill:var(--fg);font-family:var(--mono);font-size:10.5px}
+.bus{stroke:var(--muted);stroke-width:1.6}
+.dec{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.dec.own{background:var(--lapis-soft);color:var(--lapis)} .dec.buy{background:var(--ext-soft);color:var(--ext)} .dec.mix{background:var(--gate-soft);color:var(--gate)}
+.src{font-size:.82rem;color:var(--muted)}
+.dotk{width:10px;height:10px;border-radius:50%;display:inline-block}
+.prose{max-width:72ch;display:grid;gap:10px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.rules .card p{font-size:.92rem}
+.st{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.st.ok{background:var(--ok-soft);color:var(--ok)} .st.part{background:var(--gate-soft);color:var(--gate)} .st.miss{background:var(--warn-soft);color:var(--warn)}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+/* Additions for the before/after page: numbered badges, proposed (dashed) nodes, state nodes. */
+.bd circle{fill:var(--warn)}
+.bd text{fill:var(--paper);font-family:var(--mono);font-size:12px;font-weight:600;text-anchor:middle}
+.nb circle{fill:var(--lapis)}
+.nb text{fill:var(--paper);font-family:var(--mono);font-size:11px;font-weight:600;text-anchor:middle}
+.nb-new circle{fill:var(--ok)}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-grp{fill:none;stroke:var(--line);stroke-width:1.2}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.diagram svg.wide{min-width:1000px}
+.badge-list{counter-reset:none;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.badge-list li{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;min-width:0}
+.badge-list .no{font-family:var(--mono);font-size:.78rem;font-weight:600;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.badge-list.r .no{background:var(--warn)}
+.badge-list.b .no{background:var(--lapis)}
+.badge-list.b li.new .no{background:var(--ok)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 28px}
+.keep li::marker{color:var(--ok)}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+.vs td:nth-child(2){color:var(--muted)}
+.prose{max-width:72ch;display:grid;gap:10px}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.86rem}
+.toc a{text-decoration:none}
+.code{font-family:var(--mono);font-size:.78rem;line-height:1.5;margin:0;white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px}
+.prose-note{color:var(--muted);max-width:72ch;font-size:.92rem}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+
+body{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">opencmo.io · architecture · approval · research before build · 2026-10-26</p>
+    <h1>Approval: the founder's department</h1>
+    <p class="lede">Approval is where "assist, never act" is enforced. Every department raises a card; nothing goes out, and nothing paid runs, until the founder approves exactly what the card shows. This page says what exists, what others teach, and how one approval service serves the brain, the editor and MCP. Markdown twin for agents: <code>approval.md</code>. Parent pages: <code>ai-cmo.html</code>, <code>brain.html</code>, <code>studio.html</code>. Status: proposed.</p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#verdict">1 Verdict</a><a href="#today">2 Today</a><a href="#learn">3 What others teach</a><a href="#design">4 Design</a><a href="#cards">5 Card kinds</a><a href="#rules">6 Rules</a><a href="#reach">7 Reaching the founder</a><a href="#learnloop">8 Learning</a><a href="#safety">9 Safety</a><a href="#evals">10 Measures</a><a href="#phases">11 Phases</a><a href="#decide">12 Decisions</a><a href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <section class="sec" id="verdict">
+    <div class="sec-head"><p class="eyebrow">1</p><h2>Verdict</h2></div>
+    <div class="grid2">
+      <div class="card g"><span class="k">Good parts already built</span>
+        <ul>
+          <li>Decisions run in owner-checked RPCs with locks (<code>cmo_decide_post</code>, <code>cmo_decide_opportunity</code>, <code>cmo_decide_goal</code>, <code>cmo_mark_posted</code>).</li>
+          <li>Outbound caps in SQL: 5 X approvals a day, logged in <code>operation_log</code>.</li>
+          <li>Every decision already teaches the brain: skip reasons become memories, edits are measured (<code>cmo_draft_outcomes</code>, similarity, edit modes).</li>
+          <li>Price before spending: the Assistant's priced cards and MCP's signed confirm codes.</li>
+        </ul>
+      </div>
+      <div class="card r"><span class="k">What is missing</span>
+        <ul>
+          <li><b>Three card systems that do not know each other:</b> the CMO inbox (posts, Reddit, goals), the Assistant's chat cards, MCP's confirm codes.</li>
+          <li><b>No snapshot:</b> nothing proves the approved thing is the thing that runs, and the time and the account are not part of any approval yet.</li>
+          <li><b>No card kinds for Studio</b> (script, prices, finished video, shorts batch, slideshow) or Schedule.</li>
+          <li><b>No way to reach a founder who is not in the app</b>: no digest, email or push.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="prose-note">Proposal: one <code>approvals</code> table and one <code>approval_decide</code> RPC under all three surfaces, a snapshot rule ("you approve exactly what you saw"), new card kinds, and reminders that open a card but never decide it.</p>
+  </section>
+
+  <section class="sec" id="today">
+    <div class="sec-head"><p class="eyebrow">2</p><h2>Approval today</h2><p class="lede">Read from <code>main</code> (<code>eb858ca</code>).</p></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Surface</th><th>Where</th><th>What it approves</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>CMO inbox ("Awaiting your approval")</td><td><code>components/cmo/workspace/FeedPanel.tsx</code>, <code>lib/cmo/pending.ts</code>, <code>actions.ts</code></td><td>X posts (approve with edited text, skip with reason, mark posted), Reddit threads (replied, dismiss), weekly goals (approve, change target, reject)</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Decision RPCs</td><td><code>cmo_decide_post</code>, <code>cmo_decide_opportunity</code>, <code>cmo_decide_goal</code>, <code>cmo_mark_posted</code></td><td>Owner check, advisory lock, "already decided", 280 characters, 5 X approvals a day, outcome rows for learning</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Assistant chat cards</td><td><code>lib/agent/loop.ts</code> (<code>awaiting_approval</code>), <code>scope.ts</code> priced tools</td><td>Generations, voice-over, 3D, background, edit video, explainer, <code>create_video</code>, <code>animate_video</code>: price shown, nothing spent before approve</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>MCP confirm codes</td><td><code>packages/mcp-server/src/confirm.ts</code></td><td>The same priced tools for the founder's Claude: a signed code valid for one hour (<code>PREVIEW_SECONDS = 3600</code>)</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>Founder's Claude inbox</td><td><code>cmo_inbox</code>, <code>inbox_submit</code></td><td>Not an approval: model calls waiting for the founder's Claude in <code>claude</code> brain mode</td><td><span class="st ok">built</span></td></tr>
+          <tr><td>One table, snapshot, Studio and Schedule cards, reminders</td><td>none</td><td>—</td><td><span class="st miss">missing</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="learn">
+    <div class="sec-head"><p class="eyebrow">3</p><h2>What others teach</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead>
+        <tbody>
+          <tr><td>Buffer approvals</td><td>Team plan: drafts from "Needs approval" members wait in an Approvals tab until an approver moves them on; scheduling is separate from approval</td><td>A dedicated Approvals view; drafts stay drafts until approved</td><td>Scheduling apart from approval: for us the time is part of what is approved</td></tr>
+          <tr><td>Okara</td><td>"Needs your attention" feed next to the agent log; every draft held</td><td>One feed of decisions, separate from the activity log</td><td>—</td></tr>
+          <tr><td>Higgsfield</td><td><code>awaiting_approval</code> with the plan and credit price before render</td><td>A price on every paid card (we have it in chat; bring it to the inbox)</td><td>—</td></tr>
+          <tr><td>Agent Opus (internal)</td><td>Paid steps only through a button; a 5-minute auto-continue only on free steps; tools return an <code>approval_url</code> instead of posting</td><td>Auto-continue never on paid or outbound steps (roadmap E5.2); a link to the card instead of acting</td><td>—</td></tr>
+          <tr><td>12-factor agents</td><td>Contact humans with a tool call; pause, then resume from a webhook</td><td>A card is a paused work order, not a blocked process (<code>brain.html</code> §4b)</td><td>—</td></tr>
+          <tr><td>HITL pattern write-ups (2026)</td><td>Approve a scoped plan with a real preview; calibrated autonomy (low-risk, reversible runs alone); approval fatigue makes people miss the risky one; approve and undo are the primary buttons</td><td>Preview exactly what will happen; keep cards few; batch only low-risk items; auto-run only what is free, internal and reversible</td><td>Approving raw commands</td></tr>
+          <tr><td>Vercel AI SDK</td><td>Tool approval per input (<code>needsApproval</code>), an approval request part in the message stream</td><td>Approval decided per input, not per tool name: the same tool can be free or need a card</td><td>Switching our loop to it</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="design">
+    <div class="sec-head"><p class="eyebrow">4</p><h2>Design: one table, one decide RPC, three surfaces</h2>
+      <p class="lede">Cards keep appearing where the founder already is: the inbox for the brain's work, the chat for work the founder started in the editor, the confirm code for MCP. Underneath they are the same row and the same RPC, so every decision is counted, learned from and audited the same way.</p></div>
+    <p class="hint">Scroll sideways to see the whole diagram.</p>
+    <div class="diagram">
+<svg class="wide" viewBox="0 0 1200 560" role="img" aria-label="Approval: every department raises a card into one approvals table with a snapshot; the founder sees it in the inbox, the chat, MCP or through a reminder; one decide RPC records approve, edit, send back or skip; the outcome feeds event rules and memory.">
+<defs><marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="t-eye" x="20" y="22">WHO RAISES A CARD</text>
+<rect class="n-in" x="20" y="32" width="212" height="64" rx="8"/><text class="t-b" x="30" y="52">Brain</text><text class="t-s" x="30" y="70">week plan, goal,</text><text class="t-s" x="30" y="85">corrections</text>
+<path class="e" d="M126 96V124" marker-end="url(#ap)"/>
+<rect class="n-in" x="257" y="32" width="212" height="64" rx="8"/><text class="t-b" x="267" y="52">Writer</text><text class="t-s" x="267" y="70">posts, captions,</text><text class="t-s" x="267" y="85">scripts, articles</text>
+<path class="e" d="M363 96V124" marker-end="url(#ap)"/>
+<rect class="n-in" x="494" y="32" width="212" height="64" rx="8"/><text class="t-b" x="504" y="52">Sales</text><text class="t-s" x="504" y="70">reply drafts</text><text class="t-s" x="504" y="85">(you post by hand)</text>
+<path class="e" d="M600 96V124" marker-end="url(#ap)"/>
+<rect class="n-in" x="731" y="32" width="212" height="64" rx="8"/><text class="t-b" x="741" y="52">Studio</text><text class="t-s" x="741" y="70">prices, finished video,</text><text class="t-s" x="741" y="85">shorts batch, slides</text>
+<path class="e" d="M837 96V124" marker-end="url(#ap)"/>
+<rect class="n-in" x="968" y="32" width="212" height="64" rx="8"/><text class="t-b" x="978" y="52">Schedule</text><text class="t-s" x="978" y="70">time + account</text><text class="t-s" x="978" y="85">for each slot</text>
+<path class="e" d="M1074 96V124" marker-end="url(#ap)"/>
+<rect class="n-new" x="20" y="128" width="1160" height="76" rx="10"/><text class="t-b" x="38" y="152">approvals · one row per card (new)</text><text class="t-s" x="38" y="174">snapshot: content hash (JCS), price, time, account, platform · kind · source (work order, Assistant turn, MCP) · status pending → approved | edited | sent_back | skipped | expired | superseded</text><text class="t-s" x="38" y="192">a change to the content, the time or the account after the card was raised supersedes it: you approve exactly what you saw</text>
+<path class="e" d="M600 204V228" marker-end="url(#ap)"/>
+<text class="t-eye" x="20" y="246">WHERE YOU SEE IT</text>
+<rect class="n-user" x="20" y="256" width="275" height="64" rx="8"/><text class="t-b" x="30" y="276">Approval inbox</text><text class="t-s" x="30" y="294">web and phone, grouped by</text><text class="t-s" x="30" y="309">department, newest first</text>
+<path class="e" d="M157 320V346" marker-end="url(#ap)"/>
+<rect class="n-user" x="315" y="256" width="275" height="64" rx="8"/><text class="t-b" x="325" y="276">Assistant chat card</text><text class="t-s" x="325" y="294">when you started it in</text><text class="t-s" x="325" y="309">the editor; same card</text>
+<path class="e" d="M452 320V346" marker-end="url(#ap)"/>
+<rect class="n-ext" x="610" y="256" width="275" height="64" rx="8"/><text class="t-b" x="620" y="276">MCP confirm</text><text class="t-s" x="620" y="294">your Claude shows the</text><text class="t-s" x="620" y="309">price; signed code, 1 h</text>
+<path class="e" d="M747 320V346" marker-end="url(#ap)"/>
+<rect class="n-new" x="905" y="256" width="275" height="64" rx="8"/><text class="t-b" x="915" y="276">Reminder</text><text class="t-s" x="915" y="294">digest, email, web push:</text><text class="t-s" x="915" y="309">opens the card, never decides</text>
+<path class="e" d="M1042 320V346" marker-end="url(#ap)"/>
+<rect class="n-dept" x="20" y="350" width="1160" height="62" rx="10"/><rect class="n-bar" x="20" y="350" width="1160" height="5" rx="2"/><text class="t-b" x="38" y="374">approval_decide · one RPC (new, wraps cmo_decide_post, cmo_decide_opportunity, cmo_decide_goal)</text><text class="t-s" x="38" y="396">owner only under RLS · advisory lock, idempotent on double click · checks the snapshot is still current · daily caps for outbound (5 X approvals a day today)</text>
+<path class="e" d="M600 412V436" marker-end="url(#ap)"/>
+<rect class="n-in" x="20" y="440" width="212" height="64" rx="8"/><text class="t-b" x="30" y="460">Approved</text><text class="t-s" x="30" y="478">event rule → next order</text><text class="t-s" x="30" y="493">(Schedule, cut_shorts…)</text>
+<rect class="n-in" x="257" y="440" width="212" height="64" rx="8"/><text class="t-b" x="267" y="460">Edited, then approved</text><text class="t-s" x="267" y="478">edit similarity + edit mode</text><text class="t-s" x="267" y="493">→ cmo_draft_outcomes</text>
+<rect class="n-in" x="494" y="440" width="212" height="64" rx="8"/><text class="t-b" x="504" y="460">Sent back</text><text class="t-s" x="504" y="478">reason → the order replans</text><text class="t-s" x="504" y="493">once; repeated → correction</text>
+<rect class="n-in" x="731" y="440" width="212" height="64" rx="8"/><text class="t-b" x="741" y="460">Skipped</text><text class="t-s" x="741" y="478">reason → memory</text><text class="t-s" x="741" y="493">(as today)</text>
+<rect class="n-in" x="968" y="440" width="212" height="64" rx="8"/><text class="t-b" x="978" y="460">Expired</text><text class="t-s" x="978" y="478">time passed or price</text><text class="t-s" x="978" y="493">changed: raise a new card</text>
+<text class="t-s" x="20" y="540">Every decision is also the brain's best training signal: approve-as-is rate per department, edit modes, send-back reasons.</text>
+</svg>
+
+    </div>
+    <div class="grid2">
+      <div class="card b"><span class="k">approvals row</span>
+<pre class="code">id, user_id
+kind            see section 5
+subject         deliverable_id | work_order_id
+                | goal_id | correction_id
+source          work_order | assistant_turn | mcp
+snapshot        { content_hash (JCS), price,
+                  publish_at, account_id,
+                  platform, preview_url }
+status          pending | approved | edited
+                | sent_back | skipped | expired
+                | superseded
+reason, edit_similarity, edit_mode
+batch_id        shorts of one video share it
+raised_at, expires_at, decided_at</pre>
+      </div>
+      <div class="card b"><span class="k">Migration path</span>
+        <ul>
+          <li>The existing RPCs stay; <code>approval_decide</code> calls them for posts, Reddit threads and goals, so today's behaviour does not change.</li>
+          <li>The Assistant's chat cards write an <code>approvals</code> row when raised and decided; the chat stays the surface.</li>
+          <li>MCP's confirm code becomes the row's id plus its signature, so a confirm can be found and audited.</li>
+          <li><code>pending.ts</code> counts <code>approvals</code> rows instead of two tables.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="cards">
+    <div class="sec-head"><p class="eyebrow">5</p><h2>Card kinds</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Kind</th><th>Raised by</th><th>Shows</th><th>Actions</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td><code>post</code></td><td>Writer</td><td>text per platform, 1–2 alternates, checks passed</td><td>approve, edit then approve, skip with reason, mark posted</td><td><span class="st ok">built</span> (X)</td></tr>
+          <tr><td><code>reply</code></td><td>Sales</td><td>thread, score with evidence, reply draft</td><td>copy and open, replied, dismiss</td><td><span class="st ok">built</span></td></tr>
+          <tr><td><code>goal</code></td><td>Brain</td><td>goal, metric, target</td><td>approve, change target, reject</td><td><span class="st ok">built</span></td></tr>
+          <tr><td><code>price</code></td><td>Studio (keyframes, video, any generation)</td><td>what will be made, credits, wait</td><td>approve, redo one keyframe, cancel</td><td><span class="st part">chat only</span></td></tr>
+          <tr><td><code>script</code></td><td>Writer / Studio Director</td><td>storyboard: words, picture, motion per beat</td><td>approve, edit a beat, send back</td><td><span class="st part">inside card 1 today</span></td></tr>
+          <tr><td><code>finished_video</code></td><td>Studio</td><td>preview player, length, frame</td><td>approve = finished, open in editor, send back</td><td><span class="st miss">new</span></td></tr>
+          <tr><td><code>shorts_batch</code></td><td>Studio Shorts squad</td><td>3 shorts side by side with hook and reasons</td><td>approve the batch (decided), send back</td><td><span class="st miss">new</span></td></tr>
+          <tr><td><code>slideshow</code></td><td>Studio Slideshow squad</td><td>slides side by side, MP4 and PNG</td><td>approve, quick text edit per slide, open in Slides</td><td><span class="st miss">new</span></td></tr>
+          <tr><td><code>schedule</code></td><td>Schedule</td><td>platform, account, date and time, the deliverable</td><td>approve, change time (re-approve), cancel</td><td><span class="st miss">new</span></td></tr>
+          <tr><td><code>correction</code>, <code>skill</code></td><td>Brain (Sunday summary)</td><td>a rule learned from your edits, with the edits it came from</td><td>approve, edit, reject</td><td><span class="st miss">new</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="rules">
+    <div class="sec-head"><p class="eyebrow">6</p><h2>Rules</h2></div>
+    <div class="rules">
+      <div class="card r"><span class="k">1 · You approve exactly what you saw</span><p>The snapshot holds the content hash (JCS, so TypeScript and Python agree), the price, the time and the account. If any of them changes after the card was raised, the card is superseded and a new one is raised.</p></div>
+      <div class="card r"><span class="k">2 · Outbound and paid never auto-approve</span><p>Posts, replies, schedules and anything that spends credits always need a click. Only free, internal, reversible items may skip a card, and only if the founder turns that on.</p></div>
+      <div class="card y"><span class="k">3 · Few cards</span><p>Batch what belongs together (the shorts of one video, the slides of one slideshow, the posts of one day) and keep the daily count low; a founder who sees 40 cards a day stops reading them.</p></div>
+      <div class="card y"><span class="k">4 · Cards expire</span><p>A schedule card expires when its time passes; a price card when the price changes or after a set time (MCP uses one hour). Expired cards ask again; they never run late.</p></div>
+      <div class="card b"><span class="k">5 · Reminders never decide</span><p>An email or push opens the card. No approve button inside an email: mail scanners open links, so a link that approves would approve by itself.</p></div>
+      <div class="card b"><span class="k">6 · Every decision teaches</span><p>Approve-as-is, the edit and its mode, the send-back reason and the skip reason go to the brain's memory, as <code>cmo_decide_post</code> already does for X posts.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="reach">
+    <div class="sec-head"><p class="eyebrow">7</p><h2>Reaching a founder who is not in the app</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Channel</th><th>How</th><th>Build or buy</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Badge and morning digest in the app</td><td><code>pending.ts</code> count; a digest card at the top of the inbox</td><td>build</td><td>first</td></tr>
+          <tr><td>Email digest</td><td>once a day when cards wait, plus one for time-bound cards before they expire</td><td>buy: Resend</td><td>links open the card; never decide</td></tr>
+          <tr><td>Web push</td><td>VAPID keys, a service worker</td><td>build</td><td>on iPhone it works only for a site added to the Home Screen (iOS 16.4+), so email stays the reliable channel</td></tr>
+          <tr><td>Phone-first inbox</td><td>cards, previews (signed URL of the preview file) and decisions work at phone width</td><td>build</td><td>the editor tells phones to use a computer; Approval must not</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="learnloop">
+    <div class="sec-head"><p class="eyebrow">8</p><h2>Learning from decisions</h2></div>
+    <div class="prose">
+      <p>Approval is where the brain learns the founder's taste. Today X posts record the version chosen, the similarity of the approved text and the edit mode (<code>cmo_draft_outcomes</code>, <code>classify-edits.ts</code>), and skip reasons become memories. The same must hold for every card kind: a sent-back script, a skipped short, an edited slide. The Sunday summary turns repeated signals into a proposed correction, which comes back as a <code>correction</code> card (brain tier 0 memory).</p>
+    </div>
+  </section>
+
+  <section class="sec" id="safety">
+    <div class="sec-head"><p class="eyebrow">9</p><h2>Safety</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Risk</th><th>Guard</th></tr></thead>
+        <tbody>
+          <tr><td>Approving one thing, running another</td><td>Snapshot hash checked by <code>approval_decide</code> and again by the order before it runs</td></tr>
+          <tr><td>Double click, retries</td><td>Advisory lock, "already decided", idempotent decide; spec hash for generations (built)</td></tr>
+          <tr><td>Someone else's card</td><td>Owner check under RLS in the RPC (built pattern)</td></tr>
+          <tr><td>Injected text in a draft (Reddit, X, sites)</td><td>The card shows the exact outbound text and its destination; outside text stays data (<code>lib/cmo/untrusted.ts</code>)</td></tr>
+          <tr><td>Approval fatigue</td><td>Batching, a daily card budget, low-risk items only on opt-in</td></tr>
+          <tr><td>Too many outbound actions</td><td>Daily caps per platform in SQL (5 X approvals today), extended per platform</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="evals">
+    <div class="sec-head"><p class="eyebrow">10</p><h2>Measures</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Measure</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Approved as is, per kind and department</td><td>The brain's and each department's quality</td></tr>
+          <tr><td>Time from card to decision</td><td>Whether reminders work; slow decisions stall the week</td></tr>
+          <tr><td>Cards per day per founder</td><td>Approval fatigue</td></tr>
+          <tr><td>Expired and superseded cards</td><td>Time-bound work that missed its window; churn in drafts</td></tr>
+          <tr><td>Send-back reasons</td><td>What the departments get wrong, for the next eval cases</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" id="phases">
+    <div class="sec-head"><p class="eyebrow">11</p><h2>Build phases</h2></div>
+    <ol class="order">
+      <li><span><b>A0 · One table, one RPC.</b> <code>approvals</code> + <code>approval_decide</code> wrapping today's RPCs; posts, Reddit and goals move onto it with no visible change; <code>pending.ts</code> reads it. pgTAP for every transition.</span></li>
+      <li><span><b>A1 · Snapshot + Studio cards.</b> The snapshot rule; <code>price</code>, <code>finished_video</code>, <code>shorts_batch</code>, <code>slideshow</code> in the inbox, sharing the Assistant's card components. Needed by Studio S1–S3 and brain B3.</span></li>
+      <li><span><b>A2 · Reaching the founder.</b> Morning digest in the app, Resend email, web push, phone-first inbox.</span></li>
+      <li><span><b>A3 · Schedule cards and opt-in autonomy.</b> <code>schedule</code> cards with expiry; a setting for free internal items to skip cards. Outbound never.</span></li>
+    </ol>
+  </section>
+
+  <section class="sec" id="decide">
+    <div class="sec-head"><p class="eyebrow">12</p><h2>Decisions for the owner</h2></div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>Question</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>May the founder turn on auto-approve for anything?</td><td><b>Decided 2026-10-26:</b> free, internal, reversible items (research, plan items, metrics) only; never posts, replies, schedules or anything paid</td></tr>
+          <tr><td>2</td><td>Approve from an email?</td><td><b>Decided 2026-10-26:</b> no; the email opens the card</td></tr>
+          <tr><td>3</td><td>A daily card budget?</td><td><b>Decided 2026-10-26:</b> about 10 a day; the brain batches or waits beyond it</td></tr>
+          <tr><td>4</td><td>Team members approving for the founder?</td><td><b>Decided 2026-10-26:</b> not now; one founder, one approver</td></tr>
+          <tr><td>5</td><td>Where do chat-started cards live?</td><td><b>Decided 2026-10-26:</b> in the chat, recorded in <code>approvals</code>; the inbox shows only work the founder did not start by hand</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot" id="sources">
+    <p><b>Sources.</b> Code: <code>apps/web/components/cmo/workspace/</code> (<code>FeedPanel.tsx</code>, <code>actions.ts</code>, <code>GoalCards.tsx</code>), <code>apps/web/lib/cmo/pending.ts</code>, <code>load-workspace.ts</code>, <code>workspace.ts</code>, <code>apps/web/lib/agent/loop.ts</code>, <code>scope.ts</code>, <code>packages/mcp-server/src/confirm.ts</code>, <code>supabase/schema/current.sql</code> (<code>cmo_decide_post</code>, <code>cmo_decide_opportunity</code>, <code>cmo_decide_goal</code>, <code>cmo_mark_posted</code>, <code>operation_log</code>, <code>cmo_draft_outcomes</code>); internal studies of Agent Opus and Higgsfield.</p>
+    <p>Outside: <a href="https://support.buffer.com/article/665-managing-and-approving-draft-posts">Buffer, managing and approving draft posts</a> · <a href="https://www.kunalganglani.com/blog/tool-approval-patterns-ai-agents">10 HITL tool approval patterns</a> · <a href="https://myengineeringpath.dev/genai-engineer/human-in-the-loop/">Human-in-the-loop patterns for AI agents</a> · <a href="https://www.dataiku.com/blog/human-in-the-loop-ai-agents">Dataiku on HITL agents</a> · <a href="https://pub.towardsai.net/designing-for-ai-agents-8-ux-patterns-that-build-trust-in-2026-713a0c926933">8 UX patterns for AI agents</a> · <a href="https://github.com/humanlayer/12-factor-agents">12-factor agents</a> · <a href="https://www.issoh.co.jp/tech/details/10402/">AI SDK needsApproval write-up</a>.</p>
+    <p>The HITL write-ups are secondary sources; the iPhone web push limit (Home Screen web apps, iOS 16.4+) is Apple's published behaviour, not re-checked here.</p>
+  </footer>
+</div>
+</body>
+</html>

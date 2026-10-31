@@ -13,10 +13,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
-import { checkPost } from "../jobs/check-post";
-import { avoidList, knownNumbers } from "../jobs/context";
+import { postProfile } from "../jobs/draft-post";
+import { avoidList, checkRules } from "../jobs/context";
 import { checkRubric, INBOX_STEPS, isInboxStep, parseAnswer, stepsFor, type InboxStepName, type SubmitTool } from "../jobs/steps";
 import { CMO_JOB_KINDS, type CmoJobKind, type Documents, type InboxRequest } from "../jobs/types";
+import { checkPostFor } from "../writer/checks";
+import { profileFromPrompt } from "../writer/context";
 
 import { fail, invalidInput, ok, rpcMessage, type CmoMcpTool, type CmoToolContext } from "./contract";
 
@@ -35,11 +37,16 @@ type InboxRow = {
 const KIND_LABEL: Record<CmoJobKind, string> = {
   plan_week: "Weekly plan",
   review_week: "Weekly review",
-  post_draft: "X post",
+  post_draft: "Post",
+  write_video_brief: "Video brief",
+  write_caption: "Captions",
+  write_slides: "Slide text",
   sales_scan: "Reddit scan",
   summarize_memory: "Memory summary",
   competitor_research: "Competitor research",
+  niche_video_research: "Niche video research",
   pull_metrics: "Post metrics",
+  publish_post: "Scheduled post",
 };
 
 /** Longest a poll waits inside one request: Modal cuts web requests at 150 s. */
@@ -109,7 +116,7 @@ const getInput = z.object({
   id: z.string().uuid(),
   wait_seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).optional().describe(`Up to ${MAX_WAIT_SECONDS}: wait while a submitted answer is being checked.`),
 });
-const rubricInput = z.object({ kind: z.enum(CMO_JOB_KINDS.filter((kind) => kind !== "pull_metrics") as [CmoJobKind, ...CmoJobKind[]]) });
+const rubricInput = z.object({ kind: z.enum(CMO_JOB_KINDS.filter((kind) => kind !== "pull_metrics" && kind !== "publish_post") as [CmoJobKind, ...CmoJobKind[]]) });
 
 async function listInbox(_input: unknown, { supabase }: CmoToolContext) {
   const { data, error } = await supabase.rpc("inbox_list");
@@ -161,14 +168,19 @@ async function getInboxItem(raw: unknown, { supabase }: CmoToolContext) {
   });
 }
 
-/** For a post draft, the code checks run before anything is stored, so Claude can fix it in this turn. */
-async function precheck(supabase: SupabaseClient, step: InboxStepName, answer: unknown): Promise<string | null> {
+/**
+ * For a post draft, the code checks run before anything is stored, so Claude can fix it in this turn. The limits are
+ * the profile's the job wrote the request for (its `<platform>` block); the replay checks them again.
+ */
+async function precheck(supabase: SupabaseClient, id: string, step: InboxStepName, answer: unknown): Promise<string | null> {
   if (step !== "draft_post") return null;
+  const { data: row } = await supabase.from("cmo_inbox").select("request").eq("id", id).maybeSingle<{ request: InboxRequest }>();
+  const profile = postProfile(profileFromPrompt(row?.request?.prompt ?? ""));
   const docs = await documents(supabase);
-  const rules = { avoid: avoidList(docs), known: knownNumbers(docs) };
+  const rules = checkRules(docs);
   const versions = (answer as { versions: { text: string }[] }).versions;
   if (!versions.length) return "Write three versions.";
-  const problems = versions.map((version) => checkPost(version.text, rules));
+  const problems = versions.map((version) => checkPostFor(version.text, profile, rules));
   if (problems.some((p) => p.length === 0)) return null;
   return `Every version fails OpenCMO's checks, so none would reach the founder. ${problems.map((p, i) => `Version ${i + 1}: ${p.join(" ")}`).join(" ")}`;
 }
@@ -192,7 +204,7 @@ function submitTool(name: SubmitTool, title: string, description: string): CmoMc
       const { id, step } = parsed.data;
       const answer = parseAnswer(step, parsed.data.answer);
       if (!answer.ok) return fail(answer.error);
-      const problem = await precheck(supabase, step, answer.data);
+      const problem = await precheck(supabase, id, step, answer.data);
       if (problem) return fail(problem);
       const { data, error } = await supabase.rpc("inbox_submit", { p_id: id, p_request_id: requestId(id, step, answer.data), p_step: step, p_answer: answer.data });
       if (error) return fail(rpcMessage(error, "Could not submit this answer. Try again in a minute."));
@@ -241,7 +253,7 @@ export const INBOX_TOOLS: CmoMcpTool[] = [
   },
   submitTool("submit_plan", "Submit a weekly plan or review", "Answer a weekly plan (plan_week) or weekly review (review_week) item."),
   submitTool("submit_post_draft", "Submit an X post draft", "Answer an X post item with three versions. Versions that fail the code checks are dropped; if all fail you get the reasons now."),
-  submitTool("submit_sales_scan", "Submit a Reddit scan step", "Answer a Reddit scan item: the search queries, then the thread scores (with exact quotes), then the replies. Each answer brings the next step."),
+  submitTool("submit_sales_scan", "Submit a Reddit scan step", "Answer a Reddit scan item: the search queries, then the thread scores (with exact quotes), then what each community's rules allow (when some were not read this week), then the replies. Each answer brings the next step."),
   submitTool("submit_memory", "Submit the memory summary", "Answer a memory summary item with this week's lessons."),
   submitTool("submit_research", "Submit competitor research", "Answer a competitor research item with hooks, formats and ideas, each backed by a post URL from the context."),
 ];

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Analytics</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#c93a0f;text-decoration:none}a:hover{color:#2b2723}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f3f3ee; color: #2b2723; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+<nav aria-label="Main" style="flex: 1 1 232px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 20px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #2b2723"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="#2b2723" stroke-width="8"></path><circle cx="49" cy="32" r="5" fill="#ef4a1a"></circle></svg><span style="font-weight: 600; font-size: 19px; letter-spacing: -0.04em">OpenCMO</span></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; color: #2b2723"><span style="flex: 1">Dashboard</span><span style="padding: 1px 7px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 11px 'Source Code Pro', monospace">5</span></a>
+<a href="Analytics.dc.html" aria-current="page" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 4px; background: #2b2723; color: #f3f3ee; font-weight: 500">Analytics</a>
+<a href="Brain.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Brain</a>
+<a href="Library.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Library</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 0 10px 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Departments</span>
+<a href="Research.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Research</a>
+<a href="Writer.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Writer</a>
+<a href="Studio.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Studio</a>
+<a href="Sales.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Sales</a>
+<a href="Schedule.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Schedule</a>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #d6d6c9; padding-top: 14px">
+<a href="Settings.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Settings</a>
+<span style="display: flex; justify-content: space-between; padding: 8px 10px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Credits</span><span style="font: 500 13px 'Source Code Pro', monospace">312</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Analytics · every connected account, through Zernio <span style="padding: 2px 7px; border: 1px dashed #b9b9aa; color: #69695d; letter-spacing: 0.06em">Sample data</span></span>
+<h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.045em">What worked, and what didn't.</h1>
+<span style="font-size: 13px; color: #69695d">The Brain reads the same numbers every Sunday and before every plan.</span>
+</div>
+<div role="group" aria-label="Range" style="display: flex; gap: 2px; padding: 4px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8">
+<sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+<button type="button" onClick="{{r.pick}}" aria-pressed="{{r.pressed}}" style="min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: {{r.bg}}; color: {{r.fg}}; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer">{{r.label}}</button>
+</sc-for>
+</div>
+</header>
+
+<section aria-label="Accounts" style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{accounts}}" as="a" hint-placeholder-count="6">
+<button type="button" onClick="{{a.pick}}" aria-pressed="{{a.pressed}}" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid {{a.border}}; border-radius: 999px; background: {{a.bg}}; color: {{a.fg}}; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: {{a.dot}}"></span>{{a.label}}<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">{{a.sync}}</span></button>
+</sc-for>
+</section>
+
+<div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: #fbeeea; border: 1px solid #b23a2e; border-radius: 4px; font-size: 13px">
+<span style="flex: 999 1 320px"><b style="font-weight: 600; color: #b23a2e">Threads stopped sending data on 27 Oct.</b> Its numbers after that date are missing, and the Brain knows they are missing (not zero).</span>
+<a href="Settings.dc.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Reconnect Threads</a>
+</div>
+
+<section aria-label="Totals" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 1px; background: #d6d6c9; border: 1px solid #d6d6c9; border-radius: 4px; overflow: hidden">
+<sc-for list="{{kpis}}" as="k" hint-placeholder-count="6">
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">{{k.label}}</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">{{k.value}}</span><span style="font-size: 12px; color: {{k.deltaColor}}">{{k.delta}}</span></div>
+</sc-for>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-labelledby="chart-title" style="flex: 999 1 600px; min-width: 0; background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px">
+<h2 id="chart-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Impressions per day</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #69695d">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #2b2723"></span>X</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #c93a0f"></span>TikTok</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #b9b9aa"></span>LinkedIn</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border: 1px dashed #b23a2e; box-sizing: border-box"></span>Missing</span>
+</div>
+</div>
+<div role="img" aria-label="{{chartLabel}}" style="height: 220px; display: flex; align-items: flex-end; gap: {{barGap}}; border-bottom: 1px solid #b9b9aa">
+<sc-for list="{{days}}" as="d" hint-placeholder-count="14">
+<div title="{{d.tip}}" style="flex: 1; min-width: 0; height: {{d.total}}; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: {{d.x}}; background: #2b2723"></span>
+<span style="height: {{d.tt}}; background: #c93a0f"></span>
+<span style="height: {{d.li}}; background: #b9b9aa"></span>
+<span style="height: {{d.gap}}; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; font: 400 11px 'Source Code Pro', monospace; color: #69695d"><span>{{firstDay}}</span><span>Today</span></div>
+<span style="font-size: 12px; color: #69695d">Dashed red: a platform sent no data that day, counted as missing, not zero. Hover a bar for the day's numbers.</span>
+</section>
+
+<aside aria-labelledby="learn-title" style="flex: 1 1 340px; min-width: 0; background: #26282c; color: #f3f3ee; border-radius: 4px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+<h2 id="learn-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a89a">What the Brain takes from this</h2>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px">
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Demo clips beat text on X.</b><span style="color: #a8a89a">2.8× your median impressions · 6 posts · feeds Writer and Monday's plan</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Shorts at 18:00 do better than at noon.</b><span style="color: #a8a89a">1.9× views · 5 shorts · feeds Schedule's best times</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Question openers underperform.</b><span style="color: #a8a89a">0.6× engagement · 4 posts · matches the rule from your edits</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600; font-size: 14px">Not enough data on LinkedIn yet.</b><span style="color: #a8a89a">3 of 10 posts needed before it changes anything</span></span>
+</div>
+<a href="Brain.dc.html" style="margin-top: auto; color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: underline">See it in Brain memory →</a>
+</aside>
+</div>
+
+<section aria-labelledby="acc-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<h2 id="acc-title" style="margin: 0; padding: 14px 20px; border-bottom: 1px solid #d6d6c9; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">By account</h2>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="text-align: left; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #69695d"><th style="padding: 10px 20px; font-weight: 500">Account</th><th style="padding: 10px 8px; font-weight: 500">Followers</th><th style="padding: 10px 8px; font-weight: 500">Change</th><th style="padding: 10px 8px; font-weight: 500">Posts</th><th style="padding: 10px 8px; font-weight: 500">Median impressions</th><th style="padding: 10px 8px; font-weight: 500">Engagement</th><th style="padding: 10px 20px; font-weight: 500">Works best</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">X · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2,410</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+148</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">12</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,920</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3.9%</td><td style="padding: 12px 20px">Demo clip, morning</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">TikTok · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">880</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+121</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3,400</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">6.1%</td><td style="padding: 12px 20px">Short under 25 s, 18:00</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">LinkedIn · Marcus</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,105</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+43</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">640</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5.2%</td><td style="padding: 12px 20px; color: #69695d">Not enough posts yet</td></tr>
+<tr style="border-top: 1px solid #e8e8de; background: #fbeeea"><td style="padding: 12px 20px; font-weight: 600">Threads · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">530</td><td style="padding: 12px 8px; color: #b23a2e">no data since 27 Oct</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">4</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">—</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">—</td><td style="padding: 12px 20px"><a href="Settings.dc.html" style="font-weight: 500">Reconnect</a></td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">YouTube Shorts · OpenCMO</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">96</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+22</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,150</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">4.0%</td><td style="padding: 12px 20px; color: #69695d">Not enough posts yet</td></tr>
+</tbody>
+</table>
+</div>
+<div style="padding: 12px 20px; border-top: 1px solid #e8e8de; font-size: 12px; color: #69695d">Some platforms don't report every number; a dash means not reported, never zero.</div>
+</section>
+
+<section aria-labelledby="posts-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #d6d6c9">
+<h2 id="posts-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Posts against your own median</h2>
+<span style="font-size: 12px; color: #69695d">Best and worst first; every row opens the post</span>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="text-align: left; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #69695d"><th style="padding: 10px 20px; font-weight: 500">Post</th><th style="padding: 10px 8px; font-weight: 500">Where</th><th style="padding: 10px 8px; font-weight: 500">Impressions</th><th style="padding: 10px 8px; font-weight: 500">Engagement</th><th style="padding: 10px 8px; font-weight: 500">vs median</th><th style="padding: 10px 20px; font-weight: 500">Brain's read</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">Short · “Cut by words”</td><td style="padding: 12px 8px">TikTok</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">9,820</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">7.4%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e6f1eb; color: #2f7d57; font: 500 11px 'Source Code Pro', monospace">2.9×</span></td><td style="padding: 12px 20px">Before/after in the first 2 s</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Cut by words, a 20 s demo”</td><td style="padding: 12px 8px">X</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5,410</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5.1%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e6f1eb; color: #2f7d57; font: 500 11px 'Source Code Pro', monospace">2.8×</span></td><td style="padding: 12px 20px">Demo clip attached</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Why we built the editor first”</td><td style="padding: 12px 8px">LinkedIn</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">710</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">6.0%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e8e8de; color: #2b2723; font: 500 11px 'Source Code Pro', monospace">1.1×</span></td><td style="padding: 12px 20px; color: #69695d">Too few posts to judge</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Tired of editing demos?”</td><td style="padding: 12px 8px">X</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,050</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2.2%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #fbeeea; color: #b23a2e; font: 500 11px 'Source Code Pro', monospace">0.5×</span></td><td style="padding: 12px 20px">Question opener, text only</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1640}}'>
+const RANGES = [{ id: 7, label: '7 days' }, { id: 30, label: '30 days' }, { id: 90, label: '90 days' }];
+const ACCOUNTS = [
+  { id: 'all', label: 'All accounts', sync: '', dot: '#2b2723' },
+  { id: 'x', label: 'X · @opencmo', sync: 'synced 2 min ago', dot: '#2b2723' },
+  { id: 'tt', label: 'TikTok · @opencmo', sync: 'synced 2 min ago', dot: '#c93a0f' },
+  { id: 'li', label: 'LinkedIn · Marcus', sync: 'synced 1 h ago', dot: '#b9b9aa' },
+  { id: 'th', label: 'Threads · @opencmo', sync: 'reconnect', dot: '#b23a2e' },
+  { id: 'yt', label: 'YouTube Shorts', sync: 'synced 3 h ago', dot: '#69695d' }
+];
+// Same sample numbers every render: a seeded wave, not Math.random.
+function day(i) {
+  const w = Math.sin(i * 1.7) * 0.5 + 0.5, v = Math.cos(i * 0.9) * 0.5 + 0.5;
+  return { x: 900 + w * 1600, tt: i % 4 === 0 ? 2600 + v * 4200 : 300 + v * 600, li: 150 + w * 400, gap: i > 0 && i < 3 ? 400 : 0 };
+}
+function fmt(n) {
+  return n >= 10000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { range: 30, account: 'all' };
+  }
+  renderVals() {
+    const { range, account } = this.state;
+    const bars = range === 7 ? 7 : range === 30 ? 30 : 45;
+    const raw = Array.from({ length: bars }, (_, k) => day(bars - 1 - k)).map((d) => ({
+      x: account === 'all' || account === 'x' ? d.x : 0,
+      tt: account === 'all' || account === 'tt' ? d.tt : 0,
+      li: account === 'all' || account === 'li' ? d.li : 0,
+      gap: account === 'all' || account === 'th' ? d.gap : 0
+    }));
+    const max = Math.max(...raw.map((d) => d.x + d.tt + d.li + d.gap), 1);
+    const days = raw.map((d) => {
+      const sum = d.x + d.tt + d.li + d.gap;
+      const p = (v) => (sum ? (v / sum) * 100 : 0) + '%';
+      return { total: Math.max(1, (sum / max) * 100) + '%', x: p(d.x), tt: p(d.tt), li: p(d.li), gap: p(d.gap), tip: fmt(d.x + d.tt + d.li) + ' impressions' + (d.gap ? ' · Threads missing' : '') };
+    });
+    const imp = raw.reduce((s, d) => s + d.x + d.tt + d.li, 0) * (range === 90 ? 2 : 1);
+    const scale = range / 30;
+    const kpis = [
+      { label: 'Impressions', value: fmt(imp), delta: '+18% vs previous', deltaColor: '#2f7d57' },
+      { label: 'Engagements', value: fmt(imp * 0.044), delta: '+9%', deltaColor: '#2f7d57' },
+      { label: 'Engagement rate', value: '4.4%', delta: '−0.3 pts', deltaColor: '#b23a2e' },
+      { label: 'Followers gained', value: '+' + fmt(334 * scale), delta: 'across 5 accounts', deltaColor: '#69695d' },
+      { label: 'Video views', value: fmt(imp * 0.45), delta: '+31%', deltaColor: '#2f7d57' },
+      { label: 'Posts measured', value: String(Math.round(26 * scale)), delta: '4 without data', deltaColor: '#b23a2e' }
+    ];
+    return {
+      days, kpis,
+      barGap: bars > 30 ? '2px' : '4px',
+      firstDay: range + ' days ago',
+      chartLabel: 'Impressions per day for the last ' + range + ' days, stacked by platform',
+      ranges: RANGES.map((r) => ({ ...r, pressed: r.id === range ? 'true' : 'false', bg: r.id === range ? '#2b2723' : 'transparent', fg: r.id === range ? '#f3f3ee' : '#2b2723', pick: () => this.setState({ range: r.id }) })),
+      accounts: ACCOUNTS.map((a) => ({ ...a, pressed: a.id === account ? 'true' : 'false', bg: a.id === account ? '#2b2723' : '#fafaf8', fg: a.id === account ? '#f3f3ee' : '#2b2723', border: a.id === 'th' ? '#b23a2e' : a.id === account ? '#2b2723' : '#b9b9aa', pick: () => this.setState({ account: a.id }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>
