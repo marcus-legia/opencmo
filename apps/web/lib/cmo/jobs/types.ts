@@ -72,8 +72,21 @@ export type NicheVideoInsight = {
   measured_at: string;
 };
 
-/** Một lượt đo số liệu của bài đã đăng (W6-lite). */
-export type MetricRow = { item_id: string; url: string; views: number; likes: number; replies: number; reposts: number };
+/**
+ * One measurement of a published post. `source` says who read it (P6): `public` is the public reading through the
+ * social reader, `zernio` the numbers of a post that went out through Zernio. Missing optional fields are unreported.
+ */
+export type MetricRow = {
+  item_id: string;
+  url: string;
+  views: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  source?: "public" | "zernio";
+  impressions?: number | null;
+  engagements?: number | null;
+};
 
 export type StepStatus = "running" | "done" | "failed" | "skipped";
 export type Step = { tool: string; label: string; status: StepStatus };

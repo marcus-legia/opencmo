@@ -1547,16 +1547,18 @@ CREATE TABLE public.approvals (
     decided_at timestamp with time zone,
     decided_via text,
     reason text,
+    held_until timestamp with time zone,
     CONSTRAINT approvals_account_check CHECK ((char_length(account) <= 100)),
     CONSTRAINT approvals_content_hash_check CHECK ((content_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT approvals_held_until CHECK (((status <> 'held'::text) OR (held_until IS NOT NULL))),
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
     CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
     CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text, 'schedule_slot'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
-    CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
+    CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'held'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
 
 
@@ -6029,6 +6031,86 @@ $$;
 
 
 --
+-- Name: email_log_claim(uuid, text, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.email_log_claim(p_user uuid, p_kind text, p_approval_ids uuid[]) RETURNS TABLE(log_id uuid, approval_ids uuid[])
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_day date := (now() at time zone public.schedule_timezone(p_user))::date;
+  v_ids uuid[];
+  v_id uuid;
+begin
+  if p_kind not in ('digest', 'expiring') then
+    raise exception 'Unknown email kind.' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest) then
+    return;
+  end if;
+  -- Only the founder's own cards that still wait.
+  select coalesce(array_agg(a.id order by a.created_at), '{}') into v_ids
+  from public.approvals a
+  where a.id = any(coalesce(p_approval_ids, '{}')) and a.user_id = p_user and a.status = 'waiting';
+  if p_kind = 'expiring' then
+    select coalesce(array_agg(i order by i), '{}') into v_ids from unnest(v_ids) i
+    where not exists (select 1 from public.email_log l
+                      where l.user_id = p_user and l.kind = 'expiring' and l.status <> 'failed' and i = any(l.approval_ids));
+  end if;
+  if cardinality(v_ids) = 0 then
+    return;
+  end if;
+  v_ids := v_ids[1:50];
+  insert into public.email_log (user_id, kind, day, approval_ids)
+  values (p_user, p_kind, v_day, v_ids)
+  on conflict do nothing
+  returning id into v_id;
+  if v_id is null then
+    return;
+  end if;
+  return query select v_id, v_ids;
+end;
+$$;
+
+
+--
+-- Name: email_log_done(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.email_log_done(p_log uuid, p_provider_id text, p_error text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_error is null then
+    update public.email_log set status = 'sent', provider_id = left(p_provider_id, 100), sent_at = now() where id = p_log;
+  else
+    update public.email_log set status = 'failed', error = left(p_error, 500) where id = p_log;
+    delete from public.email_log where id = p_log and kind = 'digest';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: email_unsubscribe(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.email_unsubscribe(p_token uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.notify_settings
+  set email_digest = false, unsubscribed_at = coalesce(unsubscribed_at, now()), updated_at = now()
+  where unsubscribe_token = p_token;
+  return true;
+end;
+$$;
+
+
+--
 -- Name: enforce_write_budget(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7022,6 +7104,65 @@ $_$;
 
 
 --
+-- Name: notify_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notify_settings (
+    user_id uuid NOT NULL,
+    email_digest boolean DEFAULT true NOT NULL,
+    push boolean DEFAULT true NOT NULL,
+    unsubscribe_token uuid DEFAULT gen_random_uuid() NOT NULL,
+    unsubscribed_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: notify_settings_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notify_settings_for(p_user uuid) RETURNS public.notify_settings
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.notify_settings;
+begin
+  insert into public.notify_settings (user_id) values (p_user) on conflict (user_id) do nothing;
+  select * into v_row from public.notify_settings where user_id = p_user;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: notify_settings_save(boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notify_settings_save(p_email_digest boolean, p_push boolean) RETURNS public.notify_settings
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.notify_settings;
+begin
+  if p_email_digest is null or p_push is null then
+    raise exception 'Choose on or off for email and push.' using errcode = '22023';
+  end if;
+  insert into public.notify_settings (user_id, email_digest, push, unsubscribed_at, updated_at)
+  values (v_user, p_email_digest, p_push, case when not p_email_digest then now() end, now())
+  on conflict (user_id) do update
+    set email_digest = excluded.email_digest, push = excluded.push,
+        unsubscribed_at = case when excluded.email_digest then null else coalesce(notify_settings.unsubscribed_at, now()) end,
+        updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: orphan_keep_paths(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7784,6 +7925,55 @@ begin
       );
     return next v_user;
   end loop;
+end;
+$$;
+
+
+--
+-- Name: push_subscribe(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.push_subscribe(p_endpoint text, p_p256dh text, p_auth text, p_user_agent text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_id uuid;
+begin
+  if p_endpoint is null or p_endpoint !~ '^https://' or char_length(p_endpoint) > 1000 then
+    raise exception 'The push endpoint must be an https URL of at most 1000 characters.' using errcode = '22023';
+  end if;
+  if p_p256dh is null or p_p256dh !~ '^[A-Za-z0-9_-]{20,200}={0,2}$' or p_auth is null or p_auth !~ '^[A-Za-z0-9_-]{8,100}={0,2}$' then
+    raise exception 'The push keys are not valid.' using errcode = '22023';
+  end if;
+  if (select count(*) from public.push_subscriptions where user_id = v_user and endpoint <> p_endpoint) >= 10 then
+    raise exception 'Push is on in 10 browsers already. Turn it off in one first.' using errcode = 'P0001';
+  end if;
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+  values (v_user, p_endpoint, p_p256dh, p_auth, left(p_user_agent, 300))
+  on conflict (endpoint) do update
+    set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
+        user_agent = excluded.user_agent, failed_at = null
+  returning id into v_id;
+  return v_id;
+end;
+$_$;
+
+
+--
+-- Name: push_unsubscribe(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.push_unsubscribe(p_endpoint text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  delete from public.push_subscriptions where endpoint = p_endpoint and user_id = v_user;
+  return found;
 end;
 $$;
 
@@ -12835,6 +13025,33 @@ $$;
 
 
 --
+-- Name: account_metrics; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.account_metrics (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    social_account_id uuid,
+    platform text NOT NULL,
+    handle text NOT NULL,
+    day date NOT NULL,
+    followers bigint,
+    impressions bigint,
+    engagements bigint,
+    video_views bigint,
+    posts integer,
+    measured_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT account_metrics_engagements_check CHECK ((engagements >= 0)),
+    CONSTRAINT account_metrics_followers_check CHECK ((followers >= 0)),
+    CONSTRAINT account_metrics_handle_check CHECK (((char_length(handle) >= 1) AND (char_length(handle) <= 100))),
+    CONSTRAINT account_metrics_impressions_check CHECK ((impressions >= 0)),
+    CONSTRAINT account_metrics_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT account_metrics_posts_check CHECK ((posts >= 0)),
+    CONSTRAINT account_metrics_video_views_check CHECK ((video_views >= 0))
+);
+
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12912,6 +13129,24 @@ CREATE TABLE public.api_keys (
 
 
 --
+-- Name: best_slots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.best_slots (
+    user_id uuid NOT NULL,
+    platform text NOT NULL,
+    hour smallint NOT NULL,
+    median_views_per_hour double precision NOT NULL,
+    posts integer NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT best_slots_hour_check CHECK (((hour >= 0) AND (hour <= 23))),
+    CONSTRAINT best_slots_median_views_per_hour_check CHECK ((median_views_per_hour >= (0)::double precision)),
+    CONSTRAINT best_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT best_slots_posts_check CHECK ((posts >= 1))
+);
+
+
+--
 -- Name: caption_translations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12926,6 +13161,20 @@ CREATE TABLE public.caption_translations (
     CONSTRAINT caption_translations_credits_check CHECK ((credits > 0)),
     CONSTRAINT caption_translations_hash_check CHECK (((hash IS NULL) OR (hash ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT caption_translations_status_check CHECK ((status = ANY (ARRAY['charged'::text, 'done'::text, 'refunded'::text])))
+);
+
+
+--
+-- Name: card_budget; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.card_budget (
+    user_id uuid NOT NULL,
+    day date NOT NULL,
+    raised integer DEFAULT 0 NOT NULL,
+    held integer DEFAULT 0 NOT NULL,
+    CONSTRAINT card_budget_held_check CHECK ((held >= 0)),
+    CONSTRAINT card_budget_raised_check CHECK ((raised >= 0))
 );
 
 
@@ -12949,11 +13198,20 @@ CREATE TABLE public.cmo_draft_outcomes (
     platform text,
     voice_note_deleted_at timestamp with time zone,
     mentioned_product boolean,
+    outcome_url text,
+    outcome_votes integer,
+    outcome_replies integer,
+    outcome_checked_at timestamp with time zone,
+    outcome_status text,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
     CONSTRAINT cmo_draft_outcomes_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['NO_MEANINGFUL_EDIT'::text, 'TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text, 'FULL_REWRITE'::text]))),
     CONSTRAINT cmo_draft_outcomes_model_check CHECK ((char_length(model) <= 100)),
+    CONSTRAINT cmo_draft_outcomes_outcome_replies_check CHECK (((outcome_replies >= 0) AND (outcome_replies <= 1000000))),
+    CONSTRAINT cmo_draft_outcomes_outcome_status_check CHECK ((outcome_status = ANY (ARRAY['found'::text, 'not_found'::text, 'gone'::text]))),
+    CONSTRAINT cmo_draft_outcomes_outcome_url_check CHECK (((outcome_url ~ '^https://'::text) AND (char_length(outcome_url) <= 500))),
+    CONSTRAINT cmo_draft_outcomes_outcome_votes_check CHECK (((outcome_votes >= '-100000'::integer) AND (outcome_votes <= 10000000))),
     CONSTRAINT cmo_draft_outcomes_platform_check CHECK (((platform IS NULL) OR (public.platform_profile(platform) IS NOT NULL))),
     CONSTRAINT cmo_draft_outcomes_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
     CONSTRAINT cmo_draft_outcomes_similarity_check CHECK (((similarity >= (0)::double precision) AND (similarity <= (1)::double precision)))
@@ -13096,6 +13354,29 @@ CREATE TABLE public.editor_transcripts (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT editor_transcripts_body_check CHECK ((octet_length(body) < 524288)),
     CONSTRAINT editor_transcripts_hash_check CHECK ((hash ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: email_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    day date NOT NULL,
+    approval_ids uuid[] NOT NULL,
+    status text DEFAULT 'claimed'::text NOT NULL,
+    provider_id text,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sent_at timestamp with time zone,
+    CONSTRAINT email_log_approval_ids_check CHECK (((cardinality(approval_ids) >= 1) AND (cardinality(approval_ids) <= 50))),
+    CONSTRAINT email_log_error_check CHECK ((char_length(error) <= 500)),
+    CONSTRAINT email_log_kind_check CHECK ((kind = ANY (ARRAY['digest'::text, 'expiring'::text]))),
+    CONSTRAINT email_log_provider_id_check CHECK ((char_length(provider_id) <= 100)),
+    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['claimed'::text, 'sent'::text, 'failed'::text])))
 );
 
 
@@ -13327,9 +13608,15 @@ CREATE TABLE public.post_metrics (
     replies bigint DEFAULT 0 NOT NULL,
     reposts bigint DEFAULT 0 NOT NULL,
     measured_at timestamp with time zone DEFAULT now() NOT NULL,
+    source text DEFAULT 'public'::text NOT NULL,
+    impressions bigint,
+    engagements bigint,
+    CONSTRAINT post_metrics_engagements_check CHECK ((engagements >= 0)),
+    CONSTRAINT post_metrics_impressions_check CHECK ((impressions >= 0)),
     CONSTRAINT post_metrics_likes_check CHECK ((likes >= 0)),
     CONSTRAINT post_metrics_replies_check CHECK ((replies >= 0)),
     CONSTRAINT post_metrics_reposts_check CHECK ((reposts >= 0)),
+    CONSTRAINT post_metrics_source_check CHECK ((source = ANY (ARRAY['public'::text, 'zernio'::text]))),
     CONSTRAINT post_metrics_url_check CHECK ((char_length(url) <= 500)),
     CONSTRAINT post_metrics_views_check CHECK ((views >= 0))
 );
@@ -13369,6 +13656,26 @@ CREATE TABLE public.projects (
     kind text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT projects_kind_check CHECK ((kind = ANY (ARRAY['clip'::text, 'edit'::text])))
+);
+
+
+--
+-- Name: push_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.push_subscriptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    endpoint text NOT NULL,
+    p256dh text NOT NULL,
+    auth text NOT NULL,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    failed_at timestamp with time zone,
+    CONSTRAINT push_subscriptions_auth_check CHECK ((auth ~ '^[A-Za-z0-9_-]{8,100}={0,2}$'::text)),
+    CONSTRAINT push_subscriptions_endpoint_check CHECK (((endpoint ~ '^https://'::text) AND (char_length(endpoint) <= 1000))),
+    CONSTRAINT push_subscriptions_p256dh_check CHECK ((p256dh ~ '^[A-Za-z0-9_-]{20,200}={0,2}$'::text)),
+    CONSTRAINT push_subscriptions_user_agent_check CHECK ((char_length(user_agent) <= 300))
 );
 
 
@@ -13638,6 +13945,22 @@ ALTER TABLE ONLY public.storage_deletions ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: account_metrics account_metrics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_metrics
+    ADD CONSTRAINT account_metrics_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: account_metrics account_metrics_user_id_platform_handle_day_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_metrics
+    ADD CONSTRAINT account_metrics_user_id_platform_handle_day_key UNIQUE (user_id, platform, handle, day);
+
+
+--
 -- Name: agent_messages agent_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13742,6 +14065,14 @@ ALTER TABLE ONLY public.artifacts
 
 
 --
+-- Name: best_slots best_slots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.best_slots
+    ADD CONSTRAINT best_slots_pkey PRIMARY KEY (user_id, platform, hour);
+
+
+--
 -- Name: brand_kits brand_kits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13755,6 +14086,14 @@ ALTER TABLE ONLY public.brand_kits
 
 ALTER TABLE ONLY public.caption_translations
     ADD CONSTRAINT caption_translations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: card_budget card_budget_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.card_budget
+    ADD CONSTRAINT card_budget_pkey PRIMARY KEY (user_id, day);
 
 
 --
@@ -13950,6 +14289,14 @@ ALTER TABLE ONLY public.editor_transcripts
 
 
 --
+-- Name: email_log email_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_log
+    ADD CONSTRAINT email_log_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: generations generations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14019,6 +14366,22 @@ ALTER TABLE ONLY public.media_assets
 
 ALTER TABLE ONLY public.media_transcripts
     ADD CONSTRAINT media_transcripts_pkey PRIMARY KEY (asset_id);
+
+
+--
+-- Name: notify_settings notify_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notify_settings
+    ADD CONSTRAINT notify_settings_pkey PRIMARY KEY (user_id);
+
+
+--
+-- Name: notify_settings notify_settings_unsubscribe_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notify_settings
+    ADD CONSTRAINT notify_settings_unsubscribe_token_key UNIQUE (unsubscribe_token);
 
 
 --
@@ -14131,6 +14494,22 @@ ALTER TABLE ONLY public.projects
 
 ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: push_subscriptions push_subscriptions_endpoint_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_subscriptions
+    ADD CONSTRAINT push_subscriptions_endpoint_key UNIQUE (endpoint);
+
+
+--
+-- Name: push_subscriptions push_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_subscriptions
+    ADD CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id);
 
 
 --
@@ -14347,6 +14726,13 @@ ALTER TABLE ONLY public.zernio_profiles
 
 ALTER TABLE ONLY public.zernio_receipts
     ADD CONSTRAINT zernio_receipts_pkey PRIMARY KEY (event_id);
+
+
+--
+-- Name: account_metrics_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX account_metrics_user_idx ON public.account_metrics USING btree (user_id, day DESC);
 
 
 --
@@ -14623,6 +15009,20 @@ CREATE INDEX editor_transcripts_clip_created_idx ON public.editor_transcripts US
 
 
 --
+-- Name: email_log_one_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX email_log_one_digest ON public.email_log USING btree (user_id, day) WHERE (kind = 'digest'::text);
+
+
+--
+-- Name: email_log_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX email_log_user_idx ON public.email_log USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: generations_after_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -14795,6 +15195,13 @@ CREATE UNIQUE INDEX profiles_polar_customer_unique ON public.profiles USING btre
 --
 
 CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, created_at DESC, id DESC);
+
+
+--
+-- Name: push_subscriptions_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btree (user_id);
 
 
 --
@@ -15246,6 +15653,22 @@ CREATE TRIGGER work_orders_follow_run AFTER INSERT OR UPDATE OF status ON public
 
 
 --
+-- Name: account_metrics account_metrics_social_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_metrics
+    ADD CONSTRAINT account_metrics_social_account_id_fkey FOREIGN KEY (social_account_id) REFERENCES public.social_accounts(id) ON DELETE SET NULL;
+
+
+--
+-- Name: account_metrics account_metrics_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_metrics
+    ADD CONSTRAINT account_metrics_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: agent_messages agent_messages_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15342,6 +15765,14 @@ ALTER TABLE ONLY public.artifacts
 
 
 --
+-- Name: best_slots best_slots_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.best_slots
+    ADD CONSTRAINT best_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: brand_kits brand_kits_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15363,6 +15794,14 @@ ALTER TABLE ONLY public.caption_translations
 
 ALTER TABLE ONLY public.caption_translations
     ADD CONSTRAINT caption_translations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: card_budget card_budget_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.card_budget
+    ADD CONSTRAINT card_budget_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -15606,6 +16045,14 @@ ALTER TABLE ONLY public.editor_transcripts
 
 
 --
+-- Name: email_log email_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_log
+    ADD CONSTRAINT email_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: generations generations_after_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15718,6 +16165,14 @@ ALTER TABLE ONLY public.media_transcripts
 
 
 --
+-- Name: notify_settings notify_settings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notify_settings
+    ADD CONSTRAINT notify_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: operation_log operation_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15827,6 +16282,14 @@ ALTER TABLE ONLY public.projects
 
 ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: push_subscriptions push_subscriptions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_subscriptions
+    ADD CONSTRAINT push_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -16142,6 +16605,12 @@ ALTER TABLE ONLY public.zernio_profiles
 
 
 --
+-- Name: account_metrics; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.account_metrics ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: agent_messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -16202,6 +16671,12 @@ ALTER TABLE public.approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.artifacts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: best_slots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.best_slots ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: brand_kits; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -16212,6 +16687,12 @@ ALTER TABLE public.brand_kits ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.caption_translations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: card_budget; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.card_budget ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: clips; Type: ROW SECURITY; Schema: public; Owner: -
@@ -16316,6 +16797,12 @@ ALTER TABLE public.editor_skills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.editor_transcripts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: email_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.email_log ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: generations; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -16363,6 +16850,12 @@ ALTER TABLE public.media_assets ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.media_transcripts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: notify_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.notify_settings ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: operation_log; Type: ROW SECURITY; Schema: public; Owner: -
@@ -16431,6 +16924,12 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: push_subscriptions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: rate_limits; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -16451,10 +16950,31 @@ CREATE POLICY "read own CMO lessons" ON public.cmo_lessons FOR SELECT TO authent
 
 
 --
+-- Name: account_metrics read own account metrics; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own account metrics" ON public.account_metrics FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: approvals read own approvals; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read own approvals" ON public.approvals FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: best_slots read own best slots; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own best slots" ON public.best_slots FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: card_budget read own card budget; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own card budget" ON public.card_budget FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -16479,6 +16999,13 @@ CREATE POLICY "read own draft outcomes" ON public.cmo_draft_outcomes FOR SELECT 
 
 
 --
+-- Name: email_log read own email log; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own email log" ON public.email_log FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: cmo_inbox read own inbox; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -16490,6 +17017,13 @@ CREATE POLICY "read own inbox" ON public.cmo_inbox FOR SELECT TO authenticated U
 --
 
 CREATE POLICY "read own media transcripts" ON public.media_transcripts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: notify_settings read own notify settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own notify settings" ON public.notify_settings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -16511,6 +17045,13 @@ CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO au
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: push_subscriptions read own push subscriptions; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own push subscriptions" ON public.push_subscriptions FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

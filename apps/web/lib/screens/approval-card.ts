@@ -28,7 +28,8 @@ export const CardKindSchema = z.enum(CARD_KINDS);
 export type CardKind = z.infer<typeof CardKindSchema>;
 
 /** Same values as `approvals.status` (brain plan W1-2). */
-export const CARD_STATUSES = ["waiting", "approved", "edited", "skipped", "expired", "cancelled"] as const;
+/** `held`: past the daily card budget, waiting for a later day (P6 A4); never in the queue. */
+export const CARD_STATUSES = ["waiting", "held", "approved", "edited", "skipped", "expired", "cancelled"] as const;
 export const CardStatusSchema = z.enum(CARD_STATUSES);
 
 /**
@@ -54,6 +55,9 @@ const PostBody = z.object({
         limit: z.number().int().positive(),
         /** Characters shown before the platform's "more" on a phone (LinkedIn); null when the whole post shows. */
         visibleBeforeMore: z.number().int().positive().nullable(),
+        // --- thread field (P6, owner A) ---
+        /** An X thread (P6 W4): 5 to 8 posts, the first being `versions[0]`; absent for a single post. */
+        thread: z.array(z.string().max(280)).min(5).max(8).optional(),
       }),
     )
     .min(1),
@@ -285,6 +289,9 @@ const FinishedVideoBody = z.object({
   frameAt: z.number().min(0),
   /** One per platform profile: captions and the YouTube title and description. */
   captions: z.array(CaptionSchema).max(12),
+  // --- look-note field (P6, owner A) ---
+  /** P6 S4: what the look check still found after one send-back (`snapshot.look.note`); absent when it passed or did not run. */
+  lookNote: z.string().max(200).optional(),
 });
 
 const ShortsBatchBody = z.object({
@@ -307,6 +314,9 @@ const ShortsBatchBody = z.object({
     )
     .min(1)
     .max(3),
+  // --- look-note field (P6, owner A) ---
+  /** P6 S4: what the look check still found after one send-back (`snapshot.look.note`); absent when it passed or did not run. */
+  lookNote: z.string().max(200).optional(),
 });
 
 const SlideshowBody = z.object({
@@ -326,6 +336,9 @@ const SlideshowBody = z.object({
   pngSetUrl: z.url().nullable(),
   /** P5 A3: one per platform it will be posted to, editable before approving (`edit_caption`), as on a finished video. */
   captions: z.array(CaptionSchema).max(12).optional(),
+  // --- look-note field (P6, owner A) ---
+  /** P6 S4: what the look check still found after one send-back (`snapshot.look.note`); absent when it passed or did not run. */
+  lookNote: z.string().max(200).optional(),
 });
 
 /**

@@ -16,10 +16,20 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
 
 ## Todo
 
-- [ ] **A0 Contracts (push first)**: migration skeleton with grants, RLS and pgTAP: `push_subscriptions`,
+- [x] **A0 Contracts (push first)**: migration skeleton with grants, RLS and pgTAP: `push_subscriptions`,
       `email_log`, `card_budget` (per user per day), `account_metrics`, `best_slots`, reply outcome columns on
       `cmo_draft_outcomes`; screen types for `analytics.*` and Brain measures; `MetricsSource` interface (public,
       Zernio).
+      Done: `20270101090000_p6_contracts.sql` + `229_p6_contracts.test.sql`. For C: `push_subscribe(endpoint, p256dh,
+      auth, user_agent)` / `push_unsubscribe(endpoint)`; `notify_settings` (+ `notify_settings_save(email, push)`,
+      service `notify_settings_for(user)` for the unsubscribe token); `email_unsubscribe(token)` callable signed out;
+      service `email_log_claim(user, kind, ids)` → `{log_id, approval_ids}` (one digest a local day, one expiring
+      email per card, waiting cards only, nothing when unsubscribed) and `email_log_done(log, provider_id, error)`.
+      Approval status `held` (+ `held_until`). TS: `lib/cmo/jobs/metrics-source.ts`, `BrainScreen.measures`,
+      `lib/screens/rail.ts` (`RailStatus`: `nextPostAt`, `connectedAccounts`, `timezone`; C puts it in
+      `ShellState`), card fields `PostBody.platforms[].thread?` and `lookNote?` on the three Studio bodies.
+      Note: cards are raised in SQL (`approval_raise`), so the card budget (A4) lives there, not in `brain.ts`;
+      owner (2026-10-31): past ~10 a day a card is held until the next day, time-bound cards never.
 - [ ] **A1 Zernio metrics (P3)**: per post, per account and followers for connected accounts on the `pull_metrics`
       schedule; public reading stays for the rest; loaders `analytics.*` and Dashboard `results`; flip `live`.
 - [ ] **A2 Best time (P2)**: `best_slots` from published posts with metrics (≥ 10 per platform, median views per
