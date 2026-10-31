@@ -54,8 +54,8 @@ export const SCREENS = {
     live: ["cmo", "week", "team", "log", "results", "outToday", "digest", "queue"],
     release: ["cmo", "week", "team", "log", "results", "outToday", "queue"],
   }),
-  // P6 A1: from `account_metrics` and `post_metrics`. `brainReads` stays sample until the brain writes its own lines.
-  analytics: entry({ schema: AnalyticsScreenSchema, fixture: analyticsFixture, empty: analyticsEmpty, live: ["range", "accounts", "kpis", "daily", "byAccount", "posts"], release: ["accounts", "kpis", "daily", "byAccount", "posts"] }),
+  // P6 A1: from `account_metrics` and `post_metrics`. `brainReads` is live and empty until the brain writes its own lines.
+  analytics: entry({ schema: AnalyticsScreenSchema, fixture: analyticsFixture, empty: analyticsEmpty, live: ["range", "accounts", "kpis", "daily", "brainReads", "byAccount", "posts"], release: ["accounts", "kpis", "daily", "byAccount", "posts"] }),
   brain: entry({
     schema: BrainScreenSchema,
     fixture: brainFixture,

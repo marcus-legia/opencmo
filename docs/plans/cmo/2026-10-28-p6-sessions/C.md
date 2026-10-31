@@ -16,19 +16,25 @@ C2 at once → C0 (after A0; real Resend after the owner gate) → C1 → C3 (af
 
 ## Todo
 
-- [ ] **C2 Phone-first queue**: every card kind decides at 390 px in the shell's phone layout (`TabBar`, Chat first)
+- [x] **C2 Phone-first queue**: every card kind decides at 390 px in the shell's phone layout (`TabBar`, Chat first)
       and at 1024 with the chat as a drawer (previews by signed URL of the preview file), axe
       clean, a decide e2e per kind.
-- [ ] **C0 Email**: Resend sender behind `lib/notify/email.ts` (Inbucket in dev), digest and expiring-card templates
+- [x] **C0 Email**: Resend sender behind `lib/notify/email.ts` (Inbucket in dev), digest and expiring-card templates
       in English, links that open the card behind login, unsubscribe route, `support@opencmo.io` in the footer.
-- [ ] **C1 Web push**: service worker, permission prompt with help text (iPhone needs a Home Screen web app),
+- [x] **C1 Web push**: service worker, permission prompt with help text (iPhone needs a Home Screen web app),
       `push_subscriptions` through A's RPC, one push per new batch.
-- [ ] **C3 Analytics and Brain live**: Analytics (accounts, KPIs, daily, by account, top posts), Brain measures panel,
+- [x] **C3 Analytics and Brain live**: Analytics (accounts, KPIs, daily, by account, top posts), Brain measures panel,
       thread card body, look-check note on video cards.
-- [ ] **C5 Rail status lines**: Schedule ("Next post 9:00", from the next waiting slot) and Analytics (connected
+- [x] **C5 Rail status lines**: Schedule ("Next post 9:00", from the next waiting slot) and Analytics (connected
       accounts) in `shell-v2/Rail.tsx` `statusOf`, from A4's `ShellState` fields; no line when there is no number;
       they must not wrap at 184 px.
-- [ ] **C4 e2e**: digest in Inbucket opens the card, a card decided at 390, Analytics on fake Zernio data.
+- [x] **C4 e2e**: digest in Inbucket opens the card, a card decided at 390, Analytics on fake Zernio data.
+
+Done by a later session (2026-10-31) after A and B; session C never started. Files: `lib/notify/` (email, push, send,
+checks), `app/unsubscribe/route.ts`, `public/sw.js`, `app/manifest.ts`, `components/screens/settings/NotifyPanel.tsx`,
+the Brain Measures panel, the thread body and look note in `components/cards/`, the rail lines (`Rail.tsx`,
+`ShellV2.tsx`), `e2e/ui-v2-reach.spec.ts` (16 passed). Deviation: the phone tab bar keeps Chat fourth, as the shell
+built it; see the acceptance README.
 
 ## Requests
 

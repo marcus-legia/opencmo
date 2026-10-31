@@ -1292,8 +1292,8 @@ async function analytics({ supabase, params }: LoadContext): Promise<Partial<Ana
   const range = parsed.success ? parsed.data : 30;
   const now = new Date();
   const m = await measured(supabase, range, now);
-  const { brainReads: _unused, ...screen } = buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published });
-  return screen;
+  // `brainReads` is live and empty: no model reads these numbers yet, and a sample line would read as a real finding.
+  return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published });
 }
 
 /**

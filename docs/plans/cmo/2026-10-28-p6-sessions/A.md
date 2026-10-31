@@ -57,8 +57,9 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       votes stay null there). SQL writes the memory line from our own numbers and the community name only.
       `opportunity_reply_url(id, url)` keeps a pasted link into the same thread; the card has no field for it yet
       (C's reply card).
-- [ ] **A5 Acceptance** with fakes (F13), screenshots of Analytics, the phone queue and the digest email into
+- [x] **A5 Acceptance** with fakes (F13), screenshots of Analytics, the phone queue and the digest email into
       `docs/plans/cmo/2026-10-28-p6-acceptance/`.
+      Done: `lib/screens/p6-acceptance.e2e.ts` passed; results and gaps in that folder's README.
 
 ## Requests
 

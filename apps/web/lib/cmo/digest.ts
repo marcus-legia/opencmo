@@ -79,8 +79,16 @@ export async function loadDigestInput(
   for (const r of [waiting, out, stuck]) if (r.error) throw new Error(`digest: ${r.error.message}`);
   const title = (row: { kind: string; snapshot: Record<string, unknown> }) => {
     const s = row.snapshot;
-    const pick = s.kind === "post" ? s.text : s.kind === "reply" ? s.title : s.kind === "goal" ? s.goal : s.rule;
-    return (typeof pick === "string" && pick ? pick : row.kind).slice(0, 120);
+    const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+    // Every kind names itself differently; a schedule card says what goes out and where.
+    const pick =
+      s.kind === "post" ? str(s.text)
+      : s.kind === "reply" ? str(s.title)
+      : s.kind === "goal" ? str(s.goal)
+      : s.kind === "correction" ? str(s.rule)
+      : s.kind === "schedule" ? [str(s.text) ?? str(s.title) ?? "A post", str(s.platform) ? (String(s.platform) === "x" ? "X" : String(s.platform)) : null].filter(Boolean).join(" · ")
+      : (str(s.title) ?? str(s.text));
+    return (pick ?? "A card waits for you").slice(0, 120);
   };
   return {
     appUrl: opts.appUrl,

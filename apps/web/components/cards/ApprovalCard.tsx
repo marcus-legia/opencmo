@@ -370,7 +370,7 @@ export function ApprovalCard({
           {"lookNote" in card.body && card.body.lookNote ? (
             <p className="v2-card-state is-expired" data-testid="look-note">
               <b>Look check</b>
-              <span>{card.body.lookNote.replace(/^look check:\s*/i, "")}</span>
+              <span>{card.body.lookNote.replace(/^look check:\s*/i, "").replace(/^./, (c) => c.toUpperCase())}</span>
             </p>
           ) : null}
 
