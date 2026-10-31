@@ -4,8 +4,8 @@
  * Green renders are not proof a video is usable: the worst failures are silent (captions off-screen, a
  * black or frozen stretch, an export with no sound). So before a video, short or slideshow card is
  * raised, the worker task `look_check` reads the **full-size export** (never a `*.preview.mp4`), draws
- * up to 12 frames, and answers fixed questions: three by code (black, frozen, sound), two by a vision
- * judge (captions inside the frame, text readable). Its frames go through moderation like any frame.
+ * up to 12 frames, and answers fixed questions: three by code (black, frozen, sound), one by moderation,
+ * two by a vision judge (captions inside the frame, text readable).
  *
  * A failure goes back to the squad once (round 0 → round 1); the second result goes on the card as a
  * note, pass or fail, so the founder decides with the problem in view. Nothing here spends credits.
@@ -26,13 +26,16 @@ export const LOOK_MAX_FRAMES = 12;
 export const LOOK_SEND_BACKS = 1;
 
 /**
- * The fixed questions. `by` says who answers: code (ffmpeg filters, no model) or the vision judge.
+ * The fixed questions. `by` says who answers: code (ffmpeg filters, no model), the content check every frame
+ * goes through (product rule: AI media only with moderation), or the vision judge. A slideshow skips the
+ * frozen check (its slides hold on purpose).
  * Ids are shared with the worker (`look_check_task.py` `QUESTIONS`); keep both lists in step.
  */
 export const LOOK_QUESTIONS = [
   { id: "no_black_frames", by: "code", ask: "No black stretch longer than half a second" },
-  { id: "no_frozen_frames", by: "code", ask: "No frozen picture longer than two seconds" },
+  { id: "no_frozen_frames", by: "code", ask: "No frozen picture longer than four seconds" },
   { id: "sound_present", by: "code", ask: "The export has an audio track that is not silent" },
+  { id: "content_allowed", by: "moderation", ask: "Every frame passes the content check" },
   { id: "captions_inside", by: "judge", ask: "Every caption sits fully inside the frame" },
   { id: "text_readable", by: "judge", ask: "On-screen text is readable: not garbled, cut off or too small" },
 ] as const;
@@ -83,7 +86,7 @@ export const LookResultSchema = z
   .strict();
 export type LookResult = z.infer<typeof LookResultSchema>;
 
-/** The worker task's input (`tasks.settings` of a `look_check` task), written by the SQL rules. */
+/** The worker task's input (`tasks.payload` of a `look_check` task), written by the SQL rules. */
 export const LookCheckInputSchema = z
   .object({
     ref_kind: z.enum(["editor_project", "short_batch", "studio_step"]),
