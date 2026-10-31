@@ -39,3 +39,12 @@ C2 at once → C0 (after A0; real Resend after the owner gate) → C1 → C3 (af
       `approval-card.ts`, request 1 in `A.md`); show it above the decide buttons when not empty. X threads arrive as
       `PostBody.platforms[].thread: string[]` (5–8 posts, each ≤ 280; A's request 3): one numbered post per row with its
       own length chip. Types: `ThreadDraftSchema` in `lib/cmo/writer/types.ts`.
+- [ ] **[from A → C] A0 is pushed (`cbac5048`, `c21abd5f`); what C0, C1 and C5 call.** Push: `push_subscribe(endpoint,
+      p256dh, auth, user_agent)` / `push_unsubscribe(endpoint)`. Only FCM, Mozilla, Apple (`web.push.apple.com`) and WNS
+      endpoints are accepted (`push_endpoint_allowed`, SSRF guard); `lib/notify/push.ts` should check the same list
+      before every send and delete the row on 404/410. Email: service `email_log_claim(user, 'digest'|'expiring', ids)`
+      → `{log_id, approval_ids}` or no row (already sent, unsubscribed, nothing waiting), then
+      `email_log_done(log_id, resend_id, error)`; the unsubscribe link carries `notify_settings.unsubscribe_token`
+      (service `notify_settings_for(user)` creates it) and calls `email_unsubscribe(token)` signed out; Settings
+      switches through `notify_settings_save(email_digest, push)`. Rail: `RailStatus` in `lib/screens/rail.ts`; its
+      loader lands with A4. `held` cards (past the day's budget) are not in the queue.
