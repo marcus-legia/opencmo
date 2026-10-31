@@ -19,13 +19,20 @@ B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
 - [x] **B0 Contracts (push first)**: `LookResult` (questions, pass/fail, frame times, note), where it runs (before a
       card, never on every render unless the owner says so at M1); eval case shapes (squad: brief → output → judge
       questions; brain: profile → plan → judge); `HnSource`; thread draft type (5–8 posts, each ≤ 280).
-- [ ] **B1 Look check (S4)**: before a video, short or slideshow card (long take, Shorts, Slideshow squads in
+- [x] **B1 Look check (S4)**: before a video, short or slideshow card (long take, Shorts, Slideshow squads in
       `lib/departments/studio/`), call Modal `look` on the full-size export (up to 12 frames); fixed questions; one
       send-back to the squad, then the card shows the note.
+      Done: worker `look_check_task.py` + `ai/look_judge.py`, web `look-check.ts` / `look-redo.ts`, the drain loop in
+      `studio-orders.ts`; SQL wait by A (`20270101100000`, `20270101140000` for "unchanged"). Not run yet: a real
+      vision judge and a real export (owner gate).
 - [x] **B3 Hacker News (R4)**: Algolia HN search (no key, within its rate limit) for Sales and Research, budget,
       untrusted wrapping, tests with recorded responses.
-- [ ] **B4 X threads (W4)**: `post_draft` thread mode (hook post with the promise, one step per post, no recap
+- [x] **B4 X threads (W4)**: `post_draft` thread mode (hook post with the promise, one step per post, no recap
       ending, checks per post), posting as a thread through the publish adapter.
+      Done: `jobs/draft-thread.ts` (one thread, code checks per post and on the thread, the checker in its own
+      context, one fix round), `post_draft` with `thread: true` (X only), `create_task` takes `thread` (now only),
+      `PublishDeliverableSchema.thread`, Zernio `threadItems` (media on the root post), `draft-thread.check.ts`.
+      Finished by a later session from B's recovered working tree.
 - [x] **B2 Evals (S4, B4)**: Studio cases for long take, shorts and slideshows; ~20 brain profiles with the plan
       judge on the cascade; a fake run in CI; the real run waits for the owner.
 
