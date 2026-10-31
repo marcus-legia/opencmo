@@ -1935,6 +1935,34 @@ CREATE FUNCTION public.approval_snapshot(p_ref_kind text, p_ref_id uuid) RETURNS
     SET search_path TO 'public'
     AS $$
 declare
+  v jsonb := public.approval_snapshot_base(p_ref_kind, p_ref_id);
+  v_look public.look_checks;
+begin
+  if v is null or p_ref_kind not in ('editor_project', 'short_batch', 'studio_step') then
+    return v;
+  end if;
+  select * into v_look from public.look_checks c
+  where c.ref_kind = p_ref_kind and c.ref_id = p_ref_id and c.status = 'failed'
+    and c.doc_key = coalesce(v->>'document_hash', v->>'parent_hash')
+  order by c.round desc, c.created_at desc limit 1;
+  if found and coalesce(v_look.result->>'note', '') <> '' then
+    v := v || jsonb_build_object('look', jsonb_build_object('pass', false, 'round', v_look.round,
+      'note', left(v_look.result->>'note', 200)));
+  end if;
+  return v;
+end;
+$$;
+
+
+--
+-- Name: approval_snapshot_base(text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_snapshot_base(p_ref_kind text, p_ref_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
   v jsonb;
   v_captions jsonb;
 begin
@@ -2304,7 +2332,7 @@ CREATE TABLE public.tasks (
     finished_at timestamp with time zone,
     editor_revision_id uuid,
     progress real,
-    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'render_stills'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text, 'publish_media'::text]))),
+    CONSTRAINT tasks_kind_check CHECK ((kind = ANY (ARRAY['probe_media'::text, 'generate'::text, 'render_document'::text, 'render_stills'::text, 'transcribe_media'::text, 'transcribe_asset'::text, 'capture_page'::text, 'publish_media'::text, 'look_check'::text]))),
     CONSTRAINT tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= (0)::double precision) AND (progress <= (1)::double precision)))),
     CONSTRAINT tasks_status_check CHECK ((status = ANY (ARRAY['awaiting_upload'::text, 'awaiting_input'::text, 'queued'::text, 'running'::text, 'done'::text, 'failed'::text, 'cancelled'::text])))
 );
@@ -6864,6 +6892,112 @@ $$;
 
 
 --
+-- Name: look_check_begin(uuid, text, uuid, uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.look_check_begin(p_user uuid, p_ref_kind text, p_ref_id uuid, p_order uuid, p_doc_key text, p_files jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_round smallint;
+  v_prior public.look_checks;
+  v_task uuid;
+begin
+  if p_files is null or jsonb_typeof(p_files) <> 'array' or jsonb_array_length(p_files) not between 1 and 20
+     or p_doc_key is null
+     or exists (select 1 from jsonb_array_elements(p_files) f where coalesce(f->>'path', '') = '' or coalesce(f->>'clip_id', '') = '') then
+    return false;
+  end if;
+  select * into v_prior from public.look_checks
+  where ref_kind = p_ref_kind and coalesce(order_id, ref_id) = coalesce(p_order, p_ref_id)
+  order by round desc limit 1 for update;
+  if not found then
+    v_round := 0;
+  elsif v_prior.status = 'checking' then
+    return true;
+  elsif v_prior.round = 0 and v_prior.status in ('sent_back', 'claimed') then
+    v_round := 1;
+  else
+    -- Passed, failed in round 1, or could not run: a later render of the same order is not checked again.
+    return false;
+  end if;
+  insert into public.tasks (user_id, kind, payload, status, request_id)
+  values (p_user, 'look_check',
+    jsonb_build_object('ref_kind', p_ref_kind, 'ref_id', p_ref_id, 'round', v_round, 'files', p_files),
+    'queued', gen_random_uuid())
+  returning id into v_task;
+  insert into public.look_checks (user_id, ref_kind, ref_id, order_id, round, doc_key, task_id)
+  values (p_user, p_ref_kind, p_ref_id, p_order, v_round, p_doc_key, v_task);
+  return true;
+end;
+$$;
+
+
+--
+-- Name: look_checks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.look_checks (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    ref_kind text NOT NULL,
+    ref_id uuid NOT NULL,
+    order_id uuid,
+    round smallint NOT NULL,
+    doc_key text NOT NULL,
+    task_id uuid,
+    status text DEFAULT 'checking'::text NOT NULL,
+    result jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    settled_at timestamp with time zone,
+    claimed_at timestamp with time zone,
+    CONSTRAINT look_checks_doc_key_check CHECK ((char_length(doc_key) <= 100)),
+    CONSTRAINT look_checks_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['editor_project'::text, 'short_batch'::text, 'studio_step'::text]))),
+    CONSTRAINT look_checks_result_check CHECK (((result IS NULL) OR ((jsonb_typeof(result) = 'object'::text) AND (octet_length((result)::text) <= 65536)))),
+    CONSTRAINT look_checks_round_check CHECK ((round = ANY (ARRAY[0, 1]))),
+    CONSTRAINT look_checks_status_check CHECK ((status = ANY (ARRAY['checking'::text, 'passed'::text, 'failed'::text, 'sent_back'::text, 'claimed'::text, 'error'::text])))
+);
+
+
+--
+-- Name: look_check_raise(public.look_checks); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.look_check_raise(p_check public.look_checks) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  case p_check.ref_kind
+    when 'editor_project' then
+      -- Only for the edit that was rendered: an edit made during the check gets its own render and card.
+      if p_check.doc_key = (select public.editor_document_hash(document) from public.editor_projects where clip_id = p_check.ref_id) then
+        perform public.approval_raise(p_check.user_id, 'editor_project', p_check.ref_id);
+        if p_check.order_id is not null then
+          perform public.work_order_wait_founder(p_check.order_id, 'Your video is rendered');
+        end if;
+      end if;
+    when 'short_batch' then
+      update public.short_batches set status = 'waiting_founder' where id = p_check.ref_id and status = 'rendering';
+      if found then
+        perform public.approval_raise(p_check.user_id, 'short_batch', p_check.ref_id);
+        if p_check.order_id is not null then
+          perform public.work_order_wait_founder(p_check.order_id, 'Shorts are ready for you');
+        end if;
+      end if;
+    when 'studio_step' then
+      -- `studio_steps_sync` raises the card when the step turns `waiting`.
+      update public.studio_steps set status = 'waiting' where id = p_check.ref_id and status = 'running';
+      if found and p_check.order_id is not null then
+        perform public.work_order_wait_founder(p_check.order_id, 'Your slideshow is rendered');
+      end if;
+  end case;
+end;
+$$;
+
+
+--
 -- Name: mark_finished(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10618,6 +10752,7 @@ CREATE FUNCTION public.short_batch_settle(p_batch_id uuid) RETURNS void
     AS $$
 declare
   v_batch public.short_batches;
+  v_files jsonb;
 begin
   select * into v_batch from public.short_batches where id = p_batch_id for update;
   if not found or v_batch.status <> 'rendering' or exists (
@@ -10625,6 +10760,21 @@ begin
     return;
   end if;
   if exists (select 1 from public.shorts where batch_id = v_batch.id and status = 'ready') then
+    -- P6 S4: each ready short's full-size render of its edit as it is now; the batch stays `rendering` while checked.
+    select jsonb_agg(jsonb_build_object('path', r.output_path, 'clip_id', s.short_clip_id) order by s.source_start, s.id)
+    into v_files
+    from public.shorts s
+    left join public.editor_projects p on p.clip_id = s.short_clip_id
+    left join lateral (
+      select t.output_path from public.tasks t
+      where t.clip_id = s.short_clip_id and t.kind = 'render_document' and t.status = 'done'
+        and t.settings_hash = public.editor_document_hash(p.document)
+      order by t.finished_at desc nulls last, t.created_at desc limit 1
+    ) r on true
+    where s.batch_id = v_batch.id and s.status = 'ready';
+    if public.look_check_begin(v_batch.user_id, 'short_batch', v_batch.id, v_batch.order_id, v_batch.parent_hash, v_files) then
+      return;
+    end if;
     update public.short_batches set status = 'waiting_founder' where id = v_batch.id;
     perform public.approval_raise(v_batch.user_id, 'short_batch', v_batch.id);
     if v_batch.order_id is not null then
@@ -10994,6 +11144,42 @@ CREATE FUNCTION public.studio_brain_call() RETURNS boolean
     AS $$
 begin
   return coalesce(auth.jwt()->>'opencmo_actor', '') = 'brain';
+end;
+$$;
+
+
+--
+-- Name: studio_look_sendbacks_claim(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_look_sendbacks_claim(p_limit integer) RETURNS TABLE(check_id uuid, ref_kind text, ref_id uuid, user_id uuid, order_id uuid, look jsonb)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_stale public.look_checks;
+begin
+  for v_stale in
+    select c.* from public.look_checks c
+    where c.status = 'claimed' and c.claimed_at < now() - interval '1 hour'
+      and not exists (select 1 from public.look_checks r where r.ref_kind = c.ref_kind
+                      and coalesce(r.order_id, r.ref_id) = coalesce(c.order_id, c.ref_id) and r.round = 1)
+    for update skip locked
+  loop
+    update public.look_checks set status = 'failed' where id = v_stale.id returning * into v_stale;
+    perform public.look_check_raise(v_stale);
+  end loop;
+  return query
+  with picked as (
+    select c.id from public.look_checks c
+    where c.status = 'sent_back'
+    order by c.created_at
+    limit greatest(1, least(coalesce(p_limit, 10), 50))
+    for update skip locked
+  )
+  update public.look_checks c set status = 'claimed', claimed_at = now()
+  from picked where c.id = picked.id
+  returning c.id, c.ref_kind, c.ref_id, c.user_id, c.order_id, c.result;
 end;
 $$;
 
@@ -11391,6 +11577,11 @@ begin
       perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'document_changed',
         'message', 'The slideshow changed while it was rendering.', 'retryable', true));
     end if;
+    return;
+  end if;
+  -- P6 S4: the look check reads the MP4 first; `look_check_raise` turns the step `waiting` when it is done.
+  if public.look_check_begin(v_step.user_id, 'studio_step', v_step.id, v_step.order_id, v_hash,
+      jsonb_build_array(jsonb_build_object('path', v_mp4.output_path, 'clip_id', v_step.clip_id))) then
     return;
   end if;
   -- `studio_steps_sync` raises the card when the step turns `waiting`.
@@ -11851,6 +12042,45 @@ $$;
 
 
 --
+-- Name: tasks_look_check_settle(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.tasks_look_check_settle() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_check public.look_checks;
+  v_pass boolean;
+begin
+  if new.kind <> 'look_check' or new.status not in ('done', 'failed', 'cancelled') or old.status = new.status then
+    return new;
+  end if;
+  select * into v_check from public.look_checks where task_id = new.id and status = 'checking' for update;
+  if not found then
+    return new;
+  end if;
+  begin
+    v_pass := case when new.status = 'done' and jsonb_typeof(new.output->'pass') = 'boolean' then (new.output->>'pass')::boolean end;
+    update public.look_checks
+    set status = case when v_pass is null then 'error' when v_pass then 'passed' when round = 0 then 'sent_back' else 'failed' end,
+        result = case when new.status = 'done' and jsonb_typeof(new.output) = 'object' and octet_length(new.output::text) <= 65536
+                      then new.output end,
+        settled_at = now()
+    where id = v_check.id
+    returning * into v_check;
+    if v_check.status <> 'sent_back' then
+      perform public.look_check_raise(v_check);
+    end if;
+  exception when others then
+    raise warning 'look check rule failed for task %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: tasks_studio_rules(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11912,8 +12142,12 @@ begin
     end if;
     if new.status = 'done' then
       if new.settings_hash = (select public.editor_document_hash(document) from public.editor_projects where clip_id = new.clip_id) then
-        perform public.approval_raise(v_user, 'editor_project', new.clip_id);
-        perform public.work_order_wait_founder(v_order, 'Your video is rendered');
+        -- P6 S4: the look check reads the full-size export first; it raises card 3 when it is done.
+        if not public.look_check_begin(v_user, 'editor_project', new.clip_id, v_order, new.settings_hash,
+            jsonb_build_array(jsonb_build_object('path', new.output_path, 'clip_id', new.clip_id))) then
+          perform public.approval_raise(v_user, 'editor_project', new.clip_id);
+          perform public.work_order_wait_founder(v_order, 'Your video is rendered');
+        end if;
       end if;
     else
       perform public.work_order_move(v_order, 'failed', null, jsonb_build_object('code', 'render_failed',
@@ -14326,6 +14560,14 @@ ALTER TABLE ONLY public.jobs
 
 
 --
+-- Name: look_checks look_checks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.look_checks
+    ADD CONSTRAINT look_checks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: marketing_documents marketing_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15106,6 +15348,27 @@ CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_a
 
 
 --
+-- Name: look_checks_one_round; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX look_checks_one_round ON public.look_checks USING btree (ref_kind, COALESCE(order_id, ref_id), round);
+
+
+--
+-- Name: look_checks_sent_back_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_sent_back_idx ON public.look_checks USING btree (created_at) WHERE (status = ANY (ARRAY['sent_back'::text, 'claimed'::text]));
+
+
+--
+-- Name: look_checks_task_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_task_idx ON public.look_checks USING btree (task_id);
+
+
+--
 -- Name: marketing_documents_user_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -15600,6 +15863,13 @@ CREATE TRIGGER studio_slideshow_fresh BEFORE UPDATE OF status ON public.studio_s
 --
 
 CREATE TRIGGER studio_steps_sync AFTER INSERT OR DELETE OR UPDATE ON public.studio_steps FOR EACH ROW EXECUTE FUNCTION public.studio_steps_sync();
+
+
+--
+-- Name: tasks tasks_look_check_settle; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tasks_look_check_settle AFTER UPDATE OF status ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.tasks_look_check_settle();
 
 
 --
@@ -16119,6 +16389,30 @@ ALTER TABLE ONLY public.generations
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: look_checks look_checks_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.look_checks
+    ADD CONSTRAINT look_checks_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.work_orders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: look_checks look_checks_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.look_checks
+    ADD CONSTRAINT look_checks_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: look_checks look_checks_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.look_checks
+    ADD CONSTRAINT look_checks_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -16828,6 +17122,12 @@ ALTER TABLE public.generations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: look_checks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.look_checks ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: marketing_documents; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -17023,6 +17323,13 @@ CREATE POLICY "read own email log" ON public.email_log FOR SELECT TO authenticat
 --
 
 CREATE POLICY "read own inbox" ON public.cmo_inbox FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: look_checks read own look checks; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own look checks" ON public.look_checks FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

@@ -46,13 +46,15 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
 
 (Others append `[from → A] what, why`; answer here with the commit.)
 
-- [from planner → A] **CI red on `database`: `182_authenticated_function_allowlist` fails** (run 41199949759, head
+- [x] [from planner → A] **CI red on `database`: `182_authenticated_function_allowlist` fails** (run 41199949759, head
   `8ab9f57`). A0 and `c21abd5` added functions `authenticated` can call that the allowlist does not name:
   `email_unsubscribe(uuid)`, `notify_settings_save(boolean,boolean)`, `push_subscribe(text,text,text,text)`,
   `push_unsubscribe(text)` (list them in `supabase/tests/182_authenticated_function_allowlist.test.sql`, they are meant
   to be called) and `push_endpoint_allowed(text)` (a helper for the check and the RPC: `revoke all ... from public, anon,
   authenticated` instead of listing it). Earlier runs on this branch were cancelled by newer pushes, so this is the
   first full pgTAP run of A0.
+  **Answer (A):** fixed in the look-check commit: the four listed in 182, `push_endpoint_allowed` revoked from
+  `authenticated`; the whole suite passes on a fresh database built from every migration.
 - [from planner → A] **M1 review, before A4:** the `held` status is outside `approvals_one_waiting` (unique where
   `status = 'waiting'`) and outside the supersede in `approval_raise` (cancels only `waiting`). A card whose content
   changes while it is held keeps its stale snapshot next to a new waiting card, and releasing it later hits the unique
@@ -60,7 +62,7 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
   `task-kinds.json` with B's SQL (keep `publish_media` last; `test_worker_loop.py` checks the first seven kinds), and a
   per-user advisory lock in `email_log_claim` so two cron runs cannot send the same expiring email.
 
-- [ ] **[from B → A] 1. Look check before a Studio card (S4, M2; owner confirmed "only before a card", 2026-10-31).**
+- [x] **[from B → A] 1. Look check before a Studio card (S4, M2; owner confirmed "only before a card", 2026-10-31).**
       Contract: `apps/web/lib/departments/studio/look-check.ts` (`LookCheckInputSchema`, `LookResultSchema`,
       `lookNextStep`) and the worker side `packages/engine/opencmo/worker/look_check_task.py` (B builds the task in B1).
       Asked of A, in one `20270101*` migration with pgTAP:
@@ -81,6 +83,18 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       - `look_check` failed as a task (worker error) → raise the card without a note, never block it;
       - `lookNote` (≤ 200) on the three studio bodies in `approval-card.ts` (your block), read from `snapshot.look.note`.
       Why: cards are raised in SQL, so the wait between "render done" and the card has to live there.
+      **Answer (A, this commit):** `20270101100000_p6_look_check.sql` + pgTAP `231` (and `207` updated). Task kind
+      `look_check` in SQL and in `task-kinds.json` (A added the row so the check stays green). The three render rules
+      call `look_check_begin` instead of raising: payload `{ref_kind, ref_id, round, files: [{path, clip_id}]}` on
+      `tasks.payload` (full-size `output_path`). Rounds count per order (`coalesce(order_id, ref_id)`), so a redo that
+      makes a new step or batch is still round 1. On the task: pass or round 1 → card; round 0 failed → `look_checks`
+      row `sent_back`, no card; task failed/cancelled → card without a note. Squads claim with service
+      `studio_look_sendbacks_claim(p_limit)` → `{check_id, ref_kind, ref_id, user_id, order_id, look}` (`look` = the
+      task output); a claimed send-back with no round-1 check after an hour raises its card with the round-0 note.
+      `approval_snapshot` adds `look: {pass: false, round, note}` only for a failed check of this exact render
+      (`document_hash`, or `parent_hash` for a batch); `cards.ts` maps it to `lookNote`. While checked, a slideshow
+      step stays `running` and a batch stays `rendering`. Note: the worker writes `clipId`/`frameTimes` in its output
+      and `LookResultSchema` uses the same, good; SQL only reads `pass` and `note`.
 - [ ] **[from B → A] 2. Hacker News threads in Sales (R4).** `cmo_opportunities` (`20261015090000_cmo_sales.sql`) only
       takes `platform = 'reddit'` and a reddit.com URL. Asked: allow `platform in ('reddit','hn')` and
       `^https://news\.ycombinator\.com/item\?id=[0-9]+$` for `hn`; `cmo_save_opportunities` takes each item's

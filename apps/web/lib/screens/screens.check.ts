@@ -246,3 +246,19 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(`screens.check: ${SCREEN_NAMES.length} screens, ${ALL_KINDS.length + STATE_CARDS.length} cards ok`);
+
+check("cards: a look check's note reaches the video card (P6 S4), and only when the snapshot has one", () => {
+  const video = (look?: Record<string, unknown>) =>
+    approvalToCard(
+      row("finished_video", {
+        kind: "finished_video", clip_id: "11111111-1111-4111-8111-111111111111", title: "Launch", document_hash: "a".repeat(64),
+        render_task_id: "t", render_path: "u/c/t.mp4", seconds: 42, ...(look ? { look } : {}),
+      }),
+    );
+  const noted = video({ pass: false, round: 1, note: "Look check: captions run off the bottom (at 0:12)." });
+  assert.ok(noted && noted.body.kind === "finished_video");
+  ApprovalCardSchema.parse(noted);
+  assert.equal(noted.body.lookNote, "Look check: captions run off the bottom (at 0:12).");
+  const clean = video();
+  assert.ok(clean && clean.body.kind === "finished_video" && clean.body.lookNote === undefined, "no note on a pass");
+});

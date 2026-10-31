@@ -193,6 +193,7 @@ function build(row: ApprovalRow): Built | null {
           previewUrl: null,
           frameAt: Math.min(2, v.seconds! / 2),
           captions: captionsOf(v.captions, v.clip_id),
+          ...(v.look?.note ? { lookNote: v.look.note } : {}),
         },
       };
     }
@@ -218,6 +219,7 @@ function build(row: ApprovalRow): Built | null {
             previewUrl: null,
             captions: captionsOf(v.captions, x.short_clip_id),
           })),
+          ...(v.look?.note ? { lookNote: v.look.note } : {}),
         },
       };
     }
@@ -240,6 +242,7 @@ function build(row: ApprovalRow): Built | null {
           previewUrl: null,
           pngSetUrl: null,
           captions: captionsOf(v.captions, v.clip_id),
+          ...(v.look?.note ? { lookNote: v.look.note } : {}),
         },
       };
     }

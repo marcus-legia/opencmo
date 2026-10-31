@@ -13,7 +13,8 @@ as $$
     and p_endpoint ~ '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)/[^\s]+$';
 $$;
 revoke all on function public.push_endpoint_allowed(text) from public, anon;
-grant execute on function public.push_endpoint_allowed(text) to authenticated, service_role;
+revoke all on function public.push_endpoint_allowed(text) from authenticated;
+grant execute on function public.push_endpoint_allowed(text) to service_role;
 
 delete from public.push_subscriptions where not public.push_endpoint_allowed(endpoint);
 alter table public.push_subscriptions drop constraint push_subscriptions_endpoint_check;
