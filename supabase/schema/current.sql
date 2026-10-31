@@ -7930,6 +7930,19 @@ $$;
 
 
 --
+-- Name: push_endpoint_allowed(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.push_endpoint_allowed(p_endpoint text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $_$
+  select p_endpoint is not null and char_length(p_endpoint) <= 1000
+    and p_endpoint ~ '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)/[^\s]+$';
+$_$;
+
+
+--
 -- Name: push_subscribe(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7941,8 +7954,8 @@ declare
   v_user uuid := public.require_user();
   v_id uuid;
 begin
-  if p_endpoint is null or p_endpoint !~ '^https://' or char_length(p_endpoint) > 1000 then
-    raise exception 'The push endpoint must be an https URL of at most 1000 characters.' using errcode = '22023';
+  if not public.push_endpoint_allowed(p_endpoint) then
+    raise exception 'This browser''s push service is not supported.' using errcode = '22023';
   end if;
   if p_p256dh is null or p_p256dh !~ '^[A-Za-z0-9_-]{20,200}={0,2}$' or p_auth is null or p_auth !~ '^[A-Za-z0-9_-]{8,100}={0,2}$' then
     raise exception 'The push keys are not valid.' using errcode = '22023';
@@ -13673,7 +13686,7 @@ CREATE TABLE public.push_subscriptions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     failed_at timestamp with time zone,
     CONSTRAINT push_subscriptions_auth_check CHECK ((auth ~ '^[A-Za-z0-9_-]{8,100}={0,2}$'::text)),
-    CONSTRAINT push_subscriptions_endpoint_check CHECK (((endpoint ~ '^https://'::text) AND (char_length(endpoint) <= 1000))),
+    CONSTRAINT push_subscriptions_endpoint_check CHECK (public.push_endpoint_allowed(endpoint)),
     CONSTRAINT push_subscriptions_p256dh_check CHECK ((p256dh ~ '^[A-Za-z0-9_-]{20,200}={0,2}$'::text)),
     CONSTRAINT push_subscriptions_user_agent_check CHECK ((char_length(user_agent) <= 300))
 );

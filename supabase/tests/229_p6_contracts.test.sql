@@ -33,19 +33,19 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000a","role":"authenticated"}';
 create temp table s (id uuid) on commit drop;
 grant all on s to authenticated;
-insert into s select public.push_subscribe('https://push.example/abc', repeat('A', 87), repeat('b', 22), 'Firefox');
+insert into s select public.push_subscribe('https://fcm.googleapis.com/fcm/send/abc', repeat('A', 87), repeat('b', 22), 'Firefox');
 select is((select count(*)::int from public.push_subscriptions), 1, 'the founder reads their subscription');
-select is(public.push_subscribe('https://push.example/abc', repeat('C', 87), repeat('d', 22), 'Firefox'), (select id from s),
+select is(public.push_subscribe('https://fcm.googleapis.com/fcm/send/abc', repeat('C', 87), repeat('d', 22), 'Firefox'), (select id from s),
   'subscribing again updates the same row');
 select throws_ok($$ select public.push_subscribe('http://push.example/x', repeat('A', 87), repeat('b', 22), null) $$, '22023',
-  'The push endpoint must be an https URL of at most 1000 characters.', 'an endpoint is https');
-select throws_ok($$ select public.push_subscribe('https://push.example/y', 'short', repeat('b', 22), null) $$, '22023',
+  'This browser''s push service is not supported.', 'an endpoint is https (and a push service, 230)');
+select throws_ok($$ select public.push_subscribe('https://fcm.googleapis.com/fcm/send/y', 'short', repeat('b', 22), null) $$, '22023',
   'The push keys are not valid.', 'the keys are checked');
 set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000b","role":"authenticated"}';
 select is((select count(*)::int from public.push_subscriptions), 0, 'another founder reads none');
-select ok(not public.push_unsubscribe('https://push.example/abc'), 'and cannot remove it');
+select ok(not public.push_unsubscribe('https://fcm.googleapis.com/fcm/send/abc'), 'and cannot remove it');
 set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000a","role":"authenticated"}';
-select ok(public.push_unsubscribe('https://push.example/abc'), 'the founder turns it off');
+select ok(public.push_unsubscribe('https://fcm.googleapis.com/fcm/send/abc'), 'the founder turns it off');
 
 -- Notify settings.
 select is((public.notify_settings_save(false, true)).email_digest, false, 'the founder turns the digest off');
