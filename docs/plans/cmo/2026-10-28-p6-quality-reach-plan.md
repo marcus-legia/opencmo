@@ -46,7 +46,8 @@ real profiles with a look check before every video card.
   jitter up to ±4 minutes (`schedule-publish.md` §5, §11).
 - Hacker News: yes, free, after R1–R3.
 - Look check: only before a card (recommended in `studio.md` §12, 6; confirm with the owner at M1).
-- X threads when founders ask; kept under `post_draft` (thread).
+- X threads when founders ask (`writer.md` §10: W4 "when founders ask"); kept under `post_draft` (thread). B4 is last
+  in B's order and the first thing to drop at M3 if no founder has asked, with the owner's OK.
 
 ## 2. What ships
 
@@ -54,7 +55,7 @@ real profiles with a look check before every video card.
 |---|---|---|---|
 | F1 | Email digest | a morning email when cards wait, and one before a time-bound card expires; links open the card | Resend wired (`RESEND_API_KEY`, verified domain); the in-app digest (wave 1 B2) sends at `digest_hour` in their timezone; unsubscribe link; `support@opencmo.io` in the footer |
 | F2 | Web push | a push when a card waits (if they allowed it) | VAPID keys, a service worker, `push_subscriptions`; at most one push per batch; on iPhone only for a Home Screen web app (help text says so) |
-| F3 | Phone-first queue | the queue and every card decide at 390 px; previews from signed URLs of preview files | every card kind passes axe and a decide e2e at 390; the editor still sends phones to a computer, the queue does not |
+| F3 | Phone-first queue | the queue and every card decide at 390 px inside the shell's phone layout (`TabBar`, Chat first) and in the compact layout at 1024 (chat as a drawer); previews from signed URLs of preview files | every card kind passes axe and a decide e2e at 390 and 1024; the editor still sends phones to a computer, the queue does not |
 | F4 | Card budget | at most ~10 cards a day | the brain batches or waits beyond the budget; a counter in SQL |
 | F5 | Zernio metrics (P3) | Analytics live: every connected account, KPIs, daily chart, per account, top posts | a `pull_metrics` source for connected accounts through Zernio (per post, per account, followers); public reading stays for unconnected ones; `analytics.*` live; Dashboard results live |
 | F6 | Best time (P2) | schedule cards propose their own best hours ("Your posts on X do best around 9 am") | after ~10 published posts with metrics on a platform, the founder's best median hours replace `schedule-defaults.json`'s slots in `schedule_propose`; the existing jitter, gaps and caps stay |
@@ -64,6 +65,7 @@ real profiles with a look check before every video card.
 | F10 | Studio evals | — | eval cases for the long-take squad, shorts and slideshows in `lib/cmo/jobs/eval`; approved-as-is and redo rates per squad |
 | F11 | Brain evals (B4) | Brain → measures (plan accepted without edits, drafts approved as is, orders on time, credits per approved deliverable, replans) | ~20 real profiles in `lib/cmo/jobs/eval` with a plan judge on the cascade; measures from `brain.md` §10 on the Brain screen |
 | F12 | X threads (W4) | a thread card: 5–8 posts, each under 280 | `post_draft` with `thread: true`; checks per post; scheduled as one slot posting a thread through Zernio |
+| F14 | Rail status lines | the rail says "Next post 9:00" under Schedule and "Waiting on Zernio" or the account count under Analytics | `statusOf` in `Rail.tsx` reads two new `ShellState` fields from the screens loaders (only real numbers; no line otherwise) |
 | F13 | Acceptance | — | a local run with fakes: digest email to Inbucket, a push to a test subscription, a card decided at 390, metrics from the fake Zernio on Analytics, a best-time proposal after 10 fake posts, a look check failure noted on a card |
 
 ## 3. What exists (`cmo-build` at `1c299ec`, with P2–P5)
@@ -90,8 +92,12 @@ real profiles with a look check before every video card.
   check, no Hacker News source.
 - **Writer (P3):** `platforms.json`, voice notes, per-platform drafts; X threads not built (`post_draft` is single
   posts).
-- **UI (P5 shell):** the three-column v2 shell (rail, CMO chat, tab panel; `2026-10-30-three-column-shell-plan.md`);
-  the editor opens in column 3. Phone layouts of cards follow that shell.
+- **UI (three-column shell, `2026-10-30-three-column-shell-plan.md`, S1–S4 merged with P5):** rail · CMO chat · tab
+  panel, resizable (`shell-v2/columns.ts`, `Sash.tsx`); below 1100 px the chat is a drawer, at 760 px and below the
+  phone layout is `TabBar` with Chat first; the editor opens in column 3 and its Assistant takes the chat column. Every
+  screen of this phase renders in column 3 with `--v2-*` tokens only. Rail status lines (`Rail.tsx` `statusOf`) show
+  only Dashboard pending and Stuck; Schedule's "next post" and Sales' "new threads" lines were left out of the shell
+  plan for lack of a count, which this phase's loaders can supply.
 - Latest migration `20261231160000_p5_review_fixes.sql`; this phase's prefix `20270101` sorts after it.
 - **Owner decisions still open from P2** (`2026-10-28-p2-sessions/B.md` notes): a price for the brain's Studio orders,
   60 s briefs vs 10 s shorts, short renders against the daily export limit. B4's brain evals measure credits per
@@ -116,7 +122,7 @@ real profiles with a look check before every video card.
 | A1 | A | Zernio metrics (P3): fetch per post, per account, followers for connected accounts on the `pull_metrics` schedule; store; loaders `analytics.*` and Dashboard `results`; flip `live` | A0 |
 | A2 | A | Best time (P2): `best_slots` from published posts with metrics (≥ 10 per platform); `schedule_propose` prefers them over the defaults (jitter, gaps and caps unchanged); the card's one-line reason; pgTAP | A0, A1 |
 | A3 | A | Reply outcomes (R3): re-read replied threads after 3 days, store votes and replies, memory notes | A0 |
-| A4 | A | Card budget (F4): counter and the brain's batching; Brain measures loader | A0 |
+| A4 | A | Card budget (F4): counter and the brain's batching; Brain measures loader; the next waiting slot time and connected-account count for the rail (F14) | A0 |
 | A5 | A | Acceptance (F13) with screenshots of Analytics, a phone queue and the digest email | all |
 | B1 | B | Look check (S4): call `look` before raising a video, short or slideshow card; one send-back to the squad; the note on the card | B0 |
 | B2 | B | Studio evals and brain evals (B4): cases, the plan judge on the cascade, the eval report; a fake run in CI, a real run with the owner | B0 |
@@ -125,13 +131,14 @@ real profiles with a look check before every video card.
 | C0 | C | Email templates (digest, expiring card) and the Resend sender `lib/notify/email.ts`; unsubscribe route; dev sends to Inbucket | A0, owner gate |
 | C1 | C | Web push: service worker, permission prompt with help text, `lib/notify/push.ts`, send on a new card batch | A0 |
 | C2 | C | Phone-first queue: every card kind at 390 (previews by signed URL), axe and decide e2e per kind | — |
-| C3 | C | Analytics page live (accounts, KPIs, daily, by account, top posts), Brain measures panel, the thread card body | A1, A4, B4 |
+| C3 | C | Analytics page live (accounts, KPIs, daily, by account, top posts), Brain measures panel, the thread card body, all in column 3 of the shell | A1, A4, B4 |
+| C5 | C | Rail status lines for Schedule and Analytics (F14) from A's `ShellState` fields | A1, A2 |
 | C4 | C | e2e: digest to Inbucket opens the card, a card decided at 390, Analytics with fake Zernio data | C0–C3 |
 
 **Milestones**
 - **M1** contracts: A0 and B0 pushed and reviewed; the owner confirms the look check rule.
 - **M2** look check and evals (editor first): B1, B2, the look note in C3.
-- **M3** reach, analytics and acceptance: A1–A5, B3, B4, C0–C2, C3 (rest), C4; the planner reviews the whole PR.
+- **M3** reach, analytics and acceptance: A1–A5, B3, B4, C0–C2, C3 (rest), C4, C5; the planner reviews the whole PR.
   (Split point if the PR grows too big: after M2.)
 
 ## 6. Owner gates

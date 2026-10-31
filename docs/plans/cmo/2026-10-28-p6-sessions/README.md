@@ -56,5 +56,5 @@ Paste one into a new Claude Code session on this repository.
 
 **Session C**
 > You are Session C of `docs/plans/cmo/2026-10-28-p6-sessions/`. Read `README.md` and `C.md` there, the plan
-> `docs/plans/cmo/2026-10-28-p6-quality-reach-plan.md`, and `docs/architecture/approval.md` §7 and the frames `DashboardPhone.dc.html`, `Analytics.dc.html` and `Cards.dc.html` in `docs/plans/cmo/2026-10-27-app-redesign-frames/`. Work on branch `cmo-p6` (PR into `cmo-build`).
+> `docs/plans/cmo/2026-10-28-p6-quality-reach-plan.md`, `docs/plans/cmo/2026-10-30-three-column-shell-plan.md` (every screen renders in its column 3), and `docs/architecture/approval.md` §7 and the frames `DashboardPhone.dc.html`, `Analytics.dc.html` and `Cards.dc.html` in `docs/plans/cmo/2026-10-27-app-redesign-frames/`. Work on branch `cmo-p6` (PR into `cmo-build`).
 > Start with C2 at once, C0 and C1 once A0 is pushed, then the rest of `C.md` in order. Tick only `C.md`; commit and push as you go.
