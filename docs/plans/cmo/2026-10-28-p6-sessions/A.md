@@ -30,13 +30,25 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       `ShellState`), card fields `PostBody.platforms[].thread?` and `lookNote?` on the three Studio bodies.
       Note: cards are raised in SQL (`approval_raise`), so the card budget (A4) lives there, not in `brain.ts`;
       owner (2026-10-31): past ~10 a day a card is held until the next day, time-bound cards never.
-- [ ] **A1 Zernio metrics (P3)**: per post, per account and followers for connected accounts on the `pull_metrics`
+- [x] **A1 Zernio metrics (P3)**: per post, per account and followers for connected accounts on the `pull_metrics`
       schedule; public reading stays for the rest; loaders `analytics.*` and Dashboard `results`; flip `live`.
-- [ ] **A2 Best time (P2)**: `best_slots` from published posts with metrics (≥ 10 per platform, median views per
+      Done: `lib/departments/publish/analytics.ts` (three Zernio endpoints, fake, a 402 = no add-on never fails the
+      run), `20270101110000_p6_metrics.sql` + pgTAP `233` (`nonneg()`: `greatest(0, null)` is 0 in Postgres),
+      `lib/screens/analytics-build.ts` (KPIs against the previous range, daily, by account, best and worst posts;
+      `brainReads` stays sample), `analytics.check.ts`. Finished by a later session from A's recovered working tree.
+- [x] **A2 Best time (P2)**: `best_slots` from published posts with metrics (≥ 10 per platform, median views per
       hour in the founder's timezone); `schedule_propose` (`20261230100000_p4_slots.sql`) prefers them over
       `schedule-defaults.json`'s slots; the existing jitter, gaps and caps stay; the card's one-line reason. pgTAP.
-- [ ] **A4 Card budget**: about 10 cards a day; past it the brain batches (one card per batch) or waits; the Brain
+      Done: `20270101120000_p6_best_time.sql` + pgTAP `234`; `pull_metrics` calls `best_slots_refresh`; the reason
+      is added in `schedule-enrich.ts` (`bestTimeWhy`), outside the hash, so waiting cards stay valid.
+- [x] **A4 Card budget**: about 10 cards a day; past it the brain batches (one card per batch) or waits; the Brain
       measures loader (`brain.md` §10).
+      Done: `20270101130000_p6_card_budget.sql` + pgTAP `235` (`202` resets the day's budget, it raises eleven cards).
+      `approval_raise` holds the 11th new card until the next local day (time-bound cards never); a replacement keeps
+      its place and is not counted; `held` joins `approvals_one_waiting`, the supersede and `approval_refresh`.
+      `approval_release_held` runs first in the hourly `cmo-digest` cron. "Waits" is built; batching several items
+      into one card is not (each squad already raises one card per batch: shorts, slideshows). Brain measures:
+      `brain-measures.ts` + `weekCounts` in `load.ts`. Rail: `loadRailStatus` + `GET /api/v1/screens/rail`.
 - [ ] **A3 Reply outcomes (R3)**: 3 days after "replied", re-read the thread (by the pasted URL, else a match on the
       founder's text), store votes and replies, write a memory note; outside text as data.
 - [ ] **A5 Acceptance** with fakes (F13), screenshots of Analytics, the phone queue and the digest email into
@@ -62,7 +74,7 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
   `task-kinds.json` with B's SQL (keep `publish_media` last; `test_worker_loop.py` checks the first seven kinds), and a
   per-user advisory lock in `email_log_claim` so two cron runs cannot send the same expiring email.
   **Answer (A):** `look_check` sits before `publish_media` in `task-kinds.json`; the lock is in `20270101103000`;
-  `held` joins the unique index and the supersede in A4.
+  `held` joins the unique index and the supersede in A4 (done, `20270101130000`).
 
 - [x] **[from B → A] 1. Look check before a Studio card (S4, M2; owner confirmed "only before a card", 2026-10-31).**
       Contract: `apps/web/lib/departments/studio/look-check.ts` (`LookCheckInputSchema`, `LookResultSchema`,
