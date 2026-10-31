@@ -54,12 +54,16 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
         push window so `task-kinds.check.ts` stays green; tell B the commit);
       - where a Studio render is done today and a card is raised (`tasks_studio_rules` for `editor_project`,
         `short_batch_settle` for `short_batch`, `studio_slideshow_settle` for `studio_step`): enqueue one `look_check`
-        task with `settings = {ref_kind, ref_id, round, files: [{path, clip_id}]}` (the full-size `exports` paths) instead
+        task with `payload = {ref_kind, ref_id, round, files: [{path, clip_id}]}` (the full-size `exports` paths) instead
         of `approval_raise`;
       - on `look_check` done: `pass`, or `round = 1` → `approval_raise` with `look` (the task output) in
         `approval_snapshot`, so `contentHash` changes with it; failed at round 0 → no card, a send-back row the TS side
         can claim (e.g. `studio_look_sendbacks_claim(p_limit)` returning `{ref_kind, ref_id, user_id, order_id, look}`),
-        after which B's redo renders again and the next `look_check` gets `round = 1`;
+        after which B's redo renders again and the next `look_check` gets `round = 1`. B's redo
+        (`lib/departments/studio/look-redo.ts`) can answer "unchanged" (nothing the squad can fix, so a render would
+        return the same file): then it needs one call that raises the card with the round-0 result as is, e.g.
+        `studio_look_settle(p_ref_kind, p_ref_id, p_render_tasks uuid[])`, empty array = raise now, else wait on those
+        renders and check them as round 1;
       - `look_check` failed as a task (worker error) → raise the card without a note, never block it;
       - `lookNote` (≤ 200) on the three studio bodies in `approval-card.ts` (your block), read from `snapshot.look.note`.
       Why: cards are raised in SQL, so the wait between "render done" and the card has to live there.

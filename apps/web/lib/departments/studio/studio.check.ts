@@ -10,6 +10,7 @@ import { ScriptSnapshotSchema, PriceSnapshotSchema } from "@/lib/screens/approva
 
 import { pendingVoiceovers, voiceRowMatches } from "./finish";
 import { LOOK_QUESTION_IDS, LookResultSchema, lookNextStep, lookNote, lookSendBack } from "./look-check";
+import { redoable } from "./look-redo";
 import { renderRequestId } from "./render";
 import { stepCard } from "./steps";
 import { mayCall, VideoBriefSchema } from "./types";
@@ -111,5 +112,8 @@ assert.equal(lookNextStep(failed), "send_back");
 assert.equal(lookNextStep({ ...failed, round: 1 }), "raise_card", "only one send-back");
 assert.deepEqual(lookSendBack("finished_video", clip, failed).issues, [{ clipId: clip, path: black.path, reasons: ["A black stretch of 1.2 s"] }], "an unanswered question is not a reason");
 assert.equal(lookNote(failed), "Look check: A black stretch of 1.2 s (at 1:05).");
+assert.ok(redoable({ kind: "finished_video" }, ["sound_present"]), "a late voice-over can be attached");
+assert.ok(!redoable({ kind: "finished_video" }, ["no_black_frames"]), "nothing the squad can change: the card shows the note");
+assert.ok(!redoable({ kind: "shorts_batch" }, ["sound_present"]) && !redoable({ kind: "slideshow" }, ["text_readable"]));
 
 console.log("studio adapter: access, brief, cards, render ids, finishVideo matching and the look check rules correct");
