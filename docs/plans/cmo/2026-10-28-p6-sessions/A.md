@@ -46,6 +46,20 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
 
 (Others append `[from → A] what, why`; answer here with the commit.)
 
+- [from planner → A] **CI red on `database`: `182_authenticated_function_allowlist` fails** (run 41199949759, head
+  `8ab9f57`). A0 and `c21abd5` added functions `authenticated` can call that the allowlist does not name:
+  `email_unsubscribe(uuid)`, `notify_settings_save(boolean,boolean)`, `push_subscribe(text,text,text,text)`,
+  `push_unsubscribe(text)` (list them in `supabase/tests/182_authenticated_function_allowlist.test.sql`, they are meant
+  to be called) and `push_endpoint_allowed(text)` (a helper for the check and the RPC: `revoke all ... from public, anon,
+  authenticated` instead of listing it). Earlier runs on this branch were cancelled by newer pushes, so this is the
+  first full pgTAP run of A0.
+- [from planner → A] **M1 review, before A4:** the `held` status is outside `approvals_one_waiting` (unique where
+  `status = 'waiting'`) and outside the supersede in `approval_raise` (cancels only `waiting`). A card whose content
+  changes while it is held keeps its stale snapshot next to a new waiting card, and releasing it later hits the unique
+  index. Use `status in ('waiting', 'held')` in both, with a pgTAP case. Also: register `look_check` in
+  `task-kinds.json` with B's SQL (keep `publish_media` last; `test_worker_loop.py` checks the first seven kinds), and a
+  per-user advisory lock in `email_log_claim` so two cron runs cannot send the same expiring email.
+
 - [ ] **[from B → A] 1. Look check before a Studio card (S4, M2; owner confirmed "only before a card", 2026-10-31).**
       Contract: `apps/web/lib/departments/studio/look-check.ts` (`LookCheckInputSchema`, `LookResultSchema`,
       `lookNextStep`) and the worker side `packages/engine/opencmo/worker/look_check_task.py` (B builds the task in B1).
