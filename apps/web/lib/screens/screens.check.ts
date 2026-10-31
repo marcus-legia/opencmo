@@ -246,3 +246,34 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(`screens.check: ${SCREEN_NAMES.length} screens, ${ALL_KINDS.length + STATE_CARDS.length} cards ok`);
+
+check("cards: a look check's note reaches the video card (P6 S4), and only when the snapshot has one", () => {
+  const video = (look?: Record<string, unknown>) =>
+    approvalToCard(
+      row("finished_video", {
+        kind: "finished_video", clip_id: "11111111-1111-4111-8111-111111111111", title: "Launch", document_hash: "a".repeat(64),
+        render_task_id: "t", render_path: "u/c/t.mp4", seconds: 42, ...(look ? { look } : {}),
+      }),
+    );
+  const noted = video({ pass: false, round: 1, note: "Look check: captions run off the bottom (at 0:12)." });
+  assert.ok(noted && noted.body.kind === "finished_video");
+  ApprovalCardSchema.parse(noted);
+  assert.equal(noted.body.lookNote, "Look check: captions run off the bottom (at 0:12).");
+  const clean = video();
+  assert.ok(clean && clean.body.kind === "finished_video" && clean.body.lookNote === undefined, "no note on a pass");
+});
+
+check("cards: an X thread reaches the post card, and an HN reply says where it is (P6 W4, R4)", () => {
+  const thread = ["Hook: 5 ways to cut a demo.", "1. Cut the silences.", "2. Captions.", "3. B-roll.", "4. A hook."];
+  const post = approvalToCard(row("post", { kind: "post", platform: "X", day: "2026-10-29", idea: "Idea", text: thread[0], alternates: [], rationale: "", thread }));
+  assert.ok(post && post.body.kind === "post");
+  ApprovalCardSchema.parse(post);
+  assert.deepEqual(post.body.platforms[0]!.thread, thread);
+  const single = approvalToCard(row("post", { kind: "post", platform: "X", day: "2026-10-29", idea: "Idea", text: "One.", alternates: [], rationale: "" }));
+  assert.ok(single && single.body.kind === "post" && single.body.platforms[0]!.thread === undefined, "a single post has no thread");
+  const hn = approvalToCard(row("reply", { kind: "reply", platform: "hn", url: "https://news.ycombinator.com/item?id=4242", community: "", title: "Ask HN", reply: "Cut first.", score: 80, score_parts: [] }));
+  assert.ok(hn && hn.body.kind === "reply");
+  ApprovalCardSchema.parse(hn);
+  assert.equal(hn.body.platform, "hn");
+  assert.equal(hn.body.community, "Hacker News");
+});
