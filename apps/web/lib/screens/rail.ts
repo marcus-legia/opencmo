@@ -16,3 +16,20 @@ export const RailStatusSchema = z.object({
   timezone: z.string().max(64),
 });
 export type RailStatus = z.infer<typeof RailStatusSchema>;
+
+/** "Next post 9:00" today, "Next post Mon 9:00" later, in the founder's timezone as Schedule shows it. */
+export function nextPostText(at: string, timezone: string, now = new Date()): string {
+  const zone = (d: Date) => {
+    try {
+      return new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", hour: "numeric", minute: "2-digit", day: "numeric", hourCycle: "h23" }).formatToParts(d);
+    } catch {
+      return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", hour: "numeric", minute: "2-digit", day: "numeric", hourCycle: "h23" }).formatToParts(d);
+    }
+  };
+  const part = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const then = zone(new Date(at));
+  const today = zone(now);
+  const time = `${part(then, "hour")}:${part(then, "minute")}`;
+  const sameDay = part(then, "day") === part(today, "day") && Math.abs(Date.parse(at) - now.getTime()) < 86_400_000;
+  return `Next post ${sameDay ? time : `${part(then, "weekday")} ${time}`}`;
+}

@@ -137,7 +137,8 @@ export function buildAnalytics({ range, now, accounts, days, posts, publishedInR
   const videoViews = sumOrNull(cur.map((d) => d.video_views));
 
   const live = accounts.filter((a) => a.status !== "disconnected" && isPlatform(a.platform));
-  const followerValues = live.map((a) => followersAt(days, a.id, current.at(-1)!)).filter((f): f is number => f !== null);
+  // "Followers gained": the change over the range, summed over the accounts that reported both ends.
+  const followerValues = live.map((a) => followerChange(days, a.id, from, current.at(-1)!)).filter((f): f is number => f !== null);
   const followers = followerValues.length ? followerValues.reduce((a, b) => a + b, 0) : null;
   const withoutData = Math.max(0, publishedInRange - curPosts.length);
 

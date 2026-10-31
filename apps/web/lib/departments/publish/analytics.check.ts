@@ -15,6 +15,7 @@ import { buildAnalytics, buildResults, median, type AccountDayIn, type PostIn } 
 import { MeasureSchema } from "@/lib/screens/brain";
 import { buildMeasures, type WeekCounts } from "@/lib/screens/brain-measures";
 import { ResultRowSchema } from "@/lib/screens/dashboard";
+import { nextPostText } from "@/lib/screens/rail";
 import { bestTimeWhy, hourLabel } from "@/lib/screens/schedule-enrich";
 
 import { createFakeAnalytics, createZernioAnalytics, parseDaily, parseFollowers, parsePosts, publishAnalytics } from "./analytics";
@@ -149,7 +150,8 @@ async function main() {
     assert.equal(kpi("video_views").value, null, "nobody reported video views");
     assert.equal(kpi("posts_measured").value, 6);
     assert.equal(kpi("posts_measured").note, "2 without data");
-    assert.equal(kpi("followers").value, 500 + 80, "the disconnected account is not counted");
+    assert.equal(kpi("followers").value, 6 + 0, "followers gained over the range; the disconnected account is not counted");
+    assert.equal(kpi("followers").note, "across 2 accounts");
     assert.equal(screen.accounts.length, 3, "a disconnected account has no row");
     assert.equal(screen.accounts.find((a) => a.id === "sa-l")!.status, "reconnect");
     assert.deepEqual(screen.daily.at(-1)!.values, { x: 1000 }, "Threads sent nothing today: missing, not zero");
@@ -187,6 +189,13 @@ async function main() {
   assert.deepEqual(m.map((x) => x.change), [null, 12, null, null, 1], "a change only against a week with data");
   assert.equal(m[3]!.note, "13 approved, 42 credits");
   assert.ok(buildMeasures(none, none).every((x) => x.value === null && x.note === null));
+
+  // F14: the rail's Schedule line, in the founder's timezone; short enough for a 184 px rail.
+  const noon = new Date("2026-10-31T05:00:00Z");
+  assert.equal(nextPostText("2026-10-31T09:00:00Z", "Asia/Ho_Chi_Minh", noon), "Next post 16:00");
+  assert.equal(nextPostText("2026-11-02T02:00:00Z", "Asia/Ho_Chi_Minh", noon), "Next post Mon 9:00");
+  assert.equal(nextPostText("2026-11-02T02:00:00Z", "Not/AZone", noon), "Next post Mon 2:00", "a bad timezone falls back to UTC");
+  assert.ok(nextPostText("2026-11-04T23:59:00Z", "UTC", noon).length <= 20);
 
   // A2: the schedule card's one-line reason for its time.
   assert.deepEqual([0, 9, 12, 16].map(hourLabel), ["12 am", "9 am", "12 pm", "4 pm"]);
