@@ -3,13 +3,10 @@
  * what is stuck. A template, no model call. Links open the card at `/app/inbox/[id]`; the digest never decides
  * anything (mail scanners open links), so there is no approve button in it.
  *
- * Wave 1 shows it on the Dashboard and sends it locally through `sendDigest` (the local stack's mail catcher).
- * There is no email provider in production yet (approval phase A2), so `digestSender()` is null there.
+ * The Dashboard shows it; `lib/notify/send.ts` emails it (P6 C0) with an unsubscribe footer.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-import { isProduction } from "@/lib/production";
 
 export type DigestInput = {
   /** Absolute origin of the app, for links in the email (`https://opencmo.io`). */
@@ -102,33 +99,6 @@ export async function loadDigestInput(
       department: r.department,
       reason: r.error?.message ?? "It failed.",
     })),
-  };
-}
-
-export type DigestSender = (to: string, digest: Digest) => Promise<void>;
-
-/**
- * Where digests go. Locally (`OPENCMO_DIGEST_LOCAL_MAIL=1`) they land in the local stack's mail catcher through its
- * HTTP send API, at `OPENCMO_LOCAL_MAIL_URL` (default the Supabase CLI's 54324). Production has no sender until an
- * email provider is chosen (A2), so the digest is only in the app there.
- */
-export function digestSender(): DigestSender | null {
-  if (isProduction() || process.env.OPENCMO_DIGEST_LOCAL_MAIL !== "1") return null;
-  const base = (process.env.OPENCMO_LOCAL_MAIL_URL ?? "http://127.0.0.1:54324").replace(/\/$/, "");
-  return async (to, digest) => {
-    const response = await fetch(`${base}/api/v1/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        From: { Email: "cmo@opencmo.local", Name: "Your CMO" },
-        To: [{ Email: to }],
-        Subject: digest.subject,
-        Text: digest.text,
-        HTML: digest.html,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error(`local mail answered ${response.status}`);
   };
 }
 

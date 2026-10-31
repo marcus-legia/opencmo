@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { cronAuthorized } from "@/lib/cron-auth";
-import { buildDigest, digestSender, loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { localClock } from "@/lib/cmo/digest";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
+import { emailSender } from "@/lib/notify/email";
+import { sendDigestEmail, sendExpiringEmails } from "@/lib/notify/send";
 import { SITE_URL } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -11,9 +13,8 @@ export const maxDuration = 120;
 
 /**
  * Releases held cards whose day has come, then sends the morning digest to founders whose local hour is their
- * `digest_hour`. Meant to be called once an hour
- * (calling it twice in one hour sends twice). With no sender (production until A2) it only counts: the digest is
- * on the Dashboard either way.
+ * `digest_hour`, and one email for each schedule card about to expire. Called once an hour; `email_log_claim` makes
+ * a second call in the same hour send nothing. With no sender it only counts: the digest is on the Dashboard anyway.
  */
 export async function GET(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo-digest")) {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   // Cards held past a day's budget (P6 A4) come back first, so the morning digest names them.
   const released = await admin.rpc("approval_release_held", { p_limit: 500 });
   if (released.error) console.warn("[cron] cmo-digest: held cards not released", released.error.message);
-  const send = digestSender();
+  const send = emailSender();
   const now = new Date();
   type Profile = { id: string; email: string | null; timezone: string; digest_hour: number };
   let profiles: Profile[];
@@ -43,13 +44,19 @@ export async function GET(request: NextRequest) {
     due += 1;
     if (!send) continue;
     try {
-      const digest = buildDigest(await loadDigestInput(admin, profile.id, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now }));
-      if (digest.empty) continue;
-      await send(profile.email, digest);
-      sent += 1;
+      if (await sendDigestEmail(admin, send, profile, { appUrl: SITE_URL, now })) sent += 1;
     } catch (err) {
       console.warn("[cron] cmo-digest: not sent", profile.id, err instanceof Error ? err.message : err);
     }
   }
-  return NextResponse.json({ due, sent, released: released.data ?? 0, sender: send ? "local" : null });
+  // One email before a time-bound card expires (schedule cards), at most once per card.
+  let expiring = 0;
+  if (send) {
+    try {
+      expiring = await sendExpiringEmails(admin, send, { appUrl: SITE_URL, now });
+    } catch (err) {
+      console.warn("[cron] cmo-digest: expiring emails not sent", err instanceof Error ? err.message : err);
+    }
+  }
+  return NextResponse.json({ due, sent, expiring, released: released.data ?? 0, sender: send?.name ?? null });
 }
