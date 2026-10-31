@@ -641,7 +641,7 @@ function slotStatus(s: SlotDb, waiting: Set<string>): { status: ScheduleScreen["
 
 const SCHEDULE_RULES: string[] = [
   `At most ${scheduleDefaults.platforms.x.dailyCap} posts a day on X; on other platforms as many as their best times. ${scheduleDefaults.minGapHours} hours apart.`,
-  "Times start from common best times (Buffer's 2026 study) in your time zone, until your own results say better.",
+  "Times start from common best times (Buffer's 2026 study) in your time zone. Once a platform has 10 published posts with numbers, your own best hours take over.",
   "A short and its long video never go out on one platform the same day.",
   "Drag a slot to move it. A new time or account asks you again.",
   `A post that misses its time by ${scheduleDefaults.windowMinutes} minutes is never posted late: you get a new time to approve.`,

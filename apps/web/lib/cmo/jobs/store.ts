@@ -200,6 +200,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return { zernioProfileId: id, accounts: id ? ((accounts.data ?? []) as ConnectedAccountRow[]) : [] };
     },
     saveAccountMetrics: (userId, rows) => rpc<number>("cmo_save_account_metrics", { p_user: userId, p_rows: rows }),
+    refreshBestSlots: (userId) => rpc<number>("best_slots_refresh", { p_user: userId }),
     async inbox(userId, inboxId) {
       const { data, error } = await admin.from("cmo_inbox").select("answers, memo").eq("id", inboxId).eq("user_id", userId).maybeSingle();
       if (error) throw new Error(`inbox: ${error.message}`);

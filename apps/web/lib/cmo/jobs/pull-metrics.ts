@@ -73,6 +73,13 @@ export function accountRows(accounts: ConnectedAccountRow[], read: Awaited<Retur
   });
 }
 
+/** New numbers can move the founder's best hours (A2); schedule cards proposed from now on use them. */
+async function bestHours(ctx: JobContext, measured: number): Promise<{ best_hours?: number }> {
+  if (!measured) return {};
+  const hours = await ctx.step("best_hours", "Updating your best times", () => ctx.store.refreshBestSlots(ctx.run.user_id), (n) => (n ? `${n} best hours` : "Not enough posts yet"));
+  return { best_hours: hours };
+}
+
 export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
   const now = Date.now();
@@ -114,7 +121,7 @@ export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
     }
   }
 
-  if (!socialReaderReady()) return output;
+  if (!socialReaderReady()) return { ...output, ...(await bestHours(ctx, Number(output.measured ?? 0))) };
   const { docs, published } = await ctx.step("find_posts", "Finding posts you published", async () => ({
     docs: await store.documents(run.user_id),
     // Only X posts: the numbers are read on X, and a Threads or LinkedIn post sharing an idea must not take an X post's.
@@ -122,7 +129,7 @@ export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
       .filter((i) => (i.published_at ?? "") >= since && (profileIdOf(i.platform) ?? "x") === "x" && !measuredByZernio.has(i.id))
       .slice(-MAX_POSTS),
   }), (r) => `${r.published.length} posts in the last ${WINDOW_DAYS} days`);
-  if (!published.length) return output;
+  if (!published.length) return { ...output, ...(await bestHours(ctx, Number(output.measured ?? 0))) };
 
   const budget = new ScBudget(MAX_POSTS + 1);
   const posts = await ctx.step("read_numbers", "Reading the numbers on X", async () => {
@@ -151,5 +158,6 @@ export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
     throw new LlmError("Add your X handle to Product Information, or paste the post link when you mark it as posted, so I can read the numbers.");
   }
   const saved = await ctx.step("save_metrics", "Saving the numbers", () => store.saveMetrics(run.user_id, rows), (n) => `${n} posts measured`);
-  return { ...output, measured: Number(output.measured ?? 0) + saved, lookups: budget.used };
+  const measured = Number(output.measured ?? 0) + saved;
+  return { ...output, measured, lookups: budget.used, ...(await bestHours(ctx, measured)) };
 }

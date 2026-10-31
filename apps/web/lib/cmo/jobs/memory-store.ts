@@ -175,6 +175,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       return ok.length;
     },
+    refreshBestSlots: async () => 0,
     inbox: async (_u, inboxId) => {
       const item = inbox.find((i) => i.id === inboxId);
       return item ? { answers: { ...item.answers }, memo: { ...item.memo } } : null;

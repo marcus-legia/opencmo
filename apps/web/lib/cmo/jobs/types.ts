@@ -246,6 +246,8 @@ export interface CmoStore {
   /** P6 A1: the founder's Zernio profile and connected accounts; no profile = nothing connected. */
   connectedAccounts(userId: string): Promise<{ zernioProfileId: string | null; accounts: ConnectedAccountRow[] }>;
   saveAccountMetrics(userId: string, rows: AccountMetricRow[]): Promise<number>;
+  /** P6 A2: recomputes the founder's best hours from their numbers (SQL `best_slots_refresh`); returns hours stored. */
+  refreshBestSlots(userId: string): Promise<number>;
   /** The inbox item a replay run answers; null when it is gone or not the user's. */
   inbox(userId: string, inboxId: string): Promise<InboxState | null>;
   /** Writes the waiting model call to the run's inbox item and ends the run; null when the lease was lost. */

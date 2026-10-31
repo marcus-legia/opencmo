@@ -13,6 +13,7 @@ import { isoDay, type ItemRow } from "@/lib/cmo/jobs/types";
 import { AnalyticsScreenSchema } from "@/lib/screens/analytics";
 import { buildAnalytics, buildResults, median, type AccountDayIn, type PostIn } from "@/lib/screens/analytics-build";
 import { ResultRowSchema } from "@/lib/screens/dashboard";
+import { bestTimeWhy, hourLabel } from "@/lib/screens/schedule-enrich";
 
 import { createFakeAnalytics, createZernioAnalytics, parseDaily, parseFollowers, parsePosts, publishAnalytics } from "./analytics";
 import { PublishError } from "./types";
@@ -175,7 +176,14 @@ async function main() {
     assert.equal(results.rows.find((r) => r.where.platform === "threads")!.series.at(-1), null);
   }
 
-  console.log("analytics: Zernio parsing, 402, pull_metrics with the fake, Analytics and results from stored numbers");
+  // A2: the schedule card's one-line reason for its time.
+  assert.deepEqual([0, 9, 12, 16].map(hourLabel), ["12 am", "9 am", "12 pm", "4 pm"]);
+  assert.equal(bestTimeWhy("x", 9, 0, [{ hour: 9 }, { hour: 14 }], ["09:00"]), "Your posts on X do best around 9 am.");
+  assert.equal(bestTimeWhy("x", 10, 30, [{ hour: 9 }], ["09:00"]), null, "a time moved off the best hours has no reason");
+  assert.equal(bestTimeWhy("threads", 12, 0, [], ["09:00", "12:00"]), "A common best time on Threads, until your own posts say better.");
+  assert.equal(bestTimeWhy("threads", 13, 0, [], ["09:00", "12:00"]), null);
+
+  console.log("analytics: Zernio parsing, 402, pull_metrics with the fake, Analytics and results from stored numbers, best-time reasons");
 }
 
 main().catch((e) => {
