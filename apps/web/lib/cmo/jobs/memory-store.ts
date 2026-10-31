@@ -127,6 +127,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     salesSettings: async () => salesSettings,
     recentMentions: async () => mentions.used,
+    // Saved threads here are never decided, so every mention draft still waits.
+    waitingMentions: async () => opps.filter((o) => o.rule === "mention_ok").length,
     async saveOpportunities(_u, _r, list) {
       const fresh = list.filter((o) => !opps.some((x) => x.url === o.url));
       opps.push(...fresh);

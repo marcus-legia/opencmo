@@ -175,7 +175,8 @@ async function main() {
   assert.ok(mem3.opps.filter((o) => o.community === "r/freelance").every((o) => o.rule === "help_only" && /self-promotion|help only/i.test(o.rule_why ?? "")),
     "r/freelance's drafts are help only, and say why");
   assert.equal(mem3.rules.get("freelance")?.verdict, "help_only", "the verdict is cached");
-  assert.ok(mem3.opps.filter((o) => o.rule === "mention_ok").length <= 2, "at most one product mention per scan (two scans here, none posted yet)");
+  // A mention draft still waiting counts: the second scan hands out none while the first one's waits.
+  assert.ok(mem3.opps.filter((o) => o.rule === "mention_ok").length <= 1, "at most one product mention waits at a time (two scans here, none posted yet)");
   // Code refuses what the model may still write.
   assert.deepEqual(replyProblems("Try example.io for this.", true, []), ["has a link"]);
   assert.deepEqual(replyProblems("I made Paylane for exactly this.", false, ["Paylane"]), ["names the product in a help-only reply"]);

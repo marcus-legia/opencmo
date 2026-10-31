@@ -104,6 +104,10 @@ async function main() {
     const { youtubeSearch, googleSearch } = await import("./research");
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.includes("/v1/youtube/search") && url.includes("bare")) {
+        // A bare array answer: read once, not once per key.
+        return new Response(JSON.stringify([1, 2].map((n) => ({ id: `v${n}`, url: `https://www.youtube.com/watch?v=v${n}`, title: `Video ${n}`, viewCountInt: n }))));
+      }
       if (url.includes("/v1/youtube/search")) {
         assert.ok(url.includes("type=shorts"), "the Shorts filter is sent");
         return new Response(JSON.stringify({ success: true, videos: [], shorts: [{ type: "short", id: "4EfEyJdC4ls", url: "https://www.youtube.com/watch?v=4EfEyJdC4ls", title: "SaaS promo", viewCountInt: 226 }] }));
@@ -113,6 +117,7 @@ async function main() {
     try {
       const shorts = await youtubeSearch("saas demo", new ScBudget(5), { type: "shorts" });
       assert.deepEqual(shorts.map((v) => [v.url, v.views]), [["https://www.youtube.com/watch?v=4EfEyJdC4ls", 226]], "Shorts are read");
+      assert.deepEqual((await youtubeSearch("bare", new ScBudget(5))).map((v) => v.url), ["https://www.youtube.com/watch?v=v1", "https://www.youtube.com/watch?v=v2"], "a bare array is not listed three times");
       assert.deepEqual(await googleSearch('site:x.com "nothing"', new ScBudget(5)), [], "no Google results is an empty list");
     } finally {
       globalThis.fetch = realFetch;

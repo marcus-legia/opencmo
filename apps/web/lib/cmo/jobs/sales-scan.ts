@@ -195,7 +195,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
   // Brief từ CMO chat hoặc mục Reddit trên lịch (H3): hướng câu tìm kiếm, không thay luật chấm.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
-  const { docs, memories, seen, settings, mentionsUsed, voice } = await ctx.step(
+  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice } = await ctx.step(
     "read_doc",
     "Read your product and strategy",
     async () => ({
@@ -204,6 +204,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       seen: await store.seenUrls(run.user_id),
       settings: await store.salesSettings(run.user_id),
       mentionsUsed: await store.recentMentions(run.user_id),
+      mentionsWaiting: await store.waitingMentions(run.user_id),
       voice: voiceBlock(
         (await store.voiceNotes(run.user_id, 5)).map((n) => ({ body: n.body, platform: n.platform, weight: n.weight, createdAt: n.created_at })),
       ),
@@ -295,20 +296,25 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     const names = [...new Set(ranked.map((r) => subredditOf(r.thread.community)))];
     const out = new Map<string, { verdict: SubredditVerdict; summary: string }>();
     const unread: { name: string; rules: string }[] = [];
-    for (const name of names) {
+    // Independent reads: four communities at a time, kept in order so the prompt is the same on a retry.
+    const read = async (name: string) => {
       const cached = await store.subredditRule(name);
-      if (cached && Date.now() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) {
-        out.set(name, { verdict: cached.verdict, summary: cached.summary });
-        continue;
-      }
+      if (cached && Date.now() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) return { name, cached };
       try {
         const details = await subredditDetails(name);
-        unread.push({ name, rules: details.rules || details.description });
+        return { name, rules: details.rules || details.description };
       } catch (error) {
         if (!(error instanceof SocialReadError)) throw error;
-        // Rules we could not read are never a reason to name the product.
-        out.set(name, { verdict: "help_only", summary: `r/${name}: rules not read, help only` });
+        return { name, failed: true as const };
       }
+    };
+    const results: Awaited<ReturnType<typeof read>>[] = [];
+    for (let at = 0; at < names.length; at += 4) results.push(...(await Promise.all(names.slice(at, at + 4).map(read))));
+    for (const r of results) {
+      if ("cached" in r && r.cached) out.set(r.name, { verdict: r.cached.verdict, summary: r.cached.summary });
+      // Rules we could not read are never a reason to name the product.
+      else if ("failed" in r) out.set(r.name, { verdict: "help_only", summary: `r/${r.name}: rules not read, help only` });
+      else if ("rules" in r) unread.push({ name: r.name, rules: r.rules ?? "" });
     }
     if (unread.length) {
       const read = (
@@ -337,8 +343,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     return Object.fromEntries(out);
   }, (v) => `${Object.keys(v).length} ${Object.keys(v).length === 1 ? "community" : "communities"} checked`);
 
-  // At most one product mention in the founder's last ten replies: once it is used, every draft is help only.
-  let allowance = mentionsUsed >= 1 ? 0 : 1;
+  // At most one product mention in the founder's last ten replies: once it is used, every draft is help only. A draft
+  // that may name the product and still waits on the founder counts too: posting both would break the rule.
+  let allowance = mentionsUsed + mentionsWaiting >= 1 ? 0 : 1;
   const planned = ranked.map((r) => {
     const rule = verdicts[subredditOf(r.thread.community)] ?? { verdict: "help_only" as const, summary: "Rules not read: help only" };
     if (rule.verdict === "mention_ok" && allowance > 0) {
@@ -348,7 +355,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     if (rule.verdict === "mention_ok") {
       const why = mentionsUsed >= 1
         ? `Help only this time: you named the product in ${mentionsUsed} of your last ${MENTION_WINDOW} replies`
-        : "Help only: one product mention per scan";
+        : mentionsWaiting >= 1
+          ? "Help only this time: a reply that names the product already waits for you"
+          : "Help only: one product mention per scan";
       return { ...r, rule: "help_only" as const, why };
     }
     return { ...r, rule: rule.verdict, why: rule.summary };

@@ -10,7 +10,8 @@ import { applyOps, SLIDE_TEXT_MAX, type OpContext } from "@opencmo/editor-core";
 import { slideSpans, validate, type ClipDocument } from "@opencmo/clip-doc";
 
 import { STUDIO_ACCESS } from "../types";
-import { reviewSlides, slideOps, slideSeconds } from "./build";
+import { renderRequestId } from "../render";
+import { reviewSlides, slideOps, slideSeconds, stillsRequestId } from "./build";
 import { postImageAspect } from "./post-image";
 
 const slide = (heading: string, body = "") => ({ heading, body });
@@ -26,6 +27,11 @@ assert.equal(slideSeconds(slide(Array(30).fill("word").join(" "))), 10, "about 3
 const ops = slideOps(five, ["c-1", "c-2"]);
 assert.deepEqual(ops.map((op) => ("background" in op ? op.background!.src : null)), [null, "capture:c-1", "capture:c-2", null, null], "hook and call to action stay plain");
 assert.equal(slideOps(five, []).every((op) => !("background" in op)), true, "no captures: the Brand Kit background");
+
+// Request ids are how a retry finds the render already queued: the shared helper must not change them (values from the
+// formula as it was before `requestIdFrom`).
+assert.equal(stillsRequestId("clip-1", "a".repeat(64)), "c5fefb54-7e90-51cd-9ac4-92a93266c4bf");
+assert.equal(renderRequestId("clip-1", "a".repeat(64)), "fcaa4fef-d43d-50cb-94bb-4d642160ce72");
 
 assert.deepEqual(STUDIO_ACCESS.buildSlideshow, ["brain"], "only the brain's order builds a slideshow");
 assert.deepEqual(STUDIO_ACCESS.buildPostImage, ["brain"], "only the brain's order builds a post image");

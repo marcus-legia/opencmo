@@ -24,7 +24,14 @@ import {
 
 export type RedditPost = NonNullable<ReturnType<typeof redditPost>>;
 const handleOf = (h: string) => h.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "").split(/[/?#]/)[0]!.slice(0, 60);
-const keep = <T>(items: (T | null)[], max: number): T[] => items.filter((x): x is T => x !== null).slice(0, max);
+/** Non-null items, one per URL (a provider can list the same post under two keys), at most `max`. */
+const keep = <T extends { url?: string }>(items: (T | null)[], max: number): T[] => {
+  const seen = new Set<string>();
+  return items
+    .filter((x): x is T => x !== null)
+    .filter((x) => !x.url || (seen.has(x.url) ? false : (seen.add(x.url), true)))
+    .slice(0, max);
+};
 
 // ----------------------------------------------------------------- bản giả
 
@@ -170,7 +177,9 @@ export async function youtubeSearch(query: string, budget?: ScBudget, opts: { ty
   if (scFakeAllowed()) return fakePosts("youtube", query, "Channel");
   const json = await scGet("/v1/youtube/search", { query, ...(opts.type ? { type: opts.type } : {}) }, budget);
   // Videos and Shorts come in separate lists of one answer; both are results.
-  return keep([...itemsOf(json, ["videos"]), ...itemsOf(json, ["shorts"]), ...itemsOf(json, ["results", "data"])].map(youtubePost), 25);
+  // A bare array is the whole answer: `itemsOf` returns it for every key, so it is read once.
+  const items = Array.isArray(json) ? itemsOf(json, []) : [...itemsOf(json, ["videos"]), ...itemsOf(json, ["shorts"]), ...itemsOf(json, ["results", "data"])];
+  return keep(items.map(youtubePost), 25);
 }
 
 /**

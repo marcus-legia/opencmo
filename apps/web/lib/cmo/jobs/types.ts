@@ -200,6 +200,8 @@ export interface CmoStore {
   salesSettings(userId: string): Promise<SalesSettings>;
   /** Product mentions in the founder's last ten posted replies (SQL `sales_mention_count_for`). */
   recentMentions(userId: string): Promise<number>;
+  /** Drafts already handed out that may name the product and still wait on the founder: they count toward the rule. */
+  waitingMentions(userId: string): Promise<number>;
   /** Trả lượt về hàng đợi, hoãn `seconds` giây; false khi lượt đã bị nhận lại. */
   defer(run: QueuedRun, seconds: number, steps: Step[]): Promise<boolean>;
   /** W7: lưu điều học được; đọc bản mới nhất (Planner, X writer, CMO chat). */

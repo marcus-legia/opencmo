@@ -7,10 +7,8 @@
  * under RLS, through the ops.
  */
 
-import { createHash } from "node:crypto";
-
-import { slideSpans } from "@opencmo/clip-doc";
-import { CAPTURE_SRC_PREFIX, SLIDE_SECONDS, SLIDE_TEXT_MAX } from "@opencmo/editor-core";
+import { slideSpans, type ClipDocument } from "@opencmo/clip-doc";
+import { activeScene, CAPTURE_SRC_PREFIX, SLIDE_LAYERS, SLIDE_SECONDS, SLIDE_TEXT_MAX } from "@opencmo/editor-core";
 
 import { clipContext } from "@/lib/api/clips";
 import { firstRow, rpcOrThrow } from "@/lib/api/handler";
@@ -21,7 +19,7 @@ import { exportPlan, startDocumentExport } from "@/lib/editor/export";
 import { ensureProject } from "@/lib/editor/project";
 import { wakeWorker } from "@/lib/modal";
 
-import { renderRequestId } from "../render";
+import { renderRequestId, requestIdFrom } from "../render";
 import { SlideshowBriefSchema, type BuiltSlideshow, type SlideshowBrief, type StudioContext } from "../types";
 
 /** Writer's own checks hold the facts and the words to avoid; this is what the frame holds, on any brief. */
@@ -59,10 +57,43 @@ export function slideOps(slides: readonly Slide[], captureIds: readonly string[]
   });
 }
 
-export const stillsRequestId = (clipId: string, hash: string): string => {
-  const hex = createHash("sha256").update(`render_stills:${clipId}:${hash}`).digest("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-};
+export const stillsRequestId = (clipId: string, hash: string): string => requestIdFrom("render_stills", clipId, hash);
+
+type CardSlide = { text: string; still_path: string; seconds: number };
+type Node = { id?: string; name?: string; text?: unknown; children?: Node[] };
+
+/** Each slide's words (heading, then the body on the next line) and length, read from the document as rendered. */
+export function cardSlides(document: ClipDocument, stillPrefix: string): CardSlide[] {
+  const groups = new Map(((activeScene(document) as unknown as Node).children ?? []).map((node) => [node.id, node]));
+  return slideSpans(document).map((span, index) => {
+    const layer = (name: string) => groups.get(span.id)?.children?.find((child) => child.name === name)?.text;
+    const heading = typeof layer(SLIDE_LAYERS.heading) === "string" ? (layer(SLIDE_LAYERS.heading) as string) : "";
+    const body = typeof layer(SLIDE_LAYERS.body) === "string" ? (layer(SLIDE_LAYERS.body) as string) : "";
+    return {
+      text: (body ? `${heading}\n${body}` : heading).slice(0, 300),
+      still_path: `${stillPrefix}-${String(index + 1).padStart(2, "0")}.png`,
+      seconds: Math.round((span.end - span.start) * 1e4) / 1e4,
+    };
+  });
+}
+
+export type SlideshowRender = { mp4TaskId: string; stillsTaskId: string; slides: CardSlide[]; mp4Path: string; pngSetPath: string };
+
+/**
+ * The MP4 and the PNG set of the slideshow as it is saved now, from one revision. Request ids follow the document, so
+ * a retry gets the tasks already queued. Shared by the squad and by "render again" after the founder's edit.
+ */
+export async function renderSlideshow(supabase: StudioContext["supabase"], userId: string, clipId: string): Promise<SlideshowRender> {
+  const project = await readEditorProject(supabase, clipId);
+  const revision = await rpcOrThrow<{ id: string }>(supabase, "snapshot_editor_revision", { p_clip_id: clipId, p_document_hash: project.document_hash });
+  const { resolution } = await exportPlan(supabase, userId);
+  const mp4 = await startDocumentExport(supabase, clipId, revision.id, renderRequestId(clipId, project.document_hash), resolution);
+  const stills = firstRow(await rpcOrThrow<{ id: string } | { id: string }[]>(supabase, "request_stills_export", { p_clip_id: clipId, p_revision_id: revision.id, p_request_id: stillsRequestId(clipId, project.document_hash) }));
+  if (!stills) throw new Error("request_stills_export returned no task.");
+  await wakeWorker({ task_id: stills.id });
+  const prefix = `${userId}/${clipId}/${stills.id}`;
+  return { mp4TaskId: mp4.id, stillsTaskId: stills.id, slides: cardSlides(project.document, prefix), mp4Path: `${userId}/${clipId}/${mp4.id}.mp4`, pngSetPath: `${prefix}.zip` };
+}
 
 async function readyCaptures(ctx: StudioContext, wanted: number): Promise<string[]> {
   const { data, error } = await ctx.supabase.from("page_captures").select("id").eq("status", "ready").order("created_at", { ascending: false }).limit(wanted);
@@ -75,43 +106,27 @@ export async function buildSlideshow(ctx: StudioContext, input: SlideshowBrief):
   const issues = reviewSlides(brief.slides);
   if (issues.length) return { kind: "invalid", message: issues.slice(0, 3).join(" ") };
 
-  const clipId = await rpcOrThrow<string>(ctx.supabase, "create_slideshow", { p_name: brief.idea.slice(0, 60), p_aspect: brief.aspect });
+  // One edit per order: a retry after a failed render reuses it (and its slides) instead of making another.
+  const clipId = await rpcOrThrow<string>(ctx.supabase, "create_slideshow", { p_name: brief.idea.slice(0, 60), p_aspect: brief.aspect, p_order: ctx.orderId ?? null });
   const context = await clipContext(ctx.supabase, clipId);
   // Nobody opens this edit before the render, so the project the editor would create is made here.
-  await ensureProject(ctx.supabase, context, clipId);
-  const kit = await defaultBrandKit(ctx.supabase);
-  // Brand last: its logo must sit on top of the slides, and it recolours what they drew.
-  const ops = [...slideOps(brief.slides, await readyCaptures(ctx, brief.slides.length)), ...(kit ? [{ op: "apply_brand", kit: kit.kit, frame: false }] : [])];
-  await applyToClip(ctx.supabase, context, clipId, ops, { checkpoint: null });
+  const existing = await ensureProject(ctx.supabase, context, clipId);
+  if (!slideSpans(existing.document).length) {
+    const kit = await defaultBrandKit(ctx.supabase);
+    // Brand last: its logo must sit on top of the slides, and it recolours what they drew.
+    const ops = [...slideOps(brief.slides, await readyCaptures(ctx, brief.slides.length)), ...(kit ? [{ op: "apply_brand", kit: kit.kit, frame: false }] : [])];
+    await applyToClip(ctx.supabase, context, clipId, ops, { checkpoint: null });
+  }
 
-  const project = await readEditorProject(ctx.supabase, clipId);
-  const revision = await rpcOrThrow<{ id: string }>(ctx.supabase, "snapshot_editor_revision", { p_clip_id: clipId, p_document_hash: project.document_hash });
-  const { resolution } = await exportPlan(ctx.supabase, ctx.userId);
-  const mp4 = await startDocumentExport(ctx.supabase, clipId, revision.id, renderRequestId(clipId, project.document_hash), resolution);
-  const stills = firstRow(await rpcOrThrow<{ id: string } | { id: string }[]>(ctx.supabase, "request_stills_export", { p_clip_id: clipId, p_revision_id: revision.id, p_request_id: stillsRequestId(clipId, project.document_hash) }));
-  if (!stills) throw new Error("request_stills_export returned no task.");
-  await wakeWorker({ task_id: stills.id });
-
-  const prefix = `${ctx.userId}/${clipId}/${stills.id}`;
-  const spans = slideSpans(project.document);
-  const card = {
-    title: brief.idea.slice(0, 200),
-    aspect: brief.aspect,
-    slides: brief.slides.map((slide, index) => ({
-      text: `${slide.heading}${slide.body ? `\n${slide.body}` : ""}`.slice(0, 300),
-      still_path: `${prefix}-${String(index + 1).padStart(2, "0")}.png`,
-      seconds: spans[index] ? spans[index]!.end - spans[index]!.start : slideSeconds(slide),
-    })),
-    mp4_path: `${ctx.userId}/${clipId}/${mp4.id}.mp4`,
-    png_set_path: `${prefix}.zip`,
-  };
+  const render = await renderSlideshow(ctx.supabase, ctx.userId, clipId);
+  const card = { title: brief.idea.slice(0, 200), aspect: brief.aspect, slides: render.slides, mp4_path: render.mp4Path, png_set_path: render.pngSetPath };
   await rpcOrThrow(ctx.supabase, "studio_slideshow_rendering", {
     p_order_id: ctx.orderId ?? null,
     p_clip_id: clipId,
     p_input: { idea: brief.idea, aspect: brief.aspect },
     p_card: card,
-    p_mp4_task: mp4.id,
-    p_stills_task: stills.id,
+    p_mp4_task: render.mp4TaskId,
+    p_stills_task: render.stillsTaskId,
   });
-  return { kind: "rendering", clipId, mp4TaskId: mp4.id, stillsTaskId: stills.id };
+  return { kind: "rendering", clipId, mp4TaskId: render.mp4TaskId, stillsTaskId: render.stillsTaskId };
 }

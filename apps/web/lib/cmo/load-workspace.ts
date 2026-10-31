@@ -134,6 +134,8 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
       .from("opportunities")
       .select("id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, created_at")
       .eq("status", "in_review")
+      // A thread skipped by its community's rules has no reply: it is on the Sales screen, never a conversation to join.
+      .not("reply", "is", null)
       .order("score", { ascending: false })
       .limit(30),
   ]);

@@ -167,6 +167,11 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [] };
     },
     recentMentions: (userId) => rpc<number>("sales_mention_count_for", { p_user: userId }),
+    async waitingMentions(userId) {
+      const { count, error } = await admin.from("opportunities").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "in_review").eq("rule", "mention_ok");
+      if (error) throw new Error(`opportunities: ${error.message}`);
+      return count ?? 0;
+    },
     defer: (run, seconds, steps) => rpc<boolean>("cmo_defer_run", { p_run: run.id, p_attempt: run.attempt, p_seconds: seconds, p_steps: steps }),
     async saveInsight(userId, runId, body) {
       await rpc("cmo_save_insight", { p_user: userId, p_run: runId, p_kind: "competitors", p_body: body });
