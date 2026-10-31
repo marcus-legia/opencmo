@@ -1937,8 +1937,22 @@ CREATE FUNCTION public.approval_snapshot(p_ref_kind text, p_ref_id uuid) RETURNS
 declare
   v jsonb := public.approval_snapshot_base(p_ref_kind, p_ref_id);
   v_look public.look_checks;
+  v_extra jsonb;
 begin
-  if v is null or p_ref_kind not in ('editor_project', 'short_batch', 'studio_step') then
+  if v is null then
+    return v;
+  end if;
+  if p_ref_kind = 'content_item' then
+    select case when public.thread_valid(body) then jsonb_build_object('thread', body->'thread') end into v_extra
+    from public.content_items where id = p_ref_id;
+    return v || coalesce(v_extra, '{}'::jsonb);
+  end if;
+  if p_ref_kind = 'opportunity' then
+    select case when platform <> 'reddit' then jsonb_build_object('platform', platform) end into v_extra
+    from public.opportunities where id = p_ref_id;
+    return v || coalesce(v_extra, '{}'::jsonb);
+  end if;
+  if p_ref_kind not in ('editor_project', 'short_batch', 'studio_step') then
     return v;
   end if;
   select * into v_look from public.look_checks c
@@ -3321,7 +3335,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
-    CONSTRAINT opportunities_platform_check CHECK ((platform = 'reddit'::text)),
+    CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
@@ -3332,7 +3346,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_snippet_check CHECK ((char_length(snippet) <= 1200)),
     CONSTRAINT opportunities_status_check CHECK ((status = ANY (ARRAY['in_review'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT opportunities_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 400))),
-    CONSTRAINT opportunities_url_check CHECK (((url ~ '^https://(www\.|old\.)?reddit\.com/'::text) AND (char_length(url) <= 500)))
+    CONSTRAINT opportunities_url_check CHECK (((char_length(url) <= 500) AND (((platform = 'reddit'::text) AND (url ~ '^https://(www\.|old\.)?reddit\.com/'::text)) OR ((platform = 'hn'::text) AND (url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'::text)))))
 );
 
 
@@ -4256,6 +4270,15 @@ begin
   if p_body is null or jsonb_typeof(p_body) <> 'object' or coalesce(p_body->>'text', '') = '' then
     raise exception 'This draft is not valid.' using errcode = '22023';
   end if;
+  if p_body ? 'thread' then
+    if not public.thread_valid(p_body) then
+      raise exception 'A thread has 5 to 8 posts of at most 280 characters, the first being the post.' using errcode = '22023';
+    end if;
+    if coalesce(public.platform_profile_id(case when p_item is not null
+         then (select platform from public.content_items where id = p_item and user_id = p_user) else v_platform end), 'x') <> 'x' then
+      raise exception 'Only an X post can be a thread.' using errcode = '22023';
+    end if;
+  end if;
   if p_item is not null then
     update public.content_items
     set status = 'in_review', body = p_body, priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
@@ -4406,11 +4429,15 @@ begin
     if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
       continue;
     end if;
+    if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn') then
+      raise exception 'A conversation comes from Reddit or Hacker News.' using errcode = '22023';
+    end if;
     insert into public.opportunities (
-      user_id, run_id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, gen,
-      rule, rule_why
+      user_id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply,
+      priority, gen, rule, rule_why
     ) values (
-      p_user, p_run, v_item->>'url', left(coalesce(v_item->>'community', ''), 100), left(v_item->>'title', 400),
+      p_user, p_run, coalesce(v_item->>'platform', 'reddit'), v_item->>'url', left(coalesce(v_item->>'community', ''), 100),
+      left(v_item->>'title', 400),
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
       v_score, coalesce(v_item->'score_parts', '[]'::jsonb),
@@ -6074,6 +6101,7 @@ begin
   if p_kind not in ('digest', 'expiring') then
     raise exception 'Unknown email kind.' using errcode = '22023';
   end if;
+  perform pg_advisory_xact_lock(hashtextextended('email_log:' || p_user::text, 0));
   if exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest) then
     return;
   end if;
@@ -10050,13 +10078,15 @@ declare
   v_doc text;
   v_image_clip uuid;
   v_image jsonb;
+  v_thread jsonb;
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
     return null;
   end if;
   if v_d.ref_kind = 'content_item' then
-    select coalesce(body->>'text', '') into v_text from public.content_items where id = v_d.ref_id;
+    select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end
+    into v_text, v_thread from public.content_items where id = v_d.ref_id;
     -- The post's newest image (P5 B4), as its cover still of the image's document as it is now. Only a post with an
     -- image carries the key, so the hash of a post without one is what it was before P5.
     select i.ref_id into v_image_clip from public.deliverables i
@@ -10076,8 +10106,10 @@ begin
     end if;
     return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
       'content_hash', public.approval_hash(jsonb_build_object('text', v_text)
-        || case when v_image is not null then jsonb_build_object('image', v_image->>'object') else '{}'::jsonb end))
-      || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end;
+        || case when v_image is not null then jsonb_build_object('image', v_image->>'object') else '{}'::jsonb end
+        || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end))
+      || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end
+      || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end;
   elsif v_d.ref_kind = 'clip' then
     select public.editor_document_hash(document) into v_doc from public.editor_projects where clip_id = v_d.ref_id;
     select body->>'text', body->>'title' into v_text, v_title
@@ -12158,6 +12190,22 @@ begin
   end;
   return new;
 end;
+$$;
+
+
+--
+-- Name: thread_valid(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.thread_valid(p_body jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select jsonb_typeof(p_body->'thread') = 'array'
+    and jsonb_array_length(p_body->'thread') between 5 and 8
+    and not exists (select 1 from jsonb_array_elements(p_body->'thread') p
+                    where jsonb_typeof(p) <> 'string' or char_length(p #>> '{}') not between 1 and 280)
+    and p_body->'thread'->>0 = p_body->>'text';
 $$;
 
 

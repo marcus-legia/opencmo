@@ -83,6 +83,8 @@ const ReplyBody = z.object({
    * P5. A skipped thread has no card (it shows on the Sales screen only).
    */
   rule: SalesRuleSchema.optional(),
+  /** Where the thread is (P6 R4): absent for Reddit, so cards raised before P6 parse as they did. */
+  platform: z.literal("hn").optional(),
 });
 
 const GoalBody = z.object({
@@ -399,6 +401,8 @@ export const ScheduleSnapshotSchema = z.object({
    * posts without an image keep the hash they had.
    */
   image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
+  /** An X thread (P6 W4): its 5 to 8 posts, the first being `text`; part of `content_hash`. Absent for a single post. */
+  thread: z.array(z.string().max(280)).min(5).max(8).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 

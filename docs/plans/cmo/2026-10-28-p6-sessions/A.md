@@ -61,6 +61,8 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
   index. Use `status in ('waiting', 'held')` in both, with a pgTAP case. Also: register `look_check` in
   `task-kinds.json` with B's SQL (keep `publish_media` last; `test_worker_loop.py` checks the first seven kinds), and a
   per-user advisory lock in `email_log_claim` so two cron runs cannot send the same expiring email.
+  **Answer (A):** `look_check` sits before `publish_media` in `task-kinds.json`; the lock is in `20270101103000`;
+  `held` joins the unique index and the supersede in A4.
 
 - [x] **[from B → A] 1. Look check before a Studio card (S4, M2; owner confirmed "only before a card", 2026-10-31).**
       Contract: `apps/web/lib/departments/studio/look-check.ts` (`LookCheckInputSchema`, `LookResultSchema`,
@@ -101,15 +103,24 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       service-only `studio_look_sendback_unchanged(p_check uuid)`: a `claimed` check → `failed` + `look_check_raise`, so
       the card shows at once with the round-0 note; pgTAP. B already calls it from `runLookSendBacks` (the drain loop
       in `studio-orders.ts`); until it exists the call fails softly and the give-up still raises the card.
-- [ ] **[from B → A] 2. Hacker News threads in Sales (R4).** `cmo_opportunities` (`20261015090000_cmo_sales.sql`) only
+- [x] **[from B → A] 2. Hacker News threads in Sales (R4).** `cmo_opportunities` (`20261015090000_cmo_sales.sql`) only
       takes `platform = 'reddit'` and a reddit.com URL. Asked: allow `platform in ('reddit','hn')` and
       `^https://news\.ycombinator\.com/item\?id=[0-9]+$` for `hn`; `cmo_save_opportunities` takes each item's
       `platform` (default `reddit`); the `opportunity` snapshot emits `platform`. pgTAP: an hn row saves, an hn URL on a
       reddit row and a reddit URL on an hn row are refused. B sends `platform: "hn"` from `sales-scan.ts` once it lands.
-- [ ] **[from B → A] 3. X threads (W4).** Asked: `cmo_save_draft` keeps `body.thread` (array of 5–8 strings, each ≤ 280
+      **Answer (A):** `20270101103000_p6_threads_hn.sql` + pgTAP `232`. `platform in ('reddit','hn')`; an `hn` URL is
+      exactly `https://news.ycombinator.com/item?id=<digits>`; `cmo_save_opportunities` takes `platform` (default
+      `reddit`, anything else refused). The snapshot emits `platform` only for `hn`, so Reddit cards keep their hash;
+      the reply card gets `platform: "hn"` and the community "Hacker News" when empty.
+- [x] **[from B → A] 3. X threads (W4).** Asked: `cmo_save_draft` keeps `body.thread` (array of 5–8 strings, each ≤ 280
       code points; `body.text` = the first post), `approval_snapshot` for a post emits `thread`; the thread block of
       `approval-card.ts` (`PostBody.platforms[].thread?: string[]`); the deliverable built for publishing carries
       `thread` (B adds `thread` to `PublishDeliverableSchema` in `publish/types.ts` unless you prefer to, say so).
       Types: `ThreadDraftSchema`, `ThreadBody` in `lib/cmo/writer/types.ts`.
-- [ ] **[from B → A] 4. `check:contracts` additions (your block):** `tsx lib/cmo/social/hn.check.ts` (B3, pushed later;
+      **Answer (A):** same migration. `thread_valid(body)`: 5–8 strings of 1–280 code points, `thread[0] = text`;
+      `cmo_save_draft` refuses an invalid thread or one on a non-X item. The post snapshot and `schedule_content` emit
+      `thread` (part of the schedule `content_hash`; single posts keep theirs); `ScheduleSnapshotSchema.thread?` and
+      `PostBody.platforms[].thread?` are in. `PublishDeliverableSchema` is yours, as you offered.
+- [x] **[from B → A] 4. `check:contracts` additions (your block):** `tsx lib/cmo/social/hn.check.ts` (B3, pushed later;
       B will say when it exists). Studio look-check checks live in `studio.check.ts`, already in the chain.
+      **Answer (A):** `hn.check.ts` is in the `check:contracts` chain after `research.check.ts`.
