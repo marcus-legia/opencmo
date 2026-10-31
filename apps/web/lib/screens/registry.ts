@@ -51,11 +51,11 @@ export const SCREENS = {
     schema: DashboardScreenSchema,
     fixture: dashboardFixture,
     empty: dashboardEmpty,
-    live: ["cmo", "week", "team", "log", "outToday", "digest", "queue"],
-    // Results waits on Zernio metrics (wave 3); its empty state is honest, so it does not hold the release.
-    release: ["cmo", "week", "team", "log", "outToday", "queue"],
+    live: ["cmo", "week", "team", "log", "results", "outToday", "digest", "queue"],
+    release: ["cmo", "week", "team", "log", "results", "outToday", "queue"],
   }),
-  analytics: entry({ schema: AnalyticsScreenSchema, fixture: analyticsFixture, empty: analyticsEmpty, live: [], release: ["accounts", "kpis", "daily", "byAccount", "posts"] }),
+  // P6 A1: from `account_metrics` and `post_metrics`. `brainReads` stays sample until the brain writes its own lines.
+  analytics: entry({ schema: AnalyticsScreenSchema, fixture: analyticsFixture, empty: analyticsEmpty, live: ["range", "accounts", "kpis", "daily", "byAccount", "posts"], release: ["accounts", "kpis", "daily", "byAccount", "posts"] }),
   brain: entry({
     schema: BrainScreenSchema,
     fixture: brainFixture,

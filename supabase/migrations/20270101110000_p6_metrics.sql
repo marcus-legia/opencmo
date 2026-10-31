@@ -5,6 +5,12 @@
 
 begin;
 
+-- `greatest(0, null)` is 0 in Postgres (GREATEST skips nulls), which would turn "not reported" into zero.
+create or replace function public.nonneg(p bigint) returns bigint language sql immutable set search_path = public
+as $$ select case when p is null then null else greatest(0, p) end $$;
+revoke all on function public.nonneg(bigint) from public, anon, authenticated;
+grant execute on function public.nonneg(bigint) to service_role;
+
 -- The posts Zernio can measure (service role): published slots of the founder with Zernio's id for the post, and the
 -- calendar item the numbers belong to (the post itself, or a video's caption item for that platform).
 create or replace function public.cmo_zernio_posts(p_user uuid, p_since timestamptz)
@@ -62,7 +68,7 @@ begin
       values (p_user, v_item, left(coalesce(v_row->>'url', ''), 500),
         greatest(0, coalesce((v_row->>'views')::bigint, 0)), greatest(0, coalesce((v_row->>'likes')::bigint, 0)),
         greatest(0, coalesce((v_row->>'replies')::bigint, 0)), greatest(0, coalesce((v_row->>'reposts')::bigint, 0)),
-        v_source, greatest(0, (v_row->>'impressions')::bigint), greatest(0, (v_row->>'engagements')::bigint));
+        v_source, public.nonneg((v_row->>'impressions')::bigint), public.nonneg((v_row->>'engagements')::bigint));
       v_count := v_count + 1;
     end if;
   end loop;
@@ -93,9 +99,9 @@ begin
     insert into public.account_metrics (user_id, social_account_id, platform, handle, day, followers, impressions,
       engagements, video_views, posts, measured_at)
     values (p_user, v_account.id, v_account.platform, v_account.handle, (v_row->>'day')::date,
-      greatest(0, (v_row->>'followers')::bigint), greatest(0, (v_row->>'impressions')::bigint),
-      greatest(0, (v_row->>'engagements')::bigint), greatest(0, (v_row->>'video_views')::bigint),
-      greatest(0, (v_row->>'posts')::integer), now())
+      public.nonneg((v_row->>'followers')::bigint), public.nonneg((v_row->>'impressions')::bigint),
+      public.nonneg((v_row->>'engagements')::bigint), public.nonneg((v_row->>'video_views')::bigint),
+      public.nonneg((v_row->>'posts')::bigint)::integer, now())
     on conflict (user_id, platform, handle, day) do update
       set social_account_id = excluded.social_account_id, followers = coalesce(excluded.followers, account_metrics.followers),
           impressions = excluded.impressions, engagements = excluded.engagements, video_views = excluded.video_views,

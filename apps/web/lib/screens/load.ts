@@ -15,6 +15,8 @@ import { SITE_URL } from "@/lib/site";
 
 import scheduleDefaults from "../../../../packages/contracts/schedule-defaults.json";
 
+import { RangeSchema, type AnalyticsScreen } from "./analytics";
+import { buildAnalytics, buildResults, type AccountDayIn, type AccountIn, type PostIn } from "./analytics-build";
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
@@ -262,6 +264,10 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
           approvalId: null,
         }))
         .sort((a, b) => a.at.localeCompare(b.at));
+    },
+    results: async () => {
+      const m = await measured(supabase, 7, now);
+      return buildResults({ now, accounts: m.accounts, days: m.days, posts: m.posts });
     },
     digest: async () => {
       const p = await prof;
@@ -1178,7 +1184,87 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
 }
 
 /**
+ * What Analytics and the Dashboard's results read (P6 A1): accounts, their days and the newest reading of each post
+ * published in twice the range (the second half is the comparison), all under the founder's RLS session.
+ */
+async function measured(supabase: SupabaseClient, range: number, now: Date): Promise<{ accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; published: number }> {
+  const since = new Date(now.getTime() - 2 * range * 86_400_000);
+  const sinceDay = since.toISOString().slice(0, 10);
+  const [accounts, days, items] = await Promise.all([
+    socialAccounts(supabase),
+    supabase
+      .from("account_metrics")
+      .select("social_account_id, platform, handle, day, followers, impressions, engagements, video_views, measured_at")
+      .gte("day", sinceDay)
+      .order("day")
+      .limit(5000),
+    supabase
+      .from("content_items")
+      .select("id, platform, idea, final_text, published_at")
+      .eq("status", "published")
+      .gte("published_at", since.toISOString())
+      .order("published_at", { ascending: false })
+      .limit(500),
+  ]);
+  const itemRows = must(items, "content_items") as { id: string; platform: string; idea: string; final_text: string | null; published_at: string }[];
+  const metricRows = itemRows.length
+    ? (must(
+        await supabase
+          .from("post_metrics")
+          .select("item_id, url, views, likes, replies, reposts, impressions, engagements, measured_at")
+          .in("item_id", itemRows.map((i) => i.id))
+          .order("measured_at", { ascending: false })
+          .limit(5000),
+        "post_metrics",
+      ) as { item_id: string; url: string; views: number; likes: number; replies: number; reposts: number; impressions: number | null; engagements: number | null }[])
+    : [];
+  const newest = new Map<string, (typeof metricRows)[number]>();
+  for (const m of metricRows) if (!newest.has(m.item_id)) newest.set(m.item_id, m);
+  const posts: PostIn[] = itemRows.flatMap((i) => {
+    const m = newest.get(i.id);
+    const platform = profileIdOf(i.platform) ?? "x";
+    return m
+      ? [{
+          id: i.id,
+          title: (i.final_text ?? i.idea).split("\n")[0]!.slice(0, 200),
+          platform,
+          publishedAt: new Date(i.published_at).toISOString(),
+          views: Number(m.views),
+          impressions: m.impressions === null ? null : Number(m.impressions),
+          engagements: m.engagements === null ? null : Number(m.engagements),
+          likes: Number(m.likes),
+          replies: Number(m.replies),
+          reposts: Number(m.reposts),
+          url: m.url || null,
+        }]
+      : [];
+  });
+  const fromRange = new Date(now.getTime() - range * 86_400_000).toISOString();
+  return {
+    accounts: accounts.map((a) => ({ id: a.id, platform: a.platform, handle: a.handle, avatarUrl: a.avatar_url, status: a.status, updatedAt: a.updated_at })),
+    days: (must(days, "account_metrics") as AccountDayIn[]).map((d) => ({
+      ...d,
+      followers: d.followers === null ? null : Number(d.followers),
+      impressions: d.impressions === null ? null : Number(d.impressions),
+      engagements: d.engagements === null ? null : Number(d.engagements),
+      video_views: d.video_views === null ? null : Number(d.video_views),
+    })),
+    posts,
+    published: itemRows.filter((i) => i.published_at >= fromRange).length,
+  };
+}
+
+async function analytics({ supabase, params }: LoadContext): Promise<Partial<AnalyticsScreen>> {
+  const parsed = RangeSchema.safeParse(Number(params.get("range") ?? 30));
+  const range = parsed.success ? parsed.data : 30;
+  const now = new Date();
+  const m = await measured(supabase, range, now);
+  const { brainReads: _unused, ...screen } = buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published });
+  return screen;
+}
+
+/**
  * Live readers, one per screen, under the founder's RLS session (no service role). A loader returns only the
  * fields it reads for real; `registry.ts` `live` must list them too before they replace sample data.
  */
-export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, brain, library, settings, schedule, research, writer, studio: studioScreen, sales };
+export const LOADERS: { [N in ScreenName]?: Loader<N> } = { dashboard, analytics, brain, library, settings, schedule, research, writer, studio: studioScreen, sales };
