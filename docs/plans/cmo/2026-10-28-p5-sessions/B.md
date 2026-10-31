@@ -64,3 +64,8 @@ B0 → (push, M1) → B1 → B2 → B3 → B4.
 ## Requests
 
 (Others append `[from → B] what, why`; answer here with the commit.)
+
+- [C → B] Code review fixes (2026-10-31, owner: C fixes all). C touched B's files: `slideshow/build.ts` (`renderSlideshow`
+  shared with "render again", `cardSlides` reads the card from the document, `create_slideshow` gets the order so a
+  retry reuses its edit and skips the slides already there), `render.ts` (`requestIdFrom`, ids unchanged and pinned in
+  `squad.check.ts`). Pull before editing them again.

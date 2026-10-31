@@ -109,3 +109,12 @@ A0 → (push, M1) → A2 → A1 (once R0 names the rules source) → A3 (after B
 - [from C → A] FYI, found while running e2e: on `cmo-p5` as of `b5f389a`, `ui-v2-schedule` fails "connect Threads through
   the fake Zernio" (no "Connect Threads" button in Settings → Accounts) and "dragging its slot … asks again" (no "New time
   saved" toast). Both fail the same way without C's changes.
+
+- [C → A] Code review fixes (2026-10-31, owner: C fixes all, A and B pull before editing these again). C touched A's
+  files: new migration `20261231160000_p5_review_fixes.sql` + pgTAP `228` (slideshow re-render, fresh renders only,
+  cancelled renders settle, rename keeps the upload's name, CMO renders skip the daily export limit, stills in the
+  export cap, `create_slideshow(name, aspect, order)`); `221` and `182` follow the new signatures; `current.sql`
+  regenerated; `sales-scan.ts` (a waiting mention draft counts; rules read four at a time), `store.ts`/`types.ts`/
+  `memory-store.ts` (`waitingMentions`), `jobs.check.ts`, `social/research.ts` (+check: bare YouTube array, one per URL),
+  `load-workspace.ts` and `agent/cmo-tools.ts` (skipped threads are not conversations). The re-render request above is
+  done: `POST /api/v1/studio/[clipId]/slideshow-render`.
