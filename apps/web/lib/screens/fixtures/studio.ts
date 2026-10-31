@@ -33,6 +33,9 @@ export const studioFixture: StudioScreen = {
       projectId: "project-sample",
       editorHref: "/app/editor/clip-sample",
       canMarkFinished: true,
+      clipId: "clip-sample",
+      documentHash: "1".repeat(64),
+      canCutShorts: false,
       edits: [{ id: "clip-sample", title: "Founder demo · first cut", editedAt: at("2026-10-28", "17:00"), editorHref: "/app/editor/clip-sample" }],
     },
     { ...studioItem, id: "st-5", kind: "short", title: "3 shorts · Editor launch", subtitle: "Cut from a finished edit · 9:16", status: "waiting_founder", createdAt: at("2026-10-29", "08:00"), approvalId: "card-shorts" },
@@ -52,6 +55,7 @@ export const studioFixture: StudioScreen = {
       { label: "Look check → card 3", state: "todo" },
     ],
   },
+  editStates: [{ clipId: "clip-sample", documentHash: "1".repeat(64), finishedAt: null, kind: "full" }],
 };
 
-export const studioEmpty: StudioScreen = { items: [], team: null };
+export const studioEmpty: StudioScreen = { items: [], team: null, editStates: [] };

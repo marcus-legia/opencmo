@@ -115,7 +115,8 @@ select throws_ok($$ select public.cmo_mark_posted((select id from d1), 'https://
 select is((public.cmo_mark_posted((select id from d1), 'https://x.com/acme/status/123')).status, 'published', 'đánh dấu đã đăng');
 
 select is((public.cmo_decide_post((select id from d2), 'skip', null, 'Too salesy')).status, 'skipped', 'bỏ bài');
-select is((select body from public.cmo_memories where type = 'feedback'), 'Skipped the X post "Ad-hoc": Too salesy', 'lý do bỏ thành trí nhớ');
+select is((select array_agg(body) from public.cmo_memories where body like '%Too salesy%'),
+  array['Skipped a draft on X about "Ad-hoc": Too salesy'], 'the skip reason is remembered once, as the voice note');
 select is((public.cmo_remember('Never mention pricing in posts.')).type, 'user', 'ghi điều người dùng dặn');
 
 -- Trần 5 bài duyệt/ngày.

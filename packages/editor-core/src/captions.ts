@@ -24,7 +24,7 @@ import { FPS } from '@opencmo/clip-render';
 
 import { activeView, assign, clone, copyOf, isMaster, nodes, sceneOf, walk, type Entity } from './doc';
 import { faceXTrack, type FaceFrame, type XKey } from './face-track';
-import { rebuildLayout } from './layout';
+import { readLayout, rebuildLayout } from './layout';
 import { OpFailure } from './ops/context';
 import { keptDuration, keptRanges, round, type Range } from './transcript';
 
@@ -658,10 +658,9 @@ export function readCaptionStyle(document: ClipDocument): CaptionStyle | null {
 }
 
 /**
- * Đặt kiểu cho mọi `<captions>` (video và voiceover cùng một kiểu) và CHỈ thế —
- * áp brand không được đè nội dung. `preset`/`colors` luôn ghi; các khoá còn lại
- * chỉ ghi khi có mặt (null = về mặc định của preset, thiếu = giữ nguyên).
- * Project không có phụ đề thì trả nguyên document.
+ * Styles every `<captions>` (video and voiceover share one style) and ONLY that: applying a brand must not overwrite
+ * content. `preset`/`colors` are always written; the other keys only when present (null = the preset's default,
+ * absent = unchanged). A project with no captions comes back unchanged.
  */
 export function writeCaptionStyle(input: ClipDocument, style: CaptionStyle): ClipDocument {
   const document = clone(input);
@@ -672,7 +671,8 @@ export function writeCaptionStyle(input: ClipDocument, style: CaptionStyle): Cli
     assign(captions, 'colors', style.colors?.length ? [...style.colors] : undefined);
     for (const key of STYLE_KEYS) if (key in style) assign(captions, key, style[key] ?? undefined);
   }
-  return document;
+  // The layout's caption tracks were built for the old style (its box, its ink): rebuild them for this one.
+  return readLayout(document).length ? rebuildLayout(document) : document;
 }
 
 

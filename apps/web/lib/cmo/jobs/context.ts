@@ -1,7 +1,8 @@
 /** Chữ đưa vào prompt: document, trí nhớ, bài gần đây. Gom một chỗ để W1/W2 (và chat) nói cùng một thứ. */
 
 import { DOCUMENTS } from "../documents";
-import type { CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, MemoryTopic } from "./types";
+import { escapeAttribute, escapeForTag } from "../untrusted";
+import type { CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, MemoryTopic, NicheVideoInsight } from "./types";
 
 const DOC_ORDER = ["product", "strategy", "content_strategy", "competitors"] as const;
 
@@ -67,6 +68,18 @@ export function insightBlock(insight: CompetitorInsight | null): string {
   return `<what_works_now source="competitor research ${insight.measured_at.slice(0, 10)}">\nHooks:\n${hooks}\nFormats: ${insight.formats.join("; ")}\nIdeas:\n${ideas}\n</what_works_now>`;
 }
 
+/**
+ * Niche video research for the video brief (P5 R2): each standout short with its hook, format, lift and URL. Outside
+ * text, so it goes in its own tag as data; stale after three weeks like competitor research.
+ */
+export function nicheBlock(insight: NicheVideoInsight | null): string {
+  if (!insight || !insight.videos.length || Date.now() - new Date(insight.measured_at).getTime() > 21 * 86_400_000) return "";
+  const videos = insight.videos
+    .map((v) => `- ${v.platform === "tiktok" ? "TikTok" : "YouTube"} · ${escapeForTag(v.format)} · ${v.lift}x the median · hook: "${escapeForTag(v.hook)}" · why: ${escapeForTag(v.why)} · ${v.url}`)
+    .join("\n");
+  return `<what_works_on_video source="niche video research ${insight.measured_at.slice(0, 10)}" topics="${escapeAttribute(insight.topics.join(", "))}">\n${videos}\nFormats: ${escapeForTag(insight.formats.join("; "))}\n</what_works_on_video>`;
+}
+
 export function postText(item: ItemRow): string {
   return item.final_text ?? (typeof item.body.text === "string" ? item.body.text : "");
 }
@@ -75,6 +88,17 @@ export function postText(item: ItemRow): string {
 export function avoidList(docs: Documents): string[] {
   const avoid = docs.strategy?.avoid;
   return Array.isArray(avoid) ? avoid.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : [];
+}
+
+/** The product's own name(s) from the product document: "Cal.com" names the product, it is not a link. */
+export function productNames(docs: Documents): string[] {
+  const name = docs.product?.name;
+  return typeof name === "string" && name.trim() ? [name.trim()] : [];
+}
+
+/** What the code checks hold a draft to (`CheckRules` in check-post.ts), from the founder's documents. */
+export function checkRules(docs: Documents): { avoid: string[]; known: Set<string>; names: string[] } {
+  return { avoid: avoidList(docs), known: knownNumbers(docs), names: productNames(docs) };
 }
 
 /** Mọi con số xuất hiện trong document — bài nháp chỉ được dùng số có ở đây. */

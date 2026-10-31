@@ -100,6 +100,13 @@
 .scr-doc-card .v2-button { align-self: flex-start; }
 .scr-cut-words { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .scr-cut-words s { padding: 2px 8px; background: var(--v2-paper3); font-size: 13px; color: var(--v2-ink2); }
+/* Library → Voice (P3 C1): a note's weight, and the delete confirm in its row */
+.scr-voice-weight { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.scr-voice-weight meter { width: 96px; height: 8px; }
+.scr-voice-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 100%; }
+@media (max-width: 760px) {
+  .scr-row-inline:has(.scr-voice-confirm) { flex-direction: column; align-items: stretch; }
+}
 .scr-brand-host .brand-head { display: none; }
 .scr-brand-host .brand-view { padding: 0; max-width: none; }
 
@@ -238,6 +245,11 @@
 .scr .scr-slot.is-proposed, .scr .scr-slot.is-waiting_founder { background: var(--v2-brand-soft); border: 1px dashed var(--v2-brand-deep); }
 .scr .scr-slot.is-note { border: 1px dashed var(--v2-line2); background: transparent; color: var(--v2-ink2); font-family: var(--v2-sans); }
 .scr .scr-slot.is-inline { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.scr .scr-slot.is-movable { cursor: grab; }
+.scr-week-day.is-drop { outline: 2px dashed var(--v2-ink); outline-offset: -2px; }
+.scr-slot-wrap { display: flex; flex-direction: column; gap: 2px; }
+.scr-slot-move-open { align-self: flex-start; min-height: 32px; padding: 0 6px; border: 0; background: transparent; color: var(--v2-ink2); font: 500 10px var(--v2-mono); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; text-decoration: underline; }
+.scr-slot-move { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--v2-card); border: 1px solid var(--v2-line); }
 .scr-slot-status { font: 500 10px var(--v2-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--v2-ink); }
 .is-posted .scr-slot-status { color: var(--v2-ok); }
 .is-failed .scr-slot-status { color: var(--v2-stuck); }
@@ -310,6 +322,8 @@
 .scr-team .is-running { font-weight: 600; }
 .scr-team .is-running .scr-team-mark { width: 16px; height: 6px; background: var(--v2-brand); }
 .scr-team .is-todo { color: var(--v2-ink2); }
+.scr-team.is-compact { padding: 4px 0 0; }
+.scr-team.is-compact li { padding: 3px 0; border-bottom: 0; font-size: 12px; font-weight: 400; }
 .scr-drawer { margin: 0 0 0 auto; height: 100vh; max-height: 100vh; width: min(480px, 100vw); border-radius: 0; }
 .scr-drawer .scr-dialog-body { min-height: 100%; }
 .scr-drawer-block { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 14px; border: 1px solid var(--v2-line); border-radius: 4px; background: var(--v2-paper2); }
@@ -323,6 +337,12 @@
 .scr-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
 .scr-account { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; min-height: 58px; border-bottom: 1px solid var(--v2-line); }
 .scr-account.is-stuck { background: var(--v2-stuck-soft); }
+.scr-account-who { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.scr-account-who img { flex: none; border-radius: var(--v2-pill); }
+.scr-account-note { display: block; }
+.scr-status-line { margin: 0; font-size: 13px; }
+.scr-status-line.is-ok { background: var(--v2-ok-soft); color: var(--v2-ok); }
+.scr-status-line.is-stuck { background: var(--v2-stuck-soft); color: var(--v2-stuck); }
 .scr-settings-grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch; }
 .scr-settings-cmo { flex: 1 1 420px; }
 .scr-form { display: flex; flex-direction: column; gap: 16px; }
@@ -372,3 +392,16 @@
 .scr-acc h2 button { width: 100%; min-height: 56px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 18px; border: 0; background: transparent; font: 600 15px var(--v2-sans); cursor: pointer; text-align: left; }
 .scr-acc-body { padding: 0 18px 18px; }
 .scr-setup-brand { justify-content: space-between; flex-wrap: wrap; display: flex; align-items: center; }
+
+/* P5 C2: Sales settings (where Sales looks). */
+.scr-sales-settings { margin-top: 20px; }
+.scr-sales-settings .v2-panel-body { display: flex; flex-direction: column; gap: 12px; }
+.scr-settings-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.scr-settings-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.scr-settings-row .v2-field { flex: 1 1 180px; min-width: 0; }
+.scr-chips { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.scr-chips li { display: inline-flex; align-items: center; gap: 4px; padding: 0 0 0 10px; border: 1px solid var(--v2-line); border-radius: var(--v2-pill); font: 500 12px var(--v2-mono); }
+.scr-chips button { all: unset; box-sizing: border-box; width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: var(--v2-pill); cursor: pointer; }
+.scr-chips button:hover, .scr-chips button:focus-visible { background: var(--v2-paper3); }
+.scr-chips button:focus-visible { outline: 2px solid var(--v2-ink); }
+.scr-niche { margin-top: 20px; }

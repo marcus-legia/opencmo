@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  lottieInfo,
   addAsset,
   childrenOf,
   createFolder,
@@ -154,11 +153,3 @@ it('id theo nội dung: ổn định, khác nội dung thì khác, file lớn ch
   expect(a).toBe(createHash('sha256').update('5hello').digest('hex').slice(0, 16));
 });
 
-describe('lottieInfo', () => {
-  it('nhận Lottie, trả cỡ + độ dài; transcript và JSON hỏng thì null', () => {
-    expect(lottieInfo(JSON.stringify({ v: '5.7.0', fr: 30, ip: 0, op: 45, w: 400, h: 300, layers: [] }))).toEqual({ width: 400, height: 300, duration: 1.5 });
-    expect(lottieInfo(JSON.stringify([{ words: [{ word: 'hi', start: 0, end: 1 }] }]))).toBeNull();
-    expect(lottieInfo(JSON.stringify({ segments: [] }))).toBeNull();
-    expect(lottieInfo('{nope')).toBeNull();
-  });
-});

@@ -42,7 +42,7 @@ export const DEPTS: Dept[] = [
     steps: [
       "Reads your strategy and what you shipped this week",
       "Drafts a post in your voice for each platform",
-      "You approve; it publishes to your accounts",
+      "You approve each post and its time; it posts then, on your account",
     ],
     result: "Posts for every platform, in your voice, every day.",
     channels: ["x", "linkedin", "threads", "facebook", "reddit"],

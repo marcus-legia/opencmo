@@ -7,7 +7,6 @@
 
 import type { ClipDocument } from "@opencmo/clip-doc";
 import {
-  BUILTIN_LOTTIES,
   MASTER_SRC,
   clipWords,
   findQuote,
@@ -122,7 +121,7 @@ function blankEdit(document: ClipDocument): void {
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
-  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_3d_scene", "add_explainer"].includes(call.name));
+  const priced = (outcome.calls ?? []).filter((call) => ["create_video", "generate_media", "add_voiceover", "add_explainer"].includes(call.name));
   const first = priced[0];
   if (!check(notes, first?.name === "create_video", `the first paid tool was ${first?.name ?? "none"}, not create_video (tools: ${outcome.tools.join(", ")})`)) return { pass: false, notes };
   // One video card, not a retry loop that shows the founder a new price each time.
@@ -158,24 +157,17 @@ const srcOf = (entity: Entity): string[] => [
   ...(((entity.paints as { src?: unknown }[] | undefined) ?? []).flatMap((paint) => (typeof paint.src === "string" ? [paint.src] : []))),
 ];
 
-/** Things an explainer can draw (`docs/explainer-v2-build.md`, kit API v2): Lucide icons, built-in Lotties, kit shapes. */
+/** Lucide icon names, for checking the icons a scene uses are real. */
 const ICON_NAMES = new Set(Object.keys((icons as { icons: Record<string, unknown> }).icons));
-const LOTTIE_NAMES = new Set(BUILTIN_LOTTIES().map((entry) => entry.name));
-const SHAPE_KINDS = new Set(["circle", "cell", "blob", "ring", "pill", "capsule", "star", "arrow", "path"]);
-
-/** Does a storyboard `visual` name something drawable? Single words and hyphen-joined pairs ("shield check"). */
-function drawable(visual: string): boolean {
-  const words = visual.toLowerCase().split(/[^a-z0-9/-]+/).filter(Boolean);
-  const names = [...words, ...words.slice(1).map((word, index) => `${words[index]}-${word}`)];
-  return names.some((name) => ICON_NAMES.has(name) || LOTTIE_NAMES.has(name) || SHAPE_KINDS.has(name));
-}
-
 /** The last `add_explainer` call's storyboard and code (the spec keeps neither the visuals nor the code). */
 function storyboardOf(outcome: Outcome) {
   const call = [...(outcome.calls ?? [])].reverse().find((item) => item.name === "add_explainer");
   const input = (call?.input ?? {}) as { beats?: { say?: string; visual?: string }[]; code?: string; theme?: string; personality?: string };
   return { beats: input.beats ?? [], code: input.code ?? "" };
 }
+
+/** Every Mark name the scene code draws (`<Mark name="virus" …>`): its own drawings. */
+const codeMarks = (code: string): string[] => [...code.matchAll(/<Mark\b[^>]*?\bname=["'{`]+([^"'`}]+)/g)].map((match) => match[1]!);
 
 /** Every icon name the scene code draws (`<Icon name="virus" …>`). */
 const codeIcons = (code: string): string[] => [...code.matchAll(/<Icon\b[^>]*?\bname=["'{`]+([a-z0-9-]+)/g)].map((match) => match[1]!);
@@ -490,50 +482,17 @@ export const TASKS: EvalTask[] = [
       const notes: string[] = [];
       const at = clipTime(outcome.document, "growing");
       const found = all(outcome.document).find((item) => {
-        const visual = (item.entity.marks as { visual?: { op?: string; input?: { name?: string; animation?: string } } } | undefined)?.visual;
-        return item.tag === "group" && (visual?.op === "add_icon" || visual?.op === "add_lottie");
+        const visual = (item.entity.marks as { visual?: { op?: string; input?: { name?: string } } } | undefined)?.visual;
+        return item.tag === "group" && visual?.op === "add_icon";
       });
       if (!check(notes, Boolean(found), "no icon")) return { pass: false, notes };
-      const input = (found!.entity.marks as { visual: { op: string; input: { name?: string; animation?: string; motion?: string } } }).visual.input;
-      const name = String(input.name ?? input.animation ?? "");
+      const input = (found!.entity.marks as { visual: { op: string; input: { name?: string; motion?: string } } }).visual.input;
+      const name = String(input.name ?? "");
       const fits = check(notes, /user|people|person|trend|grow|chart|sprout|rocket|arrow-up|walk|cheer|megaphone/.test(name), `icon: ${name}`);
       const start = Number(found!.entity.start ?? 0);
       const end = Number(found!.entity.end ?? 0);
       const timed = check(notes, at !== null && start <= at + 0.5 && end >= at + 0.8, `shown ${start}-${end}s, word at ${at}s`);
       return { pass: fits && timed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "emoji",
-    prompt: "Add a fitting animated emoji reaction when I say 'people lose viewers'.",
-    grade(outcome) {
-      const notes: string[] = [];
-      const at = clipTime(outcome.document, "lose");
-      const found = visuals(outcome.document).find((item) => item.op === "add_lottie");
-      if (!check(notes, Boolean(found), "no animation")) return { pass: false, notes };
-      const animation = String((found!.input as { animation?: string }).animation ?? "");
-      const emoji = check(notes, animation.startsWith("emoji/"), `not an emoji: ${animation}`);
-      const fits = check(notes, /scream|fearful|anxious|cry|sob|weary|pensive|skull|grimacing|astonished|open-mouth|exploding|chart-down|broken|warning/.test(animation), `emoji: ${animation}`);
-      const timed = check(notes, at !== null && found!.start <= at + 0.5 && found!.end >= at + 0.8, `shown ${found!.start}-${found!.end}s, word at ${at}s`);
-      return { pass: emoji && fits && timed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "explain3d",
-    prompt: "Add a 3D visual that explains how growing an audience compounds.",
-    grade(outcome) {
-      const notes: string[] = [];
-      const noGen = check(notes, !outcome.tools.includes("generate_media"), "used generate_media for an explainer");
-      // "3D" → cảnh code (spec code-scenes); visual vẽ phẳng vẫn chấp nhận được cho ý trừu tượng.
-      const scene = outcome.generations?.find((item) => item.model.id === "studio-3d");
-      const drawn = visuals(outcome.document).find((item) => ["add_graph", "add_diagram", "add_chart"].includes(item.op));
-      const visual = scene ? { start: Number((scene.op as { start?: number }).start ?? -1), quote: scene.quote } : drawn;
-      if (!check(notes, Boolean(visual), "no 3D animation or drawn visual")) return { pass: false, notes };
-      const previewed = check(notes, !scene || outcome.tools.includes("preview_3d"), "added a 3D scene without previewing it");
-      const at = clipTime(outcome.document, "growing");
-      const grounded = check(notes, at !== null && Math.abs(visual!.start - at) <= 1.5, `starts ${visual!.start}s, "growing" at ${at}s`);
-      const quoted = check(notes, quoteFound(outcome.document, visual!.quote), `quote not in transcript: ${visual!.quote ?? "(none)"}`);
-      return { pass: noGen && previewed && grounded && quoted && sane(outcome, notes), notes };
     },
   },
   {
@@ -718,6 +677,37 @@ export const TASKS: EvalTask[] = [
       return { pass: order && ref && paced && labels && pictured && shape && placed && clean, notes };
     },
   },
+  // O2 (docs/plans/editor/2026-10-24-opus-animation-plan.md): the model measures its main move instead of guessing.
+  {
+    id: "explain-measured",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. Go ahead and make it, no need to show the script. Check your main move on a contact sheet, and make sure the subject never leaves the frame.",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const previews = (outcome.calls ?? []).filter((call) => call.name === "preview_explainer").map((call) => call.input as { sheet?: { count?: number }; code?: string });
+      const sheet = check(notes, previews.some((input) => (input.sheet?.count ?? 0) >= 2), "no preview asked for a contact sheet");
+      const { code } = storyboardOf(outcome);
+      const promised = check(notes, /\baudit\s*\.\s*(inside|clear)\s*\(/.test(code), "the scene declares no kit.audit check");
+      const added = check(notes, outcome.tools.includes("add_explainer"), `tools: ${outcome.tools.join(", ")}`);
+      return { pass: sheet && promised && added, notes };
+    },
+  },
+  // Plan O5: the look is picked from hero shots before the whole scene is written.
+  {
+    id: "explain-directions",
+    prompt: "/explain How a vaccine teaches your immune system, 16:9. Show me a couple of directions to pick from first, then make it.",
+    answer: "Gradient flow",
+    setup: blankEdit,
+    grade(outcome) {
+      const notes: string[] = [];
+      const calls = outcome.calls ?? [];
+      const asked = calls.findIndex((call) => call.name === "ask_user");
+      const compared = calls.findIndex((call) => call.name === "preview_explainer" && ((call.input as { variants?: unknown[] }).variants?.length ?? 0) >= 2);
+      const first = check(notes, compared >= 0 && asked > compared, "did not preview 2-3 directions in one call before asking");
+      const added = check(notes, outcome.tools.includes("add_explainer"), `tools: ${outcome.tools.join(", ")}`);
+      return { pass: first && added, notes };
+    },
+  },
   // Explainer v2 (docs/explainer-v2-build.md): the subject is on screen, mapped noun by noun before any code.
   {
     id: "explain-vaccine",
@@ -733,18 +723,21 @@ export const TASKS: EvalTask[] = [
       const scene = gen!.spec.scene as { theme?: string; personality?: string } | undefined;
       const look = check(notes, Boolean(scene?.theme && scene.personality), `theme ${scene?.theme ?? "(none)"}, personality ${scene?.personality ?? "(none)"}`);
       const { beats, code } = storyboardOf(outcome);
-      const unpictured = beats.filter((beat) => !drawable(beat.visual ?? "")).map((beat) => beat.visual ?? "(none)");
-      const pictured = check(notes, beats.length >= 3 && !unpictured.length, `visuals that name no icon, Lottie or shape: ${unpictured.join(" | ")}`);
+      // Motion studio: the subjects are drawn (Marks) or set as type, scene code is written shot by shot,
+      // and icons, when any, are real names. The old rule (subject icons and a Headline row) is gone.
+      const vague = beats.filter((beat) => (beat.visual ?? "").trim().split(/\s+/).length < 6).map((beat) => beat.visual ?? "(none)");
+      const pictured = check(notes, beats.length >= 3 && !vague.length, `visuals too vague to draw from: ${vague.join(" | ")}`);
+      const marks = codeMarks(code);
+      const drawnSubjects = check(notes, marks.length >= Math.min(3, beats.length), `drawn subjects (Mark names): ${marks.join(", ") || "none"}`);
+      const onTopic = check(notes, marks.some((name) => /virus|antibod|immune|cell|syringe|shield|vaccin/i.test(name)), `no Mark draws the vaccine story: ${marks.join(", ") || "none"}`);
+      const shots = check(notes, /<Shot\s+[^>]*beat=/.test(code), "the scene is not written shot by shot (<Shot beat>)");
       const drawn = codeIcons(code);
       const unknown = drawn.filter((name) => !ICON_NAMES.has(name));
       const real = check(notes, !unknown.length, `unknown icons in the code: ${unknown.join(", ")}`);
-      const subject = new Set(drawn.filter((name) => /virus|syringe|shield|dna|microscope|biohazard|pill|bacteria|heart-pulse/.test(name)));
-      const onTopic = check(notes, subject.size >= 3, `subject icons: ${[...subject].join(", ") || "none"}`);
       const offTopic = drawn.filter((name) => /database|server|cpu|hard-drive/.test(name));
       const relevant = check(notes, !offTopic.length, `icons unrelated to vaccines: ${offTopic.join(", ")}`);
-      const headline = check(notes, /<Headline\b/.test(code), "no Headline row in the scene code");
       const shape = check(notes, gen!.spec.aspectRatio === "16:9", `format ${gen!.spec.aspectRatio}`);
-      return { pass: order && look && pictured && real && onTopic && relevant && headline && shape, notes };
+      return { pass: order && look && pictured && drawnSubjects && onTopic && shots && real && relevant && shape, notes };
     },
   },
   {
@@ -793,31 +786,6 @@ export const TASKS: EvalTask[] = [
       // B-roll pack: every still comes with variants for the user to pick from.
       const packed = check(notes, stills.every((item) => (item.variants?.length ?? 0) >= 1), "stills without variants");
       return { pass: several && noVideo && grounded && distinct && offHook && short && packed && sane(outcome, notes), notes };
-    },
-  },
-  {
-    id: "code3d",
-    prompt: "Make a 3D animation for 'the first three seconds' — it's the hero moment of this clip.",
-    grade(outcome) {
-      const notes: string[] = [];
-      // Spec code-scenes: preview trước rồi mới đặt — model phải NHÌN cảnh trước khi trả tiền render.
-      const previewed = outcome.tools.indexOf("preview_3d");
-      const added = outcome.tools.indexOf("add_3d_scene");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
-      const gen = outcome.generations?.find((item) => item.model.id === "studio-3d");
-      if (!check(notes, Boolean(gen), "no 3D animation prepared")) return { pass: false, notes };
-      const scene = gen!.spec.scene as { template?: string; code_ref?: string } | undefined;
-      const code = check(notes, scene?.template === "code" && /^[0-9a-f]{64}$/.test(scene.code_ref ?? ""), `scene: ${JSON.stringify(scene)}`);
-      const quoted = check(notes, quoteFound(outcome.document, gen!.quote), `quote not in transcript: ${gen!.quote ?? "(none)"}`);
-      const at = clipTime(outcome.document, "three");
-      const start = Number((gen!.op as { start?: number }).start ?? -1);
-      const timed = check(notes, at !== null && Math.abs(start - at) <= 1.5, `starts ${start}s, "three" at ${at}s`);
-      const placed = check(
-        notes,
-        all(outcome.document).some((item) => ((item.entity.paints as { src?: { model?: string } }[] | undefined) ?? []).some((paint) => paint.src?.model === "studio-3d")),
-        "the render is not on the clip",
-      );
-      return { pass: order && code && quoted && timed && placed && sane(outcome, notes), notes };
     },
   },
   {

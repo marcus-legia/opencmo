@@ -86,10 +86,6 @@ export type Values = {
   trimStart: number;
   trimEnd: number;
   dashOffset: number;
-  /** scene3d: camera theo keyframe; NaN = theo khai báo `camera` của node. */
-  cameraPhi: number;
-  cameraTheta: number;
-  cameraDistance: number;
 };
 
 /** Giá trị của thành phần phụ (paint, stop, stroke, shadow, effect). */
@@ -136,8 +132,6 @@ const DEFAULT_SIZE: Partial<Record<ClipNode['kind'], [number, number]>> = {
   scene: [1920, 1080],
   rect: [100, 100],
   path: [100, 100],
-  scene3d: [1080, 1080],
-  lottie: [512, 512],
   video: [1920, 1080],
   image: [1920, 1080],
   audio: [500, 150],
@@ -304,8 +298,5 @@ export function authored(node: ClipNode): Values {
     trimStart: num('trimStart', 0),
     trimEnd: num('trimEnd', 1),
     dashOffset: num('dashOffset', 0),
-    cameraPhi: NaN,
-    cameraTheta: NaN,
-    cameraDistance: NaN,
   };
 }

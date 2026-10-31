@@ -8,6 +8,7 @@ import { DEPARTMENT_LABEL } from "@/lib/screens/common";
 
 import { shortDate } from "../format";
 import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
+import { TeamSteps } from "../studio/StudioScreen";
 import { useTabParam } from "../useTabParam";
 import { isSample, useScreen } from "../useScreen";
 import { PauseButton } from "./PauseButton";
@@ -188,6 +189,7 @@ function OrdersTable({ orders }: { orders: OrderRow[] }) {
                 {depth ? <span className="scr-sr-only">Part of the order above: </span> : null}
                 {order.title}
               </span>
+              {order.steps?.length ? <TeamSteps steps={order.steps} compact /> : null}
             </td>
             <td>{DEPARTMENT_LABEL[order.department]}</td>
             <td className="scr-num">{due(order)}</td>

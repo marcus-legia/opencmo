@@ -6,10 +6,10 @@ import { buildScene, sceneError } from '../code/run.ts';
 import { DEFAULT_PERSONALITY, DEFAULT_THEME, type MotionJob } from '../job.ts';
 import { MotionContext, PaletteContext, ThemeContext } from '../kit/context.tsx';
 import { MOTION } from '../kit/personality.ts';
-import { makeKit } from '../kit/index.ts';
+import { kitAudit, makeKit } from '../kit/index.ts';
 import { makePalette } from '../kit/theme.ts';
 import { FAMILY } from './fonts.ts';
-import { LAYOUT_LOG } from './layout-log.ts';
+import { AUDIT_LOG, LAYOUT_LOG } from './layout-log.ts';
 
 export type ExplainerProps = {
 	job: MotionJob;
@@ -73,7 +73,7 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 						<div style={{ fontFamily: FAMILY.title, fontSize: 96, color: palette.text }}>{job.title}</div>
 					</AbsoluteFill>
 				)}
-				{probe ? <LayoutProbe /> : null}
+				{probe ? <LayoutProbe checks={() => kitAudit(kit)} /> : null}
 			</AbsoluteFill>
 			</MotionContext.Provider>
 			</ThemeContext.Provider>
@@ -81,10 +81,44 @@ export function Explainer({ job, compiled, probe }: ExplainerProps) {
 	);
 }
 
-export type ProbedBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number };
+export type ProbedBox = { kind: 'text' | 'mark'; name: string; x: number; y: number; w: number; h: number; size?: number; soft?: boolean };
 
-/** Preview only: once fonts are in, log every tagged box (after camera transforms) for layout.ts. */
-function LayoutProbe() {
+/**
+ * The part of a tagged box the viewer can see: clipped by every ancestor that hides overflow (a masked row, a phone
+ * screen), and nothing when the box or an ancestor is fully transparent.
+ */
+function visiblePart(element: HTMLElement, rect: DOMRect, root: HTMLElement | null): { left: number; top: number; right: number; bottom: number; width: number; height: number } | null {
+	let left = rect.left;
+	let top = rect.top;
+	let right = rect.right;
+	let bottom = rect.bottom;
+	for (let node: HTMLElement | null = element; node && node !== root; node = node.parentElement) {
+		const style = getComputedStyle(node);
+		if (Number(style.opacity) < 0.05) return null;
+		if (node !== element && (style.overflowX !== 'visible' || style.overflowY !== 'visible')) {
+			const clip = node.getBoundingClientRect();
+			left = Math.max(left, clip.left);
+			top = Math.max(top, clip.top);
+			right = Math.min(right, clip.right);
+			bottom = Math.min(bottom, clip.bottom);
+		}
+	}
+	return right > left && bottom > top ? { left, top, right, bottom, width: right - left, height: bottom - top } : null;
+}
+
+/** Preview only: once fonts are in, log every visible tagged box (after camera transforms) for layout.ts. */
+/** A blur on the element or an ancestor (a CSS blur or an SVG filter): resting text should carry none. */
+function blurred(element: HTMLElement, root: HTMLElement | null): boolean {
+	for (let node: HTMLElement | null = element; node && node !== root; node = node.parentElement) {
+		const filter = getComputedStyle(node).filter;
+		if (filter.includes('url(')) return true;
+		const match = /blur\(([\d.]+)px\)/.exec(filter);
+		if (match && Number(match[1]) > 0.3) return true;
+	}
+	return false;
+}
+
+function LayoutProbe({ checks }: { checks: () => unknown[] }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [handle] = useState(() => delayRender('Measuring layout'));
 	useEffect(() => {
@@ -94,21 +128,31 @@ function LayoutProbe() {
 			const root = ref.current?.parentElement;
 			const origin = root?.getBoundingClientRect() ?? { left: 0, top: 0 };
 			const boxes: ProbedBox[] = [];
+			const frame = root?.getBoundingClientRect();
 			for (const element of Array.from(root?.querySelectorAll<HTMLElement>('[data-box]') ?? [])) {
-				const rect = element.getBoundingClientRect();
-				if (rect.width === 0 || rect.height === 0) continue;
+				// MotionBlur's earlier samples are ghosts of the same element: only its newest sample is measured.
+				if (element.closest('[data-ghost]')) continue;
+				const full = element.getBoundingClientRect();
+				if (full.width === 0 || full.height === 0) continue;
+				const rect = visiblePart(element, full, root ?? null);
+				// Hidden by a mask (a row window), faded out, or wholly off the frame: the viewer does not see it.
+				if (!rect || rect.width < 1 || rect.height < 1) continue;
+				if (frame && (rect.right <= frame.left || rect.left >= frame.right || rect.bottom <= frame.top || rect.top >= frame.bottom)) continue;
 				const kind = element.dataset.box === 'text' ? 'text' : 'mark';
 				const size = Number(element.dataset.size);
 				const area = element.offsetWidth * element.offsetHeight;
-				const scale = area ? Math.sqrt((rect.width * rect.height) / area) : 1;
-				boxes.push({ kind, name: element.dataset.name ?? '', x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height, ...(kind === 'text' && size ? { size: size * scale } : {}) });
+				const scale = area ? Math.sqrt((full.width * full.height) / area) : 1;
+				boxes.push({ kind, name: element.dataset.name ?? '', x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height, ...(kind === 'text' && size ? { size: size * scale } : {}), ...(kind === 'text' && blurred(element, root ?? null) ? { soft: true } : {}) });
 			}
 			console.log(`${LAYOUT_LOG}${JSON.stringify(boxes)}`);
+			const declared = checks();
+			if (declared.length) console.log(`${AUDIT_LOG}${JSON.stringify(declared)}`);
 			continueRender(handle);
 		});
 		return () => {
 			done = true;
 		};
+	// `checks` is read once, when fonts are in: the scene body (and its kit.audit calls) ran before that.
 	}, [handle]);
 	return <div ref={ref} style={{ display: 'none' }} />;
 }

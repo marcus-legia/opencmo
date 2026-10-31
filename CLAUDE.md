@@ -16,8 +16,9 @@ specs, provider comparisons — go straight into `docs/` here; there is no separ
 keep them out of. The language rule below still applies.
 
 One system: Next.js web app + Supabase + a Modal worker. There is no second runtime; do not
-build one. Generated-media renderers (`clip-three`, `clip-motion`) run on the worker and produce
-video files; the editor itself has one runtime (`clip-render`).
+build one. Motion is made with one renderer, Remotion (`clip-motion`), on the worker; it produces video
+files. The editor itself has one runtime (`clip-render`). 3D (three.js) and Lottie were removed on
+2026-10-24; do not bring them back.
 
 ## Strategy: the editor is the spearhead (owner decision, 2026-10-19)
 
@@ -124,6 +125,9 @@ render or export, extract a frame from the full-size file (not `*.preview.mp4`) 
 
 - A Scribe failure does not fail an upload: the video is published without a transcript and
   the editor shows "no speech". Check the worker log, not the job status, when words are missing.
+- Face tracking does not fail an upload either: without the engine's `[face]` extra, the model, or
+  `libegl1`/`libgles2`, the master is published framed in the centre (speaker possibly half cut).
+  Check the worker log for "framing in the centre" and `masters[clip].focus` in the job manifest.
 
 ## Layout
 
@@ -134,7 +138,6 @@ packages/clip-doc/      clip document schema (zod), validation, migrations
 packages/editor-core/   operations on the document — the ONLY write path (buttons, API, agent)
 packages/clip-render/   Canvas 2D renderer (browser + Node)
 packages/clip-export/   server export: document → MP4 (task `render_document`)
-packages/clip-three/    3D scenes rendered on a GPU worker
 packages/clip-motion/   explainer animations (Remotion) rendered on the worker
 packages/clip-icons/, clip-media/, clip-assets/, editor-parity/
 packages/skills/       style skills: markdown + frontmatter → generated index; gated by editor-core/capabilities.ts
@@ -163,8 +166,19 @@ scripts/dev.mjs         one-command dev stack
 ## Working style
 
 - Don't expand scope. Note out-of-scope improvements in the PR or an issue instead.
-- Commit only when asked. Commit messages in English.
+- **Commit and push as you go (owner, 2026-10-27).** Finished work is committed and pushed to the task's branch and
+  its PR right away, without waiting to be asked; nothing is left only in a session or a container, which can be
+  reclaimed. Each commit is green on its own (the checks of what it touches). Commit messages in English. Deploys,
+  merges and force-pushes still wait for the owner.
 - An HTML doc ships with a markdown twin of the same name for agents (`docs/architecture/README.md`); change both together.
+- **Parallel sessions (owner, 2026-10-27): one branch, one PR.** When a plan splits work across sessions, every session
+  works on the same branch and the same PR; no session opens its own branch or PR. The plan creates that branch before
+  any session starts, so no session has to wait for it or invent one.
+- **Split the work so it cannot conflict.** Before sessions start, the plan gives each session a numbered todo list with
+  checkboxes, the exact files and folders it owns, the order it works in, and what it waits on. Shared files get named
+  blocks with one owner each. Checklists and requests go in a per-session file (`<plan>-sessions/<session>.md`), not one
+  file all sessions edit. A building block two sessions need (types, primitives, a flag helper) is built once by one
+  named session first, never twice.
 
 ## Product advisor role
 

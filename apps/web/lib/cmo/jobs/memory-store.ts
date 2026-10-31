@@ -3,8 +3,9 @@
  * Supabase. Not `server-only`, so `tsx` scripts can import it.
  */
 
+import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type CompetitorInsight, type MetricRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 
 export type InboxItem = {
   id: string;
@@ -22,13 +23,22 @@ export type InboxItem = {
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
 export function memoryStore(docs: Documents, memories: string[] = ["Skipped the X post \"Pricing\": too salesy"], events: MemoryEvent[] = [], corrections: string[] = []) {
+  /** Voice notes as `voice_notes_for` would return them; tests push rows here, newest first. */
+  const voice: VoiceNoteRow[] = [];
+  /** Edits a caption run can read, and the captions it saved (`edited`: the founder's own, never overwritten). */
+  const videos: VideoSource[] = [];
+  const captions: { runId: string; clipId: string; profile: string; text: string; title: string | null; gen: Record<string, unknown>; edited: boolean }[] = [];
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
   const results: WeekResults = { posts: 0, replies: 0, views: 0 };
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
+  const rules = new Map<string, SubredditRule>();
+  const salesSettings: SalesSettings = { excluded: [], pairs: [] };
+  const mentions = { used: 0 };
   const insights: CompetitorInsight[] = [];
+  const niche: NicheVideoInsight[] = [];
   const metrics: MetricRow[] = [];
   const inbox: InboxItem[] = [];
   let seq = 0;
@@ -56,6 +66,15 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     documents: async () => docs,
     memories: async () => memories,
+    voiceNotes: async (_u, limit) => voice.slice(0, limit),
+    videoSource: async (_u, clipId) => videos.find((video) => video.clipId === clipId) ?? null,
+    async saveCaption(_u, runId, clipId, profile, text, title, gen) {
+      const at = captions.findIndex((c) => c.clipId === clipId && c.profile === profile);
+      if (at >= 0 && captions[at]!.edited) return;
+      const row = { runId, clipId, profile, text, title, gen, edited: false };
+      if (at >= 0) captions[at] = row;
+      else captions.push(row);
+    },
     memoryEvents: async () => events,
     corrections: async () => corrections,
     lessons: async () => latestPerTopic([...lessons].sort((a, b) => b.week.localeCompare(a.week))),
@@ -102,6 +121,14 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
+    subredditRule: async (name) => rules.get(name.toLowerCase()) ?? null,
+    async saveSubredditRule(rule) {
+      rules.set(rule.subreddit.toLowerCase(), { ...rule, subreddit: rule.subreddit.toLowerCase(), read_at: new Date().toISOString() });
+    },
+    salesSettings: async () => salesSettings,
+    recentMentions: async () => mentions.used,
+    // Saved threads here are never decided, so every mention draft still waits.
+    waitingMentions: async () => opps.filter((o) => o.rule === "mention_ok").length,
     async saveOpportunities(_u, _r, list) {
       const fresh = list.filter((o) => !opps.some((x) => x.url === o.url));
       opps.push(...fresh);
@@ -117,6 +144,10 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       insights.push(body);
     },
     latestInsight: async () => insights.at(-1) ?? null,
+    async saveNicheInsight(_u, _run, body) {
+      niche.push(body);
+    },
+    latestNicheInsight: async () => niche.at(-1) ?? null,
     async saveMetrics(_u, rows) {
       const ok = rows.filter((row) => items.some((i) => i.id === row.item_id && i.status === "published"));
       metrics.push(...ok);
@@ -164,5 +195,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, insights, metrics, lessons, goals, results, enqueue, inbox, submit };
+  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
 }

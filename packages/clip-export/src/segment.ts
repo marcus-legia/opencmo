@@ -11,9 +11,9 @@ import { join } from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
-import { createCanvas, GlobalFonts, loadImage, LottieAnimation, type Canvas, type Image } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts, loadImage, type Image } from '@napi-rs/canvas';
 import { FRAME_RATE as FPS } from '@opencmo/clip-doc';
-import { builtinLottieName, createRenderer, FONTS, lottieTime, outputSize, parseCube, setFallbackFamilies, type CubeLut, type MediaHost, type Transcript } from '@opencmo/clip-render';
+import { createRenderer, FONTS, outputSize, parseCube, setFallbackFamilies, type CubeLut, type MediaHost, type Transcript } from '@opencmo/clip-render';
 
 import { VideoFrames } from './decode.ts';
 import { jobDocument, sourceKey, type Job } from './job.ts';
@@ -72,13 +72,11 @@ export async function loadHost(job: Job, probes: Record<string, Probe>) {
   );
   const current = new Map<string, unknown>();
   const luts = new Map<string, CubeLut | 'failed'>();
-  const lottie = lottieHost(job, files);
   const host: MediaHost = {
     image: (src) => (images.get(sourceKey(src)) as never) ?? 'failed',
     video: (src, seconds) => (current.get(`${sourceKey(src)}@${seconds}`) as never) ?? 'failed',
     duration: (src) => probes[sourceKey(src)]?.duration ?? null,
     transcript: (src) => transcripts.get(src) ?? null,
-    lottie,
     canvas: (width, height) => createCanvas(width, height),
     lut: (src) => {
       if (!luts.has(src)) {
@@ -103,78 +101,16 @@ export async function loadHost(job: Job, probes: Record<string, Probe>) {
 }
 
 /**
- * Lottie qua Skottie của Skia (`LottieAnimation` của @napi-rs/canvas) — cùng
- * engine với CanvasKit ở preview. Vẽ vào canvas riêng theo cỡ pixel mà renderer
- * xin (không nhoè khi phóng), renderer `drawImage` ngay sau đó. `builtin:<tên>`
- * là bộ có sẵn ở `job.lottie` (`packages/clip-media/lottie`), không phải tải.
- *
- * Hai điều đã đo trên 1.0.9: Skottie chỉ vẽ lên canvas mà trước đó chỉ có
- * `clearRect` (vẽ gì khác trước là mất hình, im lặng), và `getImageData` không
- * thấy kết quả — `drawImage(canvas)` thì thấy. Vì thế canvas riêng, xoá sạch mỗi
- * khung, và test đọc qua `drawImage`. Một canvas mỗi animation: cỡ đổi theo
- * keyframe `scale` thì cấp lại chứ không giữ canvas cho từng cỡ (RAM).
- */
-/** Lottie khai báo ảnh ngoài (đường dẫn) thay vì nhúng `data:` — cùng luật `lottie_info` của worker. */
-export function hasExternalAssets(text: string): boolean {
-  const assets = (JSON.parse(text) as { assets?: unknown }).assets;
-  if (assets === undefined || assets === null) return false;
-  if (!Array.isArray(assets)) return true;
-  return assets.some((asset) => {
-    if (!asset || typeof asset !== 'object') return true;
-    const { p, e } = asset as { p?: unknown; e?: unknown };
-    return p !== undefined && !(e === 1 && typeof p === 'string' && p.startsWith('data:'));
-  });
-}
-
-export function lottieHost(job: Pick<Job, 'lottie'>, files: Map<string, string>): NonNullable<MediaHost['lottie']> {
-  const animations = new Map<string, LottieAnimation | 'failed'>();
-  const canvases = new Map<string, Canvas>();
-  const fileOf = (key: string) => {
-    if (!key.startsWith('builtin:')) return files.get(key);
-    const name = builtinLottieName(key);
-    return name ? join(job.lottie, `${name}.json`) : undefined;
-  };
-  return (src, seconds, width, height, loop) => {
-    const key = sourceKey(src);
-    let animation = animations.get(key);
-    if (animation === undefined) {
-      const file = fileOf(key);
-      try {
-        const text = file ? readFileSync(file, 'utf8') : null;
-        // Lottie người dùng: tài nguyên NGOÀI (`p` không phải ảnh nhúng `data:`) có thể khiến Skottie
-        // đọc file khác trên máy worker rồi vẽ vào video — chỉ nạp file không có tài nguyên ngoài.
-        animation = text && !hasExternalAssets(text) ? LottieAnimation.loadFromData(text) : 'failed';
-      } catch {
-        animation = 'failed';
-      }
-      animations.set(key, animation);
-    }
-    if (animation === 'failed') return 'failed';
-    const time = lottieTime(seconds, animation.duration, animation.fps, loop);
-    let canvas = canvases.get(key);
-    if (!canvas || canvas.width !== width || canvas.height !== height) {
-      canvas = createCanvas(width, height);
-      canvases.set(key, canvas);
-    }
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, width, height);
-    animation.seekTime(time);
-    animation.render(ctx, { x: 0, y: 0, width, height });
-    return canvas as never;
-  };
-}
-
-/**
- * `canvas.data()` cấp một Buffer native 8 MB mỗi khung 1080×1920 mà V8 không
- * tính vào heap: GC chỉ chạy theo rác JS, nên với cảnh ít JS (Lottie, video)
- * hàng trăm buffer đã ghi xong vẫn nằm chờ — đo 29/09: ~480 MB mỗi đoạn. Gọi GC
- * mỗi `GC_EVERY` khung giữ phần tồn đọng dưới ~15 × 8 MB; mất ~1 ms mỗi lần.
+ * `canvas.data()` allocates a native 8 MB Buffer per 1080×1920 frame that V8 does not count in its heap: GC only
+ * runs on JS garbage, so in scenes with little JS (video) hundreds of already-written buffers wait around
+ * (measured 09-29: ~480 MB per segment). Collecting every `GC_EVERY` frames keeps the backlog under ~15 × 8 MB, at
+ * ~1 ms each time.
  */
 const GC_EVERY = 15;
 setFlagsFromString('--expose-gc');
 const collect = runInNewContext('gc') as () => void;
 
-/** `onFrames(n)`: báo thêm n khung đã vẽ + mã hoá — thanh tiến độ Export (02/10). */
+/** `onFrames(n)`: n more frames drawn and encoded, for the Export progress bar (10-02). */
 export async function renderSegment(input: SegmentInput, onFrames: (count: number) => void = () => {}): Promise<void> {
   const { job, probes } = input;
   registerFonts(job.fonts);

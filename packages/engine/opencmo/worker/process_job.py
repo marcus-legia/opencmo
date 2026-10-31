@@ -7,8 +7,9 @@ clipping tool (owner, 2026-10-20). A job now runs one path, in order:
 2. settle the credits on the video's real length;
 3. download the user's own upload once and remux it into the editor's master (`-c copy`, I/O
    not CPU, no frame enters Python);
-4. transcribe the master's audio with Scribe so the user can cut by words at once;
-5. publish ONE `full` clip with its starting settings, transcript and master in one
+4. measure where the speaker's face is (`steps/reframe.py`) so the editor's crop follows them;
+5. transcribe the master's audio with Scribe so the user can cut by words at once;
+6. publish ONE `full` clip with its starting settings, transcript and master in one
    transaction (`complete_job_publication`), so the editor opens it like any project.
 
 State of a run lives in `job_context`, uploads and their cleanup in `job_uploads`.
@@ -40,6 +41,7 @@ from opencmo.editing.models import default_settings, settings_hash
 from opencmo.editing.subtitles import to_ds_transcript
 from opencmo.media.ffmpeg import extract_audio
 from opencmo.media.probe import probe_file
+from opencmo.steps.reframe import ASPECTS, editor_focus, face_track, needs_tracking
 from opencmo.steps.render import _safe_name, preview_head
 from opencmo.steps.transcribe import transcribe_audio
 from opencmo.worker.errors import UserMessageError, processing_error
@@ -132,6 +134,28 @@ def _transcribe(master: Path, work: Path) -> str | None:
     return to_ds_transcript(transcript.segments) if transcript.segments else None
 
 
+def _focus(master: Path, info: Any, duration: float, aspect: str) -> dict[str, list[list[float]]] | None:
+    """The editor's face tracks for the master, or None. A failure here never fails the upload: the video is
+    still the user's to edit, framed in the centre."""
+    frame_aspect = ASPECTS.get(aspect, 9 / 16)
+    if not needs_tracking(info.width, info.height, frame_aspect):
+        return None
+    try:
+        track, covered = face_track(master, duration, width=info.width, height=info.height)
+        # A pass cut short by its budget gives keys up to where it got; the editor holds the last centre after.
+        focus = editor_focus(
+            track,
+            source_width=info.width,
+            source_height=info.height,
+            frame_aspect=frame_aspect,
+            duration=covered,
+        )
+    except Exception:
+        log.warning("Face tracking failed; publishing the video framed in the centre", exc_info=True)
+        return None
+    return focus if focus["frame"] or focus["reframe"] else None
+
+
 def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     store, job, root = run.store, run.job, run.root
     assert root is not None
@@ -198,6 +222,11 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     )
     run.check_lease()
 
+    run.set_stage("reframe")
+    aspect = job.aspect if job.aspect != "auto" else "9:16"
+    focus = _focus(master, master_info, master_info.duration, aspect)
+    run.check_lease()
+
     run.set_stage("transcribe")
     transcript_object = None
     transcript_body = _transcribe(master, work)
@@ -215,7 +244,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
     settings = default_settings(
         0.0,
         master_info.duration,
-        aspect=job.aspect if job.aspect != "auto" else "9:16",
+        aspect=aspect,
         captions=job.captions and transcript_object is not None,
     ).to_dict()
     row = {
@@ -249,6 +278,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
                     "height": master_info.height,
                     "duration": master_info.duration,
                     "offset": 0.0,
+                    **({"focus": focus} if focus else {}),
                 }
             },
         },

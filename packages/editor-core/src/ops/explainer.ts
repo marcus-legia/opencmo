@@ -1,6 +1,7 @@
 /**
  * `add_explainer`: places a finished explainer (Remotion animation + narration, rendered on the
- * worker by `packages/clip-motion`) as ONE full-frame generated video layer. The op only writes the
+ * worker by `packages/clip-motion`) as ONE generated video layer: full frame, or with `place` in the top or bottom
+ * band of a split with the speaker in the other band, the split sized so the band is exactly the animation's shape. The op only writes the
  * `generate.video` declaration of model `motion-explainer`; the editor resolves it through
  * `/api/v1/generations` like any generation, and the layer shows render progress until the MP4 lands.
  *
@@ -16,7 +17,8 @@ import { readCaptionStyle } from '../captions';
 import { clone, sceneOf, walk, type Entity } from '../doc';
 import { holderOf } from './captions';
 import { OpFailure, type OpContext } from './context';
-import { checked, setFrame } from './project';
+import { checked, setFrame, setLayout } from './project';
+import { hasSpeaker, panelBackgroundAt, panelRegionAt, readLayout, speakerBandAt } from '../layout';
 import { voiceTranscript } from './voiceover';
 import {
 	CLIP_MAX_SECONDS,
@@ -70,6 +72,13 @@ export const explainerInput = z
 		duration: z.number().int().min(CLIP_MIN_SECONDS).max(EXPLAINER_MAX_SECONDS),
 		/** Clip seconds. Default: the playhead, or 0 on a blank clip. */
 		start: z.number().finite().min(0).optional(),
+		/**
+		 * On a clip with a speaker: `top` puts the animation in the upper band and the speaker below it (a split for
+		 * the animation's time), `bottom` the other way round; `left`/`right` put it in one column and the speaker in
+		 * the other (16:9); `behind` fills the frame with it and puts the speaker in a corner over it (a facecam).
+		 * Default: full frame, or the panel of a split already there.
+		 */
+		place: z.enum(['full', 'top', 'bottom', 'left', 'right', 'behind']).optional(),
 		spec: specInput,
 	})
 	.superRefine((value, ctx) => {
@@ -108,8 +117,69 @@ export const addExplainer = {
 		if (blank) root.workarea = [0, end];
 		else if (workarea && workarea[1] < end) root.workarea = [workarea[0], end];
 
-		// Full frame when the format matches the clip; otherwise the largest centred box of its shape.
-		const scale = Math.min(root.width / formatWidth, root.height / formatHeight);
+		// Full frame when the format matches the clip; otherwise the largest centred box of its shape, inside the
+		// visual band when the frame is split.
+		let area = { x: 0, y: 0, width: root.width, height: root.height };
+		const laidOut = !blank && input.place !== undefined && input.place !== 'full';
+		if (laidOut && !hasSpeaker(next)) throw new OpFailure(`There is no speaker video to put next to the animation. Use place "full".`);
+		if (laidOut && (input.place === 'left' || input.place === 'right') && root.width < root.height) {
+			throw new OpFailure(`Columns are for a landscape frame; this ${root.width}x${root.height} frame is vertical. Use place "top" or "bottom".`);
+		}
+		// A panel colour the user chose for this span stays: the new layout replaces the range under it.
+		const background = panelBackgroundAt(next, start) ?? undefined;
+		const keep = background ? { background } : {};
+		if (!blank && (input.place === 'top' || input.place === 'bottom')) {
+			// The band takes the full width at the animation's own shape; the speaker gets the rest.
+			const band = Math.round((root.width * formatHeight) / formatWidth);
+			const ratio = round((root.height - band) / root.height);
+			if (ratio < 0.3 || ratio > 0.7) {
+				const fits = FORMAT_KEYS.filter((key) => {
+					const [w, h] = EXPLAINER_FORMATS[key];
+					const r = (root.height - (root.width * h) / w) / root.height;
+					return r >= 0.3 && r <= 0.7;
+				});
+				throw new OpFailure(
+					`A ${input.format} animation does not fit half of this ${root.width}x${root.height} frame next to the speaker. ${fits.length ? `Use format ${fits.join(' or ')}.` : 'Show it full frame.'}`,
+				);
+			}
+			const split = await setLayout.apply(
+				next,
+				{ op: 'set_layout', mode: input.place === 'top' ? 'split-bottom' : 'split-top', start, end, ratio, ...keep } as never,
+				ctx,
+			);
+			next = split;
+			area = { x: 0, y: input.place === 'top' ? 0 : root.height - band, width: root.width, height: band };
+		} else if (!blank && (input.place === 'left' || input.place === 'right')) {
+			// The speaker takes the other column; the animation fits its column at its own shape.
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'side-by-side', start, end, anchor: input.place === 'left' ? 'right' : 'left', ...keep } as never, ctx);
+			const column = root.width / 2;
+			area = { x: input.place === 'left' ? 0 : column, y: 0, width: column, height: root.height };
+		} else if (!blank && input.place === 'behind') {
+			next = await setLayout.apply(next, { op: 'set_layout', mode: 'pip', start, end, ...keep } as never, ctx);
+		} else if (!blank && input.place !== 'full') {
+			// A layout already on screen: the animation fills its visual area, not the whole frame over the speaker.
+			const ranges = readLayout(next);
+			const range = ranges.find((item) => start >= item.start - 1e-6 && start < item.end);
+			if (range && range.mode !== 'cell' && range.mode !== 'visual-only') {
+				// The layout holds for the whole animation (up to the next layout), or the speaker would come back full
+				// frame under a half-size animation.
+				const stop = Math.min(end, ranges.find((item) => item.start >= range.end - 1e-6)?.start ?? end);
+				if (stop > range.end + 1e-6) {
+					const { mode, ratio, anchor, background: colour } = range;
+					next = await setLayout.apply(next, { op: 'set_layout', mode, start: range.start, end: stop, ratio, ...(anchor ? { anchor } : {}), ...(colour ? { background: colour } : {}) } as never, ctx);
+				}
+				const speaker = speakerBandAt(next, start);
+				const region = panelRegionAt(next, start);
+				if (speaker) {
+					const top = speaker.y > 0 ? 0 : Math.round(speaker.height * root.height);
+					area = { x: 0, y: top, width: root.width, height: Math.round((1 - speaker.height) * root.height) };
+				} else if (region) {
+					area = { x: region.x * root.width, y: region.y * root.height, width: region.width * root.width, height: region.height * root.height };
+				}
+			}
+		}
+		const scene = sceneOf(next)!;
+		const scale = Math.min(area.width / formatWidth, area.height / formatHeight);
 		const width = Math.round(formatWidth * scale);
 		const height = Math.round(formatHeight * scale);
 		const src: AssetDeclaration = {
@@ -123,22 +193,24 @@ export const addExplainer = {
 			scene: input.spec.scene as Record<string, unknown>,
 			...(input.spec.seed === undefined ? {} : { seed: input.spec.seed }),
 		};
-		// Under captions and text like every generated media: they stay readable on top.
-		const children = [...(root.children ?? [])];
-		const at = children.findIndex((child) => child.kind === 'captions' || child.kind === 'text');
+		// Under captions and text like every generated media: they stay readable on top. Behind a facecam it goes
+		// under the speaker's cell instead, or it would cover the speaker.
+		const children = [...(scene.children ?? [])];
+		const speakerAt = children.findIndex((child) => (child as { marks?: { layout?: string } }).marks?.layout === 'speaker');
+		const at = input.place === 'behind' && speakerAt >= 0 ? speakerAt : children.findIndex((child) => child.kind === 'captions' || child.kind === 'text');
 		children.splice(at < 0 ? children.length : at, 0, {
 			kind: 'rect',
 			name: silent(input) ? motionClipLayerName(input.title) : explainerLayerName(input.title),
 			keepAspectRatio: true,
-			x: Math.round((root.width - width) / 2),
-			y: Math.round((root.height - height) / 2),
+			x: Math.round(area.x + (area.width - width) / 2),
+			y: Math.round(area.y + (area.height - height) / 2),
 			width,
 			height,
 			start,
 			end,
 			paints: [{ type: 'video', src }],
 		} as never);
-		root.children = children;
+		scene.children = children;
 		return checked(next, 'That explainer cannot be added');
 	},
 };

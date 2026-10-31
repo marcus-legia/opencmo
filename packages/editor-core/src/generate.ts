@@ -9,8 +9,6 @@
 
 import { z } from 'zod';
 
-import { SceneContentSchema, type SceneContent } from '@opencmo/clip-three';
-
 import catalog from '../../contracts/ai-models.json';
 
 import { CLIP_MAX_SECONDS, ClipSceneSchema, EXPLAINER_SCENE_BYTES, ExplainerSceneSchema, sceneBytes, type ExplainerScene } from './explainer';
@@ -42,7 +40,7 @@ export type AiModel = {
 		voices?: string[];
 		/** Số ảnh tham chiếu model nhận; thiếu = 0. */
 		maxReferences?: number;
-		/** 3D Studio: spec mang `scene` (dữ liệu cảnh), `prompt` chỉ là câu tóm tắt. */
+		/** Explainers: the spec carries `scene` (script + code ref); `prompt` is only a one-line summary. */
 		scene?: boolean;
 		/** Độ phân giải chọn được (ảnh/video); có thì spec nhận `resolution`. */
 		resolutions?: string[];
@@ -89,8 +87,8 @@ export type GenerationSpec = {
 	aspectRatio?: string;
 	duration?: number;
 	voice?: string;
-	/** Model 3D Studio: nội dung cảnh — thứ quyết định hình, nằm trong hash. Explainer: its script and code ref. */
-	scene?: SceneContent | ExplainerScene;
+	/** Explainer: its script and code ref — what decides the picture, so it is in the hash. */
+	scene?: ExplainerScene;
 	seed?: number;
 	resolution?: string;
 	/** Tên object trong bucket `media` của chính người dùng (`<uid>/…`); SQL kiểm chủ + tồn tại. */
@@ -120,12 +118,12 @@ const mediaRef = z
 /** The clip's own video, or a library video: `<bucket>:<owner>/…` for the first, `<owner>/…` for the second. */
 const CLIP_VIDEO_REF = /^(?:(?:renders|sources):)?[0-9a-f-]{36}\/[^]+$/;
 
-/** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref, not a 3D template. */
+/** Remotion explainers (`motion-explainer`): their scene is a script plus a code ref. */
 export const isExplainer = (model: Pick<AiModel, 'provider'>): boolean => model.provider === 'opencmo-motion';
 /** A silent motion clip (`motion-clip`): the same renderer, no voice in the catalog row. */
 export const isMotionClip = (model: Pick<AiModel, 'provider' | 'limits'>): boolean => isExplainer(model) && !model.limits.voices?.length;
 
-// Measured like SQL: a script that passes here must not fail there with the 3D wording. Images are capped on their own
+// Measured like SQL: a script that passes here must not fail there. Images are capped on their own
 // (6 refs), so they never count against the script.
 const scriptBytes = ({ assets: _assets, ...scene }: { assets?: unknown }) => sceneBytes(scene);
 const explainerScene = ExplainerSceneSchema.refine((scene) => scriptBytes(scene) <= EXPLAINER_SCENE_BYTES, {
@@ -177,7 +175,7 @@ export function specSchema(model: AiModel) {
 							sourceStart: z.number().finite().min(0).max(86_400),
 						}
 					: {}),
-				...(limits.scene ? { scene: isMotionClip(model) ? clipScene : isExplainer(model) ? explainerScene : SceneContentSchema } : {}),
+				...(limits.scene && isExplainer(model) ? { scene: isMotionClip(model) ? clipScene : explainerScene } : {}),
 				// Explainers voice their narration in the render job: the premade voice is part of the spec.
 				...(isExplainer(model) && !isMotionClip(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
 				seed,

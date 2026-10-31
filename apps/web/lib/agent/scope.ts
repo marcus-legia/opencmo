@@ -6,12 +6,12 @@
  * (`capture_frames`), or wait for the user to approve (priced tools).
  */
 
-import { activeScene, frameAspect, MASTER_SRC, planStudio3d, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
+import { activeScene, frameAspect, MASTER_SRC, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
 import type { ClipDocument } from "@opencmo/clip-doc";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { saveDocument } from "@/lib/editor/document";
-import { ensureProject } from "@/lib/editor/project";
+import { ensureProject, startsEmpty } from "@/lib/editor/project";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
@@ -36,10 +36,8 @@ import {
   generateCard,
   generateToolSpec,
   prepareGeneration,
-  prepareScene,
   prepareVoiceover,
   runGeneration,
-  sceneToolSpec,
   voiceoverToolSpec,
   type PreparedGeneration,
 } from "./generate-tool";
@@ -91,8 +89,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 }
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
-// add_3d_studio (4 khuôn) không còn cho agent: 3D của agent là code (add_3d_scene, spec code-scenes).
-const PRICED_TOOLS = new Set(["generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -145,7 +142,7 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
 export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
-  const priced = [generateToolSpec(), sceneToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
+  const priced = [generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
@@ -216,7 +213,7 @@ export async function clipScope(
 
 /** A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by. */
 export const blankEdit = (context: ClipContext, document: ClipDocument): boolean =>
-  context.clip.kind === "blank" && !speechSources(document).length;
+  startsEmpty(context.clip.kind) && !speechSources(document).length;
 
 export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
   const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
@@ -315,23 +312,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         );
         if (typeof prepared === "string") {
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the generation" };
-        }
-        const blocked = await screen(prepared);
-        if (blocked) return blocked;
-        return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
-      }
-      if (call.name === "add_3d_scene") {
-        const prepared = await prepareScene(
-          call.input,
-          async (input) => {
-            const snapshot = await workspace.read();
-            return planStudio3d(snapshot.document, input, await workspace.opContext(snapshot.document, snapshot.manifest));
-          },
-          // Lưu ngay lúc báo giá: thẻ duyệt mang code_ref, bấm duyệt là render đúng code đó.
-          (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
-        );
-        if (typeof prepared === "string") {
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the 3D scene" };
         }
         const blocked = await screen(prepared);
         if (blocked) return blocked;
@@ -599,7 +579,7 @@ export function cmoScope(supabase: SupabaseClient): Scope {
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,
-    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy):\n${cmoSkillIndex("cmo")}`,
+    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy, and no-ai-slop before writing any text that goes out):\n${cmoSkillIndex("cmo")}`,
     context: () => cmoContext(supabase),
     state: () => cmoState(supabase),
     async plan() {

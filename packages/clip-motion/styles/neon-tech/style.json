@@ -1,0 +1,14 @@
+{
+  "id": "neon-tech",
+  "title": "Neon tech",
+  "line": "Deep black-blue, thin glowing lines and data drawn as light: waveforms, signals, scans. One cyan, one magenta for what gets cut or flagged.",
+  "bestFor": ["how software works", "audio, video and data processing", "AI and automation", "speed and precision claims", "developer tools"],
+  "format": "9:16",
+  "seconds": 5.5,
+  "beats": [
+    { "say": "Every pause in your take.", "visual": "A cyan waveform draws on left to right over a faint perspective grid; flat runs show the pauses.", "seconds": 1.6 },
+    { "say": "Found to the frame.", "visual": "A scan line sweeps; each pause lights up magenta with its length above it.", "seconds": 1.5 },
+    { "say": "Gone in one click.", "visual": "The magenta runs collapse and the speech closes up; minus 3.1 seconds counts up below.", "seconds": 1.4 },
+    { "say": "Tighter, without a single cut by hand.", "visual": "The tight waveform rests and glows; the counter holds.", "seconds": 1 }
+  ]
+}

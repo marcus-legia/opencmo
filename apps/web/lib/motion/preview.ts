@@ -131,7 +131,8 @@ async function previewLocal(job: MotionJob, timeoutMs: number): Promise<MotionPr
       // Only files the CLI wrote into this preview's folder.
       if (!file.startsWith(`${outdir}${path.sep}`)) throw new Error(FAILED);
       images.push((await readFile(file)).toString("base64"));
-      stills.push({ t: still.t, file: path.basename(file) });
+      // Keep every field the CLI gave (a sheet's times and columns, a zoom's kind): the reviewer reads them.
+      stills.push({ ...still, file: path.basename(file) });
     }
     return { ...result, stills, images };
   } finally {

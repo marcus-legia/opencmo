@@ -198,36 +198,3 @@ export async function nodeWaveform(
 }
 
 export const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8")) as T;
-
-/**
- * preview_3d trong Node (spec code-scenes): cùng runtime với sandbox của editor,
- * vẽ trong Chromium headless (SwiftShader). Cần CHROMIUM_PATH như test clip-three.
- */
-export async function nodePreview3d(input: { code: string; duration: number; aspect_ratio: string; theme?: string; seed?: number }): Promise<{ images: string[]; data: unknown } | { error: string }> {
-  const { frameSize } = await import("@opencmo/clip-three");
-  // Chỉ eval (Node) dùng: import động theo chuỗi để typecheck của web không kéo
-  // cả renderer (Chromium, font brand) vào — kiểu khai báo tại chỗ.
-  type CodeStills =
-    | { ok: true; images: string[]; reports: { t: number; issues: string[]; coverage: number }[]; msPerFrame: number; triangles: number }
-    | { ok: false; phase: string; message: string; at?: number };
-  const renderModule = "@opencmo/clip-three/render";
-  const { renderCodeStills } = (await import(renderModule)) as {
-    renderCodeStills: (input: Record<string, unknown>, times: number[]) => Promise<CodeStills>;
-  };
-  const full = frameSize(input.aspect_ratio);
-  const even = (value: number) => Math.max(64, Math.round(value / 4) * 2);
-  const times = [0.15, 0.45, 0.75].map((f) => Math.round(input.duration * f * 100) / 100).concat(Math.round((input.duration - 0.05) * 100) / 100);
-  try {
-    const result = await renderCodeStills(
-      { code: input.code, width: even(full.width), height: even(full.height), duration: input.duration, ...(input.theme ? { theme: input.theme as never } : {}), ...(input.seed === undefined ? {} : { seed: input.seed }) },
-      times,
-    );
-    if (!result.ok) return { error: `The scene code failed (${result.phase}${result.at === undefined ? "" : ` at ${result.at}s`}): ${result.message}`.slice(0, 300) };
-    return {
-      images: result.images.map((url) => url.slice(url.indexOf(",") + 1)),
-      data: { times, layout: result.reports.map((report) => ({ t: report.t, coverage: report.coverage, issues: report.issues })), ms_per_frame: Math.round(result.msPerFrame), triangles: result.triangles },
-    };
-  } catch (error) {
-    return { error: `The 3D preview could not run here: ${(error as Error).message}`.slice(0, 300) };
-  }
-}

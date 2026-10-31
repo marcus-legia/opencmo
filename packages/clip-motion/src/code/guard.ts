@@ -1,6 +1,6 @@
 /**
  * Scene code is the BODY of `(React, R, kit) => { …; return function Scene() { … } }`, written by the
- * Assistant. Like clip-three's guard this is not the security boundary (the render runs in a
+ * Assistant. This is not the security boundary (the render runs in a
  * container without network or secrets, and Chromium is launched offline); it keeps renders
  * deterministic and gives the agent a precise message to fix.
  */
@@ -22,6 +22,7 @@ const FORBIDDEN: { pattern: RegExp; message: string }[] = [
 	{ pattern: /(?<![\w$.])eval\s*\(/, message: '`eval` is not allowed.' },
 	{ pattern: /\bMath\s*\.\s*random\b/, message: '`Math.random` is not allowed: use `kit.random(seed)`, which is seeded.' },
 	{ pattern: /\bconstructor\b/, message: '`constructor` is not allowed.' },
+	{ pattern: /\.\s*getContext\s*\(/, message: 'Canvas contexts are not available to scenes: draw with SVG and CSS, or use kit.fx.ShaderField for a shader background.' },
 	{ pattern: /\bR\s*\.\s*(delayRender|continueRender|staticFile|Img|Audio|Video|OffthreadVideo|IFrame)\b/, message: 'Media and render-control parts of Remotion are not available to scenes.' },
 	...SHADOWED.map((name) => ({
 		pattern: new RegExp(`(?<![\\w$.])${name}(?![\\w$])`),

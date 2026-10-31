@@ -29,7 +29,7 @@ import { detach, moveTo, nodeById, parentOrigin, placeOf, rippleFollowers, times
 const elementId = z.string().min(1).max(64);
 const seconds = (frames: number): number => Math.round((frames / FPS) * 1e4) / 1e4;
 const AUDIBLE = new Set(['video', 'audio']);
-const VISUAL = new Set(['text', 'rect', 'path', 'image', 'video', 'lottie', 'group', 'scene3d', 'sequence', 'captions']);
+const VISUAL = new Set(['text', 'rect', 'path', 'image', 'video', 'group', 'sequence', 'captions']);
 
 function timeOf(document: ClipDocument, ctx: OpContext, entity: Entity) {
   const t = timesOf(document, ctx).get(entity as unknown as ClipNode);

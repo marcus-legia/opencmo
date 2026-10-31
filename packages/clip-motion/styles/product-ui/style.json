@@ -1,0 +1,14 @@
+{
+  "id": "product-ui",
+  "title": "Product UI",
+  "line": "A light, soft-shadowed product moment: the app's own interface floats in gentle 3D, a cursor does the one thing the feature does, the result lands with a toast.",
+  "bestFor": ["feature launches", "product demos", "how to use a feature", "before and after inside the app", "onboarding moments"],
+  "format": "9:16",
+  "seconds": 6,
+  "beats": [
+    { "say": "Your transcript, word by word.", "visual": "A white app window tilts up into place in soft 3D; transcript words sit in chips, two fillers in amber.", "seconds": 1.6 },
+    { "say": "Click a filler.", "visual": "A cursor glides to um, presses it; the chip dims and strikes through.", "seconds": 1.4 },
+    { "say": "It is gone, and the sentence closes up.", "visual": "The struck chips shrink to nothing and the remaining words slide together.", "seconds": 1.4 },
+    { "say": "Cut by words.", "visual": "A dark toast slides up: 2 fillers removed; the window settles with a slow push.", "seconds": 1.6 }
+  ]
+}

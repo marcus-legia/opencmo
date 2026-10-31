@@ -15,7 +15,6 @@
 
 import { z } from "zod";
 
-import { MAX_CODE_CHARS, THEMES } from "@opencmo/clip-three";
 import type { ClipDocument } from "@opencmo/clip-doc";
 import { findIcons } from "@opencmo/clip-icons";
 import {
@@ -28,7 +27,6 @@ import {
   checkDocument,
   describeOp,
   diffDocuments,
-  findLotties,
   findSilences,
   guardProps,
   isCutSequence,
@@ -140,7 +138,6 @@ export const searchInput = z.object({
   limit: z.number().int().min(1).max(40).optional(),
 });
 export const iconsInput = z.object({ query: z.string().trim().min(1).max(80).describe('Words for what the icon shows, e.g. "bow arrow", "money", "running person".'), limit: z.number().int().min(1).max(40).optional() });
-export const lottiesInput = z.object({ query: z.string().trim().min(1).max(80).describe('What should move or react, e.g. "celebrate", "idea", "laughing", "money", "person running".'), limit: z.number().int().min(1).max(40).optional() });
 export const planInput = z.object({
   items: z
     .array(z.object({ text: z.string().trim().min(1).max(200), status: z.enum(["pending", "active", "done"]) }))
@@ -201,19 +198,6 @@ export const grabInput = z
   })
   .refine((input) => input.times || input.count, "Give times or a count.");
 
-/** preview_3d (spec code-scenes): chạy code cảnh trong sandbox của editor, trả 4 ảnh + báo cáo bố cục. */
-export const preview3dInput = z.object({
-  code: z
-    .string()
-    .min(1)
-    .max(MAX_CODE_CHARS)
-    .describe("The BODY of function (THREE, stage, kit) { … } ending with `return (t) => { … }` (read_guide \"3d\")."),
-  duration: z.number().min(3).max(10).describe("Seconds the animation lasts on the clip."),
-  aspect_ratio: z.enum(["9:16", "4:5", "1:1", "16:9"]).describe("Shape of the area it fills: full screen = clip_context.frame; 1:1 or 4:5 for the panel of a split."),
-  theme: z.enum(THEMES).optional(),
-  seed: z.number().int().min(0).max(2_147_483_647).optional(),
-});
-
 export const saveFrameInput = z.object({
   time: z.number().finite().min(0).max(3600).describe("Second on the clip timeline (as in capture)."),
   name: z.string().trim().min(1).max(60).optional().describe('File name without extension, e.g. "before-cut".'),
@@ -229,7 +213,6 @@ export const BROWSER_INPUTS: Record<string, z.ZodType> = {
   save_frame: saveFrameInput,
   media_waveform: waveformInput,
   media_grab: grabInput,
-  preview_3d: preview3dInput,
   inspect_color: inspectColorInput,
 };
 
@@ -287,11 +270,6 @@ const READ_TOOLS: ToolSpec[] = [
     iconsInput,
   ),
   spec(
-    "find_lotties",
-    "Search the built-in animations by meaning: moving stick people and motion effects (walk, run, cheer, bow-shot, rocket-launch, lightbulb-on, clock-tick, confetti…) and about 140 animated emoji (emoji/fire, emoji/joy, emoji/thinking, emoji/rocket, emoji/money-mouth…). Returns names to pass to add_lottie.",
-    lottiesInput,
-  ),
-  spec(
     "read_guide",
     `Read an editing guide. Available: ${GUIDE_NAMES.join(", ")}. Read "workflow" before a multi-step edit and "document" before writing properties, keyframes, effects or animations.`,
     guideInput,
@@ -326,12 +304,6 @@ const BROWSER_TOOLS: ToolSpec[] = [
     { browser: true },
   ),
   spec(
-    "preview_3d",
-    "Run 3D scene code you wrote and look at it: 4 frames (near the start, middle, near the end, final state) plus a layout report per frame (objects or labels cut off or outside the frame, how much of the frame the scene fills). Errors come back with the phase (compile/build/frame) and the JS message. Fix and preview again until there are no errors and no layout issues, then add it with add_3d_scene. Free.",
-    preview3dInput,
-    { browser: true },
-  ),
-  spec(
     "save_frame",
     "Save one frame of the clip (as the export draws it, WITHOUT captions or text) to the library folder Frames, uploaded so generate_media can use it as start_image or end_image: an AI transition between two shots (the frame before and after a cut), or a video that continues from a moment of the clip. Returns its library path and the picture. Free.",
     saveFrameInput,
@@ -353,6 +325,11 @@ const BROWSER_TOOLS: ToolSpec[] = [
 
 /** Mô tả op cho model. */
 const OP_DESCRIPTIONS: Record<string, string> = {
+  add_slide: "Add a slide to a slideshow: a heading, an optional body and a colour or library image behind them, shown for a few seconds. Text is always a layer, never inside the image. Refused on a timeline with video.",
+  move_slide: "Move a slide of a slideshow to another position; the slides stay touching and keep their durations.",
+  delete_slide: "Delete a slide of a slideshow and close the gap. The last slide cannot be deleted.",
+  set_slide_duration: "Change how many seconds a slide of a slideshow stays on screen; the later slides move with it.",
+  set_slide_text: "Change a slide's heading or body. An empty body removes it.",
   remove_words:
     "Cut words out of the video (and captions) by word id. Non-adjacent ids become separate cuts. Get ids from get_transcript or search_transcript. tightness also cuts the pauses around the removed words, leaving tight 0.06s / balanced 0.15s / loose 0.32s next to the words that stay — use balanced for fillers and stumbles so the sentence does not gap. element_id picks the video when the clip has several with speech (speech_sources in <clip_context>).",
   remove_silence:
@@ -428,8 +405,6 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Color-grade video, image or shape elements in one step, like a colorist: exposure (stops), contrast, highlights, shadows, whites, blacks, saturation, vibrance, temperature (+warm), tint (+magenta), clarity, dehaze, sharpen, grain, glow, vignette {amount, midpoint, roundness, feather}, curves {master/red/green/blue points [in, out] 0-1}, wheels {lift/gamma/gain [r,g,b] offsets}, hue_curves {hue/sat/lum points [hue 0-1, change]}, chroma_key {color, range, spill} for green screen, motion_blur {amount, angle}, lut {path, strength} = a 3D .cube LUT the user imported (list_library type LUT). Each key replaces that adjustment, 0 removes it, reset: true starts the grade over; blur and other filters are kept. Subtle values look professional: ±0.1-0.3 for tone, wheel offsets ±0.03-0.15. Check the result with inspect_color or capture.",
   add_shape:
     "Draw a pointer on the video, hand-drawn style (strokes draw on): arrow (from/to, optional bend), line, underline (from/to), circle, box, diamond, highlight (marker swipe), check, cross (box). Coordinates are 0-1 of the frame. Use it to point at what the speaker is talking about.",
-  add_lottie:
-    "Place a Lottie animation. animation = a built-in name from find_lotties — a moving stick person (walk, run, wave, point, jump, cheer), a motion effect (confetti, check-draw, pulse-ring, typing-dots, arrow-spin, bow-shot, sparkle, heart-beat, lightbulb-on, rocket-launch, star-burst, spinner, clock-tick, swipe-up, arrow-bounce, target-hit) or an animated emoji (emoji/<name>, e.g. emoji/fire, emoji/joy, emoji/exploding-head) — or the path of a Lottie .json in the library (list_library). at = center, size = share of the frame's short side, flip: true mirrors it (a person walking left), speed, loop (default true), label. Use a person to act out what is said (running late → run, success → cheer), an emoji for the speaker's feeling or the audience's reaction, an effect for the idea (idea → lightbulb-on, goal → target-hit, launch → rocket-launch).",
   add_icon:
     "Place an animated line icon (name from find_icons). at = center, size = share of the frame's short side. motion: draw (sketches itself), pop, spin (turns in place), orbit (circles around), bounce, float, pulse, shake, fly (travels to `to` along a curve; orient: true turns it to face where it flies, heading = the direction the icon points, 0 = right, -45 = up-right). Use fly for an arrow shot from a bow, a rocket launching, money flying to a wallet.",
   add_diagram:
@@ -446,6 +421,10 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Add the opening hook: one or two short lines (≤ 40 characters each) in the upper third, clear of the face and captions — line 1 the topic, line 2 the promise on an accent box (accent_line picks the boxed line; accent_font_style italic for a serif accent). Without start/end/quote it shows from 0 to 3 s; it stays up 1.5–8 s. Use the speaker's strongest phrase. One hook per clip.",
   punch_in:
     "Alternate the speaker's zoom at every cut (scales = [wide, close], default [1, 1.15]) so jump cuts read as deliberate; shots shorter than min_shot (default 1.2 s) keep the zoom before them. The zoom stays centred on the face. Running it again replaces the earlier punch-ins.",
+  add_camera_move:
+    "Move the camera on the talking head, baked into keyframes so preview and export match: impact_shake (0.2-0.45 s, on a number or a hard claim), white_flash (up to 0.35 s, on a hard beat or a reveal), whip (0.25-0.4 s throw left/right, into the next point), push_in (0.5-6 s slow zoom on a build-up; holds until the next cut), handheld (1-30 s gentle drift on a calm stretch), beat_pulse (0.2-0.3 s zoom bump on a beat). quote = exact words from <clip_context> (it lands where they start) or start in clip seconds; strength 0-1. The frame always stays covered. At most one shake or flash per 20 s; not where a layout panel shrinks the speaker. The same kind on the same words replaces the earlier move. read_guide \"pacing\".",
+  remove_camera_moves:
+    "Remove the camera move playing at clip second `at`, or every camera move when `at` is omitted.",
   add_list:
     "Show a numbered list (2–7 items: label, optional short meta like \"12.4k\", blur: true hides a label the speaker is teasing) in the visual panel of a split layout or the upper region. reveal_quotes, one per item in order, light each row when the speaker reaches it (exact words from <clip_context>). Pass quote or start/end for when the list appears.",
   add_proof:
@@ -514,7 +493,7 @@ export const TOOL_SPECS: ToolSpec[] = [
     .map((name) => opSpec(name, AGENT_OP_INPUTS[name]!)),
 ];
 
-// `generate_media`/`add_3d_scene`/`add_voiceover` ghi lên clip (khai báo `generate.*`) sau thẻ duyệt.
+// `generate_media`/`add_voiceover` write to the clip (a `generate.*` declaration) after the approval card.
 /**
  * Tools that only read: the model often asks for several in one step (state, transcript, library),
  * and they can run at the same time. Anything that writes, pauses or spends stays in order.
@@ -571,7 +550,7 @@ export function readGroup<T extends { name: string }>(calls: T[], index: number)
   return group;
 }
 
-const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_3d_scene", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video", "redo_keyframe"]);
+const WRITE_TOOLS = new Set([...Object.keys(AGENT_OP_INPUTS), "insert_asset", "place_broll", "generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video", "redo_keyframe"]);
 export const isWriteTool = (name: string): boolean => WRITE_TOOLS.has(name);
 
 export type ToolEnv = { workspace: AgentWorkspace };
@@ -866,12 +845,6 @@ export async function runTool(name: string, input: unknown, env: ToolEnv): Promi
       if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: parsed.error.issues[0]?.message }), summary: "Could not search icons" };
       const icons = await findIcons(parsed.data.query, parsed.data.limit ?? 12);
       return { ok: true, content: JSON.stringify({ icons }), summary: icons.length ? `Found ${icons.length} icons` : "No icons found" };
-    }
-    if (name === "find_lotties") {
-      const parsed = lottiesInput.safeParse(input);
-      if (!parsed.success) return { ok: false, content: JSON.stringify({ INVALID_INPUT: parsed.error.issues[0]?.message }), summary: "Could not search animations" };
-      const animations = findLotties(parsed.data.query, parsed.data.limit ?? 12).map(({ name, title }) => ({ name, title }));
-      return { ok: true, content: JSON.stringify({ animations }), summary: animations.length ? `Found ${animations.length} animations` : "No animations found" };
     }
     if (name === "read_guide") {
       const parsed = guideInput.safeParse(input);

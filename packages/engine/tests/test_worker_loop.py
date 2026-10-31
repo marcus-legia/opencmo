@@ -6,16 +6,15 @@ from collections import deque
 
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Job, Task
+from opencmo.worker.kinds import task_kinds
 from opencmo.worker.loop import JOB_FAILURE, TASK_FAILURE, run_forever
 
 
 class FakeStore:
     def __init__(self) -> None:
         self.jobs = deque()
-        self.tasks = {
-            kind: deque()
-            for kind in ("probe_media", "generate", "transcribe_media", "transcribe_asset", "render_document", "capture_page")
-        }
+        # Every kind task-kinds.json lists, as the real claim RPC takes them.
+        self.tasks = {kind: deque() for kind in task_kinds()}
         self.claimed_kinds = []
         self.failed_tasks = []
         self.failed_jobs = []
@@ -90,10 +89,12 @@ def test_tasks_are_claimed_in_one_call_in_user_wait_priority():
         sleep=lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
 
-    # Một RPC mỗi lượt, mảng theo đúng thứ tự của task-kinds.json.
-    assert store.claimed_kinds[0] == [
+    # One RPC per pass, the array in task-kinds.json's order; the P4 upload (publish_media) comes last.
+    assert store.claimed_kinds[0] == list(task_kinds())
+    assert task_kinds()[:6] == (
         "probe_media", "generate", "transcribe_media", "transcribe_asset", "render_document", "capture_page",
-    ]
+    )
+    assert task_kinds()[-1] == "publish_media"
     assert handled == ["probe-1", "capture-1"]
     assert len(store.claimed_kinds) == 3
 

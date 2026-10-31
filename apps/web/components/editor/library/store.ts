@@ -17,7 +17,6 @@ import {
   ASSETS_DIR,
   contentId,
   joinPath,
-  lottieInfo,
   LUT_MIME,
   stemOf,
   typeOfMime,
@@ -38,11 +37,6 @@ export { readLocal, removeLocal };
 // ------------------------------------------------------------------ đo file
 
 async function probe(file: File, type: AssetType, mime: string): Promise<Partial<AssetRecord>> {
-  if (type === "LOTTIE") {
-    const info = lottieInfo(await file.text());
-    if (!info) throw new Error(`${file.name} is not a Lottie animation.`);
-    return info;
-  }
   if (type === "LUT") {
     // Đọc thử ngay lúc nhập (E3-c): LUT hỏng bị từ chối ở đây, không thành màu sai lúc export.
     const cube = parseCube(await file.text());
@@ -86,10 +80,8 @@ async function probe(file: File, type: AssetType, mime: string): Promise<Partial
  */
 export async function describe(file: File, folder: string): Promise<AssetRecord> {
   const mime = /\.cube$/i.test(file.name) ? LUT_MIME : (subtitleMime(file.name, file.type) ?? file.type);
-  let type: AssetType | null = typeOfMime(mime);
-  if (!type) throw new Error(`${file.name} is not a video, image, audio, caption, Lottie or .cube LUT file.`);
-  // `.json` là transcript HOẶC Lottie — cùng MIME, phân biệt bằng nội dung.
-  if (mime === "application/json" && lottieInfo(await file.text())) type = "LOTTIE";
+  const type: AssetType | null = typeOfMime(mime);
+  if (!type) throw new Error(`${file.name} is not a video, image, audio, caption or .cube LUT file.`);
   const path = joinPath(folder, file.name.replace(/\//g, "-"));
   return {
     id: await contentId(file),
@@ -105,10 +97,10 @@ export async function describe(file: File, folder: string): Promise<AssetRecord>
 
 /**
  * Everything the server export reads goes to Storage: video, images (also first/last frames and
- * references for Generate), `.cube` LUTs, Lottie `.json` and sound (music, effects). A file that
+ * references for Generate), `.cube` LUTs and sound (music, effects). A file that
  * stays on the device fails Export with "only saved on the device"; `probe_media` checks each kind.
  */
-export const uploadable = (type: string) => type === "VIDEO" || type === "IMAGE" || type === "LUT" || type === "LOTTIE" || type === "AUDIO";
+export const uploadable = (type: string) => type === "VIDEO" || type === "IMAGE" || type === "LUT" || type === "AUDIO";
 
 /** Ghi bytes vào OPFS theo `source` của record (sau khi `path` đã chốt). */
 export const keepLocal = (clipId: string, record: AssetRecord, file: File) => writeLocal(clipId, record.source, file);
