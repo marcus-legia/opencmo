@@ -23,8 +23,8 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
 - [ ] **A1 Zernio metrics (P3)**: per post, per account and followers for connected accounts on the `pull_metrics`
       schedule; public reading stays for the rest; loaders `analytics.*` and Dashboard `results`; flip `live`.
 - [ ] **A2 Best time (P2)**: `best_slots` from published posts with metrics (≥ 10 per platform, median views per
-      hour in the founder's timezone); `schedule_propose` prefers them, defaults otherwise; jitter ±4 min; gaps and caps
-      per platform from data; the card's one-line reason. pgTAP.
+      hour in the founder's timezone); `schedule_propose` (`20261230100000_p4_slots.sql`) prefers them over
+      `schedule-defaults.json`'s slots; the existing jitter, gaps and caps stay; the card's one-line reason. pgTAP.
 - [ ] **A4 Card budget**: about 10 cards a day; past it the brain batches (one card per batch) or waits; the Brain
       measures loader (`brain.md` §10).
 - [ ] **A3 Reply outcomes (R3)**: 3 days after "replied", re-read the thread (by the pasted URL, else a match on the

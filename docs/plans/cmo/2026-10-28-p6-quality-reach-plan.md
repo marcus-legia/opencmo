@@ -18,9 +18,18 @@ builds eight backend phases:
 
 After it: 27 of 28. The 28th, **S0** (finishing the long take on production), runs on the editor roadmap.
 
-**Status: draft, written early (owner, 2026-10-28).** It was written while P2 was being built. Before sessions start,
-the planner merges `cmo-build` (with P2–P5) into `cmo-p6` and refreshes §3. This phase is wide; if review shows it is
-too big for one PR, split it at M2 into P6a (A2, P2, P3, R3) and P6b (R4, S4, B4, W4) with the owner's OK.
+**Status: ready (refreshed 2026-10-31).** Written early on 2026-10-28; `cmo-build` with P2–P5 (`1c299ec`) is merged
+into `cmo-p6` and §3 is refreshed from what was built. Sessions may start once CI on `cmo-build` is green. This phase is
+wide; if review shows it is too big for one PR, split it at M2 into P6a (A2, P2, P3, R3) and P6b (R4, S4, B4, W4) with
+the owner's OK.
+
+**Order (owner, 2026-10-30, as in P5): the editor first.** M2 is the look check (S4) and Studio evals, because they
+make the marketing videos better; reach (email, push) and analytics follow. Real Zernio calls stay behind
+`OPENCMO_PUBLISH_LIVE=1` and the owner gates of P4 (owner, 2026-10-30: "real posting, the gates and review are next
+week's phase"); until then every Zernio read in this phase runs against the fake adapter.
+
+Not in this phase: real posting through Zernio (its own owner-led phase), S0 (editor roadmap), AI search visibility
+(GEO, later).
 
 ## 1. Goal and decisions
 
@@ -48,7 +57,7 @@ real profiles with a look check before every video card.
 | F3 | Phone-first queue | the queue and every card decide at 390 px; previews from signed URLs of preview files | every card kind passes axe and a decide e2e at 390; the editor still sends phones to a computer, the queue does not |
 | F4 | Card budget | at most ~10 cards a day | the brain batches or waits beyond the budget; a counter in SQL |
 | F5 | Zernio metrics (P3) | Analytics live: every connected account, KPIs, daily chart, per account, top posts | a `pull_metrics` source for connected accounts through Zernio (per post, per account, followers); public reading stays for unconnected ones; `analytics.*` live; Dashboard results live |
-| F6 | Best time (P2) | schedule cards propose their own best hours ("Your posts on X do best around 9 am") | after ~10 published posts with metrics on a platform, the founder's best median hours replace the defaults; jitter ±4 min; gaps and caps per platform from data |
+| F6 | Best time (P2) | schedule cards propose their own best hours ("Your posts on X do best around 9 am") | after ~10 published posts with metrics on a platform, the founder's best median hours replace `schedule-defaults.json`'s slots in `schedule_propose`; the existing jitter, gaps and caps stay |
 | F7 | Reply outcomes (R3) | Sales shows "your reply got 4 replies, 12 votes" | a few days after "replied", re-read the thread for the founder's reply (by the URL they pasted or a match) and store votes and replies with the outcome; memory learns which threads work |
 | F8 | Hacker News (R4) | Sales and Research include HN threads | Algolia HN search as a source for both (no key, within its rate limit), outside text as data |
 | F9 | Look check (S4) | a video card with a note when the check found a problem | Modal `look` draws up to 12 frames of the full-size export; a vision judge answers fixed questions (captions inside the frame, no black or frozen frames, text readable, sound present); a failure goes back to the squad once, then to the card with a note |
@@ -57,16 +66,36 @@ real profiles with a look check before every video card.
 | F12 | X threads (W4) | a thread card: 5–8 posts, each under 280 | `post_draft` with `thread: true`; checks per post; scheduled as one slot posting a thread through Zernio |
 | F13 | Acceptance | — | a local run with fakes: digest email to Inbucket, a push to a test subscription, a card decided at 390, metrics from the fake Zernio on Analytics, a best-time proposal after 10 fake posts, a look check failure noted on a card |
 
-## 3. What exists (`cmo-build` at `992d632`, P2–P5 planned; refresh before start)
+## 3. What exists (`cmo-build` at `1c299ec`, with P2–P5)
 
-- Digest: `lib/cmo/digest.ts`, cron route `app/api/cron/cmo-digest`, `profiles.digest_hour` and `timezone` (wave 1 B2).
-  No Resend, no web push code.
-- Metrics: `jobs/pull-metrics.ts` (public numbers, no Zernio), `post_metrics`; `analytics` screen (no field live;
-  release needs `accounts`, `kpis`, `daily`, `byAccount`, `posts`); the Dashboard `results` waits on Zernio metrics.
-- Look: Modal endpoint `look` in `packages/engine/modal_app.py` (line ~497) and `opencmo.worker.look`.
-- Evals: `lib/cmo/jobs/eval`, `eval.ts`, `judge.ts` (cascade judge).
-- After P4: `social_accounts`, `schedule_slots`, default slots, the Zernio client. After P5: Sales safety, niche
-  research, slideshows.
+- **Digest:** `lib/cmo/digest.ts` (`buildDigest`, escaped titles, links that open the card, no approve button; checked
+  in `jobs/progress.check.ts`), cron `app/api/cron/cmo-digest`, `profiles.digest_hour` and `timezone`. No email
+  sender (no Resend code), no web push, no `push_subscriptions`.
+- **Publish (P4):** `lib/departments/publish/` (`types.ts`, `adapter.ts`, `zernio.ts` against Zernio's OpenAPI v1.420,
+  `fake.ts`, `intent.ts`, `job.ts`, `webhook*.ts`, `accounts*.ts`); platforms `x`, `threads`, `linkedin`, `tiktok`,
+  `youtube`, `instagram`; deliverable kinds `post`, `video`, `short`, `slideshow`. Real calls only with
+  `ZERNIO_API_KEY` **and** `OPENCMO_PUBLISH_LIVE=1`; none made yet. No analytics calls, no thread posting.
+- **Schedule (P4):** `schedule_slots`, `schedule_propose` (`20261230100000_p4_slots.sql`), schedule cards, firing in
+  `20261230120000_p4_firing.sql`; defaults in `packages/contracts/schedule-defaults.json` (slots per platform,
+  `windowMinutes` 15, `jitterSeconds` 240, gaps and caps). So jitter and default slots exist; **best time from the
+  founder's own data does not** (no `best_slots`).
+- **Metrics:** `jobs/pull-metrics.ts` reads public numbers through ScrapeCreators (no Zernio); `post_metrics`. The
+  `analytics` screen has no live field (release needs `accounts`, `kpis`, `daily`, `byAccount`, `posts`); the
+  Dashboard `results` waits on this phase.
+- **Look:** Modal endpoint `look` and `packages/engine/opencmo/worker/look.py` (tests in `test_worker_look.py`); no
+  squad calls it before a card yet (the long take, Shorts, Slideshow and Post image squads raise cards without it).
+- **Evals:** `lib/cmo/jobs/eval/` (`runner.ts`, `core.ts`, cascade judge in `jobs/judge.ts`), cases for `writer`,
+  `sales`, `onboarding`, `factuality`; none for Studio squads or the brain's plan.
+- **Sales (P5):** subreddit rules cache, 1-in-10 mentions, excluded subreddits, Sales loaders live; no reply outcome
+  check, no Hacker News source.
+- **Writer (P3):** `platforms.json`, voice notes, per-platform drafts; X threads not built (`post_draft` is single
+  posts).
+- **UI (P5 shell):** the three-column v2 shell (rail, CMO chat, tab panel; `2026-10-30-three-column-shell-plan.md`);
+  the editor opens in column 3. Phone layouts of cards follow that shell.
+- Latest migration `20261231160000_p5_review_fixes.sql`; this phase's prefix `20270101` sorts after it.
+- **Owner decisions still open from P2** (`2026-10-28-p2-sessions/B.md` notes): a price for the brain's Studio orders,
+  60 s briefs vs 10 s shorts, short renders against the daily export limit. B4's brain evals measure credits per
+  approved deliverable, which feeds the first one.
 
 ## 4. Global constraints
 
@@ -85,7 +114,7 @@ real profiles with a look check before every video card.
 | **A0** | A | **Contracts first:** migration skeleton `push_subscriptions`, `email_log` (sent, kind, card ids), card budget counter, `account_metrics` (per account per day), `best_slots` (per founder, platform, hour), reply outcome columns; screen types for `analytics.*`, Brain measures; the metrics source interface | — |
 | **B0** | B | **Contracts first:** look check result type and the Studio hook "before a card"; eval case shapes for squads and the brain; the HN source interface; the thread draft type | — |
 | A1 | A | Zernio metrics (P3): fetch per post, per account, followers for connected accounts on the `pull_metrics` schedule; store; loaders `analytics.*` and Dashboard `results`; flip `live` | A0 |
-| A2 | A | Best time (P2): `best_slots` from published posts with metrics (≥ 10 per platform), `schedule_propose` uses them; jitter; per-platform gaps and caps from data; pgTAP | A0, A1 |
+| A2 | A | Best time (P2): `best_slots` from published posts with metrics (≥ 10 per platform); `schedule_propose` prefers them over the defaults (jitter, gaps and caps unchanged); the card's one-line reason; pgTAP | A0, A1 |
 | A3 | A | Reply outcomes (R3): re-read replied threads after 3 days, store votes and replies, memory notes | A0 |
 | A4 | A | Card budget (F4): counter and the brain's batching; Brain measures loader | A0 |
 | A5 | A | Acceptance (F13) with screenshots of Analytics, a phone queue and the digest email | all |
@@ -101,8 +130,9 @@ real profiles with a look check before every video card.
 
 **Milestones**
 - **M1** contracts: A0 and B0 pushed and reviewed; the owner confirms the look check rule.
-- **M2** reach and analytics: A1, A2, A4, C0–C2 (split point if the PR is too big).
-- **M3** quality and acceptance: A3, A5, B1–B4, C3, C4; the planner reviews the whole PR.
+- **M2** look check and evals (editor first): B1, B2, the look note in C3.
+- **M3** reach, analytics and acceptance: A1–A5, B3, B4, C0–C2, C3 (rest), C4; the planner reviews the whole PR.
+  (Split point if the PR grows too big: after M2.)
 
 ## 6. Owner gates
 

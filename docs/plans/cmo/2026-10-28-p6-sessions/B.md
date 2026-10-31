@@ -12,15 +12,16 @@ Plan: [`../2026-10-28-p6-quality-reach-plan.md`](../2026-10-28-p6-quality-reach-
 
 ## Order
 
-B0 → (push, M1) → B1 → B3 → B4 → B2.
+B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
 
 ## Todo
 
 - [ ] **B0 Contracts (push first)**: `LookResult` (questions, pass/fail, frame times, note), where it runs (before a
       card, never on every render unless the owner says so at M1); eval case shapes (squad: brief → output → judge
       questions; brain: profile → plan → judge); `HnSource`; thread draft type (5–8 posts, each ≤ 280).
-- [ ] **B1 Look check (S4)**: before a video, short or slideshow card, call Modal `look` on the full-size export (up
-      to 12 frames); fixed questions; one send-back to the squad, then the card shows the note.
+- [ ] **B1 Look check (S4)**: before a video, short or slideshow card (long take, Shorts, Slideshow squads in
+      `lib/departments/studio/`), call Modal `look` on the full-size export (up to 12 frames); fixed questions; one
+      send-back to the squad, then the card shows the note.
 - [ ] **B3 Hacker News (R4)**: Algolia HN search (no key, within its rate limit) for Sales and Research, budget,
       untrusted wrapping, tests with recorded responses.
 - [ ] **B4 X threads (W4)**: `post_draft` thread mode (hook post with the promise, one step per post, no recap
