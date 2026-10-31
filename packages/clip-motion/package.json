@@ -19,18 +19,18 @@
     "check": "node scripts/build-templates.mjs --check && node scripts/build-styles.mjs --check && tsc --noEmit && vitest run"
   },
   "dependencies": {
-    "@remotion/bundler": "4.0.535",
-    "@remotion/renderer": "4.0.535",
+    "@remotion/bundler": "4.0.539",
+    "@remotion/renderer": "4.0.539",
     "esbuild": "^0.28.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "remotion": "4.0.535",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.539",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "typescript": "~6.0.3",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   }
 }

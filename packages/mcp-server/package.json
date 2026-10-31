@@ -12,8 +12,8 @@
     "test": "tsx --tsconfig tsconfig.json --conditions=react-server src/server.check.ts && tsx --tsconfig tsconfig.json --conditions=react-server src/oauth.check.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
-    "@supabase/supabase-js": "^2.117.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@supabase/supabase-js": "^2.118.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
