@@ -33,3 +33,9 @@ C2 at once → C0 (after A0; real Resend after the owner gate) → C1 → C3 (af
 ## Requests
 
 (Others append `[from → C] what, why`; answer here with the commit.)
+
+- [ ] **[from B → C] Look note and thread body for C3.** The look check (`lib/departments/studio/look-check.ts`) puts a
+      note (≤ 200, English, empty on a pass) on video, shorts and slideshow cards as `lookNote` (A's field in
+      `approval-card.ts`, request 1 in `A.md`); show it above the decide buttons when not empty. X threads arrive as
+      `PostBody.platforms[].thread: string[]` (5–8 posts, each ≤ 280; A's request 3): one numbered post per row with its
+      own length chip. Types: `ThreadDraftSchema` in `lib/cmo/writer/types.ts`.

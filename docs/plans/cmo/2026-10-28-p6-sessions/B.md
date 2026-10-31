@@ -16,7 +16,7 @@ B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
 
 ## Todo
 
-- [ ] **B0 Contracts (push first)**: `LookResult` (questions, pass/fail, frame times, note), where it runs (before a
+- [x] **B0 Contracts (push first)**: `LookResult` (questions, pass/fail, frame times, note), where it runs (before a
       card, never on every render unless the owner says so at M1); eval case shapes (squad: brief → output → judge
       questions; brain: profile → plan → judge); `HnSource`; thread draft type (5–8 posts, each ≤ 280).
 - [ ] **B1 Look check (S4)**: before a video, short or slideshow card (long take, Shorts, Slideshow squads in
@@ -28,6 +28,23 @@ B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
       ending, checks per post), posting as a thread through the publish adapter.
 - [ ] **B2 Evals (S4, B4)**: Studio cases for long take, shorts and slideshows; ~20 brain profiles with the plan
       judge on the cascade; a fake run in CI; the real run waits for the owner.
+
+## Notes for M1
+
+- **Look check rule (owner, 2026-10-31): only before a card.** `LOOK_CHECK_RULE = "before_card"`; draft renders in the
+  editor are never checked.
+- **Contracts:** `lib/departments/studio/look-check.ts` (questions, `LookResult`, `LookCheckInput`, one send-back,
+  `lookNote`; checked in `studio.check.ts`), `packages/engine/opencmo/worker/look_check_task.py` (the worker contract,
+  built in B1), `lib/cmo/jobs/eval/studio-types.ts` (squad cases, brain profiles, the plan judge's questions),
+  `lib/cmo/social/hn.ts` (`HnSource`, `HnThread`, `HnBudget`), `ThreadDraftSchema` / `ThreadBody` in
+  `lib/cmo/writer/types.ts`.
+- **Black, frozen and silence are code, not a model:** ffmpeg `blackdetect`, `freezedetect` and `astats` on the
+  full-size file; only "captions inside" and "text readable" go to the vision judge (Python, beside
+  `opencmo/ai/moderation.py`, which already holds the vision calls). No vision key → "not checked", never a fail.
+- **Cards are raised in SQL**, so the wait for the look check is A's (request 1 in `A.md`); HN rows need A's
+  constraint change (request 2), threads need `cmo_save_draft` and the card block (request 3).
+- **Zernio threads exist:** OpenAPI v1.429 has `TwitterPlatformData.threadItems[] {content, mediaItems}`
+  (`platformSpecificData`, item 0 is the root post), checked on `zernio.com/openapi.json` 2026-10-31.
 
 ## Requests
 
