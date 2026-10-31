@@ -14,7 +14,7 @@ select ok(has_table_privilege('authenticated', 'public.subreddit_rules', 'select
 select ok(not has_table_privilege('anon', 'public.sales_settings', 'select'), 'anon reads no Sales settings');
 select ok(not has_table_privilege('authenticated', 'public.sales_settings', 'update'), 'settings change only through the RPC');
 select ok(has_function_privilege('authenticated', 'public.sales_settings_save(text[],jsonb)', 'execute'), 'a founder saves settings');
-select ok(not has_function_privilege('anon', 'public.create_slideshow(text,text)', 'execute'), 'anon creates no slideshow');
+select ok(not has_function_privilege('anon', 'public.create_slideshow(text,text,uuid)', 'execute'), 'anon creates no slideshow');
 select ok((select bool_and(relrowsecurity) from pg_class where oid in ('public.subreddit_rules'::regclass,
   'public.sales_settings'::regclass)), 'RLS on both');
 

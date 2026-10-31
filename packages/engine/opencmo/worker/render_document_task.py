@@ -437,8 +437,8 @@ def owned_revision(store: Any, task: Task) -> tuple[dict[str, Any], dict[str, An
     document = revision.get("document")
     if not isinstance(document, dict):
         raise TypeError("Editor revision has no document")
-    # Task trỏ đúng bản đã chụp: `source_hash` của task là vân tay document
-    # lúc bấm Export (C3: tên cột giữ, nghĩa đổi), revision bất biến.
+    # The task points at the snapshot it was made from: its `source_hash` is the document's fingerprint when
+    # Export was pressed (C3: the column kept its name, not its meaning), and a revision never changes.
     if payload.get("source_hash") != revision.get("source_hash"):
         raise ValueError("Editor revision hash mismatch")
     return job, document

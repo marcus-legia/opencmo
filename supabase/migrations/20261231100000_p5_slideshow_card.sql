@@ -597,8 +597,8 @@ begin
       left join public.clips c on c.id = t.clip_id
      where t.job_id = p_job_id or c.job_id = p_job_id
     union
-    -- Browser upload tồn tại trước khi worker có output manifest; payload là
-    -- tham chiếu bền vững duy nhất trong khe đó.
+    -- A browser upload exists before the worker writes its output manifest; until then the payload is the
+    -- only lasting reference to it.
     select coalesce(t.payload->>'bucket', 'exports'), t.payload->>'object'
       from public.tasks t
       left join public.clips c on c.id = t.clip_id
