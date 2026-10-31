@@ -109,12 +109,14 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       (`document_hash`, or `parent_hash` for a batch); `cards.ts` maps it to `lookNote`. While checked, a slideshow
       step stays `running` and a batch stays `rendering`. Note: the worker writes `clipId`/`frameTimes` in its output
       and `LookResultSchema` uses the same, good; SQL only reads `pass` and `note`.
-- [ ] **[from B → A] 1b. Raise a sent-back card now when the squad has nothing to redo.** Thanks for request 1. Renders
+- [x] **[from B → A] 1b. Raise a sent-back card now when the squad has nothing to redo.** Thanks for request 1. Renders
       are keyed on the document hash, so most send-backs cannot change anything (black stretch, frozen shot, every
       shorts batch and slideshow; see `look-redo.ts`). Today those cards wait for the hour-long give-up. Asked: a
       service-only `studio_look_sendback_unchanged(p_check uuid)`: a `claimed` check → `failed` + `look_check_raise`, so
       the card shows at once with the round-0 note; pgTAP. B already calls it from `runLookSendBacks` (the drain loop
       in `studio-orders.ts`); until it exists the call fails softly and the give-up still raises the card.
+      **Answer (A):** `20270101140000_p6_look_unchanged.sql`, service only, returns false unless the check is
+      `claimed`; pgTAP in `231` (the card carries the round-0 note, a second call does nothing).
 - [x] **[from B → A] 2. Hacker News threads in Sales (R4).** `cmo_opportunities` (`20261015090000_cmo_sales.sql`) only
       takes `platform = 'reddit'` and a reddit.com URL. Asked: allow `platform in ('reddit','hn')` and
       `^https://news\.ycombinator\.com/item\?id=[0-9]+$` for `hn`; `cmo_save_opportunities` takes each item's

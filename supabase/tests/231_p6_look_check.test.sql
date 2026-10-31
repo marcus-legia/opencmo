@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(22);
+select plan(26);
 
 select ok(exists (select 1 from pg_constraint where conname = 'tasks_kind_check' and pg_get_constraintdef(oid) like '%look_check%'),
   'tasks take look_check');
@@ -105,6 +105,23 @@ select is((select count(*)::int from public.studio_look_sendbacks_claim(10)), 0,
 reset role;
 select is((select status from public.studio_steps where id = 'e2313000-0000-4000-8000-000000000003'), 'waiting',
   'its card is raised instead');
+
+-- 1b (20270101140000): a send-back the squad cannot redo raises its card now, with the round-0 note.
+select ok(not has_function_privilege('authenticated', 'public.studio_look_sendback_unchanged(uuid)', 'execute'), 'only the squads say unchanged');
+delete from public.look_checks where ref_id = 'e2313000-0000-4000-8000-000000000002';
+update public.approvals set status = 'cancelled' where ref_id = 'e2313000-0000-4000-8000-000000000002' and status = 'waiting';
+update public.studio_steps set status = 'running' where id = 'e2313000-0000-4000-8000-000000000002';
+select pg_temp.renders('e2313000-0000-4000-8000-000000000002', 2);
+update public.tasks set status = 'done', output = '{"pass":false,"round":0,"note":"Look check: a frozen shot at 0:02.","files":[]}'
+where id = (select task_id from public.look_checks where ref_id = 'e2313000-0000-4000-8000-000000000002');
+set local role service_role;
+create temp table c (check_id uuid) on commit drop;
+insert into c select check_id from public.studio_look_sendbacks_claim(10);
+select ok(public.studio_look_sendback_unchanged((select check_id from c)), 'nothing to redo: raised now');
+select ok(not public.studio_look_sendback_unchanged((select check_id from c)), 'and only once');
+reset role;
+select is((select snapshot->'look'->>'note' from public.approvals where ref_id = 'e2313000-0000-4000-8000-000000000002' and status = 'waiting'),
+  'Look check: a frozen shot at 0:02.', 'the card carries the round-0 note');
 
 select * from finish();
 rollback;
