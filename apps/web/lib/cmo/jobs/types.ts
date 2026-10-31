@@ -5,6 +5,7 @@
 
 import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
+import type { AccountMetricRow } from "./metrics-source";
 
 export type CmoJobKind =
   | "plan_week"
@@ -87,6 +88,19 @@ export type MetricRow = {
   impressions?: number | null;
   engagements?: number | null;
 };
+
+/** A post a slot published through Zernio, with the calendar item its numbers belong to. */
+export type ZernioPostRow = {
+  item_id: string | null;
+  external_id: string;
+  external_url: string | null;
+  platform: string;
+  social_account_id: string | null;
+  zernio_account_id: string | null;
+  published_at: string;
+};
+
+export type ConnectedAccountRow = { id: string; platform: AccountMetricRow["platform"]; handle: string; zernio_account_id: string };
 
 export type StepStatus = "running" | "done" | "failed" | "skipped";
 export type Step = { tool: string; label: string; status: StepStatus };
@@ -227,6 +241,11 @@ export interface CmoStore {
   latestNicheInsight(userId: string): Promise<NicheVideoInsight | null>;
   /** W6-lite: số liệu bài đã đăng; chỉ nhận bài `published` của chính người dùng. */
   saveMetrics(userId: string, rows: MetricRow[]): Promise<number>;
+  /** P6 A1: published slots Zernio can measure, newest first (SQL `cmo_zernio_posts`). */
+  zernioPosts(userId: string, since: string): Promise<ZernioPostRow[]>;
+  /** P6 A1: the founder's Zernio profile and connected accounts; no profile = nothing connected. */
+  connectedAccounts(userId: string): Promise<{ zernioProfileId: string | null; accounts: ConnectedAccountRow[] }>;
+  saveAccountMetrics(userId: string, rows: AccountMetricRow[]): Promise<number>;
   /** The inbox item a replay run answers; null when it is gone or not the user's. */
   inbox(userId: string, inboxId: string): Promise<InboxState | null>;
   /** Writes the waiting model call to the run's inbox item and ends the run; null when the lease was lost. */
