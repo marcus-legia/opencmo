@@ -8,6 +8,10 @@
  * Not `server-only` so checks can run it.
  */
 
+import { isProduction } from "@/lib/production";
+
+import { cleanUntrusted } from "../untrusted";
+
 /** One HN story, shaped like `RedditThread` so Sales can score both the same way. */
 export type HnThread = {
   /** Always the discussion page `https://news.ycombinator.com/item?id=<id>`, never the linked site. */
@@ -42,3 +46,104 @@ export class HnBudget {
 export type HnSource = {
   search(query: string, budget: HnBudget): Promise<HnThread[]>;
 };
+
+// ----------------------------------------------------------------- search
+
+export const HN_BASE = "https://hn.algolia.com/api/v1";
+const TIMEOUT_MS = 20_000;
+/** Enough to score; the scan reads at most this many per query. */
+export const HN_HITS = 20;
+const ITEM = /^https:\/\/news\.ycombinator\.com\/item\?id=\d{1,12}$/;
+
+export const hnFakeAllowed = (): boolean => process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+const int = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+/** HN story text is HTML (`<p>`, `<a>`, entities): plain text before anything reads it, then cleaned. */
+export function hnPlain(html: string, max: number): string {
+  const text = html
+    .replace(/<p>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_, h: string) => safeChar(parseInt(h, 16)))
+    .replace(/&#(\d{1,7});/g, (_, d: string) => safeChar(Number(d)))
+    .replace(/&([a-z]+);/gi, (m, name: string) => ENTITIES[name.toLowerCase()] ?? m);
+  return cleanUntrusted(text).replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim().slice(0, max);
+}
+
+const safeChar = (code: number): string => (code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "");
+
+/** Algolia's JSON → stories with a discussion URL and a title; anything else is dropped. */
+export function parseHnSearch(json: unknown): HnThread[] {
+  const hits = isObj(json) && Array.isArray(json.hits) ? json.hits.filter(isObj) : [];
+  const out: HnThread[] = [];
+  for (const hit of hits) {
+    const objectId = str(hit.objectID);
+    if (!/^\d{1,12}$/.test(objectId)) continue;
+    const url = `https://news.ycombinator.com/item?id=${objectId}`;
+    const title = hnPlain(str(hit.title), 300);
+    if (!ITEM.test(url) || !title) continue;
+    const created = str(hit.created_at);
+    const time = created ? new Date(created) : null;
+    out.push({
+      url,
+      objectId,
+      community: "Hacker News",
+      title,
+      author: hnPlain(str(hit.author), 60),
+      text: hnPlain(str(hit.story_text), 4000),
+      points: int(hit.points),
+      comments: int(hit.num_comments),
+      postedAt: time && !Number.isNaN(time.getTime()) ? time.toISOString() : null,
+    });
+  }
+  return out;
+}
+
+const FAKE: HnThread[] = [
+  {
+    url: "https://news.ycombinator.com/item?id=1",
+    objectId: "1",
+    community: "Hacker News",
+    title: "Ask HN: How do you handle clients who pay late?",
+    author: "fake_founder",
+    text: "I freelance for a few startups and one invoice is a month overdue. Polite reminders feel awkward.",
+    points: 12,
+    comments: 9,
+    postedAt: null,
+  },
+];
+
+/**
+ * Stories matching `query`. `recentDays` asks for the newest first within that window (Sales: a thread worth
+ * a reply is fresh); without it, Algolia's relevance order (Research).
+ */
+export async function searchHn(query: string, budget: HnBudget, opts: { recentDays?: number; fetch?: typeof fetch } = {}): Promise<HnThread[]> {
+  const q = cleanUntrusted(query).trim().slice(0, 200);
+  if (!q) return [];
+  budget.take();
+  if (hnFakeAllowed() && !opts.fetch) return FAKE.map((t) => ({ ...t, postedAt: new Date().toISOString() }));
+  const params = new URLSearchParams({ query: q, tags: "story", hitsPerPage: String(HN_HITS) });
+  let path = "search";
+  if (opts.recentDays) {
+    path = "search_by_date";
+    params.set("numericFilters", `created_at_i>${Math.floor(Date.now() / 1000) - opts.recentDays * 86_400}`);
+  }
+  const call = opts.fetch ?? fetch;
+  let response: Response;
+  try {
+    response = await call(`${HN_BASE}/${path}?${params}`, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { accept: "application/json" } });
+  } catch {
+    throw new HnReadError("Hacker News did not answer in time. Try again in a minute.");
+  }
+  if (response.status === 429) throw new HnReadError("Hacker News search is busy right now. Try again in a few minutes.");
+  if (!response.ok) throw new HnReadError("Hacker News search failed. Try again later.");
+  return parseHnSearch(await response.json().catch(() => null));
+}
+
+/** The default source: Algolia search. Tests and evals pass their own. */
+export const algoliaHn: HnSource = { search: (query, budget) => searchHn(query, budget) };
