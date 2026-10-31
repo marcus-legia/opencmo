@@ -17,8 +17,9 @@ export type CmoJobKind =
   | "write_video_brief"
   | "write_caption"
   | "write_slides"
-  | "publish_post";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post"];
+  | "publish_post"
+  | "niche_video_research";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -46,6 +47,28 @@ export type CompetitorInsight = {
   hooks: { pattern: string; example: string; url: string; lift: number; why: string }[];
   formats: string[];
   ideas: { idea: string; inspired_by: string }[];
+  measured_at: string;
+};
+
+/**
+ * What works on short video in the founder's niche (P5 R2): standout shorts on TikTok and YouTube for the strategy's
+ * topics. Only text, numbers and the URL are kept, never the video; a video without a URL from the read is dropped.
+ */
+export type NicheVideoInsight = {
+  topics: string[];
+  videos: {
+    platform: "tiktok" | "youtube";
+    url: string;
+    author: string;
+    views: number;
+    /** Views over the median of the same search. */
+    lift: number;
+    /** The opening line as said or captioned, cut to 200 characters. */
+    hook: string;
+    format: string;
+    why: string;
+  }[];
+  formats: string[];
   measured_at: string;
 };
 
@@ -101,10 +124,20 @@ export type Opportunity = {
   comments: number;
   score: number;
   score_parts: ScorePart[];
+  /** Empty for a skipped thread: it is kept for the Sales screen, with no draft and no card. */
   reply: string;
   /** Which model and prompt drafted the reply (`edit-taxonomy.ts`). */
   gen?: { model: string; prompt_version: string };
+  /** P5 R1: the rule the draft was written under, and why ("r/x forbids self-promotion"). */
+  rule?: SubredditVerdict;
+  rule_why?: string;
 };
+
+/** What a subreddit's rules allow (P5 R1): name the product, help only, or stay out. */
+export type SubredditVerdict = "mention_ok" | "help_only" | "skip";
+export type SubredditRule = { subreddit: string; verdict: SubredditVerdict; summary: string; read_at: string };
+/** The founder's Sales settings (`sales_settings`). */
+export type SalesSettings = { excluded: string[]; pairs: [string, string][] };
 
 /** Who thinks for a run: OpenCMO's own models, or the founder's Claude through the inbox. */
 export type Brain = "opencmo" | "claude";
@@ -161,11 +194,22 @@ export interface CmoStore {
   /** Link thread đã từng thành thẻ (kể cả đã bỏ) — W4 không đưa lại. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
+  subredditRule(subreddit: string): Promise<SubredditRule | null>;
+  saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;
+  salesSettings(userId: string): Promise<SalesSettings>;
+  /** Product mentions in the founder's last ten posted replies (SQL `sales_mention_count_for`). */
+  recentMentions(userId: string): Promise<number>;
+  /** Drafts already handed out that may name the product and still wait on the founder: they count toward the rule. */
+  waitingMentions(userId: string): Promise<number>;
   /** Trả lượt về hàng đợi, hoãn `seconds` giây; false khi lượt đã bị nhận lại. */
   defer(run: QueuedRun, seconds: number, steps: Step[]): Promise<boolean>;
   /** W7: lưu điều học được; đọc bản mới nhất (Planner, X writer, CMO chat). */
   saveInsight(userId: string, runId: string, body: CompetitorInsight): Promise<void>;
   latestInsight(userId: string): Promise<CompetitorInsight | null>;
+  /** P5 R2: niche video research, saved as `cmo_insights.kind = 'niche_video'`; Writer's video brief reads the latest. */
+  saveNicheInsight(userId: string, runId: string, body: NicheVideoInsight): Promise<void>;
+  latestNicheInsight(userId: string): Promise<NicheVideoInsight | null>;
   /** W6-lite: số liệu bài đã đăng; chỉ nhận bài `published` của chính người dùng. */
   saveMetrics(userId: string, rows: MetricRow[]): Promise<number>;
   /** The inbox item a replay run answers; null when it is gone or not the user's. */

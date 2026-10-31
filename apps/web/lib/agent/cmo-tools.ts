@@ -259,6 +259,7 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         .from("opportunities")
         .select("id, community, score, priority, status, created_at")
         .eq("status", "in_review")
+        .not("reply", "is", null)
         .order("score", { ascending: false })
         .limit(10);
       const count = (rows?.length ?? 0) + (threads?.length ?? 0);
@@ -365,7 +366,7 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
 export async function cmoState(supabase: SupabaseClient): Promise<string> {
   const [{ data: pending }, { data: threads }, { data: today }, { data: runs }, { data: memories }] = await Promise.all([
     supabase.from("content_items").select("id", { count: "exact", head: false }).eq("status", "in_review").limit(20),
-    supabase.from("opportunities").select("id").eq("status", "in_review").limit(20),
+    supabase.from("opportunities").select("id").eq("status", "in_review").not("reply", "is", null).limit(20),
     supabase.from("content_items").select("department, platform, idea, status").eq("day", isoDay()).limit(10),
     supabase.from("cmo_runs").select("kind, status").in("status", ["queued", "running"]).limit(5),
     // Most important unexpired notes first (memory tier 2); lessons below are tier 3.

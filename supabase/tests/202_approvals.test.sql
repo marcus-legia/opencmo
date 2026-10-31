@@ -128,7 +128,8 @@ update public.approvals set kind = 'slideshow', department = 'studio' where ref_
 insert into t_card select 'p8', id, content_hash from public.approvals where ref_id = (select id from t_ref where name = 'p8') and status = 'waiting';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2020000-0000-4000-8000-00000000000a"}';
-select throws_ok($$ select pg_temp.decide('p8', 'approve') $$, 'P0001', 'This card cannot be decided yet.', 'slideshow cards wait for their phase (P5)');
+select throws_ok($$ select pg_temp.decide('p8', 'approve') $$, 'P0001', 'This card was already decided.',
+  'a slideshow card decides only its own slideshow step (P5)');
 select is((select count(*)::int from public.approvals where status = 'waiting'), 1, 'only the slideshow card still waits');
 
 select * from finish();

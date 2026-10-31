@@ -755,9 +755,11 @@ async function waitingByRef(supabase: SupabaseClient, refKind: string): Promise<
 async function research({ supabase }: LoadContext): Promise<Partial<ResearchScreen>> {
   const now = new Date();
   const latest = supabase.from("cmo_insights").select("body, created_at").eq("kind", "competitors").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  // P5 R2: what works on video in the founder's niche, the newest run.
+  const niche = supabase.from("cmo_insights").select("body, created_at").eq("kind", "niche_video").order("created_at", { ascending: false }).limit(1).maybeSingle();
   return parts<ResearchScreen>("research", {
     lastRunAt: async () => {
-      const r = await supabase.from("cmo_runs").select("finished_at").eq("kind", "competitor_research").eq("status", "done").order("finished_at", { ascending: false }).limit(1).maybeSingle();
+      const r = await supabase.from("cmo_runs").select("finished_at").in("kind", ["competitor_research", "niche_video_research"]).eq("status", "done").order("finished_at", { ascending: false }).limit(1).maybeSingle();
       if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
       return iso((r.data as { finished_at: string | null } | null)?.finished_at);
     },
@@ -768,11 +770,32 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
       return next.toISOString();
     },
     insights: async () => {
-      const r = await latest;
+      const [r, n] = await Promise.all([latest, niche]);
       if (r.error) throw new Error(`cmo_insights: ${r.error.message}`);
+      if (n.error) throw new Error(`cmo_insights: ${n.error.message}`);
+      type NicheRow = { platform?: string; url?: string; hook?: string; format?: string; why?: string; views?: number; lift?: number };
+      const videos = (((n.data as { body?: { videos?: NicheRow[] } } | null)?.body?.videos ?? []) as NicheRow[])
+        .filter((v) => typeof v.hook === "string" && v.hook && isHttps(v.url))
+        .slice(0, 12)
+        .map((v, i) => ({
+          id: `video-${i}`,
+          type: "hook" as const,
+          scope: "niche_video" as const,
+          platform: v.platform === "youtube" ? "Shorts" : "TikTok",
+          text: v.hook!.slice(0, 300),
+          evidence: [typeof v.lift === "number" ? `${v.lift}× the search's median` : "", v.format ?? "", v.why ?? ""].filter(Boolean).join(" · ").slice(0, 200),
+          usedIn: null,
+          sources: [v.url!],
+          video: {
+            views: typeof v.views === "number" ? Math.max(0, Math.round(v.views)) : null,
+            outlier: typeof v.lift === "number" ? v.lift : null,
+            seconds: null,
+            format: v.format ? v.format.slice(0, 60) : null,
+          },
+        }));
       const body = ((r.data as { body?: { hooks?: unknown[] } } | null)?.body ?? {}) as { hooks?: { pattern?: string; example?: string; url?: string; lift?: number }[] };
       // Every insight points to the post it came from: one without a link is dropped (counted in `dropped`).
-      return (body.hooks ?? [])
+      const hooks: ResearchScreen["insights"] = (body.hooks ?? [])
         .filter((h) => typeof h.pattern === "string" && h.pattern && isHttps(h.url))
         .slice(0, 20)
         .map((h, i) => ({
@@ -785,6 +808,7 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
           usedIn: null,
           sources: [h.url!],
         }));
+      return [...hooks, ...videos];
     },
     dropped: async () => {
       const r = await latest;
@@ -927,7 +951,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
  */
 async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
   type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
-  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short"; hook: string | null } | null };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null } | null };
   const videos = supabase
     .from("work_orders")
     .select("id, title, status, created_at, updated_at, error, brief")
@@ -1017,7 +1041,54 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
           edits: [],
         };
       });
-      return [...videoItems, ...batchItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      // P5 S3: the Slideshow and Post image squads' orders, each with the step that holds its edit and card.
+      const made = must(
+        await supabase
+          .from("work_orders")
+          .select("id, kind, title, status, created_at, error")
+          .in("kind", ["build_slideshow", "build_post_image"])
+          .neq("status", "cancelled")
+          .order("created_at", { ascending: false })
+          .limit(20),
+        "work_orders",
+      ) as { id: string; kind: "build_slideshow" | "build_post_image"; title: string; status: OrderDb["status"]; created_at: string; error: { message?: string } | null }[];
+      const madeSteps = made.length
+        ? (must(await supabase.from("studio_steps").select("id, order_id, clip_id, kind, status").in("order_id", made.map((o) => o.id)).order("created_at", { ascending: true }), "studio_steps") as {
+            id: string;
+            order_id: string;
+            clip_id: string;
+            kind: string;
+            status: string;
+          }[])
+        : [];
+      const madeItems = made.map((o) => {
+        const step = madeSteps.filter((s) => s.order_id === o.id).at(-1);
+        const slideshow = o.kind === "build_slideshow";
+        const status: StudioItem["status"] =
+          o.status === "done" ? "finished" : o.status === "failed" ? "failed" : o.status === "waiting_founder" ? "waiting_founder" : "running";
+        const now = step?.status === "running" ? "rendering" : status === "running" ? "building" : status === "finished" ? (slideshow ? "approved" : "ready for its post") : "";
+        return {
+          id: o.id,
+          kind: slideshow ? ("slideshow" as const) : ("post_image" as const),
+          title: o.title.slice(0, 200),
+          subtitle: `${slideshow ? "Slideshow · MP4 + PNG set" : "Post image"}${now ? ` · ${now}` : ""}`.slice(0, 200),
+          status,
+          progress: null,
+          favorite: false,
+          createdAt: new Date(o.created_at).toISOString(),
+          editedAt: step ? (editOf.get(step.clip_id) ? new Date(editOf.get(step.clip_id)!.updated_at).toISOString() : null) : null,
+          failure: o.status === "failed" ? (o.error?.message ?? (slideshow ? "The slideshow could not be made." : "The image could not be made.")).slice(0, 200) : null,
+          projectId: null,
+          editorHref: step ? `/app/editor/${step.clip_id}` : null,
+          approvalId: step ? (stepCards.get(step.id) ?? null) : null,
+          canMarkFinished: false,
+          clipId: step?.clip_id ?? null,
+          documentHash: step ? (editOf.get(step.clip_id)?.document_hash ?? null) : null,
+          canCutShorts: false,
+          edits: [],
+        };
+      });
+      return [...videoItems, ...batchItems, ...madeItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     team: async () => {
       const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);
@@ -1043,11 +1114,11 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
   return parts<SalesScreen>("sales", {
     threads: async () => {
       const [rows, cards] = await Promise.all([
-        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status").order("created_at", { ascending: false }).limit(30),
+        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why").order("created_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string; status: "in_review" | "replied" | "dismissed" }[])
+      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: "mention_ok" | "help_only" | "skip" | null; rule_why: string | null }[])
         .map((r) => {
           const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
           return {
@@ -1058,12 +1129,15 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
             comments: r.comments,
             title: r.title.slice(0, 300),
             url: r.url,
-            // Subreddit rules are read with Sales safety (R1); until then every thread is help first, no product mention.
-            rule: { kind: "help_only" as const, text: "Rules not checked yet: help first" },
+            // P5 R1: the rule the draft was written under. Threads from before it are help first, no product mention.
+            rule: {
+              kind: r.rule === "mention_ok" ? ("mention_allowed" as const) : r.rule === "skip" ? ("skipped" as const) : ("help_only" as const),
+              text: (r.rule_why ?? (r.rule ? "" : "Rules not checked: help first")).slice(0, 200) || (r.rule === "skip" ? "Skipped by the community's rules" : "Help only"),
+            },
             parts: parts.map((p) => ({ label: p.label as "Pain", score: p.score!, max: p.max! })),
             quotes: parts.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: p.evidence!.slice(0, 400), from: p.label!.toLowerCase() })),
-            draft: r.reply,
-            draftChecks: null,
+            draft: r.rule === "skip" ? null : r.reply,
+            draftChecks: r.rule === "skip" || !r.reply ? null : `No links · under 120 words · ${r.rule === "mention_ok" ? "product named at most once" : "no product mention"}`,
             status: r.status === "in_review" ? ("open" as const) : r.status,
             approvalId: cards.get(r.id) ?? null,
           };
@@ -1079,6 +1153,26 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
       };
       const [replied, dismissed] = await Promise.all([count("replied"), count("dismissed")]);
       return { replied, dismissed };
+    },
+    // P5 F3: product mentions in the last ten posted replies (at most one in ten).
+    mentions: async () => {
+      const r = await supabase.rpc("sales_mention_count");
+      if (r.error) throw new Error(`sales_mention_count: ${r.error.message}`);
+      return { used: Number(r.data ?? 0), window: 10 };
+    },
+    // P5 F6: the last two scans found nothing worth joining; the banner offers a scan with a new brief.
+    stuck: async () => {
+      const r = await supabase.from("cmo_runs").select("status, output").eq("kind", "sales_scan").in("status", ["done", "failed"]).order("created_at", { ascending: false }).limit(2);
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      const runs = (r.data ?? []) as { status: string; output: { cards?: number } | null }[];
+      if (runs.length < 2 || runs.some((x) => x.status !== "done" || (x.output?.cards ?? 0) > 0)) return null;
+      return { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 };
+    },
+    settings: async () => {
+      const r = await supabase.from("sales_settings").select("excluded_subreddits, co_occurrence").maybeSingle();
+      if (r.error) throw new Error(`sales_settings: ${r.error.message}`);
+      const row = r.data as { excluded_subreddits: string[]; co_occurrence: [string, string][] } | null;
+      return { excludedSubreddits: (row?.excluded_subreddits ?? []).slice(0, 50), pairs: (row?.co_occurrence ?? []).slice(0, 20) };
     },
   });
 }

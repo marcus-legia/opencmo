@@ -81,8 +81,8 @@ export const SCREENS = {
   writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts", "voice"], release: ["drafts", "voice"] }),
   // Uploads come from /api/v1/projects on the page; `items` holds only generated work (none before S1).
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
-  // Mentions and the stuck banner come with Sales safety (R1).
-  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week"], release: ["threads", "week"] }),
+  // P5 R1: the mention counter, the stuck banner and the founder's Sales settings read real rows.
+  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week", "mentions", "stuck", "settings"], release: ["threads", "week"] }),
   // P4 A3: slots, accounts and rules read schedule_slots and social_accounts.
   schedule: entry({
     schema: ScheduleScreenSchema,

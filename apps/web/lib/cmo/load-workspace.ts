@@ -23,7 +23,7 @@ type CmoRunRow = {
   created_at: string;
 };
 
-const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3" };
+const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3", niche_video_research: "W7" };
 
 type OpportunityRow = {
   id: string;
@@ -105,7 +105,7 @@ function toCalendar(item: ItemRow): CalendarItem {
 function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
   const active = runs.find((r) => r.status === "running" || r.status === "queued");
   if (active) {
-    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved" }[active.kind];
+    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved", niche_video_research: "studying short videos in your niche" }[active.kind];
     return { text: `Your CMO is ${what}. Follow along in Activity.`, tone: "running" };
   }
   const latest = runs[0];
@@ -134,6 +134,8 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
       .from("opportunities")
       .select("id, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply, priority, created_at")
       .eq("status", "in_review")
+      // A thread skipped by its community's rules has no reply: it is on the Sales screen, never a conversation to join.
+      .not("reply", "is", null)
       .order("score", { ascending: false })
       .limit(30),
   ]);

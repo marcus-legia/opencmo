@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { profileOf } from "../cmo/platforms";
 
-import { DepartmentSchema, PlatformSchema, QuoteSchema, ScorePartSchema, WhereSchema, day, iso } from "./common";
+import { DepartmentSchema, PlatformSchema, QuoteSchema, SalesRuleSchema, ScorePartSchema, WhereSchema, day, iso } from "./common";
 
 export const CARD_KINDS = [
   "post",
@@ -73,6 +73,12 @@ const ReplyBody = z.object({
   draft: z.string().max(10000),
   /** The subreddit rule line: "product mention allowed · you post it yourself". */
   rules: z.string().max(200),
+  /**
+   * The rule this draft was written under (P5 R1): `help_only` when the subreddit forbids self-promotion or the
+   * founder already named the product in 1 of the last 10 replies; `text` says which. Absent on cards raised before
+   * P5. A skipped thread has no card (it shows on the Sales screen only).
+   */
+  rule: SalesRuleSchema.optional(),
 });
 
 const GoalBody = z.object({
@@ -152,6 +158,33 @@ export const PriceSnapshotSchema = z.object({
   price_credits: z.number().int().min(0),
 });
 
+/** One slide on a slideshow card: its text layer, its still (PNG) once rendered, and how long it shows. */
+export const SlideSnapshotSchema = z.object({
+  text: z.string().max(300),
+  /** `exports` bucket path of the slide's PNG from `render_stills`; null until the stills are rendered. */
+  still_path: z.string().max(500).nullable(),
+  seconds: z.number().positive(),
+});
+
+/**
+ * The slideshow card (P5 S3, `studio_steps.kind = 'slideshow'`): the slides as built, the MP4 (`render_document`) and
+ * the PNG set (`render_stills`, zipped) of this exact document. `document_hash` is read live from the edit, so any
+ * change in the Slides view supersedes the card.
+ */
+export const SlideshowSnapshotSchema = z.object({
+  kind: z.literal("slideshow"),
+  step_id: z.string(),
+  clip_id: z.string(),
+  title: z.string().max(200),
+  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
+  slides: z.array(SlideSnapshotSchema).min(1).max(20),
+  document_hash: sha256.nullable(),
+  mp4_path: z.string().max(500).nullable(),
+  png_set_path: z.string().max(500).nullable(),
+  /** P5 A3: captions per platform, ordered when the card is raised and approved with it, as a finished video's. */
+  captions: z.array(CaptionSnapshotSchema).max(12).optional(),
+});
+
 /** Card 3: the render of the edit as it is now (`ref_kind = 'editor_project'`, `ref_id` = clip id). */
 export const FinishedVideoSnapshotSchema = z.object({
   kind: z.literal("finished_video"),
@@ -195,11 +228,18 @@ export const StudioSnapshotSchema = z.discriminatedUnion("kind", [
   PriceSnapshotSchema,
   FinishedVideoSnapshotSchema,
   ShortsBatchSnapshotSchema,
+  SlideshowSnapshotSchema,
 ]);
 export type StudioSnapshot = z.infer<typeof StudioSnapshotSchema>;
 
 /** `approvals.ref_kind` per Studio card kind. */
-export const STUDIO_REF_KIND = { script: "studio_step", price: "studio_step", finished_video: "editor_project", shorts_batch: "short_batch" } as const;
+export const STUDIO_REF_KIND = {
+  script: "studio_step",
+  price: "studio_step",
+  finished_video: "editor_project",
+  shorts_batch: "short_batch",
+  slideshow: "studio_step",
+} as const;
 
 const ScriptBody = z.object({
   kind: z.literal("script"),
@@ -271,8 +311,21 @@ const ShortsBatchBody = z.object({
 
 const SlideshowBody = z.object({
   kind: z.literal("slideshow"),
-  slides: z.array(z.string().max(300)).min(1),
-  formats: z.array(z.enum(["mp4", "png"])).min(1),
+  stepId: z.string(),
+  clipId: z.string(),
+  /** Sent back with the decision: an edit in the Slides view after the card was raised refuses it. */
+  documentHash: sha256.nullable(),
+  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
+  /** Quick text edits per slide happen on the card; "Open in Slides" opens `clipId` in the Slides view. */
+  slides: z
+    .array(z.object({ text: z.string().max(300), stillUrl: z.url().nullable(), seconds: z.number().positive() }))
+    .min(1)
+    .max(20),
+  /** Signed URLs; null until rendered. */
+  previewUrl: z.url().nullable(),
+  pngSetUrl: z.url().nullable(),
+  /** P5 A3: one per platform it will be posted to, editable before approving (`edit_caption`), as on a finished video. */
+  captions: z.array(CaptionSchema).max(12).optional(),
 });
 
 /**
@@ -322,6 +375,11 @@ export const ScheduleSnapshotSchema = z.object({
   /** The YouTube title; null elsewhere. */
   title: z.string().max(100).nullable(),
   content_hash: sha256,
+  /**
+   * A post's image (P5 B4): its cover still, part of `content_hash`. Present only when the post has one, so cards of
+   * posts without an image keep the hash they had.
+   */
+  image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 
@@ -454,11 +512,13 @@ export const CAPTION_ACTION = "edit_caption";
  * contact sheet, cancel a script or a price (releases any hold), send back a finished video or a shorts batch.
  * Editing a beat (`edit {beat, text}`) re-plans the script and raises a new card.
  */
-export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch", readonly string[]> = {
+export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch" | "slideshow", readonly string[]> = {
   script: ["approve", "edit", "cancel"],
   price: ["approve", "redo", "cancel"],
   finished_video: ["approve", "send_back"],
   shorts_batch: ["approve", "send_back"],
+  /** P5: rendered before the card, so approving runs nothing; text edits go through the Slides view. */
+  slideshow: ["approve", "send_back"],
 };
 
 /**
@@ -473,4 +533,15 @@ export type ScheduleAction = (typeof SCHEDULE_ACTIONS)[number];
  * Kinds whose decision works now (wave 1 A0; P2 A1 Studio steps and the finished video, A3 the shorts batch; P4 A1 schedule); the others show their
  * button disabled with the reason. The name stays so `components/cards/decide.ts` keeps reading it.
  */
-export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set(["post", "reply", "goal", "correction", "script", "price", "finished_video", "shorts_batch", "schedule"]);
+export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set([
+  "post",
+  "reply",
+  "goal",
+  "correction",
+  "script",
+  "price",
+  "finished_video",
+  "shorts_batch",
+  "slideshow",
+  "schedule",
+]);
