@@ -49,8 +49,14 @@ A0 → (push, M1) → A1 → A2 → A4 → A3 → A5. Post "M1/M2/M3 ready for r
       `approval_release_held` runs first in the hourly `cmo-digest` cron. "Waits" is built; batching several items
       into one card is not (each squad already raises one card per batch: shorts, slideshows). Brain measures:
       `brain-measures.ts` + `weekCounts` in `load.ts`. Rail: `loadRailStatus` + `GET /api/v1/screens/rail`.
-- [ ] **A3 Reply outcomes (R3)**: 3 days after "replied", re-read the thread (by the pasted URL, else a match on the
+- [x] **A3 Reply outcomes (R3)**: 3 days after "replied", re-read the thread (by the pasted URL, else a match on the
       founder's text), store votes and replies, write a memory note; outside text as data.
+      Done: `20270101150000_p6_reply_outcomes.sql` + pgTAP `236`; `jobs/reply-outcomes.ts` runs as a step of
+      `pull_metrics` (which now also runs for connected accounts and due replies, `loops.ts`); Reddit through
+      `redditThread` (100 comments), HN through Algolia `items/<id>` (`hnItem`, free; HN shows no comment points, so
+      votes stay null there). SQL writes the memory line from our own numbers and the community name only.
+      `opportunity_reply_url(id, url)` keeps a pasted link into the same thread; the card has no field for it yet
+      (C's reply card).
 - [ ] **A5 Acceptance** with fakes (F13), screenshots of Analytics, the phone queue and the digest email into
       `docs/plans/cmo/2026-10-28-p6-acceptance/`.
 

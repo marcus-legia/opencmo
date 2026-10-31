@@ -15,6 +15,7 @@ import { xTopPosts, xTweet } from "../social/research";
 import { ScBudget, SocialReadError, socialReaderReady, type SocialPost } from "../social/scrapecreators";
 import { LlmError } from "./llm-error";
 import type { AccountMetricRow } from "./metrics-source";
+import { checkReplies } from "./reply-outcomes";
 import type { JobContext, JobOutput } from "./runner";
 import type { ConnectedAccountRow, ItemRow, MetricRow, ZernioPostRow } from "./types";
 
@@ -86,6 +87,10 @@ export async function pullMetrics(ctx: JobContext): Promise<JobOutput> {
   const since = new Date(now - WINDOW_DAYS * 86_400_000).toISOString();
   const analytics = ctx.analytics !== undefined ? ctx.analytics : publishAnalytics();
   const output: JobOutput = { measured: 0 };
+
+  // A3: what the founder's replies got, three days on. Free on Hacker News, a lookup each on Reddit.
+  const replies = await checkReplies(ctx);
+  if (replies.checked) output.replies_checked = replies.checked;
 
   // Zernio: the founder's connected accounts and what went out through them.
   const measuredByZernio = new Set<string>();

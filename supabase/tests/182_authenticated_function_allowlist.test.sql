@@ -104,6 +104,7 @@ insert into allowed values
   ('mcp_grant_revoke(text)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
+  ('opportunity_reply_url(uuid,text)'),
   ('purge_in_progress()'),
   ('push_subscribe(text,text,text,text)'),
   ('push_unsubscribe(text)'),

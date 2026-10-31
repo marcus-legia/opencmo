@@ -5,7 +5,7 @@
 
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type CompetitorInsight, type ConnectedAccountRow, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 
 export type InboxItem = {
@@ -48,6 +48,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     days: [],
   };
   const inbox: InboxItem[] = [];
+  const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -176,6 +177,13 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return ok.length;
     },
     refreshBestSlots: async () => 0,
+    replyOutcomesDue: async (_u, limit) => replies.filter((r) => !r.check).slice(0, limit),
+    async saveReplyOutcome(_u, outcomeId, check) {
+      const row = replies.find((r) => r.outcome_id === outcomeId && !r.check);
+      if (!row) return false;
+      row.check = check;
+      return true;
+    },
     inbox: async (_u, inboxId) => {
       const item = inbox.find((i) => i.id === inboxId);
       return item ? { answers: { ...item.answers }, memo: { ...item.memo } } : null;
@@ -218,5 +226,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
+  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
 }

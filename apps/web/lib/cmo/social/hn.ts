@@ -147,3 +147,46 @@ export async function searchHn(query: string, budget: HnBudget, opts: { recentDa
 
 /** The default source: Algolia search. Tests and evals pass their own. */
 export const algoliaHn: HnSource = { search: (query, budget) => searchHn(query, budget) };
+
+// ----------------------------------------------------------------- one discussion (P6 R3)
+
+/** A comment in a discussion, flattened: its own id, plain text and how many direct replies it has. */
+export type HnComment = { id: string; author: string; text: string; replies: number };
+
+/** Algolia's item tree → every comment in it (depth-first, at most `max`). HN shows no points for comments. */
+export function parseHnItem(json: unknown, max = 500): HnComment[] {
+  const out: HnComment[] = [];
+  const walk = (node: unknown) => {
+    if (!isObj(node) || out.length >= max) return;
+    const children = Array.isArray(node.children) ? node.children : [];
+    if (str(node.type) === "comment" && /^\d{1,12}$/.test(String(node.id ?? ""))) {
+      out.push({ id: String(node.id), author: hnPlain(str(node.author), 60), text: hnPlain(str(node.text), 4000), replies: children.filter(isObj).length });
+    }
+    for (const child of children) walk(child);
+  };
+  walk(json);
+  return out;
+}
+
+/** The comments of one HN item (a story or a comment), or null when HN no longer has it. */
+export async function hnItem(url: string, budget: HnBudget, opts: { fetch?: typeof fetch } = {}): Promise<HnComment[] | null> {
+  const id = /^https:\/\/news\.ycombinator\.com\/item\?id=(\d{1,12})$/.exec(url)?.[1];
+  if (!id) throw new HnReadError("Use a news.ycombinator.com item link.");
+  budget.take();
+  if (hnFakeAllowed() && !opts.fetch) {
+    return [{ id: "2", author: "fake_founder", text: "Thanks, I will try the reminder rule.", replies: 0 }];
+  }
+  const call = opts.fetch ?? fetch;
+  let response: Response;
+  try {
+    response = await call(`${HN_BASE}/items/${id}`, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { accept: "application/json" } });
+  } catch {
+    throw new HnReadError("Hacker News did not answer in time. Try again in a minute.");
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) throw new HnReadError("Hacker News could not be read. Try again later.");
+  const json = await response.json().catch(() => null);
+  if (!isObj(json)) return null;
+  // Reading a comment's own link: count it too, so the founder's pasted reply is in the list.
+  return str(json.type) === "comment" ? parseHnItem({ type: "story", children: [json] }) : parseHnItem(json);
+}

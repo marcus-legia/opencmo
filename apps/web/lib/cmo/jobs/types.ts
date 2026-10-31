@@ -100,6 +100,17 @@ export type ZernioPostRow = {
   published_at: string;
 };
 
+/** A replied thread due its outcome check (SQL `cmo_reply_outcomes_due`). `reply` is what the founder posted. */
+export type ReplyOutcomeDue = {
+  outcome_id: string;
+  opportunity_id: string;
+  platform: "reddit" | "hn";
+  url: string;
+  community: string;
+  reply: string;
+  outcome_url: string | null;
+};
+
 export type ConnectedAccountRow = { id: string; platform: AccountMetricRow["platform"]; handle: string; zernio_account_id: string };
 
 export type StepStatus = "running" | "done" | "failed" | "skipped";
@@ -248,6 +259,10 @@ export interface CmoStore {
   saveAccountMetrics(userId: string, rows: AccountMetricRow[]): Promise<number>;
   /** P6 A2: recomputes the founder's best hours from their numbers (SQL `best_slots_refresh`); returns hours stored. */
   refreshBestSlots(userId: string): Promise<number>;
+  /** P6 A3: replies three days old and never checked. */
+  replyOutcomesDue(userId: string, limit: number): Promise<ReplyOutcomeDue[]>;
+  /** P6 A3: stores one check (once); false when it was already checked. */
+  saveReplyOutcome(userId: string, outcomeId: string, check: { status: "found" | "not_found" | "gone"; votes: number | null; replies: number | null }): Promise<boolean>;
   /** The inbox item a replay run answers; null when it is gone or not the user's. */
   inbox(userId: string, inboxId: string): Promise<InboxState | null>;
   /** Writes the waiting model call to the run's inbox item and ends the run; null when the lease was lost. */
