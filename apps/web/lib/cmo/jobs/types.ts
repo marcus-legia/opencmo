@@ -144,6 +144,8 @@ export type Opportunity = {
   /** P5 R1: the rule the draft was written under, and why ("r/x forbids self-promotion"). */
   rule?: SubredditVerdict;
   rule_why?: string;
+  /** P6 R4: where the thread is. Omitted means Reddit (the column's default). */
+  platform?: "reddit" | "hn";
 };
 
 /** What a subreddit's rules allow (P5 R1): name the product, help only, or stay out. */

@@ -22,7 +22,7 @@ B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
 - [ ] **B1 Look check (S4)**: before a video, short or slideshow card (long take, Shorts, Slideshow squads in
       `lib/departments/studio/`), call Modal `look` on the full-size export (up to 12 frames); fixed questions; one
       send-back to the squad, then the card shows the note.
-- [ ] **B3 Hacker News (R4)**: Algolia HN search (no key, within its rate limit) for Sales and Research, budget,
+- [x] **B3 Hacker News (R4)**: Algolia HN search (no key, within its rate limit) for Sales and Research, budget,
       untrusted wrapping, tests with recorded responses.
 - [ ] **B4 X threads (W4)**: `post_draft` thread mode (hook post with the promise, one step per post, no recap
       ending, checks per post), posting as a thread through the publish adapter.
@@ -62,6 +62,12 @@ B0 → (push, M1) → B1 → B2 (editor first, M2) → B3 → B4.
   measured by the look check at runtime). All pass on the fake provider; code tiers asserted in `coverage.check.ts`.
   **The real run waits for the owner** (gate 4): `ai-evals.yml` by hand with `job=b4,s4-shorts,s4-slideshow,s4-long-take`;
   not added to the weekly cron, which would spend every Monday.
+- **B3 Hacker News (2026-10-31):** `social/hn.ts` (Algolia, no key, discussion URL only, HTML to plain text, our own
+  budget) on a recorded response (`hn.check.ts`). Sales: up to 3 searches of the scan's queries, newest within 30 days,
+  at most 8 stories scored with Reddit's; replies on HN are always help only (no rules page; HN frowns on
+  self-promotion); saved with `platform: "hn"` (A's request 2). Research: `search_hackernews` in the CMO chat and MCP,
+  counted in the turn's lookups. A failing HN search never fails a scan. The w4 eval stays Reddit-only so it compares
+  with older runs. **Not run:** a real scan against Algolia end to end (one recorded response only).
 
 ## Requests
 

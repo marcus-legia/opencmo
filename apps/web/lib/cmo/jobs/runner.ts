@@ -16,6 +16,7 @@ import { planWeek } from "./plan-week";
 import { pullMetrics } from "./pull-metrics";
 import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
+import type { HnThread } from "../social/hn";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
 import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
@@ -49,9 +50,11 @@ export type JobContext = {
   think<S extends z.ZodType>(opts: ThinkOptions<S>): Promise<z.infer<S>>;
   /** Stands in for the Reddit search (evals, checks); production leaves it unset. */
   searchReddit?: (query: string) => Promise<RedditThread[]>;
+  /** Stands in for the Hacker News search (P6 R4: evals, checks); production leaves it unset. */
+  searchHn?: (query: string) => Promise<HnThread[]>;
 };
 
-export type RunOptions = { searchReddit?: JobContext["searchReddit"] };
+export type RunOptions = { searchReddit?: JobContext["searchReddit"]; searchHn?: JobContext["searchHn"] };
 
 export type JobOutput = Record<string, unknown>;
 type Job = (ctx: JobContext) => Promise<JobOutput>;
@@ -131,6 +134,7 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
     },
     think: (opts) => think(opts, brain, inbox.answers),
     searchReddit: opts.searchReddit,
+    searchHn: opts.searchHn,
   };
 
   const job = JOBS[run.kind];
@@ -180,7 +184,7 @@ export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; bud
   while (Date.now() < deadline) {
     const run = await store.claim(opts.runId);
     if (!run) break;
-    await runOne(store, run, { searchReddit: opts.searchReddit });
+    await runOne(store, run, { searchReddit: opts.searchReddit, searchHn: opts.searchHn });
     ran += 1;
     if (opts.runId) break;
   }
