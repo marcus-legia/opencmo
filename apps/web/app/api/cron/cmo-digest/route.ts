@@ -4,6 +4,7 @@ import { cronAuthorized } from "@/lib/cron-auth";
 import { localClock } from "@/lib/cmo/digest";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { emailSender } from "@/lib/notify/email";
+import { pushNewCards, vapidFromEnv } from "@/lib/notify/push";
 import { sendDigestEmail, sendExpiringEmails } from "@/lib/notify/send";
 import { SITE_URL } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -13,7 +14,7 @@ export const maxDuration = 120;
 
 /**
  * Releases held cards whose day has come, then sends the morning digest to founders whose local hour is their
- * `digest_hour`, and one email for each schedule card about to expire. Called once an hour; `email_log_claim` makes
+ * `digest_hour`, one email for each schedule card about to expire, and one push per browser for new cards. Called once an hour; `email_log_claim` makes
  * a second call in the same hour send nothing. With no sender it only counts: the digest is on the Dashboard anyway.
  */
 export async function GET(request: NextRequest) {
@@ -58,5 +59,15 @@ export async function GET(request: NextRequest) {
       console.warn("[cron] cmo-digest: expiring emails not sent", err instanceof Error ? err.message : err);
     }
   }
-  return NextResponse.json({ due, sent, expiring, released: released.data ?? 0, sender: send?.name ?? null });
+  // One push per browser for the cards raised since its last push (P6 C1); none without VAPID keys.
+  let pushed = 0;
+  const vapid = vapidFromEnv();
+  if (vapid) {
+    try {
+      pushed = await pushNewCards(admin, vapid);
+    } catch (err) {
+      console.warn("[cron] cmo-digest: pushes not sent", err instanceof Error ? err.message : err);
+    }
+  }
+  return NextResponse.json({ due, sent, expiring, pushed, released: released.data ?? 0, sender: send?.name ?? null });
 }
