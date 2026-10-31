@@ -1867,17 +1867,22 @@ declare
   v_kind text;
   v_id uuid;
   v_expires timestamptz;
+  v_prev public.approvals;
+  v_status text := 'waiting';
+  v_held_until timestamptz;
 begin
   if v_snapshot is null then
     return;
   end if;
   v_hash := public.approval_hash(v_snapshot);
   if exists (select 1 from public.approvals
-             where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting' and content_hash = v_hash) then
+             where ref_kind = p_ref_kind and ref_id = p_ref_id and status in ('waiting', 'held') and content_hash = v_hash) then
     return;
   end if;
+  select * into v_prev from public.approvals
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status in ('waiting', 'held') for update;
   update public.approvals set status = 'cancelled', decided_at = now()
-  where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting';
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status in ('waiting', 'held');
   v_kind := v_snapshot->>'kind';
   -- A failure card (it carries the last error) stays open while the slot's window lasts, so Retry can still post
   -- at the approved time; any other schedule card expires at its time.
@@ -1885,9 +1890,17 @@ begin
     select case when s.error is not null then s.window_ends_at else s.publish_at end into v_expires
     from public.schedule_slots s where s.id = p_ref_id;
   end if;
+  if v_prev.id is not null then
+    -- A replacement keeps its place: not counted again, still held if the old one was.
+    v_status := case when v_prev.status = 'held' and v_expires is null then 'held' else 'waiting' end;
+    v_held_until := case when v_status = 'held' then v_prev.held_until end;
+  elsif not public.card_budget_take(p_user, v_expires is not null) then
+    v_status := 'held';
+    v_held_until := public.card_budget_next_day(p_user);
+  end if;
   -- A schedule card carries its time and account in the foot and expires when its time comes (rule 4).
   insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, price_credits,
-    post_at, account, expires_at)
+    post_at, account, expires_at, status, held_until)
   values (p_user, v_kind,
     case v_kind when 'post' then 'writer' when 'reply' then 'sales'
       when 'script' then 'studio' when 'price' then 'studio' when 'finished_video' then 'studio'
@@ -1896,7 +1909,7 @@ begin
     case when v_kind in ('script', 'price') then (v_snapshot->>'price_credits')::integer end,
     case when v_kind = 'schedule' then (v_snapshot->>'publish_at')::timestamptz end,
     case when v_kind = 'schedule' then left(v_snapshot->>'handle', 100) end,
-    v_expires)
+    v_expires, v_status, v_held_until)
   returning id into v_id;
   if v_kind = 'schedule' then
     update public.schedule_slots set approval_id = v_id, updated_at = now() where id = p_ref_id;
@@ -1920,8 +1933,38 @@ begin
     return;
   end if;
   update public.approvals set snapshot = v_snapshot, content_hash = public.approval_hash(v_snapshot)
-  where ref_kind = p_ref_kind and ref_id = p_ref_id and status = 'waiting'
+  where ref_kind = p_ref_kind and ref_id = p_ref_id and status in ('waiting', 'held')
     and content_hash is distinct from public.approval_hash(v_snapshot);
+end;
+$$;
+
+
+--
+-- Name: approval_release_held(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_release_held(p_limit integer DEFAULT 500) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_card public.approvals;
+  v_n integer := 0;
+begin
+  for v_card in
+    select * from public.approvals where status = 'held' and held_until <= now()
+    order by user_id, created_at limit greatest(1, least(p_limit, 5000))
+    for update skip locked
+  loop
+    if public.card_budget_take(v_card.user_id, false) then
+      update public.approvals set status = 'waiting', held_until = null where id = v_card.id;
+      v_n := v_n + 1;
+    else
+      -- `card_budget_take` counted it as held again on today's row; it tries tomorrow.
+      update public.approvals set held_until = public.card_budget_next_day(v_card.user_id) where id = v_card.id;
+    end if;
+  end loop;
+  return v_n;
 end;
 $$;
 
@@ -2266,6 +2309,76 @@ $$;
 CREATE FUNCTION public.auto_transcript_daily_seconds() RETURNS numeric
     LANGUAGE sql IMMUTABLE
     AS $$ select 10800::numeric $$;
+
+
+--
+-- Name: best_slots_refresh(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.best_slots_refresh(p_user uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rules jsonb := public.best_time_rules();
+  v_n integer;
+begin
+  delete from public.best_slots where user_id = p_user;
+  insert into public.best_slots (user_id, platform, hour, median_views_per_hour, posts, computed_at)
+  select p_user, b.platform, b.hour, percentile_cont(0.5) within group (order by b.views), count(*), now()
+  from public.best_time_posts(p_user) b
+  where b.platform in (
+    select platform from public.best_time_posts(p_user) group by platform having count(*) >= (v_rules->>'minPosts')::integer)
+  group by b.platform, b.hour
+  having count(*) >= (v_rules->>'minPostsPerHour')::integer;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: best_time_posts(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.best_time_posts(p_user uuid) RETURNS TABLE(item_id uuid, platform text, hour smallint, views bigint)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with r as (select public.best_time_rules() as j),
+  latest as (
+    select distinct on (m.item_id) m.item_id, greatest(m.views, coalesce(m.impressions, 0)) as views
+    from public.post_metrics m
+    where m.user_id = p_user
+    order by m.item_id, m.measured_at desc
+  ),
+  posts as (
+    select i.id, public.platform_profile_id(i.platform) as platform, l.views,
+      coalesce(i.published_at, (
+        select max(s.publish_at) from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+        where s.user_id = p_user and s.status = 'published'
+          and ((d.ref_kind = 'content_item' and d.ref_id = i.id)
+            or (d.ref_kind = 'clip' and d.ref_id = i.clip_id and s.platform = public.platform_profile_id(i.platform)))
+      )) as published_at
+    from latest l join public.content_items i on i.id = l.item_id and i.user_id = p_user
+  )
+  select p.id, p.platform, extract(hour from p.published_at at time zone public.schedule_timezone(p_user))::smallint, p.views
+  from posts p, r
+  where p.published_at is not null
+    and p.platform in ('x', 'threads', 'linkedin', 'tiktok', 'youtube', 'instagram')
+    and p.published_at >= now() - make_interval(days => (r.j->>'windowDays')::integer)
+    and p.published_at <= now() - make_interval(hours => (r.j->>'settleHours')::integer)
+$$;
+
+
+--
+-- Name: best_time_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.best_time_rules() RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select '{"minPosts": 10, "minPostsPerHour": 2, "windowDays": 90, "settleHours": 24}'::jsonb $$;
 
 
 --
@@ -2740,6 +2853,52 @@ $$;
 CREATE FUNCTION public.capture_daily_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$ select 30 $$;
+
+
+--
+-- Name: card_budget_next_day(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.card_budget_next_day(p_user uuid) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select (((now() at time zone public.schedule_timezone(p_user))::date + 1)::timestamp) at time zone public.schedule_timezone(p_user)
+$$;
+
+
+--
+-- Name: card_budget_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.card_budget_rules() RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select '{"perDay": 10}'::jsonb $$;
+
+
+--
+-- Name: card_budget_take(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.card_budget_take(p_user uuid, p_force boolean) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_day date := (now() at time zone public.schedule_timezone(p_user))::date;
+  v_raised integer;
+begin
+  insert into public.card_budget (user_id, day) values (p_user, v_day) on conflict (user_id, day) do nothing;
+  select raised into v_raised from public.card_budget where user_id = p_user and day = v_day for update;
+  if p_force or v_raised < (public.card_budget_rules()->>'perDay')::integer then
+    update public.card_budget set raised = raised + 1 where user_id = p_user and day = v_day;
+    return true;
+  end if;
+  update public.card_budget set held = held + 1 where user_id = p_user and day = v_day;
+  return false;
+end;
+$$;
 
 
 --
@@ -4177,6 +4336,24 @@ $$;
 
 
 --
+-- Name: cmo_reply_outcomes_due(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETURNS TABLE(outcome_id uuid, opportunity_id uuid, platform text, url text, community text, reply text, outcome_url text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.id, p.id, p.platform, p.url, p.community, p.reply, o.outcome_url
+  from public.cmo_draft_outcomes o
+  join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
+  where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
+    and o.decided_at <= now() - interval '3 days' and p.reply is not null
+  order by o.decided_at desc
+  limit greatest(1, least(coalesce(p_limit, 10), 50));
+$$;
+
+
+--
 -- Name: cmo_resume(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4211,6 +4388,45 @@ begin
   return found;
 end;
 $$;
+
+
+--
+-- Name: cmo_save_account_metrics(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_account_metrics(p_user uuid, p_rows jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_row jsonb;
+  v_account public.social_accounts;
+  v_count integer := 0;
+begin
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 1000 then
+    raise exception 'These numbers are not valid.' using errcode = '22023';
+  end if;
+  for v_row in select * from jsonb_array_elements(p_rows) loop
+    select * into v_account from public.social_accounts
+    where id = (v_row->>'social_account_id')::uuid and user_id = p_user;
+    if not found or coalesce(v_row->>'day', '') !~ '^\d{4}-\d{2}-\d{2}$' then
+      continue;
+    end if;
+    insert into public.account_metrics (user_id, social_account_id, platform, handle, day, followers, impressions,
+      engagements, video_views, posts, measured_at)
+    values (p_user, v_account.id, v_account.platform, v_account.handle, (v_row->>'day')::date,
+      public.nonneg((v_row->>'followers')::bigint), public.nonneg((v_row->>'impressions')::bigint),
+      public.nonneg((v_row->>'engagements')::bigint), public.nonneg((v_row->>'video_views')::bigint),
+      public.nonneg((v_row->>'posts')::bigint)::integer, now())
+    on conflict (user_id, platform, handle, day) do update
+      set social_account_id = excluded.social_account_id, followers = coalesce(excluded.followers, account_metrics.followers),
+          impressions = excluded.impressions, engagements = excluded.engagements, video_views = excluded.video_views,
+          posts = excluded.posts, measured_at = now();
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$_$;
 
 
 --
@@ -4382,17 +4598,30 @@ CREATE FUNCTION public.cmo_save_metrics(p_user uuid, p_rows jsonb) RETURNS integ
 declare
   v_row jsonb;
   v_count integer := 0;
+  v_source text;
+  v_item uuid;
 begin
-  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 50 then
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 200 then
     raise exception 'These numbers are not valid.' using errcode = '22023';
   end if;
   for v_row in select * from jsonb_array_elements(p_rows) loop
-    -- Chỉ bài ĐÃ ĐĂNG của chính người dùng: worker không ghi nhầm sang tài khoản khác.
-    if exists (select 1 from public.content_items i where i.id = (v_row->>'item_id')::uuid and i.user_id = p_user and i.status = 'published') then
-      insert into public.post_metrics (user_id, item_id, url, views, likes, replies, reposts)
-      values (p_user, (v_row->>'item_id')::uuid, left(v_row->>'url', 500),
+    v_source := coalesce(v_row->>'source', 'public');
+    if v_source not in ('public', 'zernio') then
+      raise exception 'These numbers are not valid.' using errcode = '22023';
+    end if;
+    v_item := (v_row->>'item_id')::uuid;
+    -- Only the founder's own published posts: the job never writes numbers onto someone else's.
+    if (v_source = 'public' and exists (select 1 from public.content_items i
+          where i.id = v_item and i.user_id = p_user and i.status = 'published'))
+       or (v_source = 'zernio' and exists (select 1 from public.cmo_zernio_posts(p_user, '-infinity') z where z.item_id = v_item)) then
+      if coalesce(v_row->>'views', v_row->>'impressions', v_row->>'likes', v_row->>'replies', v_row->>'reposts', v_row->>'engagements') is null then
+        continue;
+      end if;
+      insert into public.post_metrics (user_id, item_id, url, views, likes, replies, reposts, source, impressions, engagements)
+      values (p_user, v_item, left(coalesce(v_row->>'url', ''), 500),
         greatest(0, coalesce((v_row->>'views')::bigint, 0)), greatest(0, coalesce((v_row->>'likes')::bigint, 0)),
-        greatest(0, coalesce((v_row->>'replies')::bigint, 0)), greatest(0, coalesce((v_row->>'reposts')::bigint, 0)));
+        greatest(0, coalesce((v_row->>'replies')::bigint, 0)), greatest(0, coalesce((v_row->>'reposts')::bigint, 0)),
+        v_source, public.nonneg((v_row->>'impressions')::bigint), public.nonneg((v_row->>'engagements')::bigint));
       v_count := v_count + 1;
     end if;
   end loop;
@@ -4455,6 +4684,47 @@ begin
   return v_count;
 end;
 $$;
+
+
+--
+-- Name: cmo_save_reply_outcome(uuid, uuid, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_reply_outcome(p_user uuid, p_outcome uuid, p_status text, p_votes integer, p_replies integer) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_row public.cmo_draft_outcomes;
+  v_opp public.opportunities;
+  v_where text;
+begin
+  if p_status is null or p_status not in ('found', 'not_found', 'gone')
+     or (p_status = 'found' and p_votes is null and p_replies is null)
+     or (p_status <> 'found' and (p_votes is not null or p_replies is not null)) then
+    raise exception 'This reply check is not valid.' using errcode = '22023';
+  end if;
+  update public.cmo_draft_outcomes
+  set outcome_status = p_status, outcome_votes = p_votes, outcome_replies = greatest(0, p_replies), outcome_checked_at = now()
+  where id = p_outcome and user_id = p_user and department = 'sales' and action = 'replied' and outcome_checked_at is null
+  returning * into v_row;
+  if not found then
+    return false;
+  end if;
+  if p_status = 'found' then
+    select * into v_opp from public.opportunities where id = v_row.item_id;
+    v_where := case when v_opp.platform = 'hn' then 'on Hacker News'
+                    when coalesce(v_opp.community, '') ~ '^r/[A-Za-z0-9_]{1,40}$' then 'in ' || v_opp.community
+                    else 'on Reddit' end;
+    insert into public.cmo_memories (user_id, type, body)
+    values (p_user, 'feedback', left(format('A reply %s %s got %s and %s three days later.', v_where,
+      case when v_row.mentioned_product then 'that named the product' else 'that only helped' end,
+      case when p_votes is null then 'no vote count' when p_votes = 1 then '1 vote' else p_votes || ' votes' end,
+      case when p_replies is null then 'no reply count' when p_replies = 1 then '1 reply' else p_replies || ' replies' end), 600));
+  end if;
+  return true;
+end;
+$_$;
 
 
 --
@@ -4537,6 +4807,32 @@ begin
   end if;
   return v_row;
 end;
+$$;
+
+
+--
+-- Name: cmo_zernio_posts(uuid, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_zernio_posts(p_user uuid, p_since timestamp with time zone) RETURNS TABLE(item_id uuid, external_id text, external_url text, platform text, social_account_id uuid, zernio_account_id text, published_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(case when d.ref_kind = 'content_item' then d.ref_id end, cap.id) as item_id,
+    s.external_id, s.external_url, s.platform, s.account_id, a.zernio_account_id, s.publish_at
+  from public.schedule_slots s
+  join public.deliverables d on d.id = s.deliverable_id
+  left join public.social_accounts a on a.id = s.account_id
+  left join lateral (
+    select i.id from public.content_items i
+    where d.ref_kind = 'clip' and i.user_id = p_user and i.clip_id = d.ref_id and i.department = 'video'
+      and i.platform = public.platform_profile_id(s.platform)
+    order by i.updated_at desc limit 1
+  ) cap on true
+  where s.user_id = p_user and s.status = 'published' and s.mode = 'publish' and s.external_id is not null
+    and s.publish_at >= p_since
+  order by s.publish_at desc
+  limit 200;
 $$;
 
 
@@ -6340,8 +6636,8 @@ begin
       left join public.clips c on c.id = t.clip_id
      where t.job_id = p_job_id or c.job_id = p_job_id
     union
-    -- A browser upload exists before the worker writes its output manifest; until then the payload is the
-    -- only lasting reference to it.
+    -- Browser upload tồn tại trước khi worker có output manifest; payload là
+    -- tham chiếu bền vững duy nhất trong khe đó.
     select coalesce(t.payload->>'bucket', 'exports'), t.payload->>'object'
       from public.tasks t
       left join public.clips c on c.id = t.clip_id
@@ -7196,6 +7492,16 @@ $$;
 
 
 --
+-- Name: nonneg(bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.nonneg(p bigint) RETURNS bigint
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select case when p is null then null else greatest(0, p) end $$;
+
+
+--
 -- Name: normalize_capture_url(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7322,6 +7628,37 @@ begin
   return v_row;
 end;
 $$;
+
+
+--
+-- Name: opportunity_reply_url(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_reply_url(p_id uuid, p_url text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_opp public.opportunities;
+  v_url text := trim(coalesce(p_url, ''));
+  v_base text;
+begin
+  select * into v_opp from public.opportunities where id = p_id and user_id = v_user and status = 'replied';
+  if not found then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  v_base := regexp_replace(v_opp.url, '^https://(www\.|old\.)?reddit\.com', '');
+  if char_length(v_url) > 500
+     or not ((v_opp.platform = 'hn' and v_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$')
+          or (v_opp.platform = 'reddit' and v_url ~ '^https://(www\.|old\.)?reddit\.com/r/'
+              and position(rtrim(v_base, '/') || '/' in regexp_replace(v_url, '^https://(www\.|old\.)?reddit\.com', '')) = 1)) then
+    raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
+  end if;
+  update public.cmo_draft_outcomes set outcome_url = v_url
+  where user_id = v_user and department = 'sales' and item_id = p_id and action = 'replied';
+end;
+$_$;
 
 
 --
@@ -8088,6 +8425,48 @@ begin
     return next v_user;
   end loop;
 end;
+$$;
+
+
+--
+-- Name: push_done(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.push_done(p_subscription uuid, p_status integer) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_status in (404, 410) then
+    delete from public.push_subscriptions where id = p_subscription;
+    return false;
+  end if;
+  update public.push_subscriptions
+  set last_pushed_at = case when p_status between 200 and 299 then now() else last_pushed_at end,
+      failed_at = case when p_status between 200 and 299 then null else now() end
+  where id = p_subscription;
+  return true;
+end;
+$$;
+
+
+--
+-- Name: push_due(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.push_due(p_limit integer) RETURNS TABLE(subscription_id uuid, user_id uuid, endpoint text, waiting integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.id, s.user_id, s.endpoint,
+    (select count(*)::integer from public.approvals a where a.user_id = s.user_id and a.status = 'waiting')
+  from public.push_subscriptions s
+  where public.push_endpoint_allowed(s.endpoint)
+    and not exists (select 1 from public.notify_settings n where n.user_id = s.user_id and not n.push)
+    and exists (select 1 from public.approvals a where a.user_id = s.user_id and a.status = 'waiting'
+                and a.created_at > coalesce(s.last_pushed_at, s.created_at))
+  order by s.user_id
+  limit greatest(1, least(coalesce(p_limit, 200), 1000));
 $$;
 
 
@@ -9882,6 +10261,24 @@ $$;
 
 
 --
+-- Name: schedule_candidate_times(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_candidate_times(p_user uuid, p_platform text) RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select array_agg(to_char(make_time(b.hour, 0, 0), 'HH24:MI') order by b.median_views_per_hour desc, b.hour)
+     from (select * from public.best_slots where user_id = p_user and platform = p_platform
+           order by median_views_per_hour desc, hour
+           limit greatest(1, jsonb_array_length(public.schedule_rules()->'platforms'->p_platform->'times'))) b),
+    (select array_agg(t) from jsonb_array_elements_text(public.schedule_rules()->'platforms'->p_platform->'times') t)
+  )
+$$;
+
+
+--
 -- Name: schedule_change(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10375,6 +10772,7 @@ declare
   v_earliest timestamptz := now() + make_interval(mins => (v_rules->>'leadMinutes')::integer);
   v_cap integer := (v_rules->'platforms'->p_platform->>'dailyCap')::integer;
   v_today date := (now() at time zone v_tz)::date;
+  v_times text[] := public.schedule_candidate_times(p_user, p_platform);
   v_parent uuid;
   v_day integer;
   v_time text;
@@ -10387,7 +10785,7 @@ begin
   from public.deliverables d join public.clips c on c.id = d.ref_id
   where d.id = p_deliverable and d.ref_kind = 'clip';
   for v_day in 0 .. (v_rules->>'horizonDays')::integer loop
-    for v_time in select jsonb_array_elements_text(v_rules->'platforms'->p_platform->'times') loop
+    foreach v_time in array v_times loop
       v_at := ((v_today + v_day) + v_time::time) at time zone v_tz;
       continue when v_at < v_earliest;
       continue when exists (select 1 from public.schedule_slots
@@ -11176,6 +11574,29 @@ CREATE FUNCTION public.studio_brain_call() RETURNS boolean
     AS $$
 begin
   return coalesce(auth.jwt()->>'opencmo_actor', '') = 'brain';
+end;
+$$;
+
+
+--
+-- Name: studio_look_sendback_unchanged(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_look_sendback_unchanged(p_check uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_check public.look_checks;
+begin
+  update public.look_checks set status = 'failed', settled_at = now()
+  where id = p_check and status = 'claimed'
+  returning * into v_check;
+  if not found then
+    return false;
+  end if;
+  perform public.look_check_raise(v_check);
+  return true;
 end;
 $$;
 
@@ -13967,6 +14388,7 @@ CREATE TABLE public.push_subscriptions (
     user_agent text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     failed_at timestamp with time zone,
+    last_pushed_at timestamp with time zone,
     CONSTRAINT push_subscriptions_auth_check CHECK ((auth ~ '^[A-Za-z0-9_-]{8,100}={0,2}$'::text)),
     CONSTRAINT push_subscriptions_endpoint_check CHECK (public.push_endpoint_allowed(endpoint)),
     CONSTRAINT push_subscriptions_p256dh_check CHECK ((p256dh ~ '^[A-Za-z0-9_-]{20,200}={0,2}$'::text)),
@@ -15067,10 +15489,17 @@ CREATE INDEX api_keys_user_idx ON public.api_keys USING btree (user_id, created_
 
 
 --
+-- Name: approvals_held_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX approvals_held_idx ON public.approvals USING btree (held_until) WHERE (status = 'held'::text);
+
+
+--
 -- Name: approvals_one_waiting; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX approvals_one_waiting ON public.approvals USING btree (ref_kind, ref_id) WHERE (status = 'waiting'::text);
+CREATE UNIQUE INDEX approvals_one_waiting ON public.approvals USING btree (ref_kind, ref_id) WHERE (status = ANY (ARRAY['waiting'::text, 'held'::text]));
 
 
 --
