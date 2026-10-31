@@ -29,7 +29,7 @@ import {
   SlideshowBody,
 } from "./bodies";
 import { blockedReason, editCaption, type Decision } from "./decide";
-import { saveSlideText, slidesHref } from "./slides";
+import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
 import { approveBlocked, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
@@ -114,8 +114,10 @@ export function ApprovalCard({
   const [moving, setMoving] = useState(false);
   const [newTime, setNewTime] = useState("");
   const [shown, setShown] = useState(() => firstText(card));
-  /** Slideshow card: a slide's words were saved, so its renders are older than the edit. */
+  /** Slideshow card: a slide's words were saved, so its renders are older than the edit and a new render runs. */
   const [slideEdited, setSlideEdited] = useState(false);
+  /** Slideshow card: a decision was refused (the slideshow was edited elsewhere since it was rendered). */
+  const [slideStale, setSlideStale] = useState(false);
   const [draft, setDraft] = useState(() => firstText(card));
   const beats = card.body.kind === "script" ? card.body.beats : [];
 
@@ -134,6 +136,8 @@ export function ApprovalCard({
     const ok = await onDecide(card, decision);
     // A decided card leaves the queue and unmounts; only a refused one comes back to edit.
     if (!ok) setBusy(false);
+    // A slideshow refused after an edit in the Slides view can be rendered again from here.
+    if (!ok && card.kind === "slideshow") setSlideStale(true);
     return ok;
   }
 
@@ -163,6 +167,21 @@ export function ApprovalCard({
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
       return false;
+    }
+  }
+
+  async function rerender() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await renderAgain(card, sample);
+      setSlideEdited(true);
+      setSlideStale(false);
+      toast(sample ? "Rendering again (sample, nothing was sent)." : "Rendering again. A new card replaces this one when it is ready.");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -241,6 +260,7 @@ export function ApprovalCard({
         return [primary(), ...declineAction];
       case "slideshow":
         // Approving words the renders do not show yet would approve a video nobody saw: wait for the new card.
+        if (slideStale && !slideEdited) return [{ label: "Render again", variant: "primary", run: () => void rerender() }, { label: "Open in Slides", variant: "secondary", href: slidesHref(card.body.clipId) }, ...declineAction];
         return [{ ...primary(), disabled: slideEdited ? "The slideshow renders again with your words; approve the new card." : undefined }, { label: "Open in Slides", variant: "secondary", href: slidesHref(card.body.clipId) }, ...declineAction];
       case "schedule": {
         const body = card.body;

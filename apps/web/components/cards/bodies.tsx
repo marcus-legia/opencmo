@@ -404,8 +404,8 @@ export function SlideshowBody({
       </div>
       {edited ? (
         <p className="v2-card-state is-expired" data-testid="slideshow-edited">
-          <b>Text changed</b>
-          <span>The MP4 and PNGs above show the old words. The slideshow renders again and comes back as a new card.</span>
+          <b>Rendering again</b>
+          <span>The MP4 and PNGs above show the old words. A new card with your changes replaces this one when it is ready.</span>
         </p>
       ) : null}
       {body.captions?.length ? (

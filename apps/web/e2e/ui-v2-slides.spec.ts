@@ -228,6 +228,93 @@ test("Slideshow card: slides, quick text edit, approve finishes the order", asyn
   await expect(sample.getByRole("button", { name: "Approve" })).toBeDisabled();
 });
 
+/**
+ * A slideshow with real slides and a waiting card, the way the squad leaves it: the founder's own edit (built through
+ * the ops route), a Slideshow order, both renders of the document as it is, done.
+ */
+async function liveSlideshow(page: Page, db: SupabaseClient, user: E2EUser, me: SupabaseClient) {
+  const { data: clipId, error } = await me.rpc("create_slideshow", { p_name: "Three cuts", p_aspect: "9:16" });
+  expect(error).toBeNull();
+  const opened = await page.request.get(`/api/v1/editor/project?clip_id=${clipId}`);
+  expect(opened.ok()).toBeTruthy();
+  const { version } = (await opened.json()) as { version: number };
+  const built = await page.request.post("/api/v1/editor/ops", {
+    data: { clip_id: clipId, expected_version: version, ops: ["Cut by words", "Ask for B-roll", "Try it"].map((heading) => ({ op: "add_slide", heading })) },
+  });
+  expect(built.ok(), await built.text()).toBeTruthy();
+  const root = await db.rpc("work_order_week_root", { p_user: user.id });
+  const parent = (Array.isArray(root.data) ? root.data[0] : root.data) as { id: string; week: string };
+  const order = await db.rpc("work_order_create", { p_user: user.id, p_week: parent.week, p_parent: parent.id, p_kind: "build_slideshow", p_title: "Three cuts" });
+  const orderId = (Array.isArray(order.data) ? order.data[0] : order.data).id as string;
+  expect((await db.rpc("work_order_move", { p_id: orderId, p_to: "running" })).error).toBeNull();
+  const { data: clipRow } = await db.from("clips").select("job_id").eq("id", clipId).single();
+  const { data: project } = await db.from("editor_projects").select("document_hash").eq("clip_id", clipId).single();
+  const [mp4, stills] = [randomUUID(), randomUUID()];
+  const rows = [mp4, stills].map((id, index) => ({ id, user_id: user.id, kind: index ? "render_stills" : "render_document", clip_id: clipId, job_id: clipRow!.job_id, status: "queued", request_id: randomUUID(), payload: {}, settings_hash: project!.document_hash }));
+  expect((await db.from("tasks").insert(rows)).error).toBeNull();
+  const slides = ["Cut by words", "Ask for B-roll", "Try it"].map((text) => ({ text, still_path: null, seconds: 4 }));
+  const step = await brainClient(user.id).rpc("studio_slideshow_rendering", {
+    p_order_id: orderId, p_clip_id: clipId, p_input: {}, p_card: { title: "Three cuts", aspect: "9:16", slides, mp4_path: null, png_set_path: null }, p_mp4_task: mp4, p_stills_task: stills,
+  });
+  expect(step.error).toBeNull();
+  expect((await db.from("tasks").update({ status: "done" }).in("id", [mp4, stills])).error).toBeNull();
+  const { data: card } = await db.from("approvals").select("id").eq("ref_id", step.data as string).eq("status", "waiting").single();
+  return { clipId: clipId as string, stepId: step.data as string, cardId: card!.id as string };
+}
+
+/** The renders "render again" queued (the worker is not running here), finished as the worker would. */
+async function finishNewRenders(db: SupabaseClient, clipId: string, stepId: string) {
+  let input: { mp4_task?: string; stills_task?: string } = {};
+  await expect
+    .poll(async () => {
+      const { data } = await db.from("studio_steps").select("status, input").eq("id", stepId).single();
+      input = (data?.input ?? {}) as typeof input;
+      return data?.status;
+    })
+    .toBe("running");
+  const { data: project } = await db.from("editor_projects").select("document_hash").eq("clip_id", clipId).single();
+  const { data: tasks } = await db.from("tasks").select("settings_hash").in("id", [input.mp4_task!, input.stills_task!]);
+  expect(tasks!.map((t) => t.settings_hash)).toEqual([project!.document_hash, project!.document_hash]);
+  expect((await db.from("tasks").update({ status: "done" }).in("id", [input.mp4_task!, input.stills_task!])).error).toBeNull();
+}
+
+test("A slide edited on the card renders again into a new card; an edit in Slides is rendered again from the card", async ({ page }) => {
+  const db = admin();
+  const { user, me } = await founder(db);
+  await signIn(page, user);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const live = await liveSlideshow(page, db, user, me);
+
+  // A quick text edit on the card: the old card closes, the new renders raise a new card with the new words.
+  await page.goto(`/app/inbox/${live.cardId}`);
+  let shown = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  await shown.getByRole("button", { name: /^Slide 2,/ }).click();
+  await shown.getByLabel("Slide 2 heading").fill("Ask for B-roll on a word");
+  await shown.getByRole("button", { name: "Save slide 2" }).click();
+  await expect(shown.getByTestId("slideshow-edited")).toContainText("Rendering again");
+  await expect(shown.getByRole("button", { name: "Approve" })).toBeDisabled();
+  await expect.poll(async () => (await db.from("approvals").select("status").eq("id", live.cardId).single()).data?.status).toBe("cancelled");
+  await finishNewRenders(db, live.clipId, live.stepId);
+  const { data: next } = await db.from("approvals").select("id, snapshot").eq("ref_id", live.stepId).eq("status", "waiting").single();
+  expect((next!.snapshot as { slides: { text: string }[] }).slides.map((x) => x.text)).toEqual(["Cut by words", "Ask for B-roll on a word", "Try it"]);
+
+  // An edit in the Slides view (here through the same ops route): approving is refused, and the card renders it again.
+  const opened = await page.request.get(`/api/v1/editor/project?clip_id=${live.clipId}`);
+  const { version, document } = (await opened.json()) as { version: number; document: { stage: { children: { children?: { id: string; kind: string }[] }[] } } };
+  const firstSlide = document.stage.children[0]!.children!.find((node) => node.kind === "group")!.id;
+  const edited = await page.request.post("/api/v1/editor/ops", { data: { clip_id: live.clipId, expected_version: version, ops: [{ op: "set_slide_text", slide_id: firstSlide, heading: "Cut a demo by words" }] } });
+  expect(edited.ok(), await edited.text()).toBeTruthy();
+  await page.goto(`/app/inbox/${next!.id}`);
+  shown = page.getByTestId("inbox-card-page").getByTestId("approval-card");
+  await shown.getByRole("button", { name: "Approve" }).click();
+  await shown.getByRole("button", { name: "Render again" }).click();
+  await expect(shown.getByTestId("slideshow-edited")).toBeVisible();
+  await expect.poll(async () => (await db.from("approvals").select("status").eq("id", next!.id).single()).data?.status).toBe("cancelled");
+  await finishNewRenders(db, live.clipId, live.stepId);
+  const { data: third } = await db.from("approvals").select("snapshot").eq("ref_id", live.stepId).eq("status", "waiting").single();
+  expect((third!.snapshot as { slides: { text: string }[] }).slides[0]!.text).toBe("Cut a demo by words");
+});
+
 test("Help-only Sales card says why and has no post button", async ({ page }) => {
   const db = admin();
   const { user } = await founder(db);
@@ -284,7 +371,8 @@ test("Help-only Sales card says why and has no post button", async ({ page }) =>
   await expect(threads).toContainText("r/startups bans self-promotion: help only");
   await threads.getByRole("button", { name: /Do AI captions hurt reach\?/ }).click();
   await expect(page.getByText("Sales did not draft a reply.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /post/i })).toHaveCount(0);
+  // The Sales screen itself (the shell's chat column suggests "Draft a post…" prompts, which post nothing).
+  await expect(page.getByTestId("v2-sales").getByRole("button", { name: /post/i })).toHaveCount(0);
 });
 
 test("Sales settings save live; a stuck scan points at them, not at credits", async ({ page }) => {

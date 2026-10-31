@@ -11,8 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import type { EditorClip } from "@/app/api/v1/editor/clips/route";
 import { slidesHref } from "@/components/cards/slides";
 import { studioItemHref } from "@/components/screens/studio/href";
-
-import { startsEmpty } from "./slides/kind";
+import { startsEmpty } from "@/lib/editor/kinds";
 
 export async function loadEditorClips(): Promise<EditorClip[]> {
   const response = await fetch("/api/v1/editor/clips").catch(() => null);
@@ -178,7 +177,8 @@ export function ClipPicker({ clipId, projectId, onOpen }: { clipId: string; proj
             >
               New slideshow
             </button>
-            {current && startsEmpty(current.kind) ? (
+            {/* A post image edit shares its upload's project: renaming it there would not show (the name is the project's). */}
+            {current && startsEmpty(current.kind) && !clips?.some((clip) => clip.project_id === current.project_id && clip.clip_id !== current.clip_id) ? (
               <button type="button" className="ed2-link" data-testid="clip-picker-rename" onClick={() => setNaming(current.project)}>
                 Rename
               </button>

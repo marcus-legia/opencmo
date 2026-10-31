@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorClip } from "@/app/api/v1/editor/clips/route";
 
 import { createBlankEdit } from "./ClipPicker";
-import { startsEmpty } from "./slides/kind";
+import { startsEmpty } from "@/lib/editor/kinds";
 
 /** Bản nên mở: sửa gần nhất (API đã xếp `edited_at` mới nhất đầu), rồi bản trống chưa mở. */
 export function pickEdit(clips: EditorClip[]): EditorClip | null {

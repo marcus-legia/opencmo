@@ -19,6 +19,8 @@ import { editorSource, signedTranscriptUrl } from "@/lib/editor/media";
 import { generateProject } from "@/lib/editor/generate-project";
 import { parseSettings, SettingsError } from "@/lib/settings-schema";
 
+import { startsEmpty } from "./kinds";
+
 export type EditorProject = {
   clip_id: string;
   /** Nguồn sự thật duy nhất (B1, C3). */
@@ -179,8 +181,7 @@ export async function ensureBlankProject(supabase: SupabaseClient, context: Clip
   return withDocument(created);
 }
 
-/** Kinds with no upload behind them: their first document is empty, and nothing is spoken until the founder adds it. */
-export const startsEmpty = (kind: string | null | undefined): boolean => kind === "blank" || kind === "slideshow";
+export { startsEmpty };
 
 /** The clip's project, made on first open: a blank edit gets an empty document, an upload its generated edit. */
 export function ensureProject(supabase: SupabaseClient, context: ClipContext, clipId: string): Promise<EditorProject> {

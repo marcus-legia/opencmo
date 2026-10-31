@@ -1,7 +1,8 @@
 /**
  * Quick text edits on a slideshow card (P5 C0). The card has no text action of its own: the words live in the edit,
- * so a change goes through the same `set_slide_text` op the Slides view runs (`POST /editor/ops`). The document
- * hash moves with it, which supersedes the card; the renders of the old text are never approved.
+ * so a change goes through the same `set_slide_text` op the Slides view runs (`POST /editor/ops`), then the slideshow
+ * renders again (`POST /studio/[clip]/slideshow-render`) and a new card replaces this one. The renders of the old text
+ * are never approved.
  */
 
 import { slideSpans, type ClipDocument } from "@opencmo/clip-doc";
@@ -46,7 +47,18 @@ export async function saveSlideText(card: ApprovalCard, index: number, heading: 
   const id = spans[index]?.id;
   if (!id || spans.length !== card.body.slides.length) throw new ApiError("The slideshow changed since this card was made. Open it in Slides.", 409, null);
   await api(`/editor/ops`, jsonBody({ clip_id: clip, expected_version: project.version, ops: [{ op: "set_slide_text", slide_id: id, heading: heading.trim(), body: body.trim() }] }));
+  await renderAgain(card, false);
   return changed;
+}
+
+/**
+ * A new MP4 and PNG set of the slideshow as it is saved now (after a text edit here or in the Slides view): the old
+ * card closes and a new one comes when both are done. Sample cards send nothing.
+ */
+export async function renderAgain(card: ApprovalCard, sample: boolean): Promise<void> {
+  if (card.body.kind !== "slideshow") throw new ApiError("This card has no slides.", 0, null);
+  if (sample) return;
+  await api(`/studio/${encodeURIComponent(card.body.clipId)}/slideshow-render`, jsonBody({}));
 }
 
 /** The Slides view of a slideshow's edit. */
