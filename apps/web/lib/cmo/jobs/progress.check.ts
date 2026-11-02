@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 import { buildDigest, localClock } from "../digest";
 
-import { readAll } from "./progress-run";
+import { readAll, runProgressCheck } from "./progress-run";
 import { classifyOrder, nextCheckAt, progressReport, replanBrief, type OrderLedgerRow } from "./progress";
 
 const NOW = new Date("2026-10-29T10:00:00Z");
@@ -99,7 +99,26 @@ async function paging(): Promise<void> {
   assert.deepEqual(calls, [[0, 999], [1000, 1999], [2000, 2999]]);
 }
 
-void paging().then(
+// The one replan is used only when a run was queued for it, not when a queued plan absorbed it (review follow-up Q6).
+async function replanUse(): Promise<void> {
+  for (const [queuedInput, marked] of [[{ replan_of: "o" }, 1], [{ source: "schedule" }, 0]] as const) {
+    const calls: string[] = [];
+    const rows = [{ ...order({ status: "failed" }), user_id: "u" }];
+    const query = { select: () => query, eq: () => query, order: () => query, range: async () => ({ data: rows, error: null }) };
+    const admin = {
+      from: () => query,
+      rpc: async (name: string) => {
+        calls.push(name);
+        return { data: name === "enqueue_cmo_run_for" ? { input: queuedInput } : true, error: null };
+      },
+    };
+    const outcome = await runProgressCheck(admin as never, NOW);
+    assert.equal(calls.filter((name) => name === "work_order_mark_replanned").length, marked, JSON.stringify(queuedInput));
+    assert.equal(outcome.replanned, marked);
+  }
+}
+
+void Promise.all([paging(), replanUse()]).then(
   () => console.log("progress.check: classifier, one replan per order, digest template ok"),
   (error) => {
     console.error(error);

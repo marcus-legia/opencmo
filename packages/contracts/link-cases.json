@@ -1,0 +1,5 @@
+{
+  "$comment": "What a post or caption may and may not carry as a link (review follow-up Q8). `hasLink` in apps/web/lib/cmo/jobs/check-post.ts and SQL `caption_check` both run these: check-post.check reads this file, and pgTAP 244 holds the same strings (the check verifies it does). A domain with a path is a link, unless the 'domain' is a code file name like Next.js.",
+  "refused": ["https://acme.io", "see www.acme.io", "opencmo.io/pricing", "Read acme.com/blog now", "go to example.fr/start"],
+  "allowed": ["Built with Next.js/React", "Next.js and Node.js", "Ship the app.tsx/hooks folder", "a 50/50 split", "Version 2.0/3.0"]
+}

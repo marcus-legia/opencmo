@@ -17,8 +17,12 @@ export const X_LIMIT = 280;
 /** `names`: the founder's own product name(s), which may look like a domain ("Cal.com") and are not links. */
 export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[] };
 
-/** Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"). SQL's `caption_check` holds the same. */
-const URL_LIKE = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+|\b[a-z0-9][a-z0-9-]*\.[a-z]{2,}\/\S/i;
+/**
+ * Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"), but not a code file name
+ * with a slash after it ("Next.js/React"). SQL's `caption_check` holds the same; the cases are
+ * `packages/contracts/link-cases.json`.
+ */
+const URL_LIKE = /\bhttps?:\/\/|\bwww\.[a-z0-9-]+|\b[a-z0-9][a-z0-9-]*\.(?!(?:jsx?|tsx?|mjs|py|rb|css|html?|md|json|ya?ml|txt|sql|vue|svelte)\/)[a-z]{2,}\/\S/i;
 /** A bare domain on a TLD people link to ("acme.io"); not "Next.js". */
 const BARE_DOMAIN = /\b[a-z0-9][a-z0-9-]*\.(?:com|io|ai|co|app|dev|net|org|so|xyz|me|ly|gg|sh|to|tv|link|site|online|store|tech|page|info|biz|us|uk)\b(?!\.\w)/gi;
 
