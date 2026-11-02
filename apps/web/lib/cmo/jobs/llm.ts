@@ -1,9 +1,9 @@
 import "server-only";
 
 /**
- * Một cửa gọi model cho mọi việc CMO (W0, W1, W2…): structured output ép theo schema zod, ánh
- * xạ lỗi API về câu tiếng Anh cho người dùng. Provider/model/khoá theo AGENT gọi (H1): mỗi job
- * nói "tôi là agent nào", sổ agent quyết định chạy bằng gì.
+ * One door for every CMO model call (W0, W1, W2…): structured output held to a zod schema, API errors mapped to an
+ * English sentence for the founder. The provider, model and key follow the calling AGENT (H1): each job says which
+ * agent it is, and the agent registry decides what it runs on.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -17,15 +17,13 @@ import { compatJson, OpenAiCompatError } from "@/lib/openai-compat";
 import { outage, withFailover } from "@/lib/llm-health";
 
 import { LlmError } from "./llm-error";
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
 import { assertSpendAllowed, recordSpend, spendProviderOf } from "@/lib/spend/record";
 
 export { LlmError };
 
-/** Bản giả cho CI/E2E. Không bao giờ bật trên production. */
-export function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
-}
+/** The fake for CI and e2e. Never on in production. */
+export const fakeAllowed = agentFakeAllowed;
 
 /** The agent can run: the fake, or the server has a key for some provider of it. */
 export function llmReady(agent: AgentId = "planner"): boolean {
@@ -33,15 +31,15 @@ export function llmReady(agent: AgentId = "planner"): boolean {
 }
 
 export type StructuredOptions<S extends z.ZodType> = {
-  /** Agent trong sổ (`lib/cmo/agents/registry.ts`) — quyết định provider, model, khoá. */
+  /** The agent in the registry (`lib/cmo/agents/registry.ts`): it decides the provider, model and key. */
   agent: AgentId;
   system: string;
   prompt: string;
   schema: S;
   maxTokens?: number;
-  /** Nhãn cho log nội bộ. */
+  /** A label for internal logs. */
   label: string;
-  /** Câu báo lỗi chung cho người dùng (tiếng Anh). */
+  /** The generic error sentence for the founder (English). */
   failure: string;
   /** Request time limit; the SDK default is ten minutes. */
   timeoutMs?: number;

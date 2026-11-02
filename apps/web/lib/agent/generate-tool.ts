@@ -24,7 +24,7 @@ import { priceOf, type AiModel, type GenerationKind, type GenerationSpec } from 
 
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { checkGeneration, normalizeSpec, startGeneration, type PreparedCreate } from "@/lib/generate/create";
+import { checkGeneration, normalizeSpec, requireCredits, startGeneration, type PreparedCreate } from "@/lib/generate/create";
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
@@ -416,9 +416,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
     if (!(err instanceof ApiError)) console.error("[agent] generate_media failed", err);
     return { outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } };
   };
-  // Checks and moderation for every piece run at once (a /video has up to 20); nothing is held yet.
+  // Checks and moderation for every piece run at once (a /video has up to 20); nothing is held yet. The batch's total
+  // is checked first: past the balance the whole batch is refused before any piece is moderated (review C4).
   let ready: PreparedCreate[];
   try {
+    if (runs.length > 1) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
     ready = await Promise.all(
       runs.map(({ model, spec }) =>
         checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() }),

@@ -61,5 +61,6 @@ export async function unchangedSince(
  * statuses, so the route must too, BEFORE it restores the clip: refusing afterwards would leave the
  * clip rolled back and the turn not marked undone.
  */
-const OPEN = new Set(["running", "awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"]);
+export const OPEN_TURN_STATUSES = ["running", "awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"] as const;
+const OPEN = new Set<string>(OPEN_TURN_STATUSES);
 export const turnOpen = (status: string): boolean => OPEN.has(status);

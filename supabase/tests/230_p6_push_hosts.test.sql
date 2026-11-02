@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(8);
+select plan(10);
 
 select ok(public.push_endpoint_allowed('https://fcm.googleapis.com/fcm/send/abc'), 'Chrome''s push service');
 select ok(public.push_endpoint_allowed('https://updates.push.services.mozilla.com/wpush/v2/abc'), 'Firefox''s');
@@ -14,6 +14,9 @@ select ok(public.push_endpoint_allowed('https://wns2-par02p.notify.windows.com/w
 select ok(not public.push_endpoint_allowed('https://169.254.169.254/latest/meta-data'), 'no address');
 select ok(not public.push_endpoint_allowed('https://fcm.googleapis.com.evil.example/x'), 'no look-alike host');
 select ok(not public.push_endpoint_allowed('https://evil.example/fcm.googleapis.com/x'), 'the host is what counts');
+-- The cases of packages/contracts/push-hosts.json (push.check verifies each is here).
+select ok(not public.push_endpoint_allowed('http://fcm.googleapis.com/x'), 'https only');
+select ok(not public.push_endpoint_allowed('https://example.com/push'), 'no other host');
 
 insert into auth.users (id, email) values ('e2300000-0000-4000-8000-00000000000a', 'p6push@test.local');
 set local role authenticated;

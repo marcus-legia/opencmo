@@ -85,8 +85,34 @@ async function admit(caller: Caller, messages: number): Promise<Admission | null
   return data as Admission;
 }
 
+/**
+ * Failed sign-ins per address (review follow-up S2): an unauthenticated client cannot make this server look up keys
+ * without end. Kept in the container's memory; each container counts on its own, which still bounds every one.
+ */
+export const FAILED_AUTH_LIMIT = 30;
+const FAILED_AUTH_WINDOW_MS = 10 * 60_000;
+const failedAuth = new Map<string, { count: number; since: number }>();
+
+function clientAddress(request: Request): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+}
+
+function authBlocked(address: string, now: number): boolean {
+  const entry = failedAuth.get(address);
+  if (!entry || now - entry.since > FAILED_AUTH_WINDOW_MS) return false;
+  return entry.count >= FAILED_AUTH_LIMIT;
+}
+
+function noteFailedAuth(address: string, now: number): void {
+  const entry = failedAuth.get(address);
+  if (!entry || now - entry.since > FAILED_AUTH_WINDOW_MS) failedAuth.set(address, { count: 1, since: now });
+  else entry.count += 1;
+  // Bounded memory: old windows go once the map grows.
+  if (failedAuth.size > 10_000) for (const [key, value] of failedAuth) if (now - value.since > FAILED_AUTH_WINDOW_MS) failedAuth.delete(key);
+}
+
 /** `auth` is replaceable for the checks, which run without a database. */
-export async function handle(request: Request, auth: typeof authenticate = authenticate): Promise<Response> {
+export async function handle(request: Request, auth: typeof authenticate = authenticate, now: number = Date.now()): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -100,6 +126,8 @@ export async function handle(request: Request, auth: typeof authenticate = authe
   // Stateless server: no server-to-client stream (GET) and no session to end (DELETE).
   if (request.method !== "POST") return json({ error: "This MCP server takes POST requests only." }, 405, { allow: "POST" });
 
+  const address = clientAddress(request);
+  if (authBlocked(address, now)) return rpcError(429, -32000, "Too many failed sign-ins. Try again in a few minutes.");
   let caller: Caller | null;
   try {
     caller = await auth(request.headers.get("authorization"));
@@ -107,6 +135,7 @@ export async function handle(request: Request, auth: typeof authenticate = authe
     console.error("[mcp] auth failed", err);
     return rpcError(503, -32603, "Could not check these credentials. Please try again.");
   }
+  if (!caller) noteFailedAuth(address, now);
   if (!caller) return unauthorized(request, "Sign in to OpenCMO: connect this server, or send an API key (Authorization: Bearer ocm_…).");
 
   const read = await readBody(request);

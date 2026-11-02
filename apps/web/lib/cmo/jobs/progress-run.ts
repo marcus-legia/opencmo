@@ -48,7 +48,7 @@ export async function runProgressCheck(admin: SupabaseClient, now = new Date()):
     outcome.overBudget += report.overBudget.length;
     if (!report.replan) continue;
     const order = report.replan;
-    const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", {
+    const { data: queued, error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", {
       p_user: user,
       p_kind: "plan_week",
       p_input: { source: "replan", loop: "progress-check", replan_of: order.id, brief: replanBrief(order, now) },
@@ -58,6 +58,10 @@ export async function runProgressCheck(admin: SupabaseClient, now = new Date()):
       console.warn("[cmo] progress check: no replan", user, enqueueError.message);
       continue;
     }
+    // A plan already queued absorbs the request (cmo_enqueue merges identical work) and keeps its own input: the
+    // order's one replan is used only when a run was queued for it (review follow-up Q6).
+    const run = (Array.isArray(queued) ? queued[0] : queued) as { input?: { replan_of?: unknown } } | null;
+    if (run?.input?.replan_of !== order.id) continue;
     const { error: markError } = await admin.rpc("work_order_mark_replanned", { p_id: order.id, p_problem: stuckReason(order, now) });
     if (markError) console.warn("[cmo] progress check: could not mark the replan", order.id, markError.message);
     else outcome.replanned += 1;

@@ -8,6 +8,8 @@
 import assert from "node:assert/strict";
 
 import { emailFooter, emailSender, expiringEmail, SUPPORT_EMAIL, unsubscribeUrl, type EmailSender } from "./email";
+import { cardTitle } from "@/lib/cmo/digest";
+
 import { digestDue, sendExpiringEmails } from "./send";
 
 async function main() {
@@ -89,6 +91,10 @@ async function main() {
   assert.ok(done && done[1].p_log === "log-1" && done[1].p_error === "bad snapshot", "the claim is recorded as failed");
   assert.equal(sends, 0);
   assert.ok(calls.findIndex(([n]) => n === "notify_settings_for") < calls.findIndex(([n]) => n === "email_log_claim"), "the token is read before the claim");
+
+  // One card title for the digest and the expiring email (review follow-up S3): one line, where it goes.
+  assert.equal(cardTitle({ kind: "schedule", text: "Launch day\nthread", platform: "x" }), "Launch day thread · X");
+  assert.equal(cardTitle({}), "A card waits for you");
 
   console.log("notify: sender selection, Resend request, the expiring email, the footer, the digest hour and failed claims");
 }

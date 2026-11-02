@@ -21,11 +21,9 @@ import { GEMINI_MODEL, geminiKey, geminiProvider } from "./providers/gemini";
 import { geminiFormat } from "./providers/gemini-history";
 import type { Format, Provider, ProviderKind } from "./providers/types";
 import { healthyFirst, isDown, type Candidate, type LlmProvider } from "@/lib/llm-health";
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
 
-function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
-}
+const fakeAllowed = agentFakeAllowed;
 
 const hasAnthropicKey = () => Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 

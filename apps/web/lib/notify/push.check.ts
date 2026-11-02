@@ -6,6 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { createPublicKey, generateKeyPairSync, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { PUSH_BATCH, PUSH_HOSTS, pushNewCards, sendPush, vapidAuthorization, vapidFromEnv } from "./push";
 
@@ -36,8 +37,12 @@ async function main() {
   assert.ok(verify("sha256", Buffer.from(`${m[1]}.${m[2]}`), { key: createPublicKey(publicKey.export({ format: "pem", type: "spki" })), dsaEncoding: "ieee-p1363" }, fromB64url(m[3]!)), "the signature verifies");
 
   // Only the allowed push services; the same list as SQL's push_endpoint_allowed.
-  for (const ok of [endpoint, "https://updates.push.services.mozilla.com/wpush/v2/x", "https://web.push.apple.com/QXk", "https://wns2-par02p.notify.windows.com/w/?token=x"]) assert.ok(PUSH_HOSTS.test(ok), ok);
-  for (const bad of ["http://fcm.googleapis.com/x", "https://fcm.googleapis.com.evil.example/x", "https://169.254.169.254/latest", "https://example.com/push"]) assert.ok(!PUSH_HOSTS.test(bad), bad);
+  // One case list for the TS rule and SQL's push_endpoint_allowed (review follow-up S4).
+  const hosts = JSON.parse(readFileSync(new URL("../../../../packages/contracts/push-hosts.json", import.meta.url), "utf8")) as { allowed: string[]; refused: string[] };
+  const pgtap = readFileSync(new URL("../../../../supabase/tests/230_p6_push_hosts.test.sql", import.meta.url), "utf8");
+  for (const ok of [endpoint, ...hosts.allowed]) assert.ok(PUSH_HOSTS.test(ok), ok);
+  for (const bad of hosts.refused) assert.ok(!PUSH_HOSTS.test(bad), bad);
+  for (const url of [...hosts.allowed, ...hosts.refused]) assert.ok(pgtap.includes(`'${url}'`), `pgTAP 230 tests ${url} too`);
   const calls: string[] = [];
   const fake = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push(`${String(url)} ${init?.method} ${(init?.headers as Record<string, string>).TTL}`);

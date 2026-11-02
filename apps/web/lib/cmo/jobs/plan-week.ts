@@ -1,7 +1,6 @@
 /**
- * W1 Lên kế hoạch tuần (docs/cmo/san-pham.md §4.3): Strategy + Content Strategy
- * + kết quả tuần trước + trí nhớ → 5–10 mục lịch trong 7 ngày, mỗi mục một câu
- * lý do. Không đăng gì; chỉ ghi lịch.
+ * W1 Plan the week (docs/cmo/san-pham.md §4.3): Strategy + Content Strategy + last week's results + memory → 5–10
+ * calendar items over 7 days, each with a one-sentence reason. Nothing is posted; it only writes the calendar.
  */
 
 import { z } from "zod";

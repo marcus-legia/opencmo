@@ -587,7 +587,7 @@ export function chatReadBucket(name: string): "chat_social" | "chat_site" | "res
 /** `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message. */
 export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   const budget = new ScBudget(RESEARCH_CALLS_PER_TURN);
-  const turn: CmoTurn = { siteReads: 0 };
+  const turn: CmoTurn = { siteReads: 0, startedAt: Date.now() };
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,

@@ -50,8 +50,8 @@ select is(public.mcp_admit(20), 'ok', 'another user is unaffected');
 reset role;
 select is((select count from public.rate_limits where user_id = 'e1700000-0000-4000-8000-00000000000b' and bucket = 'mcp'), 601,
   'one row in the existing mcp bucket counts messages, not calls');
-select is((select count(*)::int from public.rate_limits where user_id = 'e1700000-0000-4000-8000-00000000000a'), 0,
-  'a free account writes no rate-limit row');
+select is((select count(*)::int from public.rate_limits where user_id = 'e1700000-0000-4000-8000-00000000000a' and bucket = 'mcp'), 0,
+  'a free account writes nothing to the paid bucket (its refusals count in mcp_free, review S2)');
 -- Through the catalog (as 160): pgTAP on Supabase's PG17 used to segfault catching a permission error.
 select is(has_function_privilege('anon', 'public.mcp_admit(integer)', 'execute'), false, 'anon cannot call mcp_admit');
 

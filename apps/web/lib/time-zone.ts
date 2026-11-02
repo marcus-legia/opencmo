@@ -57,6 +57,11 @@ export function localMonday(t: number, timezone: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** The local date (`YYYY-MM-DD`) of `t` in `timezone`. */
+export function localDay(t: Date | number, timezone: string): string {
+  return wall(typeof t === "number" ? t : t.getTime(), timezone).date;
+}
+
 /** Midnight at the start of local day `day` (`YYYY-MM-DD`) in `timezone`, in UTC. */
 export function localMidnight(day: string, timezone: string): string | null {
   return fromLocalInput(`${day}T00:00`, timezone);

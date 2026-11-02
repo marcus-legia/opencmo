@@ -1,10 +1,10 @@
-"""Worker OpenCMO chạy trên Modal.
+"""The OpenCMO worker on Modal.
 
 Deploy:
     modal secret create opencmo \
         ANTHROPIC_API_KEY=... \
         SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
-        OPENCMO_WORKER_TOKEN=...   # cùng giá trị với biến của web app
+        OPENCMO_WORKER_TOKEN=...   # the same value as the web app's
         OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule; same CRON_SECRET as Vercel
         CRON_CLEANUP_SECRET=...   # cleanup only; same value as Vercel's CRON_CLEANUP_SECRET
         OPENCMO_WAKE_TOKEN=...    # `wake`; same value as the MCP server's OPENCMO_WAKE_TOKEN
@@ -16,26 +16,24 @@ Deploy:
 Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
 cannot answer (no credit, an outage); without it such output is refunded, never delivered.
 
-Bản này CẦN toàn bộ migration D1/D2 đã áp trên database TRƯỚC khi deploy.
-Deploy ngược thứ tự khiến worker gọi RPC chưa tồn tại và mọi job/task đều lỗi.
+Deploy only after every migration is applied to the database: in the other order the worker calls RPCs that do
+not exist yet and every job and task fails.
 
-Vì sao Modal chứ không phải VPS: không có máy nào để quản, không cập nhật OS,
-không systemd, không bị đánh thức lúc 2h sáng. Trả tiền theo giây, rảnh thì $0.
-Image được định nghĩa bằng chính Python nên không phải viết Dockerfile.
+Why Modal rather than a VPS: no machine to manage, no OS updates, no systemd, no 2 a.m. pages. Billed by the
+second, $0 when idle. The image is defined in Python, so there is no Dockerfile.
 
-Hai đường vào, cố ý:
-  1. `submit` — endpoint HTTP web app gọi thẳng khi người dùng bấm, rồi
-     `run_job.spawn(...)`. Không độ trễ.
-  2. `sweep()` — cron mỗi phút: reconciler trả job hết lease về hàng đợi, rồi
-     nhặt job còn queued. Đây là lưới an toàn, không phải đường chính.
+Ways in, on purpose:
+  1. `submit` — an HTTP endpoint the web app calls when the user acts, then `run_job.spawn(...)`. No delay.
+  2. `sweep()` — a cron every minute: the reconciler puts jobs whose lease ran out back in the queue, then picks
+     up what is still queued. This is the safety net, not the main path.
      It also dispatches queued AI CMO runs to the web app (`_dispatch_cmo`).
   3. `cmo_schedule()` and `cleanup()` — daily crons that call the web app's cron routes.
      Modal is the only scheduler; `apps/web/vercel.json` has no crons.
   4. `wake` — the MCP server (`mcp_app.py`, its own app) asks for an early `sweep()` with a
      token that can do nothing else.
 
-Nhờ có (2), (1) được phép hỏng: web app coi lỗi gọi `submit` là chuyện nhỏ, job
-vẫn nằm ở 'queued' và chạy chậm nhất một phút sau.
+Because of (2), (1) may fail: the web app treats a failed `submit` as minor; the job stays 'queued' and runs a
+minute later at most.
 """
 
 from __future__ import annotations
@@ -49,8 +47,8 @@ import modal
 
 APP_NAME = "opencmo"
 
-# Trần số việc một lượt `sweep()` nhặt. Có trần để một đợt dồn bất thường (lỗi
-# vòng lặp phía web, spam) không đẻ ra hàng trăm container trong một phút.
+# The most work one `sweep()` picks up, so an unusual burst (a loop bug on the web side, spam) cannot start hundreds
+# of containers in a minute.
 SWEEP_BATCH = 10
 
 # `run_task` containers. Claims stop at this many running tasks (review R6): a task spawned past it waited in Modal's
@@ -94,14 +92,12 @@ def _with_node(img: modal.Image) -> modal.Image:
 
 
 def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
-    # Cài engine từ chính repo này. Đổi sang `.pip_install("opencmo-engine")`
-    # nếu sau này publish lên PyPI.
+    # The engine is installed from this repo. Switch to `.pip_install("opencmo-engine")` if it is ever on PyPI.
     #
-    # `ignore` là bắt buộc: thư mục engine trên máy dev chứa .venv và clip test,
-    # cỡ vài GB. Không loại ra thì mỗi lần build image phải đẩy hết chỗ đó lên.
-    # Neo theo vị trí file, không theo thư mục đang đứng: "." làm
-    # `modal deploy packages/engine/modal_app.py` chạy từ gốc repo đẩy nhầm cả
-    # repo lên và pip báo "Neither 'setup.py' nor 'pyproject.toml' found".
+    # `ignore` is required: the engine folder on a dev machine holds .venv and test clips, several GB, which every
+    # image build would upload otherwise. Anchored to this file, not the working directory: "." made
+    # `modal deploy packages/engine/modal_app.py` from the repo root upload the whole repo, and pip said "Neither
+    # 'setup.py' nor 'pyproject.toml' found".
     img = img.add_local_dir(
         _ENGINE,
         remote_path="/root/engine",
@@ -115,9 +111,9 @@ def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
             "tests", "tests/**",
         ],
     )
-    # Catalog model sinh media nằm ở packages/contracts, NGOÀI thư mục engine:
-    # thiếu file này thì task `generate` nào cũng hỏng (opencmo/ai/catalog.py).
-    # Bảng task kind (opencmo/worker/kinds.py): thiếu thì worker không phân được việc nào.
+    # The media model catalog lives in packages/contracts, OUTSIDE the engine folder: without it every `generate`
+    # task fails (opencmo/ai/catalog.py). The task kinds table (opencmo/worker/kinds.py): without it the worker
+    # cannot route any work.
     # The edit-length cap the web Upload panel shares (opencmo/worker/process_job.py).
     # Platform profiles Writer and the cards share (opencmo/platforms.py).
     for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json"):
@@ -135,10 +131,9 @@ def _with_media(img: modal.Image) -> modal.Image:
 
 cpu_image = (
     modal.Image.debian_slim(python_version="3.12")
-    # `fonts-dejavu-core` là bắt buộc, không phải cho đẹp: cả phụ đề (libass) và
-    # watermark (drawtext) đều cần file font thật. debian_slim không có font nào,
-    # và thiếu font thì ffmpeg vẫn chạy — chỉ là clip ra không có chữ. Đúng kiểu
-    # lỗi im lặng mà CLAUDE.md cảnh báo.
+    # `fonts-dejavu-core` is required, not cosmetic: captions (libass) and the watermark (drawtext) need a real font
+    # file. debian_slim has none, and without one ffmpeg still runs and the clip just has no text: the silent
+    # failure CLAUDE.md warns about.
     #
     # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
     # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
@@ -183,7 +178,7 @@ cpu_image = (
         }
     )
 )
-# Tên cũ: `modal.App(image=…)` và mọi hàm không khai image riêng dùng image CPU.
+# The old name: `modal.App(image=…)`, and every function that names no image of its own uses the CPU image.
 image = cpu_image
 
 # Explainers (docs/explainer-build.md): a CPU image of its own for `clip-motion` (Remotion +
@@ -247,11 +242,11 @@ capture_image = _with_engine(capture_image)
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
 
-# Khoá ElevenLabs tách riêng, cùng lý do: thêm vào `opencmo` bằng `--force` là
-# phải gõ lại mọi khoá cũ. Thiếu nó thì web (Vercel CÓ khoá) vẫn bán voiceover
-# mà worker báo "not set up" ở MỌI lượt — đúng lỗi production 02/10.
+# The ElevenLabs key is a secret of its own for the same reason: adding it to `opencmo` with `--force` means typing
+# every old key again. Without it the web (where Vercel HAS the key) still sells voiceovers while the worker says
+# "not set up" on EVERY run: the production failure of 02/10.
 #
-#   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # cùng khoá với Vercel
+#   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # the same key as Vercel
 #
 # `run_job` needs it for an upload's transcript (ElevenLabs Scribe); `run_task` for captions of
 # library files.
@@ -285,8 +280,8 @@ def _record_call(store, job, call) -> None:
     try:
         store.set_call_id(job.id, job.attempt_id, call.object_id)
     except Exception:
-        # Chỉ để tra log Modal; thiếu nó không ảnh hưởng vòng đời job.
-        log.warning("Không ghi được call_id cho job %s", job.id, exc_info=True)
+        # Only for finding the Modal log; the job's life does not depend on it.
+        log.warning("Could not record the call_id of job %s", job.id, exc_info=True)
 
 
 @app.function(
@@ -294,9 +289,9 @@ def _record_call(store, job, call) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    # A container that dies midway (OOM, preemption) runs the SAME attempt again. A caught error was already settled by
-    # `process_job.process`, so the rerun sees the job no longer running and exits at once.
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
+    # No Modal retry (review follow-up L5, owner 2026-11-02): a container that dies midway leaves the job's lease to run
+    # out, and the database's reclaim runs it again within its own attempt limit. Both layers retrying ran a job up to
+    # six times.
     # Uploads were unbounded at 4 CPU / 4 GiB each, sharing the workspace's container quota with the sweep, submit and
     # MCP (review R6). The database already caps each user at 3 in progress.
     max_containers=20,
@@ -309,7 +304,7 @@ def run_job(job_id: str, attempt_id: str) -> None:
     try:
         job = store.get_job(job_id)
         if job is None or job.status != "running" or job.attempt_id != attempt_id:
-            log.info("Job %s: attempt %s không còn hiện hành — bỏ qua", job_id, attempt_id)
+            log.info("Job %s: attempt %s is no longer current; skipped", job_id, attempt_id)
             return
         process(store, job)
     finally:
@@ -321,11 +316,11 @@ def run_job(job_id: str, attempt_id: str) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
+    # No Modal retry: the lease reclaim is the one retry layer (L5, as run_job).
     max_containers=RUN_TASK_MAX_CONTAINERS,
 )
 def run_task(task_id: str, attempt_id: str) -> None:
-    """Chạy một task canonical; kind/payload luôn đọc lại từ database."""
+    """Runs one canonical task; its kind and payload are always read again from the database."""
     from opencmo.worker.kinds import handlers as task_handlers
 
     handlers = task_handlers()
@@ -333,7 +328,7 @@ def run_task(task_id: str, attempt_id: str) -> None:
     try:
         task = store.get_task(task_id)
         if task is None or task.status != "running" or task.attempt_id != attempt_id:
-            log.info("Task %s: attempt %s không còn hiện hành — bỏ qua", task_id, attempt_id)
+            log.info("Task %s: attempt %s is no longer current; skipped", task_id, attempt_id)
             return
         handler = handlers.get(task.kind)
         if handler is None:
@@ -475,18 +470,16 @@ def look(payload: dict) -> dict:
 @app.function(secrets=[secret], timeout=30)
 @modal.fastapi_endpoint(method="POST")
 def submit(payload: dict) -> dict:
-    """Cửa HTTP cho web app.
+    """The web app's HTTP door.
 
-    Vì sao cần: `run_job.spawn()` là API Python, mà web app là TypeScript. Không
-    có endpoint này thì job phải chờ `sweep()` nhặt — tức là trung bình 30 giây
-    người dùng nhìn màn hình "đang chờ" mà chẳng có gì chạy.
+    Why: `run_job.spawn()` is a Python API and the web app is TypeScript. Without this endpoint a job waits for
+    `sweep()`: on average 30 seconds of a "waiting" screen with nothing running.
 
-    Xác thực bằng một token dùng chung trong body, không phải header: chữ ký hàm
-    được đánh giá trên MÁY DEV lúc `modal deploy`, nên nhận `fastapi.Header` sẽ
-    bắt máy dev phải cài fastapi. Body là `dict` thuần thì không.
+    Authenticated with a shared token in the body, not a header: the function signature is evaluated on the DEV
+    MACHINE at `modal deploy`, so taking `fastapi.Header` would require fastapi there. A plain `dict` body does not.
 
-    Chỉ dùng một trong `job_id`/`task_id` từ payload. Toàn bộ dữ liệu còn lại
-    lấy từ hàng canonical mà RPC claim trả về.
+    Only `job_id` or `task_id` is taken from the payload; everything else comes from the canonical row the claim RPC
+    returns.
     """
 
     from fastapi import HTTPException
@@ -508,8 +501,8 @@ def submit(payload: dict) -> dict:
         try:
             item = store.claim_job(job_id) if job_id else store.claim_task(task_id, max_running=RUN_TASK_MAX_CONTAINERS)
         except TransientError as exc:
-            # Không retry claim. Nếu nó đã commit, lease hết hạn trả job về
-            # hàng đợi; nếu chưa, sweep phút sau nhặt.
+            # The claim is not retried. If it committed, the lease runs out and the job goes back to the queue; if not,
+            # the next minute's sweep picks it up.
             log.warning("Submit %s: transient database error, left to the sweep", job_id or task_id)
             raise HTTPException(status_code=503, detail="The database is temporarily unavailable.") from exc
 

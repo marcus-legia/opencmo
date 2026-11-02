@@ -18,7 +18,7 @@ select is(
   true, 'mcp_preview: 60 previews an hour pass');
 select is(public.rate_limit_hit('mcp_preview', 60, 3600), false, 'mcp_preview: the 61st is refused');
 select throws_ok($$ select public.rate_limit_hit('mcp_preview', 1000, 3600) $$, '22023', 'Invalid rate limit.', 'mcp_preview: the caller cannot raise its own cap');
-select is(public.rate_limit_hit('mcp', 600, 3600), true, 'the existing mcp bucket still works');
+select throws_ok($$ select public.rate_limit_hit('mcp', 600, 3600) $$, '22023', 'Invalid rate limit.', 'the unused mcp bucket is gone (review R2)');
 
 select is(public.mcp_confirm_use('c0de0000-0000-4000-8000-000000000001'), true, 'a confirm code is accepted once');
 select is(public.mcp_confirm_use('c0de0000-0000-4000-8000-000000000001'), false, 'the same code again is refused');

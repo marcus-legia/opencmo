@@ -265,7 +265,11 @@ export const SITE_READS_PER_TURN = 3;
  * Counters that live for one request (the scope is rebuilt every turn). `brain: "claude"`: the
  * caller is the founder's own Claude (MCP), so tasks it hands out think with it, through the inbox.
  */
-export type CmoTurn = { siteReads: number; brain?: Brain };
+/** `startedAt`: when this request began; past `KICK_UNTIL_MS` a started task is left to the sweep. */
+export type CmoTurn = { siteReads: number; brain?: Brain; startedAt?: number };
+
+/** A chat request runs up to 300 s; an `after()` drain started later than this would be cut off mid-job. */
+const KICK_UNTIL_MS = 200_000;
 
 export async function runCmoTool(supabase: SupabaseClient, name: string, input: unknown, turn: CmoTurn = { siteReads: 0 }): Promise<ToolOutcome> {
   try {
@@ -364,7 +368,8 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
         const kind = JOB_OF[task.agent as keyof typeof JOB_OF];
         const input =
           kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
-        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input);
+        const late = turn.startedAt !== undefined && Date.now() - turn.startedAt > KICK_UNTIL_MS;
+        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input, { kick: !late });
         const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
         return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label, ...opens({ screen: SCREEN_OF_AGENT[task.agent], ids: [run.id] }) };
       } catch (error) {

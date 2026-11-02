@@ -159,7 +159,8 @@ async function requireParent(supabase: SupabaseClient, request: CreateRequest, s
 }
 
 /** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */
-async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
+/** Refuses before any paid check when the balance cannot cover `needed`. A batch asks once, for its total. */
+export async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
   const { data, error } = await supabase.from("profiles").select("credit_balance").maybeSingle<{ credit_balance: number | null }>();
   if (error) throw error;
   const left = Number(data?.credit_balance ?? 0);

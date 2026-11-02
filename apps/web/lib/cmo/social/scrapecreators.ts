@@ -11,7 +11,7 @@
  * Không `server-only` để check chạy được; khoá chỉ đọc từ env phía server.
  */
 
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
 import { recordSpend, SPEND_CAP_MESSAGE, spendAllowed } from "@/lib/spend/record";
 import { cleanUntrusted } from "../untrusted";
 
@@ -32,9 +32,7 @@ export class SocialReadError extends Error {
   }
 }
 
-export function scFakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
-}
+export const scFakeAllowed = agentFakeAllowed;
 
 /** The provider key. `SCRAPE_CREATORS_API_KEY` is accepted too: it is the name the provider's own docs suggest. */
 function scKey(): string {

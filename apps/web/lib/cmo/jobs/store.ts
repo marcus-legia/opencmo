@@ -14,7 +14,7 @@ function one<T>(data: unknown): T | null {
   return row && typeof row === "object" && (row as { id?: unknown }).id ? (row as T) : null;
 }
 
-/** Store thật: client service role, gọi RPC chỉ-service kèm user id tường minh (như worker Python). */
+/** The real store: a service-role client calling service-only RPCs with an explicit user id (like the Python worker). */
 export function supabaseStore(admin: BaseClient): CmoStore {
   async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
     const { data, error } = await admin.rpc(name, args);
@@ -108,10 +108,18 @@ export function supabaseStore(admin: BaseClient): CmoStore {
         if (error) throw new Error(`${table}: ${error.message}`);
         return n ?? 0;
       };
+      // Views count only posts published this week (owner, 2026-11-02): a post measured this week but published
+      // earlier would add its lifetime views to every week it is measured in.
       const [posts, replies, { data: measured, error: measuredError }] = await Promise.all([
         count("content_items", ["approved", "published"], { column: "department", value: "post" }),
         count("opportunities", ["replied"]),
-        admin.from("post_metrics").select("item_id, views").eq("user_id", userId).gte("measured_at", since).limit(1000),
+        admin
+          .from("post_metrics")
+          .select("item_id, views, content_items!inner(published_at)")
+          .eq("user_id", userId)
+          .gte("measured_at", since)
+          .gte("content_items.published_at", since)
+          .limit(1000),
       ]);
       if (measuredError) throw new Error(`post_metrics: ${measuredError.message}`);
       // Several measurements per post: keep the highest per post, then add them up.

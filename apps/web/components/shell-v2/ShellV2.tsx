@@ -167,17 +167,23 @@ function V2Frame({
   // widths before React ran, so the first render here changes nothing on screen.
   const [pref, setPref] = useState<ColumnsPref>(DEFAULT_PREF);
   const [viewport, setViewport] = useState(1440);
-  useEffect(() => {
+  // The stored prefs and the window are read in a layout effect, before the first paint, and nothing is written until
+  // then: writing the defaults first drew one frame of default widths over the boot script's (review follow-up Q3).
+  const [measured, setMeasured] = useState(false);
+  useLayoutEffect(() => {
     setPref(readPref());
     const measure = () => setViewport(window.innerWidth);
     measure();
+    setMeasured(true);
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
   const inEditor = segment === EDITOR;
   // The editor needs the width: the rail is the icon strip there, whatever was chosen elsewhere.
   const columns = clampColumns(viewport, inEditor ? { ...pref, railCollapsed: true } : pref);
-  useLayoutEffect(() => applyColumns(columns), [columns.rail, columns.chat, columns.railCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    if (measured) applyColumns(columns);
+  }, [measured, columns.rail, columns.chat, columns.railCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
   const choose = useCallback((next: Partial<ColumnsPref>) => {
     setPref((was) => {
       const pref = { ...was, ...next };
