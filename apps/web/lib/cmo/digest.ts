@@ -66,6 +66,24 @@ export function buildDigest(input: DigestInput): Digest {
 }
 
 /** Reads one founder's digest content. Works with the founder's session (RLS) or the service role. */
+/**
+ * What a card is, in one line of at most 120 characters: the digest and the expiring-card email both name cards with
+ * it (review follow-up S3). One line, because a post's own newlines would land in an email's Subject header.
+ */
+export function cardTitle(snapshot: Record<string, unknown>): string {
+  const s = snapshot;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  // Every kind names itself differently; a schedule card says what goes out and where.
+  const pick =
+    s.kind === "post" ? str(s.text)
+    : s.kind === "reply" ? str(s.title)
+    : s.kind === "goal" ? str(s.goal)
+    : s.kind === "correction" ? str(s.rule)
+    : s.kind === "schedule" ? [str(s.text) ?? str(s.title) ?? "A post", str(s.platform) ? (String(s.platform) === "x" ? "X" : String(s.platform)) : null].filter(Boolean).join(" · ")
+    : (str(s.title) ?? str(s.text));
+  return (pick ?? "A card waits for you").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
 export async function loadDigestInput(
   db: SupabaseClient,
   userId: string,
@@ -78,25 +96,12 @@ export async function loadDigestInput(
     db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", since).limit(20),
   ]);
   for (const r of [waiting, out, stuck]) if (r.error) throw new Error(`digest: ${r.error.message}`);
-  const title = (row: { kind: string; snapshot: Record<string, unknown> }) => {
-    const s = row.snapshot;
-    const str = (v: unknown) => (typeof v === "string" && v ? v : null);
-    // Every kind names itself differently; a schedule card says what goes out and where.
-    const pick =
-      s.kind === "post" ? str(s.text)
-      : s.kind === "reply" ? str(s.title)
-      : s.kind === "goal" ? str(s.goal)
-      : s.kind === "correction" ? str(s.rule)
-      : s.kind === "schedule" ? [str(s.text) ?? str(s.title) ?? "A post", str(s.platform) ? (String(s.platform) === "x" ? "X" : String(s.platform)) : null].filter(Boolean).join(" · ")
-      : (str(s.title) ?? str(s.text));
-    return (pick ?? "A card waits for you").slice(0, 120);
-  };
   return {
     appUrl: opts.appUrl,
     dateLabel: opts.dateLabel,
     waiting: ((waiting.data ?? []) as { id: string; kind: string; department: string; snapshot: Record<string, unknown> }[]).map((r) => ({
       id: r.id,
-      title: title(r),
+      title: cardTitle(r.snapshot),
       department: r.department,
     })),
     wentOut: ((out.data ?? []) as { idea: string; platform: string; final_text: string | null }[]).map((r) => ({

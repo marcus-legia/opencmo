@@ -10,7 +10,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buildDigest, loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { buildDigest, cardTitle, loadDigestInput, localClock } from "@/lib/cmo/digest";
 
 import { emailFooter, expiringEmail, unsubscribeUrl, type EmailSender } from "./email";
 
@@ -105,11 +105,7 @@ export async function sendExpiringEmails(admin: SupabaseClient, sender: EmailSen
       const c = await claim(admin, founder.id, "expiring", [card.id]);
       if (!c) continue;
       const ok = await sendClaimed(admin, sender, c, async () => {
-        const s = card.snapshot;
-        // One line: the post's own newlines would land in the Subject header.
-        const what = (typeof s.text === "string" && s.text ? s.text : typeof s.title === "string" && s.title ? s.title : "A post waits for your time").replace(/\s+/g, " ").trim();
-        const where = typeof s.platform === "string" ? ` on ${String(s.platform).toUpperCase() === "X" ? "X" : s.platform}` : "";
-        const message = expiringEmail({ appUrl: opts.appUrl, cardId: card.id, title: `${what}${where}`, expiresAt: card.expires_at, timezone: founder.timezone, unsubscribeUrl: url });
+        const message = expiringEmail({ appUrl: opts.appUrl, cardId: card.id, title: cardTitle(card.snapshot), expiresAt: card.expires_at, timezone: founder.timezone, unsubscribeUrl: url });
         return sender.send({ to: founder.email!, ...message });
       });
       if (ok) sent += 1;
