@@ -66,6 +66,7 @@ import {
 } from "./long-take";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
+import { EDITOR_TOOLS, runEditorTool } from "./cmo-editor";
 import { runWaitForRun, runsFinishedBlock } from "./cmo-wait";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
@@ -602,6 +603,7 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
     async run(call) {
       if (call.name === "get_credits") return readCredits(supabase);
       if (call.name === "wait_for_run") return runWaitForRun(call.input, { supabase });
+      if (EDITOR_TOOLS.has(call.name)) return runEditorTool(supabase, call.name, call.input);
       // The in-memory caps above start again on every request (each continue rebuilds the scope); the founder's
       // counters in SQL do not, and the daily cap is shared with MCP (review R4).
       const bucket = chatReadBucket(call.name);

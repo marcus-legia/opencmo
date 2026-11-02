@@ -24,6 +24,7 @@ import { activeScene, applyOps, cutPoints, speechSources, EXPLAINER_MODEL, frame
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
+import { HANDOFF_PROMPT_MAX } from "@/lib/agent/panel";
 import type { RenderTask } from "@/lib/api/tasks";
 import { DocumentSession, SaveConflict, type SaveTransport, type TransactOptions } from "@/lib/editor/session";
 import { UI_V2 } from "@/lib/screens/flag";
@@ -385,7 +386,16 @@ function Workspace({
   // Assistant đang sửa clip: khoá mềm canvas (CNV-09) — sửa tay giữa chừng sẽ va với bài của nó.
   const [assistantBusy, setAssistantBusy] = useState(false);
   // A request the editor writes into the Assistant's box for the user to finish and send.
-  const [assistantPrefill, setAssistantPrefill] = useState<{ text: string; nonce: number } | null>(null);
+  const [assistantPrefill, setAssistantPrefill] = useState<{ text: string; nonce: number; send?: boolean } | null>(null);
+  // `?ask=` (the CMO chat's handoff, plan 2026-11-02): the founder's request goes into the Assistant's box, and with
+  // `&send=1` it is sent once the Assistant is ready. The URL is cleaned at once, so a reload never sends it again.
+  useEffect(() => {
+    const ask = search.get("ask")?.trim().slice(0, HANDOFF_PROMPT_MAX);
+    if (!ask) return;
+    setAssistantPrefill({ text: ask, nonce: Date.now(), send: search.get("send") === "1" });
+    router.replace(pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, pathname, router]);
   const [notice, setNotice] = useState<string | null>(null);
   const opContext = useCallback(
     (): OpContext => ({

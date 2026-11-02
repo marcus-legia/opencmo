@@ -26,6 +26,7 @@ import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 
 import { DECISION_TOOL_SPECS, DECISION_WRITES } from "./cmo-decisions";
+import { EDITOR_TOOL_SPECS } from "./cmo-editor";
 import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
 import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
@@ -195,9 +196,12 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   ...DECISION_TOOL_SPECS,
   // CMO chat live (plan 2026-11-02): after the decisions, for the same reason.
   WAIT_FOR_RUN_SPEC,
+  // The editor handoff (plan 2026-11-02): last, for the same reason.
+  ...EDITOR_TOOL_SPECS,
 ];
 
-const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document", ...DECISION_WRITES]);
+// open_editor can create a New edit, and its prompt is sent to the editor's Assistant as the founder's request.
+const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document", "open_editor", ...DECISION_WRITES]);
 export const isCmoWrite = (name: string) => WRITES.has(name);
 
 /**
@@ -208,7 +212,8 @@ export const isCmoWrite = (name: string) => WRITES.has(name);
  */
 export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site"]);
 // Decisions too: after a page or a stranger's post was read, a decision needs the founder's next message.
-export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal", ...DECISION_WRITES]);
+// The editor handoff too: its prompt is sent as the founder's own request, so a page must not write it.
+export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal", "open_editor", ...DECISION_WRITES]);
 export const TAINT_MESSAGE = "This came after reading outside content. Ask the founder to confirm it in their next message.";
 
 const readInput = z.object({ kind: z.enum(DOCUMENT_KINDS) });
