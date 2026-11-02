@@ -193,11 +193,9 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
     await finish(false, "Unknown task.");
     return { ok: false, error: "Unknown task." };
   }
+  let output: JobOutput;
   try {
-    const output = await job(ctx);
-    await store.complete(run, true, output, null);
-    await finish(true, null);
-    return { ok: true, error: null };
+    output = await job(ctx);
   } catch (error) {
     if (error instanceof LeaseLost) return { ok: false, error: null };
     if (error instanceof Deferred) {
@@ -222,6 +220,11 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
     await finish(false, message);
     return { ok: false, error: message };
   }
+  // The job's work is written: a store error from here on is ours, not the job's. It is thrown, so the lease runs out
+  // and the run is claimed again, instead of failing a finished job and refunding it (review follow-up Q10).
+  await store.complete(run, true, output, null);
+  await finish(true, null);
+  return { ok: true, error: null };
 }
 
 /**
@@ -234,7 +237,13 @@ export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; bud
   while (Date.now() < deadline) {
     const run = await store.claim(opts.runId);
     if (!run) break;
-    await runOne(store, run, { searchReddit: opts.searchReddit, searchHn: opts.searchHn, analytics: opts.analytics });
+    try {
+      await runOne(store, run, { searchReddit: opts.searchReddit, searchHn: opts.searchHn, analytics: opts.analytics });
+    } catch (error) {
+      // Our store failed (reading the inbox, or completing a finished job): the run keeps its lease and is claimed
+      // again when it runs out. The other runs in this drain still go.
+      console.error(`[cmo] ${run.kind} ${run.id}: store error, left for the lease to retry`, error);
+    }
     ran += 1;
     if (opts.runId) break;
   }

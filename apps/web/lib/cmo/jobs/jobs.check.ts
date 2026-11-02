@@ -103,6 +103,25 @@ async function main() {
   assert.equal(gen.model, "fake", "the draft records which model wrote it");
   assert.match(gen.prompt_version, /^[0-9a-f]{12}$/, "and which prompt");
 
+  // Review follow-up Q10: a store error after the job's writes is not a job failure. The run is not failed and
+  // refunded; it keeps its lease for a retry, and the drain goes on with the next run.
+  const memStore = memoryStore(docs);
+  const stuck = memStore.enqueue("plan_week");
+  const after = memStore.enqueue("plan_week", { brief: "another week" });
+  const completes: boolean[] = [];
+  const flaky = {
+    ...memStore.store,
+    complete: async (r: Parameters<typeof memStore.store.complete>[0], ok: boolean, output: Parameters<typeof memStore.store.complete>[2], error: string | null) => {
+      completes.push(ok);
+      if (ok && r.id === stuck.id) throw new Error("connection reset");
+      return memStore.store.complete(r, ok, output, error);
+    },
+  };
+  assert.equal(await drainCmoQueue(flaky), 2, "the next run still ran");
+  assert.ok(!completes.includes(false), "nothing was failed and refunded");
+  assert.notEqual(stuck.status, "failed", "the finished job is left for the lease to retry");
+  assert.equal(after.status, "done");
+
   // Lượt mất lease giữa chừng: dừng im lặng, không ghi kết quả.
   const mem2 = memoryStore(docs);
   const lost = mem2.enqueue("plan_week");
