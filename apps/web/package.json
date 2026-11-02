@@ -39,7 +39,7 @@
     "@opencmo/clip-render": "*",
     "@opencmo/editor-core": "*",
     "@opencmo/skills": "*",
-    "@sentry/nextjs": "^10.76.2",
+    "@sentry/nextjs": "^10.78.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "@vercel/speed-insights": "^2.0.0",
@@ -49,7 +49,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "server-only": "^0.0.1",
-    "three": "0.186.1",
+    "three": "0.187.0",
     "tus-js-client": "^4.3.1",
     "zod": "^4.6.7"
   },

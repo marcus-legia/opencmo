@@ -19,12 +19,12 @@
     "check": "node scripts/build-templates.mjs --check && node scripts/build-styles.mjs --check && tsc --noEmit && vitest run"
   },
   "dependencies": {
-    "@remotion/bundler": "4.0.537",
-    "@remotion/renderer": "4.0.537",
+    "@remotion/bundler": "4.0.539",
+    "@remotion/renderer": "4.0.539",
     "esbuild": "^0.28.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "remotion": "4.0.537",
+    "remotion": "4.0.539",
     "zod": "^4.6.7"
   },
   "devDependencies": {
