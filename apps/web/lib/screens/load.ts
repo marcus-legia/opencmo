@@ -9,7 +9,7 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
-import { localMidnight, localMonday } from "@/lib/time-zone";
+import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
 import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { SITE_URL } from "@/lib/site";
 
@@ -245,30 +245,24 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
         text: r.text,
       }));
     },
+    // The slots of today in the founder's time zone, as Schedule shows them (review follow-up Q1): the slot's own time,
+    // account and status, not the approval time of the post.
     outToday: async () => {
-      const today = now.toISOString().slice(0, 10);
-      const rows = must(
-        await supabase
-          .from("content_items")
-          .select("id, platform, idea, final_text, status, day, published_at, decided_at")
-          .eq("department", "post")
-          .in("status", ["approved", "published"])
-          .or(`day.eq.${today},published_at.gte.${today}T00:00:00Z`)
-          .limit(20),
-        "content_items",
-      ) as { id: string; platform: string; idea: string; final_text: string | null; status: string; published_at: string | null; decided_at: string | null }[];
-      return rows
-        .map((r) => ({
-          id: r.id,
-          at: new Date(r.published_at ?? r.decided_at ?? now).toISOString(),
-          where: { platform: screenPlatform(r.platform, "x"), handle: "your account" },
-          text: (r.final_text ?? r.idea).slice(0, 300),
-          // Assisted posting (W3): an approved X post waits for the founder to post it on X.
-          status: r.status === "published" ? ("posted" as const) : ("scheduled" as const),
-          problem: null,
-          approvalId: null,
-        }))
-        .sort((a, b) => a.at.localeCompare(b.at));
+      const timezone = (await prof).timezone;
+      const today = localDay(now, timezone);
+      const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+      const from = new Date(localMidnight(today, timezone) ?? `${today}T00:00:00Z`);
+      const to = new Date(localMidnight(tomorrow, timezone) ?? `${tomorrow}T00:00:00Z`);
+      const slots = await scheduleSlots(supabase, from, to);
+      return slots.slice(0, 20).map((slot) => ({
+        id: slot.id,
+        at: slot.at,
+        where: slot.where,
+        text: slot.title,
+        status: slot.status,
+        problem: slot.status === "failed" ? (slot.note ?? "failed").slice(0, 120) : null,
+        approvalId: slot.approvalId,
+      }));
     },
     results: async () => {
       const m = await measured(supabase, 7, now);
@@ -698,52 +692,58 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
     timezone: async () => (await prof).timezone,
     from: async () => from.toISOString(),
     to: async () => to.toISOString(),
-    slots: async () => {
-      const slots = must(
-        await supabase
-          .from("schedule_slots")
-          .select("id, platform, status, publish_at, error, external_url, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
-          .gte("publish_at", from.toISOString())
-          .lt("publish_at", to.toISOString())
-          .neq("status", "cancelled")
-          .order("publish_at")
-          .limit(300),
-        "schedule_slots",
-      ) as unknown as SlotDb[];
-      const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
-      const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
-      const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
-      const [itemRows, clipRows, waitingRows] = await Promise.all([
-        items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
-        clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
-        approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
-      ]);
-      const titles = new Map<string, string>([
-        ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
-          (r) => [r.id, (r.body?.text?.split("\n")[0] || r.idea || "Post").slice(0, 300)] as [string, string],
-        ),
-        ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, `Short · ${r.hook || "Untitled"}`.slice(0, 300)] as [string, string]),
-      ]);
-      const waiting = new Set(((waitingRows.data ?? []) as { id: string }[]).map((r) => r.id));
-      return slots.flatMap((s) => {
-        const platform = PUBLISH_PLATFORMS.find((p) => p === s.platform);
-        if (!platform) return [];
-        const { status, note } = slotStatus(s, waiting);
-        return [{
-          id: s.id,
-          at: iso(s.publish_at)!,
-          where: { platform, handle: (s.account?.handle ?? "").slice(0, 80) },
-          title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
-          status,
-          note,
-          // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
-          approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
-          url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
-        }];
-      });
-    },
+    slots: async () => scheduleSlots(supabase, from, to),
     accounts: async () => accountList(await socialAccounts(supabase), false),
     rules: async () => SCHEDULE_RULES,
+  });
+}
+
+/**
+ * The founder's slots between two instants, as Schedule draws them: title, account, status and the waiting card. One
+ * read for Schedule and the Dashboard's "Going out today" (review follow-up Q1), so both say the same thing.
+ */
+async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Promise<ScheduleScreen["slots"]> {
+  const slots = must(
+    await supabase
+      .from("schedule_slots")
+      .select("id, platform, status, publish_at, error, external_url, approval_id, account:social_accounts(handle), deliverable:deliverables(kind, ref_kind, ref_id)")
+      .gte("publish_at", from.toISOString())
+      .lt("publish_at", to.toISOString())
+      .neq("status", "cancelled")
+      .order("publish_at")
+      .limit(300),
+    "schedule_slots",
+  ) as unknown as SlotDb[];
+  const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
+  const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
+  const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
+  const [itemRows, clipRows, waitingRows] = await Promise.all([
+    items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
+    clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
+    approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
+  ]);
+  const titles = new Map<string, string>([
+    ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
+      (r) => [r.id, (r.body?.text?.split("\n")[0] || r.idea || "Post").slice(0, 300)] as [string, string],
+    ),
+    ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, `Short · ${r.hook || "Untitled"}`.slice(0, 300)] as [string, string]),
+  ]);
+  const waiting = new Set(((waitingRows.data ?? []) as { id: string }[]).map((r) => r.id));
+  return slots.flatMap((s) => {
+    const platform = PUBLISH_PLATFORMS.find((p) => p === s.platform);
+    if (!platform) return [];
+    const { status, note } = slotStatus(s, waiting);
+    return [{
+      id: s.id,
+      at: iso(s.publish_at)!,
+      where: { platform, handle: (s.account?.handle ?? "").slice(0, 80) },
+      title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
+      status,
+      note,
+      // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
+      approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
+      url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
+    }];
   });
 }
 
