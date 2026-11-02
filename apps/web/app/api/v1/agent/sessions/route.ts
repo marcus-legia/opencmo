@@ -57,6 +57,8 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   const clipId = params.get("clip_id");
   const sessionId = params.get("session_id");
   const cmo = params.get("scope") === "cmo";
+  // The CMO chat's history menu needs only the list, not the open conversation rebuilt.
+  if (cmo && params.get("list") === "1") return { sessions: await listSessions(supabase, { cmo: true }) };
   let blank = false;
   // The slash menu offers what this clip's Assistant can do: the tools its scope will have.
   let slash: { name: string; label: string; hint: string }[] = [];

@@ -28,15 +28,16 @@ export const ANTHROPIC_MODEL = "claude-sonnet-5-5";
 const CONTEXT_BETA = "context-management-2025-06-27";
 
 /**
- * Server-side clearing of old tool results (context editing), behind OPENCMO_AGENT_CONTEXT_EDITING=1
+ * Server-side clearing of old tool results (context editing): always on for the CMO chat (`force`), whose read
+ * documents and research results are most of its history; for the editor behind OPENCMO_AGENT_CONTEXT_EDITING=1
  * until a real-model eval shows it pays. Long sessions resend every transcript, document and
  * library listing they ever read; past 80k input tokens the oldest results become a placeholder,
  * the last six stay, and at least 20k go at once, because each clearing rewrites the cache from that
  * point. Guides, skills and the plan are instructions the model keeps working from: never cleared.
  * The stored history is untouched, and server-side edits never invalidate thinking blocks.
  */
-export function contextEditing(env: NodeJS.ProcessEnv = process.env) {
-  if (env.OPENCMO_AGENT_CONTEXT_EDITING !== "1") return null;
+export function contextEditing(env: NodeJS.ProcessEnv = process.env, force = false) {
+  if (!force && env.OPENCMO_AGENT_CONTEXT_EDITING !== "1") return null;
   return {
     beta: CONTEXT_BETA,
     context_management: {
@@ -325,10 +326,10 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
     model,
     ...anthropicFormat,
     failureMessage,
-    async step({ history, tools: specs, system, signal, ran }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
+    async step({ history, tools: specs, system, signal, ran, clearOldToolResults }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
       let jsonRetries = 0;
       let useStrict = true;
-      const editing = contextEditing();
+      const editing = contextEditing(process.env, clearOldToolResults);
       // The CMO and project scopes have few tools; only the editor's large set is worth searching.
       const search = toolSearchOn() && specs.length > ALWAYS_LOADED.size;
       // Characters streamed so far: the output estimate if Stop cuts the stream short.

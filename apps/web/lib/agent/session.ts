@@ -49,7 +49,7 @@ export async function scopeFor(
   const checkpointed = Boolean(turn.checkpoint_id);
   // Tool sinh media mang giá trên thẻ duyệt: nạp catalog DB (G5) trước khi dựng scope.
   await loadCatalog(supabase);
-  if (session.scope === "cmo") return cmoScope(supabase);
+  if (session.scope === "cmo") return cmoScope(supabase, session.id);
   if (!session.clip_id) throw notFound("Assistant session not found.");
   const context = await clipContext(supabase, session.clip_id);
   return clipScope(supabase, context, session.clip_id, turn, checkpointed, ledger);
