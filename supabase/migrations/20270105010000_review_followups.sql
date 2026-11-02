@@ -167,4 +167,80 @@ begin
 end;
 $$;
 
+-- C6: retry_job reads the balance the way every other charge does (profiles.credit_balance), not by summing the
+-- whole ledger on each retry.
+create or replace function public.retry_job(p_job_id uuid) RETURNS public.jobs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_hold int := public.job_hold_credits();
+  v_spent int;
+  v_balance int;
+  v_status public.job_status;
+  v_job public.jobs;
+begin
+  -- Khoá hồ sơ TRƯỚC khi đọc số dư, đúng thứ tự của `create_job`: hai tab bấm
+  -- Retry cùng lúc không được tiêu quá số dư.
+  perform 1 from public.profiles where id = v_user for update;
+
+  -- Same caps as create_upload_edit: the route's limit alone is skipped by calling this RPC directly.
+  if (select count(*) from public.jobs
+      where user_id = v_user and status in ('queued', 'running') and purging_at is null) >= 3
+  then
+    raise exception 'You already have 3 projects in progress. Please wait for one to finish.'
+      using errcode = 'P0001';
+  end if;
+  if not public.rate_limit_hit('retry', 20, 3600) then
+    raise exception 'Too many retries. Please wait a while and try again.'
+      using errcode = 'P0001';
+  end if;
+
+  select status into v_status
+  from public.jobs
+  where id = p_job_id and user_id = v_user and purging_at is null
+  for update;
+
+  if not found then
+    raise exception 'Project not found.' using errcode = 'P0002';
+  end if;
+  if v_status not in ('failed', 'cancelled') then
+    raise exception 'Only a failed project can be run again.' using errcode = '22023';
+  end if;
+
+  -- Lần chạy trước có thể đã được hoàn credit (`finalize_job_failure`). Giữ lại
+  -- đúng phần còn thiếu để một job không bao giờ bị tính tiền hai lần.
+  v_spent := public.job_credits_spent(p_job_id);
+  if v_spent < v_hold then
+    v_balance := public.credit_balance(v_user);
+
+    if v_balance < v_hold - v_spent then
+      raise exception 'Not enough credits: % needed, % left. Top up on the Credits page.',
+        v_hold - v_spent, v_balance using errcode = 'P0001';
+    end if;
+
+    perform public.credit_hold(v_user, 'job', p_job_id, v_hold - v_spent, 'Hold for retry', p_job_id);
+  end if;
+
+  update public.jobs
+  set status = 'queued',
+      stage = 'queued',
+      error = null,
+      finished_at = null,
+      -- attempt_id để null: worker của lần chạy cũ (nếu còn sống) ghi bằng
+      -- attempt_id cũ sẽ bị mọi RPC có fence từ chối.
+      attempt_id = null,
+      lease_until = null,
+      heartbeat_at = null,
+      attempt_started_at = now(),
+      call_id = null,
+      attempt = 0
+  where id = p_job_id
+  returning * into v_job;
+
+  return v_job;
+end;
+$$;
+
 commit;

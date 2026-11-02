@@ -35,7 +35,11 @@ export function kickCmoQueue(runId?: string, budgetMs = 250_000): void {
   });
 }
 
-export async function startCmoRun(supabase: SupabaseClient, kind: CmoJobKind, input: Record<string, unknown> = {}): Promise<StartedRun> {
+/**
+ * `kick: false` leaves the run to Modal's sweep (within a minute): a request already late in its function's time limit
+ * would cut the `after()` drain short mid-job (review follow-up C5).
+ */
+export async function startCmoRun(supabase: SupabaseClient, kind: CmoJobKind, input: Record<string, unknown> = {}, opts: { kick?: boolean } = {}): Promise<StartedRun> {
   if (cmoPausedEverywhere()) throw new ApiError(503, PAUSED_EVERYWHERE);
   // Kiểm TRƯỚC khi giữ credit: không có khoá đọc Reddit thì lượt nào cũng hỏng.
   if (kind === "sales_scan" && !socialReaderReady()) throw new ApiError(503, "Reddit scanning is not set up on this server yet.");
@@ -44,6 +48,6 @@ export async function startCmoRun(supabase: SupabaseClient, kind: CmoJobKind, in
   if (!run) throw new ApiError(500, "Could not start this task.");
   // An inbox run only goes as far as its first model call: Modal's sweep opens it within a
   // minute, and over MCP there is no Next.js `after()` to run it here.
-  if (run.status === "queued" && input.brain !== "claude") kickCmoQueue(run.id);
+  if (run.status === "queued" && input.brain !== "claude" && opts.kick !== false) kickCmoQueue(run.id);
   return run;
 }
