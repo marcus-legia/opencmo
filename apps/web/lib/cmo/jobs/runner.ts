@@ -24,6 +24,8 @@ import type { PublishAnalytics } from "@/lib/departments/publish/analytics";
 import { publishPost } from "@/lib/departments/publish/job";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
 import type { Brain, CmoJobKind, CmoStore, InboxState, QueuedRun, Step } from "./types";
+import { SocialReadError } from "@/lib/cmo/social/scrapecreators";
+import { assertSpendAllowed, SPEND_CAP_MESSAGE, SpendCapError, withSpend } from "@/lib/spend/record";
 
 /**
  * Việc chưa làm tiếp được (vd chờ một việc bên ngoài): ném cái này, lượt về
@@ -195,7 +197,13 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
   }
   let output: JobOutput;
   try {
-    output = await job(ctx);
+    // Every paid provider call of the job is recorded for this founder and run, and refused past their daily cap.
+    output = store.spendClient
+      ? await withSpend({ via: "service", client: store.spendClient, userId: run.user_id, refKind: "cmo_run", refId: run.id }, async () => {
+          await assertSpendAllowed();
+          return job(ctx);
+        })
+      : await job(ctx);
   } catch (error) {
     if (error instanceof LeaseLost) return { ok: false, error: null };
     if (error instanceof Deferred) {
@@ -214,8 +222,10 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
         return { ok: false, error: message };
       }
     }
-    const message = error instanceof LlmError ? error.message : "Something went wrong. Try again in a minute.";
-    if (!(error instanceof LlmError)) console.error(`[cmo] ${run.kind} ${run.id} failed`, error);
+    // Past the daily cap the run fails with the founder message; complete_cmo_run returns its credits.
+    const capped = error instanceof SpendCapError || (error instanceof SocialReadError && error.kind === "cap");
+    const message = capped ? SPEND_CAP_MESSAGE : error instanceof LlmError ? error.message : "Something went wrong. Try again in a minute.";
+    if (!(error instanceof LlmError) && !capped) console.error(`[cmo] ${run.kind} ${run.id} failed`, error);
     await store.complete(run, false, null, message).catch((e) => console.error("[cmo] complete_cmo_run", e));
     await finish(false, message);
     return { ok: false, error: message };

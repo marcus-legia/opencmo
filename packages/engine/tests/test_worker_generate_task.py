@@ -119,6 +119,7 @@ class FakeStore:
         self.failed: list[str] = []
         self.removed: list[tuple] = []
         self.codes: dict = {}
+        self.spent: list[tuple] = []
 
     def get_generation(self, _id):
         return self.generation
@@ -148,6 +149,9 @@ class FakeStore:
 
     def get_scene_code(self, user_id, code_hash):
         return self.codes.get((user_id, code_hash))
+
+    def record_provider_usage(self, *args, **kwargs):
+        self.spent.append((args, kwargs))
 
 
 GEN_ID = "11111111-2222-4333-8444-555555555555"

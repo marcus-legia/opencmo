@@ -36,6 +36,7 @@ from opencmo.ai.moderation import (
 )
 from opencmo.ai.providers import ProviderError, adapter_for
 from opencmo.ai.providers.motion import motion_assets
+from opencmo.ai.spend import media_units
 from opencmo.backends.retry import TransientError
 from opencmo.backends.supabase import Task
 from opencmo.editing.models import canonical_json
@@ -285,6 +286,12 @@ def process(store: Any, task: Task) -> None:
             result = adapter.run(model, inputs, root, alive=lambda: not heartbeat.lost.is_set())
             if result is None or heartbeat.lost.is_set():
                 return
+            # The provider was paid once it answered: recorded before moderation or the upload can fail.
+            units = media_units(model, spec, None)
+            if units:
+                store.record_provider_usage(
+                    task.user_id, model.provider, model.id, units, ref_kind="generation", ref_id=generation_id
+                )
             # Kiểm thứ model vẽ ra TRƯỚC khi lên bucket: bị chặn thì không có file nào để lộ.
             check_output(model, spec, result.path)
             # Long take F9: a garbled-text hint for the editor's badge. Never fails the generation.

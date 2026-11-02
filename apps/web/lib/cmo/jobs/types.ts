@@ -200,6 +200,8 @@ export type InboxState = { answers: Record<string, unknown>; memo: Record<string
 
 /** Mọi đọc/ghi của một việc CMO đi qua đây: thật là Supabase (service role), test là bộ nhớ. */
 export interface CmoStore {
+  /** The service client the spend ledger records with (provider_usage_record); test stores leave it out. */
+  spendClient?: import("@/lib/api/handler").SupabaseClient;
   claim(runId?: string): Promise<QueuedRun | null>;
   step(run: QueuedRun, steps: Step[]): Promise<boolean>;
   complete(run: QueuedRun, ok: boolean, output: Record<string, unknown> | null, error: string | null): Promise<boolean>;

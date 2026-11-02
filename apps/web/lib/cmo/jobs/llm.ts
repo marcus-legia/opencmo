@@ -18,6 +18,7 @@ import { outage, withFailover } from "@/lib/llm-health";
 
 import { LlmError } from "./llm-error";
 import { agentFakeAllowed } from "@/lib/production";
+import { assertSpendAllowed, recordSpend, spendProviderOf } from "@/lib/spend/record";
 
 export { LlmError };
 
@@ -147,6 +148,22 @@ export function structuredOn<S extends z.ZodType>(opts: StructuredOptions<S>, ag
  * credit, a bad key, rate limits, an outage), the call runs on the next provider of the order the
  * server has a key for (`CMO_LLM_PROVIDERS`), on that provider's model of the same tier.
  */
+/** Every call's usage also goes to the spend ledger, under the provider that actually answered. */
+function recorded<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): StructuredOptions<S> {
+  return {
+    ...opts,
+    onUsage: async (usage) => {
+      await recordSpend(spendProviderOf(agent.provider, agent.baseUrl), usage.model, {
+        input: usage.input,
+        output: usage.output,
+        cache_read: usage.cacheRead,
+        cache_write: usage.cacheWrite,
+      });
+      await opts.onUsage?.(usage);
+    },
+  };
+}
+
 export async function structured<S extends z.ZodType>(input: StructuredOptions<S>): Promise<z.infer<S>> {
   const opts: StructuredOptions<S> = usageListeners.size
     ? {
@@ -160,7 +177,9 @@ export async function structured<S extends z.ZodType>(input: StructuredOptions<S
   const candidates = agentCandidates(opts.agent, process.env, opts.prefer);
   if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
   try {
-    return await withFailover(candidates, (agent) => structuredOn(opts, agent), (agent) => !agent.ownKey);
+    // The founder's daily provider cap (spend ledger): refused before the call, never after it.
+    await assertSpendAllowed();
+    return await withFailover(candidates, (agent) => structuredOn(recorded(opts, agent), agent), (agent) => !agent.ownKey);
   } catch (error) {
     if (error instanceof LlmError) throw error;
     const kind = outage(error);
