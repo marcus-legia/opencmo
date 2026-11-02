@@ -474,4 +474,117 @@ begin
 end;
 $$;
 
+-- C2: one lock order for finishing and cancelling a generation.
+create or replace function public.complete_generation(p_task_id uuid, p_attempt_id uuid, p_object_name text, p_name text, p_duration numeric, p_width integer, p_height integer, p_credits integer, p_words jsonb DEFAULT NULL::jsonb, p_quality jsonb DEFAULT NULL::jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_task public.tasks;
+  v_generation public.generations;
+  v_asset public.media_assets;
+  v_final int;
+  v_words jsonb;
+  v_quality jsonb;
+  v_user uuid;
+begin
+  -- One lock order with cancel_generation and cancel_job: the founder's credits, then the generation, then the task
+  -- (review follow-up C2). Task first here and generation first there could deadlock a cancel against a finish.
+  select user_id into v_user from public.tasks where id = p_task_id;
+  if not found then return false; end if;
+  perform public.lock_credit_owner(v_user);
+  select * into v_generation from public.generations where task_id = p_task_id for update;
+  if not found then return false; end if;
+  select * into v_task from public.tasks
+  where id = p_task_id and kind = 'generate' and attempt_id is not distinct from p_attempt_id
+  for update;
+  if not found then return false; end if;
+  if v_task.status = 'done' then
+    return v_generation.status = 'done';
+  end if;
+  if v_task.status <> 'running' then return false; end if;
+  -- The worker names the object itself; checked again so a worker bug cannot attach another
+  -- project's file to this generation.
+  if p_object_name is null
+     or p_object_name !~ ('^' || v_task.user_id || '/' || v_task.job_id || '/gen-[0-9a-f-]{36}\.[a-z0-9]{2,5}$') then
+    raise exception 'invalid generated object name';
+  end if;
+
+  -- Word timings matter for narrated media only: voiceovers and (v2) explainers, whose captions
+  -- the editor builds from them. A bad shape is DROPPED, never failing a paid generation: the
+  -- media still works, it just has no captions.
+  if (v_generation.kind = 'voice'
+      or exists (select 1 from public.ai_models m
+                 where m.id = v_generation.model and m.provider = 'opencmo-motion'))
+     and p_words is not null
+     and jsonb_typeof(p_words) = 'array'
+     and jsonb_array_length(p_words) <= 20000
+     and octet_length(p_words::text) < 524288
+     and not exists (
+       select 1 from jsonb_array_elements(p_words) w
+       where jsonb_typeof(w) <> 'object'
+          or jsonb_typeof(w->'text') is distinct from 'string'
+          or jsonb_typeof(w->'start') is distinct from 'number'
+          or jsonb_typeof(w->'end') is distinct from 'number'
+          or (w->>'start')::numeric < 0
+          or (w->>'end')::numeric < (w->>'start')::numeric
+     ) then
+    v_words := p_words;
+  end if;
+
+  -- Long take F9: the garbled-text hint on a finished image. A hint, never a verdict: a bad shape is
+  -- dropped and the generation still completes.
+  if v_generation.kind = 'image' and public.generation_quality_ok(p_quality) then
+    v_quality := p_quality;
+  end if;
+
+  insert into public.media_assets (user_id, job_id, storage_path, name, duration, width, height, status, words)
+  values (v_task.user_id, v_task.job_id, 'media/' || p_object_name, left(coalesce(nullif(btrim(p_name), ''), 'Generated'), 200),
+          p_duration, p_width, p_height, 'ready', v_words)
+  returning * into v_asset;
+
+  v_final := least(v_generation.credits_reserved, greatest(coalesce(p_credits, v_generation.credits_reserved), 0));
+  update public.generations
+  set status = 'done', credits_final = v_final, media_asset_id = v_asset.id, error = null, finished_at = now(),
+      quality = v_quality
+  where id = v_generation.id;
+  if v_generation.credits_reserved - v_final > 0 then
+    perform public.credit_settle(v_task.user_id, 'generation', v_generation.id, v_final, 'Generate refund', v_task.job_id);
+  end if;
+  update public.tasks
+  set status = 'done', output = jsonb_build_object('media_asset_id', v_asset.id), error = null,
+      finished_at = now(), lease_until = null
+  where id = p_task_id;
+  -- Shots that continue this one can start now; the worker's sweep claims them.
+  update public.tasks set status = 'queued'
+  where status = 'awaiting_input'
+    and id in (select task_id from public.generations where after_id = v_generation.id);
+  return true;
+end;
+$_$;
+
+create or replace function public.cancel_generation(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_generation public.generations;
+begin
+  -- The same lock order as complete_generation: credits, generation, task (C2).
+  perform public.lock_credit_owner(v_user);
+  select * into v_generation from public.generations where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Generation not found.' using errcode = 'P0002';
+  end if;
+  if v_generation.status in ('queued', 'running') then
+    update public.tasks
+    set status = 'cancelled', error = 'Cancelled.', finished_at = now(), lease_until = null
+    where id = v_generation.task_id and status in ('awaiting_input', 'queued', 'running');
+  end if;
+  select * into v_generation from public.generations where id = p_id;
+  return to_jsonb(v_generation);
+end;
+$$;
+
 commit;
