@@ -100,6 +100,26 @@ CMO chat would blur both. Instead, **the CMO chat hands off**:
 | A4 | **Context and prompt.** The editor in `<on_screen>`. `CMO_SYSTEM_PROMPT`: "For video, find the clip and open the editor with the founder's request; the editor's Assistant does the work." | A1–A3 |
 | A5 | **Checks and acceptance.** The panel check, a fake-model task in `lib/agent/eval/cmo-tasks.ts`, the e2e, screenshots, and `/code-review`. | A1–A4 |
 
+**Progress (2026-11-02):**
+- [x] **A0.** `panel.ts`: `EditorOpenSchema` (`{editor: {clip_id, prompt ≤ 2000, send}}`) next to the screen target;
+  `panelHref` builds `/app/editor/<id>?ask=…&send=1`; `targetIds` replaces the direct parse in `ChatPanel`. The five
+  tools are last in the CMO list and hidden from MCP.
+- [x] **A1.** `lib/editor/find.ts` holds the project and clip reads; MCP's `find` group now uses it too, so both list
+  the same videos. `get_export` reads the clip's latest `render_document` task with a signed link; `list_versions`
+  reuses `lib/mcp/versions.ts`.
+- [x] **A2.** `open_editor` checks the clip under RLS, or starts a New edit with the button's limit and RPC. It is a
+  write and waits for the founder after outside content (`WRITES`, `TAINT_GATED_TOOLS`), because its prompt is sent as
+  the founder's own request.
+- [x] **A3.** `EditorShell` reads `?ask` / `?send`, puts the request in `assistantPrefill` and cleans the URL at once;
+  `AssistantPanel` sends it once per nonce when it has loaded and is idle. A reload never sends it again.
+- [x] **A4.** `CMO_SYSTEM_PROMPT` has the video paragraph. **F5 dropped:** in the editor, column 2 is the clip
+  Assistant, so the CMO chat is never on screen with the editor and an `<on_screen>` editor line would never be sent.
+- [x] **A5.** `cmo-editor.check.ts`, `panel.check.ts` (editor targets), a fake-model script (`list_projects` →
+  `open_editor`), e2e `ui-v2-handoff.spec.ts`: the request asked in the CMO chat opens the editor on the newest edit
+  and lands in its Assistant once, also after a reload. Screenshots in
+  [`2026-11-02-cmo-chat-editor-handoff-shots/`](2026-11-02-cmo-chat-editor-handoff-shots/).
+- Owner gate 1 (2026-11-02): `open_editor` sends the request at once.
+
 ## 6. Owner gates
 
 1. Whether `open_editor` sends the request at once (default) or only fills the box.

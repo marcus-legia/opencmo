@@ -18,7 +18,7 @@ import { useLive } from "@/components/clipping/useLive";
 import { ContinueInClaude } from "@/components/editor/assistant/ContinueInClaude";
 import { Markdown } from "@/components/editor/assistant/Markdown";
 import { Icon } from "@/components/icons";
-import { panelHref, PanelOpenSchema, screenOfPath, type ScreenContext } from "@/lib/agent/panel";
+import { panelHref, screenOfPath, targetIds, type ScreenContext } from "@/lib/agent/panel";
 import { isFinished, runLine, startedRunIds, type RunRow } from "@/lib/agent/run-line";
 import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage, Workspace } from "@/lib/cmo/workspace";
@@ -90,6 +90,9 @@ function workingLabel(tool: string): string {
   if (tool === "read_skill") return "Reading a playbook…";
   if (tool === "get_run_result") return "Checking on the team…";
   if (tool === "wait_for_run") return "Waiting for the result…";
+  if (tool === "list_projects" || tool === "list_clips") return "Finding your videos…";
+  if (tool === "open_editor") return "Opening the editor…";
+  if (tool === "get_export" || tool === "list_versions") return "Checking your video…";
   if (tool === "update_document") return "Updating your document…";
   if (tool === "remember") return "Saving to memory…";
   if (tool === "set_week_goal") return "Proposing a goal…";
@@ -211,8 +214,9 @@ export function ChatPanel({
       const href = panelHref(open);
       if (!href) return false;
       const path = href.split("?")[0]!;
-      shown.current = { path, ids: PanelOpenSchema.parse(open).ids ?? [] };
-      if (pathRef.current !== path) router.push(href);
+      shown.current = { path, ids: targetIds(open) };
+      // The editor with a request always opens, even on the same clip: the request is new.
+      if (pathRef.current !== path || href.includes("?ask=")) router.push(href);
       return true;
     },
     [router],
