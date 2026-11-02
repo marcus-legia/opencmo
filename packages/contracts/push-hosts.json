@@ -1,0 +1,16 @@
+{
+  "$comment": "Browser push endpoints the sender may call (review follow-up S4). PUSH_HOSTS in apps/web/lib/notify/push.ts and SQL push_endpoint_allowed both hold the rule; push.check runs these cases against the TS rule and checks pgTAP 230 runs the same strings against SQL.",
+  "allowed": [
+    "https://fcm.googleapis.com/fcm/send/abc",
+    "https://updates.push.services.mozilla.com/wpush/v2/abc",
+    "https://web.push.apple.com/QGx",
+    "https://wns2-par02p.notify.windows.com/w/?token=x"
+  ],
+  "refused": [
+    "https://169.254.169.254/latest/meta-data",
+    "https://fcm.googleapis.com.evil.example/x",
+    "https://evil.example/fcm.googleapis.com/x",
+    "http://fcm.googleapis.com/x",
+    "https://example.com/push"
+  ]
+}
