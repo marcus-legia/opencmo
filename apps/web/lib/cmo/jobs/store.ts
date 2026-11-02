@@ -14,7 +14,7 @@ function one<T>(data: unknown): T | null {
   return row && typeof row === "object" && (row as { id?: unknown }).id ? (row as T) : null;
 }
 
-/** Store thật: client service role, gọi RPC chỉ-service kèm user id tường minh (như worker Python). */
+/** The real store: a service-role client calling service-only RPCs with an explicit user id (like the Python worker). */
 export function supabaseStore(admin: BaseClient): CmoStore {
   async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
     const { data, error } = await admin.rpc(name, args);

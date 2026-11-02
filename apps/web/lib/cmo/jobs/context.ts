@@ -1,4 +1,4 @@
-/** Chữ đưa vào prompt: document, trí nhớ, bài gần đây. Gom một chỗ để W1/W2 (và chat) nói cùng một thứ. */
+/** Text that goes into prompts: documents, memory, recent posts. In one place so W1, W2 and the chat say the same. */
 
 import { DOCUMENTS } from "../documents";
 import { escapeAttribute, escapeForTag } from "../untrusted";
@@ -6,7 +6,7 @@ import type { CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, Mem
 
 const DOC_ORDER = ["product", "strategy", "content_strategy", "competitors"] as const;
 
-/** Document dạng JSON gọn trong thẻ <documents>. Đây là dữ liệu của người dùng, không phải lệnh. */
+/** Documents as compact JSON inside <documents>. This is the founder's data, not instructions. */
 export function documentsBlock(docs: Documents): string {
   const parts = DOC_ORDER.filter((k) => docs[k]).map(
     (k) => `<document kind="${k}" title="${DOCUMENTS[k].title}">\n${JSON.stringify(docs[k])}\n</document>`,
@@ -59,8 +59,8 @@ export async function recall(store: CmoStore, userId: string, limit: number, top
 }
 
 /**
- * Điều W7 học được (hook/format có URL) — dữ liệu cho Planner và X writer, cùng luật: adapt, không chép.
- * Bản quá 21 ngày bỏ qua: hook "đang chạy" của tháng trước không còn là bằng chứng.
+ * What W7 learned (hooks and formats with URLs): data for the Planner and the X writer, under one rule: adapt, never
+ * copy. Older than 21 days is skipped: last month's "working" hook is no longer evidence.
  */
 export function insightBlock(insight: CompetitorInsight | null): string {
   if (!insight || Date.now() - new Date(insight.measured_at).getTime() > 21 * 86_400_000) return "";
@@ -86,7 +86,7 @@ export function postText(item: ItemRow): string {
   return item.final_text ?? (typeof item.body.text === "string" ? item.body.text : "");
 }
 
-/** Danh sách từ cấm của Strategy (`avoid`), đã chuẩn hoá. */
+/** The Strategy's words to avoid (`avoid`), normalized. */
 export function avoidList(docs: Documents): string[] {
   const avoid = docs.strategy?.avoid;
   return Array.isArray(avoid) ? avoid.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : [];
@@ -103,7 +103,7 @@ export function checkRules(docs: Documents): { avoid: string[]; known: Set<strin
   return { avoid: avoidList(docs), known: knownNumbers(docs), names: productNames(docs) };
 }
 
-/** Mọi con số xuất hiện trong document — bài nháp chỉ được dùng số có ở đây. */
+/** Every number in the documents: a draft may use only numbers found here. */
 export function knownNumbers(docs: Documents): Set<string> {
   const text = JSON.stringify(docs);
   const known = new Set((text.match(/\d[\d,.]*/g) ?? []).map(normalizeNumber));

@@ -133,7 +133,7 @@ Size: S = under 2 hours, M = up to a day, L = more.
 | L4 | done | A test keeps both images on one Node version (each deploy file keeps its own constant). |
 | L5 | done | Owner: Modal retries dropped on `run_job` and `run_task`; the lease reclaim is the one retry layer. |
 | L6 | done | Tasks queued over 10 minutes go first in `claim_next_task`. |
-| L7 | done (part) | `modal_app.py` and `lib/modal.ts`; `lib/cmo/jobs` (about 150 lines) is still to do. |
+| L7 | done | `modal_app.py`, `lib/modal.ts` and `lib/cmo/jobs` are in English. |
 
 ## 3. Order
 

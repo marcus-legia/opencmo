@@ -89,7 +89,7 @@ export function pickDueItem(items: ItemRow[], today = isoDay(), wanted?: string)
 export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
   const today = isoDay();
-  // CMO chat giao việc "now" có brief (H3): viết đúng brief đó, không lấy mất mục tới hạn của lịch.
+  // The CMO chat handed out a "now" task with a brief (H3): write that brief, and leave the calendar's due item alone.
   const asked = typeof run.input.idea === "string" && run.input.idea ? run.input.idea : "";
   const wanted = typeof run.input.item_id === "string" ? run.input.item_id : undefined;
   const due = await ctx.step(
@@ -206,7 +206,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
     });
   }
 
-  // Bản nào vẫn trượt kiểm bằng code thì bỏ; không còn bản nào thì lượt hỏng (và hoàn credit).
+  // A version that still fails the code checks is dropped; with none left the run fails (and its credits come back).
   const passing = draft.versions.map((v) => ({ ...v, text: v.text.trim() })).filter((v) => checkPostFor(v.text, profile, rules).length === 0);
   if (!passing.length) {
     // Claude gets the reasons with the reopened inbox item, to fix them in its next answer.

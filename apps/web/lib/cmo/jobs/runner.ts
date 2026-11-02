@@ -1,7 +1,7 @@
 /**
- * Chạy hàng đợi việc CMO (docs/cmo/san-pham.md §4.3–4.4). Một lượt = một việc
- * W1/W2…, mỗi bước ghi vào `cmo_runs.steps` TRƯỚC và SAU khi chạy, nên Activity
- * hiện từng bước và lượt chết giữa chừng (hết lease) chạy lại được từ đầu.
+ * Runs the CMO work queue (docs/cmo/san-pham.md §4.3–4.4). One run = one job (W1, W2…); each step is written to
+ * `cmo_runs.steps` BEFORE and AFTER it runs, so Activity shows every step and a run that died midway (lease ran out)
+ * can run again from the top.
  *
  * Không `server-only`: `jobs.check.ts` chạy runner với store trong bộ nhớ.
  */
@@ -28,8 +28,8 @@ import { SocialReadError } from "@/lib/cmo/social/scrapecreators";
 import { assertSpendAllowed, SPEND_CAP_MESSAGE, SpendCapError, withSpend } from "@/lib/spend/record";
 
 /**
- * Việc chưa làm tiếp được (vd chờ một việc bên ngoài): ném cái này, lượt về
- * hàng đợi và hoãn `seconds` giây — không phải hỏng, không hoàn credit.
+ * Work that cannot go on yet (e.g. waiting for something outside): throw this, and the run goes back to the queue for
+ * `seconds` seconds. Not a failure, no refund.
  */
 export class Deferred extends Error {
   constructor(readonly seconds: number) {
@@ -108,7 +108,7 @@ export const JOBS: Record<CmoJobKind, Job> = {
   niche_video_research: nicheVideoResearch,
 };
 
-/** Lượt bị nhận lại bởi một worker khác (lease hết): dừng im lặng, không ghi gì nữa. */
+/** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */
 class LeaseLost extends Error {}
 
 export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions = {}): Promise<{ ok: boolean; error: string | null; deferred?: boolean; inbox?: string }> {
@@ -165,7 +165,7 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
         await write();
         return value;
       } catch (error) {
-        // Đang chờ (Deferred, the inbox) không phải hỏng: Activity nói đúng.
+        // Waiting (Deferred, the inbox) is not a failure: Activity says so.
         steps[index] =
           error instanceof NeedsClaude
             ? { tool, label: "Waiting for your Claude (Inbox)", status: "skipped" }
@@ -238,8 +238,8 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
 }
 
 /**
- * Nhận và chạy việc cho tới khi hết hàng đợi hoặc hết ngân sách thời gian.
- * Có `runId` thì chỉ chạy đúng lượt đó (người dùng vừa bấm) — lượt khác để cron.
+ * Claims and runs work until the queue is empty or the time budget is spent. With `runId`, only that run (the founder
+ * just asked for it); the others are left to the cron.
  */
 export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; budgetMs?: number } & RunOptions = {}): Promise<number> {
   const deadline = Date.now() + (opts.budgetMs ?? 240_000);

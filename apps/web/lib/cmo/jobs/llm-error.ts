@@ -1,2 +1,2 @@
-/** Lỗi gọi model, kèm câu tiếng Anh hiện được cho người dùng. */
+/** A model call that failed, with an English sentence the founder can be shown. */
 export class LlmError extends Error {}

@@ -1,6 +1,6 @@
 /**
- * Kiểu dùng chung của hàng đợi việc CMO. File thuần (không server-only) để
- * `jobs.check.ts` dựng được store giả trong bộ nhớ.
+ * Shared types of the CMO work queue. A plain file (not server-only), so `jobs.check.ts` can build an in-memory
+ * store.
  */
 
 import type { DocumentKind } from "../documents";
@@ -42,7 +42,7 @@ export type VoiceNoteRow = { body: string; platform: string | null; created_at: 
 
 export type Lesson = { week: string; topic: MemoryTopic; body: string };
 
-/** Điều W7 học được từ đối thủ: mọi mẫu đều có URL bài làm bằng chứng. */
+/** What W7 learned from competitors: every pattern carries the URL of a post as evidence. */
 export type CompetitorInsight = {
   accounts: { handle: string; posts: number; baseline: number; confidence: "low" | "ok" }[];
   hooks: { pattern: string; example: string; url: string; lift: number; why: string }[];
@@ -149,10 +149,10 @@ export type PlanItem = { department: "post" | "sales" | "video"; platform: strin
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 
-/** Một phần của điểm cơ hội: số + câu trích bằng chứng (hiện ở ngăn kéo thẻ Sales). */
+/** One part of an opportunity's score: the number and the quote that earned it (shown in the Sales card's drawer). */
 export type ScorePart = { label: "Pain" | "Fit" | "Timing" | "Reach" | "Evidence"; score: number; max: number; evidence: string };
 
-/** Một thread Reddit đáng tham gia, sẵn sàng thành thẻ (W4). */
+/** A Reddit thread worth joining, ready to become a card (W4). */
 export type Opportunity = {
   url: string;
   community: string;
@@ -198,7 +198,7 @@ export type InboxRequest = {
 /** What an inbox replay starts from: the answers given so far, and the step results kept between rounds. */
 export type InboxState = { answers: Record<string, unknown>; memo: Record<string, unknown> };
 
-/** Mọi đọc/ghi của một việc CMO đi qua đây: thật là Supabase (service role), test là bộ nhớ. */
+/** Every read and write of a CMO job goes through here: Supabase (service role) for real, memory in tests. */
 export interface CmoStore {
   /** The service client the spend ledger records with (provider_usage_record); test stores leave it out. */
   spendClient?: import("@/lib/api/handler").SupabaseClient;
@@ -234,7 +234,7 @@ export interface CmoStore {
   items(userId: string, filter: { statuses?: ItemStatus[]; since?: string; department?: ItemRow["department"]; limit?: number }): Promise<ItemRow[]>;
   planWeek(userId: string, runId: string, items: PlanItem[]): Promise<number>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
-  /** Link thread đã từng thành thẻ (kể cả đã bỏ) — W4 không đưa lại. */
+  /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
   /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
@@ -245,15 +245,15 @@ export interface CmoStore {
   recentMentions(userId: string): Promise<number>;
   /** Drafts already handed out that may name the product and still wait on the founder: they count toward the rule. */
   waitingMentions(userId: string): Promise<number>;
-  /** Trả lượt về hàng đợi, hoãn `seconds` giây; false khi lượt đã bị nhận lại. */
+  /** Puts the run back in the queue for `seconds` seconds; false when it was claimed again. */
   defer(run: QueuedRun, seconds: number, steps: Step[]): Promise<boolean>;
-  /** W7: lưu điều học được; đọc bản mới nhất (Planner, X writer, CMO chat). */
+  /** W7: saves what was learned; reads the latest (Planner, X writer, CMO chat). */
   saveInsight(userId: string, runId: string, body: CompetitorInsight): Promise<void>;
   latestInsight(userId: string): Promise<CompetitorInsight | null>;
   /** P5 R2: niche video research, saved as `cmo_insights.kind = 'niche_video'`; Writer's video brief reads the latest. */
   saveNicheInsight(userId: string, runId: string, body: NicheVideoInsight): Promise<void>;
   latestNicheInsight(userId: string): Promise<NicheVideoInsight | null>;
-  /** W6-lite: số liệu bài đã đăng; chỉ nhận bài `published` của chính người dùng. */
+  /** W6-lite: numbers for posted posts; only the founder's own `published` posts. */
   saveMetrics(userId: string, rows: MetricRow[]): Promise<number>;
   /** P6 A1: published slots Zernio can measure, newest first (SQL `cmo_zernio_posts`). */
   zernioPosts(userId: string, since: string): Promise<ZernioPostRow[]>;
@@ -274,7 +274,7 @@ export interface CmoStore {
   finishInbox(run: QueuedRun, ok: boolean, feedback: string | null): Promise<void>;
 }
 
-/** Ngày theo UTC dạng YYYY-MM-DD, cộng `offset` ngày. Cùng mốc với `current_date` của Postgres (UTC). */
+/** The UTC date as YYYY-MM-DD, plus `offset` days. The same clock as Postgres's `current_date` (UTC). */
 export function isoDay(offset = 0, from = new Date()): string {
   const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() + offset));
   return d.toISOString().slice(0, 10);

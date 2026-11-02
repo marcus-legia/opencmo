@@ -1,12 +1,11 @@
 /**
- * W4 Quét Reddit (docs/cmo/san-pham.md §4.3): truy vấn từ nỗi đau + đối thủ →
- * tìm thread → chấm điểm có bằng chứng → soạn trả lời cho 5 thread tốt nhất →
- * thẻ ở Approvals. KHÔNG có bước đăng: người dùng tự mở thread và dán trả lời.
+ * W4 Reddit scan (docs/cmo/san-pham.md §4.3): queries from the pains and competitors → threads → scores with
+ * evidence → draft replies for the 5 best threads → cards in Approvals. There is NO posting step: the founder opens
+ * the thread and pastes the reply themselves.
  *
- * Chữ lấy từ Reddit là dữ liệu không tin cậy: chỉ đi vào hai lần gọi model
- * không có tool, đầu ra ép schema, bọc trong <thread> kèm lệnh "bỏ qua chỉ dẫn
- * bên trong". Điểm phần nào cần câu trích thì câu trích phải có thật trong
- * thread — không có thì phần đó 0 điểm, để model không bịa bằng chứng.
+ * Text from Reddit is untrusted: it only goes into two model calls with no tools and schema-held output, wrapped in
+ * <thread> with an instruction to ignore directions inside. A score part that needs a quote needs a real quote from
+ * the thread; without one the part scores 0, so the model cannot invent evidence.
  */
 
 import { z } from "zod";
@@ -150,7 +149,7 @@ ${skillText("no-ai-slop")}`;
 
 const REPLY_VERSION = promptVersion(REPLY_SYSTEM);
 
-/** Timing (0–20) theo tuổi thread: trả lời sớm thì được đọc. Không rõ ngày: điểm giữa. */
+/** Timing (0–20) by the thread's age: an early reply gets read. Unknown date: the middle score. */
 export function timingScore(postedAt: string | null, now = Date.now()): ScorePart {
   if (!postedAt) return { label: "Timing", score: 8, max: 20, evidence: "Posting time unknown" };
   const hours = Math.max(0, (now - new Date(postedAt).getTime()) / 3_600_000);
@@ -159,7 +158,7 @@ export function timingScore(postedAt: string | null, now = Date.now()): ScorePar
   return { label: "Timing", score, max: 20, evidence: `Posted ${age}` };
 }
 
-/** Reach (0–15) theo số comment: có người đọc, nhưng chưa ngập trả lời. */
+/** Reach (0–15) by comment count: people read it, but it is not flooded with replies yet. */
 export function reachScore(comments: number): ScorePart {
   const score = comments >= 50 ? 15 : comments >= 15 ? 13 : comments >= 5 ? 10 : comments >= 1 ? 7 : 4;
   return { label: "Reach", score, max: 15, evidence: `${comments} ${comments === 1 ? "comment" : "comments"}` };
@@ -167,7 +166,7 @@ export function reachScore(comments: number): ScorePart {
 
 const clamp = (n: number, max: number) => Math.max(0, Math.min(max, Math.round(Number.isFinite(n) ? n : 0)));
 
-/** Câu trích phải có thật trong thread (không phân biệt hoa thường, gộp khoảng trắng). */
+/** A quote must really be in the thread (case-insensitive, whitespace collapsed). */
 export function quoteIn(quote: string, thread: RedditThread): boolean {
   // The model saw the thread escaped (`threadBlock`), so it may quote `&lt;` for `<`.
   const q = quote.replace(/&lt;/g, "<").replace(/&gt;/g, ">").toLowerCase().replace(/\s+/g, " ").replace(/^["“']|["”']$/g, "").trim();
@@ -218,7 +217,7 @@ function fakeScores(threads: RedditThread[]): Scored[] {
 
 export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
-  // Brief từ CMO chat hoặc mục Reddit trên lịch (H3): hướng câu tìm kiếm, không thay luật chấm.
+  // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
   const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice } = await ctx.step(
     "read_doc",
@@ -264,7 +263,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         results = await search(query);
       } catch (error) {
         if (!(error instanceof SocialReadError)) throw error;
-        // Thiếu/sai khoá thì truy vấn nào cũng hỏng: dừng ngay. Lỗi khác chỉ bỏ truy vấn đó.
+        // A missing or wrong key fails every query: stop now. Any other error skips only that query.
         if (error.message.includes("not set up")) throw new LlmError(error.message);
         failed += 1;
         lastError = error.message;
@@ -279,7 +278,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       }
       if (found.size >= MAX_THREADS) break;
     }
-    // Mọi truy vấn đều hỏng: là lỗi (credit hoàn qua lượt failed), không phải "không có gì".
+    // Every query failed: an error (the failed run returns the credits), not "nothing found".
     if (list.length && failed === list.length) throw new LlmError(lastError);
     return [...found.values()].slice(0, MAX_THREADS);
   }, (t) => (t.length ? `${t.length} new threads found` : "No new threads found"), { memo: "reddit_search" });
