@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(16);
+select plan(18);
 
 select throws_ok($$ select public.caption_check('tiktok_caption', 'https://acme.io', null) $$, '22023', 'Captions carry no links.', 'a URL');
 select throws_ok($$ select public.caption_check('tiktok_caption', 'see www.acme.io', null) $$, '22023', 'Captions carry no links.', 'a www address');
@@ -40,6 +40,18 @@ select is((select id from public.claim_next_task(array['render_document', 'look_
 select is((select id from public.claim_next_task(array['render_document', 'look_check'])), 'e2442000-0000-4000-8000-000000000001'::uuid,
   'then the rest in order');
 reset role;
+
+-- C3: a failed export gives the day's export back (rate_limits counted on the day it was asked for).
+insert into public.rate_limits (user_id, bucket, window_start, count)
+values ('e2440000-0000-4000-8000-00000000000a', 'export', to_timestamp(floor(extract(epoch from now()) / 86400) * 86400), 2);
+insert into public.tasks (id, user_id, kind, job_id, request_id, status, attempt_id) values
+  ('e2442000-0000-4000-8000-000000000003', 'e2440000-0000-4000-8000-00000000000a', 'render_document', 'e2441000-0000-4000-8000-00000000000a',
+   gen_random_uuid(), 'running', 'e2443000-0000-4000-8000-000000000001');
+set local role service_role;
+select ok(public.fail_task('e2442000-0000-4000-8000-000000000003', 'e2443000-0000-4000-8000-000000000001', 'boom'), 'the export fails');
+reset role;
+select is((select count from public.rate_limits where user_id = 'e2440000-0000-4000-8000-00000000000a' and bucket = 'export'), 1,
+  'and the day''s export is given back');
 
 select * from finish();
 rollback;

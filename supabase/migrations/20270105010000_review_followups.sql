@@ -273,4 +273,205 @@ create or replace function public.claim_next_task(p_kinds text[], p_lease_second
   returning *;
 $$;
 
+-- C3: the export count was released right before a `raise`, which rolls the release back with everything else: dead
+-- code, removed. The day's export is given back where it can be: when the worker fails the export task.
+create or replace function public.request_document_export(p_clip_id uuid, p_revision_id uuid, p_request_id uuid, p_resolution integer DEFAULT 1080) RETURNS public.tasks
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_plan text;
+  v_quota record;
+  v_revision public.editor_revisions;
+  v_manifest jsonb;
+  v_job_id uuid;
+  v_task public.tasks;
+  v_task_id uuid := gen_random_uuid();
+  v_object text;
+begin
+  if p_request_id is null then
+    raise exception 'Missing request id.' using errcode = '22023';
+  end if;
+  if p_resolution is null or p_resolution not in (720, 1080) then
+    raise exception 'Choose 720p or 1080p.' using errcode = '22023';
+  end if;
+
+  perform public.owned_clip(p_clip_id, v_user);
+  select r.* into v_revision
+  from public.editor_revisions r
+  where r.id = p_revision_id and r.clip_id = p_clip_id;
+  if not found then
+    raise exception 'Save the project before exporting it.' using errcode = 'P0002';
+  end if;
+  select c.job_id into v_job_id from public.clips c where c.id = p_clip_id;
+  select p.manifest into v_manifest from public.editor_projects p where p.clip_id = p_clip_id;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text, 1701));
+  select * into v_task from public.tasks where request_id = p_request_id;
+  if found then
+    if v_task.user_id is distinct from v_user
+       or v_task.kind <> 'render_document'
+       or v_task.clip_id is distinct from p_clip_id
+       or v_task.editor_revision_id is distinct from p_revision_id then
+      raise exception 'This export request was already used for another clip or revision.'
+        using errcode = '22023';
+    end if;
+    return v_task;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text, 1702));
+  if (select count(*) from public.tasks
+      where user_id = v_user
+        and kind in ('preview', 'export', 'client_export', 'finalize', 'render_document', 'render_stills')
+        and status in ('awaiting_upload', 'queued', 'running')) >= 20 then
+    raise exception 'You already have 20 previews or exports in progress. Please wait for one to finish.'
+      using errcode = 'P0001';
+  end if;
+
+  -- Renders OpenCMO orders itself (its Studio squads) do not spend the founder's daily exports; the cap above holds.
+  if not public.studio_brain_call() then
+    select coalesce(plan, 'free') into v_plan
+    from public.profiles where id = v_user;
+    select * into v_quota from public.plan_quota(v_plan);
+    if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
+      raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
+    end if;
+  end if;
+
+  v_object := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text || '.mp4';
+  insert into public.tasks(
+    id, user_id, kind, clip_id, editor_revision_id, settings_hash, job_id,
+    payload, status, request_id
+  ) values (
+    v_task_id, v_user, 'render_document', p_clip_id, p_revision_id,
+    v_revision.source_hash, v_job_id,
+    jsonb_build_object(
+      'bucket', 'exports',
+      'object', v_object,
+      'editor_revision_id', p_revision_id,
+      'source_hash', v_revision.source_hash,
+      'resolution', p_resolution,
+      'manifest', coalesce(v_manifest, '{"version":1,"folders":[],"assets":[]}'::jsonb)
+    ),
+    'queued', p_request_id
+  )
+  on conflict do nothing
+  returning * into v_task;
+
+  if not found then
+    select * into v_task from public.tasks where request_id = p_request_id;
+  end if;
+  if not found then
+    raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
+  end if;
+  if v_task.user_id is distinct from v_user
+     or v_task.kind <> 'render_document'
+     or v_task.clip_id is distinct from p_clip_id
+     or v_task.editor_revision_id is distinct from p_revision_id then
+    raise exception 'This request id was already used for something else.' using errcode = '22023';
+  end if;
+  return v_task;
+end;
+$$;
+
+create or replace function public.request_stills_export(p_clip_id uuid, p_revision_id uuid, p_request_id uuid) RETURNS public.tasks
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_plan text;
+  v_quota record;
+  v_revision public.editor_revisions;
+  v_manifest jsonb;
+  v_job_id uuid;
+  v_task public.tasks;
+  v_task_id uuid := gen_random_uuid();
+  v_prefix text;
+begin
+  if p_request_id is null then
+    raise exception 'Missing request id.' using errcode = '22023';
+  end if;
+  perform public.owned_clip(p_clip_id, v_user);
+  select r.* into v_revision from public.editor_revisions r where r.id = p_revision_id and r.clip_id = p_clip_id;
+  if not found then
+    raise exception 'Save the project before exporting it.' using errcode = 'P0002';
+  end if;
+  select c.job_id into v_job_id from public.clips c where c.id = p_clip_id;
+  select p.manifest into v_manifest from public.editor_projects p where p.clip_id = p_clip_id;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text, 1701));
+  select * into v_task from public.tasks where request_id = p_request_id;
+  if found then
+    if v_task.user_id is distinct from v_user or v_task.kind <> 'render_stills'
+       or v_task.clip_id is distinct from p_clip_id or v_task.editor_revision_id is distinct from p_revision_id then
+      raise exception 'This export request was already used for another clip or revision.' using errcode = '22023';
+    end if;
+    return v_task;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text, 1702));
+  if (select count(*) from public.tasks
+      where user_id = v_user
+        and kind in ('preview', 'export', 'client_export', 'finalize', 'render_document', 'render_stills')
+        and status in ('awaiting_upload', 'queued', 'running')) >= 20 then
+    raise exception 'You already have 20 previews or exports in progress. Please wait for one to finish.' using errcode = 'P0001';
+  end if;
+  if not public.studio_brain_call() then
+    select coalesce(plan, 'free') into v_plan from public.profiles where id = v_user;
+    select * into v_quota from public.plan_quota(v_plan);
+    if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
+      raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
+    end if;
+  end if;
+
+  v_prefix := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text;
+  insert into public.tasks (id, user_id, kind, clip_id, editor_revision_id, settings_hash, job_id, payload, status, request_id)
+  values (v_task_id, v_user, 'render_stills', p_clip_id, p_revision_id, v_revision.source_hash, v_job_id,
+    jsonb_build_object('bucket', 'exports', 'object', v_prefix || '.zip', 'still_prefix', v_prefix,
+      'editor_revision_id', p_revision_id, 'source_hash', v_revision.source_hash,
+      'manifest', coalesce(v_manifest, '{"version":1,"folders":[],"assets":[]}'::jsonb)),
+    'queued', p_request_id)
+  on conflict do nothing
+  returning * into v_task;
+  if not found then
+    raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
+  end if;
+  return v_task;
+end;
+$$;
+
+create or replace function public.fail_task(p_task_id uuid, p_attempt_id uuid, p_error text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_task public.tasks;
+begin
+  update public.tasks
+  set status = 'failed',
+      error = left(coalesce(p_error, 'Rendering failed. Please try again.'), 2000),
+      finished_at = now(),
+      lease_until = null
+  where id = p_task_id and status = 'running'
+    and attempt_id is not distinct from p_attempt_id
+  returning * into v_task;
+
+  if found then
+    -- An export the worker could not finish gives the day's export back, counted on the day it was asked for.
+    if v_task.kind in ('render_document', 'render_stills') then
+      perform public.release_rate_limit_for(v_task.user_id, 'export', v_task.created_at);
+    end if;
+    return true;
+  end if;
+
+  return exists (
+    select 1 from public.tasks
+    where id = p_task_id and status = 'failed'
+      and attempt_id is not distinct from p_attempt_id
+  );
+end;
+$$;
+
 commit;
