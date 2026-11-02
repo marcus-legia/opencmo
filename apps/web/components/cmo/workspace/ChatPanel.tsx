@@ -10,33 +10,69 @@
  */
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { readStream } from "@/components/clipping/agent-stream";
+import { useLive } from "@/components/clipping/useLive";
 import { ContinueInClaude } from "@/components/editor/assistant/ContinueInClaude";
 import { Markdown } from "@/components/editor/assistant/Markdown";
 import { Icon } from "@/components/icons";
-import { panelHref, PanelOpenSchema, screenOfPath, type ScreenContext } from "@/lib/agent/panel";
+import { panelHref, screenOfPath, targetIds, type ScreenContext } from "@/lib/agent/panel";
+import { isFinished, runLine, startedRunIds, type RunRow } from "@/lib/agent/run-line";
+import { createClient } from "@/lib/supabase/client";
 import type { ChatMessage, Workspace } from "@/lib/cmo/workspace";
 
 import { ago } from "./time";
 
 const SUGGESTIONS = ["Plan my week", "Draft a post for X about what we shipped", "What should I post today?", "Who is my ideal customer?"];
 
-type TurnView = { number: number; prompt: string; status: string; pause_reason?: string | null; error: string | null; reply: string; actions: { name: string; ok: boolean; summary: string }[] };
+/** A decision the founder confirms in the chat (plan 2026-11-02-cmo-chat-decisions): one line per change. */
+type ConfirmCard = { id: string; name: string; changes: string[]; credits?: number };
+type PendingCall = { id: string; name: string; card?: { changes?: unknown; credits?: unknown } };
+type TurnView = {
+  number: number;
+  prompt: string;
+  status: string;
+  pause_reason?: string | null;
+  error: string | null;
+  reply: string;
+  actions: { name: string; ok: boolean; summary: string; view?: { open?: { ids?: unknown } } }[];
+  pending?: PendingCall[];
+  runs?: RunRow[];
+  rating?: "up" | "down" | null;
+};
+
+/** A chat bubble and the turn it belongs to: ratings and finished-run lines are keyed by turn number. */
+type Msg = ChatMessage & { turn?: number; note?: boolean };
+/** A run this conversation started, under the turn that started it. */
+type TrackedRun = RunRow & { turn: number };
+
+/** Past this many turns the next message opens a new conversation (agent_open_cmo_session does the same in SQL). */
+const MAX_TURNS = 200;
+
+/** Pending calls that carry a confirmation card (others are browser tools of the clip Assistant). */
+function confirmCards(pending: PendingCall[] | undefined): ConfirmCard[] {
+  return (pending ?? []).flatMap((call) => {
+    const changes = call.card?.changes;
+    if (!Array.isArray(changes)) return [];
+    const credits = typeof call.card?.credits === "number" ? call.card.credits : undefined;
+    return [{ id: call.id, name: call.name, changes: changes.map(String), ...(credits ? { credits } : {}) }];
+  });
+}
 type SessionView = { id: string; turns: TurnView[] };
 type PastSession = { id: string; title: string; created_at: string };
 type Loaded = { available: boolean; session: SessionView | null; sessions: PastSession[] };
 type Done = { status?: string; reason?: string; extend?: number; error?: string | null };
 
-function toMessages(session: SessionView | null): ChatMessage[] {
+function toMessages(session: SessionView | null): Msg[] {
   if (!session) return [];
   return session.turns.flatMap((turn) => [
-    { id: `${turn.number}-u`, role: "user" as const, text: turn.prompt },
+    { id: `${turn.number}-u`, role: "user" as const, text: turn.prompt, turn: turn.number },
     {
       id: `${turn.number}-c`,
       role: "cmo" as const,
+      turn: turn.number,
       // A turn that failed after some text keeps both, as it showed live.
       text:
         turn.status === "failed" && turn.reply && turn.error
@@ -53,6 +89,10 @@ function workingLabel(tool: string): string {
   if (tool === "search_hackernews") return "Reading Hacker News…";
   if (tool === "read_skill") return "Reading a playbook…";
   if (tool === "get_run_result") return "Checking on the team…";
+  if (tool === "wait_for_run") return "Waiting for the result…";
+  if (tool === "list_projects" || tool === "list_clips") return "Finding your videos…";
+  if (tool === "open_editor") return "Opening the editor…";
+  if (tool === "get_export" || tool === "list_versions") return "Checking your video…";
   if (tool === "update_document") return "Updating your document…";
   if (tool === "remember") return "Saving to memory…";
   if (tool === "set_week_goal") return "Proposing a goal…";
@@ -93,14 +133,19 @@ export function ChatPanel({
   pathRef.current = pathname;
   // The rows the last `view.open` put on screen; sent back with the next turn while that screen is still open.
   const shown = useRef<{ path: string; ids: string[] } | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>(ws.chat);
+  const [messages, setMessages] = useState<Msg[]>(ws.chat);
   const [title, setTitle] = useState(ws.chatTitle);
   const [session, setSession] = useState<SessionView | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [extend, setExtend] = useState<number | null>(null);
-  const [rated, setRated] = useState<Record<string, "up" | "down">>({});
+  // Cards waiting for the founder's Approve or Cancel; they survive a reload through the session's pending calls.
+  const [confirm, setConfirm] = useState<ConfirmCard[]>([]);
+  // Thumbs by turn number, kept in agent_turn_ratings.
+  const [rated, setRated] = useState<Record<number, "up" | "down">>({});
+  // Runs this conversation started: a line shows under their turn when they finish (plan 2026-11-02-cmo-chat-live).
+  const [runs, setRuns] = useState<TrackedRun[]>([]);
   const [past, setPast] = useState<PastSession[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   // A session whose last turn paused on time or steps before a reload: continued once the stream is ready.
@@ -117,10 +162,13 @@ export function ChatPanel({
     setMessages(toMessages(loaded.session));
     setTitle(loaded.session?.turns[0]?.prompt.slice(0, 60) ?? null);
     setPast(loaded.sessions ?? []);
+    setRuns((loaded.session?.turns ?? []).flatMap((turn) => (turn.runs ?? []).map((run) => ({ ...run, turn: turn.number }))));
+    setRated(Object.fromEntries((loaded.session?.turns ?? []).flatMap((turn) => (turn.rating ? [[turn.number, turn.rating]] : []))));
     // A pause outlives a reload: 'budget' needs the founder's Continue, 'time' and 'steps' go on by themselves.
     const last = loaded.session?.turns.at(-1);
     const paused = last?.status === "awaiting_continue" ? last.pause_reason : null;
     setExtend(paused === "budget" ? 10 : null);
+    setConfirm(last?.status === "awaiting_approval" ? confirmCards(last.pending) : []);
     if (loaded.session && (paused === "time" || paused === "steps")) setResume(loaded.session.id);
   }, []);
 
@@ -166,12 +214,51 @@ export function ChatPanel({
       const href = panelHref(open);
       if (!href) return false;
       const path = href.split("?")[0]!;
-      shown.current = { path, ids: PanelOpenSchema.parse(open).ids ?? [] };
-      if (pathRef.current !== path) router.push(href);
+      shown.current = { path, ids: targetIds(open) };
+      // The editor with a request always opens, even on the same clip: the request is new.
+      if (pathRef.current !== path || href.includes("?ask=")) router.push(href);
       return true;
     },
     [router],
   );
+
+  // Runs still working: realtime (with useLive's fallback poll) re-reads them under RLS; the payload is never trusted.
+  const openRunIds = runs.filter((run) => !isFinished(run.status)).map((run) => run.id);
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+  const refreshRuns = useCallback(async () => {
+    const ids = runsRef.current.filter((run) => !isFinished(run.status)).map((run) => run.id);
+    if (!ids.length) return;
+    const { data } = await createClient().from("cmo_runs").select("id, kind, status").in("id", ids);
+    const rows = new Map(((data ?? []) as RunRow[]).map((row) => [row.id, row]));
+    const finished = runsRef.current.flatMap((run) => {
+      const row = rows.get(run.id);
+      return row && !isFinished(run.status) && isFinished(row.status) ? [row] : [];
+    });
+    setRuns((list) => list.map((run) => (rows.has(run.id) ? { ...run, kind: rows.get(run.id)!.kind, status: rows.get(run.id)!.status } : run)));
+    // A run that just finished moves column 3 to what it made; it never starts a model turn.
+    if (finished.length) {
+      void onWorkStarted();
+      const open = finished.map((row) => runLine(row)?.open).find(Boolean);
+      if (open && drivesPanel) openPanel(open);
+    }
+  }, [onWorkStarted, drivesPanel, openPanel]);
+  useLive("cmo_runs", openRunIds.length ? `id=in.(${openRunIds.join(",")})` : null, () => void refreshRuns(), live && openRunIds.length > 0, true, "chat");
+
+  async function rate(turn: number, value: "up" | "down") {
+    if (!session) return;
+    const next = rated[turn] === value ? null : value;
+    setRated((r) => {
+      const rest = { ...r };
+      delete rest[turn];
+      return next ? { ...rest, [turn]: next } : rest;
+    });
+    try {
+      await api(`/agent/sessions/${session.id}/ratings`, jsonBody({ turn, rating: next }));
+    } catch (error) {
+      onToast(error instanceof ApiError ? error.message : "Could not save the rating.");
+    }
+  }
 
   const stream = useCallback(
     async (sessionId: string, path: string, body: unknown, prompt: string | null) => {
@@ -189,6 +276,7 @@ export function ChatPanel({
       }
       const append = (more: string) => setMessages((m) => m.map((msg) => (msg.id === replyId ? { ...msg, text: msg.text + more } : msg)));
       let done: Done = {};
+      let turnNumber = 0;
       try {
         const response = await fetch(`/api/v1/agent/sessions/${sessionId}/${path}`, {
           method: "POST",
@@ -196,12 +284,28 @@ export function ChatPanel({
           body: JSON.stringify(body),
         });
         await readStream(response, (event, data) => {
+          if (event === "turn") {
+            turnNumber = Number(data.number) || 0;
+            setMessages((m) => {
+              const at = m.findIndex((msg) => msg.id === replyId);
+              if (at < 0) return m;
+              return m.map((msg, i) => (i === at || (i === at - 1 && prompt !== null && msg.role === "user") ? { ...msg, turn: turnNumber } : msg));
+            });
+          }
           if (event === "text") append(String(data.text));
           if (event === "tool_start") setWorking(workingLabel(String(data.name)));
           if (event === "tool_result") {
             setWorking(null);
             const opened = data.ok && drivesPanel ? openPanel((data.view as { open?: unknown } | undefined)?.open) : false;
             if (data.ok && (opened || CARD_TOOLS.has(String(data.name)))) void onWorkStarted();
+            const started = startedRunIds([data as { name: string; ok: boolean; view?: { open?: { ids?: unknown } } }]);
+            if (started.length && turnNumber) {
+              setRuns((list) => [...list.filter((run) => !started.includes(run.id)), ...started.map((id) => ({ id, kind: "", status: "queued", turn: turnNumber }))]);
+            }
+          }
+          if (event === "approval_request") {
+            const [card] = confirmCards([data as PendingCall]);
+            if (card) setConfirm((list) => [...list.filter((c) => c.id !== card.id), card]);
           }
           if (event === "done") done = data as Done;
         });
@@ -235,6 +339,14 @@ export function ChatPanel({
     void stream(resume, "continue", {}, null);
   }, [resume, busy, stream]);
 
+  /** Approve or Cancel every waiting card; the turn then continues on the same stream. */
+  async function decide(approved: boolean) {
+    if (!session || !confirm.length) return;
+    const decisions = confirm.map((card) => ({ tool_use_id: card.id, approved }));
+    setConfirm([]);
+    await stream(session.id, "approvals", { decisions }, null);
+  }
+
   async function send(text: string) {
     const value = text.trim();
     if (!value || !enabled || busy) return;
@@ -250,9 +362,17 @@ export function ChatPanel({
       return;
     }
     let current = session;
+    // A full conversation hands over to a new one; the SQL side refuses to reuse it too.
+    const full = Math.max(0, ...messages.map((m) => m.turn ?? 0)) >= MAX_TURNS;
     try {
-      if (!current) {
-        current = await api<SessionView>("/agent/sessions", jsonBody({ scope: "cmo" }));
+      if (!current || full) {
+        const opened = await api<SessionView>("/agent/sessions", jsonBody({ scope: "cmo" }));
+        if (current && opened.id !== current.id) {
+          setRuns([]);
+          setRated({});
+          setMessages([{ id: `${Date.now()}-n`, role: "cmo", note: true, text: "Started a new conversation. The old one is in Past conversations." }]);
+        }
+        current = opened;
         setSession(current);
       }
     } catch (error) {
@@ -271,6 +391,9 @@ export function ChatPanel({
     try {
       const fresh = await api<SessionView>("/agent/sessions", jsonBody({ scope: "cmo", new: true }));
       setSession(fresh);
+      setConfirm([]);
+      setRuns([]);
+      setRated({});
       setMessages([]);
       setTitle(null);
       setExtend(null);
@@ -313,7 +436,7 @@ export function ChatPanel({
                 if (historyOpen) return setHistoryOpen(false);
                 setHistoryOpen(true);
                 // Danh sách lấy lại mỗi lần mở: server là nguồn thật (gồm cả cuộc ở tab khác).
-                void api<Loaded>(`/agent/sessions?scope=cmo${session ? `&session_id=${session.id}` : ""}`)
+                void api<Pick<Loaded, "sessions">>("/agent/sessions?scope=cmo&list=1")
                   .then((loaded) => setPast(loaded.sessions ?? []))
                   .catch(() => undefined);
               }}
@@ -358,8 +481,14 @@ export function ChatPanel({
             </div>
           </li>
         ) : (
-          messages.map((m) => (
-            <li key={m.id} className={`cmo-msg is-${m.role}`}>
+          messages.map((m) =>
+            m.note ? (
+              <li key={m.id} className="cmo-msg is-note">
+                <p>{m.text}</p>
+              </li>
+            ) : (
+            <Fragment key={m.id}>
+            <li className={`cmo-msg is-${m.role}`}>
               <div className="cmo-msg-body">
                 {m.role === "cmo" ? (m.text ? <Markdown text={m.text} className="cmo-md" /> : <p className="cmo-muted">Thinking…</p>) : <p>{m.text}</p>}
               </div>
@@ -368,19 +497,67 @@ export function ChatPanel({
                   <button type="button" className="cmo-icon-btn" aria-label="Copy" onClick={() => copy(m.text)}>
                     <Icon name="copy" size={14} />
                   </button>
-                  <button type="button" className="cmo-icon-btn" aria-label="Good answer" aria-pressed={rated[m.id] === "up"} onClick={() => setRated((r) => ({ ...r, [m.id]: "up" }))}>
-                    <Icon name="thumbs-up" size={14} />
-                  </button>
-                  <button type="button" className="cmo-icon-btn" aria-label="Bad answer" aria-pressed={rated[m.id] === "down"} onClick={() => setRated((r) => ({ ...r, [m.id]: "down" }))}>
-                    <Icon name="thumbs-down" size={14} />
-                  </button>
+                  {m.turn && live ? (
+                    <>
+                      <button type="button" className="cmo-icon-btn" aria-label="Good answer" aria-pressed={rated[m.turn] === "up"} onClick={() => void rate(m.turn!, "up")}>
+                        <Icon name="thumbs-up" size={14} />
+                      </button>
+                      <button type="button" className="cmo-icon-btn" aria-label="Bad answer" aria-pressed={rated[m.turn] === "down"} onClick={() => void rate(m.turn!, "down")}>
+                        <Icon name="thumbs-down" size={14} />
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </li>
-          ))
+            {m.role === "cmo" && m.turn
+              ? runs
+                  .filter((run) => run.turn === m.turn)
+                  .flatMap((run) => {
+                    const line = runLine(run);
+                    if (!line) return [];
+                    const href = line.open && drivesPanel ? panelHref(line.open) : null;
+                    return [
+                      <li key={`run-${run.id}`} className={`cmo-msg is-note${line.status === "failed" ? " is-failed" : ""}`} data-testid="run-line">
+                        <p>{line.text}</p>
+                        {href ? (
+                          <button type="button" className="cmo-note-open" onClick={() => openPanel(line.open)}>
+                            Open
+                          </button>
+                        ) : null}
+                      </li>,
+                    ];
+                  })
+              : null}
+            </Fragment>
+            ),
+          )
         )}
         {working ? <li className="cmo-msg is-cmo"><p className="cmo-muted">{working}</p></li> : null}
       </ol>
+
+      {confirm.length && session ? (
+        <div className="cmo-confirm" role="group" aria-label="Confirm">
+          {confirm.map((card) => (
+            <div key={card.id} className="cmo-confirm-card">
+              <ul>
+                {card.changes.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              {card.credits ? <p className="cmo-muted">{card.credits} credits</p> : null}
+            </div>
+          ))}
+          <div className="cmo-confirm-actions">
+            <button type="button" className="primary-button" disabled={busy} onClick={() => void decide(true)} data-testid="cmo-confirm-approve">
+              {confirm.length > 1 ? `Approve all ${confirm.length}` : "Approve"}
+            </button>
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => void decide(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {extend !== null && session ? (
         <div className="cmo-extend">

@@ -12,6 +12,8 @@
 import { z } from "zod";
 
 import { RESEARCH_TOOLS, runResearchTool } from "@/lib/agent/cmo-research";
+import { DECISION_TOOLS } from "@/lib/agent/cmo-decisions";
+import { EDITOR_TOOLS } from "@/lib/agent/cmo-editor";
 import { CMO_TOOL_SPECS, isCmoWrite, runCmoTool } from "@/lib/agent/cmo-tools";
 import type { ToolOutcome, ToolSpec } from "@/lib/agent/tools";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
@@ -100,4 +102,7 @@ function toMcp(spec: ToolSpec): CmoMcpTool {
 }
 
 // CMO_TOOL_SPECS already holds the research tools. `open_screen` moves the in-app panel; an MCP client has none.
-export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.filter((spec) => spec.name !== "open_screen").map(toMcp);
+// Decisions from the chat (plan 2026-11-02) are confirmed on a card in the app; MCP decides through its inbox instead.
+// `wait_for_run` answers the in-app chat, which hears finished runs by realtime; an MCP client polls get_run_result.
+// The editor handoff opens column 3; MCP has its own find, export and versions groups over the same reads.
+export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.filter((spec) => spec.name !== "open_screen" && spec.name !== "wait_for_run" && !EDITOR_TOOLS.has(spec.name) && !DECISION_TOOLS.has(spec.name)).map(toMcp);

@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@/lib/api/handler";
 
 import { formatFor } from "./model";
 import type { PanelOpen } from "./panel";
+import { startedRunIds, type RunRow } from "./run-line";
 
 export type PlanItem = { text: string; status: "pending" | "active" | "done" };
 
@@ -42,6 +43,10 @@ export type TurnView = {
   can_undo: boolean;
   undone: boolean;
   created_at: string;
+  /** CMO chat: the runs this turn's create_task started, as they stand now (the chat draws a line when one finishes). */
+  runs?: RunRow[];
+  /** CMO chat: the founder's thumbs on this answer. */
+  rating?: "up" | "down" | null;
 };
 
 const WAITING = ["awaiting_browser", "awaiting_approval", "awaiting_input", "awaiting_continue"] as const;
@@ -166,6 +171,19 @@ export async function sessionView(
   // Undo chỉ cho lượt ghi GẦN NHẤT chưa hoàn tác: checkpoint là bản trước lượt
   // đó, nên undo một lượt cũ hơn sẽ xoá luôn mọi lượt sau nó — không ai bấm
   // "Undo" ở một câu cũ mà mong thế.
+  // The CMO chat rebuilds its finished-run lines and thumbs after a reload.
+  const cmo = !session.clip_id && !session.job_id;
+  const started = new Map(turns.map((turn) => [turn.id, startedRunIds(actions.get(turn.id) ?? [])]));
+  const runIds = [...started.values()].flat();
+  const [runRows, ratingRows] = cmo
+    ? await Promise.all([
+        runIds.length ? supabase.from("cmo_runs").select("id, kind, status").in("id", runIds.slice(-200)).then((r) => (r.data ?? []) as RunRow[]) : Promise.resolve([] as RunRow[]),
+        supabase.from("agent_turn_ratings").select("turn_number, rating").eq("session_id", session.id).then((r) => (r.data ?? []) as { turn_number: number; rating: "up" | "down" }[]),
+      ])
+    : [[], []];
+  const runsById = new Map(runRows.map((run) => [run.id, run]));
+  const ratings = new Map(ratingRows.map((row) => [row.turn_number, row.rating]));
+
   const undoable = turns
     .filter((turn) => turn.checkpoint_id && !turn.undone_at && turn.status !== "running" && !(WAITING as readonly string[]).includes(turn.status))
     .reduce((latest, turn) => Math.max(latest, turn.number), 0);
@@ -191,6 +209,12 @@ export async function sessionView(
       can_undo: turn.number === undoable,
       undone: Boolean(turn.undone_at),
       created_at: turn.created_at,
+      ...(cmo
+        ? {
+            runs: (started.get(turn.id) ?? []).flatMap((id) => (runsById.has(id) ? [runsById.get(id)!] : [])),
+            rating: ratings.get(turn.number) ?? null,
+          }
+        : {}),
     })),
   };
 }

@@ -157,6 +157,7 @@ assert.deepEqual(anthropicFormat.trimImages(many.slice(0, 4), 2, 2).map(imagesIn
 
 // Context editing is off unless asked for; on, it never clears the guides, skills or plan.
 assert.equal(contextEditing({} as NodeJS.ProcessEnv), null);
+assert.ok(contextEditing({} as NodeJS.ProcessEnv, true), "the CMO chat clears old tool results without the flag");
 const editing = contextEditing({ OPENCMO_AGENT_CONTEXT_EDITING: "1" } as unknown as NodeJS.ProcessEnv)!;
 assert.equal(editing.beta, "context-management-2025-06-27");
 assert.deepEqual(editing.context_management.edits[0]!.exclude_tools, ["read_guide", "read_skill", "update_plan"]);
