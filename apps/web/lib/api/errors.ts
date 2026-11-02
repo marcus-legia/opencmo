@@ -88,7 +88,7 @@ export function apiErrorFromPostgrest(error: PostgrestLikeError): ApiError {
       error.message === "You can cut shorts 10 times a day. Try again tomorrow." ||
       // Review R4: these are limits too, and came back as 409 with no hint to wait.
       error.message === "Too many generations started. Wait a while and try again." ||
-      error.message === "Too many 3D scenes in a short time. Try again later." ||
+      error.message === "Too many explainer scenes in a short time. Try again later." ||
       error.message === "Too much feedback in a short time. Try again later.")
   ) {
     status = 429;
