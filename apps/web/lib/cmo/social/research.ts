@@ -23,7 +23,8 @@ import {
 } from "./scrapecreators";
 
 export type RedditPost = NonNullable<ReturnType<typeof redditPost>>;
-const handleOf = (h: string) => h.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "").split(/[/?#]/)[0]!.slice(0, 60);
+/** An X handle from "@name", "name" or a profile URL. */
+export const handleOf = (h: string) => h.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "").split(/[/?#]/)[0]!.slice(0, 60);
 /** Non-null items, one per URL (a provider can list the same post under two keys), at most `max`. */
 const keep = <T extends { url?: string }>(items: (T | null)[], max: number): T[] => {
   const seen = new Set<string>();

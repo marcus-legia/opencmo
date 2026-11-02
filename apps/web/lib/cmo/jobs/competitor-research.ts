@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 import { skillText } from "../skills";
-import { xTopPosts } from "../social/research";
+import { handleOf, xTopPosts } from "../social/research";
 import { outliers, ScBudget, SocialReadError, type Outlier } from "../social/scrapecreators";
 import { escapeAttribute, escapeForTag } from "../untrusted";
 import { documentsBlock } from "./context";
@@ -46,7 +46,7 @@ export function watchedHandles(docs: Documents, input: Record<string, unknown>):
   const fromDoc = competitors.map((c) => (typeof c.x_handle === "string" ? c.x_handle : ""));
   const seen = new Set<string>();
   return [...given, ...fromDoc]
-    .map((h) => h.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "").split(/[/?#]/)[0]!)
+    .map(handleOf)
     .filter((h) => /^[A-Za-z0-9_]{1,15}$/.test(h) && !seen.has(h.toLowerCase()) && seen.add(h.toLowerCase()))
     .slice(0, MAX_ACCOUNTS);
 }

@@ -17,14 +17,12 @@ import { compatJson, OpenAiCompatError } from "@/lib/openai-compat";
 import { outage, withFailover } from "@/lib/llm-health";
 
 import { LlmError } from "./llm-error";
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
 
 export { LlmError };
 
 /** Bản giả cho CI/E2E. Không bao giờ bật trên production. */
-export function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
-}
+export const fakeAllowed = agentFakeAllowed;
 
 /** The agent can run: the fake, or the server has a key for some provider of it. */
 export function llmReady(agent: AgentId = "planner"): boolean {
