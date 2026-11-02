@@ -243,4 +243,34 @@ begin
 end;
 $$;
 
+-- L6: aging in the task queue.
+create or replace function public.claim_next_task(p_kinds text[], p_lease_seconds integer DEFAULT 120, p_max_running integer DEFAULT NULL::integer) RETURNS SETOF public.tasks
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  update public.tasks
+  set status = 'running',
+      attempt = attempt + 1,
+      attempt_id = gen_random_uuid(),
+      lease_until = now() + make_interval(secs => p_lease_seconds),
+      heartbeat_at = now(),
+      started_at = coalesce(started_at, now())
+  where id = (
+    select t.id from public.tasks t
+    where t.status = 'queued' and t.kind = any(p_kinds)
+      and (p_max_running is null
+           or (select count(*) from public.tasks r where r.status = 'running' and r.kind = any(p_kinds)) < p_max_running)
+    -- A task waiting over 10 minutes goes first, so a low-priority kind (publish_media, look_check) never starves
+    -- behind requeued work. Then the user with the fewest running tasks, then kind order and age: fair across users,
+    -- priority within one.
+    order by (t.created_at < now() - interval '10 minutes') desc,
+      (select count(*) from public.tasks r where r.status = 'running' and r.user_id = t.user_id),
+      array_position(p_kinds, t.kind), t.created_at
+    -- `skip locked`: parallel claims never take the same task.
+    for update skip locked
+    limit 1
+  )
+  returning *;
+$$;
+
 commit;

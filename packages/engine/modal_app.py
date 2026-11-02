@@ -294,9 +294,9 @@ def _record_call(store, job, call) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    # A container that dies midway (OOM, preemption) runs the SAME attempt again. A caught error was already settled by
-    # `process_job.process`, so the rerun sees the job no longer running and exits at once.
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
+    # No Modal retry (review follow-up L5, owner 2026-11-02): a container that dies midway leaves the job's lease to run
+    # out, and the database's reclaim runs it again within its own attempt limit. Both layers retrying ran a job up to
+    # six times.
     # Uploads were unbounded at 4 CPU / 4 GiB each, sharing the workspace's container quota with the sweep, submit and
     # MCP (review R6). The database already caps each user at 3 in progress.
     max_containers=20,
@@ -321,7 +321,7 @@ def run_job(job_id: str, attempt_id: str) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
+    # No Modal retry: the lease reclaim is the one retry layer (L5, as run_job).
     max_containers=RUN_TASK_MAX_CONTAINERS,
 )
 def run_task(task_id: str, attempt_id: str) -> None:
