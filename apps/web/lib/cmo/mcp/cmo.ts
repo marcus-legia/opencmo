@@ -102,4 +102,5 @@ function toMcp(spec: ToolSpec): CmoMcpTool {
 
 // CMO_TOOL_SPECS already holds the research tools. `open_screen` moves the in-app panel; an MCP client has none.
 // Decisions from the chat (plan 2026-11-02) are confirmed on a card in the app; MCP decides through its inbox instead.
-export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.filter((spec) => spec.name !== "open_screen" && !DECISION_TOOLS.has(spec.name)).map(toMcp);
+// `wait_for_run` answers the in-app chat, which hears finished runs by realtime; an MCP client polls get_run_result.
+export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.filter((spec) => spec.name !== "open_screen" && spec.name !== "wait_for_run" && !DECISION_TOOLS.has(spec.name)).map(toMcp);

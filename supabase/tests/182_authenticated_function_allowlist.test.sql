@@ -110,6 +110,7 @@ insert into allowed values
   ('push_subscribe(text,text,text,text)'),
   ('push_unsubscribe(text)'),
   ('put_editor_transcript(uuid,text)'),
+  ('rate_agent_turn(uuid,integer,text,text)'),
   ('rate_limit_hit(text,integer,integer)'),
   ('refund_media_captions_from_task()'),
   ('register_media_asset(uuid,text,text,uuid)'),

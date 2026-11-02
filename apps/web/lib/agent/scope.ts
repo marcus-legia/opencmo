@@ -66,6 +66,7 @@ import {
 } from "./long-take";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
+import { runWaitForRun, runsFinishedBlock } from "./cmo-wait";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
@@ -581,14 +582,15 @@ export function chatReadBucket(name: string): "chat_social" | "chat_site" | "res
   return RESEARCH_TOOLS.has(name) ? "chat_social" : null;
 }
 
-export function cmoScope(supabase: SupabaseClient): Scope {
+/** `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message. */
+export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   const budget = new ScBudget(RESEARCH_CALLS_PER_TURN);
   const turn: CmoTurn = { siteReads: 0 };
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,
     system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy, and no-ai-slop before writing any text that goes out):\n${cmoSkillIndex("cmo")}`,
-    context: () => cmoContext(supabase),
+    context: async () => `${await cmoContext(supabase)}${sessionId ? await runsFinishedBlock(supabase, sessionId) : ""}`,
     state: () => cmoState(supabase),
     async plan(call) {
       // A decision (plan 2026-11-02-cmo-chat-decisions) is a confirmation card: nothing writes until the founder
@@ -599,6 +601,7 @@ export function cmoScope(supabase: SupabaseClient): Scope {
     },
     async run(call) {
       if (call.name === "get_credits") return readCredits(supabase);
+      if (call.name === "wait_for_run") return runWaitForRun(call.input, { supabase });
       // The in-memory caps above start again on every request (each continue rebuilds the scope); the founder's
       // counters in SQL do not, and the daily cap is shared with MCP (review R4).
       const bucket = chatReadBucket(call.name);

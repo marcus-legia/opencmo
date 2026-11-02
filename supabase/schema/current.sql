@@ -671,7 +671,9 @@ begin
     select * into v_session from public.agent_sessions
     where user_id = v_user and scope = 'cmo' and model = p_model
     order by created_at desc limit 1;
-    if found then
+    -- A full conversation is not reused: the chat sends a window of it, but the panel and the turn numbers keep
+    -- growing, so past 200 turns the next message starts a new conversation.
+    if found and (select count(*) from public.agent_turns where session_id = v_session.id) < 200 then
       return v_session;
     end if;
   end if;
@@ -880,10 +882,10 @@ $$;
 -- Name: agent_reap_turns(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.agent_reap_turns() returns integer
-  language plpgsql security definer
-  set search_path to 'public'
-  as $$
+CREATE FUNCTION public.agent_reap_turns() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
 declare
   v_turn record;
   v_count integer := 0;
@@ -3179,14 +3181,13 @@ $$;
 
 
 --
--- Name: claim_next_task(text[], integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: claim_next_task(text[], integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_next_task(p_kinds text[], p_lease_seconds integer default 120, p_max_running integer default null)
-  returns setof public.tasks
-  language sql security definer
-  set search_path to 'public'
-  as $$
+CREATE FUNCTION public.claim_next_task(p_kinds text[], p_lease_seconds integer DEFAULT 120, p_max_running integer DEFAULT NULL::integer) RETURNS SETOF public.tasks
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
   update public.tasks
   set status = 'running',
       attempt = attempt + 1,
@@ -3211,14 +3212,13 @@ $$;
 
 
 --
--- Name: claim_task(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: claim_task(uuid, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.claim_task(p_task_id uuid, p_lease_seconds integer default 120, p_max_running integer default null)
-  returns setof public.tasks
-  language sql security definer
-  set search_path to 'public'
-  as $$
+CREATE FUNCTION public.claim_task(p_task_id uuid, p_lease_seconds integer DEFAULT 120, p_max_running integer DEFAULT NULL::integer) RETURNS SETOF public.tasks
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
   update public.tasks
   set status = 'running',
       attempt = attempt + 1,
@@ -3680,6 +3680,24 @@ $$;
 
 
 --
+-- Name: cmo_dispatch_count(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_dispatch_count(p_limit integer DEFAULT 10) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*)::integer from (
+    select 1 from public.cmo_runs r
+    where not public.cmo_paused(r.user_id)
+      and ((r.status = 'queued' and (r.not_before is null or r.not_before <= now()))
+        or (r.status = 'running' and r.kind <> 'onboard' and r.lease_until < now() and r.attempt < 3))
+    limit greatest(1, least(coalesce(p_limit, 10), 100))
+  ) x;
+$$;
+
+
+--
 -- Name: cmo_draft_outcomes_backfill_platform(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3736,24 +3754,6 @@ begin
   end if;
   return new;
 end;
-$$;
-
-
---
--- Name: cmo_dispatch_count(integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_dispatch_count(p_limit integer default 10) returns integer
-  language sql stable security definer
-  set search_path to 'public'
-  as $$
-  select count(*)::integer from (
-    select 1 from public.cmo_runs r
-    where not public.cmo_paused(r.user_id)
-      and ((r.status = 'queued' and (r.not_before is null or r.not_before <= now()))
-        or (r.status = 'running' and r.kind <> 'onboard' and r.lease_until < now() and r.attempt < 3))
-    limit greatest(1, least(coalesce(p_limit, 10), 100))
-  ) x;
 $$;
 
 
@@ -4281,6 +4281,22 @@ $$;
 
 
 --
+-- Name: cmo_refund_run(public.cmo_runs); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_refund_run(p_run public.cmo_runs) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_run.credits > 0 then
+    perform public.credit_refund(p_run.user_id, 'cmo_run', p_run.id, 'CMO refund');
+  end if;
+end;
+$$;
+
+
+--
 -- Name: cmo_release_parked_runs(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4305,44 +4321,6 @@ begin
     v_n := v_n + 1;
   end loop;
   return v_n;
-end;
-$$;
-
-
---
--- Name: refund_stale_caption_translations(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.refund_stale_caption_translations() RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_id uuid;
-  v_n integer := 0;
-begin
-  for v_id in select id from public.caption_translations where status = 'charged' and created_at < now() - interval '15 minutes' loop
-    if public.refund_caption_translation(v_id) then
-      v_n := v_n + 1;
-    end if;
-  end loop;
-  return v_n;
-end;
-$$;
-
-
---
--- Name: cmo_refund_run(public.cmo_runs); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_refund_run(p_run public.cmo_runs) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-begin
-  if p_run.credits > 0 then
-    perform public.credit_refund(p_run.user_id, 'cmo_run', p_run.id, 'CMO refund');
-  end if;
 end;
 $$;
 
@@ -8861,6 +8839,64 @@ $$;
 
 
 --
+-- Name: agent_turn_ratings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_turn_ratings (
+    session_id uuid NOT NULL,
+    turn_number integer NOT NULL,
+    user_id uuid NOT NULL,
+    rating text NOT NULL,
+    reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_turn_ratings_rating_check CHECK ((rating = ANY (ARRAY['up'::text, 'down'::text]))),
+    CONSTRAINT agent_turn_ratings_reason_check CHECK (((reason IS NULL) OR ((char_length(reason) >= 1) AND (char_length(reason) <= 300)))),
+    CONSTRAINT agent_turn_ratings_turn_number_check CHECK ((turn_number >= 1))
+);
+
+
+--
+-- Name: rate_agent_turn(uuid, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rate_agent_turn(p_session uuid, p_turn integer, p_rating text, p_reason text DEFAULT NULL::text) RETURNS public.agent_turn_ratings
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.agent_turn_ratings;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if p_rating is not null and p_rating not in ('up', 'down') then
+    raise exception 'A rating is up or down.' using errcode = '22023';
+  end if;
+  if v_reason is not null and char_length(v_reason) > 300 then
+    raise exception 'Keep the reason under 300 characters.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.agent_turns t
+    join public.agent_sessions s on s.id = t.session_id
+    where s.id = p_session and s.user_id = v_user and t.number = p_turn
+  ) then
+    raise exception 'Answer not found.' using errcode = 'P0002';
+  end if;
+  if p_rating is null then
+    delete from public.agent_turn_ratings where session_id = p_session and turn_number = p_turn returning * into v_row;
+    return v_row;
+  end if;
+  insert into public.agent_turn_ratings (session_id, turn_number, user_id, rating, reason)
+  values (p_session, p_turn, v_user, p_rating, v_reason)
+  on conflict (session_id, turn_number)
+  do update set rating = excluded.rating, reason = excluded.reason, updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: rate_limit_hit(text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8928,7 +8964,9 @@ begin
       or (p_bucket = 'agent-session' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'captures' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'cmo-runs' and p_limit = 60 and p_window_seconds = 3600)
-      or (p_bucket = 'onboarding' and p_limit = 20 and p_window_seconds = 3600);
+      or (p_bucket = 'onboarding' and p_limit = 20 and p_window_seconds = 3600)
+      -- The CMO chat's thumbs (20270103010000).
+      or (p_bucket = 'feedback-turn' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then
@@ -9021,10 +9059,10 @@ $$;
 -- Name: reclaim_expired_tasks(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.reclaim_expired_tasks(p_max_attempts integer default 3) returns jsonb
-  language plpgsql security definer
-  set search_path to 'public'
-  as $$
+CREATE FUNCTION public.reclaim_expired_tasks(p_max_attempts integer DEFAULT 3) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
 declare
   r record;
   v_requeued int := 0;
@@ -9264,6 +9302,28 @@ begin
     perform public.credit_refund(new.user_id, 'captions', new.id, 'Captions refund', new.job_id);
   end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: refund_stale_caption_translations(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.refund_stale_caption_translations() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_id uuid;
+  v_n integer := 0;
+begin
+  for v_id in select id from public.caption_translations where status = 'charged' and created_at < now() - interval '15 minutes' loop
+    if public.refund_caption_translation(v_id) then
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
 end;
 $$;
 
@@ -14960,6 +15020,14 @@ ALTER TABLE ONLY public.agent_tool_calls
 
 
 --
+-- Name: agent_turn_ratings agent_turn_ratings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_pkey PRIMARY KEY (session_id, turn_number);
+
+
+--
 -- Name: agent_turns agent_turns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15696,13 +15764,6 @@ ALTER TABLE ONLY public.zernio_receipts
 
 
 --
--- Name: agent_turns_open_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX agent_turns_open_idx ON public.agent_turns USING btree (created_at) WHERE (status = ANY (ARRAY['running'::text, 'awaiting_browser'::text, 'awaiting_approval'::text, 'awaiting_input'::text, 'awaiting_continue'::text]));
-
-
---
 -- Name: account_metrics_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -15728,6 +15789,20 @@ CREATE INDEX agent_sessions_job_idx ON public.agent_sessions USING btree (job_id
 --
 
 CREATE INDEX agent_tool_calls_turn_idx ON public.agent_tool_calls USING btree (turn_id, created_at);
+
+
+--
+-- Name: agent_turn_ratings_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turn_ratings_user_idx ON public.agent_turn_ratings USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: agent_turns_open_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turns_open_idx ON public.agent_turns USING btree (created_at) WHERE (status = ANY (ARRAY['running'::text, 'awaiting_browser'::text, 'awaiting_approval'::text, 'awaiting_input'::text, 'awaiting_continue'::text]));
 
 
 --
@@ -15927,7 +16002,7 @@ CREATE UNIQUE INDEX credit_ledger_external_idx ON public.credit_ledger USING btr
 
 
 --
--- Name: credit_ledger_ref_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: credit_ledger_legacy_job_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX credit_ledger_legacy_job_idx ON public.credit_ledger USING btree (job_id) WHERE (ref_kind IS NULL);
@@ -16730,6 +16805,22 @@ ALTER TABLE ONLY public.agent_sessions
 
 ALTER TABLE ONLY public.agent_tool_calls
     ADD CONSTRAINT agent_tool_calls_turn_id_fkey FOREIGN KEY (turn_id) REFERENCES public.agent_turns(id) ON DELETE CASCADE;
+
+
+--
+-- Name: agent_turn_ratings agent_turn_ratings_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.agent_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: agent_turn_ratings agent_turn_ratings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -17675,6 +17766,12 @@ ALTER TABLE public.agent_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_tool_calls ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: agent_turn_ratings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.agent_turn_ratings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: agent_turns; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -18147,6 +18244,13 @@ CREATE POLICY "read own social accounts" ON public.social_accounts FOR SELECT TO
 --
 
 CREATE POLICY "read own studio steps" ON public.studio_steps FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: agent_turn_ratings read own turn ratings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own turn ratings" ON public.agent_turn_ratings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

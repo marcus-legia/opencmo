@@ -783,3 +783,10 @@ html[data-theme] .cmo-view h1 { font: 400 clamp(36px, 4vw, 52px) / 1 var(--ds-fo
 .cmo-confirm-card ul { margin: 0; padding-left: 18px; }
 .cmo-confirm-card li + li { margin-top: 2px; }
 .cmo-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* CMO chat live (plan 2026-11-02): a finished run or a new conversation, as a quiet line between answers. */
+.cmo-msg.is-note { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1px dashed var(--ds-line); border-radius: var(--ds-radius-control); font-size: 13px; color: var(--ds-fg-3); }
+.cmo-msg.is-note p { margin: 0; flex: 1; }
+.cmo-msg.is-note.is-failed { border-color: var(--ds-terra); }
+.cmo-note-open { flex: none; padding: 2px 10px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: transparent; color: var(--ds-fg-2); font: inherit; font-size: 12.5px; cursor: pointer; }
+.cmo-note-open:hover { background: var(--ds-marble-50); }
