@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { ConfirmError, read, sign } from "./confirm";
 import type { Caller } from "./auth";
-import { handle, PAID_PLAN_ERROR } from "./http";
+import { FAILED_AUTH_LIMIT, handle, PAID_PLAN_ERROR } from "./http";
 import { registerGroup, registry } from "./registry";
 import { callTool, describeTool, INSTRUCTIONS } from "./server";
 
@@ -178,6 +178,16 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   assert.equal((await handle(new Request("http://mcp.test/healthz"))).status, 200);
   assert.equal((await handle(new Request("http://mcp.test/other"))).status, 404);
   assert.equal((await handle(new Request("http://mcp.test/mcp", { method: "OPTIONS" }))).headers.get("access-control-allow-origin"), "*");
+
+  // Review follow-up S2: an address with too many failed sign-ins waits, before any key lookup; others do not.
+  let lookups = 0;
+  const noOne = async () => ((lookups += 1), null);
+  const post = (ip: string) => new Request("http://mcp.test/mcp", { method: "POST", body: "{}", headers: { "content-type": "application/json", "x-forwarded-for": ip } });
+  for (let i = 0; i < FAILED_AUTH_LIMIT; i++) assert.equal((await handle(post("203.0.113.9"), noOne, 1_000)).status, 401);
+  assert.equal((await handle(post("203.0.113.9"), noOne, 2_000)).status, 429, "blocked after the limit");
+  assert.equal(lookups, FAILED_AUTH_LIMIT, "a blocked address costs no lookup");
+  assert.equal((await handle(post("203.0.113.10"), noOne, 2_000)).status, 401, "another address is not blocked");
+  assert.equal((await handle(post("203.0.113.9"), noOne, 1_000 + 11 * 60_000)).status, 401, "the window passes");
 }
 
 // ------------------------------------------------------------ admission: one call per request

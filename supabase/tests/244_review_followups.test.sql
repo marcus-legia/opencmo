@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(18);
+select plan(20);
 
 select throws_ok($$ select public.caption_check('tiktok_caption', 'https://acme.io', null) $$, '22023', 'Captions carry no links.', 'a URL');
 select throws_ok($$ select public.caption_check('tiktok_caption', 'see www.acme.io', null) $$, '22023', 'Captions carry no links.', 'a www address');
@@ -52,6 +52,14 @@ select ok(public.fail_task('e2442000-0000-4000-8000-000000000003', 'e2443000-000
 reset role;
 select is((select count from public.rate_limits where user_id = 'e2440000-0000-4000-8000-00000000000a' and bucket = 'export'), 1,
   'and the day''s export is given back');
+
+-- S2: a free account is refused, and past 60 refusals an hour it is told to wait.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2440000-0000-4000-8000-00000000000a"}';
+select is(public.mcp_admit(1), 'free_plan', 'a free account is refused');
+select is((select count(*)::int from generate_series(1, 60) g where public.mcp_admit(1) = 'rate_limited'), 1,
+  'the 61st refusal of the hour is a wait');
+reset role;
 
 select * from finish();
 rollback;

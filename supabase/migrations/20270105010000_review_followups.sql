@@ -587,4 +587,40 @@ begin
 end;
 $$;
 
+-- S2: free accounts' refused MCP requests are counted too.
+create or replace function public.mcp_admit(p_count integer) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_window_start timestamptz;
+  v_count int;
+begin
+  if p_count is null or p_count < 1 or p_count > 20 then
+    raise exception 'Send 1 to 20 messages per request.' using errcode = '22023';
+  end if;
+  v_window_start := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  -- A free account is refused, but its refusals are counted in a bucket of their own (review follow-up S2): past 60
+  -- an hour it is told to wait, so a client looping on the refusal stops costing a lookup per request. The paid
+  -- bucket below stays untouched, so an upgrade starts with its full hour.
+  if not public.is_paid(v_user) then
+    insert into public.rate_limits (user_id, bucket, window_start, count)
+    values (v_user, 'mcp_free', v_window_start, 1)
+    on conflict (user_id, bucket, window_start)
+    do update set count = public.rate_limits.count + 1
+    returning count into v_count;
+    return case when v_count <= 60 then 'free_plan' else 'rate_limited' end;
+  end if;
+
+  insert into public.rate_limits (user_id, bucket, window_start, count)
+  values (v_user, 'mcp', v_window_start, p_count)
+  on conflict (user_id, bucket, window_start)
+  do update set count = public.rate_limits.count + p_count
+  returning count into v_count;
+
+  return case when v_count <= 600 then 'ok' else 'rate_limited' end;
+end;
+$$;
+
 commit;
