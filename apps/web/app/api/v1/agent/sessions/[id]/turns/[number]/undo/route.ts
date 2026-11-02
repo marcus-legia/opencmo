@@ -3,7 +3,7 @@ import { clipContext } from "@/lib/api/clips";
 import { notFound, rpcOrThrow, withApi, type SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@opencmo/clip-doc";
 
-import { EDITED_AFTER_MESSAGE, turnOpen, unchangedSince, writtenVersions, type ToolCallRow } from "@/lib/agent/undo-guard";
+import { EDITED_AFTER_MESSAGE, OPEN_TURN_STATUSES, turnOpen, unchangedSince, writtenVersions, type ToolCallRow } from "@/lib/agent/undo-guard";
 import { readEditorProject, type EditorProjectRow } from "@/lib/editor/apply";
 import { projectDocument, saveDocument } from "@/lib/editor/document";
 
@@ -95,6 +95,15 @@ export const POST = withApi({}, async ({ supabase, params }) => {
     .is("undone_at", null)
     .limit(1);
   if (newer?.length) throw new ApiError(409, "Undo the newer requests first.");
+  // A newer turn still open may write any moment, before it has a checkpoint the check above would see (review R1).
+  const { data: openNewer } = await supabase
+    .from("agent_turns")
+    .select("number")
+    .eq("session_id", params.id)
+    .gt("number", number)
+    .in("status", [...OPEN_TURN_STATUSES])
+    .limit(1);
+  if (openNewer?.length) throw new ApiError(409, "Wait for the assistant to finish before undoing.");
 
   // The oldest newer turn that wrote (already undone, checked above): its undo is where the clip stands now.
   const { data: nextRow } = await supabase
