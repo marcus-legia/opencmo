@@ -11,7 +11,7 @@ ENGINE = Path(__file__).resolve().parent.parent
 
 
 def _node_version(name: str) -> str:
-    match = re.search(r'^NODE_VERSION = "([0-9.]+)"$', (ENGINE / name).read_text(), re.M)
+    match = re.search(r'^NODE_VERSION = "([0-9.]+)"$', (ENGINE / name).read_text(), re.MULTILINE)
     assert match, name
     return match.group(1)
 
