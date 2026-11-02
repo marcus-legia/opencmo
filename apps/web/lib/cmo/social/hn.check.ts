@@ -22,6 +22,8 @@ async function main() {
 
   // Outside text: tags go, smuggled invisible characters go, a hit without an id or title is dropped.
   assert.equal(hnPlain("Hi<p>there <a href=\"x\">link</a> &amp; ​more&#x27;s", 100), "Hi\nthere link & more's");
+  assert.equal(hnPlain("Under &lt;10 users and &gt;5 replies", 100), "Under <10 users and >5 replies", "text in brackets is kept");
+  assert.ok(!hnPlain("<scr<b>ipt>x</scr</b>ipt>", 100).includes("<"), "a split tag leaves no tag behind");
   assert.equal(parseHnSearch({ hits: [{ objectID: "../1", title: "x" }, { objectID: "2", title: "" }, { objectID: "3", title: "Ok", points: -4 }] }).map((t) => [t.objectId, t.points]).join(), "3,0");
   assert.deepEqual(parseHnSearch(null), []);
 
