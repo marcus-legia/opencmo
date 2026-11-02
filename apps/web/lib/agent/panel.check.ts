@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@/lib/api/handler";
 
 import { CMO_TOOL_SPECS, runCmoTool } from "./cmo-tools";
-import { panelHref, PANEL_SCREENS, screenContextText, screenOfPath } from "./panel";
+import { panelHref, PANEL_SCREENS, screenContextText, screenOfPath, targetIds } from "./panel";
 
 const RUN = "7f1e2d3c-4b5a-4968-8776-655443322110";
 
@@ -44,7 +44,9 @@ async function main() {
 
   // open_screen: a tool the model calls; it reads nothing, writes nothing, and its result carries `view.open`.
   assert.ok(CMO_TOOL_SPECS.some((spec) => spec.name === "open_screen"));
-  assert.equal(CMO_TOOL_SPECS.at(-1)?.name, "open_screen", "added last: the tool list is the head of the prompt cache");
+  // Added after the earlier tools: the tool list is the head of the prompt cache (decisions came later still).
+  const names = CMO_TOOL_SPECS.map((spec) => spec.name);
+  assert.ok(names.indexOf("open_screen") > names.indexOf("update_document"), "open_screen after the older tools");
   const noDb = null as unknown as SupabaseClient;
   const opened = await runCmoTool(noDb, "open_screen", { screen: "sales", ids: [RUN] });
   assert.ok(opened.ok);
@@ -64,6 +66,17 @@ async function main() {
     const outcome = await runCmoTool(noDb, "update_document", { kind: "product", fields_json: `{"${key}":"x"}` });
     assert.ok(!outcome.ok && outcome.content.includes("INVALID_INPUT"), key);
   }
+
+  // The editor handoff (plan 2026-11-02): a clip id and a request, both checked; the send flag needs a request.
+  const CLIP = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  assert.equal(panelHref({ editor: { clip_id: CLIP } }), `/app/editor/${CLIP}`);
+  assert.equal(panelHref({ editor: { clip_id: CLIP, prompt: "Add captions & cut the pauses", send: true } }), `/app/editor/${CLIP}?ask=Add+captions+%26+cut+the+pauses&send=1`);
+  assert.equal(panelHref({ editor: { clip_id: CLIP, send: true } }), `/app/editor/${CLIP}`, "nothing to send without a request");
+  for (const bad of [{ editor: { clip_id: "../admin" } }, { editor: { clip_id: CLIP, prompt: "x".repeat(2001) } }, { editor: {} }]) {
+    assert.equal(panelHref(bad), null, JSON.stringify(bad).slice(0, 80));
+  }
+  assert.deepEqual(targetIds({ editor: { clip_id: CLIP } }), []);
+  assert.deepEqual(targetIds({ screen: "sales", ids: [RUN] }), [RUN]);
 
   console.log("panel.check ok");
 }

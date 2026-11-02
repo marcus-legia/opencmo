@@ -32,8 +32,40 @@ export const PanelOpenSchema = z.object({
 });
 export type PanelOpen = z.infer<typeof PanelOpenSchema>;
 
+/** Longest request the CMO chat hands to the clip Assistant; its own box takes 4000, the URL stays short. */
+export const HANDOFF_PROMPT_MAX = 2000;
+
+/**
+ * The editor on one clip (plan 2026-11-02-cmo-chat-editor-handoff), with the founder's request for its Assistant.
+ * `send`: the Assistant sends the request once the editor has loaded; otherwise it waits in the box.
+ */
+export const EditorOpenSchema = z.object({
+  editor: z.object({
+    clip_id: z.string().uuid(),
+    prompt: z.string().trim().min(1).max(HANDOFF_PROMPT_MAX).optional(),
+    send: z.boolean().optional(),
+  }),
+});
+export type EditorOpen = z.infer<typeof EditorOpenSchema>;
+export type PanelTarget = PanelOpen | EditorOpen;
+
+/** The rows a target put on screen, for the next turn's context; the editor has its own Assistant, so none. */
+export function targetIds(value: unknown): string[] {
+  const parsed = PanelOpenSchema.safeParse(value);
+  return parsed.success ? (parsed.data.ids ?? []) : [];
+}
+
 /** Returns null for anything that does not validate: a bad `view.open` must never move the founder's panel. */
 export function panelHref(value: unknown): string | null {
+  const editor = EditorOpenSchema.safeParse(value);
+  if (editor.success) {
+    const { clip_id, prompt, send } = editor.data.editor;
+    const query = new URLSearchParams();
+    if (prompt) query.set("ask", prompt);
+    if (prompt && send) query.set("send", "1");
+    const search = query.toString();
+    return `/app/editor/${clip_id}${search ? `?${search}` : ""}`;
+  }
   const parsed = PanelOpenSchema.safeParse(value);
   if (!parsed.success) return null;
   const { screen, tab } = parsed.data;

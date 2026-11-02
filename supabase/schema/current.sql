@@ -671,7 +671,9 @@ begin
     select * into v_session from public.agent_sessions
     where user_id = v_user and scope = 'cmo' and model = p_model
     order by created_at desc limit 1;
-    if found then
+    -- A full conversation is not reused: the chat sends a window of it, but the panel and the turn numbers keep
+    -- growing, so past 200 turns the next message starts a new conversation.
+    if found and (select count(*) from public.agent_turns where session_id = v_session.id) < 200 then
       return v_session;
     end if;
   end if;
@@ -9005,6 +9007,64 @@ $$;
 
 
 --
+-- Name: agent_turn_ratings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_turn_ratings (
+    session_id uuid NOT NULL,
+    turn_number integer NOT NULL,
+    user_id uuid NOT NULL,
+    rating text NOT NULL,
+    reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_turn_ratings_rating_check CHECK ((rating = ANY (ARRAY['up'::text, 'down'::text]))),
+    CONSTRAINT agent_turn_ratings_reason_check CHECK (((reason IS NULL) OR ((char_length(reason) >= 1) AND (char_length(reason) <= 300)))),
+    CONSTRAINT agent_turn_ratings_turn_number_check CHECK ((turn_number >= 1))
+);
+
+
+--
+-- Name: rate_agent_turn(uuid, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rate_agent_turn(p_session uuid, p_turn integer, p_rating text, p_reason text DEFAULT NULL::text) RETURNS public.agent_turn_ratings
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.agent_turn_ratings;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if p_rating is not null and p_rating not in ('up', 'down') then
+    raise exception 'A rating is up or down.' using errcode = '22023';
+  end if;
+  if v_reason is not null and char_length(v_reason) > 300 then
+    raise exception 'Keep the reason under 300 characters.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.agent_turns t
+    join public.agent_sessions s on s.id = t.session_id
+    where s.id = p_session and s.user_id = v_user and t.number = p_turn
+  ) then
+    raise exception 'Answer not found.' using errcode = 'P0002';
+  end if;
+  if p_rating is null then
+    delete from public.agent_turn_ratings where session_id = p_session and turn_number = p_turn returning * into v_row;
+    return v_row;
+  end if;
+  insert into public.agent_turn_ratings (session_id, turn_number, user_id, rating, reason)
+  values (p_session, p_turn, v_user, p_rating, v_reason)
+  on conflict (session_id, turn_number)
+  do update set rating = excluded.rating, reason = excluded.reason, updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: rate_limit_hit(text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9072,7 +9132,9 @@ begin
       or (p_bucket = 'agent-session' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'captures' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'cmo-runs' and p_limit = 60 and p_window_seconds = 3600)
-      or (p_bucket = 'onboarding' and p_limit = 20 and p_window_seconds = 3600);
+      or (p_bucket = 'onboarding' and p_limit = 20 and p_window_seconds = 3600)
+      -- The CMO chat's thumbs (20270103010000).
+      or (p_bucket = 'feedback-turn' and p_limit = 60 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then
@@ -15188,6 +15250,14 @@ ALTER TABLE ONLY public.agent_tool_calls
 
 
 --
+-- Name: agent_turn_ratings agent_turn_ratings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_pkey PRIMARY KEY (session_id, turn_number);
+
+
+--
 -- Name: agent_turns agent_turns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15981,6 +16051,13 @@ CREATE INDEX agent_sessions_job_idx ON public.agent_sessions USING btree (job_id
 --
 
 CREATE INDEX agent_tool_calls_turn_idx ON public.agent_tool_calls USING btree (turn_id, created_at);
+
+
+--
+-- Name: agent_turn_ratings_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turn_ratings_user_idx ON public.agent_turn_ratings USING btree (user_id, created_at DESC);
 
 
 --
@@ -17007,6 +17084,22 @@ ALTER TABLE ONLY public.agent_tool_calls
 
 
 --
+-- Name: agent_turn_ratings agent_turn_ratings_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.agent_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: agent_turn_ratings agent_turn_ratings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn_ratings
+    ADD CONSTRAINT agent_turn_ratings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: agent_turns agent_turns_checkpoint_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -17957,6 +18050,12 @@ ALTER TABLE public.agent_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_tool_calls ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: agent_turn_ratings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.agent_turn_ratings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: agent_turns; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -18453,6 +18552,13 @@ CREATE POLICY "read own social accounts" ON public.social_accounts FOR SELECT TO
 --
 
 CREATE POLICY "read own studio steps" ON public.studio_steps FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: agent_turn_ratings read own turn ratings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own turn ratings" ON public.agent_turn_ratings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

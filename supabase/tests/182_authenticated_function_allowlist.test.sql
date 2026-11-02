@@ -113,6 +113,7 @@ insert into allowed values
   ('provider_spend_allowed()'),
   ('provider_spend_report(integer)'),
   ('provider_usage_record_mine(text,integer,text)'),
+  ('rate_agent_turn(uuid,integer,text,text)'),
   ('rate_limit_hit(text,integer,integer)'),
   ('refund_media_captions_from_task()'),
   ('register_media_asset(uuid,text,text,uuid)'),
