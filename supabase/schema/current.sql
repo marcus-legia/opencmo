@@ -8200,6 +8200,174 @@ $$;
 
 
 --
+-- Name: provider_price(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_price(p_provider text, p_unit text) RETURNS numeric
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select micro_usd from public.provider_prices
+  where provider = p_provider and unit = p_unit and valid_from <= now()
+  order by valid_from desc limit 1
+$$;
+
+
+--
+-- Name: provider_spend_allowed(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_spend_allowed() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public.provider_spend_allowed_for(public.require_user()) $$;
+
+
+--
+-- Name: provider_spend_allowed_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_spend_allowed_for(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public.provider_spend_today(p_user) < (select micro_usd from public.provider_spend_cap) $$;
+
+
+--
+-- Name: provider_spend_report(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_spend_report(p_days integer DEFAULT 7) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_email text := lower(coalesce(auth.jwt()->>'email', ''));
+  v_since timestamptz;
+  v_result jsonb;
+begin
+  if not exists (select 1 from public.app_owners where email = v_email) then
+    raise exception 'Not available.' using errcode = '42501';
+  end if;
+  if p_days is null or p_days < 1 or p_days > 90 then
+    raise exception 'Pick 1 to 90 days.' using errcode = '22023';
+  end if;
+  v_since := date_trunc('day', now() at time zone 'utc') at time zone 'utc' - make_interval(days => p_days - 1);
+  with spend as (
+    select user_id, provider, coalesce(ref_kind, 'other') as kind, micro_usd, priced, created_at from public.provider_usage where created_at >= v_since
+    union all
+    select s.user_id, 'assistant', 'agent_turn', u.micro_usd, true, u.created_at
+    from public.agent_usage u join public.agent_turns t on t.id = u.turn_id join public.agent_sessions s on s.id = t.session_id
+    where u.created_at >= v_since
+  ),
+  approved as (
+    select count(*) as n from public.approvals where status in ('approved', 'edited') and decided_at >= v_since
+  )
+  select jsonb_build_object(
+    'since', v_since,
+    'total_micro_usd', (select coalesce(sum(micro_usd), 0) from spend),
+    'unpriced_calls', (select count(*) from spend where not priced),
+    'by_day', coalesce((select jsonb_agg(row_to_json(d) order by d.day) from (
+      select (created_at at time zone 'utc')::date as day, provider, sum(micro_usd)::bigint as micro_usd from spend group by 1, 2) d), '[]'::jsonb),
+    'by_provider', coalesce((select jsonb_agg(row_to_json(p) order by p.micro_usd desc) from (
+      select provider, sum(micro_usd)::bigint as micro_usd, count(*) as calls from spend group by provider) p), '[]'::jsonb),
+    'by_kind', coalesce((select jsonb_agg(row_to_json(k) order by k.micro_usd desc) from (
+      select kind, sum(micro_usd)::bigint as micro_usd, count(*) as calls from spend group by kind) k), '[]'::jsonb),
+    'top_founders', coalesce((select jsonb_agg(row_to_json(f) order by f.micro_usd desc) from (
+      select s.user_id, coalesce(au.email, '(deleted)') as email, sum(s.micro_usd)::bigint as micro_usd
+      from spend s left join auth.users au on au.id = s.user_id
+      group by s.user_id, au.email order by 3 desc limit 20) f), '[]'::jsonb),
+    'approved_cards', (select n from approved),
+    'micro_usd_per_approved', case when (select n from approved) > 0
+      then ((select coalesce(sum(micro_usd), 0) from spend) / (select n from approved))::bigint end
+  ) into v_result;
+  return v_result;
+end;
+$$;
+
+
+--
+-- Name: provider_spend_today(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_spend_today(p_user uuid) RETURNS bigint
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(sum(micro_usd), 0)::bigint from public.provider_usage
+  where user_id = p_user and created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'
+$$;
+
+
+--
+-- Name: provider_usage_record(uuid, text, text, jsonb, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_usage_record(p_user uuid, p_provider text, p_model text, p_units jsonb, p_ref_kind text DEFAULT NULL::text, p_ref_id uuid DEFAULT NULL::uuid) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_units jsonb := coalesce(p_units, '{}'::jsonb);
+  v_micro numeric := 0;
+  v_priced boolean := true;
+  v_key text;
+  v_count numeric;
+  v_price numeric;
+begin
+  if jsonb_typeof(v_units) <> 'object' then
+    raise exception 'Usage units must be an object.' using errcode = '22023';
+  end if;
+  if p_provider in ('anthropic', 'gemini', 'groq', 'openai_compat') then
+    v_micro := public.agent_micro_usd(
+      p_model,
+      greatest(coalesce((v_units->>'input')::bigint, 0), 0),
+      greatest(coalesce((v_units->>'output')::bigint, 0), 0),
+      greatest(coalesce((v_units->>'cache_read')::bigint, 0), 0),
+      greatest(coalesce((v_units->>'cache_write')::bigint, 0), 0));
+  else
+    for v_key, v_count in select key, (value #>> '{}')::numeric from jsonb_each(v_units) loop
+      v_price := public.provider_price(p_provider, v_key);
+      if v_price is null then
+        v_priced := false;
+      else
+        v_micro := v_micro + greatest(v_count, 0) * v_price;
+      end if;
+    end loop;
+  end if;
+  insert into public.provider_usage (user_id, provider, model_or_endpoint, units, micro_usd, priced, ref_kind, ref_id)
+  values (p_user, p_provider, left(coalesce(nullif(btrim(p_model), ''), 'unknown'), 120), v_units, ceil(v_micro)::bigint, v_priced, p_ref_kind, p_ref_id);
+  return ceil(v_micro)::bigint;
+end;
+$$;
+
+
+--
+-- Name: provider_usage_record_mine(text, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.provider_usage_record_mine(p_endpoint text, p_calls integer, p_ref_kind text DEFAULT NULL::text) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_calls is null or p_calls not in (0, 1) then
+    raise exception 'One lookup at a time.' using errcode = '22023';
+  end if;
+  if p_endpoint is null or p_endpoint !~ '^/[a-z0-9/_-]{1,100}$' then
+    raise exception 'Unknown endpoint.' using errcode = '22023';
+  end if;
+  if p_ref_kind is not null and p_ref_kind not in ('agent_turn', 'mcp') then
+    raise exception 'Unknown reference.' using errcode = '22023';
+  end if;
+  return public.provider_usage_record(v_user, 'scrapecreators', p_endpoint, jsonb_build_object('call', p_calls), p_ref_kind, null);
+end;
+$_$;
+
+
+--
 -- Name: publish_media_queue(uuid, uuid, uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14146,6 +14314,16 @@ CREATE TABLE public.api_keys (
 
 
 --
+-- Name: app_owners; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_owners (
+    email text NOT NULL,
+    CONSTRAINT app_owners_email_check CHECK (((email = lower(email)) AND ((char_length(email) >= 3) AND (char_length(email) <= 320))))
+);
+
+
+--
 -- Name: best_slots; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14677,6 +14855,58 @@ CREATE TABLE public.projects (
 
 
 --
+-- Name: provider_prices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.provider_prices (
+    provider text NOT NULL,
+    unit text NOT NULL,
+    micro_usd numeric NOT NULL,
+    valid_from timestamp with time zone DEFAULT now() NOT NULL,
+    note text,
+    CONSTRAINT provider_prices_micro_usd_check CHECK ((micro_usd >= (0)::numeric)),
+    CONSTRAINT provider_prices_note_check CHECK (((note IS NULL) OR (char_length(note) <= 300))),
+    CONSTRAINT provider_prices_provider_check CHECK ((provider = ANY (ARRAY['scrapecreators'::text, 'fal'::text, 'elevenlabs'::text]))),
+    CONSTRAINT provider_prices_unit_check CHECK ((unit ~ '^[a-z0-9_:.-]{1,80}$'::text))
+);
+
+
+--
+-- Name: provider_spend_cap; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.provider_spend_cap (
+    id boolean DEFAULT true NOT NULL,
+    micro_usd bigint NOT NULL,
+    CONSTRAINT provider_spend_cap_id_check CHECK (id),
+    CONSTRAINT provider_spend_cap_micro_usd_check CHECK ((micro_usd > 0))
+);
+
+
+--
+-- Name: provider_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.provider_usage (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider text NOT NULL,
+    model_or_endpoint text NOT NULL,
+    units jsonb DEFAULT '{}'::jsonb NOT NULL,
+    micro_usd bigint DEFAULT 0 NOT NULL,
+    priced boolean DEFAULT true NOT NULL,
+    ref_kind text,
+    ref_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT provider_usage_micro_usd_check CHECK ((micro_usd >= 0)),
+    CONSTRAINT provider_usage_model_or_endpoint_check CHECK (((char_length(model_or_endpoint) >= 1) AND (char_length(model_or_endpoint) <= 120))),
+    CONSTRAINT provider_usage_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'gemini'::text, 'groq'::text, 'openai_compat'::text, 'scrapecreators'::text, 'fal'::text, 'elevenlabs'::text]))),
+    CONSTRAINT provider_usage_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['cmo_run'::text, 'agent_turn'::text, 'generation'::text, 'task'::text, 'work_order'::text, 'mcp'::text]))),
+    CONSTRAINT provider_usage_units_check CHECK (((jsonb_typeof(units) = 'object'::text) AND (octet_length((units)::text) <= 1024)))
+);
+
+
+--
 -- Name: push_subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15073,6 +15303,14 @@ ALTER TABLE ONLY public.api_keys
 
 ALTER TABLE ONLY public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_owners app_owners_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_owners
+    ADD CONSTRAINT app_owners_pkey PRIMARY KEY (email);
 
 
 --
@@ -15529,6 +15767,30 @@ ALTER TABLE ONLY public.projects
 
 ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: provider_prices provider_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.provider_prices
+    ADD CONSTRAINT provider_prices_pkey PRIMARY KEY (provider, unit, valid_from);
+
+
+--
+-- Name: provider_spend_cap provider_spend_cap_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.provider_spend_cap
+    ADD CONSTRAINT provider_spend_cap_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: provider_usage provider_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.provider_usage
+    ADD CONSTRAINT provider_usage_pkey PRIMARY KEY (id);
 
 
 --
@@ -16279,6 +16541,20 @@ CREATE UNIQUE INDEX profiles_polar_customer_unique ON public.profiles USING btre
 --
 
 CREATE INDEX projects_user_created_idx ON public.projects USING btree (user_id, created_at DESC, id DESC);
+
+
+--
+-- Name: provider_usage_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX provider_usage_created_idx ON public.provider_usage USING btree (created_at DESC);
+
+
+--
+-- Name: provider_usage_user_day_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX provider_usage_user_day_idx ON public.provider_usage USING btree (user_id, created_at DESC);
 
 
 --
@@ -17416,6 +17692,14 @@ ALTER TABLE ONLY public.projects
 
 
 --
+-- Name: provider_usage provider_usage_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.provider_usage
+    ADD CONSTRAINT provider_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: push_subscriptions push_subscriptions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -17796,6 +18080,12 @@ ALTER TABLE public.ai_models ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: app_owners; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.app_owners ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: approvals; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -18065,6 +18355,24 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: provider_prices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.provider_prices ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: provider_spend_cap; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.provider_spend_cap ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: provider_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.provider_usage ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: push_subscriptions; Type: ROW SECURITY; Schema: public; Owner: -

@@ -22,6 +22,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     return data as T;
   }
   return {
+    spendClient: admin as unknown as NonNullable<CmoStore["spendClient"]>,
     async claim(runId) {
       const row = one<QueuedRun>(await rpc("claim_cmo_run", { p_run_id: runId ?? null, p_lease_seconds: 300 }));
       return row;

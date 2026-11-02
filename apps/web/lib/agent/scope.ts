@@ -71,6 +71,7 @@ import { runWaitForRun, runsFinishedBlock } from "./cmo-wait";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
+import { withSpend } from "@/lib/spend/record";
 
 /**
  * Kiểm lời của lượt sinh LÚC BÁO GIÁ: lời bị chặn thì không hiện thẻ duyệt cho
@@ -616,7 +617,10 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
           return { ok: false, content: JSON.stringify({ error: message }), summary: "Research limit reached" };
         }
       }
-      return RESEARCH_TOOLS.has(call.name) ? runResearchTool(call.name, call.input, budget) : runCmoTool(supabase, call.name, call.input, turn);
+      // Lookups are recorded in the founder's spend ledger and refused past their daily cap.
+      return RESEARCH_TOOLS.has(call.name)
+        ? withSpend({ via: "founder", client: supabase, refKind: "agent_turn" }, () => runResearchTool(call.name, call.input, budget))
+        : runCmoTool(supabase, call.name, call.input, turn);
     },
     async decide(call, input, approved) {
       if (!DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);

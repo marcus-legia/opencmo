@@ -12,6 +12,7 @@
  */
 
 import { isProduction } from "@/lib/production";
+import { recordSpend, SPEND_CAP_MESSAGE, spendAllowed } from "@/lib/spend/record";
 import { cleanUntrusted } from "../untrusted";
 
 export const SC_BASE = "https://api.scrapecreators.com";
@@ -21,7 +22,7 @@ const TIMEOUT_MS = 20_000;
  * `kind` lets a job tell "this post or account is gone" (`not_found`) from a problem on our side (`setup`, `credits`,
  * `busy`) or a passing one (`unavailable`), instead of reading the English message.
  */
-export type SocialReadKind = "setup" | "credits" | "not_found" | "busy" | "unavailable";
+export type SocialReadKind = "setup" | "credits" | "not_found" | "busy" | "unavailable" | "cap";
 export class SocialReadError extends Error {
   constructor(
     message: string,
@@ -76,6 +77,8 @@ export class ScBudget {
 export async function scGet(path: string, params: Record<string, string>, budget?: ScBudget): Promise<unknown> {
   const key = scKey();
   if (!key) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  // The founder's daily provider cap (spend ledger), before the lookup is paid for.
+  if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
   budget?.take();
   const url = `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`;
   let response: Response;
@@ -88,6 +91,8 @@ export async function scGet(path: string, params: Record<string, string>, budget
     console.error("[cmo] scrapecreators: key refused", path, response.status);
     throw new SocialReadError("Social research is not set up on this server yet.", "setup");
   }
+  // One row per request: a lookup that answered is billed; a 402 or 404 is recorded at no cost.
+  if (response.ok || response.status === 402 || response.status === 404) await recordSpend("scrapecreators", path, { call: response.ok ? 1 : 0 });
   if (response.status === 402) throw new SocialReadError("Social research is paused (out of lookup credits). Try again later.", "credits");
   if (response.status === 404) throw new SocialReadError("That account or post was not found, or it is private.", "not_found");
   if (response.status === 429) throw new SocialReadError("Too many lookups right now. Try again in a minute.", "busy");
