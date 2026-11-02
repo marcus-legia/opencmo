@@ -138,9 +138,10 @@ showing r/memes" each become one message and one confirmation in the chat. Colum
 - [x] **A3.** Sales and CMO settings merge only the fields that changed. A request that changes nothing is refused.
 - [x] **A4.** `ChatPanel` shows the confirmation cards (live and after a reload); Approve and Cancel go to the approvals route.
 - [x] **A5.** `list_approvals` returns card summaries without the hash, and the prompt has the decision rule.
-- [~] **A6.**
-  - Done: the check passes, and the CMO eval adds `cmo-pause` (it ends on the card) and a planted "pause the CMO" in the site-injection case, which the gate refuses.
-  - Open: the browser e2e and screenshots, because no local Supabase runs in this container.
+- [x] **A6.**
+  - The check passes, and the CMO eval adds `cmo-pause` (it ends on the card) and a planted "pause the CMO" in the site-injection case, which the gate refuses.
+  - e2e `ui-v2-decisions.spec.ts` (fake model, local Supabase): the card shows, nothing changes before Approve, the card survives a reload, Cancel changes nothing, Approve pauses the CMO. Screenshots at 1440 and 390 in [`2026-11-02-cmo-chat-decisions-shots/`](2026-11-02-cmo-chat-decisions-shots/).
+  - Owner gates (2026-11-02): `decided_via` stays `'app'` with `source: 'chat'`; the chat may approve priced cards.
 
 **Milestones**
 - **M1:** A0 and A1. A decision works end to end through the approvals route; the UI is still missing.
