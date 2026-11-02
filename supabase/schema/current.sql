@@ -2517,6 +2517,8 @@ declare
   v_user uuid := public.require_user();
   v_generation public.generations;
 begin
+  -- The same lock order as complete_generation: credits, generation, task (C2).
+  perform public.lock_credit_owner(v_user);
   select * into v_generation from public.generations where id = p_id and user_id = v_user for update;
   if not found then
     raise exception 'Generation not found.' using errcode = 'P0002';
@@ -2674,7 +2676,7 @@ begin
   elsif p_title is not null then
     raise exception 'Only YouTube has a title.' using errcode = '22023';
   end if;
-  if concat_ws(' ', p_title, p_text) ~* '(https?://|www\.|\m[a-z0-9][a-z0-9-]*\.[a-z]{2,}/[^[:space:]])' then
+  if concat_ws(' ', p_title, p_text) ~* '(https?://|www\.|\m[a-z0-9][a-z0-9-]*\.(?!(jsx?|tsx?|mjs|py|rb|css|html?|md|json|ya?ml|txt|sql|vue|svelte)/)[a-z]{2,}/[^[:space:]])' then
     raise exception 'Captions carry no links.' using errcode = '22023';
   end if;
   -- `countHashtags` in lib/cmo/platforms.ts: `#word` with a letter in it, not `#1` or `a#b`.
@@ -3200,8 +3202,11 @@ CREATE FUNCTION public.claim_next_task(p_kinds text[], p_lease_seconds integer D
     where t.status = 'queued' and t.kind = any(p_kinds)
       and (p_max_running is null
            or (select count(*) from public.tasks r where r.status = 'running' and r.kind = any(p_kinds)) < p_max_running)
-    -- The user with the fewest running tasks first, then kind order and age: fair across users, priority within one.
-    order by (select count(*) from public.tasks r where r.status = 'running' and r.user_id = t.user_id),
+    -- A task waiting over 10 minutes goes first, so a low-priority kind (publish_media, look_check) never starves
+    -- behind requeued work. Then the user with the fewest running tasks, then kind order and age: fair across users,
+    -- priority within one.
+    order by (t.created_at < now() - interval '10 minutes') desc,
+      (select count(*) from public.tasks r where r.status = 'running' and r.user_id = t.user_id),
       array_position(p_kinds, t.kind), t.created_at
     -- `skip locked`: parallel claims never take the same task.
     for update skip locked
@@ -4997,12 +5002,18 @@ declare
   v_final int;
   v_words jsonb;
   v_quality jsonb;
+  v_user uuid;
 begin
+  -- One lock order with cancel_generation and cancel_job: the founder's credits, then the generation, then the task
+  -- (review follow-up C2). Task first here and generation first there could deadlock a cancel against a finish.
+  select user_id into v_user from public.tasks where id = p_task_id;
+  if not found then return false; end if;
+  perform public.lock_credit_owner(v_user);
+  select * into v_generation from public.generations where task_id = p_task_id for update;
+  if not found then return false; end if;
   select * into v_task from public.tasks
   where id = p_task_id and kind = 'generate' and attempt_id is not distinct from p_attempt_id
   for update;
-  if not found then return false; end if;
-  select * into v_generation from public.generations where task_id = p_task_id for update;
   if not found then return false; end if;
   if v_task.status = 'done' then
     return v_generation.status = 'done';
@@ -5476,27 +5487,6 @@ begin
   delete from public.storage_deletions where id = any(p_ids);
   get diagnostics v_rows = row_count;
   return v_rows;
-end;
-$$;
-
-
---
--- Name: consume_daily_task_quota(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.consume_daily_task_quota(p_kind text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare v_user uuid := public.require_user(); v_plan text; v_limits record; v_limit int;
-begin
-  if p_kind not in ('preview','export') then raise exception 'Invalid task quota.' using errcode='22023'; end if;
-  select coalesce(plan, 'free') into v_plan from public.profiles where id = v_user;
-  select * into v_limits from public.plan_usage_limits(v_plan);
-  v_limit := case when p_kind = 'preview' then v_limits.preview_daily else v_limits.export_daily end;
-  if not public.rate_limit_hit('daily_' || p_kind, v_limit, 86400) then
-    raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
-  end if;
 end;
 $$;
 
@@ -6833,6 +6823,8 @@ CREATE FUNCTION public.fail_task(p_task_id uuid, p_attempt_id uuid, p_error text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
+declare
+  v_task public.tasks;
 begin
   update public.tasks
   set status = 'failed',
@@ -6840,9 +6832,14 @@ begin
       finished_at = now(),
       lease_until = null
   where id = p_task_id and status = 'running'
-    and attempt_id is not distinct from p_attempt_id;
+    and attempt_id is not distinct from p_attempt_id
+  returning * into v_task;
 
   if found then
+    -- An export the worker could not finish gives the day's export back, counted on the day it was asked for.
+    if v_task.kind in ('render_document', 'render_stills') then
+      perform public.release_rate_limit_for(v_task.user_id, 'export', v_task.created_at);
+    end if;
     return true;
   end if;
 
@@ -7524,12 +7521,19 @@ begin
   if p_count is null or p_count < 1 or p_count > 20 then
     raise exception 'Send 1 to 20 messages per request.' using errcode = '22023';
   end if;
-  -- Before counting: a free account's refused requests must not fill a bucket it cannot use.
+  v_window_start := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
+  -- A free account is refused, but its refusals are counted in a bucket of their own (review follow-up S2): past 60
+  -- an hour it is told to wait, so a client looping on the refusal stops costing a lookup per request. The paid
+  -- bucket below stays untouched, so an upgrade starts with its full hour.
   if not public.is_paid(v_user) then
-    return 'free_plan';
+    insert into public.rate_limits (user_id, bucket, window_start, count)
+    values (v_user, 'mcp_free', v_window_start, 1)
+    on conflict (user_id, bucket, window_start)
+    do update set count = public.rate_limits.count + 1
+    returning count into v_count;
+    return case when v_count <= 60 then 'free_plan' else 'rate_limited' end;
   end if;
 
-  v_window_start := to_timestamp(floor(extract(epoch from now()) / 3600) * 3600);
   insert into public.rate_limits (user_id, bucket, window_start, count)
   values (v_user, 'mcp', v_window_start, p_count)
   on conflict (user_id, bucket, window_start)
@@ -9106,20 +9110,15 @@ begin
       or (p_bucket = 'uploads' and p_limit = 30 and p_window_seconds = 3600)
       or (p_bucket = 'jobs' and p_limit = 10 and p_window_seconds = 3600)
       or (p_bucket = 'retry' and p_limit = 20 and p_window_seconds = 3600)
-      or (p_bucket = 'draft' and p_limit = 120 and p_window_seconds = 60)
       or (p_bucket = 'project-write' and p_limit = 60 and p_window_seconds = 3600)
-      or (p_bucket = 'mcp' and p_limit = 600 and p_window_seconds = 3600)
       -- P4: connecting and disconnecting social accounts (each call reaches Zernio).
       or (p_bucket = 'accounts' and p_limit = 30 and p_window_seconds = 3600)
       -- P4: moving a slot on the calendar and "I posted it" (`/api/v1/schedule/slots/[id]`).
       or (p_bucket = 'schedule' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'editor-write' and p_limit = 240 and p_window_seconds = 60)
-      or (p_bucket = 'zip' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'media' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'scene_codes' and p_limit = 300 and p_window_seconds = 3600)
       or (p_bucket = 'feedback' and p_limit = 20 and p_window_seconds = 3600)
-      -- 30 until motion quality A3 (PR #104) raised MCP previews to 60: both, so either PR can merge first.
-      or (p_bucket = 'mcp_preview' and p_limit = 30 and p_window_seconds = 3600)
       or (p_bucket = 'mcp_preview' and p_limit = 60 and p_window_seconds = 3600)
       -- POST /api/v1/generations: each request can run a paid moderation call.
       or (p_bucket = 'generations' and p_limit = 120 and p_window_seconds = 3600)
@@ -9770,7 +9769,6 @@ declare
   v_task public.tasks;
   v_task_id uuid := gen_random_uuid();
   v_object text;
-  v_counted boolean := false;
 begin
   if p_request_id is null then
     raise exception 'Missing request id.' using errcode = '22023';
@@ -9819,7 +9817,6 @@ begin
     if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
       raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
     end if;
-    v_counted := true;
   end if;
 
   v_object := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text || '.mp4';
@@ -9846,9 +9843,6 @@ begin
     select * into v_task from public.tasks where request_id = p_request_id;
   end if;
   if not found then
-    if v_counted then
-      perform public.release_rate_limit_for(v_user, 'export', now());
-    end if;
     raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
   end if;
   if v_task.user_id is distinct from v_user
@@ -9998,7 +9992,6 @@ declare
   v_task public.tasks;
   v_task_id uuid := gen_random_uuid();
   v_prefix text;
-  v_counted boolean := false;
 begin
   if p_request_id is null then
     raise exception 'Missing request id.' using errcode = '22023';
@@ -10034,7 +10027,6 @@ begin
     if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
       raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
     end if;
-    v_counted := true;
   end if;
 
   v_prefix := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text;
@@ -10047,9 +10039,6 @@ begin
   on conflict do nothing
   returning * into v_task;
   if not found then
-    if v_counted then
-      perform public.release_rate_limit_for(v_user, 'export', now());
-    end if;
     raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
   end if;
   return v_task;
@@ -10257,8 +10246,7 @@ begin
   -- đúng phần còn thiếu để một job không bao giờ bị tính tiền hai lần.
   v_spent := public.job_credits_spent(p_job_id);
   if v_spent < v_hold then
-    select coalesce(sum(delta), 0)::int into v_balance
-    from public.credit_ledger where user_id = v_user;
+    v_balance := public.credit_balance(v_user);
 
     if v_balance < v_hold - v_spent then
       raise exception 'Not enough credits: % needed, % left. Top up on the Credits page.',
@@ -10668,7 +10656,7 @@ begin
   v_hash := encode(sha256(convert_to(p_code, 'UTF8')), 'hex');
   if not exists (select 1 from public.scene_codes where user_id = v_user and hash = v_hash) then
     if not public.rate_limit_hit('scene_codes', 300, 3600) then
-      raise exception 'Too many 3D scenes in a short time. Try again later.' using errcode = 'P0001';
+      raise exception 'Too many explainer scenes in a short time. Try again later.' using errcode = 'P0001';
     end if;
     insert into public.scene_codes (user_id, hash, code) values (v_user, v_hash, p_code)
       on conflict do nothing;

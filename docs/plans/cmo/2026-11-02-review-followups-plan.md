@@ -98,6 +98,43 @@ Size: S = under 2 hours, M = up to a day, L = more.
 | L6 | `publish_media` and `look_check` can starve behind requeued work | #150 | S | Aging in `claim_next_task`: a task queued for more than 10 minutes sorts first. |
 | L7 | Remaining Vietnamese comments in `modal_app.py`, `lib/modal.ts` and `lib/cmo/jobs` | #150, #145 | S | Translated (CLAUDE.md, Language). |
 
+**Progress (2026-11-02):** one migration (`20270105010000_review_followups.sql`) and pgTAP `244`.
+
+| # | State | What was done, or why it is open |
+|---|---|---|
+| Q1 | done | "Going out today" reads today's slots (founder's time zone) through Schedule's own loader `scheduleSlots`. |
+| Q2 | open | Needs a document-hash column or RPC so the Studio loader stops reading whole documents; not started. |
+| Q3 | done | `ShellV2` reads prefs and the window in a layout effect and writes widths only after that. |
+| Q4 | open | Moving the review to Monday 00:05 puts it next to `plan_week`, which reads its lesson, with no ordering between the two runs. Needs `enqueue_cmo_run_for` to take a `not_before` for the plan (or the plan to wait for the review). |
+| Q5 | done | Owner: only posts published this week count (`post_metrics` joined to `content_items.published_at`). |
+| Q6 | done | The replan is marked used only when the queued run carries `replan_of` for this order; `progress.check`. |
+| Q7 | open | Needs a trigger or a progress-check pass to re-queue `needs_credits` orders after a top-up; not started. |
+| Q8 | done | `packages/contracts/link-cases.json`; `hasLink` and `caption_check` agree; `check-post.check` + pgTAP 244. |
+| Q9 | done | `hnPlain` strips tags first, then decodes once. |
+| Q10 | done | A store error after the job's writes propagates and the lease retries it; the drain goes on; `jobs.check`. |
+| Q11 | done (part) | One `agentFakeAllowed`, one `handleOf`. The `Promise.all` in read steps was not found again in the current code. |
+| S1 | owner | Dismiss the CodeQL alert in GitHub (no code change). |
+| S2 | done | Failed sign-ins per address (30 / 10 min) in the MCP server; `mcp_admit` counts free refusals in `mcp_free`. |
+| S3 | done | `cardTitle` in `lib/cmo/digest.ts` for the digest and the expiring email. |
+| S4 | done | `packages/contracts/push-hosts.json`, run by `push.check`, the same strings in pgTAP 230. |
+| R1 | done | Undo refuses while any newer turn is open. |
+| R2 | done (part) | `draft`, `mcp`, `zip`, `mcp_preview 30` and `consume_daily_task_quota` dropped. `preview 2/60` stays: pgTAP 020/118 test the short-window counting with it. |
+| R3 | done | "explainer scenes"; the 429 mapping follows. |
+| R4 | done | `handler.check` also scans constants and library calls in the web and the MCP server. |
+| C1 | open | Studio's per-step balance check and `studio_record_usage` refusing past zero; not started. |
+| C2 | done | One lock order (credits → generation → task) in `complete_generation` and `cancel_generation`. |
+| C3 | done | The dead releases are gone; `fail_task` gives the day's export back for a failed export task. |
+| C4 | done | A `/video` batch checks its total before any moderation. |
+| C5 | done | `create_task` past 200 s of a chat request leaves the run to the sweep. |
+| C6 | done | `retry_job` reads `credit_balance`. |
+| L1 | open | `render_motion` budget vs Modal queue time; needs a deploy to verify. |
+| L2 | open | `ops_flags` table for the pause switch; not started. |
+| L3 | open | `cmo_dispatch` taking the open store; not started. |
+| L4 | done | A test keeps both images on one Node version (each deploy file keeps its own constant). |
+| L5 | done | Owner: Modal retries dropped on `run_job` and `run_task`; the lease reclaim is the one retry layer. |
+| L6 | done | Tasks queued over 10 minutes go first in `claim_next_task`. |
+| L7 | done (part) | `modal_app.py` and `lib/modal.ts`; `lib/cmo/jobs` (about 150 lines) is still to do. |
+
 ## 3. Order
 
 Batches go Q, S, R, C, L.
@@ -115,5 +152,5 @@ Batches go Q, S, R, C, L.
 ## 5. Owner gates
 
 1. S1: dismiss the CodeQL alert.
-2. Q5: which views count toward the weekly goal.
-3. L5: which retry layer stays.
+2. Q5 (decided 2026-11-02): only posts published this week.
+3. L5 (decided 2026-11-02): the lease reclaim stays, Modal retries go.
