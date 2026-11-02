@@ -303,8 +303,7 @@ select lives_ok(
   $$ select public.rate_limit_hit(bucket, max_hits, window_seconds)
      from (values
        ('presets', 60, 3600), ('uploads', 30, 3600), ('jobs', 10, 3600),
-       ('retry', 20, 3600), ('draft', 120, 60), ('project-write', 60, 3600),
-       ('zip', 20, 3600), ('media', 60, 3600)
+       ('retry', 20, 3600), ('project-write', 60, 3600), ('media', 60, 3600)
      ) as expected(bucket, max_hits, window_seconds) $$,
   'mọi bộ ba chống spam hiện hữu vẫn chạy'
 );

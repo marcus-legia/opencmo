@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics · OpenCMO redesign</title>
+<!-- Static export of Analytics.dc.html from the design canvas, initial state only. Source of truth: the canvas and the .dc.html file. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#c93a0f;text-decoration:none}a:hover{color:#2b2723}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f3f3ee; color: #2b2723; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+<nav aria-label="Main" style="flex: 1 1 232px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 20px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #2b2723"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="#2b2723" stroke-width="8"></path><circle cx="49" cy="32" r="5" fill="#ef4a1a"></circle></svg><span style="font-weight: 600; font-size: 19px; letter-spacing: -0.04em">OpenCMO</span></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; color: #2b2723"><span style="flex: 1">Dashboard</span><span style="padding: 1px 7px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 11px 'Source Code Pro', monospace">5</span></a>
+<a href="Analytics.html" aria-current="page" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 4px; background: #2b2723; color: #f3f3ee; font-weight: 500">Analytics</a>
+<a href="Brain.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Brain</a>
+<a href="Library.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Library</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 0 10px 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Departments</span>
+<a href="Research.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Research</a>
+<a href="Writer.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Writer</a>
+<a href="Studio.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Studio</a>
+<a href="Sales.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Sales</a>
+<a href="Schedule.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Schedule</a>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #d6d6c9; padding-top: 14px">
+<a href="Settings.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Settings</a>
+<span style="display: flex; justify-content: space-between; padding: 8px 10px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Credits</span><span style="font: 500 13px 'Source Code Pro', monospace">312</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Analytics · every connected account, through Zernio <span style="padding: 2px 7px; border: 1px dashed #b9b9aa; color: #69695d; letter-spacing: 0.06em">Sample data</span></span>
+<h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.045em">What worked, and what didn't.</h1>
+<span style="font-size: 13px; color: #69695d">The Brain reads the same numbers every Sunday and before every plan.</span>
+</div>
+<div role="group" aria-label="Range" style="display: flex; gap: 2px; padding: 4px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8">
+
+<button type="button" aria-pressed="false" style="min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: #2b2723; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer">7 days</button>
+
+<button type="button" aria-pressed="true" style="min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: #2b2723; color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer">30 days</button>
+
+<button type="button" aria-pressed="false" style="min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: #2b2723; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer">90 days</button>
+
+</div>
+</header>
+
+<section aria-label="Accounts" style="display: flex; flex-wrap: wrap; gap: 8px">
+
+<button type="button" aria-pressed="true" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #2b2723; border-radius: 999px; background: #2b2723; color: #f3f3ee; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #2b2723"></span>All accounts<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8"></span></button>
+
+<button type="button" aria-pressed="false" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #2b2723"></span>X · @opencmo<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">synced 2 min ago</span></button>
+
+<button type="button" aria-pressed="false" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #c93a0f"></span>TikTok · @opencmo<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">synced 2 min ago</span></button>
+
+<button type="button" aria-pressed="false" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #b9b9aa"></span>LinkedIn · Marcus<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">synced 1 h ago</span></button>
+
+<button type="button" aria-pressed="false" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #b23a2e; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #b23a2e"></span>Threads · @opencmo<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">reconnect</span></button>
+
+<button type="button" aria-pressed="false" style="min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #b9b9aa; border-radius: 999px; background: #fafaf8; color: #2b2723; font: 500 13px Inter, sans-serif; cursor: pointer"><span style="width: 8px; height: 8px; background: #69695d"></span>YouTube Shorts<span style="font: 400 11px 'Source Code Pro', monospace; opacity: 0.8">synced 3 h ago</span></button>
+
+</section>
+
+<div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: #fbeeea; border: 1px solid #b23a2e; border-radius: 4px; font-size: 13px">
+<span style="flex: 999 1 320px"><b style="font-weight: 600; color: #b23a2e">Threads stopped sending data on 27 Oct.</b> Its numbers after that date are missing, and the Brain knows they are missing (not zero).</span>
+<a href="Settings.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Reconnect Threads</a>
+</div>
+
+<section aria-label="Totals" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 1px; background: #d6d6c9; border: 1px solid #d6d6c9; border-radius: 4px; overflow: hidden">
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Impressions</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">114.4k</span><span style="font-size: 12px; color: #2f7d57">+18% vs previous</span></div>
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Engagements</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">5,032</span><span style="font-size: 12px; color: #2f7d57">+9%</span></div>
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Engagement rate</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">4.4%</span><span style="font-size: 12px; color: #b23a2e">−0.3 pts</span></div>
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Followers gained</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">+334</span><span style="font-size: 12px; color: #69695d">across 5 accounts</span></div>
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Video views</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">51.5k</span><span style="font-size: 12px; color: #2f7d57">+31%</span></div>
+
+<div style="padding: 14px 18px; background: #fafaf8; display: flex; flex-direction: column; gap: 2px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Posts measured</span><span style="font: 500 26px 'Source Code Pro', monospace; letter-spacing: -0.02em">26</span><span style="font-size: 12px; color: #b23a2e">4 without data</span></div>
+
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-labelledby="chart-title" style="flex: 999 1 600px; min-width: 0; background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px">
+<h2 id="chart-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Impressions per day</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #69695d">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #2b2723"></span>X</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #c93a0f"></span>TikTok</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; background: #b9b9aa"></span>LinkedIn</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border: 1px dashed #b23a2e; box-sizing: border-box"></span>Missing</span>
+</div>
+</div>
+<div role="img" aria-label="Impressions per day for the last 30 days, stacked by platform" style="height: 220px; display: flex; align-items: flex-end; gap: 4px; border-bottom: 1px solid #b9b9aa">
+
+<div title="1,998 impressions" style="flex: 1; min-width: 0; height: 22.482407831659323%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 52.16067849477489%; background: #2b2723"></span>
+<span style="height: 38.55301077093378%; background: #c93a0f"></span>
+<span style="height: 9.286310734291321%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="8,387 impressions" style="flex: 1; min-width: 0; height: 94.37616671177301%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 15.897833983429482%; background: #2b2723"></span>
+<span style="height: 81.02195645489365%; background: #c93a0f"></span>
+<span style="height: 3.0802095616768668%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,792 impressions" style="flex: 1; min-width: 0; height: 42.67370633245258%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 64.66665257625202%; background: #2b2723"></span>
+<span style="height: 21.144384220640504%; background: #c93a0f"></span>
+<span style="height: 14.188963203107487%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,818 impressions" style="flex: 1; min-width: 0; height: 31.705987729109303%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 66.46717987041811%; background: #2b2723"></span>
+<span style="height: 19.577850026577334%; background: #c93a0f"></span>
+<span style="height: 13.95497010300456%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,392 impressions" style="flex: 1; min-width: 0; height: 15.662981436994686%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 64.88371686575987%; background: #2b2723"></span>
+<span style="height: 24.28358647323872%; background: #c93a0f"></span>
+<span style="height: 10.83269666100141%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="4,849 impressions" style="flex: 1; min-width: 0; height: 54.56809346259461%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 35.727913347346856%; background: #2b2723"></span>
+<span style="height: 56.88672248425712%; background: #c93a0f"></span>
+<span style="height: 7.385364168396026%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,553 impressions" style="flex: 1; min-width: 0; height: 39.978792332092304%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 70.04288513886183%; background: #2b2723"></span>
+<span style="height: 14.557407480819656%; background: #c93a0f"></span>
+<span style="height: 15.39970738031852%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,530 impressions" style="flex: 1; min-width: 0; height: 28.46641681298811%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 57.88228966966811%; background: #2b2723"></span>
+<span style="height: 30.611887113648073%; background: #c93a0f"></span>
+<span style="height: 11.50582321668383%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,040 impressions" style="flex: 1; min-width: 0; height: 22.955110623885584%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 47.661258538245356%; background: #2b2723"></span>
+<span style="height: 44.09998443028444%; background: #c93a0f"></span>
+<span style="height: 8.238757031470207%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="8,666 impressions" style="flex: 1; min-width: 0; height: 97.51367985304789%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 24.501822628688984%; background: #2b2723"></span>
+<span style="height: 70.23819809264512%; background: #c93a0f"></span>
+<span style="height: 5.259979278665885%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,370 impressions" style="flex: 1; min-width: 0; height: 37.92167316613009%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 68.80333876576931%; background: #2b2723"></span>
+<span style="height: 16.22135562544031%; background: #c93a0f"></span>
+<span style="height: 14.975305608790379%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,657 impressions" style="flex: 1; min-width: 0; height: 18.64840226682183%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 67.42051986269408%; background: #2b2723"></span>
+<span style="height: 20.24998112309449%; background: #c93a0f"></span>
+<span style="height: 12.329499014211436%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,789 impressions" style="flex: 1; min-width: 0; height: 20.131021767168022%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 68.83742522097718%; background: #2b2723"></span>
+<span style="height: 18.145543506762532%; background: #c93a0f"></span>
+<span style="height: 13.017031272260283%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="7,084 impressions" style="flex: 1; min-width: 0; height: 79.71076948782232%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 33.929064894331596%; background: #2b2723"></span>
+<span style="height: 58.647444089454915%; background: #c93a0f"></span>
+<span style="height: 7.423491016213486%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,188 impressions" style="flex: 1; min-width: 0; height: 35.868598077154026%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 62.34431816081708%; background: #2b2723"></span>
+<span style="height: 24.422517969463126%; background: #c93a0f"></span>
+<span style="height: 13.233163869719805%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,978 impressions" style="flex: 1; min-width: 0; height: 22.25834139130489%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 46.64036153595089%; background: #2b2723"></span>
+<span style="height: 45.49119567007514%; background: #c93a0f"></span>
+<span style="height: 7.868442793973967%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,736 impressions" style="flex: 1; min-width: 0; height: 30.78355786610335%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 58.96570322886602%; background: #2b2723"></span>
+<span style="height: 29.03445745827703%; background: #c93a0f"></span>
+<span style="height: 11.999839312856956%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="7,342 impressions" style="flex: 1; min-width: 0; height: 82.61447384730903%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 34.04980164303411%; background: #2b2723"></span>
+<span style="height: 58.45930969639206%; background: #c93a0f"></span>
+<span style="height: 7.490888660573833%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,234 impressions" style="flex: 1; min-width: 0; height: 25.141433098396444%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 70.75328577671594%; background: #2b2723"></span>
+<span style="height: 14.915233503487935%; background: #c93a0f"></span>
+<span style="height: 14.331480719796117%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,415 impressions" style="flex: 1; min-width: 0; height: 15.925636031140858%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 65.77446905337082%; background: #2b2723"></span>
+<span style="height: 23.08128046079021%; background: #c93a0f"></span>
+<span style="height: 11.144250485838954%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,974 impressions" style="flex: 1; min-width: 0; height: 33.46211157233422%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 67.84167334433158%; background: #2b2723"></span>
+<span style="height: 17.720038051644078%; background: #c93a0f"></span>
+<span style="height: 14.438288604024347%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="8,887 impressions" style="flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 26.864072894966334%; background: #2b2723"></span>
+<span style="height: 67.26386674623254%; background: #c93a0f"></span>
+<span style="height: 5.8720603588011375%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,332 impressions" style="flex: 1; min-width: 0; height: 26.239443101459802%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 51.69738928160616%; background: #2b2723"></span>
+<span style="height: 38.59463449884654%; background: #c93a0f"></span>
+<span style="height: 9.707976219547296%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,141 impressions" style="flex: 1; min-width: 0; height: 24.086930778225476%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 53.26244242042022%; background: #2b2723"></span>
+<span style="height: 36.92574690943106%; background: #c93a0f"></span>
+<span style="height: 9.811810670148706%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,385 impressions" style="flex: 1; min-width: 0; height: 38.09342651995411%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 69.08768375445094%; background: #2b2723"></span>
+<span style="height: 15.85589005771272%; background: #c93a0f"></span>
+<span style="height: 15.056426187836342%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="5,361 impressions" style="flex: 1; min-width: 0; height: 60.32521558051145%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 39.08453057259503%; background: #2b2723"></span>
+<span style="height: 52.543350209768256%; background: #c93a0f"></span>
+<span style="height: 8.372119217636701%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="1,453 impressions" style="flex: 1; min-width: 0; height: 16.34986828060926%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 66.02699507222556%; background: #2b2723"></span>
+<span style="height: 22.62811954880338%; background: #c93a0f"></span>
+<span style="height: 11.344885378971053%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="2,326 impressions · Threads missing" style="flex: 1; min-width: 0; height: 30.67841155697485%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 54.857061498888385%; background: #2b2723"></span>
+<span style="height: 19.507747099032024%; background: #c93a0f"></span>
+<span style="height: 10.963282445331906%; background: #b9b9aa"></span>
+<span style="height: 14.671908956747687%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="3,828 impressions · Threads missing" style="flex: 1; min-width: 0; height: 47.57838120971491%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 58.96983657504576%; background: #2b2723"></span>
+<span style="height: 18.6011234117106%; background: #c93a0f"></span>
+<span style="height: 12.968632789265547%; background: #b9b9aa"></span>
+<span style="height: 9.460407223978102%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+<div title="8,850 impressions" style="flex: 1; min-width: 0; height: 99.58702806297258%; display: flex; flex-direction: column-reverse; gap: 1px">
+<span style="height: 19.2090395480226%; background: #2b2723"></span>
+<span style="height: 76.8361581920904%; background: #c93a0f"></span>
+<span style="height: 3.954802259887006%; background: #b9b9aa"></span>
+<span style="height: 0%; border: 1px dashed #b23a2e; box-sizing: border-box"></span>
+</div>
+
+</div>
+<div style="display: flex; justify-content: space-between; font: 400 11px 'Source Code Pro', monospace; color: #69695d"><span>30 days ago</span><span>Today</span></div>
+<span style="font-size: 12px; color: #69695d">Dashed red: a platform sent no data that day, counted as missing, not zero. Hover a bar for the day's numbers.</span>
+</section>
+
+<aside aria-labelledby="learn-title" style="flex: 1 1 340px; min-width: 0; background: #26282c; color: #f3f3ee; border-radius: 4px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+<h2 id="learn-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #a8a89a">What the Brain takes from this</h2>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px">
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Demo clips beat text on X.</b><span style="color: #a8a89a">2.8× your median impressions · 6 posts · feeds Writer and Monday's plan</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Shorts at 18:00 do better than at noon.</b><span style="color: #a8a89a">1.9× views · 5 shorts · feeds Schedule's best times</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid #34363b"><b style="font-weight: 600; font-size: 14px">Question openers underperform.</b><span style="color: #a8a89a">0.6× engagement · 4 posts · matches the rule from your edits</span></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600; font-size: 14px">Not enough data on LinkedIn yet.</b><span style="color: #a8a89a">3 of 10 posts needed before it changes anything</span></span>
+</div>
+<a href="Brain.html" style="margin-top: auto; color: #f3f3ee; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: underline">See it in Brain memory →</a>
+</aside>
+</div>
+
+<section aria-labelledby="acc-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<h2 id="acc-title" style="margin: 0; padding: 14px 20px; border-bottom: 1px solid #d6d6c9; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">By account</h2>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="text-align: left; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #69695d"><th style="padding: 10px 20px; font-weight: 500">Account</th><th style="padding: 10px 8px; font-weight: 500">Followers</th><th style="padding: 10px 8px; font-weight: 500">Change</th><th style="padding: 10px 8px; font-weight: 500">Posts</th><th style="padding: 10px 8px; font-weight: 500">Median impressions</th><th style="padding: 10px 8px; font-weight: 500">Engagement</th><th style="padding: 10px 20px; font-weight: 500">Works best</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">X · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2,410</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+148</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">12</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,920</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3.9%</td><td style="padding: 12px 20px">Demo clip, morning</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">TikTok · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">880</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+121</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3,400</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">6.1%</td><td style="padding: 12px 20px">Short under 25 s, 18:00</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">LinkedIn · Marcus</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,105</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+43</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">3</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">640</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5.2%</td><td style="padding: 12px 20px; color: #69695d">Not enough posts yet</td></tr>
+<tr style="border-top: 1px solid #e8e8de; background: #fbeeea"><td style="padding: 12px 20px; font-weight: 600">Threads · @opencmo</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">530</td><td style="padding: 12px 8px; color: #b23a2e">no data since 27 Oct</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">4</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">—</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">—</td><td style="padding: 12px 20px"><a href="Settings.html" style="font-weight: 500">Reconnect</a></td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px; font-weight: 600">YouTube Shorts · OpenCMO</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">96</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace; color: #2f7d57">+22</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,150</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">4.0%</td><td style="padding: 12px 20px; color: #69695d">Not enough posts yet</td></tr>
+</tbody>
+</table>
+</div>
+<div style="padding: 12px 20px; border-top: 1px solid #e8e8de; font-size: 12px; color: #69695d">Some platforms don't report every number; a dash means not reported, never zero.</div>
+</section>
+
+<section aria-labelledby="posts-title" style="background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid #d6d6c9">
+<h2 id="posts-title" style="margin: 0; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase">Posts against your own median</h2>
+<span style="font-size: 12px; color: #69695d">Best and worst first; every row opens the post</span>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="text-align: left; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #69695d"><th style="padding: 10px 20px; font-weight: 500">Post</th><th style="padding: 10px 8px; font-weight: 500">Where</th><th style="padding: 10px 8px; font-weight: 500">Impressions</th><th style="padding: 10px 8px; font-weight: 500">Engagement</th><th style="padding: 10px 8px; font-weight: 500">vs median</th><th style="padding: 10px 20px; font-weight: 500">Brain's read</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">Short · “Cut by words”</td><td style="padding: 12px 8px">TikTok</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">9,820</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">7.4%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e6f1eb; color: #2f7d57; font: 500 11px 'Source Code Pro', monospace">2.9×</span></td><td style="padding: 12px 20px">Before/after in the first 2 s</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Cut by words, a 20 s demo”</td><td style="padding: 12px 8px">X</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5,410</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">5.1%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e6f1eb; color: #2f7d57; font: 500 11px 'Source Code Pro', monospace">2.8×</span></td><td style="padding: 12px 20px">Demo clip attached</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Why we built the editor first”</td><td style="padding: 12px 8px">LinkedIn</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">710</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">6.0%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #e8e8de; color: #2b2723; font: 500 11px 'Source Code Pro', monospace">1.1×</span></td><td style="padding: 12px 20px; color: #69695d">Too few posts to judge</td></tr>
+<tr style="border-top: 1px solid #e8e8de"><td style="padding: 12px 20px">“Tired of editing demos?”</td><td style="padding: 12px 8px">X</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">1,050</td><td style="padding: 12px 8px; font-family: 'Source Code Pro', monospace">2.2%</td><td style="padding: 12px 8px"><span style="padding: 2px 7px; background: #fbeeea; color: #b23a2e; font: 500 11px 'Source Code Pro', monospace">0.5×</span></td><td style="padding: 12px 20px">Question opener, text only</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</div>
+</body>
+</html>

@@ -7,16 +7,19 @@
  *
  *   W1 — finished, 5–10 items, at most one Reddit item a day, video only when the strategy mentions
  *        it, every item has a reason, no avoid words or invented numbers (code only)
- *   W2 — finished; each of the three versions passes `checkPost`, then the judge
+ *   W2 — finished; each of the three versions passes `checkPost`, then the judge; and, by code, which
+ *        No AI Slop stock patterns each version shows (`style.ts`: measured before and after a prompt
+ *        change, never a gate in production)
  */
 
 import type { CaseResult } from "@/lib/eval/compare";
 
 import { checkPost } from "../check-post";
-import { avoidList, knownNumbers, normalizeNumber } from "../context";
+import { avoidList, checkRules, knownNumbers, normalizeNumber } from "../context";
 import { cascade } from "../judge";
 import { memoryStore } from "../memory-store";
 import type { Documents } from "../types";
+import { stockPatterns } from "./style";
 import { registerCases, type EvalCase } from "./types";
 
 const BUDGET_MS = 240_000;
@@ -78,7 +81,7 @@ const w2: EvalCase = {
     const item = mem.items.find((i) => i.run_id === run.id);
     if (item?.body.gen) env.recordGen("w2", item.body.gen);
     const texts = item ? [String(item.body.text ?? ""), ...((item.body.alternates as string[] | undefined) ?? [])] : [];
-    const rules = { avoid: avoidList(fixture.docs), known: knownNumbers(fixture.docs) };
+    const rules = checkRules(fixture.docs);
     const results: CaseResult[] = [runResult(`w2:${fixture.name}:run`, env.epoch, run.status === "done", run.error ? [run.error] : [])];
     // Always three outputs, so a run that drafted fewer pairs as fails, not as missing cases.
     for (let index = 0; index < 3; index++) {
@@ -86,6 +89,8 @@ const w2: EvalCase = {
       env.log(`[${index + 1}] ${text}`);
       const issues = text ? checkPost(text, rules) : ["no draft"];
       results.push(await cascade(`w2:${fixture.name}:${index}`, env.epoch, issues, env.judge, { job: `An X post for the founder on: ${fixture.brief}`, docs: fixture.docs, output: text }));
+      const patterns = text ? stockPatterns(text) : [];
+      results.push({ id: `w2:${fixture.name}:style-${index}`, epoch: env.epoch, pass: Boolean(text) && patterns.length === 0, decided_by: "code", ...(patterns.length ? { notes: patterns } : text ? {} : { notes: ["no draft"] }) });
     }
     return results;
   },

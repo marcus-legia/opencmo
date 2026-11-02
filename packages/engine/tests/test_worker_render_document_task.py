@@ -507,3 +507,50 @@ def test_generation_that_never_finished_still_fails_with_the_library_message(mon
     store.generations = [{"id": "g", "model": "other-model", "spec": {"prompt": SHOT["prompt"]}, "media_asset_id": "m-shot"}]
     rd.process(store, _task())
     assert store.failed is not None and "is not in this project's library" in store.failed
+
+
+KEYFRAME = {"generate": "image", "prompt": "a desk at dawn", "model": "fal-nano-banana", "seed": 3}
+LONG_SHOT = {"generate": "video", "prompt": "slow push in", "model": "fal-seedance", "duration": 5, "seed": 7, "startFrame": KEYFRAME}
+
+
+def _long_take_rows(start_image: str) -> list[dict]:
+    """The keyframe's row, and the shot's row as the server stores it: the keyframe resolved to a path."""
+    keyframe = {k: v for k, v in KEYFRAME.items() if k not in ("generate", "model")}
+    shot = {k: v for k, v in LONG_SHOT.items() if k not in ("generate", "model", "startFrame")}
+    return [
+        {"id": "g-key", "model": "fal-nano-banana", "spec": keyframe, "media_asset_id": "m-fox"},
+        {"id": "g-shot", "model": "fal-seedance", "spec": {**shot, "startImage": start_image}, "media_asset_id": "m-shot"},
+    ]
+
+
+def test_long_take_shot_exports_with_no_tab_when_its_keyframe_is_the_resolved_image(monkeypatch):
+    """A brain-made long take (P2 A6): no editor tab ever opened, so the shot is found in the
+    project's generations, its nested keyframe matched through the image the row was made from."""
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}], [])
+    store = FakeStore()
+    store.generations = _long_take_rows("media/u1/j1/fox.png")
+    rd.process(store, _task())
+    assert store.failed is None
+    assert ("media", "u1/j1/gen-shot.mp4") in store.downloads
+
+
+def test_long_take_shot_made_from_another_keyframe_is_not_used(monkeypatch):
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}], [])
+    store = FakeStore()
+    store.generations = _long_take_rows("media/u1/j1/broll.mp4")
+    rd.process(store, _task())
+    assert store.failed is not None and "is not in this project's library" in store.failed
+
+
+def test_a_keyframe_shared_by_two_shots_is_looked_up_once(monkeypatch):
+    second = {**LONG_SHOT, "prompt": "keep pushing in", "seed": 8}
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}, {"kind": "video", "src": second}], [])
+    store = FakeStore()
+    rows = _long_take_rows("media/u1/j1/fox.png")
+    store.generations = rows + [{**rows[1], "id": "g-shot-2", "spec": {**rows[1]["spec"], "prompt": "keep pushing in", "seed": 8}}]
+    looked_up: list[str] = []
+    original = store.get_media_asset
+    monkeypatch.setattr(store, "get_media_asset", lambda media_id: looked_up.append(media_id) or original(media_id))
+    rd.process(store, _task())
+    assert store.failed is None
+    assert looked_up.count("m-fox") == 1, "the shared keyframe is resolved once"

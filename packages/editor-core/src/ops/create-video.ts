@@ -216,7 +216,7 @@ function gatherShots(document: ClipDocument, input: CreateVideo, existing: Set<s
 /** A keyframe of a placed long take and the shots that start or end on it (at most two). */
 export type PlacedKeyframe = { source: KeyframeSource; shots: { id: string; start: boolean; end: boolean }[] };
 
-const shotSource = (shot: Entity): Entity | undefined => {
+export const shotSource = (shot: Entity): Entity | undefined => {
 	const src = ((shot.paints as Entity[] | undefined) ?? [])[0]?.src as Entity | undefined;
 	return src?.generate === 'video' ? src : undefined;
 };

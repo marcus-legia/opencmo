@@ -84,7 +84,7 @@ export async function saveFrame(supabase: SupabaseClient, userId: string, input:
   // the reservation trigger admits `video/%` only, and the probe task reads the real type.
   await rpcOrThrow(supabase, "reserve_upload", { p_bucket: "media", p_object_name: objectName, p_size: bytes.length, p_content_type: "video/x-upload", p_project_id: jobId });
   const { error: uploadError } = await supabase.storage.from("media").upload(objectName, bytes, { contentType: "video/x-upload", upsert: false });
-  if (uploadError) return { error: "The frame could not be saved to the library. Try again." };
+  if (uploadError) return { error: "The frame could not be saved to your media. Try again." };
 
   const stem = frameStem(input.time, input.name);
   const registered = await rpcOrThrow<{ asset: { id: string; status: string }; task_id: string | null }>(supabase, "register_media_asset", {

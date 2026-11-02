@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     assert.equal(out.startImage, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/j/a.png", "bỏ tiền tố bucket");
     assert.deepEqual(out.references, ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/j/g.png", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/j/kept.png"], "generation → asset; đường dẫn giữ nguyên");
     await assert.rejects(resolveMediaRefs(fake, job, { endImage: pending }), /still generating/);
-    await assert.rejects(resolveMediaRefs(fake, "55555555-5555-4555-8555-555555555555", { startImage: asset }), /not found in your library/);
+    await assert.rejects(resolveMediaRefs(fake, "55555555-5555-4555-8555-555555555555", { startImage: asset }), /not found in your media/);
   }
 
   console.log("brief: mọi kiểm tra xanh");

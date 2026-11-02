@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { CmoView } from "@/components/cmo/CmoView";
 import { CmoWorkspace } from "@/components/cmo/workspace/CmoWorkspace";
+import { Dashboard } from "@/components/dashboard/Dashboard";
+import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
 import { createServerClient } from "@/lib/supabase/server";
@@ -28,6 +30,14 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
   const supabase = await createServerClient();
   const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
   const state = await loadCmoState(supabase);
+
+  // v2: a founder with no documents starts at Setup (S13), with the website they typed on the landing page; the
+  // Dashboard reads its own data client-side.
+  if (UI_V2) {
+    if (Object.keys(state.documents).length === 0) redirect(site ? `/app/setup?site=${encodeURIComponent(site)}` : "/app/setup");
+    return <Dashboard />;
+  }
+
   if (Object.keys(state.documents).length === 0) return <CmoView initial={state} site={site} />;
   return <CmoWorkspace initial={await loadWorkspace(supabase)} />;
 }

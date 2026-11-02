@@ -11,21 +11,37 @@
  * Không `server-only` để check chạy được; khoá chỉ đọc từ env phía server.
  */
 
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
+import { recordSpend, SPEND_CAP_MESSAGE, spendAllowed } from "@/lib/spend/record";
 import { cleanUntrusted } from "../untrusted";
 
 export const SC_BASE = "https://api.scrapecreators.com";
 const TIMEOUT_MS = 20_000;
 
-export class SocialReadError extends Error {}
+/**
+ * `kind` lets a job tell "this post or account is gone" (`not_found`) from a problem on our side (`setup`, `credits`,
+ * `busy`) or a passing one (`unavailable`), instead of reading the English message.
+ */
+export type SocialReadKind = "setup" | "credits" | "not_found" | "busy" | "unavailable" | "cap";
+export class SocialReadError extends Error {
+  constructor(
+    message: string,
+    readonly kind: SocialReadKind = "unavailable",
+  ) {
+    super(message);
+  }
+}
 
-export function scFakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
+export const scFakeAllowed = agentFakeAllowed;
+
+/** The provider key. `SCRAPE_CREATORS_API_KEY` is accepted too: it is the name the provider's own docs suggest. */
+function scKey(): string {
+  return process.env.SCRAPECREATORS_API_KEY || process.env.SCRAPE_CREATORS_API_KEY || "";
 }
 
 /** Đọc được mạng xã hội: có khoá thật, hoặc bản giả (CI/E2E). */
 export function socialReaderReady(): boolean {
-  return scFakeAllowed() || Boolean(process.env.SCRAPECREATORS_API_KEY);
+  return scFakeAllowed() || Boolean(scKey());
 }
 
 export type Platform = "reddit" | "x" | "tiktok" | "youtube" | "threads" | "instagram";
@@ -57,8 +73,10 @@ export class ScBudget {
 
 /** Lời gọi thô. `budget` trừ trước khi gọi — lỗi mạng vẫn tính, vì ScrapeCreators có thể đã tính. */
 export async function scGet(path: string, params: Record<string, string>, budget?: ScBudget): Promise<unknown> {
-  const key = process.env.SCRAPECREATORS_API_KEY;
-  if (!key) throw new SocialReadError("Social research is not set up on this server yet.");
+  const key = scKey();
+  if (!key) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  // The founder's daily provider cap (spend ledger), before the lookup is paid for.
+  if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
   budget?.take();
   const url = `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`;
   let response: Response;
@@ -68,20 +86,22 @@ export async function scGet(path: string, params: Record<string, string>, budget
     throw new SocialReadError("The social network did not answer in time. Try again in a minute.");
   }
   if (response.status === 401 || response.status === 403) {
-    console.error("[cmo] scrapecreators: khoá bị từ chối", path, response.status);
-    throw new SocialReadError("Social research is not set up on this server yet.");
+    console.error("[cmo] scrapecreators: key refused", path, response.status);
+    throw new SocialReadError("Social research is not set up on this server yet.", "setup");
   }
-  if (response.status === 402) throw new SocialReadError("Social research is paused (out of lookup credits). Try again later.");
-  if (response.status === 404) throw new SocialReadError("That account or post was not found, or it is private.");
-  if (response.status === 429) throw new SocialReadError("Too many lookups right now. Try again in a minute.");
+  // One row per request: a lookup that answered is billed; a 402 or 404 is recorded at no cost.
+  if (response.ok || response.status === 402 || response.status === 404) await recordSpend("scrapecreators", path, { call: response.ok ? 1 : 0 });
+  if (response.status === 402) throw new SocialReadError("Social research is paused (out of lookup credits). Try again later.", "credits");
+  if (response.status === 404) throw new SocialReadError("That account or post was not found, or it is private.", "not_found");
+  if (response.status === 429) throw new SocialReadError("Too many lookups right now. Try again in a minute.", "busy");
   if (!response.ok) {
-    console.error("[cmo] scrapecreators: lỗi", path, response.status);
+    console.error("[cmo] scrapecreators: error", path, response.status);
     throw new SocialReadError("The social network did not answer. Try again in a minute.");
   }
   return response.json().catch(() => null);
 }
 
-// ----------------------------------------------------------------- đọc phòng thủ
+// ----------------------------------------------------------------- defensive parsing
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => Boolean(v) && typeof v === "object" && !Array.isArray(v);
@@ -111,6 +131,8 @@ export function itemsOf(json: unknown, keys: string[]): Obj[] {
   if (Array.isArray(json)) return json.filter(isObj);
   for (const key of keys) {
     const v = at(json, key);
+    // An empty list is not the answer when a later key has items: YouTube search returns `videos: []` beside `shorts`.
+    if (Array.isArray(v) && !v.length) continue;
     if (Array.isArray(v)) return v.map((x) => (isObj(x) && isObj(x.data) && "kind" in x ? x.data : x)).filter(isObj);
     if (isObj(v) && Array.isArray(v.children)) return v.children.map((c) => (isObj(c) && isObj(c.data) ? c.data : c)).filter(isObj);
   }
@@ -175,7 +197,10 @@ export function xPost(item: Obj, handle = ""): SocialPost | null {
 
 export function tiktokPost(item: Obj): SocialPost | null {
   const v = isObj(item.aweme_info) ? item.aweme_info : item;
-  const user = str(first(v, ["author.unique_id", "author.uniqueId", "author.username"]));
+  // The trimmed search answer may leave the author out; the share URL still names them (`/@user/video/id`).
+  const user =
+    str(first(v, ["author.unique_id", "author.uniqueId", "author.username"])) ||
+    (/^https:\/\/www\.tiktok\.com\/@([A-Za-z0-9._]{1,40})\/video\//.exec(str(first(v, ["share_url", "url"])))?.[1] ?? "");
   const id = str(first(v, ["aweme_id", "id"]));
   const url = safeUrl(str(first(v, ["share_url", "url"])) || (id && user ? `https://www.tiktok.com/@${user}/video/${id}` : ""), HOSTS.tiktok);
   if (!url) return null;
@@ -230,7 +255,8 @@ export function threadsPost(item: Obj): SocialPost | null {
   };
 }
 
-export type RedditComment = { author: string; text: string; score: number };
+/** `replies`: direct replies when the reader sends them (P6 R3); absent otherwise, never a guessed zero. */
+export type RedditComment = { author: string; text: string; score: number; replies?: number };
 
 export function redditPost(item: Obj): (SocialPost & { community: string; title: string }) | null {
   const permalink = str(item.permalink);

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sales</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#c93a0f;text-decoration:none}a:hover{color:#2b2723}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f3f3ee; color: #2b2723; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.5">
+
+<nav aria-label="Main" style="flex: 1 1 232px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #d6d6c9; display: flex; flex-direction: column; gap: 20px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: #2b2723"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="#2b2723" stroke-width="8"></path><circle cx="49" cy="32" r="5" fill="#ef4a1a"></circle></svg><span style="font-weight: 600; font-size: 19px; letter-spacing: -0.04em">OpenCMO</span></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; color: #2b2723"><span style="flex: 1">Dashboard</span><span style="padding: 1px 7px; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 11px 'Source Code Pro', monospace">5</span></a>
+<a href="Analytics.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Analytics</a>
+<a href="Brain.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Brain</a>
+<a href="Library.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Library</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 0 10px 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Departments</span>
+<a href="Research.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Research</a>
+<a href="Writer.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Writer</a>
+<a href="Studio.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Studio</a>
+<a href="Sales.dc.html" aria-current="page" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 4px; background: #2b2723; color: #f3f3ee; font-weight: 500">Sales</a>
+<a href="Schedule.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Schedule</a>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #d6d6c9; padding-top: 14px">
+<a href="Settings.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: #2b2723">Settings</a>
+<span style="display: flex; justify-content: space-between; padding: 8px 10px"><span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Credits</span><span style="font: 500 13px 'Source Code Pro', monospace">312</span></span>
+</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #c93a0f">IV · Sales</span>
+<h1 style="margin: 0; font-size: 40px; line-height: 1; font-weight: 500; letter-spacing: -0.045em">People who need what you built.</h1>
+<span style="font-size: 13px; color: #69695d">Threads scored with quotes from the thread. Replies are drafts: you post them yourself.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 220px">
+<span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #69695d">Product mentions, last 10 replies</span>
+<span style="display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px"><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span><span style="height: 10px; background: #d6d6c9"></span></span>
+<span style="font-size: 12px; color: #69695d">0 of 10 · this reply may name the product once</span>
+</div>
+</header>
+
+<div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; background: #fbeeea; border: 2px solid #b23a2e; border-radius: 4px">
+<span style="flex: 999 1 320px; font-size: 14px; color: #2b2723"><b style="font-weight: 600; color: #b23a2e">Scan stopped.</b> This week's Sales budget is used (5 of 5 credits). 4 threads found before it stopped are below.</span>
+<button type="button" style="min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Add 5 credits and finish</button>
+<button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #b9b9aa; border-radius: 999px; background: transparent; color: #2b2723; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Wait for Monday</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+<section aria-label="Threads" style="flex: 1 1 420px; min-width: 0; background: #fafaf8; border: 1px solid #d6d6c9; border-radius: 4px; display: flex; flex-direction: column">
+<a href="Sales.dc.html" aria-current="true" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; padding: 14px 16px; background: #ffffff; border-left: 3px solid #2b2723; color: #2b2723"><b style="font: 500 18px 'Source Code Pro', monospace">78</b><span><span style="font: 500 11px 'Source Code Pro', monospace; color: #69695d">r/SaaS · 6 h · 41 comments</span><br><b style="font-weight: 600">What do you use to edit product demos?</b><br><span style="font-size: 12px; color: #2f7d57">Mention allowed</span></span></a>
+<a href="Sales.dc.html" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border-top: 1px solid #e8e8de; color: #2b2723"><b style="font: 500 18px 'Source Code Pro', monospace">71</b><span><span style="font: 500 11px 'Source Code Pro', monospace; color: #69695d">r/indiehackers · 1 d · 18 comments</span><br><b style="font-weight: 600">Solo founders: how do you make launch videos?</b><br><span style="font-size: 12px; color: #a9420f">Help only: no self-promotion rule</span></span></a>
+<a href="Sales.dc.html" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border-top: 1px solid #e8e8de; color: #2b2723"><b style="font: 500 18px 'Source Code Pro', monospace">66</b><span><span style="font: 500 11px 'Source Code Pro', monospace; color: #69695d">r/startups · 2 d · 9 comments</span><br><b style="font-weight: 600">Descript alternative for short demos?</b><br><span style="font-size: 12px; color: #2f7d57">Mention allowed</span></span></a>
+<a href="Sales.dc.html" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border-top: 1px solid #e8e8de; color: #69695d"><b style="font: 500 18px 'Source Code Pro', monospace">61</b><span><span style="font: 500 11px 'Source Code Pro', monospace">r/marketing · 3 d</span><br><b style="font-weight: 600">Do AI captions hurt reach?</b><br><span style="font-size: 12px">Skipped: subreddit bans tool mentions</span></span></a>
+<div style="padding: 12px 16px; border-top: 1px solid #e8e8de; display: flex; justify-content: space-between; font-size: 12px; color: #69695d"><span>Replied this week: 1 · dismissed: 3</span><a href="Sales.dc.html">History</a></div>
+</section>
+
+<section aria-labelledby="thread-title" style="flex: 999 1 480px; min-width: 0; background: #ffffff; border: 1px solid #d6d6c9; border-radius: 4px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d">r/SaaS · posted 6 h ago</span>
+<h2 id="thread-title" style="margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.02em">What do you use to edit product demos?</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<span style="padding: 10px; background: #f3f3ee; font-size: 12px; color: #69695d">Pain<br><b style="font: 500 16px 'Source Code Pro', monospace; color: #2b2723">22/25</b></span>
+<span style="padding: 10px; background: #f3f3ee; font-size: 12px; color: #69695d">Fit<br><b style="font: 500 16px 'Source Code Pro', monospace; color: #2b2723">20/25</b></span>
+<span style="padding: 10px; background: #f3f3ee; font-size: 12px; color: #69695d">Timing<br><b style="font: 500 16px 'Source Code Pro', monospace; color: #2b2723">18/20</b></span>
+<span style="padding: 10px; background: #f3f3ee; font-size: 12px; color: #69695d">Reach<br><b style="font: 500 16px 'Source Code Pro', monospace; color: #2b2723">9/15</b></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d">Evidence, copied from the thread</span>
+<blockquote style="margin: 0; padding: 10px 14px; background: #f3f3ee; font-size: 14px">“I spend more time cutting my demo than building the feature.” <span style="color: #69695d; font-size: 12px">· original post</span></blockquote>
+<blockquote style="margin: 0; padding: 10px 14px; background: #f3f3ee; font-size: 14px">“Timeline editors are overkill for a 40 second clip.” <span style="color: #69695d; font-size: 12px">· top comment</span></blockquote>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font: 500 11px 'Source Code Pro', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #69695d">Reply draft · 96 words
+<textarea rows="6" style="padding: 12px; border: 1px solid #b9b9aa; border-radius: 4px; background: #fafaf8; color: #2b2723; font: 400 14px/1.5 Inter, sans-serif; text-transform: none; letter-spacing: 0; resize: vertical">Same problem here. What helped me: record once, then cut by deleting words from the transcript instead of scrubbing a timeline. Ums and retakes go in a minute. For a 40 second demo, add captions and one zoom on the click that matters, nothing else. I built a tool for this (OpenCMO), but the transcript approach works in most editors now.</textarea></label>
+<div style="font-size: 12px; color: #69695d">No links · product named once, at the end · r/SaaS allows it</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #c93a0f; color: #ffffff; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Copy and open thread</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #b9b9aa; border-radius: 999px; background: transparent; color: #2b2723; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">I replied</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; border: 0; background: transparent; color: #69695d; font: 500 12px 'Source Code Pro', monospace; letter-spacing: 0.08em; text-transform: uppercase">Dismiss with reason</button>
+</div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

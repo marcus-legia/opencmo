@@ -1,9 +1,10 @@
 import { permanentRedirect } from "next/navigation";
 
+import { studioItemHref } from "@/components/screens/studio/href";
+
 /**
- * Link cũ `/app/jobs/<id>` (bản cloud trước D3) chuyển hẳn sang trang project.
- * 308 chứ không phải 307: đường này không quay lại, và bookmark/link đã chia sẻ
- * phải cập nhật.
+ * Old `/app/jobs/<id>` links (the cloud version before D3) move for good to the upload's page.
+ * 308, not 307: this route never comes back, and bookmarks and shared links should update.
  */
 export default async function LegacyJobPage({
   params,
@@ -11,5 +12,6 @@ export default async function LegacyJobPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  permanentRedirect(`/app/projects/${id}`);
+  // With the redesign on this goes straight to Studio's item drawer, not through a second redirect.
+  permanentRedirect(studioItemHref(id));
 }

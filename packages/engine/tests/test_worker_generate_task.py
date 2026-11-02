@@ -119,6 +119,7 @@ class FakeStore:
         self.failed: list[str] = []
         self.removed: list[tuple] = []
         self.codes: dict = {}
+        self.spent: list[tuple] = []
 
     def get_generation(self, _id):
         return self.generation
@@ -148,6 +149,9 @@ class FakeStore:
 
     def get_scene_code(self, user_id, code_hash):
         return self.codes.get((user_id, code_hash))
+
+    def record_provider_usage(self, *args, **kwargs):
+        self.spent.append((args, kwargs))
 
 
 GEN_ID = "11111111-2222-4333-8444-555555555555"
@@ -325,7 +329,7 @@ def test_anh_dau_vao_cua_nguoi_khac_bi_chan_truoc_khi_goi_provider(monkeypatch):
     spec = {"prompt": "a fox", "aspectRatio": "9:16", "duration": 5, "startImage": "user-2/job/a.png"}
     store = _ref_store(spec)
     generate_task.process(store, _task())
-    assert store.failed == ["That image was not found in your library."]
+    assert store.failed == ["That image was not found in your media."]
     assert adapter.spec is None, "không gọi provider"
 
 
@@ -443,7 +447,7 @@ def test_sua_video_cua_nguoi_khac_bi_chan_truoc_khi_ky_url(monkeypatch, tmp_path
     spec = {"prompt": "x", "aspectRatio": "16:9", "duration": 4, "sourceVideo": f"{other}/job-1/clip.mp4", "sourceStart": 0}
     store = _edit_store(tmp_path, spec, uid)
     generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
-    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.failed == ["Choose a video from your media to edit."]
     assert store.signed == [] and adapter.spec is None
 
 
@@ -488,7 +492,7 @@ def test_sua_video_playlist_hls_gia_mp4_bi_tu_choi(monkeypatch, tmp_path):
     playlist.write_text(f"#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nfile://{secret}\n#EXT-X-ENDLIST\n")
     store.sign_object_url = lambda bucket, path, expires_in=3600: str(playlist)
     generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
-    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.failed == ["Choose a video from your media to edit."]
     assert adapter.spec is None, "không gọi provider"
 
 
@@ -622,7 +626,7 @@ def test_cutout_of_someone_elses_master_is_refused_before_signing(monkeypatch, t
     spec = {"prompt": "Remove background", "aspectRatio": "16:9", "duration": 3, "sourceVideo": f"renders:{other}/clip/master/a.mp4", "sourceStart": 0}
     store = _edit_store(tmp_path, spec, uid, model="fake-cutout")
     generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
-    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.failed == ["Choose a video from your media to edit."]
     assert store.signed == [] and adapter.spec is None
 
 
@@ -660,7 +664,7 @@ def test_upscale_cannot_read_the_clips_own_video(monkeypatch, tmp_path):
     spec = {"prompt": "Upscale", "aspectRatio": "16:9", "duration": 4, "resolution": "1080p", "sourceVideo": f"renders:{uid}/clip/master/a.mp4", "sourceStart": 0}
     store = _edit_store(tmp_path, spec, uid, model="fal-seedvr-upscale")
     generate_task.process(store, Task(id="task-1", user_id=uid, kind="generate", job_id="job-1", payload={"generation_id": GEN_ID}, attempt_id="attempt-1"))
-    assert store.failed == ["Choose a video from your library to edit."]
+    assert store.failed == ["Choose a video from your media to edit."]
     assert adapter.spec is None
 
 

@@ -9,12 +9,13 @@ insert into auth.users (id, email) values ('f1290000-0000-4000-8000-00000000000a
 insert into public.jobs (id, user_id, source_url, status) values
   ('f1291000-0000-4000-8000-00000000000a', 'f1290000-0000-4000-8000-00000000000a', 'https://a', 'done');
 
--- transcribe_media vào hàng TRƯỚC (cũ hơn), probe_media sau: ưu tiên phải thắng tuổi.
+-- transcribe_media was queued first (older), probe_media later: within 10 minutes priority beats age (past 10
+-- minutes a task goes first whatever its kind: pgTAP 244, review follow-up L6).
 insert into public.tasks (id, user_id, kind, job_id, request_id, created_at) values
   ('f1292000-0000-4000-8000-000000000001', 'f1290000-0000-4000-8000-00000000000a', 'transcribe_media',
-   'f1291000-0000-4000-8000-00000000000a', gen_random_uuid(), now() - interval '1 hour'),
+   'f1291000-0000-4000-8000-00000000000a', gen_random_uuid(), now() - interval '5 minutes'),
   ('f1292000-0000-4000-8000-000000000002', 'f1290000-0000-4000-8000-00000000000a', 'transcribe_media',
-   'f1291000-0000-4000-8000-00000000000a', gen_random_uuid(), now() - interval '2 hours'),
+   'f1291000-0000-4000-8000-00000000000a', gen_random_uuid(), now() - interval '8 minutes'),
   ('f1292000-0000-4000-8000-000000000003', 'f1290000-0000-4000-8000-00000000000a', 'probe_media',
    'f1291000-0000-4000-8000-00000000000a', gen_random_uuid(), now());
 
@@ -41,7 +42,7 @@ select is_empty(
 reset role;
 
 select ok(
-  not has_function_privilege('authenticated', 'public.claim_next_task(text[], int)', 'execute'),
+  not has_function_privilege('authenticated', 'public.claim_next_task(text[], int, int)', 'execute'),
   'người dùng không tự claim việc của worker'
 );
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Mascot } from "@/components/brand/Brand";
 import { Icon } from "@/components/icons";
+import { studioItemHref } from "@/components/screens/studio/href";
 
 import type { Project } from "@/lib/clipping-types";
 
@@ -11,9 +12,9 @@ import { PageSkeleton } from "./Skeleton";
 import { stageLabel } from "./ProcessingView";
 
 export function projectHref(projectId: string, clipId?: string | null, edit = false) {
-  const base = `/app/projects/${encodeURIComponent(projectId)}`;
+  const base = studioItemHref(projectId);
   if (!clipId) return base;
-  return edit ? `/app/editor/${encodeURIComponent(clipId)}` : `${base}?clip=${encodeURIComponent(clipId)}`;
+  return edit ? `/app/editor/${encodeURIComponent(clipId)}` : `${base}${base.includes("?") ? "&" : "?"}clip=${encodeURIComponent(clipId)}`;
 }
 
 function clock(seconds: number) {

@@ -9,6 +9,7 @@ import { blankEdit, clipToolSpecs } from "@/lib/agent/scope";
 import { slashCommandsFor } from "@/lib/agent/slash";
 import { sessionView, type SessionRow } from "@/lib/agent/view";
 import { readEditorProject } from "@/lib/editor/apply";
+import { startsEmpty } from "@/lib/editor/project";
 import { availableModels as generationModels } from "@/lib/generate/models";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,8 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   const clipId = params.get("clip_id");
   const sessionId = params.get("session_id");
   const cmo = params.get("scope") === "cmo";
+  // The CMO chat's history menu needs only the list, not the open conversation rebuilt.
+  if (cmo && params.get("list") === "1") return { sessions: await listSessions(supabase, { cmo: true }) };
   let blank = false;
   // The slash menu offers what this clip's Assistant can do: the tools its scope will have.
   let slash: { name: string; label: string; hint: string }[] = [];
@@ -64,7 +67,7 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   } else if (clipId !== null) {
     if (!UUID.test(clipId)) throw new ApiError(422, "clip_id: Invalid");
     const context = await clipContext(supabase, clipId);
-    blank = context.clip.kind === "blank";
+    blank = startsEmpty(context.clip.kind);
     // No editor document yet: nothing on the clip has a transcript, as `blankEdit` reads it.
     const document = await readEditorProject(supabase, clipId).then((project) => project.document, () => null);
     const tools = clipToolSpecs({ blank: document ? blankEdit(context, document) : blank }).map((tool) => tool.name);
@@ -74,7 +77,8 @@ export const GET = withApi({}, async ({ supabase, request }) => {
   }
   if (sessionId !== null && !UUID.test(sessionId)) throw new ApiError(422, "session_id: Invalid");
 
-  const model = pickModel(params.get("model"));
+  // A CMO chat is opened on the `cmo` agent's model (POST below), not the editor Assistant's: look it up the same way.
+  const model = cmo ? (agentChatProvider("cmo")?.model ?? null) : pickModel(params.get("model"));
   let query = supabase.from("agent_sessions").select("id, clip_id, job_id, model, lock_until");
   query = cmo ? query.eq("scope", "cmo") : query.eq("clip_id", clipId!);
   if (sessionId) query = query.eq("id", sessionId);
@@ -103,7 +107,8 @@ const body = z.union([
 ]);
 
 /** Opens (or returns) this clip's session (`new` is "New chat"), or the CMO chat (`scope: "cmo"`). Project chat is gone with clipping. */
-export const POST = withApi({ body }, async ({ supabase, body }) => {
+// Clip chats had no cap at all (agent_new_session counts nothing); CMO chats keep their own 30 an hour in SQL.
+export const POST = withApi({ body, rateLimit: { bucket: "agent-session", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   let session: SessionRow;
   if ("clip_id" in body) {
     const model = pickModel(body.model);

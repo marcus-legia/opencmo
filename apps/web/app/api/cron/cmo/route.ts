@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { classifyEdits, supabaseOutcomeStore } from "@/lib/cmo/jobs/classify-edits";
 import { llmReady } from "@/lib/cmo/jobs/llm";
+import { runProgressCheck } from "@/lib/cmo/jobs/progress-run";
+import { cmoPausedEverywhere } from "@/lib/cmo/pause";
 import { enqueueDueLoops } from "@/lib/cmo/schedule";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -18,13 +20,15 @@ export const maxDuration = 300;
  * queued runs within a minute and calls `/api/internal/cmo/run` once per run, so every run gets
  * its own function instead of one 300 s function walking every user.
  *
- * Afterwards it labels yesterday's edited approvals (`classify-edits.ts`), capped so it stays a
- * small part of this call; a failure there never fails the schedule.
+ * Afterwards it runs the progress check over every week's order tree (`progress-run.ts`: code only, at most one
+ * replan per founder) and labels yesterday's edited approvals (`classify-edits.ts`), capped so it stays a small
+ * part of this call; a failure in either never fails the schedule.
  */
 export async function GET(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
+  if (cmoPausedEverywhere()) return NextResponse.json({ paused: true });
   const admin = createAdminClient(AbortSignal.timeout((maxDuration - 10) * 1000));
   let loops;
   try {
@@ -33,11 +37,15 @@ export async function GET(request: NextRequest) {
     console.error("[cron] cmo", error);
     return NextResponse.json({ error: "Could not read users." }, { status: 500 });
   }
+  const progress = await runProgressCheck(admin).catch((error) => {
+    console.error("[cron] cmo progress check", error);
+    return null;
+  });
   const edits = llmReady("checker")
     ? await classifyEdits(supabaseOutcomeStore(admin), { limit: 30 }).catch((error) => {
         console.error("[cron] cmo classify_edits", error);
         return null;
       })
     : null;
-  return NextResponse.json({ ...loops, edits });
+  return NextResponse.json({ ...loops, progress, edits });
 }

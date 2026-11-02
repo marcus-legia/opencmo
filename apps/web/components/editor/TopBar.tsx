@@ -5,8 +5,12 @@
  * và Export.
  */
 
+import { useEffect, useState } from "react";
+
+import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { ThemeSwitch } from "@/components/theme";
 import type { SaveStatus } from "@/lib/editor/session";
+import { createClient } from "@/lib/supabase/client";
 
 export type ExportState =
   | { phase: "idle" }
@@ -51,6 +55,7 @@ export function TopBar({
   menu,
   picker,
   panels,
+  finish,
 }: {
   credits: number | null;
   status: SaveStatus;
@@ -74,6 +79,8 @@ export function TopBar({
   picker?: React.ReactNode;
   /** Nút bật/tắt panel + preset bố cục (Palmier `TitleBarLeadingView`). */
   panels?: React.ReactNode;
+  /** P2 (v2 UI only): Mark finished for this edit, at the hash of the last save (null while changes are unsaved). */
+  finish?: { clipId: string; documentHash: string | null };
 }) {
   const exporting = ["preparing", "queued", "running"].includes(exportState.phase);
   return (
@@ -144,6 +151,7 @@ export function TopBar({
       <div className="ed2-row">
         {/* Editor là màn "bleed" (không có top bar chung) nên công tắc theme nằm ở đây. */}
         <ThemeSwitch className="ed2-theme" />
+        {finish ? <MarkFinished clipId={finish.clipId} documentHash={finish.documentHash} /> : null}
         {credits !== null ? (
           <span className="ed2-muted ed2-credits" data-testid="editor-credits">
             <b>{credits.toLocaleString("en-US")}</b> credits
@@ -218,5 +226,98 @@ function ExportMeter({ state }: { state: ExportState }) {
         <div className="ed2-export-meter-fill" style={value === null ? undefined : { width: `${Math.max(2, value * 100)}%` }} />
       </div>
     </div>
+  );
+}
+
+type Finish = { phase: "loading" } | { phase: "ready"; hash: string | null } | { phase: "busy"; hash: string | null };
+
+/**
+ * Mark finished (P2 C2): Shorts are cut only from an edit marked finished at the document the founder saw. The mark
+ * is the last save's hash (`POST /api/v1/studio/[clipId]/finished`); any later save changes the hash and the server
+ * clears the mark, so the badge here shows only while the saved document is the finished one. The browser never
+ * hashes a document: it sends the hash the save handed back.
+ */
+function MarkFinished({ clipId, documentHash }: { clipId: string; documentHash: string | null }) {
+  const [state, setState] = useState<Finish>({ phase: "loading" });
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void createClient()
+      .from("editor_projects")
+      .select("finished_hash")
+      .eq("clip_id", clipId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (live) setState({ phase: "ready", hash: (data as { finished_hash: string | null } | null)?.finished_hash ?? null });
+      });
+    return () => {
+      live = false;
+    };
+  }, [clipId]);
+
+  const marked = state.phase !== "loading" ? state.hash : null;
+  const finished = !!marked && marked === documentHash;
+  const busy = state.phase !== "ready";
+
+  async function markFinished() {
+    if (!documentHash || busy) return;
+    setState({ phase: "busy", hash: marked });
+    setNote(null);
+    try {
+      const done = await api<{ finishedAt: string; documentHash: string }>(`/studio/${encodeURIComponent(clipId)}/finished`, jsonBody({ documentHash }));
+      setState({ phase: "ready", hash: done.documentHash });
+      setNote({ text: "Marked finished. Shorts can be cut from it.", error: false });
+    } catch (error) {
+      setState({ phase: "ready", hash: marked });
+      setNote({ text: error instanceof ApiError ? error.message : "Could not mark it finished. Please try again.", error: true });
+    }
+  }
+
+  async function cutShorts() {
+    if (busy) return;
+    setState({ phase: "busy", hash: marked });
+    setNote(null);
+    try {
+      await api<{ orderId: string }>(`/studio/${encodeURIComponent(clipId)}/shorts`, jsonBody({}));
+      setNote({ text: "Cutting 3 shorts. The batch card comes to your Dashboard.", error: false });
+    } catch (error) {
+      setNote({ text: error instanceof ApiError ? error.message : "Could not start the shorts. Please try again.", error: true });
+    } finally {
+      setState((current) => ({ phase: "ready", hash: current.phase === "loading" ? marked : current.hash }));
+    }
+  }
+
+  if (state.phase === "loading") return null;
+  return (
+    <>
+      {note ? (
+        <span className={note.error ? "ed2-error" : "ed2-muted"} role={note.error ? "alert" : "status"} data-testid="finished-note">
+          {note.text}
+        </span>
+      ) : null}
+      {finished ? (
+        <>
+          <span className="ed2-status" data-testid="finished-badge" title="Marked finished at the version you see">
+            <i className="ed2-status-dot" aria-hidden="true" />
+            Finished
+          </span>
+          <button type="button" className="ed2-btn" data-testid="cut-shorts" disabled={busy} onClick={() => void cutShorts()}>
+            Cut shorts
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="ed2-btn"
+          data-testid="mark-finished"
+          disabled={busy || !documentHash}
+          title={documentHash ? "Shorts are cut only from an edit marked finished" : "Wait for the save, then mark it finished"}
+          onClick={() => void markFinished()}
+        >
+          Mark finished
+        </button>
+      )}
+    </>
   );
 }

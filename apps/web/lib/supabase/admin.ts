@@ -1,6 +1,5 @@
-// Câu cảnh báo trong docstring dưới là một comment; comment không chặn được ai.
-// `server-only` thì chặn: import file này từ một client component là lỗi BUILD,
-// không phải một khoá rò ra bundle mà ta phát hiện sau.
+// The warning in the docstring below is a comment, and a comment stops no one. `server-only` does: importing this file
+// from a client component is a BUILD error, not a key leaked into the bundle that we find out about later.
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
@@ -9,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
  * Client dùng SERVICE ROLE KEY — đi vòng qua RLS.
  *
  * Chỉ những chỗ chạy KHÔNG thay mặt một người dùng đang đăng nhập: webhook
- * Polar (cộng credit), các cron, bộ chạy việc CMO (`lib/cmo/jobs/start.ts`,
+ * Polar (cộng credit) và Zernio (trạng thái bài đăng, `app/api/webhooks/zernio`), các cron, bộ chạy việc CMO (`lib/cmo/jobs/start.ts`,
  * như worker Python — gọi RPC chỉ-service kèm user id tường minh), và bước tra
  * chủ khoá API của MCP (`lib/mcp/auth.ts`: chỉ `api_key_owner`; mọi tool sau đó
  * chạy dưới RLS bằng JWT ngắn hạn của chính user), and the Assistant's ledger (`lib/agent/ledger.ts`:
@@ -21,7 +20,7 @@ import { createClient } from "@supabase/supabase-js";
  */
 export function createAdminClient(signal?: AbortSignal) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error("Thiếu SUPABASE_SERVICE_ROLE_KEY.");
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is missing.");
 
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
     auth: { persistSession: false, autoRefreshToken: false },

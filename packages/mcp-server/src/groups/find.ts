@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 
+import { clipExists, findClips, findProjects } from "@/lib/editor/find";
 import { SITE_URL } from "@/lib/site";
 
 import { errorResult, registerGroup, type McpResult } from "../registry";
@@ -49,17 +50,9 @@ registerGroup({
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input, { supabase }) {
         const { query } = input as z.infer<typeof projectsInput>;
-        const [{ data, error }, blank] = await Promise.all([
-          supabase.rpc("list_projects", { p_query: query || null, p_limit: 50 }),
-          // New edits are not projects in the app's list; under RLS this reads only the user's own.
-          supabase.from("clips").select("id, hook, created_at, jobs!inner(kind, aspect, title)").eq("kind", "blank").eq("jobs.kind", "edit").order("created_at", { ascending: false }).limit(20),
-        ]);
-        if (error) return errorResult("Could not load your projects. Please try again.");
-        const rows = (data ?? []) as { id: string; name: string | null; title: string | null; status: string; created_at: string }[];
-        const edits = ((blank.data ?? []) as unknown as { id: string; hook: string | null; created_at: string; jobs: { aspect: string | null; title: string | null } }[])
-          .filter((clip) => !query || `${clip.jobs.title ?? clip.hook ?? ""}`.toLowerCase().includes(query.toLowerCase()))
-          .map((clip) => ({ clip_id: clip.id, name: clip.jobs.title ?? clip.hook, aspect: clip.jobs.aspect, created_at: clip.created_at, editor_url: editorUrl(clip.id) }));
-        return structured({ projects: rows.map((job) => ({ id: job.id, name: job.name ?? job.title, status: job.status, created_at: job.created_at })), edits });
+        const found = await findProjects(supabase, query, { projects: 50, edits: 20 });
+        if (!found) return errorResult("Could not load your projects. Please try again.");
+        return structured({ projects: found.projects, edits: found.edits.map((edit) => ({ ...edit, editor_url: editorUrl(edit.clip_id) })) });
       },
     },
     {
@@ -71,18 +64,9 @@ registerGroup({
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input, { supabase }) {
         const { project_id } = input as z.infer<typeof clipsInput>;
-        const { data, error } = await supabase.from("clips").select("id, idx, hook, start_seconds, end_seconds, kind").eq("job_id", project_id).order("idx");
-        if (error) return errorResult("Could not load the clips. Please try again.");
-        return structured({
-          clips: (data ?? []).map((clip) => ({
-            id: clip.id as string,
-            number: (clip.idx as number) + 1,
-            hook: (clip.hook as string | null) ?? null,
-            kind: (clip.kind as string | null) ?? null,
-            seconds: Math.round((Number(clip.end_seconds) - Number(clip.start_seconds)) * 10) / 10,
-            editor_url: editorUrl(clip.id as string),
-          })),
-        });
+        const clips = await findClips(supabase, project_id);
+        if (!clips) return errorResult("Could not load the clips. Please try again.");
+        return structured({ clips: clips.map((clip) => ({ ...clip, editor_url: editorUrl(clip.id) })) });
       },
     },
     {
@@ -112,9 +96,7 @@ registerGroup({
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input, { supabase }) {
         const { clip_id } = input as z.infer<typeof openInput>;
-        // Under RLS: someone else's clip id reads as not found.
-        const { data } = await supabase.from("clips").select("id").eq("id", clip_id).maybeSingle();
-        if (!data) return errorResult("That clip was not found. Use list_clips to find its id.");
+        if (!(await clipExists(supabase, clip_id))) return errorResult("That clip was not found. Use list_clips to find its id.");
         return structured({ url: editorUrl(clip_id) });
       },
     },

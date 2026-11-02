@@ -2,7 +2,7 @@
  * CMO prompts and resources (B7). Prompts show up as commands in Claude; each one is the
  * workflow the in-app CMO follows, written for the founder's Claude with this server's tools.
  * Resources: the CMO playbooks (`opencmo://skills/cmo/{name}`) and the marketing library
- * (`opencmo://skills/library/{name}`, read with LIBRARY_PREAMBLE), the same text the in-app
+ * (`opencmo://skills/library/{name}`, read with MARKETING_PREAMBLE), the same text the in-app
  * agents read.
  */
 
@@ -83,9 +83,10 @@ ${RULES}`,
 ];
 
 const playbooks = SKILL_NAMES.filter((name) => CMO_SKILLS[name].kind === "playbook");
-const library = SKILL_NAMES.filter((name) => CMO_SKILLS[name].kind === "library");
+const marketing = SKILL_NAMES.filter((name) => CMO_SKILLS[name].kind === "marketing");
 
 export const CMO_RESOURCES: CmoMcpResource[] = [
   ...playbooks.map((name) => ({ uri: `opencmo://skills/cmo/${name}`, name: `CMO playbook: ${name}`, mimeType: "text/markdown" as const, read: async () => skillText(name) })),
-  ...library.map((name) => ({ uri: `opencmo://skills/library/${name}`, name: `Marketing library: ${name}`, mimeType: "text/markdown" as const, read: async () => skillText(name) })),
+  // The URI keeps `library/`: MCP clients already address these resources by it.
+  ...marketing.map((name) => ({ uri: `opencmo://skills/library/${name}`, name: `Marketing library: ${name}`, mimeType: "text/markdown" as const, read: async () => skillText(name) })),
 ];

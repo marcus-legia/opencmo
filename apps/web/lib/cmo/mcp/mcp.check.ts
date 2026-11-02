@@ -16,7 +16,7 @@ import { requestId } from "./inbox";
 const tools = [...CMO_GROUP.tools!, ...INBOX_GROUP.tools!, ...ACCOUNT_GROUP.tools!];
 const names = tools.map((tool) => tool.name);
 assert.equal(new Set(names).size, names.length, "tool names are unique");
-assert.equal(CMO_GROUP.tools!.length, 19, "the CMO chat's 19 tools");
+assert.equal(CMO_GROUP.tools!.length, 20, "the CMO chat's 20 tools (P6: search_hackernews)");
 assert.ok(names.includes("read_cmo_playbook") && !names.includes("read_skill"), "read_skill is left to the editor group");
 assert.ok(names.includes("get_video_transcript") && !names.includes("get_transcript"), "get_transcript is left to the editor group");
 for (const tool of tools) {
@@ -68,10 +68,10 @@ for (const prompt of prompts) {
 }
 assert.ok(prompts[1]!.render({ brief: "Launch week" }).includes("\"Launch week\""));
 const resources = CMO_GROUP.resources!;
-const library = Object.values(CMO_SKILLS).filter((s) => s.kind === "library").length;
+const marketing = Object.values(CMO_SKILLS).filter((s) => s.kind === "marketing").length;
 const playbooks = Object.values(CMO_SKILLS).filter((s) => s.kind === "playbook").length;
-assert.equal(resources.length, library + playbooks);
+assert.equal(resources.length, marketing + playbooks);
 assert.equal(new Set(resources.map((r) => r.uri)).size, resources.length, "resource URIs are unique");
 assert.ok(resources.every((r) => /^opencmo:\/\/skills\/(cmo|library)\/[a-z0-9-]+$/.test(r.uri)));
 
-console.log(`mcp.check — ${tools.length} tools, ${prompts.length} prompts, ${resources.length} resources (${playbooks} playbooks, ${library} library).`);
+console.log(`mcp.check — ${tools.length} tools, ${prompts.length} prompts, ${resources.length} resources (${playbooks} playbooks, ${marketing} marketing).`);

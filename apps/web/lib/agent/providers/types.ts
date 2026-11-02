@@ -102,6 +102,8 @@ export type StepRequest = {
    * a tool that did run is reported as it ran, not as "not completed", or the model does it again.
    */
   ran?: Map<string, { ok: boolean; content: string }>;
+  /** Clear old tool results server-side whatever the env flag says (the CMO chat: its documents and research are the bulk). */
+  clearOldToolResults?: boolean;
 };
 
 /** Chữ thay cho ảnh đã bỏ khỏi request. */

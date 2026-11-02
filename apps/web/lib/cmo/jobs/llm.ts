@@ -1,9 +1,9 @@
 import "server-only";
 
 /**
- * Một cửa gọi model cho mọi việc CMO (W0, W1, W2…): structured output ép theo schema zod, ánh
- * xạ lỗi API về câu tiếng Anh cho người dùng. Provider/model/khoá theo AGENT gọi (H1): mỗi job
- * nói "tôi là agent nào", sổ agent quyết định chạy bằng gì.
+ * One door for every CMO model call (W0, W1, W2…): structured output held to a zod schema, API errors mapped to an
+ * English sentence for the founder. The provider, model and key follow the calling AGENT (H1): each job says which
+ * agent it is, and the agent registry decides what it runs on.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -17,14 +17,13 @@ import { compatJson, OpenAiCompatError } from "@/lib/openai-compat";
 import { outage, withFailover } from "@/lib/llm-health";
 
 import { LlmError } from "./llm-error";
-import { isProduction } from "@/lib/production";
+import { agentFakeAllowed } from "@/lib/production";
+import { assertSpendAllowed, recordSpend, spendProviderOf } from "@/lib/spend/record";
 
 export { LlmError };
 
-/** Bản giả cho CI/E2E. Không bao giờ bật trên production. */
-export function fakeAllowed(): boolean {
-  return process.env.OPENCMO_AGENT_FAKE === "1" && !isProduction();
-}
+/** The fake for CI and e2e. Never on in production. */
+export const fakeAllowed = agentFakeAllowed;
 
 /** The agent can run: the fake, or the server has a key for some provider of it. */
 export function llmReady(agent: AgentId = "planner"): boolean {
@@ -32,15 +31,15 @@ export function llmReady(agent: AgentId = "planner"): boolean {
 }
 
 export type StructuredOptions<S extends z.ZodType> = {
-  /** Agent trong sổ (`lib/cmo/agents/registry.ts`) — quyết định provider, model, khoá. */
+  /** The agent in the registry (`lib/cmo/agents/registry.ts`): it decides the provider, model and key. */
   agent: AgentId;
   system: string;
   prompt: string;
   schema: S;
   maxTokens?: number;
-  /** Nhãn cho log nội bộ. */
+  /** A label for internal logs. */
   label: string;
-  /** Câu báo lỗi chung cho người dùng (tiếng Anh). */
+  /** The generic error sentence for the founder (English). */
   failure: string;
   /** Request time limit; the SDK default is ten minutes. */
   timeoutMs?: number;
@@ -149,6 +148,22 @@ export function structuredOn<S extends z.ZodType>(opts: StructuredOptions<S>, ag
  * credit, a bad key, rate limits, an outage), the call runs on the next provider of the order the
  * server has a key for (`CMO_LLM_PROVIDERS`), on that provider's model of the same tier.
  */
+/** Every call's usage also goes to the spend ledger, under the provider that actually answered. */
+function recorded<S extends z.ZodType>(opts: StructuredOptions<S>, agent: ResolvedAgent): StructuredOptions<S> {
+  return {
+    ...opts,
+    onUsage: async (usage) => {
+      await recordSpend(spendProviderOf(agent.provider, agent.baseUrl), usage.model, {
+        input: usage.input,
+        output: usage.output,
+        cache_read: usage.cacheRead,
+        cache_write: usage.cacheWrite,
+      });
+      await opts.onUsage?.(usage);
+    },
+  };
+}
+
 export async function structured<S extends z.ZodType>(input: StructuredOptions<S>): Promise<z.infer<S>> {
   const opts: StructuredOptions<S> = usageListeners.size
     ? {
@@ -162,7 +177,9 @@ export async function structured<S extends z.ZodType>(input: StructuredOptions<S
   const candidates = agentCandidates(opts.agent, process.env, opts.prefer);
   if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
   try {
-    return await withFailover(candidates, (agent) => structuredOn(opts, agent), (agent) => !agent.ownKey);
+    // The founder's daily provider cap (spend ledger): refused before the call, never after it.
+    await assertSpendAllowed();
+    return await withFailover(candidates, (agent) => structuredOn(recorded(opts, agent), agent), (agent) => !agent.ownKey);
   } catch (error) {
     if (error instanceof LlmError) throw error;
     const kind = outage(error);
@@ -192,8 +209,8 @@ async function structuredAnthropic<S extends z.ZodType>(opts: StructuredOptions<
     }, opts.timeoutMs ? { timeout: opts.timeoutMs, maxRetries: 1 } : undefined);
   } catch (error) {
     if (outage(error)) throw error;
-    if (error instanceof Anthropic.APIError) console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): lỗi API`, error.status, error.message);
-    else console.error(`[cmo] ${opts.label}: parse/khác`, error);
+    if (error instanceof Anthropic.APIError) console.error(`[cmo] ${opts.label} (${agent.id}/${agent.model}): API error`, error.status, error.message);
+    else console.error(`[cmo] ${opts.label}: parse or other error`, error);
     throw new LlmError(opts.failure);
   }
   await opts.onUsage?.({

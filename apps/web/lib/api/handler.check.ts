@@ -130,6 +130,27 @@ async function main(): Promise<void> {
     assert.equal(res.status, 413);
   });
 
+  // Review R4: a real streamed body is cut at the cap, and a route can raise its own cap.
+  const streamed = (text: string) => {
+    const bytes = new TextEncoder().encode(text);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let at = 0; at < bytes.length; at += 64 * 1024) controller.enqueue(bytes.subarray(at, at + 64 * 1024));
+        controller.close();
+      },
+    });
+    return { method: "POST", headers: new Headers({ host: "app.opencmo.io" }), body, text: async () => text } as unknown as Parameters<typeof handleApi>[2];
+  };
+  await check("a streamed body over the cap is refused while it is read", async () => {
+    const big = JSON.stringify({ big: "x".repeat(MAX_BODY_BYTES) });
+    assert.equal((await handleApi({ body: z.object({ big: z.string() }) }, ok, streamed(big), fakeClient())).status, 413);
+  });
+  await check("maxBodyBytes lets a route take a larger body", async () => {
+    const big = JSON.stringify({ big: "x".repeat(MAX_BODY_BYTES) });
+    const res = await handleApi({ body: z.object({ big: z.string() }), maxBodyBytes: 1024 * 1024 }, ok, streamed(big), fakeClient());
+    assert.equal(res.status, 200);
+  });
+
   await check("body không phải JSON thành 422, không phải 500", async () => {
     const bad = request("POST");
     bad.text = async () => "{oops";
@@ -269,6 +290,32 @@ async function main(): Promise<void> {
       }
     };
     walk(join(__dirname, "../../app/api"));
+    // Limits held in constants or called straight from a library, the web's and the MCP server's (review R4):
+    // `{ bucket: "x", limit: 1, windowSeconds: 2 }` and `rpc("rate_limit_hit", { p_bucket: "x", p_limit: NAME, … })`,
+    // with NAME read from a `const NAME = 60` in the same file.
+    const seen = new Set<string>();
+    const library = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) library(path);
+        else if (/\.tsx?$/.test(entry.name) && !entry.name.includes(".check.")) {
+          const text = readFileSync(path, "utf8");
+          const consts = new Map([...text.matchAll(/const (\w+) = (\d+);/g)].map((m) => [m[1]!, m[2]!]));
+          const found = [
+            ...[...text.matchAll(/bucket: "([\w-]+)", limit: (\d+), windowSeconds: (\d+)/g)].map((m) => [m[1]!, m[2]!, m[3]!]),
+            ...[...text.matchAll(/p_bucket: "([\w-]+)", p_limit: (\w+), p_window_seconds: (\d+)/g)].map((m) => [m[1]!, consts.get(m[2]!) ?? m[2]!, m[3]!]),
+          ];
+          for (const [bucket, limit, window] of found) {
+            seen.add(bucket!);
+            if (["preview", "export", "daily_preview", "daily_export"].includes(bucket!)) continue;
+            if (!allowed.has(`${bucket}/${limit}/${window}`)) bad.push(`${path.split("/opencmo/").pop()}: ${bucket} ${limit}/${window}s`);
+          }
+        }
+      }
+    };
+    library(join(__dirname, ".."));
+    library(join(__dirname, "../../../../packages/mcp-server/src"));
+    for (const bucket of ["generations", "mcp_look", "mcp_preview", "project-write"]) assert.ok(seen.has(bucket), `the scan found ${bucket}`);
     assert.deepEqual(bad, [], `ngoài danh sách (${latest}):\n${bad.join("\n")}`);
   });
 

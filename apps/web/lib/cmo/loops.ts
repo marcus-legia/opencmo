@@ -11,15 +11,19 @@
 import type { CmoJobKind } from "./jobs/types";
 
 export type LoopState = {
-  /** 0 = Chủ nhật … 6 = thứ Bảy (UTC). */
+  /** 0 = Sunday … 6 = Saturday (UTC). */
   weekday: number;
-  /** Mục X/Reddit tới hạn hôm nay (đầu tiên mỗi loại). */
-  duePost: { idea: string } | null;
-  dueSales: { idea: string } | null;
+  /** The X and Reddit items due today (the first of each); `id` is the calendar item, for linking its work order. */
+  duePost: { idea: string; id?: string } | null;
+  dueSales: { idea: string; id?: string } | null;
   /** Đã có handle X của đối thủ trong Competitor Analysis. */
   competitorHandles: number;
   /** Bài đã đăng trong 14 ngày (để đo số). */
   publishedRecently: number;
+  /** Accounts connected through Zernio (P6 A1): their numbers need no social reader. */
+  connectedAccounts?: number;
+  /** Replies marked "replied" three or more days ago and not checked yet (P6 A3). */
+  repliesDue?: number;
   /** Server có khoá ScrapeCreators (hoặc bản giả). */
   socialReader: boolean;
 };
@@ -69,8 +73,8 @@ export const LOOPS: Loop[] = [
   },
   {
     name: "post-metrics",
-    cadence: "daily, when something was published in the last 14 days (free)",
-    when: (s) => s.socialReader && s.publishedRecently > 0,
+    cadence: "daily, when something was published in the last 14 days, an account is connected or a reply is due a check (free)",
+    when: (s) => (s.socialReader && s.publishedRecently > 0) || (s.connectedAccounts ?? 0) > 0 || (s.repliesDue ?? 0) > 0,
     run: () => ({ loop: "post-metrics", kind: "pull_metrics", input: { source: "schedule" } }),
   },
 ];

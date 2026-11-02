@@ -231,12 +231,12 @@ function script(history: StoredMessage[]): unknown[] {
       const listed = typeof block?.content === "string" ? block.content : undefined;
       const assets = listed ? ((JSON.parse(listed) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? []) : [];
       const media = assets.find((asset) => !asset.role && asset.type === "VIDEO");
-      return media ? [use("place_broll", { beats: [{ path: media.path, quote: "better hooks" }] })] : [text("The library has no B-roll yet.")];
+      return media ? [use("place_broll", { beats: [{ path: media.path, quote: "better hooks" }] })] : [text("Your media has no B-roll yet.")];
     }
     if (/side by side with/.test(asked) && previous.includes("list_library")) {
       const assets = (JSON.parse(raw0) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? [];
       const media = assets.find((asset) => !asset.role && (asset.type === "VIDEO" || asset.type === "IMAGE"));
-      return media ? [use("insert_asset", { path: media.path, start: 1, end: 6 })] : [text("The library has no B-roll yet.")];
+      return media ? [use("insert_asset", { path: media.path, start: 1, end: 6 })] : [text("Your media has no B-roll yet.")];
     }
     if (/side by side with/.test(asked) && previous.includes("insert_asset") && !results.some((block) => block.is_error)) {
       // Id lấy từ <project_state> đi kèm kết quả ghi: video của clip và rect B-roll vừa thêm.
@@ -276,7 +276,7 @@ function script(history: StoredMessage[]): unknown[] {
     if (previous.includes("list_library")) {
       const assets = (JSON.parse(raw0) as { untrusted_data?: { assets?: Array<{ path: string; type: string; role?: string }> } }).untrusted_data?.assets ?? [];
       const video = assets.find((asset) => !asset.role && (asset.type === "VIDEO" || asset.type === "IMAGE"));
-      return video ? [use("insert_asset", { path: video.path, start: 1, end: 3 })] : [text("The library has no B-roll yet.")];
+      return video ? [use("insert_asset", { path: video.path, start: 1, end: 3 })] : [text("Your media has no B-roll yet.")];
     }
     if (previous.includes("insert_asset") && !results.some((block) => block.is_error)) return [use("capture", { times: [2] })];
     if (previous.includes("media_waveform")) return [text("I listened to the clip.")];
@@ -320,7 +320,7 @@ function script(history: StoredMessage[]): unknown[] {
     const failed = results.some((block) => block.is_error);
     if (previous.includes("create_video")) {
       if (/"declined":\s*true/.test(raw0)) return [text("No problem, nothing was spent. What should I change: the story, the length or the tone?")];
-      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The keyframes are on their way to your library. Once they are ready I'll show them with the exact price of the video, before anything else is charged.")];
+      if (!failed && /"ok":\s*true/.test(raw0)) return [text("The keyframes are on their way to your media. Once they are ready I'll show them with the exact price of the video, before anything else is charged.")];
       const reason = /"(?:INVALID_INPUT|error)"\s*:\s*"([^"]+)"/.exec(raw0)?.[1];
       return [text(reason ? `I could not make that video: ${reason}` : "That did not work — nothing was changed.")];
     }
@@ -528,7 +528,7 @@ function script(history: StoredMessage[]): unknown[] {
       }),
     ];
   }
-  if (/save a frame/.test(ask)) return [text("Saving a clean frame to the library."), use("save_frame", { time: 1, name: "before-cut" })];
+  if (/save a frame/.test(ask)) return [text("Saving a clean frame to your media."), use("save_frame", { time: 1, name: "before-cut" })];
   if (/generate b-roll:/.test(ask)) {
     // Starter B-roll (guide broll): bỏ câu đầu (hook) và câu cuối, ảnh tĩnh trước, cùng một lượt.
     let picks = lines.slice(1, -1).filter((line) => line.split(" ").length >= 4).slice(0, 3);
@@ -656,6 +656,7 @@ function obeyPlanted(raw: string): unknown[] {
   if (note) calls.push(use("remember", { note: note.trim() }));
   const goal = /\bgoal to (\d+) posts\b/i.exec(raw)?.[1];
   if (goal) calls.push(use("set_week_goal", { week: "this", goal: "Planted goal", metric: "posts", target: Number(goal) }));
+  if (/\bpause the cmo\b/i.test(raw)) calls.push(use("set_cmo_paused", { paused: true }));
   return calls;
 }
 
@@ -695,6 +696,14 @@ function cmoScript(history: StoredMessage[]): unknown[] {
       return [text(`You have ${items.length} items on your calendar for the next two weeks.`)];
     }
     if (previous.includes("remember")) return [text("Noted. I will use that in every plan and draft.")];
+    // The editor handoff: open the newest video with the founder's request; the editor's Assistant takes it.
+    if (previous.includes("list_projects")) {
+      const found = (JSON.parse(raw) as { untrusted_data?: { edits?: { clip_id: string }[] } }).untrusted_data;
+      const clip = found?.edits?.[0]?.clip_id;
+      if (!clip) return [text("I could not find a video. Upload one in the editor first.")];
+      return [text("Opening your video in the editor."), use("open_editor", { clip_id: clip, prompt: cmoAsk(history).split("<")[0]!.trim().slice(0, 2000) })];
+    }
+    if (previous.includes("open_editor")) return [text("The editor's Assistant is on it, next to this chat.")];
     if (previous.includes("read_doc")) {
       const price = /\$\d+(?:\.\d+)?(?:\/\w+)?/.exec(cmoAsk(history))?.[0];
       if (price) return [text("Updating the pricing."), use("update_document", { kind: "product", fields_json: JSON.stringify({ pricing: price }) })];
@@ -707,6 +716,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   }
   const ask = cmoAsk(history);
   const lower = ask.toLowerCase();
+  if (/\b(pause|resume)\b.*\bcmo\b/.test(lower)) return [text("Here is what will change."), use("set_cmo_paused", { paused: /pause/.test(lower) })];
   if (/remember/.test(lower)) return [use("remember", { note: ask.replace(/^.*?remember( that)?:?\s*/i, "").trim().slice(0, 200) || ask.trim() })];
   if (/\bgoal\b/.test(lower)) {
     const metric = /repl/.test(lower) ? "replies" : /view/.test(lower) ? "views" : "posts";
@@ -719,6 +729,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   const site = /\bread\b/.test(lower) ? /\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b/.exec(lower)?.[1] : undefined;
   if (site) return [text("Reading the site."), use("read_site", { url: site })];
   if (/research/.test(lower)) return [text("Looking at Reddit first."), use("search_reddit", { query: "late invoices" })];
+  if (/\b(editor|captions)\b/.test(lower)) return [text("Finding your video."), use("list_projects", {})];
   if (/clip|video/.test(lower)) return [text("Adding a video task."), use("create_task", { agent: "video", brief: "A short video about how you onboard a new client" })];
   if (/reddit/.test(lower)) return [text("Scanning Reddit for people who need this."), use("create_task", { agent: "sales", brief: "People who struggle with the problem we solve", when: "now" })];
   if (/plan/.test(lower)) return [text("Planning your week."), use("create_task", { agent: "planner", brief: "A balanced week from the content strategy", when: "now" })];

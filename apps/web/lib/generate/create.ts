@@ -39,6 +39,9 @@ const IMAGE_KEYS = ["startImage", "endImage"] as const;
  * bucket `media`. Đọc DƯỚI RLS và theo đúng project: id của người khác hay project khác
  * không ra đường dẫn nào. SQL vẫn kiểm chủ sở hữu + tồn tại (`ai_media_ref_ok`).
  */
+/** Reference images one generation may name; the catalog's models take at most a few. */
+const MAX_REFERENCES = 16;
+
 export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, spec: unknown): Promise<unknown> {
   if (!spec || typeof spec !== "object") return spec;
   const input = spec as Record<string, unknown>;
@@ -50,15 +53,24 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
     let path = asset.data?.status === "ready" ? asset.data.storage_path : undefined;
     if (!path) {
       const generation = await supabase.from("generations").select("media_asset_id, status").eq("id", value).eq("job_id", jobId).maybeSingle<{ media_asset_id: string | null; status: string }>();
+      // A failed or cancelled one will never be ready: say so instead of "try again when it is ready".
+      if (generation.data && (generation.data.status === "failed" || generation.data.status === "cancelled")) {
+        throw new ApiError(422, `That ${noun} did not finish generating. Generate it again, or pick another one.`);
+      }
       if (generation.data && generation.data.status !== "done") throw new ApiError(422, `That ${noun} is still generating. Try again when it is ready.`);
       if (generation.data?.media_asset_id) {
         const linked = await supabase.from("media_assets").select("storage_path").eq("id", generation.data.media_asset_id).maybeSingle<{ storage_path: string }>();
         path = linked.data?.storage_path;
       }
     }
-    if (!path) throw new ApiError(422, `That ${noun} was not found in your library.`);
+    if (!path) throw new ApiError(422, `That ${noun} was not found in your media.`);
     return path.replace(/^media\//, "");
   };
+  // Each reference costs two queries before the schema or the rate limit runs: no model takes more than a handful, so a
+  // request with thousands of ids is refused before any of them is looked up (review R5).
+  if (Array.isArray(input.references) && input.references.length > MAX_REFERENCES) {
+    throw new ApiError(422, `Use at most ${MAX_REFERENCES} reference images.`);
+  }
   const out: Record<string, unknown> = { ...input };
   for (const key of IMAGE_KEYS) if (key in out) out[key] = await toPath(out[key]);
   if (Array.isArray(out.references)) out.references = await Promise.all(out.references.map((ref) => toPath(ref)));
@@ -69,7 +81,7 @@ export async function resolveMediaRefs(supabase: SupabaseClient, jobId: string, 
 type StorageRef = { bucket?: string; object?: string };
 
 async function clipVideoRefs(supabase: SupabaseClient, request: CreateRequest): Promise<string[]> {
-  if (!request.clipId) throw new ApiError(422, "Choose a video from your library to edit.");
+  if (!request.clipId) throw new ApiError(422, "Choose a video from your media to edit.");
   const job = await supabase.from("jobs").select("media_manifest").eq("id", request.jobId).maybeSingle<{ media_manifest: unknown }>();
   const manifest = (job.data?.media_manifest ?? {}) as { masters?: Record<string, StorageRef>; proxies?: Record<string, StorageRef> };
   return [manifest.masters?.[request.clipId], manifest.proxies?.[request.clipId]]
@@ -147,7 +159,8 @@ async function requireParent(supabase: SupabaseClient, request: CreateRequest, s
 }
 
 /** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */
-async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
+/** Refuses before any paid check when the balance cannot cover `needed`. A batch asks once, for its total. */
+export async function requireCredits(supabase: SupabaseClient, needed: number): Promise<void> {
   const { data, error } = await supabase.from("profiles").select("credit_balance").maybeSingle<{ credit_balance: number | null }>();
   if (error) throw error;
   const left = Number(data?.credit_balance ?? 0);

@@ -1,0 +1,78 @@
+{
+  "$schema": "./platforms.schema.json",
+  "$comment": "Platform profiles (writer.md §7). Limits carry headroom. No links anywhere, no hashtags in posts. Change a number here and in the latest migration's platform_profile(); check:contracts compares them.",
+  "profiles": [
+    {
+      "id": "x",
+      "label": "X",
+      "platform": "x",
+      "kind": "post",
+      "limit": 280,
+      "title": null,
+      "visibleBeforeMore": null,
+      "hashtags": 0,
+      "links": false,
+      "tone": "One idea, a clear first line."
+    },
+    {
+      "id": "threads",
+      "label": "Threads",
+      "platform": "threads",
+      "kind": "post",
+      "limit": 500,
+      "title": null,
+      "visibleBeforeMore": null,
+      "hashtags": 0,
+      "links": false,
+      "tone": "Conversational, as if talking to one person."
+    },
+    {
+      "id": "linkedin",
+      "label": "LinkedIn",
+      "platform": "linkedin",
+      "kind": "post",
+      "limit": 3000,
+      "title": null,
+      "visibleBeforeMore": 140,
+      "hashtags": 0,
+      "links": false,
+      "tone": "Longer, short paragraphs, the hook before the cut (about 140 characters on a phone, 210 on a desktop)."
+    },
+    {
+      "id": "instagram_caption",
+      "label": "Instagram caption",
+      "platform": "instagram",
+      "kind": "caption",
+      "limit": 2200,
+      "title": null,
+      "visibleBeforeMore": 125,
+      "hashtags": 5,
+      "links": false,
+      "tone": "The hook in the first line."
+    },
+    {
+      "id": "tiktok_caption",
+      "label": "TikTok caption",
+      "platform": "tiktok",
+      "kind": "caption",
+      "limit": 2200,
+      "title": null,
+      "visibleBeforeMore": 100,
+      "hashtags": 5,
+      "links": false,
+      "tone": "Short, matching the video's hook."
+    },
+    {
+      "id": "youtube",
+      "label": "YouTube title and description",
+      "platform": "youtube",
+      "kind": "youtube",
+      "limit": 5000,
+      "title": 100,
+      "visibleBeforeMore": null,
+      "hashtags": 3,
+      "links": false,
+      "tone": "A searchable title; the description says what the video shows."
+    }
+  ]
+}

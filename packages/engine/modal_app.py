@@ -1,10 +1,10 @@
-"""Worker OpenCMO chạy trên Modal.
+"""The OpenCMO worker on Modal.
 
 Deploy:
     modal secret create opencmo \
         ANTHROPIC_API_KEY=... \
         SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
-        OPENCMO_WORKER_TOKEN=...   # cùng giá trị với biến của web app
+        OPENCMO_WORKER_TOKEN=...   # the same value as the web app's
         OPENCMO_WEB_URL=https://... CRON_SECRET=...   # AI CMO schedule; same CRON_SECRET as Vercel
         CRON_CLEANUP_SECRET=...   # cleanup only; same value as Vercel's CRON_CLEANUP_SECRET
         OPENCMO_WAKE_TOKEN=...    # `wake`; same value as the MCP server's OPENCMO_WAKE_TOKEN
@@ -16,26 +16,24 @@ Deploy:
 Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
 cannot answer (no credit, an outage); without it such output is refunded, never delivered.
 
-Bản này CẦN toàn bộ migration D1/D2 đã áp trên database TRƯỚC khi deploy.
-Deploy ngược thứ tự khiến worker gọi RPC chưa tồn tại và mọi job/task đều lỗi.
+Deploy only after every migration is applied to the database: in the other order the worker calls RPCs that do
+not exist yet and every job and task fails.
 
-Vì sao Modal chứ không phải VPS: không có máy nào để quản, không cập nhật OS,
-không systemd, không bị đánh thức lúc 2h sáng. Trả tiền theo giây, rảnh thì $0.
-Image được định nghĩa bằng chính Python nên không phải viết Dockerfile.
+Why Modal rather than a VPS: no machine to manage, no OS updates, no systemd, no 2 a.m. pages. Billed by the
+second, $0 when idle. The image is defined in Python, so there is no Dockerfile.
 
-Hai đường vào, cố ý:
-  1. `submit` — endpoint HTTP web app gọi thẳng khi người dùng bấm, rồi
-     `run_job.spawn(...)`. Không độ trễ.
-  2. `sweep()` — cron mỗi phút: reconciler trả job hết lease về hàng đợi, rồi
-     nhặt job còn queued. Đây là lưới an toàn, không phải đường chính.
+Ways in, on purpose:
+  1. `submit` — an HTTP endpoint the web app calls when the user acts, then `run_job.spawn(...)`. No delay.
+  2. `sweep()` — a cron every minute: the reconciler puts jobs whose lease ran out back in the queue, then picks
+     up what is still queued. This is the safety net, not the main path.
      It also dispatches queued AI CMO runs to the web app (`_dispatch_cmo`).
   3. `cmo_schedule()` and `cleanup()` — daily crons that call the web app's cron routes.
      Modal is the only scheduler; `apps/web/vercel.json` has no crons.
   4. `wake` — the MCP server (`mcp_app.py`, its own app) asks for an early `sweep()` with a
      token that can do nothing else.
 
-Nhờ có (2), (1) được phép hỏng: web app coi lỗi gọi `submit` là chuyện nhỏ, job
-vẫn nằm ở 'queued' và chạy chậm nhất một phút sau.
+Because of (2), (1) may fail: the web app treats a failed `submit` as minor; the job stays 'queued' and runs a
+minute later at most.
 """
 
 from __future__ import annotations
@@ -49,9 +47,20 @@ import modal
 
 APP_NAME = "opencmo"
 
-# Trần số việc một lượt `sweep()` nhặt. Có trần để một đợt dồn bất thường (lỗi
-# vòng lặp phía web, spam) không đẻ ra hàng trăm container trong một phút.
+# The most work one `sweep()` picks up, so an unusual burst (a loop bug on the web side, spam) cannot start hundreds
+# of containers in a minute.
 SWEEP_BATCH = 10
+
+# `run_task` containers. Claims stop at this many running tasks (review R6): a task spawned past it waited in Modal's
+# queue while its 120 s database lease ran out, was claimed again and failed after three tries without ever running.
+RUN_TASK_MAX_CONTAINERS = 10
+
+
+def _token_ok(expected: str, given: str) -> bool:
+    """Constant-time token check on bytes: `hmac.compare_digest` on str raises for non-ASCII input (a 500, not 401)."""
+    import hmac
+
+    return bool(expected) and hmac.compare_digest(expected.encode("utf-8"), given.encode("utf-8"))
 
 NODE_VERSION = "22.22.2"
 WEB_ROOT = "/root/web"
@@ -83,14 +92,12 @@ def _with_node(img: modal.Image) -> modal.Image:
 
 
 def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
-    # Cài engine từ chính repo này. Đổi sang `.pip_install("opencmo-engine")`
-    # nếu sau này publish lên PyPI.
+    # The engine is installed from this repo. Switch to `.pip_install("opencmo-engine")` if it is ever on PyPI.
     #
-    # `ignore` là bắt buộc: thư mục engine trên máy dev chứa .venv và clip test,
-    # cỡ vài GB. Không loại ra thì mỗi lần build image phải đẩy hết chỗ đó lên.
-    # Neo theo vị trí file, không theo thư mục đang đứng: "." làm
-    # `modal deploy packages/engine/modal_app.py` chạy từ gốc repo đẩy nhầm cả
-    # repo lên và pip báo "Neither 'setup.py' nor 'pyproject.toml' found".
+    # `ignore` is required: the engine folder on a dev machine holds .venv and test clips, several GB, which every
+    # image build would upload otherwise. Anchored to this file, not the working directory: "." made
+    # `modal deploy packages/engine/modal_app.py` from the repo root upload the whole repo, and pip said "Neither
+    # 'setup.py' nor 'pyproject.toml' found".
     img = img.add_local_dir(
         _ENGINE,
         remote_path="/root/engine",
@@ -104,11 +111,12 @@ def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
             "tests", "tests/**",
         ],
     )
-    # Catalog model sinh media nằm ở packages/contracts, NGOÀI thư mục engine:
-    # thiếu file này thì task `generate` nào cũng hỏng (opencmo/ai/catalog.py).
-    # Bảng task kind (opencmo/worker/kinds.py): thiếu thì worker không phân được việc nào.
+    # The media model catalog lives in packages/contracts, OUTSIDE the engine folder: without it every `generate`
+    # task fails (opencmo/ai/catalog.py). The task kinds table (opencmo/worker/kinds.py): without it the worker
+    # cannot route any work.
     # The edit-length cap the web Upload panel shares (opencmo/worker/process_job.py).
-    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json"):
+    # Platform profiles Writer and the cards share (opencmo/platforms.py).
+    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json"):
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )
@@ -123,10 +131,9 @@ def _with_media(img: modal.Image) -> modal.Image:
 
 cpu_image = (
     modal.Image.debian_slim(python_version="3.12")
-    # `fonts-dejavu-core` là bắt buộc, không phải cho đẹp: cả phụ đề (libass) và
-    # watermark (drawtext) đều cần file font thật. debian_slim không có font nào,
-    # và thiếu font thì ffmpeg vẫn chạy — chỉ là clip ra không có chữ. Đúng kiểu
-    # lỗi im lặng mà CLAUDE.md cảnh báo.
+    # `fonts-dejavu-core` is required, not cosmetic: captions (libass) and the watermark (drawtext) need a real font
+    # file. debian_slim has none, and without one ffmpeg still runs and the clip just has no text: the silent
+    # failure CLAUDE.md warns about.
     #
     # Noto: captions translated to Japanese/Korean/Chinese/Thai/Hindi and emoji would export as
     # boxes; the renderer names these families after the brand font (clip-render `applyFont`).
@@ -171,7 +178,7 @@ cpu_image = (
         }
     )
 )
-# Tên cũ: `modal.App(image=…)` và mọi hàm không khai image riêng dùng image CPU.
+# The old name: `modal.App(image=…)`, and every function that names no image of its own uses the CPU image.
 image = cpu_image
 
 # Explainers (docs/explainer-build.md): a CPU image of its own for `clip-motion` (Remotion +
@@ -235,11 +242,11 @@ capture_image = _with_engine(capture_image)
 app = modal.App(APP_NAME, image=cpu_image)
 secret = modal.Secret.from_name("opencmo")
 
-# Khoá ElevenLabs tách riêng, cùng lý do: thêm vào `opencmo` bằng `--force` là
-# phải gõ lại mọi khoá cũ. Thiếu nó thì web (Vercel CÓ khoá) vẫn bán voiceover
-# mà worker báo "not set up" ở MỌI lượt — đúng lỗi production 02/10.
+# The ElevenLabs key is a secret of its own for the same reason: adding it to `opencmo` with `--force` means typing
+# every old key again. Without it the web (where Vercel HAS the key) still sells voiceovers while the worker says
+# "not set up" on EVERY run: the production failure of 02/10.
 #
-#   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # cùng khoá với Vercel
+#   modal secret create opencmo-voice ELEVENLABS_API_KEY=...   # the same key as Vercel
 #
 # `run_job` needs it for an upload's transcript (ElevenLabs Scribe); `run_task` for captions of
 # library files.
@@ -273,8 +280,8 @@ def _record_call(store, job, call) -> None:
     try:
         store.set_call_id(job.id, job.attempt_id, call.object_id)
     except Exception:
-        # Chỉ để tra log Modal; thiếu nó không ảnh hưởng vòng đời job.
-        log.warning("Không ghi được call_id cho job %s", job.id, exc_info=True)
+        # Only for finding the Modal log; the job's life does not depend on it.
+        log.warning("Could not record the call_id of job %s", job.id, exc_info=True)
 
 
 @app.function(
@@ -282,20 +289,22 @@ def _record_call(store, job, call) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    # Cho container chết giữa chừng (OOM, preempt): chạy lại CÙNG attempt. Lỗi
-    # bắt được thì `process_job.process` đã chốt, lần chạy lại thấy job không còn running
-    # và thoát ngay.
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
+    # No Modal retry (review follow-up L5, owner 2026-11-02): a container that dies midway leaves the job's lease to run
+    # out, and the database's reclaim runs it again within its own attempt limit. Both layers retrying ran a job up to
+    # six times.
+    # Uploads were unbounded at 4 CPU / 4 GiB each, sharing the workspace's container quota with the sweep, submit and
+    # MCP (review R6). The database already caps each user at 3 in progress.
+    max_containers=20,
 )
 def run_job(job_id: str, attempt_id: str) -> None:
-    """Đường vào chính. Chỉ nhận ID; mọi dữ liệu job đọc lại từ database."""
+    """The main entry point. It takes only ids; every job field is read again from the database."""
     from opencmo.worker.process_job import process
 
     store = _store()
     try:
         job = store.get_job(job_id)
         if job is None or job.status != "running" or job.attempt_id != attempt_id:
-            log.info("Job %s: attempt %s không còn hiện hành — bỏ qua", job_id, attempt_id)
+            log.info("Job %s: attempt %s is no longer current; skipped", job_id, attempt_id)
             return
         process(store, job)
     finally:
@@ -307,11 +316,11 @@ def run_job(job_id: str, attempt_id: str) -> None:
     timeout=1800,
     cpu=4,
     memory=4096,
-    retries=modal.Retries(max_retries=1, initial_delay=10.0),
-    max_containers=10,
+    # No Modal retry: the lease reclaim is the one retry layer (L5, as run_job).
+    max_containers=RUN_TASK_MAX_CONTAINERS,
 )
 def run_task(task_id: str, attempt_id: str) -> None:
-    """Chạy một task canonical; kind/payload luôn đọc lại từ database."""
+    """Runs one canonical task; its kind and payload are always read again from the database."""
     from opencmo.worker.kinds import handlers as task_handlers
 
     handlers = task_handlers()
@@ -319,7 +328,7 @@ def run_task(task_id: str, attempt_id: str) -> None:
     try:
         task = store.get_task(task_id)
         if task is None or task.status != "running" or task.attempt_id != attempt_id:
-            log.info("Task %s: attempt %s không còn hiện hành — bỏ qua", task_id, attempt_id)
+            log.info("Task %s: attempt %s is no longer current; skipped", task_id, attempt_id)
             return
         handler = handlers.get(task.kind)
         if handler is None:
@@ -408,13 +417,12 @@ class MotionPreview:
     # Same URL as the v1 function `motion_preview`, so MOTION_PREVIEW_URL does not change.
     @modal.fastapi_endpoint(method="POST", label=f"{APP_NAME}-motion-preview")
     def motion_preview(self, payload: dict) -> dict:
-        import hmac
 
         from fastapi import HTTPException
 
         expected = os.environ.get("MOTION_PREVIEW_TOKEN", "")
         given = str(payload.get("token") or "")
-        if not expected or not hmac.compare_digest(expected, given):
+        if not _token_ok(expected, given):
             raise HTTPException(status_code=401, detail="Invalid preview token.")
         job = payload.get("job")
         if not isinstance(job, dict):
@@ -442,7 +450,6 @@ def look(payload: dict) -> dict:
     the `opencmo` secret (same value as in `opencmo-mcp`). `opencmo.worker.look` runs in
     `tests/test_worker_look.py`, and once end to end against a local clip-export.
     """
-    import hmac
 
     from fastapi import HTTPException
 
@@ -450,7 +457,7 @@ def look(payload: dict) -> dict:
 
     expected = os.environ.get("OPENCMO_LOOK_TOKEN", "")
     given = str(payload.pop("token", "") or "")
-    if not expected or not hmac.compare_digest(expected, given):
+    if not _token_ok(expected, given):
         raise HTTPException(status_code=401, detail="Invalid look token.")
     store = _store()
     try:
@@ -463,20 +470,17 @@ def look(payload: dict) -> dict:
 @app.function(secrets=[secret], timeout=30)
 @modal.fastapi_endpoint(method="POST")
 def submit(payload: dict) -> dict:
-    """Cửa HTTP cho web app.
+    """The web app's HTTP door.
 
-    Vì sao cần: `run_job.spawn()` là API Python, mà web app là TypeScript. Không
-    có endpoint này thì job phải chờ `sweep()` nhặt — tức là trung bình 30 giây
-    người dùng nhìn màn hình "đang chờ" mà chẳng có gì chạy.
+    Why: `run_job.spawn()` is a Python API and the web app is TypeScript. Without this endpoint a job waits for
+    `sweep()`: on average 30 seconds of a "waiting" screen with nothing running.
 
-    Xác thực bằng một token dùng chung trong body, không phải header: chữ ký hàm
-    được đánh giá trên MÁY DEV lúc `modal deploy`, nên nhận `fastapi.Header` sẽ
-    bắt máy dev phải cài fastapi. Body là `dict` thuần thì không.
+    Authenticated with a shared token in the body, not a header: the function signature is evaluated on the DEV
+    MACHINE at `modal deploy`, so taking `fastapi.Header` would require fastapi there. A plain `dict` body does not.
 
-    Chỉ dùng một trong `job_id`/`task_id` từ payload. Toàn bộ dữ liệu còn lại
-    lấy từ hàng canonical mà RPC claim trả về.
+    Only `job_id` or `task_id` is taken from the payload; everything else comes from the canonical row the claim RPC
+    returns.
     """
-    import hmac
 
     from fastapi import HTTPException
 
@@ -484,7 +488,7 @@ def submit(payload: dict) -> dict:
 
     expected = os.environ.get("OPENCMO_WORKER_TOKEN", "")
     given = str(payload.get("token") or "")
-    if not expected or not hmac.compare_digest(expected, given):
+    if not _token_ok(expected, given):
         raise HTTPException(status_code=401, detail="Invalid worker token.")
 
     job_id = str(payload.get("job_id") or "")
@@ -495,15 +499,15 @@ def submit(payload: dict) -> dict:
     store = _store()
     try:
         try:
-            item = store.claim_job(job_id) if job_id else store.claim_task(task_id)
+            item = store.claim_job(job_id) if job_id else store.claim_task(task_id, max_running=RUN_TASK_MAX_CONTAINERS)
         except TransientError as exc:
-            # Không retry claim. Nếu nó đã commit, lease hết hạn trả job về
-            # hàng đợi; nếu chưa, sweep phút sau nhặt.
-            log.warning("Submit %s: database lỗi tạm — để sweep xử lý", job_id or task_id)
+            # The claim is not retried. If it committed, the lease runs out and the job goes back to the queue; if not,
+            # the next minute's sweep picks it up.
+            log.warning("Submit %s: transient database error, left to the sweep", job_id or task_id)
             raise HTTPException(status_code=503, detail="The database is temporarily unavailable.") from exc
 
         if item is None:
-            log.info("Việc %s đã có worker nhận — bỏ qua", job_id or task_id)
+            log.info("Work %s is already claimed, or every task container is busy (the sweep takes it later)", job_id or task_id)
             return {"ok": True, "already_claimed": True}
 
         if job_id:
@@ -514,7 +518,7 @@ def submit(payload: dict) -> dict:
     finally:
         store.close()
 
-    log.info("Nhận %s %s attempt %s từ web", "job" if job_id else "task", item.id, item.attempt)
+    log.info("Took %s %s attempt %s from the web", "job" if job_id else "task", item.id, item.attempt)
     return {"ok": True, "call_id": call.object_id}
 
 
@@ -528,79 +532,82 @@ def wake(payload: dict) -> dict:
     the sweep claims through the same leases, and a spare run finds an empty queue.
     The token travels in the body for the same reason as in `submit`.
     """
-    import hmac
 
     from fastapi import HTTPException
 
     expected = os.environ.get("OPENCMO_WAKE_TOKEN", "")
     given = str(payload.get("token") or "")
-    if not expected or not hmac.compare_digest(expected, given):
+    if not _token_ok(expected, given):
         raise HTTPException(status_code=401, detail="Invalid wake token.")
     sweep.spawn()
     return {"ok": True}
 
 
-@app.function(secrets=[secret], schedule=modal.Period(minutes=1), timeout=60)
+# One sweep at a time: every `wake` spawns one, and a burst of wakes ran many at once, each dispatching up to
+# MAX_DISPATCH CMO calls (review R6). A queued wake sweep still runs, right after the current one.
+@app.function(secrets=[secret], schedule=modal.Period(minutes=1), timeout=60, max_containers=1)
 def sweep() -> None:
-    """Lưới an toàn: phục hồi lease rồi nhặt job/task còn kẹt ở queued.
+    """The safety net: recover expired leases, then take jobs and tasks still waiting in the queue.
 
-    Nhặt HẾT hàng đợi (tối đa SWEEP_BATCH) rồi giao cho `run_job` — không tự
-    chạy pipeline ở đây: hàm này timeout 60 giây, còn một job mất vài phút.
+    It takes the whole queue (at most SWEEP_BATCH, and never past RUN_TASK_MAX_CONTAINERS running tasks) and hands it
+    to `run_job` / `run_task`; it never runs a pipeline itself: this function times out at 60 seconds, a job takes
+    minutes.
 
-    Lỗi tạm của database chỉ ghi warning rồi thôi: cron chạy lại sau một phút,
-    và 504 lúc hàng đợi rỗng (13/09 11:00) không phải sự cố cần báo động.
+    Database errors only warn: the cron runs again in a minute, and a 504 on an empty queue (13/09 11:00) is not an
+    incident.
     """
     from opencmo.backends.retry import TransientError
     from opencmo.worker.kinds import task_kinds
 
     store = _store()
     try:
-        try:
-            outcome = store.reclaim_expired()
-            if outcome.get("requeued") or outcome.get("failed"):
-                log.warning("Reconciler: %s", outcome)
-        except TransientError:
-            log.warning("Reconciler lỗi tạm — phút sau chạy lại", exc_info=True)
-
-        try:
-            outcome = store.reclaim_expired_tasks()
-            if outcome.get("requeued") or outcome.get("failed"):
-                log.warning("Task reconciler: %s", outcome)
-        except TransientError:
-            log.warning("Task reconciler lỗi tạm — phút sau chạy lại", exc_info=True)
+        # Each phase on its own (review R6): one that fails, for any reason, must not stop the claims and the CMO
+        # dispatch after it. They only warn; the sweep runs again in a minute.
+        for name, phase in (
+            ("Job reconciler", store.reclaim_expired),
+            ("Task reconciler", store.reclaim_expired_tasks),
+        ):
+            try:
+                outcome = phase()
+                if outcome.get("requeued") or outcome.get("failed"):
+                    log.warning("%s: %s", name, outcome)
+            except Exception:
+                log.warning("%s failed; next sweep tries again", name, exc_info=True)
 
         try:
             reaped = store.reap_agent_turns()
             if reaped:
                 log.warning("Assistant turns closed by the sweep: %s", reaped)
-        except TransientError:
-            log.warning("Turn sweep: transient error, retrying next minute", exc_info=True)
+        except Exception:
+            log.warning("Turn sweep failed; next sweep tries again", exc_info=True)
 
+        jobs_left = True
         for _ in range(SWEEP_BATCH):
             try:
-                job = store.claim_next_job()
+                if jobs_left:
+                    job = store.claim_next_job()
+                    if job is not None:
+                        log.info("Sweep took job %s attempt %s", job.id, job.attempt)
+                        call = run_job.spawn(job.id, job.attempt_id)
+                        _record_call(store, job, call)
+                        continue
+                    # The job queue is empty for this sweep: stop asking (it cost one claim RPC per task).
+                    jobs_left = False
+                task = store.claim_next_task(list(task_kinds()), max_running=RUN_TASK_MAX_CONTAINERS)
+                if task is None:
+                    break
+                log.info("Sweep took task %s kind %s", task.id, task.kind)
+                run_task.spawn(task.id, task.attempt_id)
             except TransientError:
-                log.warning("Claim lỗi tạm — phút sau chạy lại", exc_info=True)
+                log.warning("Claim: transient error, retrying next minute", exc_info=True)
                 break
-            if job is not None:
-                log.info("Sweep nhặt job %s attempt %s", job.id, job.attempt)
-                call = run_job.spawn(job.id, job.attempt_id)
-                _record_call(store, job, call)
-                continue
-
-            try:
-                task = store.claim_next_task(list(task_kinds()))
-            except TransientError:
-                log.warning("Claim task lỗi tạm — phút sau chạy lại", exc_info=True)
+            except Exception:
+                log.warning("Claim failed; next sweep tries again", exc_info=True)
                 break
-            if task is None:
-                break
-            log.info("Sweep nhặt task %s kind %s", task.id, task.kind)
-            run_task.spawn(task.id, task.attempt_id)
     finally:
         store.close()
-
-    _dispatch_cmo()
+        # Always: the CMO and Schedule queues must not stop because a step above failed.
+        _dispatch_cmo()
 
 
 def _dispatch_cmo() -> None:
@@ -615,9 +622,16 @@ def _dispatch_cmo() -> None:
         log.info("OPENCMO_WEB_URL or CRON_SECRET missing: AI CMO runs are not dispatched")
         return
     try:
-        waiting = cmo_dispatch.count_dispatchable(
-            os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-        )
+        db = (os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        # Schedule's clock (P4 A2): due slots become publish_post runs first, so this same sweep dispatches them.
+        try:
+            fired = cmo_dispatch.claim_due_slots(*db)
+            if any(fired.values()):
+                log.info("Schedule: %s", fired)
+        except Exception:
+            log.warning("Schedule claim failed; next sweep tries again", exc_info=True)
+        # One route runs both queues; Studio's orders (P2 A2) are counted apart and capped by `dispatch`.
+        waiting = cmo_dispatch.count_dispatchable(*db) + cmo_dispatch.count_studio_work(*db)
         if waiting:
             sent = cmo_dispatch.dispatch(*web, waiting)
             log.info("AI CMO: %s waiting, %s dispatched", waiting, sent)
@@ -625,7 +639,9 @@ def _dispatch_cmo() -> None:
         log.warning("AI CMO dispatch failed; next sweep tries again", exc_info=True)
 
 
-@app.function(secrets=[secret], schedule=modal.Cron("5 0 * * *"), timeout=330)
+# Two retries: one failed call skipped every founder's loops for the day, and cmo_enqueue merges a retry into the run
+# already queued, so retrying is safe (review R6).
+@app.function(secrets=[secret], schedule=modal.Cron("5 0 * * *"), timeout=330, retries=modal.Retries(max_retries=2, initial_delay=60.0))
 def cmo_schedule() -> None:
     """Enqueue the AI CMO loops due today (00:05 UTC, right after the calendar's day starts).
 
@@ -639,6 +655,20 @@ def cmo_schedule() -> None:
         log.error("OPENCMO_WEB_URL or CRON_SECRET missing: the AI CMO schedule did not run")
         return
     log.info("AI CMO schedule: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo"))
+
+
+@app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=150)
+def cmo_digest() -> None:
+    """Hourly: release cards held past a day's budget, send each founder's digest at their local hour, email the
+    cards about to expire and push new cards (P6). Every send is claimed in SQL, so a second call sends nothing.
+    """
+    from opencmo.worker import cmo_dispatch
+
+    web = cmo_dispatch.web_config(dict(os.environ))
+    if web is None:
+        log.error("OPENCMO_WEB_URL or CRON_SECRET missing: the digest did not run")
+        return
+    log.info("Digest: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo-digest", timeout=140.0))
 
 
 @app.function(secrets=[secret], schedule=modal.Cron("0 3 * * *"), timeout=90)

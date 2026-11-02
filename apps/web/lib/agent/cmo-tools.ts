@@ -11,6 +11,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
@@ -22,7 +23,13 @@ import { isoDay, type Brain, type CompetitorInsight, type Lesson } from "@/lib/c
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
 
+import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
+
+import { DECISION_TOOL_SPECS, DECISION_WRITES } from "./cmo-decisions";
+import { EDITOR_TOOL_SPECS } from "./cmo-editor";
+import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
+import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
 import type { ToolOutcome, ToolSpec } from "./tools";
 
 const EMPTY = { type: "object", properties: {}, additionalProperties: false };
@@ -51,7 +58,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List drafts waiting for the user's approval, posts approved or published in the last 14 days and Reddit conversations (community, score, status) waiting for the user to reply.",
+      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Reddit conversations (community, score, status) waiting for a reply.",
     schema: EMPTY,
     strict: true,
   },
@@ -60,11 +67,11 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     description: [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (1 credit; when = now only).",
-      "x_writer: draft an X post, three versions, into Approvals (1 credit).",
+      "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
       "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "video: a short-video task. The founder records and uploads their OWN video, so this always becomes a calendar item with an \"Upload video\" button that opens the editor; you cannot upload video for them.",
-      "when: \"now\" runs it in the background (result in Approvals within a minute). A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
+      "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
     schema: {
       type: "object",
@@ -73,6 +80,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
         brief: { type: "string", description: "One to three sentences. For video: what the video should say." },
         when: { type: "string", description: "\"now\" or a date YYYY-MM-DD." },
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
+        thread: { type: "boolean", description: "x_writer only: true when the founder asked for an X thread." },
       },
       required: ["agent", "brief"],
       additionalProperties: false,
@@ -124,7 +132,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "get_run_result",
     description:
-      "Check on tasks you handed out: the status, steps and result of one task (by run_id) or of the 8 most recent tasks. Use it before telling the founder something is done, and to learn from what failed.",
+      "Check on tasks you handed out: the status, steps and result of one task (by run_id) or of the 8 most recent tasks. Use it before telling the founder something is done, and to learn from what failed. Video tasks and dated tasks are calendar items, not runs: check those with list_calendar.",
     schema: {
       type: "object",
       properties: { run_id: { type: "string", description: "A run id from an earlier create_task result. Omit for the latest tasks." } },
@@ -140,7 +148,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       type: "object",
       properties: {
         week: { type: "string", enum: ["this", "next"] },
-        goal: { type: "string", description: "One sentence, 3 to 300 characters." },
+        goal: { type: "string", description: "One sentence, 3 to 200 characters." },
         metric: { type: "string", enum: ["posts", "replies", "views"] },
         target: { type: "integer", description: "1 to 1,000,000." },
       },
@@ -168,9 +176,32 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     },
     strict: true,
   },
+  // Column 3 of the shell (audit 2026-11-01). Last, so the cached prompt prefix stays the same.
+  {
+    name: "open_screen",
+    description:
+      "Open a screen in the panel next to the chat, so the founder sees what you are talking about: dashboard (cards waiting), schedule, sales, writer, studio, research, brain, analytics, library or settings. Tools that start work already open their screen; use this when the founder asks to see something, or to show what you just read.",
+    schema: {
+      type: "object",
+      properties: {
+        screen: { type: "string", enum: [...PANEL_SCREENS] },
+        ids: { type: "array", items: { type: "string" }, description: "Optional ids of the rows you mean (cards, runs, threads), at most 20." },
+      },
+      required: ["screen"],
+      additionalProperties: false,
+    },
+    strict: false,
+  },
+  // Decisions from the chat (plan 2026-11-02): last, so the cached prompt prefix stays the same.
+  ...DECISION_TOOL_SPECS,
+  // CMO chat live (plan 2026-11-02): after the decisions, for the same reason.
+  WAIT_FOR_RUN_SPEC,
+  // The editor handoff (plan 2026-11-02): last, for the same reason.
+  ...EDITOR_TOOL_SPECS,
 ];
 
-const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document"]);
+// open_editor can create a New edit, and its prompt is sent to the editor's Assistant as the founder's request.
+const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document", "open_editor", ...DECISION_WRITES]);
 export const isCmoWrite = (name: string) => WRITES.has(name);
 
 /**
@@ -180,7 +211,9 @@ export const isCmoWrite = (name: string) => WRITES.has(name);
  * `create_task` stays allowed; it only queues our own job.
  */
 export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site"]);
-export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal"]);
+// Decisions too: after a page or a stranger's post was read, a decision needs the founder's next message.
+// The editor handoff too: its prompt is sent as the founder's own request, so a page must not write it.
+export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal", "open_editor", ...DECISION_WRITES]);
 export const TAINT_MESSAGE = "This came after reading outside content. Ask the founder to confirm it in their next message.";
 
 const readInput = z.object({ kind: z.enum(DOCUMENT_KINDS) });
@@ -191,6 +224,7 @@ const taskInput = z.object({
   brief: z.string().trim().min(3).max(300),
   when: z.string().trim().regex(/^(now|\d{4}-\d{2}-\d{2})$/).default("now"),
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
+  thread: z.boolean().optional(),
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
@@ -199,10 +233,22 @@ const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });
 const goalInput = z.object({
   week: z.enum(["this", "next"]),
-  goal: z.string().trim().min(3).max(300),
+  goal: z.string().trim().min(3).max(200),
   metric: z.enum(["posts", "replies", "views"]),
   target: z.number().int().min(1).max(1_000_000),
 });
+
+/**
+ * `view.open`: the chat panel opens this screen in column 3 when the tool succeeds. Only work the founder asked for
+ * (a task, a calendar item) and `open_screen` set it: the model reads the calendar or Approvals for its own reasoning
+ * too, and the panel must not jump while the founder is looking at something else.
+ */
+const opens = (open: PanelOpen): { view: { open: PanelOpen } } => ({ view: { open } });
+/** Where each kind of work shows up once it is started or scheduled. */
+const SCREEN_OF_AGENT = { planner: "dashboard", x_writer: "writer", sales: "sales", research: "research", video: "schedule" } as const;
+
+/** A read that failed is not "nothing there": the model must not plan on an empty calendar or a missing document. */
+const readFailed: ToolOutcome = { ok: false, content: JSON.stringify({ error: "Could not read this right now. Try again in a moment." }), summary: "Could not read" };
 
 const invalid = (message: string): ToolOutcome => ({ ok: false, content: JSON.stringify({ INVALID_INPUT: message }), summary: "Invalid request" });
 
@@ -219,14 +265,30 @@ export const SITE_READS_PER_TURN = 3;
  * Counters that live for one request (the scope is rebuilt every turn). `brain: "claude"`: the
  * caller is the founder's own Claude (MCP), so tasks it hands out think with it, through the inbox.
  */
-export type CmoTurn = { siteReads: number; brain?: Brain };
+/** `startedAt`: when this request began; past `KICK_UNTIL_MS` a started task is left to the sweep. */
+export type CmoTurn = { siteReads: number; brain?: Brain; startedAt?: number };
+
+/** A chat request runs up to 300 s; an `after()` drain started later than this would be cut off mid-job. */
+const KICK_UNTIL_MS = 200_000;
 
 export async function runCmoTool(supabase: SupabaseClient, name: string, input: unknown, turn: CmoTurn = { siteReads: 0 }): Promise<ToolOutcome> {
+  try {
+    return await runTool(supabase, name, input, turn);
+  } catch (error) {
+    // A refused write (a goal already approved, a full memory) is the model's to explain; it must not end the turn.
+    const message = error instanceof ApiError ? error.message : "That did not work. Try again in a moment.";
+    if (!(error instanceof ApiError)) console.error("[cmo] tool failed", name, error);
+    return { ok: false, content: JSON.stringify({ error: message }), summary: "Could not finish" };
+  }
+}
+
+async function runTool(supabase: SupabaseClient, name: string, input: unknown, turn: CmoTurn): Promise<ToolOutcome> {
   switch (name) {
     case "read_doc": {
       const parsed = readInput.safeParse(input);
       if (!parsed.success) return invalid("kind must be product, strategy, competitors or content_strategy.");
-      const { data: row } = await supabase.from("marketing_documents_latest").select("body, created_by, version").eq("kind", parsed.data.kind).maybeSingle();
+      const { data: row, error } = await supabase.from("marketing_documents_latest").select("body, created_by, version").eq("kind", parsed.data.kind).maybeSingle();
+      if (error) return readFailed;
       if (!row) return { ok: true, content: JSON.stringify({ missing: true }), summary: `No ${DOCUMENTS[parsed.data.kind].title} yet` };
       return { ok: true, content: data(row), summary: `Read ${DOCUMENTS[parsed.data.kind].title}` };
     }
@@ -236,13 +298,14 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
       return updateDocument(supabase, parsed.data.kind, parsed.data.fields_json);
     }
     case "list_calendar": {
-      const { data: rows } = await supabase
+      const { data: rows, error } = await supabase
         .from("content_items")
         .select("id, day, department, platform, idea, reason, status")
         .gte("day", isoDay())
         .lte("day", isoDay(13))
         .order("day")
         .limit(40);
+      if (error) return readFailed;
       return { ok: true, content: data({ today: isoDay(), items: rows ?? [] }), summary: `Read the calendar (${rows?.length ?? 0} items)` };
     }
     case "list_approvals": {
@@ -259,15 +322,34 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         .from("opportunities")
         .select("id, community, score, priority, status, created_at")
         .eq("status", "in_review")
+        .not("reply", "is", null)
         .order("score", { ascending: false })
         .limit(10);
-      const count = (rows?.length ?? 0) + (threads?.length ?? 0);
-      return { ok: true, content: data({ items: rows ?? [], reddit_conversations: threads ?? [] }), summary: `Read Approvals (${count} items)` };
+      // The queue the Dashboard shows: every kind of card (goal, schedule, Studio, correction…), not only drafts.
+      const { data: cardRows } = await supabase
+        .from("approvals")
+        .select(APPROVAL_COLUMNS)
+        .eq("status", "waiting")
+        .order("created_at", { ascending: true })
+        .limit(50);
+      // What each card says, as the Dashboard shows it, so "approve the pricing post" can name the right card. Never
+      // its hash: decide_card reads that itself when it shows the founder the card.
+      const cards = ((cardRows ?? []) as ApprovalRow[]).flatMap((row) => {
+        const card = approvalToCard(row);
+        return card ? [{ id: card.id, kind: card.kind, title: card.title, summary: card.summary, meta: card.meta, post_at: card.postAt, price_credits: card.priceCredits, expires_at: card.expiresAt }] : [];
+      });
+      return {
+        ok: true,
+        content: data({ waiting_cards: cards, items: rows ?? [], reddit_conversations: threads ?? [] }),
+        summary: `Read Approvals (${cards?.length ?? 0} waiting)`,
+      };
     }
     case "create_task": {
       const parsed = taskInput.safeParse(input);
       if (!parsed.success) return invalid("agent must be planner, x_writer, sales, research or video; brief 3-300 characters; when \"now\" or YYYY-MM-DD.");
       const task = parsed.data;
+      if (task.thread && task.agent !== "x_writer") return invalid("thread is for x_writer only.");
+      if (task.thread && task.when !== "now") return invalid("A thread is written now; when must be \"now\".");
       // Video is always scheduled (the user uploads their own video in the editor), with or without a date.
       const scheduled = task.agent === "video" || task.when !== "now";
       try {
@@ -281,14 +363,15 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
             p_reason: "Added by your CMO",
             p_body: { brief: task.brief },
           });
-          return { ok: true, content: JSON.stringify({ scheduled: true, item_id: item.id, day: item.day }), summary: task.agent === "video" ? "Added a video task to the calendar" : `Scheduled for ${item.day}` };
+          return { ok: true, content: JSON.stringify({ scheduled: true, item_id: item.id, day: item.day }), summary: task.agent === "video" ? "Added a video task to the calendar" : `Scheduled for ${item.day}`, ...opens({ screen: "schedule" }) };
         }
         const kind = JOB_OF[task.agent as keyof typeof JOB_OF];
         const input =
-          kind === "post_draft" ? { idea: task.brief, brief: task.brief } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
-        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input);
-        const label = { plan_week: "Planning the week", post_draft: "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
-        return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label };
+          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
+        const late = turn.startedAt !== undefined && Date.now() - turn.startedAt > KICK_UNTIL_MS;
+        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input, { kick: !late });
+        const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
+        return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label, ...opens({ screen: SCREEN_OF_AGENT[task.agent], ids: [run.id] }) };
       } catch (error) {
         return { ok: false, content: JSON.stringify({ error: error instanceof Error ? error.message : "Could not start this task." }), summary: "Could not start" };
       }
@@ -331,7 +414,8 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
       if (!parsed.success) return invalid("run_id must be a run id from create_task.");
       let query = supabase.from("cmo_runs").select("id, kind, status, error, steps, output, created_at, finished_at").order("created_at", { ascending: false });
       query = parsed.data.run_id ? query.eq("id", parsed.data.run_id).limit(1) : query.limit(8);
-      const { data: runs } = await query;
+      const { data: runs, error } = await query;
+      if (error) return readFailed;
       const rows = ((runs ?? []) as { id: string; kind: string; status: string; error: string | null; steps: { label: string; status: string }[] | null; output: unknown; created_at: string; finished_at: string | null }[]).map((r) => ({
         run_id: r.id,
         task: r.kind,
@@ -347,7 +431,7 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
     }
     case "set_week_goal": {
       const parsed = goalInput.safeParse(input);
-      if (!parsed.success) return invalid("week must be this or next; goal 3 to 300 characters; metric posts, replies or views; target 1 to 1,000,000.");
+      if (!parsed.success) return invalid("week must be this or next; goal 3 to 200 characters; metric posts, replies or views; target 1 to 1,000,000.");
       const week = isoDay(parsed.data.week === "next" ? 7 : 0, new Date(`${mondayOf()}T00:00:00Z`));
       await rpcOrThrow(supabase, "cmo_set_week_goal", { p_week: week, p_goal: parsed.data.goal, p_metric: parsed.data.metric, p_target: parsed.data.target });
       return {
@@ -356,6 +440,11 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
         summary: "Proposed a weekly goal",
       };
     }
+    case "open_screen": {
+      const parsed = PanelOpenSchema.pick({ screen: true, ids: true }).safeParse(input);
+      if (!parsed.success) return invalid(`screen must be one of: ${PANEL_SCREENS.join(", ")}; ids at most 20 ids from your tools.`);
+      return { ok: true, content: JSON.stringify({ opened: parsed.data.screen }), summary: `Opened ${parsed.data.screen}`, ...opens(parsed.data) };
+    }
     default:
       return { ok: false, content: JSON.stringify({ error: `Unknown tool ${name}.` }), summary: "Unknown tool" };
   }
@@ -363,9 +452,9 @@ export async function runCmoTool(supabase: SupabaseClient, name: string, input: 
 
 /** State appended after the request: items awaiting approval + today's calendar, short to stay cheap. */
 export async function cmoState(supabase: SupabaseClient): Promise<string> {
-  const [{ data: pending }, { data: threads }, { data: today }, { data: runs }, { data: memories }] = await Promise.all([
-    supabase.from("content_items").select("id", { count: "exact", head: false }).eq("status", "in_review").limit(20),
-    supabase.from("opportunities").select("id").eq("status", "in_review").limit(20),
+  const [{ count: pending }, { data: threads }, { data: today }, { data: runs }, { data: memories }] = await Promise.all([
+    supabase.from("approvals").select("id", { count: "exact", head: true }).eq("status", "waiting"),
+    supabase.from("opportunities").select("id").eq("status", "in_review").not("reply", "is", null).limit(20),
     supabase.from("content_items").select("department, platform, idea, status").eq("day", isoDay()).limit(10),
     supabase.from("cmo_runs").select("kind, status").in("status", ["queued", "running"]).limit(5),
     // Most important unexpired notes first (memory tier 2); lessons below are tier 3.
@@ -380,7 +469,7 @@ export async function cmoState(supabase: SupabaseClient): Promise<string> {
   const { data: lessonRows } = await supabase.from("cmo_lessons").select("week, topic, body").order("week", { ascending: false }).limit(20);
   return `<cmo_state>${JSON.stringify({
     today: isoDay(),
-    awaiting_approval: pending?.length ?? 0,
+    awaiting_approval: pending ?? 0,
     reddit_conversations_waiting: threads?.length ?? 0,
     calendar_today: today ?? [],
     jobs_running: runs ?? [],
@@ -414,12 +503,14 @@ async function updateDocument(supabase: SupabaseClient, kind: DocumentKind, fiel
   const changed = Object.keys(fields);
   if (!changed.length) return invalid("fields_json has no fields to change.");
   for (const key of changed) {
-    if (!(key in shape)) return invalid(`${DOCUMENTS[kind].title} has no field "${key}". Its fields are: ${Object.keys(shape).join(", ")}.`);
+    if (!Object.hasOwn(shape, key)) return invalid(`${DOCUMENTS[kind].title} has no field "${key}". Its fields are: ${Object.keys(shape).join(", ")}.`);
     if (!shape[key].safeParse((fields as Record<string, unknown>)[key]).success) {
       return invalid(`"${key}" has the wrong shape. Use the same shape read_doc returned.`);
     }
   }
-  const { data: latest } = await supabase.from("marketing_documents_latest").select("body").eq("kind", kind).maybeSingle();
+  const { data: latest, error: readError } = await supabase.from("marketing_documents_latest").select("body").eq("kind", kind).maybeSingle();
+  // Merging into {} after a failed read would save a document with every other field blanked.
+  if (readError) return { ok: false, content: JSON.stringify({ error: "Could not read the document. Try again in a moment." }), summary: "Could not read the document" };
   const merged = { ...((latest?.body as Record<string, unknown> | undefined) ?? {}), ...(fields as Record<string, unknown>) };
   const body = clampDocument(kind, merged);
   // Fields longer than the document allows are cut; say so instead of saving half a sentence silently.

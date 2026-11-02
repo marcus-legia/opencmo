@@ -153,7 +153,7 @@ async function main() {
   const withRefs = await prepareExplainer({ ...withImage, voice: "Aria" }, { previewed: async () => [input.code], save: async () => "a".repeat(64), lookupImage });
   assert.ok(typeof withRefs !== "string", String(withRefs));
   assert.deepEqual((withRefs.spec.scene as { assets?: unknown }).assets, [{ name: "screen", ref: OBJECT }], "the spec holds the library object, never a URL");
-  assert.match(explainerCard(withRefs, "clip").changes[1]!, /Images from your library: Uploads\/screen\.png/);
+  assert.match(explainerCard(withRefs, "clip").changes[1]!, /Images from your media: Uploads\/screen\.png/);
   const missingRef = await prepareExplainer({ ...input, voice: "Aria", assets: [{ name: "screen", image: "Uploads/nope.png" }] }, { previewed: async () => [input.code], save: async () => assert.fail("must not save"), lookupImage });
   assert.match(String(missingRef), /^assets\.0\.image: /);
 

@@ -110,7 +110,7 @@ select is((public.agent_open_cmo_session('fake', false)).scope, 'cmo', 'reopenin
 
 -- ================================================================ rate limits
 select is(public.rate_limit_hit('generations', 120, 3600), true, 'the generations route has its bucket');
-select is(public.rate_limit_hit('mcp_preview', 30, 3600), true, 'MCP previews: the old cap still works');
+select throws_ok($$ select public.rate_limit_hit('mcp_preview', 30, 3600) $$, '22023', 'Invalid rate limit.', 'MCP previews: the old cap of 30 is gone (review R2)');
 select is(public.rate_limit_hit('mcp_preview', 60, 3600), true, 'MCP previews: the cap of motion quality A3 works');
 select throws_ok($$ select public.rate_limit_hit('generations', 1000, 3600) $$, '22023', 'Invalid rate limit.', 'the caller cannot raise its own cap');
 

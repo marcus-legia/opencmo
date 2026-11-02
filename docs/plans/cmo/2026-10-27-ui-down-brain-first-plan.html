@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UI Down, Brain First</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+
+/* Layout: two diagrams (workflow, then system design with providers), a department map table, provider and skill audits. */
+:root{
+  --bg:#f5f6f8; --paper:#ffffff; --fg:#1b2333; --muted:#5b6578; --line:#c9cfdb;
+  --lapis:#2747a8; --lapis-soft:#e6ebf8; --gate:#a86a12; --gate-soft:#fbf1e1;
+  --warn:#b4322a; --warn-soft:#fbe9e7; --ok:#21734a; --ok-soft:#e3f3ea;
+  --ext:#6b4fa3; --ext-soft:#efeaf8;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1420; --paper:#171e2e; --fg:#e4e8f1; --muted:#9aa4b8; --line:#3a455c;
+  --lapis:#8ea6f2; --lapis-soft:#1d2848; --gate:#e3a54b; --gate-soft:#33270f;
+  --warn:#f08a80; --warn-soft:#3a1a18; --ok:#6fd19d; --ok-soft:#14301f;
+  --ext:#bba4ec; --ext-soft:#2a2140; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1060px;margin:0 auto;padding-block:32px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:44px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1,h2{font-family:var(--display);font-weight:600}
+h1{font-size:2rem;line-height:1.15}
+h2{font-size:1.4rem}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+code{font-family:var(--mono);font-size:.84em;background:var(--lapis-soft);padding:1px 5px;border-radius:4px}
+a{color:var(--lapis)}
+.lede{color:var(--muted);max-width:64ch;margin-top:8px}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sec{display:grid;gap:14px}
+.sec-head{display:grid;gap:4px}
+
+.diagram{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:820px;height:auto}
+.hint{display:none;font-size:.8rem;color:var(--muted)}
+@media (max-width:860px){.hint{display:block}}
+
+.n-dept{fill:var(--paper);stroke:var(--lapis);stroke-width:1.5}
+.n-bar{fill:var(--lapis)}
+.n-in{fill:var(--lapis-soft);stroke:none}
+.n-user{fill:var(--gate-soft);stroke:var(--gate);stroke-width:2}
+.n-ext{fill:var(--ext-soft);stroke:var(--ext);stroke-width:1.2}
+.n-chip{fill:var(--lapis-soft)}
+.n-chip-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1}
+.n-chip-user{fill:var(--gate)}
+.t{fill:var(--fg);font-family:var(--body);font-size:14px}
+.t-title{fill:var(--fg);font-family:var(--display);font-size:21px;font-weight:600}
+.t-title-s{fill:var(--fg);font-family:var(--display);font-size:17px;font-weight:600}
+.t-eye{fill:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-user{fill:var(--gate);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-eye-ext{fill:var(--ext);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+.t-b{fill:var(--fg);font-family:var(--body);font-size:14px;font-weight:600}
+.t-s{fill:var(--muted);font-family:var(--body);font-size:12px}
+.t-m{fill:var(--fg);font-family:var(--body);font-size:13px}
+.t-warn{fill:var(--warn);font-family:var(--body);font-size:12px}
+.t-new{fill:var(--ok);font-family:var(--mono);font-size:11px}
+.t-chip{fill:var(--lapis);font-family:var(--mono);font-size:11px}
+.t-chip-user{fill:var(--paper);font-family:var(--mono);font-size:11px}
+.t-edge{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.e{fill:none;stroke:var(--muted);stroke-width:1.6}
+.e-dash{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4}
+.e-ok{fill:none;stroke:var(--ok);stroke-width:2}
+.m{fill:var(--muted)}
+.m-ok{fill:var(--ok)}
+.div{stroke:var(--line);stroke-width:1}
+
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.82rem;color:var(--muted)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+.tbl{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;margin:1px 2px 1px 0;white-space:nowrap}
+.p-new{background:var(--ok-soft);color:var(--ok)}
+.p-plan{background:var(--gate-soft);color:var(--gate)}
+.p-no{background:var(--warn-soft);color:var(--warn)}
+.p-ok{background:var(--lapis-soft);color:var(--lapis)}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:10px;align-content:start;min-width:0}
+.card .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+.card.r .k{color:var(--warn)} .card.y .k{color:var(--gate)} .card.g .k{color:var(--ok)} .card.b .k{color:var(--lapis)}
+.plist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.plist li{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.plist li:last-child{border-bottom:0}
+.plist .what{color:var(--muted);font-size:.86rem}
+.order{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.order li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+.order li::before{content:counter(s);font-family:var(--mono);font-size:.8rem;width:24px;height:24px;border-radius:50%;background:var(--lapis-soft);color:var(--lapis);display:grid;place-items:center}
+
+/* Additions: brain node, proposed nodes, status dots, state nodes. */
+.n-brain{fill:var(--paper);stroke:var(--lapis);stroke-width:2.5}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-new2{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.dot-ok{fill:var(--ok)} .dot-part{fill:var(--gate)} .dot-miss{fill:var(--warn)}
+.diagram svg.wide{min-width:1000px}
+.t-cap{fill:var(--fg);font-family:var(--mono);font-size:10.5px}
+.bus{stroke:var(--muted);stroke-width:1.6}
+.dec{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.dec.own{background:var(--lapis-soft);color:var(--lapis)} .dec.buy{background:var(--ext-soft);color:var(--ext)} .dec.mix{background:var(--gate-soft);color:var(--gate)}
+.src{font-size:.82rem;color:var(--muted)}
+.dotk{width:10px;height:10px;border-radius:50%;display:inline-block}
+.prose{max-width:72ch;display:grid;gap:10px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.rules .card p{font-size:.92rem}
+.st{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.st.ok{background:var(--ok-soft);color:var(--ok)} .st.part{background:var(--gate-soft);color:var(--gate)} .st.miss{background:var(--warn-soft);color:var(--warn)}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+/* Additions for the before/after page: numbered badges, proposed (dashed) nodes, state nodes. */
+.bd circle{fill:var(--warn)}
+.bd text{fill:var(--paper);font-family:var(--mono);font-size:12px;font-weight:600;text-anchor:middle}
+.nb circle{fill:var(--lapis)}
+.nb text{fill:var(--paper);font-family:var(--mono);font-size:11px;font-weight:600;text-anchor:middle}
+.nb-new circle{fill:var(--ok)}
+.n-new{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.2;stroke-dasharray:5 4}
+.n-grp{fill:none;stroke:var(--line);stroke-width:1.2}
+.n-st{fill:var(--paper);stroke:var(--lapis);stroke-width:1.3}
+.t-st{fill:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500}
+.e-new{fill:none;stroke:var(--ok);stroke-width:1.6;stroke-dasharray:6 4}
+.diagram svg.wide{min-width:1000px}
+.badge-list{counter-reset:none;list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.badge-list li{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;min-width:0}
+.badge-list .no{font-family:var(--mono);font-size:.78rem;font-weight:600;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--paper)}
+.badge-list.r .no{background:var(--warn)}
+.badge-list.b .no{background:var(--lapis)}
+.badge-list.b li.new .no{background:var(--ok)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 28px}
+.keep li::marker{color:var(--ok)}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+.vs td:nth-child(2){color:var(--muted)}
+.prose{max-width:72ch;display:grid;gap:10px}
+.foot{font-size:.84rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;display:grid;gap:6px}
+
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.86rem}
+.toc a{text-decoration:none}
+.code{font-family:var(--mono);font-size:.78rem;line-height:1.5;margin:0;white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px}
+.prose-note{color:var(--muted);max-width:72ch;font-size:.92rem}
+.card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
+
+.lane{fill:var(--paper);stroke:var(--line)}
+.lane-you{fill:var(--gate-soft);stroke:var(--gate)}
+.t-xs{fill:var(--fg);font-family:var(--body);font-size:11px}
+table.steps td:nth-child(3){min-width:260px}
+table.steps td:nth-child(4){min-width:200px}
+ul.plain,ol.plain{margin:0;padding-left:1.2em;display:grid;gap:6px}
+pre.code{font-family:var(--mono);font-size:.8rem;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto}
+.sec p{max-width:75ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<p class="eyebrow">opencmo.io · plan · cmo · 2026-10-27 · for review</p>
+<h1>UI down, brain first: the plan to build the AI CMO</h1>
+<p class="lede">Status: <b>proposed</b> (2026-10-27), for the owner's review. Markdown twin for agents: <a href="2026-10-27-ui-down-brain-first-plan.md"><code>2026-10-27-ui-down-brain-first-plan.md</code></a>. Built on <a href="../../architecture/workflow.md"><code>docs/architecture/workflow.md</code></a> and the department pages next to it. The screen list for the designer is <a href="2026-10-27-ui-design-brief.md"><code>2026-10-27-ui-design-brief.md</code></a>.</p>
+</header>
+<section class="sec"><div class="sec-head"><h2>1. Owner direction (2026-10-27)</h2></div>
+<ul class="plain"><li><b>Build the brain first</b>, then the rest of the system.</li><li><b>Work top-down</b>, from the whole system to the details.</li><li><b>Start from the UI:</b> redesign the whole app in Claude Design. The finished design is the goal every build phase works toward.</li></ul>
+</section>
+<section class="sec"><div class="sec-head"><h2>2. Advisor view</h2></div>
+<div class="tbl"><table><thead><tr><th>Point</th><th>View</th></tr></thead><tbody><tr><td>UI as the goal</td><td><b>Agree.</b> Each screen names the data it shows and the actions it offers. That becomes the contract for tables, RPCs and jobs, so nothing gets built that no screen uses. Today's CMO screen already works this way (<code>lib/cmo/workspace.ts</code> with <code>live.*</code> flags).</td></tr><tr><td>Brain first</td><td><b>Agree, with one condition.</b> The brain is the spine every department plugs into, and it can be tested on departments that already exist: X posts, the Reddit scan, competitor research, goals and the long take. This changes the owner decision of 2026-10-19 ("the editor is the spearhead"), so the Strategy section of <code>CLAUDE.md</code> changes with this plan (§7).</td></tr><tr><td>The one exception</td><td>Finish <b>Studio S0</b> (long take on production, PR #111) alongside the design work. It is nearly done, it is the first real OpenCMO marketing video, and it gives the brain a real Studio to brief in B3.</td></tr><tr><td>Redesign scope</td><td><b>Everything except the inside of the editor.</b> The editor has its own parity work and shortcuts. Redesigning it now would put the brain off by weeks. The editor gets the new design tokens and an entry point from Studio; a redesign inside it comes later.</td></tr><tr><td>Claude Design output</td><td><b>A target, not code to paste.</b> We rebuild the screens with our own components and routes, with the same tokens. The design must show real states: empty, loading, waiting on the founder, failed, out of credits. Those states are where the contracts come from.</td></tr><tr><td>Risk</td><td>Design without data drifts into features we cannot back (the rule is "don't ship coming soon"). Each screen is tagged with the phase that makes it live. The app shows only the screens whose phase has shipped.</td></tr></tbody></table></div>
+</section>
+<section class="sec"><div class="sec-head"><h2>3. Phases, top-down</h2></div>
+<p class="hint">Scroll sideways to see the whole diagram.</p><div class="diagram"><svg class="wide" viewBox="0 0 1200 470" role="img" aria-label="Top-down phases: UI map, design system, screens and contracts first; then the brain and approval steps with their UI slices; a one-week gate; then departments in workflow order; then quality. Studio S0 runs in parallel with the design phases.">
+<defs><marker id="pl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
+<text class="t-eye" x="20" y="50">1 · UI (SYSTEM)</text>
+<rect class="n-user" x="170" y="20" width="230" height="58" rx="8"/><text class="t-b" x="180" y="42">U0 Product map</text><text class="t-xs" x="180" y="62">sitemap, screens, states</text>
+<path class="e" d="M400 49H425" marker-end="url(#pl)"/>
+<rect class="n-user" x="428" y="20" width="230" height="58" rx="8"/><text class="t-b" x="438" y="42">U1 Design system</text><text class="t-xs" x="438" y="62">Claude Design</text>
+<path class="e" d="M658 49H683" marker-end="url(#pl)"/>
+<rect class="n-user" x="686" y="20" width="230" height="58" rx="8"/><text class="t-b" x="696" y="42">U2 Every screen</text><text class="t-xs" x="696" y="62">frozen</text>
+<path class="e" d="M916 49H941" marker-end="url(#pl)"/>
+<rect class="n-user" x="944" y="20" width="230" height="58" rx="8"/><text class="t-b" x="954" y="42">U3 Contracts</text><text class="t-xs" x="954" y="62">screen → data → RPC</text>
+<rect class="n-st" x="170" y="92" width="1000" height="34" rx="8"/><text class="t-xs" x="182" y="114">In parallel: Studio S0, the long take on production (PR #111): the first real OpenCMO video and a real Studio for the brain</text>
+<path class="e" d="M1115 78V86H150V179H166" marker-end="url(#pl)"/>
+<text class="t-eye" x="20" y="180">2 · BRAIN</text>
+<rect class="n-new" x="170" y="150" width="124" height="58" rx="8"/><text class="t-b" x="180" y="172">B0</text><text class="t-xs" x="180" y="192">corrections, budget</text>
+<path class="e" d="M294 179H309" marker-end="url(#pl)"/>
+<rect class="n-new" x="312" y="150" width="124" height="58" rx="8"/><text class="t-b" x="322" y="172">A0</text><text class="t-xs" x="322" y="192">Inbox, shell</text>
+<path class="e" d="M436 179H451" marker-end="url(#pl)"/>
+<rect class="n-new" x="454" y="150" width="124" height="58" rx="8"/><text class="t-b" x="464" y="172">B1</text><text class="t-xs" x="464" y="192">work orders, Week</text>
+<path class="e" d="M578 179H593" marker-end="url(#pl)"/>
+<rect class="n-new" x="596" y="150" width="124" height="58" rx="8"/><text class="t-b" x="606" y="172">A1</text><text class="t-xs" x="606" y="192">Studio cards</text>
+<path class="e" d="M720 179H735" marker-end="url(#pl)"/>
+<rect class="n-new" x="738" y="150" width="124" height="58" rx="8"/><text class="t-b" x="748" y="172">B2</text><text class="t-xs" x="748" y="192">Home, kill switch</text>
+<path class="e" d="M862 179H877" marker-end="url(#pl)"/>
+<rect class="n-new" x="880" y="150" width="124" height="58" rx="8"/><text class="t-b" x="890" y="172">A2</text><text class="t-xs" x="890" y="192">digest, phone</text>
+<path class="e" d="M1004 179H1019" marker-end="url(#pl)"/>
+<rect class="n-new" x="1022" y="150" width="124" height="58" rx="8"/><text class="t-b" x="1032" y="172">B3</text><text class="t-xs" x="1032" y="192">registry, rules</text>
+<rect class="n-user" x="170" y="232" width="1000" height="34" rx="8"/><text class="t-xs" x="182" y="254">Gate: one real week runs with the departments that exist; the founder only approves (cards/day, approval rate, credits per deliverable)</text>
+<path class="e" d="M1108 208V228" marker-end="url(#pl)"/><path class="e" d="M1108 266V277H150V317H166" marker-end="url(#pl)"/>
+<text class="t-eye" x="20" y="318">3 · DEPARTMENTS</text>
+<rect class="n-new" x="170" y="288" width="230" height="58" rx="8"/><text class="t-b" x="180" y="310">D1 Writer</text><text class="t-xs" x="180" y="330">W0–W2</text>
+<path class="e" d="M400 317H425" marker-end="url(#pl)"/>
+<rect class="n-new" x="428" y="288" width="230" height="58" rx="8"/><text class="t-b" x="438" y="310">D2 Studio</text><text class="t-xs" x="438" y="330">S1–S3, shorts, slides</text>
+<path class="e" d="M658 317H683" marker-end="url(#pl)"/>
+<rect class="n-new" x="686" y="288" width="230" height="58" rx="8"/><text class="t-b" x="696" y="310">D3 Schedule</text><text class="t-xs" x="696" y="330">P0–P1, Zernio</text>
+<path class="e" d="M916 317H941" marker-end="url(#pl)"/>
+<rect class="n-new" x="944" y="288" width="230" height="58" rx="8"/><text class="t-b" x="954" y="310">D4 Research+Sales</text><text class="t-xs" x="954" y="330">R0–R2</text>
+<path class="e" d="M1108 346V366" marker-end="url(#pl)"/>
+<text class="t-eye" x="20" y="400">4 · QUALITY</text>
+<rect class="n-st" x="170" y="370" width="1000" height="58" rx="8"/><text class="t-b" x="180" y="392">Q</text><text class="t-xs" x="180" y="412">B4 evals, S4 look check, P2 best time, P3 metrics, R3–R4, W4</text>
+<text class="t-s" x="20" y="458">Each brain step ships its slice of the new UI with its backend. Each department: frozen screen → contract → build → a real deliverable.</text>
+</svg>
+</div>
+<div class="tbl"><table><thead><tr><th>Phase</th><th>Level</th><th>What</th><th>Who</th><th>Output</th><th>Gate</th></tr></thead><tbody><tr><td><b>U0</b></td><td>System</td><td>Product map: sitemap, the screen list, the states of each screen, the card kinds, taken from <code>workflow.md</code></td><td>Claude</td><td>the design brief (done with this plan)</td><td>the owner approves the screen list</td></tr><tr><td><b>U1</b></td><td>System</td><td>Design system in Claude Design: colours, type, spacing, components (rail, card, table, drawer, status chips, empty states), light and dark, phone width</td><td>owner in Claude Design; Claude reviews</td><td>design system</td><td>the owner approves</td></tr><tr><td><b>U2</b></td><td>Screens</td><td>The whole app in Claude Design, in workflow order: shell and Home → Inbox (10 card kinds) → Week → Departments → Activity → Memory → Setup → Settings and billing</td><td>owner; Claude reviews against the contracts</td><td>every screen, every state</td><td>design frozen (changes after this go through the plan)</td></tr><tr><td><b>U3</b></td><td>Contracts</td><td>For each screen: data, actions, live phase → the tables, RPCs, jobs and API routes it needs; diff against today's code</td><td>Claude</td><td><code>screen-contracts.md</code>; the architecture pages updated</td><td>the owner approves</td></tr><tr><td><b>B0–B3 + A0–A2</b></td><td>Brain</td><td>Brain and Approval, built against U3 and wired to the departments that exist (section 4)</td><td>Claude sessions</td><td>brain live; new shell, Home, Inbox, Week, Activity</td><td><b>one real week runs</b>: plan → posts → Reddit → research → measure, the founder only approves</td></tr><tr><td><b>D1–D4</b></td><td>Departments</td><td>One department at a time, in workflow order (section 5)</td><td>Claude sessions</td><td>each department's screen live with real output</td><td>a real deliverable per department</td></tr><tr><td><b>Q</b></td><td>Quality</td><td>Brain evals B4, Studio look check S4, best time P2, metrics P3, Research R3–R4, Writer W4</td><td>Claude sessions</td><td>measures on the dashboard</td><td>targets set from real weeks</td></tr></tbody></table></div>
+<p>S0 runs in parallel with U1–U3.</p>
+</section>
+<section class="sec"><div class="sec-head"><h2>4. Brain phase in detail</h2></div>
+<p>Each step ships its slice of the new UI together with the backend, so the step is visible as soon as it lands.</p>
+<div class="tbl"><table><thead><tr><th>Step</th><th>Backend</th><th>UI slice</th><th>Uses departments that exist</th></tr></thead><tbody><tr><td><b>B0</b></td><td>corrections, budget fields (<code>brain.md</code> §9)</td><td>Settings: weekly budget, kill switch placeholder hidden until B2</td><td>—</td></tr><tr><td><b>A0</b></td><td><code>approvals</code> + <code>approval_decide</code> wrapping today's RPCs; <code>pending.ts</code> reads it</td><td>new shell and <b>Inbox</b> with <code>post</code>, <code>reply</code>, <code>goal</code> cards</td><td>Writer (X), Sales, goals</td></tr><tr><td><b>B1</b></td><td><code>work_orders</code> from <code>cmo_runs</code>, deliverables; <code>plan_week</code> writes a tree</td><td><b>Week</b>: plan and work order tree; <b>Activity</b>: order log</td><td>competitor research, X drafts, Reddit scan</td></tr><tr><td><b>A1</b></td><td>snapshot rule; Studio cards (<code>price</code>, <code>finished_video</code>)</td><td>Inbox: Studio cards</td><td>long take (S0)</td></tr><tr><td><b>B2</b></td><td>progress check, kill switch, morning digest (cron)</td><td><b>Home / Today</b>: waiting, progress, stuck orders, kill switch</td><td>all of the above</td></tr><tr><td><b>A2</b></td><td>digest email (Resend), web push, phone-first inbox</td><td>Inbox at phone width</td><td>—</td></tr><tr><td><b>B3</b></td><td>capability registry, event rules, Studio adapter (<code>build_video</code>, <code>cut_clips</code>)</td><td>Activity shows which department got which order</td><td>long take via the adapter</td></tr></tbody></table></div>
+<p><b>Gate:</b> one real week on a test account and on OpenCMO's own account. The brain plans; X drafts, the Reddit scan and research run on their own; the founder only approves. Measures: cards per day, approval rate, edit rate, credits per approved deliverable, stuck orders.</p>
+</section>
+<section class="sec"><div class="sec-head"><h2>5. Departments, in workflow order</h2></div>
+<p>Each department follows the same steps: frozen screen → its contract → build → a real deliverable.</p>
+<div class="tbl"><table><thead><tr><th>#</th><th>Department</th><th>Phases</th><th>Screen</th><th>Real deliverable</th></tr></thead><tbody><tr><td>D1</td><td>Writer</td><td>W0, W1, W2 (other platforms, voice memory, captions)</td><td>Writer: drafts per platform, voice notes</td><td>a week of OpenCMO posts on X, Threads, LinkedIn</td></tr><tr><td>D2</td><td>Studio</td><td>S1, S2, S3 (adapter, Shorts, Slideshow, post images); A1 cards</td><td>Studio: videos, shorts, slideshows; opens the editor</td><td>one OpenCMO video, its 3 shorts, one slideshow</td></tr><tr><td>D3</td><td>Schedule + Publish</td><td>P0, P1; A3 <code>schedule</code> cards</td><td>Week calendar with slots; Settings: accounts, timezone</td><td>posts going out at approved times through Zernio</td></tr><tr><td>D4</td><td>Research + Sales</td><td>R0, R1, R2</td><td>Research: insights with URLs; Sales: threads and replies</td><td>a niche video brief; replies posted by hand</td></tr></tbody></table></div>
+</section>
+<section class="sec"><div class="sec-head"><h2>6. What this replaces on the roadmap</h2></div>
+<ul class="plain"><li><code>docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md</code> E1–E6 wait until D2. S0 stays.</li><li>Growth and billing (referral, rewards, cancel flow) still come after, as before.</li><li>Every phase still gets its own plan in <code>docs/plans/</code> before code, as before.</li></ul>
+</section>
+<section class="sec"><div class="sec-head"><h2>7. Changes that come with this plan</h2></div>
+<ul class="plain"><li><code>CLAUDE.md</code> Strategy: "brain first, UI down (owner, 2026-10-27)"; the editor stays what we sell, and S0 keeps producing the marketing video.</li><li><code>docs/architecture/workflow.md</code> build order: replaced by sections 3–5 here.</li></ul>
+<p>These two edits are made when the owner approves this plan, not before.</p>
+</section>
+<section class="sec"><div class="sec-head"><h2>8. Decisions for the owner</h2></div>
+<div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead><tbody><tr><td>1</td><td>Brain first, changing the 2026-10-19 spearhead decision</td><td>yes, with S0 kept in parallel</td></tr><tr><td>2</td><td>Redesign scope</td><td>the whole app except the inside of the editor</td></tr><tr><td>3</td><td>Design system: keep Lapis &amp; Marble or start fresh</td><td>let Claude Design propose; keep the lapis accent if it still fits</td></tr><tr><td>4</td><td>Who drives Claude Design</td><td>the owner drives; Claude writes the brief and reviews every screen against the contracts</td></tr><tr><td>5</td><td>Phone</td><td>Inbox and Home designed phone-first (approvals happen on the phone); the rest desktop-first</td></tr></tbody></table></div>
+</section>
+</div>
+</body>
+</html>

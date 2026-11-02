@@ -12,11 +12,14 @@
 import { z } from "zod";
 
 import { RESEARCH_TOOLS, runResearchTool } from "@/lib/agent/cmo-research";
+import { DECISION_TOOLS } from "@/lib/agent/cmo-decisions";
+import { EDITOR_TOOLS } from "@/lib/agent/cmo-editor";
 import { CMO_TOOL_SPECS, isCmoWrite, runCmoTool } from "@/lib/agent/cmo-tools";
 import type { ToolOutcome, ToolSpec } from "@/lib/agent/tools";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 
 import { fail, ok, type CmoMcpTool, type CmoToolContext, type McpAnnotations, type McpResult } from "./contract";
+import { withSpend } from "@/lib/spend/record";
 
 /**
  * Session A's editor group has its own `read_skill` (the founder's editing recipes) and
@@ -39,6 +42,7 @@ const TITLES: Record<string, string> = {
   set_week_goal: "Propose a weekly goal",
   update_document: "Update a marketing document",
   search_reddit: "Search Reddit",
+  search_hackernews: "Search Hacker News",
   subreddit_posts: "Read a subreddit",
   reddit_thread: "Read a Reddit thread",
   x_profile: "Read an X profile",
@@ -57,8 +61,8 @@ const MCP_NOTES: Record<string, string> = {
 };
 
 /** Which bucket of `cmo_read_hit` a read counts against, if any. */
-const capOf = (name: string): "mcp_social" | "mcp_site" | null =>
-  name === "read_site" ? "mcp_site" : RESEARCH_TOOLS.has(name) && name !== "research_credits" ? "mcp_social" : null;
+const capOf = (name: string): "mcp_social" | "mcp_site" | "research_credits" | null =>
+  name === "read_site" ? "mcp_site" : name === "research_credits" ? "research_credits" : RESEARCH_TOOLS.has(name) ? "mcp_social" : null;
 
 function annotations(name: string): McpAnnotations {
   const outside = RESEARCH_TOOLS.has(name) || name === "read_site";
@@ -91,12 +95,15 @@ function toMcp(spec: ToolSpec): CmoMcpTool {
         if (!allowed) return fail(`The hourly limit for ${cap === "mcp_site" ? "website reads" : "social research"} is reached. Work with what you have, or try again next hour.`);
       }
       const outcome = RESEARCH_TOOLS.has(spec.name)
-        ? await runResearchTool(spec.name, input, new ScBudget(LOOKUPS_PER_CALL))
+        ? await withSpend({ via: "founder", client: supabase, refKind: "mcp" }, () => runResearchTool(spec.name, input, new ScBudget(LOOKUPS_PER_CALL)))
         : await runCmoTool(supabase, spec.name, input, { siteReads: 0, brain: "claude" });
       return fromOutcome(outcome);
     },
   };
 }
 
-// CMO_TOOL_SPECS already ends with the research tools.
-export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.map(toMcp);
+// CMO_TOOL_SPECS already holds the research tools. `open_screen` moves the in-app panel; an MCP client has none.
+// Decisions from the chat (plan 2026-11-02) are confirmed on a card in the app; MCP decides through its inbox instead.
+// `wait_for_run` answers the in-app chat, which hears finished runs by realtime; an MCP client polls get_run_result.
+// The editor handoff opens column 3; MCP has its own find, export and versions groups over the same reads.
+export const CMO_TOOLS: CmoMcpTool[] = CMO_TOOL_SPECS.filter((spec) => spec.name !== "open_screen" && spec.name !== "wait_for_run" && !EDITOR_TOOLS.has(spec.name) && !DECISION_TOOLS.has(spec.name)).map(toMcp);

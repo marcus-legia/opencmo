@@ -50,10 +50,31 @@ if (run("docker", ["info"], { stdio: "ignore" }).status !== 0) {
   die("Docker chưa chạy. Mở Docker Desktop rồi chạy lại `npm run dev`.");
 }
 
+/** Reads `KEY=value` lines from the two `.env.local` files (the web one wins) for the keys `keep` accepts. */
+function readEnvFiles(keep) {
+  const env = {};
+  for (const file of [path.join(ROOT, ".env.local"), path.join(WEB, ".env.local")]) {
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const index = line.indexOf("=");
+      if (index < 1) continue;
+      const key = line.slice(0, index).trim();
+      if (keep(key)) env[key] = line.slice(index + 1).trim().replace(/^["']|["']$/g, "");
+    }
+  }
+  return env;
+}
+
+// supabase/config.toml reads the Google OAuth client as `env(SUPABASE_AUTH_GOOGLE_*)`. The CLI only
+// sees the shell, not apps/web/.env.local: without these the auth container gets the literal
+// `env(...)` string and Google answers "Error 401: invalid_client". They are read once, when the
+// containers are created — a stack started without them needs `supabase stop` first.
+const supabaseEnv = readEnvFiles((key) => key.startsWith("SUPABASE_AUTH_"));
+
 const status = run("supabase", ["status", "-o", "env"]);
 if (status.status !== 0) {
   console.log("Supabase local chưa chạy — đang `supabase start`…");
-  if (run("supabase", ["start"], { stdio: "inherit" }).status !== 0) {
+  if (run("supabase", ["start"], { stdio: "inherit", env: { ...process.env, ...supabaseEnv } }).status !== 0) {
     die("`supabase start` thất bại. Xem log bên trên.");
   }
 }
@@ -71,16 +92,7 @@ for (const key of ["API_URL", "ANON_KEY", "SERVICE_ROLE_KEY"]) {
   if (!supabase[key]) die(`\`supabase status\` thiếu ${key}.`);
 }
 
-const engineEnv = {};
-for (const file of [path.join(ROOT, ".env.local"), path.join(WEB, ".env.local")]) {
-  if (!existsSync(file)) continue;
-  for (const line of readFileSync(file, "utf8").split("\n")) {
-    const index = line.indexOf("=");
-    if (index < 1) continue;
-    const key = line.slice(0, index).trim();
-    if (ENGINE_KEYS.has(key) || ENGINE_PREFIXES.some((p) => key.startsWith(p))) engineEnv[key] = line.slice(index + 1).trim().replace(/^["']|["']$/g, "");
-  }
-}
+const engineEnv = readEnvFiles((key) => ENGINE_KEYS.has(key) || ENGINE_PREFIXES.some((p) => key.startsWith(p)));
 
 // Cổng 3000 bị chiếm thì Next lặng lẽ nhảy sang 3001, nhưng NEXT_PUBLIC_SITE_URL
 // bên dưới vẫn là 3000 — magic link trong Inbucket trỏ về một cổng không có gì
@@ -138,6 +150,9 @@ const children = [
       // MCP (G5) ký JWT ngắn hạn cho chủ khoá API.
       SUPABASE_JWT_SECRET: supabase.JWT_SECRET,
       NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://127.0.0.1:3000",
+      // The redesigned UI (ui-build plan): local and preview run it, production leaves it unset until
+      // release. `NEXT_PUBLIC_OPENCMO_UI= npm run dev` shows today's UI.
+      NEXT_PUBLIC_OPENCMO_UI: process.env.NEXT_PUBLIC_OPENCMO_UI ?? "v2",
       // apps/web/.env.local holds the PRODUCTION worker URL and token: local jobs must be picked up
       // by the local worker, never sent to the production one. `@next/env` keeps a value that is
       // already set, so empty strings win over the file.

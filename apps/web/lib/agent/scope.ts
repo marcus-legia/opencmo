@@ -11,7 +11,7 @@ import type { ClipDocument } from "@opencmo/clip-doc";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { saveDocument } from "@/lib/editor/document";
-import { ensureProject } from "@/lib/editor/project";
+import { ensureProject, startsEmpty } from "@/lib/editor/project";
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
@@ -24,6 +24,7 @@ import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
 import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, runCmoTool, type CmoTurn } from "./cmo-tools";
+import { DECISION_WRITES, prepareDecision, readCredits, runDecision, type DecisionCard, type Prepared } from "./cmo-decisions";
 import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
 import { runSkillTool, SKILL_SPECS, SKILL_TOOLS, skillIndex } from "./skills";
@@ -65,9 +66,12 @@ import {
 } from "./long-take";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
+import { EDITOR_TOOLS, runEditorTool } from "./cmo-editor";
+import { runWaitForRun, runsFinishedBlock } from "./cmo-wait";
 import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
+import { withSpend } from "@/lib/spend/record";
 
 /**
  * Kiểm lời của lượt sinh LÚC BÁO GIÁ: lời bị chặn thì không hiện thẻ duyệt cho
@@ -98,7 +102,7 @@ export type Plan =
   | {
       kind: "approval";
       input: unknown;
-      card: (ReturnType<typeof generateCard> & { sheet?: ContactSheet }) | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard>;
+      card: (ReturnType<typeof generateCard> & { sheet?: ContactSheet }) | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> | DecisionCard;
     }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
@@ -213,7 +217,7 @@ export async function clipScope(
 
 /** A blank New edit gets the cut-by-words tools once a video on it has a transcript to cut by. */
 export const blankEdit = (context: ClipContext, document: ClipDocument): boolean =>
-  context.clip.kind === "blank" && !speechSources(document).length;
+  startsEmpty(context.clip.kind) && !speechSources(document).length;
 
 export async function clipScopeWith(supabase: SupabaseClient, context: ClipContext, clipId: string, host: ClipHost): Promise<Scope> {
   const workspace = dbWorkspace(supabase, context, clipId, host.checkpoint);
@@ -573,21 +577,62 @@ function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {
  * nào tốn tiền ngoài credit của việc được giao, và không tool nào đăng gì. Ngân sách lời gọi
  * research tính theo YÊU CẦU (scope dựng lại mỗi lượt).
  */
-export function cmoScope(supabase: SupabaseClient): Scope {
+/** The `cmo_read_hit` bucket a CMO chat tool counts against: social reads, website reads, the credit balance. */
+export function chatReadBucket(name: string): "chat_social" | "chat_site" | "research_credits" | null {
+  if (name === "read_site") return "chat_site";
+  if (name === "research_credits") return "research_credits";
+  return RESEARCH_TOOLS.has(name) ? "chat_social" : null;
+}
+
+/** `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message. */
+export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   const budget = new ScBudget(RESEARCH_CALLS_PER_TURN);
-  const turn: CmoTurn = { siteReads: 0 };
+  const turn: CmoTurn = { siteReads: 0, startedAt: Date.now() };
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,
-    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy):\n${cmoSkillIndex("cmo")}`,
-    context: () => cmoContext(supabase),
+    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy, and no-ai-slop before writing any text that goes out):\n${cmoSkillIndex("cmo")}`,
+    context: async () => `${await cmoContext(supabase)}${sessionId ? await runsFinishedBlock(supabase, sessionId) : ""}`,
     state: () => cmoState(supabase),
-    async plan() {
-      return { kind: "run" };
+    async plan(call) {
+      // A decision (plan 2026-11-02-cmo-chat-decisions) is a confirmation card: nothing writes until the founder
+      // confirms it. The prepared input, with the card's hash read now, stays on the server with the pending call.
+      if (!DECISION_WRITES.has(call.name)) return { kind: "run" };
+      const prepared = await prepareDecision(supabase, call.name, call.input);
+      return prepared.ok ? { kind: "approval", input: prepared.prepared, card: prepared.card } : { kind: "invalid", content: prepared.content, summary: prepared.summary };
     },
-    run: (call) => (RESEARCH_TOOLS.has(call.name) ? runResearchTool(call.name, call.input, budget) : runCmoTool(supabase, call.name, call.input, turn)),
-    async decide(call) {
-      throw new Error(`CMO scope has no approval tool ${call.name}.`);
+    async run(call) {
+      if (call.name === "get_credits") return readCredits(supabase);
+      if (call.name === "wait_for_run") return runWaitForRun(call.input, { supabase });
+      if (EDITOR_TOOLS.has(call.name)) return runEditorTool(supabase, call.name, call.input);
+      // The in-memory caps above start again on every request (each continue rebuilds the scope); the founder's
+      // counters in SQL do not, and the daily cap is shared with MCP (review R4).
+      const bucket = chatReadBucket(call.name);
+      if (bucket) {
+        const { data: allowed, error } = await supabase.rpc("cmo_read_hit", { p_bucket: bucket });
+        if (error || !allowed) {
+          const message = error
+            ? "Could not check the research limit. Try again in a minute."
+            : "The research limit for now is reached. Work with what you have read, or try again later.";
+          return { ok: false, content: JSON.stringify({ error: message }), summary: "Research limit reached" };
+        }
+      }
+      // Lookups are recorded in the founder's spend ledger and refused past their daily cap.
+      return RESEARCH_TOOLS.has(call.name)
+        ? withSpend({ via: "founder", client: supabase, refKind: "agent_turn" }, () => runResearchTool(call.name, call.input, budget))
+        : runCmoTool(supabase, call.name, call.input, turn);
+    },
+    async decide(call, input, approved) {
+      if (!DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);
+      if (!approved) {
+        return {
+          outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The founder cancelled. Nothing changed." }), summary: "Cancelled" },
+          extra: {},
+          wrote: false,
+        };
+      }
+      const outcome = await runDecision(supabase, input as Prepared);
+      return { outcome, extra: {}, wrote: outcome.ok };
     },
     isWrite: isCmoWrite,
   };

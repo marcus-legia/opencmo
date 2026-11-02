@@ -14,7 +14,7 @@ import { fail, ok, type CmoMcpTool } from "./contract";
 
 const BILLING_URL = `${SITE_URL}/app/billing`;
 
-async function balance(supabase: SupabaseClient, userId: string): Promise<{ credits: number; plan: string } | null> {
+export async function balance(supabase: SupabaseClient, userId: string): Promise<{ credits: number; plan: string } | null> {
   const { data, error } = await supabase.from("profiles").select("credit_balance, plan").eq("id", userId).maybeSingle();
   if (error || !data) return null;
   const row = data as { credit_balance: number | null; plan: string | null };

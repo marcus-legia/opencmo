@@ -9,6 +9,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { browserFacts, deviceVerdict, MIN_HEIGHT, MIN_WIDTH, type DeviceVerdict } from "@/lib/editor/device";
+import { studioHref, studioItemHref } from "@/components/screens/studio/href";
 
 export function DeviceCheck({ projectId, clipId, children }: { projectId: string | null; clipId: string; children: ReactNode }) {
   const [verdict, setVerdict] = useState<DeviceVerdict | null>(null);
@@ -49,7 +50,7 @@ export function DeviceCheck({ projectId, clipId, children }: { projectId: string
       </div>
       <p className="editor-gate-alt">
         You can still download this clip, or change its crop and captions, from{" "}
-        <a href={projectId ? `/app/projects/${projectId}` : "/app/projects"}>the project page</a>.
+        <a href={projectId ? studioItemHref(projectId) : studioHref()}>the project page</a>.
       </p>
     </div>
   );
