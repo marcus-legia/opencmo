@@ -1,14 +1,12 @@
 /**
- * Gọi worker trên Modal.
+ * Wakes the worker on Modal.
  *
- * Vì sao là HTTP chứ không phải `run_job.spawn()`: spawn là API Python, app này
- * là TypeScript. Endpoint `submit` trong `packages/engine/modal_app.py` là cây
- * cầu giữa hai bên.
+ * HTTP rather than `run_job.spawn()`: spawn is a Python API and this app is TypeScript. The `submit` endpoint in
+ * `packages/engine/modal_app.py` is the bridge between the two.
  *
- * Hàm này KHÔNG BAO GIỜ ném lỗi ra ngoài. Job đã nằm trong database ở trạng
- * thái 'queued' rồi; nếu Modal không nhận được cú đánh thức thì `sweep()` — cron
- * mỗi phút — sẽ nhặt nó lên. Đánh sập việc tạo job chỉ vì lưới an toàn phải làm
- * việc là đổi một chậm trễ 60 giây lấy một lỗi đỏ trước mặt người dùng.
+ * This function NEVER throws. The job is already in the database as 'queued'; if Modal misses the wake, `sweep()`
+ * (a cron every minute) picks it up. Failing the job's creation because the safety net has to work would trade a
+ * 60-second delay for a red error in front of the user.
  */
 /** The worker reads the job or task from the database; the wake carries only its id. */
 export type WakePayload = { id: string } | { task_id: string };
