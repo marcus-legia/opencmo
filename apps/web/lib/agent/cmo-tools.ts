@@ -26,6 +26,7 @@ import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 
 import { DECISION_TOOL_SPECS, DECISION_WRITES } from "./cmo-decisions";
+import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
 import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
 import type { ToolOutcome, ToolSpec } from "./tools";
@@ -192,6 +193,8 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   },
   // Decisions from the chat (plan 2026-11-02): last, so the cached prompt prefix stays the same.
   ...DECISION_TOOL_SPECS,
+  // CMO chat live (plan 2026-11-02): after the decisions, for the same reason.
+  WAIT_FOR_RUN_SPEC,
 ];
 
 const WRITES = new Set(["create_task", "remember", "set_week_goal", "update_document", ...DECISION_WRITES]);

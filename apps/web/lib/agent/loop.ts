@@ -87,13 +87,41 @@ export type Answer = {
 /** PostgREST returns at most `max_rows` (1000) rows a request; a long chat must not lose its newest messages. */
 const HISTORY_PAGE = 1000;
 
-async function history(supabase: SupabaseClient, sessionId: string): Promise<StoredMessage[]> {
+/** CMO chats send at most this many turns; the founder's durable facts travel in `<cmo_state>` every turn. */
+export const CMO_WINDOW_TURNS = 30;
+/** The window's start moves this many turns at once, so the cached conversation prefix holds for that many turns. */
+const CMO_WINDOW_STEP = 10;
+
+/**
+ * First turn number a CMO chat sends at turn `current`: between 21 and 30 turns, cut on a turn boundary. A turn's
+ * messages begin with the founder's prompt and hold every tool call with its result, so no pair is split.
+ */
+export function cmoWindowStart(current: number): number {
+  const over = current - (CMO_WINDOW_TURNS - CMO_WINDOW_STEP + 1);
+  return over < 0 ? 1 : Math.floor(over / CMO_WINDOW_STEP) * CMO_WINDOW_STEP + 1;
+}
+
+async function history(supabase: SupabaseClient, sessionId: string, fromTurn = 1): Promise<StoredMessage[]> {
+  let firstSeq = 0;
+  if (fromTurn > 1) {
+    const { data, error } = await supabase
+      .from("agent_messages")
+      .select("seq, agent_turns!inner(number)")
+      .eq("session_id", sessionId)
+      .gte("agent_turns.number", fromTurn)
+      .order("seq", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    firstSeq = (data as { seq: number } | null)?.seq ?? 0;
+  }
   const all: StoredMessage[] = [];
   for (let from = 0; ; from += HISTORY_PAGE) {
     const { data, error } = await supabase
       .from("agent_messages")
       .select("role, content")
       .eq("session_id", sessionId)
+      .gte("seq", firstSeq)
       .order("seq", { ascending: true })
       .range(from, from + HISTORY_PAGE - 1);
     if (error) throw error;
@@ -305,7 +333,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       const watch = watchStop(supabase, turn.id);
       let result;
       try {
-        past ??= await history(supabase, turn.session_id);
+        past ??= await history(supabase, turn.session_id, scope.kind === "cmo" ? cmoWindowStart(turn.number) : 1);
         result = await provider.step(
           {
             history: provider.trimImages(past, KEEP_IMAGES, KEEP_IMAGES),
@@ -313,6 +341,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
             tools: scope.tools,
             system: scope.system,
             signal: watch.signal,
+            clearOldToolResults: scope.kind === "cmo",
           },
           (delta) => {
             if (delta.type === "tool_start") emit("tool_start", { id: delta.id, name: delta.name });

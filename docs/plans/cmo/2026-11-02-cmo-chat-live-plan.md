@@ -105,6 +105,26 @@ output.
 | A5 | **Ratings UI and the history menu.** The thumbs call `rate_agent_turn`; the state is loaded with the session view. `list=1` on the sessions route. | A0 |
 | A6 | **Checks and acceptance.** `cmo-live.check.ts` covers the window cut with tool pairs and the line building. The fake runner completes a run in the e2e. Screenshots. `/code-review` on the diff. | A1–A5 |
 
+**Progress (2026-11-02):**
+- [x] **A0.** Migration `20270103010000_cmo_chat_live.sql` (realtime, `agent_turn_ratings`, `rate_agent_turn`, the
+  200-turn rule in `agent_open_cmo_session`, the `feedback-turn` bucket); pgTAP `242_cmo_chat_live` (13 tests). The
+  line type is `RunLine` in `lib/agent/run-line.ts`, a pure module the panel and the server share.
+- [x] **A1.** `ChatPanel` tracks the run ids `create_task` returned and listens with `useLive("cmo_runs", id=in.(…))`,
+  re-reading the rows under RLS. A finish adds a fixed-text line under its turn and opens its screen; it never starts a
+  model turn. `sessionView` returns each CMO turn's `runs`, so the lines come back after a reload.
+- [x] **A2.** `wait_for_run` (`lib/agent/cmo-wait.ts`): polls every 3 s for at most 45 s; hidden from MCP.
+- [x] **A3.** `<runs_finished>` in the turn context: runs finished since the previous message, at most 5, as
+  `untrusted_data`; the prompt lists it among the data tags.
+- [x] **A4.** `history()` sends whole turns from `cmoWindowStart(n)`: 21 to 30 turns, the start moving 10 turns at a
+  time so the cached prefix holds for 10 turns. Context editing is on for the CMO scope (`clearOldToolResults`). Past
+  200 turns, SQL and the panel open a new conversation, with a line saying so.
+- [x] **A5.** Thumbs call `POST /agent/sessions/:id/ratings` (`rate_agent_turn`, pressing the same thumb clears it);
+  the history menu reads `?list=1`.
+- [x] **A6.** `cmo-live.check.ts` (window bounds for 400 turns, lines, `wait_for_run` with a fake clock, MCP hiding);
+  the window query checked on a 40-turn session in local Postgres; e2e `ui-v2-live.spec.ts` (a draft from the chat
+  finishes, the line shows, Writer opens, a rating survives a reload). Screenshots in
+  [`2026-11-02-cmo-chat-live-shots/`](2026-11-02-cmo-chat-live-shots/).
+
 ## 6. Owner gates
 
 1. Whether ratings may later feed the CMO's memory, e.g. "the founder disliked long answers". The default is that
