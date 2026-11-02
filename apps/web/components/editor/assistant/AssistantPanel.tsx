@@ -102,8 +102,11 @@ export function AssistantPanel({
   onTouched?: (ids: string[]) => void;
   /** The clip has a video whose words can be cut: offer the rough-cut starter. */
   speech?: boolean;
-  /** Text the editor puts in the box (a new `nonce` each time), e.g. "Redo keyframe…" from a shot's menu. */
-  prefill?: { text: string; nonce: number } | null;
+  /**
+   * Text the editor puts in the box (a new `nonce` each time), e.g. "Redo keyframe…" from a shot's menu. `send`: the
+   * CMO chat's handoff, sent once per nonce when the Assistant is ready.
+   */
+  prefill?: { text: string; nonce: number; send?: boolean } | null;
 }) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [models, setModels] = useState<ModelChoice[]>([]);
@@ -137,6 +140,7 @@ export function AssistantPanel({
     setDraft(prefill.text);
     input.current?.focus();
   }, [prefill]);
+  const sentNonce = useRef<number | null>(null);
   // Ô nhập giãn theo chữ tới ~8 dòng rồi mới cuộn; gửi xong thì co lại.
   useEffect(() => {
     const box = input.current;
@@ -446,6 +450,14 @@ export function AssistantPanel({
     ...(session?.turns ?? []).filter((turn) => !live || turn.number !== live.number || live.number === 0),
     ...(live ? [live] : []),
   ];
+
+  // The CMO chat's handoff: once the Assistant has loaded and is idle, the request goes out once per nonce.
+  useEffect(() => {
+    if (!prefill?.send || available !== true || busy || sentNonce.current === prefill.nonce) return;
+    sentNonce.current = prefill.nonce;
+    void send(prefill.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill, available, busy]);
 
   if (available === false) {
     return (
