@@ -113,6 +113,35 @@ A runaway founder or bug is stopped by a daily USD cap before the bill grows.
 | A5 | **Owner page.** `/app/settings/costs`, owner-only, reading through a service-role server component limited to `OPENCMO_OWNER_EMAILS`. This is a deliberate exception: add it to `lib/supabase/admin.ts`'s allowed callers and to CLAUDE.md's list. | A0 |
 | A6 | **Checks and acceptance.** `/code-review` on the diff. | A1–A5 |
 
+**Progress (2026-11-02):**
+- [x] **A0.** Migration `20270104010000_provider_spend.sql`, pgTAP `243_provider_spend` (16 tests), TS `lib/spend/record.ts`,
+  Python `opencmo/backends/supabase/spend.py` + `opencmo/ai/spend.py`. Changes from §1, decided while building:
+  - **One price list for models.** Model calls are priced by `agent_micro_usd` (`agent_model_prices`), the table the
+    Assistant is already charged from; `provider_prices` holds only the other units. No second LLM price table to keep
+    in step.
+  - **No guessed prices.** A unit with no `provider_prices` row is stored with `priced = false` and shown on the page
+    as "calls with no price yet". Seeded: ScrapeCreators at $0.002 a call, marked PROVISIONAL. fal and ElevenLabs
+    record their units per model (`<model id>:second`, `:generation`, `:kchars`) unpriced until their rows are added.
+  - **No service role for the owner page.** `provider_spend_report` is a definer RPC that refuses anyone whose email is
+    not in `app_owners` (written with SQL only). The page reads it under the owner's own session, so `admin.ts` and
+    CLAUDE.md need no new exception (owner gate 3 is no longer needed).
+  - **The chat's lookups** run under the founder's JWT, so they record through `provider_usage_record_mine`, which
+    takes only the endpoint and prices it on the server: a founder can only add to their own spend.
+- [x] **A1.** `structured()` checks the cap before the first call and records every call under the provider that
+  answered (`recorded()`), inside the runner's `withSpend` context (`AsyncLocalStorage`, so concurrent runs in one
+  instance never mix). `think.ts` needs nothing.
+- [x] **A2.** `scGet` checks the cap before the lookup and records one row per request (billed, or 0 for a 402/404).
+  The chat scope and MCP run their research tools inside `withSpend` (`agent_turn`, `mcp`); jobs inherit the runner's.
+- [x] **A3.** `generate_task` records fal and ElevenLabs right after the provider answers, before moderation or the
+  upload can fail. Best effort: a failed write is logged.
+- [x] **A4.** A cap refusal fails the run with "Your CMO reached today's limit. It will continue tomorrow."
+  (`complete_cmo_run` returns its credits); in the chat it is the research tool's error.
+- [x] **A5.** `/app/settings/costs`: 7 days by provider and by kind of work, top 20 founders, cost per approved card.
+  Not found for anyone not in `app_owners`.
+- [x] **A6.** `spend.check.ts`, `tests/test_ai_spend.py`; jobs, research, MCP, CMO and fake-eval checks unchanged.
+
+**Owner, to turn the page on:** `insert into public.app_owners (email) values ('<your login email>');` in the SQL editor.
+
 ## 6. Owner gates
 
 1. The daily cap per founder (default $5) and whether paid plans get a higher cap.

@@ -17,6 +17,7 @@ import type { ToolOutcome, ToolSpec } from "@/lib/agent/tools";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 
 import { fail, ok, type CmoMcpTool, type CmoToolContext, type McpAnnotations, type McpResult } from "./contract";
+import { withSpend } from "@/lib/spend/record";
 
 /**
  * Session A's editor group has its own `read_skill` (the founder's editing recipes) and
@@ -92,7 +93,7 @@ function toMcp(spec: ToolSpec): CmoMcpTool {
         if (!allowed) return fail(`The hourly limit for ${cap === "mcp_site" ? "website reads" : "social research"} is reached. Work with what you have, or try again next hour.`);
       }
       const outcome = RESEARCH_TOOLS.has(spec.name)
-        ? await runResearchTool(spec.name, input, new ScBudget(LOOKUPS_PER_CALL))
+        ? await withSpend({ via: "founder", client: supabase, refKind: "mcp" }, () => runResearchTool(spec.name, input, new ScBudget(LOOKUPS_PER_CALL)))
         : await runCmoTool(supabase, spec.name, input, { siteReads: 0, brain: "claude" });
       return fromOutcome(outcome);
     },
