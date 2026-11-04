@@ -18,7 +18,7 @@ export const PlanSchema = z.object({
       z.object({
         day_offset: z.number().int().describe("0 = today, 6 = six days from today"),
         department: z.enum(["post", "sales", "video"]),
-        platform: z.string().describe("X, Threads or LinkedIn for post; Reddit for sales; TikTok, Reels or Shorts for video"),
+        platform: z.string().describe("X, Threads or LinkedIn for post; Reddit for sales; TikTok, Reels or Shorts for a video; Slideshow for a slideshow"),
         idea: z.string().describe("The idea in one line, specific to this product"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
       }),
@@ -32,7 +32,8 @@ const SYSTEM = `You are the CMO for a solo founder. Plan the next seven days of 
 Rules:
 - Five to ten items. Mostly posts (department "post"), at most one Reddit item a day ("sales").
 - Posts go to X unless the strategy, its weekly rhythm or this week's goal names Threads or LinkedIn; then one idea may become a post on each of those platforms, each written for its platform. At most one post per platform a day; at most 5 Threads and 3 LinkedIn posts a week.
-- At most one video item a week (department "video"): a short AI video the Studio team makes from your brief, only when the strategy or this week's goal calls for video (a launch, a demo, an explainer). Its idea says what the video shows; its reason says why it matters this week.
+- At most one video item a week (department "video"): a one-minute AI video the Studio team makes from your brief and cuts into short clips, only when the strategy or this week's goal calls for video (a launch, a demo, an explainer). Its idea says what the video shows; its reason says why it matters this week.
+- At most one slideshow a week (department "video", platform "Slideshow"): 5 to 10 slides that teach one thing from the documents (a how-to, a list, a before and after). It costs the founder nothing; plan one most weeks.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
 - Learn from the memories: they are reasons the founder skipped drafts and notes they gave you.
 - Plain English, no hype, no invented numbers.
@@ -41,6 +42,8 @@ Rules:
 ${skillText("content-calendar")}`;
 
 const VIDEO = new Set(["TikTok", "Reels", "Shorts"]);
+/** The calendar's platform for a slideshow: a Studio (video department) item whose order is `build_slideshow`. */
+export const SLIDESHOW = "Slideshow";
 
 /** Posts a week per platform, past which the plan drops an item: LinkedIn and Threads reward a slower rhythm than X. */
 export const WEEKLY_POSTS: Readonly<Record<string, number>> = { x: 7, threads: 5, linkedin: 3 };
@@ -54,19 +57,31 @@ export function postPlatform(label: string): string {
 /**
  * Trims and normalizes the model's output into valid calendar items (day, platform, length). Posts: one per platform a day
  * and at most `WEEKLY_POSTS` a week, each kept on X, Threads or LinkedIn. Video: one a week (each becomes a `build_video`
- * order that spends real credits behind its cards) unless the founder asked for more (`maxVideos`).
+ * order that spends real credits behind its cards) unless the founder asked for more (`maxVideos`). Slideshow: one a
+ * week, counted apart from videos (it spends no credits).
  */
 export function toPlanItems(plan: Plan, today = new Date(), maxVideos = 1): PlanItem[] {
   let videos = 0;
+  let slideshows = 0;
   const perWeek = new Map<string, number>();
   const perDay = new Set<string>();
   const out: PlanItem[] = [];
   for (const item of plan.items.slice(0, 12)) {
-    if (item.department === "video" && ++videos > maxVideos) continue;
+    const slideshow = item.department === "video" && item.platform.trim().toLowerCase() === SLIDESHOW.toLowerCase();
+    if (slideshow && ++slideshows > 1) continue;
+    if (item.department === "video" && !slideshow && ++videos > maxVideos) continue;
     const offset = Math.min(6, Math.max(0, Math.round(item.day_offset)));
     const day = isoDay(offset, today);
     const platform =
-      item.department === "post" ? postPlatform(item.platform) : item.department === "sales" ? "Reddit" : VIDEO.has(item.platform) ? item.platform : "Shorts";
+      item.department === "post"
+        ? postPlatform(item.platform)
+        : item.department === "sales"
+          ? "Reddit"
+          : slideshow
+            ? SLIDESHOW
+            : VIDEO.has(item.platform)
+              ? item.platform
+              : "Shorts";
     if (item.department === "post") {
       const id = profileIdOf(platform) ?? "x";
       if (perDay.has(`${id}:${day}`) || (perWeek.get(id) ?? 0) >= (WEEKLY_POSTS[id] ?? 0)) continue;
@@ -114,7 +129,11 @@ function fakePlan(docs: Documents, brief?: unknown, goal?: string): Plan {
   }
   items.push({ day_offset: 2, department: "sales", platform: "Reddit", idea: "Join threads where people describe the problem you solve", reason: "Your strategy says to help first on Reddit." });
   if (videosAsked(brief)) {
-    items.push({ day_offset: 1, department: "video", platform: "Shorts", idea: `${base[0]!.idea}, shown in 30 seconds`, reason: "You asked for a video this week." });
+    items.push({ day_offset: 1, department: "video", platform: "Shorts", idea: `${base[0]!.idea}, shown in one minute`, reason: "You asked for a video this week." });
+  }
+  // The fake plans a slideshow only when the brief asks, so suites that count a week's orders stay as they were.
+  if (typeof brief === "string" && /\bslideshow\b/i.test(brief)) {
+    items.push({ day_offset: 3, department: "video", platform: SLIDESHOW, idea: `${base[0]!.idea}, in five slides`, reason: "You asked for a slideshow this week." });
   }
   return { items };
 }

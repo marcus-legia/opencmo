@@ -62,6 +62,15 @@ async function main() {
     "05 X Idea", "05 Threads Idea", "05 LinkedIn Idea", "06 LinkedIn Idea", "07 LinkedIn Idea",
   ]);
 
+  // A slideshow is a Studio item apart from videos: one a week, never counted against the one video (cmo-review B2.3).
+  const studio = toPlanItems({ items: [
+    { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },
+    { day_offset: 2, department: "video", platform: "slideshow", idea: "Five cuts", reason: "r" },
+    { day_offset: 3, department: "video", platform: "Slideshow", idea: "A second slideshow", reason: "r" },
+    { day_offset: 4, department: "video", platform: "TikTok", idea: "A second video", reason: "r" },
+  ] }, today);
+  assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
+
   // The fake plan reads which post platforms besides X the founder names (strategy, rhythm, goal, brief).
   assert.deepEqual(namedPlatforms({ cadence: "X daily, LinkedIn twice a week" }, undefined), ["LinkedIn"]);
   assert.deepEqual(namedPlatforms("Post on threads and linkedin too"), ["Threads", "LinkedIn"]);

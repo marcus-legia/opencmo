@@ -122,16 +122,18 @@ Steps 3, 5, 6 and 9 of the goal test.
 
   New migration (`approvals.kind` check, `approval_snapshot`, `approval_decide`), pgTAP, and a card body in
   `components/cards/`. Done: dropping the video item cancels the `build_video` order and its children.
-- [ ] **B2.2** **Three shorts, not one** (after D4). `20261228120000_p2_video_orders.sql:312` briefs at `'seconds', 30`.
-  Change it in a new migration: take the seconds from the video brief, default 60. Check that the Shorts reviewer
-  accepts 15–20 s shorts. Done: a fake 60 s transcript gives a 3-short batch card (extend `p2-acceptance`).
-- [ ] **B2.3** **Slideshows and post images are ordered** (after D5).
-  - `plan-week.ts:20` allows only `post | sales | video`. Add `slideshow` (at most 1 a week), and the SQL that turns it
-    into `write_slides` → `build_slideshow` (the rules exist, but only `p5-acceptance.e2e.ts:115` creates the order).
-  - A post item may ask for a post image, which creates `build_post_image`.
-  - Add the capabilities to the registry and expose them in the Studio adapter for MCP.
-
-  Done: a plan with a slideshow item ends in a slideshow card with no manual insert (e2e).
+- [x] **B2.2** **Three shorts, not one** (D4).
+  - `cmo_video_seconds()` = 60 replaces the hard-coded 30 s in `work_orders_plan_week` and `work_orders_brief_rules`
+    (`20270106020000_cmo_review_week_studio.sql`, pgTAP 246).
+  - Writer's brief may still choose another length, as before.
+  - Still to confirm with a real 60 s transcript in B4.2.
+- [x] **B2.3** **Slideshows are ordered** (D5).
+  - A plan item in the video department with platform `Slideshow` (at most one a week, counted apart from the video,
+    `plan-week.ts`) becomes `write_slides` → `build_slideshow` (TikTok, 9:16).
+  - A replan that drops it cancels both orders and fails the queued slides run.
+  - The planner prompt asks for a slideshow most weeks. The fake plan adds one only when the brief says "slideshow".
+  - Not done yet: post images from a post, and MCP/adapter entries for slideshows. Post images stay "only when a post
+    asks for one" (D5), but nothing asks yet, so this moves to B5.5.
 - [ ] **B2.4** **Metrics 24 h after posting.** Today `pull_metrics` is a daily loop. Add a per-slot follow-up at
   `posted_at + 24 h` (an event rule or a sweep check) so reply outcomes and post metrics land on time. Keep the daily
   loop as the catch-all.

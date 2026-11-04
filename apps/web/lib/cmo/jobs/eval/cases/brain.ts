@@ -37,7 +37,7 @@ export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[])
   const salesPerDay = new Map<string, number>();
   for (const item of plan) if (item.department === "sales") salesPerDay.set(item.day, (salesPerDay.get(item.day) ?? 0) + 1);
   if ([...salesPerDay.values()].some((n) => n > 1)) issues.push("more than one Reddit item on a day");
-  if (!mentionsVideo(profile) && plan.some((i) => i.department === "video")) issues.push("a video nobody asked for");
+  if (!mentionsVideo(profile) && plan.some((i) => i.department === "video" && i.platform !== "Slideshow")) issues.push("a video nobody asked for");
   plan.forEach((item, index) => {
     if (!item.reason.trim()) issues.push(`item ${index + 1}: no reason`);
     for (const issue of ideaIssues(item.idea, item.reason, profile.docs)) issues.push(`item ${index + 1}: ${issue}`);

@@ -4890,6 +4890,15 @@ $$;
 
 
 --
+-- Name: cmo_video_seconds(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_video_seconds() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 60 $$;
+
+
+--
 -- Name: cmo_zernio_posts(uuid, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13807,7 +13816,7 @@ begin
       update public.work_orders set depends_on = array_remove(depends_on, new.id), updated_at = now()
       where id = v_video.id returning * into v_video;
       perform public.writer_order_start(v_video, jsonb_build_object('idea', v_video.brief->>'objective',
-        'reason', coalesce(v_video.brief->>'reason', ''), 'seconds', 30, 'aspect', '9:16', 'platform', v_video.brief->>'platform'));
+        'reason', coalesce(v_video.brief->>'reason', ''), 'seconds', public.cmo_video_seconds(), 'aspect', '9:16', 'platform', v_video.brief->>'platform'));
     end loop;
     return new;
   end if;
@@ -14042,6 +14051,7 @@ begin
   for v_item in
     select c.id from public.content_items c
     where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department = 'video'
+      and c.platform <> 'Slideshow'
       and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id)
     order by c.day, c.created_at
   loop
@@ -14056,10 +14066,18 @@ begin
   loop
     perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
   end loop;
-  -- A brief not started yet whose every video was dropped, and its run, which would still run and charge.
+  -- Slideshows the new plan dropped that have not started (cmo-review B2.3).
   for v_item in
-    select b.id from public.work_orders b
-    where b.root_id = v_root.id and b.kind = 'write_video_brief' and b.status in ('queued', 'deferred')
+    select id from public.work_orders where root_id = v_root.id and item_id is null and run_id is null
+      and kind = 'build_slideshow' and status = 'queued' and created_by = 'loop'
+  loop
+    perform public.work_order_move(v_item.id, 'cancelled', 'Dropped from the new plan');
+  end loop;
+  -- A brief or slides not started yet whose every video or slideshow was dropped, and its run, which would still run
+  -- and charge.
+  for v_item in
+    select b.id, b.kind from public.work_orders b
+    where b.root_id = v_root.id and b.kind in ('write_video_brief', 'write_slides') and b.status in ('queued', 'deferred')
       and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and b.id = any(v.depends_on)
                       and v.status not in ('done', 'failed', 'cancelled'))
   loop
@@ -14067,7 +14085,7 @@ begin
     for v_run in
       update public.cmo_runs set status = 'failed', error = 'Its video was dropped from the new plan.', finished_at = now(),
         lease_until = null
-      where user_id = p_user and kind = 'write_video_brief' and status = 'queued' and input->>'order_id' = v_item.id::text
+      where user_id = p_user and kind = v_item.kind and status = 'queued' and input->>'order_id' = v_item.id::text
       returning *
     loop
       perform public.cmo_refund_run(v_run);
@@ -14078,7 +14096,7 @@ begin
   -- cites what works on video in the founder's niche; a research run that cannot start leaves them to go on alone.
   if exists (select 1 from public.content_items c
              where c.user_id = p_user and c.run_id = p_run and c.status = 'planned' and c.department = 'video'
-               and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id))
+               and c.platform <> 'Slideshow' and c.clip_id is null and not exists (select 1 from public.work_orders o where o.item_id = c.id))
      and not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'niche_video_research'
                      and status not in ('failed', 'cancelled'))
      -- Research from the last six days is still fresh: the briefs read it, nothing is paid twice.
@@ -14107,6 +14125,22 @@ begin
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_due := (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC';
+    -- A slideshow (cmo-review B2.3): Writer writes the slides, then the Slideshow squad builds them
+    -- (`work_orders_brief_rules` copies the slides into the order; `studio_orders_claim` starts it when they are done).
+    if v_item.department = 'video' and v_item.platform = 'Slideshow' then
+      v_price := public.cmo_job_price('write_slides');
+      v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_slides',
+        left('Slides for “' || v_item.idea || '”', 200),
+        jsonb_build_object('objective', v_item.idea, 'reason', coalesce(v_item.reason, ''),
+          'done_when', 'Studio has the slides for this slideshow.'),
+        least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop');
+      perform public.work_order_create(p_user, v_week, v_root.id, 'build_slideshow', v_item.idea,
+        jsonb_build_object('idea', v_item.idea, 'aspect', '9:16', 'platform', 'TikTok',
+          'done_when', 'The founder approved the slideshow.'),
+        0, v_due, array[v_brief.id], 'loop', v_item.id);
+      perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, '')));
+      continue;
+    end if;
     if v_item.department = 'video' then
       -- Videos that took over an order were matched above and have their order now; this one is new.
       v_price := public.cmo_job_price('write_video_brief');
@@ -14116,14 +14150,14 @@ begin
           'done_when', 'Studio has the brief for this video.'),
         least(v_price, greatest(v_free, 0)), v_due, case when v_niche.id is null then '{}'::uuid[] else array[v_niche.id] end, 'loop');
       perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
-        jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', 30, 'aspect', '9:16',
+        jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', public.cmo_video_seconds(), 'aspect', '9:16',
           'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
         least(public.studio_video_budget(), greatest(v_free - least(v_price, greatest(v_free, 0)), 0)), v_due,
         array[v_brief.id], 'loop', v_item.id);
       -- With research under way, the brief starts when it ends (`work_orders_brief_rules`).
       if v_niche.id is null then
         perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, ''),
-          'seconds', 30, 'aspect', '9:16', 'platform', v_item.platform));
+          'seconds', public.cmo_video_seconds(), 'aspect', '9:16', 'platform', v_item.platform));
       end if;
       continue;
     end if;
