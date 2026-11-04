@@ -14,6 +14,7 @@ import type { CaseResult } from "@/lib/eval/compare";
 
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
+import { NEEDS_CUSTOMERS } from "../../plan-week";
 import { mondayOf } from "../../summarize-memory";
 import type { PlanItem } from "../../types";
 import { ideaIssues } from "../core";
@@ -26,7 +27,6 @@ import { registerCases, type EvalCase, type EvalEnv } from "../types";
 const BUDGET_MS = 240_000;
 const EARLY: ReadonlySet<BrainStage> = new Set(["pre_launch", "launched_no_users"]);
 /** What an early business does not have yet: asking for it makes the plan undoable. */
-const NEEDS_CUSTOMERS = /\b(testimonial|case stud(y|ies)|customer (story|stories|quote|review)s?|reviews? from|our (customers|users) (say|love)|results? (from|of) (our )?(customers|users))\b/i;
 
 const mentionsVideo = (p: BrainEvalProfile) => /video|clip|record|reel|short|tiktok/i.test(`${JSON.stringify(p.docs.content_strategy ?? {})} ${p.brief ?? ""} ${p.goal}`);
 

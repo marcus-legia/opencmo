@@ -183,9 +183,11 @@ ceiling.
     (`steps.ts`, `withBudgetNote`).
   - The card is still the founder's decision, so it is raised, not refused. The founder's balance check stays as it
     was.
-- [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
-  check that drops items that do not fit it (e.g. no paid video for a pre-launch founder with no product page). Today
-  stage fit exists only in the eval judge.
+- [x] **B3.5** **Stage fit.**
+  - The planner prompt says to fit the business's stage.
+  - `fitStage` in `plan-week.ts` drops an item that needs customer proof (quotes, testimonials, reviews, case studies,
+    results) when the documents hold none. The brain eval judges by the same regex.
+  - The documents have no stage field, so proof in the documents is the signal.
 - [x] **B3.6** **Replan uses the repair hint.**
   - `replanBrief` adds the failure's `repair_hint`.
   - `build_video` and `build_slideshow` are replannable too, next to posts and Reddit. A sent-back video becomes a

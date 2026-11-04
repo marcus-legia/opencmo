@@ -78,6 +78,16 @@ async function main() {
   ] }, today);
   assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
 
+  // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
+  const { fitStage } = await import("./plan-week");
+  const proofless = { product: { name: "Cutline", one_liner: "Cut video by words" } } as Documents;
+  const staged = [
+    { department: "post" as const, platform: "X", day: "2026-10-05", idea: "Share a testimonial from an early user", reason: "Proof" },
+    { department: "post" as const, platform: "X", day: "2026-10-06", idea: "How cutting by words works", reason: "Pillar" },
+  ];
+  assert.deepEqual(fitStage(staged, proofless).map((i) => i.idea), ["How cutting by words works"]);
+  assert.equal(fitStage(staged, { ...proofless, strategy: { proof: "Testimonials: “Saved me hours” (Ana, freelancer)" } } as Documents).length, 2, "with proof in the documents it stays");
+
   // The fake plan reads which post platforms besides X the founder names (strategy, rhythm, goal, brief).
   assert.deepEqual(namedPlatforms({ cadence: "X daily, LinkedIn twice a week" }, undefined), ["LinkedIn"]);
   assert.deepEqual(namedPlatforms("Post on threads and linkedin too"), ["Threads", "LinkedIn"]);
