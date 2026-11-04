@@ -1,6 +1,7 @@
 # Move payments from Polar to Creem (2026-11-04)
 
-- **Decision:** owner, 2026-11-04. New purchases go through Creem; Polar stops selling.
+- **Decision:** owner, 2026-11-04. New purchases go through Creem; Polar stops selling. Payment model: a subscription
+  plus one-time credit packs (D9). Prices are not fixed: the owner tests them in production (D10).
 - **Source:** Creem docs snapshot in [`docs/creem-llm.txt`](../../creem-llm.txt) (line numbers below point into it), and
   today's Polar integration (`apps/web/lib/polar.ts`, `apps/web/app/api/webhooks/polar/route.ts`,
   `process_polar_event` in `supabase/schema/current.sql`).
@@ -65,15 +66,20 @@ is active, a late Polar `subscription.revoked` would set the user back to `free`
 takes the best non-terminal plan from **both** subscription tables, and both RPCs call it. `account_is_paid()` also
 ORs in `creem_transactions` and `creem_subscriptions`.
 
-### D3. Credits are granted per transaction, on `subscription.paid` only
+### D3. Credits are granted once per payment: subscriptions on `subscription.paid`, packs on `checkout.completed`
 
-The first purchase fires both `checkout.completed` and `subscription.paid`. Granting on both would double the credits.
-So:
+The first subscription purchase fires both `checkout.completed` and `subscription.paid`. Granting on both would double
+the credits. So the event that grants depends on the product's billing type:
 
-- `checkout.completed` links the Creem customer to the user (through `metadata.user_id`) and records the order. It
-  grants nothing.
-- `subscription.paid` grants the plan's credits, keyed `credit_ledger.external_id = 'creem:' || last_transaction_id`.
-  The unique `external_id` makes a redelivery a no-op.
+- **Subscription product.**
+  - `checkout.completed` links the Creem customer to the user (through `metadata.user_id`) and records the order. It
+    grants nothing.
+  - `subscription.paid` grants the plan's credits, keyed
+    `credit_ledger.external_id = 'creem:tran:' || last_transaction_id`.
+- **Credit pack** (one-time product, D9). Only `checkout.completed` fires. It grants the pack's credits, keyed
+  `'creem:order:' || order.id`.
+
+In both cases the unique `external_id` makes a redelivery a no-op.
 
 **Must verify in test mode first (V1):** that `subscription.paid` fires for the first charge as well as renewals, and
 that it can arrive before `checkout.completed`. If it can arrive first, the `metadata.user_id` on the subscription
@@ -94,7 +100,8 @@ The version order uses `object.updated_at` with the same status-priority tiebrea
 This closes finding 3 of [`docs/research/security/2026-10-17-security-credits-billing-polar.md`](../../research/security/2026-10-17-security-credits-billing-polar.md)
 for Creem purchases:
 
-- `refund.created` (full or partial) and `dispute.created` look up the grant by `transaction.id`. They write one
+- `refund.created` (full or partial) and `dispute.created` look up the grant by `transaction.id`. A credit pack's
+  grant is keyed by order, so for a pack they look it up by `transaction.order` instead. They write one
   negative ledger row keyed `creem:refund:<tran>` (or `creem:dispute:<tran>`) for the credits that transaction granted,
   capped at the user's current balance so the balance never goes negative. A partial refund takes back credits in
   proportion to the amount refunded.
@@ -112,9 +119,11 @@ days needs this cap raised by hand. That is acceptable, and the route logs it.
 
 ### D7. Checkout through our own API route
 
-Add `POST /api/v1/billing/checkout { plan }` (through `withApi`, signed-in user, rate limited). It calls Creem with:
+Add `POST /api/v1/billing/checkout { product }` (through `withApi`, signed-in user, rate limited). `product` is a
+catalogue id (D10), never a raw Creem product id from the client. A credit pack is refused unless the user has a paid
+plan (`is_paid`). The route calls Creem with:
 
-- `product_id` from `CREEM_PRODUCT_*`
+- `product_id` from the `billing_catalog` row (D10)
 - `request_id = <user id>:<random>`
 - `metadata = { user_id }`
 - `customer.email`
@@ -137,16 +146,60 @@ check, and therefore before credits are held (product rule).
 
 **Must verify (V3):** the moderation call's price per unit and latency, in test mode.
 
+### D9. Payment model: a subscription plus one-time credit packs (owner, 2026-11-04)
+
+Creem offers four models. We use two.
+
+| Model | Creem feature | Use? | Why |
+|---|---|---|---|
+| Subscription | Recurring product, `subscription.paid` | **Yes, the base** | It is the MRR. Credits come with each paid period |
+| One-time credit packs | One-time product, `checkout.completed` | **Yes, the add-on** | Heavy users buy more credits without changing plan. This is expansion revenue, and it protects margin when model costs vary |
+| Usage-based (events, meters, Creem credit wallets, auto-refill) | `/v1/events`, `/v1/meters`, `/v1/customer-credits` (L14343, L18558) | **No** | Our ledger (`credit_hold` / `credit_settle` / `credit_refund`) already holds credits before a job and refunds them on failure. A second wallet at Creem would be a second ledger for the same balance, which drifts, and an external call on every job. Creem only collects money and tells us it was paid |
+| Seat-based, pay what you want | `units`, PWYW | No | Our customers are solo founders, and PWYW does not fit a SaaS |
+
+Rules:
+
+- **A pack is sold only to a user with a paid plan.** The checkout route (D7) enforces this, so a pack never replaces
+  the subscription. The webhook still grants credits for any pack that was paid: once money is received, we owe the
+  credits.
+- **A pack's credit costs more per credit than the plan's.** This keeps the subscription the better deal. It is a
+  pricing rule the owner keeps when testing prices (D10). It is not enforced in code.
+- **Pack credits never expire** while the account exists, the same as plan credits today. The ledger has no expiry, and
+  adding one is a separate decision.
+- **No auto-refill.** It only works with Creem's wallet. A "top up" prompt on the billing page when the balance is low
+  is enough. Build it on our ledger if it is wanted later.
+
+### D10. Prices are tested in production, so the catalogue is data
+
+The owner will try different prices and credit amounts live. A price test must not need a code change, and it must
+never break a customer who bought at an older price.
+
+- **Source of truth.**
+  - The Creem product holds the price we charge.
+  - Our catalogue holds what each product grants, mapping `creem_product_id → { kind: plan | pack, plan id,
+    credits, quotas }`.
+  - The landing and billing pages read the displayed price from the same catalogue entry, so what we show and what we
+    charge cannot drift.
+- **Storage.** The catalogue lives in one place, read by the webhook, the checkout route and the pages. Choose its
+  storage in phase 1, either a `billing_catalog` table edited with the Supabase SQL editor, or JSON in an env var. The
+  table is preferred: it changes without a redeploy, and pgTAP can test it.
+- **A product id is never removed while anyone holds it.**
+  - A price test creates a **new** Creem product and a new catalogue row, and marks the old row `on_sale = false`.
+  - Old subscribers renew on the old product and still get their credits (grandfathering).
+  - An unmapped product on a money event returns 5xx and Creem retries, so deleting a row would block the renewal
+    credits of everyone still on that product.
+- **Experiments are measured with data we already have.** `creem_transactions` records the product, amount and user, so
+  conversion and revenue per price point come from SQL. No new tracking is needed.
+
 ## Environment
 
 | Variable | Secret | Replaces |
 |---|---|---|
 | `CREEM_API_KEY` | Yes (server only) | (none) |
 | `CREEM_WEBHOOK_SECRET` | Yes | `POLAR_WEBHOOK_SECRET` |
-| `CREEM_PRODUCT_STARTER`, `CREEM_PRODUCT_CREATOR` | No | `POLAR_PRODUCT_*` |
 | `CREEM_API_BASE` | No | (none). `https://test-api.creem.io` locally and in preview, `https://api.creem.io` in production |
 
-`POLAR_CHECKOUT_*` goes away in phase 4. `POLAR_WEBHOOK_SECRET` and `POLAR_PRODUCT_*` stay until phase 5.
+Creem product ids are not env vars: they live in `billing_catalog` (D10). `POLAR_CHECKOUT_*` goes away in phase 4. `POLAR_WEBHOOK_SECRET` and `POLAR_PRODUCT_*` stay until phase 5.
 
 ## Phases
 
@@ -155,10 +208,12 @@ Each phase is its own PR and ships green on its own. Order matters.
 ### Phase 0: account and catalogue (owner, no code)
 
 - [ ] Create the Creem store and pass KYC. Use the same support email as `lib/site.ts` (`SUPPORT_EMAIL`).
-- [ ] Create two products in **test mode**:
+- [ ] Create products in **test mode**:
   - Monthly: $80, every month.
   - Annual: $720, every year.
-  - Tax category `saas`, prices tax-exclusive (as today on Polar; confirm).
+  - Two or three one-time credit packs.
+  - All products: tax category `saas`, prices tax-exclusive (as today on Polar; confirm).
+  - These prices are only starting points: the owner sets live prices in production (D10).
 - [ ] Register the webhook endpoint `https://<domain>/api/webhooks/creem` for the events listed in phase 2. Store the
   secret.
 - [ ] Count active Polar subscribers (`select count(*) from polar_subscriptions where status in ('active','past_due')`).
@@ -171,6 +226,10 @@ Use the `supabase-migrations` skill. Never edit an applied migration.
 - [ ] Create the tables `creem_customers`, `creem_transactions` (with `granted_credits` and `refunded_amount`),
   `creem_subscriptions` and `creem_webhook_receipts`, plus `profiles.creem_customer_id` (unique, partial). Enable RLS
   with no client policies, and add explicit grants (security follow-up 2026-10-21).
+- [ ] Create `billing_catalog` (D10) with these columns: `creem_product_id` (primary key), `kind` (`plan` or `pack`),
+  `plan_id`, `credits`, `price_cents`, `interval`, `on_sale` and `sort`. Rows are only ever retired, never deleted (a
+  trigger refuses delete). The RPC reads the plan and credits from here, not from arguments passed by the route.
+  Plan quotas and features stay in `pricing.ts`, keyed by `plan_id`.
 - [ ] Add `recompute_plan(p_user)` (D2). `process_polar_event` calls it instead of its inline query. That is a
   `create or replace` in the new migration, and its behaviour is unchanged for Polar-only users.
 - [ ] Add `process_creem_event(p_event_id, p_event_type, p_event_at, p_object, p_plan, p_credits)`, following D3, D4
@@ -178,6 +237,9 @@ Use the `supabase-migrations` skill. Never edit an applied migration.
 - [ ] Update `account_is_paid()` to include the Creem tables. Add the receipt cleanup to the existing cleanup function.
 - [ ] pgTAP tests:
   - First purchase in both event orders.
+  - A credit pack grants once, keyed by order.
+  - A retired catalogue row (`on_sale = false`) still grants on renewal.
+  - Deleting a catalogue row is refused.
   - A redelivered event.
   - Two renewals, which give two grants.
   - `scheduled_cancel` still paid, then `canceled` makes it free.
@@ -200,8 +262,9 @@ Use the `supabase-migrations` skill. Never edit an applied migration.
   `subscription.update`, `subscription.past_due`, `subscription.unpaid`, `subscription.paused`,
   `subscription.scheduled_cancel`, `subscription.canceled`, `subscription.expired`, `refund.created` and
   `dispute.created`. Anything else gets 200 and is ignored.
-- [ ] Map plans by product id with `planByProductId`, which is provider-neutral once `pricing.ts` reads
-  `CREEM_PRODUCT_*`. Keep the Polar ids in a separate `polarPlanByProductId` for the Polar route until phase 5.
+- [ ] The route only checks that the product exists in `billing_catalog`. If it does not, a money event gets 5xx (so
+  Creem retries once the row is added) and a lifecycle event gets 200 and is skipped. The RPC reads the credits from
+  the catalogue. The Polar route keeps `planByProductId` and `POLAR_PRODUCT_*` until phase 5.
 - [ ] End-to-end: `creem listen --forward-to http://127.0.0.1:3000/api/webhooks/creem`, then buy each plan in test
   mode. Confirm the ledger row, `profiles.plan` and the receipt. Refund one in the dashboard and confirm the clawback.
 
@@ -218,11 +281,15 @@ This must be live in production **before** requesting Creem's review.
 - [ ] `POST /api/v1/billing/checkout` (D7). Add `POST /api/v1/billing/portal`, which returns a Creem portal link for a
   user with `creem_customer_id`.
 - [ ] `lib/pricing.ts`:
-  - Drop `checkoutUrl` and `checkoutUrlFor`. Plans carry `productId` from `CREEM_PRODUCT_*`.
+  - Drop `checkoutUrl` and `checkoutUrlFor`. Plan quotas and features stay here, keyed by `plan_id`. Price and credits move to `billing_catalog`.
   - `isPaidPlan` is unchanged.
   - Translate the Vietnamese comments you touch.
 - [ ] `app/app/billing/page.tsx`:
+  - Plans and packs are read from `billing_catalog` where `on_sale = true`. Prices on the landing page come from the
+    same rows.
   - The Upgrade button posts to the checkout route.
+  - A "Buy credits" section lists the packs. It is shown only to paid users. Show the price per credit next to the
+    plan's, so the plan reads as the better deal.
   - Add a "Manage subscription" button for Creem customers.
   - Show a `?paid=1` banner: "Payment received. Credits arrive within a minute."
   - Remove the "Coming soon" branch: if the product id is missing, the plan is hidden (product rule: don't ship
@@ -250,8 +317,9 @@ This must be live in production **before** requesting Creem's review.
   `subscription.paid` also fires once a year, so switching providers does not fix this. It needs a monthly grant job:
   one ledger row per month of an active annual period, keyed `creem:<sub>:<period-month>`. This is a **blocker for
   selling the annual plan**, so it should be its own plan right after phase 2.
-- **Usage-based overage** (roadmap ES.1). Creem has meters and customer credits (L14343, L18558). We keep our own
-  credit ledger as the source of truth and do not mirror it into Creem.
+- **Price per model and per slash command** (roadmap ES.1). This sets how many credits each action costs, and it lives
+  in our ledger. It is independent of the provider. Creem's meters and wallets are not used (D9).
+- **Low-balance top-up prompt and auto-refill** (D9). Build after the packs sell.
 - **Creem affiliates and referral program** (L12046, L16151). Growth work. It comes after the editor sells (Strategy
   in `CLAUDE.md`).
 
@@ -264,3 +332,4 @@ This must be live in production **before** requesting Creem's review.
 | V3 | What do moderation calls cost and how slow are they? | D8, the cost per generation, and timeout tuning |
 | V4 | Does `metadata` from the checkout appear on **every** later subscription event (`update`, `canceled`, `expired`)? | D1, matching without email |
 | V5 | Is the webhook secret used as a raw UTF-8 key? Check against a real delivery | Polar finding 1, which must not happen twice |
+| V6 | Does a one-time product's `checkout.completed` carry `order.id` and our `metadata`, and does `refund.created` for it carry `transaction.order`? | D3 and D5 for credit packs |
