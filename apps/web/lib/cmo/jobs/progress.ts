@@ -18,7 +18,8 @@ export type OrderLedgerRow = {
   spent_credits: number;
   updated_at: string;
   brief: Record<string, unknown>;
-  error: { code?: string; message?: string } | null;
+  /** As `work_order_move` writes it: `repair_hint` says what to change, `retryable: false` that a replan cannot help. */
+  error: { code?: string; message?: string; repair_hint?: string; retryable?: boolean } | null;
 };
 
 /**
@@ -37,8 +38,11 @@ const DEFERRED_STUCK_MS = 24 * HOUR;
 /** Past its due time by this much with nothing started. */
 const LATE_MS = 24 * HOUR;
 
-/** Kinds the Planner can plan around (calendar items). Other kinds are retried by their own loop. */
-export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan"]);
+/**
+ * Kinds the Planner can plan around: the orders of calendar items (posts, Reddit, a video, a slideshow). Other kinds
+ * (captions, metrics, research) are retried by their own loop or follow the order they serve.
+ */
+export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan", "build_video", "build_slideshow"]);
 
 /**
  * One order's state. `price` is what the order's kind costs (`cmo_job_price`); an order that needs credits and was
@@ -85,7 +89,8 @@ export function progressReport(orders: OrderLedgerRow[], now: Date, prices: Read
   const stuck = by("stuck");
   const replan =
     [...stuck]
-      .filter((o) => REPLANNABLE.has(o.kind) && !("replanned_at" in o.brief) && !("replan_of" in o.brief))
+      // A failure that says no replan can help (the week's budget is used up, the founder cancelled) waits for the founder.
+      .filter((o) => REPLANNABLE.has(o.kind) && o.error?.retryable !== false && !("replanned_at" in o.brief) && !("replan_of" in o.brief))
       .sort((a, b) => (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999"))[0] ?? null;
   return {
     done: by("done").length,
@@ -100,16 +105,25 @@ export function progressReport(orders: OrderLedgerRow[], now: Date, prices: Read
 
 /** Why an order is stuck, in the words the replan brief and the log use. */
 export function stuckReason(order: OrderLedgerRow, now: Date): string {
-  if (order.status === "failed") return order.error?.message ? `It failed: ${order.error.message}` : "It failed.";
+  if (order.status === "failed") {
+    const message = order.error?.message?.trim();
+    // A founder's send-back reason has no full stop of its own; the next sentence must not run into it.
+    return message ? `It failed: ${message}${/[.!?]$/.test(message) ? "" : "."}` : "It failed.";
+  }
   const hours = Math.round((now.getTime() - new Date(order.updated_at).getTime()) / HOUR);
   if (order.status === "running") return `It has been running for ${hours} hours without progress.`;
   if (order.status === "deferred") return `It has waited ${hours} hours to continue.`;
   return "It is a day past its due time and has not started.";
 }
 
-/** The brief the Planner gets for the one replan: what is stuck and why, and not to plan it again unchanged. */
+/**
+ * The brief the Planner gets for the one replan: what is stuck and why, what would fix it (the failure's repair hint,
+ * cmo-review B3.6), and not to plan it again unchanged. The reason comes first so a long hint is what gets cut.
+ */
 export function replanBrief(order: OrderLedgerRow, now: Date): string {
-  return `Replan: "${order.title}" is stuck. ${stuckReason(order, now)} Plan the rest of the week around it; do not plan the same item again unchanged.`.slice(0, 300);
+  const hint = order.status === "failed" && order.error?.repair_hint ? ` To fix it: ${order.error.repair_hint}` : "";
+  const brief = `Replan: "${order.title.slice(0, 80)}" is stuck. ${stuckReason(order, now)}${hint} Plan the rest of the week around it; do not plan the same item again unchanged.`;
+  return brief.length <= 300 ? brief : `${brief.slice(0, 299)}…`;
 }
 
 /** When the daily check runs next: the Modal clock calls the CMO cron at 00:05 UTC. */

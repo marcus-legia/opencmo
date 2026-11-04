@@ -181,9 +181,12 @@ ceiling.
 - [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
   check that drops items that do not fit it (e.g. no paid video for a pre-launch founder with no product page). Today
   stage fit exists only in the eval judge.
-- [ ] **B3.6** **Replan uses the repair hint.** `replanBrief` in `jobs/progress.ts` reads only `error.message`. Read
-  `error.code` and `error.repair_hint` too, and allow replanning `write_caption`, `write_slides` and `build_video`, not
-  only `post_draft` and `sales_scan`.
+- [x] **B3.6** **Replan uses the repair hint.**
+  - `replanBrief` adds the failure's `repair_hint`.
+  - `build_video` and `build_slideshow` are replannable too, next to posts and Reddit. A sent-back video becomes a
+    replan of the week with the founder's reason and the fix.
+  - A failure marked `retryable: false` is left to the founder.
+  - Captions follow their video and are not replanned on their own (`progress.ts`, `progress.check.ts`).
 - [x] **B3.7** Dropped: price cards do not expire.
   - Card 2 comes after the keyframes were made and paid for, so an expired card would throw paid work away.
   - Nothing is spent until the founder approves. The card's price and hash keep it honest while it waits.
