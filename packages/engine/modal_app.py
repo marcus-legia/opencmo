@@ -623,6 +623,9 @@ def _dispatch_cmo() -> None:
         return
     try:
         db = (os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        if cmo_dispatch.paused_everywhere(dict(os.environ)):
+            log.info("AI CMO paused everywhere (OPENCMO_CMO_PAUSED): no slots fired, no runs dispatched")
+            return
         # Schedule's clock (P4 A2): due slots become publish_post runs first, so this same sweep dispatches them.
         try:
             fired = cmo_dispatch.claim_due_slots(*db)

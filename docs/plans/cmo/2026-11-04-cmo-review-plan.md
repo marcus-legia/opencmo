@@ -184,10 +184,13 @@ ceiling.
 - [ ] **B3.6** **Replan uses the repair hint.** `replanBrief` in `jobs/progress.ts` reads only `error.message`. Read
   `error.code` and `error.repair_hint` too, and allow replanning `write_caption`, `write_slides` and `build_video`, not
   only `post_draft` and `sales_scan`.
-- [ ] **B3.7** **Price cards expire** (approval rule 4): a price card older than 72 h expires, and the order waits for a
-  new one.
-- [ ] **B3.8** The global kill switch `OPENCMO_CMO_PAUSED` is also read by Modal `claim_due_slots`, not only at the web
-  route.
+- [x] **B3.7** Dropped: price cards do not expire.
+  - Card 2 comes after the keyframes were made and paid for, so an expired card would throw paid work away.
+  - Nothing is spent until the founder approves. The card's price and hash keep it honest while it waits.
+- [x] **B3.8** The global kill switch `OPENCMO_CMO_PAUSED=1` is read by Modal's sweep too (`paused_everywhere`).
+  - While it is set, no slot is fired and no run is dispatched. Before, slots fired into runs the web refused, then
+    missed their window.
+  - **Owner:** add `OPENCMO_CMO_PAUSED` to the Modal secret when you pause, and redeploy Modal for the code.
 
 ## 5. B4 — Real runs (acceptance on production)
 
