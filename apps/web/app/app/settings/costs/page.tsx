@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader, Screen } from "@/components/screens/parts";
 import { Panel, TableWrap } from "@/components/ui";
+import { cmoSwitches } from "@/lib/ops/switches";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,8 @@ export const dynamic = "force-dynamic";
 /**
  * What OpenCMO pays its providers (docs/plans/cmo/2026-11-02-provider-spend-ledger-plan.md), for the owner only. The
  * report is read under the owner's own session: `provider_spend_report` refuses anyone not in `app_owners`, so this
- * page needs no service role and shows nothing to anyone else.
+ * page needs no service role and shows nothing to anyone else. It also lists the CMO's live switches (env only, never a
+ * secret value), so an unset key shows here instead of silently doing nothing.
  */
 type Row = { provider?: string; kind?: string; email?: string; micro_usd: number; calls?: number };
 type Report = {
@@ -63,6 +65,28 @@ export default async function CostsPage() {
         title={`${usd(report.total_micro_usd)} in the last 7 days.`}
         sub={`${usd(report.micro_usd_per_approved)} per approved card (${report.approved_cards} approved).${report.unpriced_calls ? ` ${report.unpriced_calls} calls have no price yet.` : ""}`}
       />
+      <Panel id="costs-switches" title="Live switches">
+        <TableWrap label="Live switches">
+          <table className="v2-table scr-table-compact">
+            <thead>
+              <tr>
+                <th>Switch</th>
+                <th>State</th>
+                <th>What it needs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cmoSwitches().map((s) => (
+                <tr key={s.id} data-switch={s.id} data-on={s.on ? "1" : "0"}>
+                  <td>{s.label}</td>
+                  <td>{s.on ? "On" : "Off"}</td>
+                  <td className="scr-muted">{s.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      </Panel>
       <Panel id="costs-providers" title="By provider">
         <Table label="By provider" head="Provider" rows={report.by_provider.map((row) => ({ name: row.provider ?? "?", micro_usd: row.micro_usd, calls: row.calls }))} />
       </Panel>

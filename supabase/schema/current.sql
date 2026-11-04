@@ -8187,6 +8187,31 @@ $_$;
 
 
 --
+-- Name: profile_timezone_detect(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.profile_timezone_detect(p_timezone text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_zone text;
+begin
+  -- An unknown name is ignored, not an error: this runs unattended on app load.
+  if p_timezone is null or not exists (select 1 from pg_catalog.pg_timezone_names where name = p_timezone) then
+    return (select timezone from public.profiles where id = v_user);
+  end if;
+  update public.profiles
+  set timezone = p_timezone, timezone_source = 'browser'
+  where id = v_user and timezone_source = 'default'
+  returning timezone into v_zone;
+  return coalesce(v_zone, (select timezone from public.profiles where id = v_user));
+end;
+$$;
+
+
+--
 -- Name: project_from_job(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10473,7 +10498,8 @@ begin
     raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
   end if;
   update public.profiles p
-  set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour
+  set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour,
+      timezone_source = 'founder'
   where p.id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
@@ -14822,8 +14848,10 @@ CREATE TABLE public.profiles (
     timezone text DEFAULT 'UTC'::text NOT NULL,
     digest_hour smallint DEFAULT 7,
     cmo_paused_at timestamp with time zone,
+    timezone_source text DEFAULT 'default'::text NOT NULL,
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
+    CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
     CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000)))
 );
 

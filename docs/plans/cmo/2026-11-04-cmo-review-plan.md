@@ -1,0 +1,277 @@
+# CMO review: what is still missing for a CMO that works
+
+> **For agentic workers:** branch **`cmo-review`**, one PR into `main`. Work the batches in order. Each batch is green
+> and pushed on its own. An item marked **owner** waits on an owner decision or an account; build around it and leave its
+> box unticked with the question next to it. Every SQL change ships a new migration and a pgTAP test (never edit a
+> merged migration), then `scripts/dump-schema.sh`.
+
+## 0. Why this plan exists
+
+On 2026-11-04 three agents audited every page in `docs/architecture/` against `main` (`dbf14aa4`): code, migrations
+and pgTAP.
+
+**Verdict:**
+- **In code, about 80 % of the design is built and tested:**
+  - the work-order spine;
+  - one approvals table;
+  - the Studio adapter and the Shorts squad;
+  - Writer W0–W3;
+  - schedule slots and best time;
+  - Sales safety.
+- **In production almost nothing runs:**
+  - The v2 UI is behind `NEXT_PUBLIC_OPENCMO_UI=v2`, which is unset, so the inbox, schedule, accounts, analytics and the
+    card pages behind email/push links all return 404.
+  - Zernio (`OPENCMO_PUBLISH_LIVE`) is off.
+  - Resend (`OPENCMO_EMAIL_LIVE`) and web push are off.
+  - Every acceptance run used fake providers.
+  - No real marketing video has been made end to end.
+
+### Goal: a CMO that works
+
+The plan is done when this test passes **on production, with real providers, on the owner's own account, with no
+manual database edits**:
+
+1. Sign up and paste the site. The brain learns the business: documents, Brand Kit and voice. The timezone comes from
+   the browser.
+2. Sunday: research runs (competitors, niche videos, last week's metrics and reply outcomes) and writes lessons.
+3. Monday: a plan card shows the week (goal + items). The founder approves it.
+4. Posts for X, Threads and LinkedIn arrive as cards. Approve one as is and edit one. The edit becomes a voice note.
+5. One video: script card → price card → finished-video card (after a real look check) → **three** shorts on one
+   batch card → captions per platform.
+6. One slideshow card (if the owner keeps slideshows, see B2.3).
+7. Two Reddit reply cards with evidence. The founder copies and posts by hand, then marks "I replied".
+8. Schedule cards with time and account. After approval, posts go out through Zernio at the approved time. A missed or
+   failed slot raises a new card. Nothing ever posts without an approved, unchanged card.
+9. The next day, metrics and reply outcomes come back and show in Analytics. The next Sunday's lessons read them.
+10. A founder away from the app gets the digest email and a push for an expiring card. The links open the card.
+11. Pause stops everything. Spend never passes the weekly budget without a card.
+
+Each batch below moves one or more of these steps from "built" to "works".
+
+**Not in this plan:**
+- the editor roadmap items that a working CMO does not need (listed in §7, for the editor plans);
+- pricing (Polar/Creem);
+- landing copy.
+
+## 1. Decisions the owner must make first
+
+**Decided 2026-11-04: the owner took every recommendation below (D1–D8).**
+
+| # | Decision | Recommendation | Blocks |
+|---|---|---|---|
+| D1 | Release UI v2 to production and retire the v1 CMO screens | **Yes.** The CMO cannot work in v1: Studio and schedule cards have no screen there. | B1 |
+| D2 | Zernio: TikTok audit, price per account, X pass-through cost, terms for a SaaS that resells posting, analytics add-on | Do the checks this week. Start live posting with X, Threads and LinkedIn; add TikTok after the audit. | B1, B4 |
+| D3 | ScrapeCreators and Reddit data terms (R0, report in PR #133) | Decide from the report. Keep Sales off the landing page until then. | B4 |
+| D4 | Video length the brain briefs | **60 s** (three 15–20 s shorts need ≈ 45 s of speech). Cost: about 2× the video credits per week. | B2.2 |
+| D5 | Does the brain plan slideshows and post images? | **Slideshows yes, 1 a week; post images only when a post asks for one.** Both squads are built and cost no credits. | B2.3 |
+| D6 | Weekly credit budget: hard or soft | **Hard for paid steps.** Past the budget, a paid step raises a price card instead of running. | B3 |
+| D7 | Phone tab order | Keep what is built (Today · Approve · Calendar · Chat · More) until real use says otherwise. | — |
+| D8 | Trademark check on the name "OpenCMO" (brain.md #6) | Before the public launch. | — |
+
+## 2. B1 — Production switch-on (config + small code)
+
+Steps 1, 8 and 10 of the goal test. Mostly configuration; the code items are small.
+
+- [ ] **B1.1 owner** Vercel env:
+  - `NEXT_PUBLIC_OPENCMO_UI=v2`;
+  - `RESEND_API_KEY`, `OPENCMO_EMAIL_LIVE=1`, `OPENCMO_EMAIL_FROM` on a verified `opencmo.io` domain;
+  - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`;
+  - `ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, `OPENCMO_PUBLISH_LIVE=1` (after D2);
+  - `SCRAPECREATORS_API_KEY`, `CRON_SECRET`, `OPENCMO_MCP_CONFIRM_KEY`.
+- [ ] **B1.2 owner** Add every variable above to `apps/web/.env.example`, with a one-line comment each. The Zernio
+  variables and `NEXT_PUBLIC_OPENCMO_UI` are missing from it today. Agents cannot write `.env*` files here (a permission
+  rule), so the owner pastes the block given in PR #162.
+- [ ] **B1.3 owner** Modal secret: `OPENCMO_WEB_URL`, `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+  Redeploy. Confirm the per-minute `sweep` and the hourly `cmo_digest` are scheduled (`packages/engine/modal_app.py`).
+  Without the secret, `sweep` skips firing slots and the digest never runs.
+- [ ] **B1.4 owner** Zernio dashboard: add a webhook pointed at `/api/webhooks/zernio` with the shared secret.
+- [ ] **B1.5 owner** Supabase prod: `supabase db push` through `20270105010000_review_followups.sql` before the deploy
+  (see the "main via PR only" rule).
+- [x] **B1.6** **Live switches** on the owner's Costs page (`/app/settings/costs`, gated by `app_owners` through
+  `provider_spend_report`). It lists UI v2, email, push, Zernio posting, the webhook secret, the social reader, cron,
+  MCP and the global pause. Each switch asks the module that decides it (`emailSender`, `vapidFromEnv`,
+  `publishAnalytics`), so the page cannot drift from the code, and it never shows a secret value
+  (`lib/ops/switches.ts` + `.check.ts`, in `check:contracts`).
+  - Not done: "Modal clock last seen". It needs a heartbeat table; the follow-up is to write one row per `sweep`.
+- [x] **B1.7** Timezone from the browser.
+  - `profiles.timezone_source` (`default | browser | founder`) and `profile_timezone_detect(text)`
+    (`20270106010000_cmo_review_timezone.sql`, pgTAP 245).
+  - `components/shell/TimezoneSync.tsx` sends the zone once per browser, from both shells.
+  - The zone is written only while the founder never chose one. Saving Settings marks the zone as the founder's, even
+    UTC.
+  - Existing accounts with a zone other than UTC are marked `founder`.
+- [ ] **B1.8** Retire the v1 decide path once v2 is live on production.
+  - Found while building: the v2 screens also call the old routes. Sales calls `/cmo/opportunities/[id]` and Setup
+    calls `/cmo/goals/[id]`, so this is more than deleting v1.
+  - It is not a safety gap. `approvals_sync` keeps `approvals` in step with every old RPC. Nothing goes out without a
+    schedule card, and that card is hash-checked three times.
+  - Do it after B4.8: give the Sales and Setup screens the card's id and `contentHash`, then delete `CmoWorkspace` and
+    `app/api/v1/cmo/items`. Done: `grep cmo_decide_` in `apps/web` finds only SQL wrappers.
+- [x] **B1.9** Dropped: D1 releases v2, so every card has a screen. If v2 is ever rolled back, revisit this item.
+
+## 3. B2 — Close the week's loop (code)
+
+Steps 3, 5, 6 and 9 of the goal test.
+
+- [ ] **B2.1** **Week plan card.** Today the Monday plan raises only a `goal` card; the items are not shown. Add a
+  `plan` card kind:
+  - it shows the week's items with a reason each;
+  - the founder can drop an item or approve all;
+  - dropping an item cancels its order;
+  - approving releases the tree.
+
+  New migration (`approvals.kind` check, `approval_snapshot`, `approval_decide`), pgTAP, and a card body in
+  `components/cards/`. Done: dropping the video item cancels the `build_video` order and its children.
+- [ ] **B2.2** **Three shorts, not one** (after D4). `20261228120000_p2_video_orders.sql:312` briefs at `'seconds', 30`.
+  Change it in a new migration: take the seconds from the video brief, default 60. Check that the Shorts reviewer
+  accepts 15–20 s shorts. Done: a fake 60 s transcript gives a 3-short batch card (extend `p2-acceptance`).
+- [ ] **B2.3** **Slideshows and post images are ordered** (after D5).
+  - `plan-week.ts:20` allows only `post | sales | video`. Add `slideshow` (at most 1 a week), and the SQL that turns it
+    into `write_slides` → `build_slideshow` (the rules exist, but only `p5-acceptance.e2e.ts:115` creates the order).
+  - A post item may ask for a post image, which creates `build_post_image`.
+  - Add the capabilities to the registry and expose them in the Studio adapter for MCP.
+
+  Done: a plan with a slideshow item ends in a slideshow card with no manual insert (e2e).
+- [ ] **B2.4** **Metrics 24 h after posting.** Today `pull_metrics` is a daily loop. Add a per-slot follow-up at
+  `posted_at + 24 h` (an event rule or a sweep check) so reply outcomes and post metrics land on time. Keep the daily
+  loop as the catch-all.
+- [ ] **B2.5** **Research reads Hacker News** (R4): `competitor-research.ts` is X only; add `lib/cmo/social/hn.ts` as a
+  source. Also add Reels to the niche video research if ScrapeCreators has it.
+- [ ] **B2.6** **Studio send-back teaches.** A send-back reason on a Studio card writes `approvals.reason` only. Also
+  write a voice/preference memory (topic `video`) and a `cmo_draft_outcomes` row for the department `studio`, so the next
+  brief reads it. pgTAP.
+- [ ] **B2.7** **Same-day posts on one card** (approval rule 3). Batch the post cards of one day into one card, the way
+  shorts already are. Approve all, or open each one.
+
+## 4. B3 — Budgets and gates the design promises (code)
+
+Step 11 of the goal test. Today the weekly budget is soft, overspend is logged and never refused, and there is no cost
+ceiling.
+
+- [ ] **B3.1** `work_order_spend` **refuses** a paid step that would pass the order's remaining budget. It raises a
+  `price` card ("this needs N more credits") instead (after D6). pgTAP: over-budget spend raises, never charges.
+- [ ] **B3.2** **Cost ceiling.** If credits held in the last hour pass a threshold (e.g. 40 % of the weekly budget), pause
+  the founder's tree (`cmo_paused_at`) and raise a card. pgTAP.
+- [ ] **B3.3** **Registry limits enforced at runtime.** `max_steps` and `credits` in `packages/contracts/capabilities.json`
+  are only drift-checked today. Read them in the job runner (`lib/cmo/jobs/*`) and in `studio-orders.ts`; stop a job
+  that passes `max_steps` with `error.code = 'max_steps'`.
+- [ ] **B3.4** **Studio credit check reads the order's budget**, not only the founder's balance (`adapter.ts:99`,
+  `studio_step_raise`).
+- [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
+  check that drops items that do not fit it (e.g. no paid video for a pre-launch founder with no product page). Today
+  stage fit exists only in the eval judge.
+- [ ] **B3.6** **Replan uses the repair hint.** `replanBrief` in `jobs/progress.ts` reads only `error.message`. Read
+  `error.code` and `error.repair_hint` too, and allow replanning `write_caption`, `write_slides` and `build_video`, not
+  only `post_draft` and `sales_scan`.
+- [ ] **B3.7** **Price cards expire** (approval rule 4): a price card older than 72 h expires, and the order waits for a
+  new one.
+- [ ] **B3.8** The global kill switch `OPENCMO_CMO_PAUSED` is also read by Modal `claim_due_slots`, not only at the web
+  route.
+
+## 5. B4 — Real runs (acceptance on production)
+
+Every acceptance run so far used fakes. A working CMO is proven only by real runs. Each item ends with its numbers in
+`../opencmo-internal/note.md` and its artifact kept as landing material.
+
+- [ ] **B4.1** **S0: one real 60 s OpenCMO video** made by the brain, from brief to finished card, on production
+  (long-take plan Tasks 0, 1 and 8). Extract a frame from the full-size file and look at it ("Verify by looking").
+- [ ] **B4.2** Three real shorts from it. **Peak RAM per render < 2 GB** (`/usr/bin/time -v`); this has been open since
+  the P2 acceptance.
+- [ ] **B4.3** One real look check with the vision judge (first real call).
+- [ ] **B4.4** One real slideshow (P5 acceptance), kept for the landing page.
+- [ ] **B4.5 owner (D2)** One supervised real post through Zernio on X. Watch the webhook, the receipt and the metrics
+  the next day.
+- [ ] **B4.6** Real-model eval runs, one each: Writer W0 before/after (`cmo:eval --provider anthropic`), brain plan eval,
+  Studio eval, slideshow squad. Record the scores.
+- [ ] **B4.7** Real email digest and push on the owner's phone. The links open the card.
+- [ ] **B4.8** The whole goal test of §0, one real week.
+
+## 6. B5 — Output quality the design promises
+
+Not needed for the loop to run, but needed for the output to be worth approving. Do these after B4.1 shows where the
+real video falls short.
+
+- [ ] **B5.1** **Shorts style step:** hook title, captions with emphasis and punch-ins on each short (studio.md §6).
+  Today a short only inherits the parent edit's styling.
+- [ ] **B5.2** **Segmenter** uses pauses (word gaps) and topic shifts, not only sentence-ending punctuation
+  (`shorts/squad.ts:35`).
+- [ ] **B5.3** **Active-speaker reframe for 9:16** (roadmap E1.2). Today the frame is `fill`.
+- [ ] **B5.4** **Slideshow MP4:** transitions and a music bed. Then TikTok photo mode and carousel posting through
+  Zernio, after D2.
+- [ ] **B5.5** **Post image** generates one only when no frame or page fits. This costs credits, so it needs a price card.
+- [ ] **B5.6** **Measures** for Approval: time from card to decision, cards per day, expired and replaced cards.
+  Approved-as-is per platform and per hook type. Look-check pass rate per squad. These go on the Brain page.
+- [ ] **B5.7** Assistant priced chat cards are recorded in `approvals` (owner decision #5 in approval.md), and MCP can
+  decide a card through `approval_decide` with the row id and a signature, not a separate code.
+- [ ] **B5.8** Library: an on/off toggle per skill, and a brief can name the Library items to load.
+- [ ] **B5.9** Writer W4: `write_article` (long draft). Last.
+
+## 7. Missing, but owned by other plans (listed so nothing is lost)
+
+These items are on the editor spearhead roadmap (`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`). Each
+gets its own research and plan.
+
+**Built, but not ticked in the roadmap** (tick them in B6):
+- E0.2, E0.3, E0.5
+- ES.3, ES.4, ES.5, ES.6
+- E1.1
+- E3.11
+- E4.4
+- E6.1, E6.2
+
+**Not built:**
+- E0: E0.6 export outcome report, E0.8 debug page, E0.9 feature flags.
+- **E2.1–E2.8: record our own product** (screen recording, zoom, blur, device frame). This is the largest gap for
+  OpenCMO's own marketing videos.
+- E3: E3.2 recipes (demo, launch, tutorial, changelog), E3.5 templates, E3.7, E3.8, E3.9, E3.12.
+- E4: E4.1 export set (16:9, 9:16 and 1:1 in one request), E4.6 public share page, E4.7 export at source resolution,
+  E4.8.
+- E5: E5.3–E5.9.
+- E6: E6.3, E6.6.
+
+**Needs a manual check on production:** E0.1 Modal export, E0.4 deploy backlog, ES.2 every slash command, ES.7 landing,
+ES.8 first-run path.
+
+## 8. B6 — Docs match the code
+
+- [ ] **B6.1** Every page in `docs/architecture/` (md and html together): status "proposed" → "built, see
+  `ARCHITECTURE.md`". Replace each "Today (`eb858ca`)" table with a short "Built" note. Record where the build moved
+  away from the design:
+  - `work_orders` sits beside `cmo_runs`;
+  - `deliverables` wraps `content_items`;
+  - clips became `shorts`, each its own clip;
+  - corrections come from a repeated-edit trigger;
+  - headless Studio is an order runner;
+  - the look check is a worker task;
+  - Zernio has 6 platforms;
+  - X posts carry no hashtags;
+  - the MCP confirm code lasts 600 s;
+  - `cmo_insights.kind` includes `niche_video`.
+- [ ] **B6.2** `ARCHITECTURE.md` §11:
+  - remove "OpenAI moderations" and "The CMO never edits video";
+  - add `work_orders`, `deliverables`, `approvals`, `schedule_slots`, Zernio, push, the Modal `sweep`/`cmo_digest`
+    clock and the `look_check` task.
+- [ ] **B6.3** Editor roadmap: tick the built items (§7). Remove Lottie and 3D from §2's strengths.
+- [ ] **B6.4** studio.md: 25 models (3D and Lottie removed), 45 eval tasks. writer.md: X threads are built.
+
+## 9. Order and size
+
+| Batch | Size | Waits on |
+|---|---|---|
+| B1 switch-on | S (config) + S (code) | D1, D2 |
+| B2 week loop | L | D4, D5 |
+| B3 budgets and gates | M | D6 |
+| B4 real runs | M (time, credits) | B1, B2.2 |
+| B5 quality | L | B4.1 |
+| B6 docs | S | none; can run alongside B1 |
+
+The CMO "works" at the end of B4.8. B5 makes its output better, and §7 is the editor's own roadmap.
+
+## 10. Verification per batch
+
+- `npm run typecheck && npm run build`, and `cd apps/web && npm run check:contracts && npm run test:e2e` (one suite at
+  a time).
+- `npm run db:reset && npm run db:test` for every migration, then `scripts/dump-schema.sh`.
+- Engine changes: `.venv312/bin/python -m pytest -q && .venv312/bin/python -m ruff check .`, plus `/usr/bin/time -v` for
+  any render.
+- B4: real artifacts, frames looked at, and numbers written down. Green tests are not enough.

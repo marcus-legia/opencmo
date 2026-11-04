@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { WebShell } from "@/components/clipping/web/WebShell";
 import { COLUMNS_BOOT } from "@/components/shell-v2/columns";
+import { TimezoneSync } from "@/components/shell/TimezoneSync";
 import { ShellV2 } from "@/components/shell-v2/ShellV2";
 import { agentChatProvider } from "@/lib/agent/model";
 import { UI_V2 } from "@/lib/screens/flag";
@@ -61,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return (
       <>
         <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT + COLUMNS_BOOT + "document.documentElement.dataset.ui='v2';" }} />
+        <TimezoneSync />
         <ShellV2 {...account} chatLive={agentChatProvider("cmo") !== null} hideSample={isProduction()}>
           {children}
         </ShellV2>
@@ -71,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT }} />
+      <TimezoneSync />
       <WebShell {...account}>{children}</WebShell>
     </>
   );

@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-11-04 | [CMO review](2026-11-04-cmo-review-plan.md): what is still missing for a CMO that works end to end in production | Audit of `docs/architecture/` vs `main` `dbf14aa4` | `cmo-review` → `main` |
 | 2026-11-02 | [CMO chat decisions](2026-11-02-cmo-chat-decisions-plan.md): approve, schedule and set things from the chat | Chat-control audit #137 + owner 2026-11-02 | `plan/cmo-chat-decisions` → `cmo-build` |
 | 2026-11-02 | [CMO chat live](2026-11-02-cmo-chat-live-plan.md): finished runs come back to the chat, long chats stay fast, ratings kept | Chat-control audit #137, #138 follow-ups | `plan/cmo-chat-live` → `cmo-build` |
 | 2026-11-02 | [CMO chat → editor handoff](2026-11-02-cmo-chat-editor-handoff-plan.md): video work asked in the chat, done in the editor | Chat-control audit #137 | `plan/cmo-chat-editor-handoff` → `cmo-build` |
