@@ -17,6 +17,7 @@ import { pullMetrics } from "./pull-metrics";
 import { reviewWeek } from "./review-week";
 import { salesScan } from "./sales-scan";
 import type { HnThread } from "../social/hn";
+import { maxSteps } from "../step-limits";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
 import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
@@ -145,12 +146,17 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
   if (brain === "claude" && typeof memo[NOW_KEY] !== "string") memo[NOW_KEY] = new Date().toISOString();
   const now = brain === "claude" ? new Date(memo[NOW_KEY] as string) : new Date();
   let stepNumber = 0;
+  // cmo-review B3.3: the registry's `max_steps` for this kind, enforced here (a job in a loop fails and is refunded).
+  const stepLimit = maxSteps(run.kind);
 
   const ctx: JobContext = {
     store,
     run,
     brain,
     async step(tool, label, fn, done, opts) {
+      if (stepLimit !== null && steps.length >= stepLimit) {
+        throw new LlmError(`This task took more than ${stepLimit} steps, so it was stopped. Your credits were refunded; try again.`);
+      }
       steps.push({ tool, label, status: "running" });
       const index = steps.length - 1;
       await write();

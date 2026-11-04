@@ -62,6 +62,13 @@ async function main() {
     "05 X Idea", "05 Threads Idea", "05 LinkedIn Idea", "06 LinkedIn Idea", "07 LinkedIn Idea",
   ]);
 
+  // cmo-review B3.3: each job kind runs under the registry's max_steps (every job in this file runs under them).
+  const { maxSteps } = await import("../step-limits");
+  assert.equal(maxSteps("post_draft"), 12);
+  assert.equal(maxSteps("sales_scan"), 30);
+  assert.equal(maxSteps("build_video"), 40, "Studio kinds come from the same registry");
+  assert.equal(maxSteps("not_a_kind"), null);
+
   // A slideshow is a Studio item apart from videos: one a week, never counted against the one video (cmo-review B2.3).
   const studio = toPlanItems({ items: [
     { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },

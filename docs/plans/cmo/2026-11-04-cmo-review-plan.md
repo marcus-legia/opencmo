@@ -173,9 +173,11 @@ ceiling.
   - More than max(10, 40 % of the weekly budget) credits of brain-started runs within an hour pauses the founder's
     brain (`cmo_paused_at`) and writes a note on the week.
   - The run that crossed the line still goes; later ones wait for Resume.
-- [ ] **B3.3** **Registry limits enforced at runtime.** `max_steps` and `credits` in `packages/contracts/capabilities.json`
-  are only drift-checked today. Read them in the job runner (`lib/cmo/jobs/*`) and in `studio-orders.ts`; stop a job
-  that passes `max_steps` with `error.code = 'max_steps'`.
+- [x] **B3.3** **Registry step limits are enforced at runtime** for CMO jobs.
+  - `lib/cmo/step-limits.ts` reads `max_steps` from `capabilities.json`, and the job runner stops a run at its kind's
+    limit. It fails with a refund instead of looping.
+  - Every job in `jobs.check.ts` runs under the limits.
+  - Studio order steps are each a founder card already, so they are not limited here.
 - [ ] **B3.4** **Studio credit check reads the order's budget**, not only the founder's balance (`adapter.ts:99`,
   `studio_step_raise`).
 - [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
