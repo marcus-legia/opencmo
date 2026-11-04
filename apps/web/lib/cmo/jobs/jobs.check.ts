@@ -323,13 +323,26 @@ async function main() {
   const w7 = mem7.enqueue("competitor_research");
   await drainCmoQueue(mem7.store);
   assert.equal(w7.status, "done", `W7 xong (${w7.error})`);
-  assert.deepEqual(w7.steps.map((s) => s.tool), ["read_doc", "find_outliers", "extract_patterns", "save_insight"]);
+  assert.deepEqual(w7.steps.map((s) => s.tool), ["read_doc", "find_outliers", "find_hn", "extract_patterns", "save_insight"]);
   assert.ok(mem7.insights[0]!.hooks.every((h) => h.url.startsWith("https://x.com/freshbooks/status/")));
   const mem7b = memoryStore(docs);
   const w7b = mem7b.enqueue("competitor_research");
   await drainCmoQueue(mem7b.store);
   assert.equal(w7b.status, "failed");
   assert.match(String(w7b.error), /X handles/);
+
+  // cmo-review B2.5: Hacker News stories about a competitor count as research, measured against the search's median;
+  // a competitor with no X handle is researched on HN alone.
+  const { competitorNames, hnPost } = await import("./competitor-research");
+  assert.deepEqual(competitorNames({ competitors: { competitors: [{ name: "FreshBooks" }, { name: "freshbooks" }, { name: "X" }, { name: "Wave" }] } }), ["FreshBooks", "Wave"]);
+  const story = hnPost({ url: "https://news.ycombinator.com/item?id=1", objectId: "1", community: "Hacker News", title: "Show HN: A", author: "a", text: "", points: 120, comments: 30, postedAt: null });
+  assert.equal(story.likes + story.replies, 150, "points and comments are the measure");
+  const mem7c = memoryStore({ ...docs, competitors: { competitors: [{ name: "FreshBooks", website: "", difference: "" }] } });
+  const w7c = mem7c.enqueue("competitor_research");
+  const hnHits = [400, 12, 9, 8, 7].map((points, i) => ({ url: `https://news.ycombinator.com/item?id=${i + 1}`, objectId: String(i + 1), community: "Hacker News" as const, title: `Story ${i}`, author: "a", text: "", points, comments: 0, postedAt: null }));
+  await drainCmoQueue(mem7c.store, { searchHn: async () => hnHits });
+  assert.equal(w7c.status, "done", `HN alone makes an insight (${w7c.error})`);
+  assert.ok(mem7c.insights[0]!.hooks.every((h) => h.url.startsWith("https://news.ycombinator.com/item?id=")), "hooks cite HN discussions");
 
   // Insight vào prompt của Planner/X writer; quá 21 ngày thì không.
   const { insightBlock } = await import("./context");

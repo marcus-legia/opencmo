@@ -137,8 +137,12 @@ Steps 3, 5, 6 and 9 of the goal test.
 - [ ] **B2.4** **Metrics 24 h after posting.** Today `pull_metrics` is a daily loop. Add a per-slot follow-up at
   `posted_at + 24 h` (an event rule or a sweep check) so reply outcomes and post metrics land on time. Keep the daily
   loop as the catch-all.
-- [ ] **B2.5** **Research reads Hacker News** (R4): `competitor-research.ts` is X only; add `lib/cmo/social/hn.ts` as a
-  source. Also add Reels to the niche video research if ScrapeCreators has it.
+- [x] **B2.5** **Research reads Hacker News** (R4).
+  - `competitor-research.ts` searches HN for up to 3 competitor names from Competitor Analysis. It measures stories
+    against the search's own median (points + comments) and cites HN discussion URLs.
+  - A founder with competitors but no X handles now gets research from HN alone.
+  - HN being slow or busy never fails the run.
+  - Not done: Reels in niche video research. It waits on what ScrapeCreators returns for Reels (R0, D3).
 - [ ] **B2.6** **Studio send-back teaches.** A send-back reason on a Studio card writes `approvals.reason` only. Also
   write a voice/preference memory (topic `video`) and a `cmo_draft_outcomes` row for the department `studio`, so the next
   brief reads it. pgTAP.
