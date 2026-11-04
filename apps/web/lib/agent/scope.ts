@@ -17,7 +17,7 @@ import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { resolveMediaRefs } from "@/lib/generate/create";
 import { previewAssets } from "@/lib/motion/assets";
 import { previewMotion } from "@/lib/motion/preview";
-import { moderateText, specText } from "@/lib/generate/moderation";
+import { moderateText, moderationKind, MOTION_KIND, specText } from "@/lib/generate/moderation";
 import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
@@ -82,7 +82,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
     // Each model kind has its own policy, so each spec is judged on its own (variants share the prompt).
     await Promise.all(
       [{ model: prepared.model, spec: prepared.spec }, ...(prepared.extra ?? [])].map((item) =>
-        moderateText(specText(item.spec).join("\n"), { kind: item.model.kind }),
+        moderateText(specText(item.spec).join("\n"), { kind: moderationKind(item.model) }),
       ),
     );
     return null;
@@ -328,7 +328,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const request = addExplainerInput.safeParse(call.input);
         if (request.success) {
           try {
-            await moderateText(explainerText(request.data), { kind: "video" });
+            await moderateText(explainerText(request.data), { kind: MOTION_KIND });
           } catch (err) {
             const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
             return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };

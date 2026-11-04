@@ -314,7 +314,7 @@ def test_neither_checker_answering_never_passes(monkeypatch, image):
     _http(monkeypatch, gemini=ALLOW, gemini_status=403)
     with pytest.raises(ProviderError) as err:
         moderation.check_images([image])
-    assert not err.value.retryable
+    assert str(err.value) == moderation.UNAVAILABLE and not err.value.retryable, "out of credit is not a block"
 
 
 def test_without_a_gemini_key_an_unpaid_claude_still_blocks(monkeypatch, image):
@@ -324,8 +324,24 @@ def test_without_a_gemini_key_an_unpaid_claude_still_blocks(monkeypatch, image):
     seen = _http(monkeypatch, gemini=ALLOW)
     with pytest.raises(ProviderError) as err:
         moderation.check_images([image])
-    assert not err.value.retryable
+    assert str(err.value) == moderation.UNAVAILABLE and not err.value.retryable
     assert seen["gemini"] == []
+
+
+def test_an_unpaid_checker_fails_the_prompt_as_unavailable_not_blocked(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    _claude(monkeypatch, error=NO_CREDIT)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_prompt(get_model("gemini-image"), {"prompt": "a red fox", "aspectRatio": "1:1"})
+    assert str(err.value) == moderation.UNAVAILABLE and not err.value.retryable
+
+
+def test_an_unpaid_nsfw_check_is_unavailable_not_blocked(monkeypatch, image):
+    _nsfw(monkeypatch, status=402)
+    with pytest.raises(ProviderError) as err:
+        moderation.check_images([image])
+    assert str(err.value) == moderation.UNAVAILABLE and not err.value.retryable
 
 
 # ---------------------------------------------------------------- OpenAI-compatible (Groq) first
@@ -582,7 +598,12 @@ def test_our_own_renderers_get_their_prompt_checked_too(monkeypatch):
     seen = _claude(monkeypatch, allowed=False)
     with pytest.raises(ProviderError):
         moderation.check_prompt(get_model("motion-explainer"), {"prompt": "a hateful banner", "aspectRatio": "16:9", "scene": {"template": "explainer"}})
-    assert seen["system"] == moderation.PROMPT_POLICY
+    assert seen["system"] == moderation.MOTION_PROMPT_POLICY, "on-screen text, not a picture prompt"
+
+
+def test_motion_policy_lets_on_screen_text_name_brands_but_keeps_safety_rules():
+    assert "logo" not in moderation.MOTION_PROMPT_POLICY and "identifiable real person" not in moderation.MOTION_PROMPT_POLICY
+    assert "quote, endorsement" in moderation.MOTION_PROMPT_POLICY and "hate" in moderation.MOTION_PROMPT_POLICY
 
 
 def test_prompt_check_without_keys_refuses_in_production(monkeypatch):

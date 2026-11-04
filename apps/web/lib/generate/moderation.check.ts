@@ -14,7 +14,7 @@ import { ApiError as GeminiError } from "@google/genai";
 import { ApiError } from "@/lib/api/errors";
 import { clearHealth, markDown } from "@/lib/llm-health";
 
-import { AUDIO_POLICY, moderateText, moderationReady, POLICY, specText } from "./moderation";
+import { AUDIO_POLICY, moderateText, moderationKind, moderationReady, MOTION_KIND, MOTION_POLICY, POLICY, specText } from "./moderation";
 
 type Reply = { stop_reason: string; parsed_output: unknown } | Error;
 
@@ -226,6 +226,16 @@ async function main(): Promise<void> {
   }
   assert.doesNotMatch(AUDIO_POLICY, /logo|identifiable real person/, "scripts may name people and products");
   assert.match(AUDIO_POLICY, /cloning/, "voice cloning stays blocked");
+
+  // Our own renderer's on-screen text may name brands and competitors ("Post drafts to X", "faster than CapCut").
+  const motion = clientFor({ stop_reason: "end_turn", parsed_output: { allowed: true, category: "none" } });
+  await moderateText("OpenCMO\nPost drafts to X you approve\nOne click, not twenty in CapCut", { kind: MOTION_KIND, client: motion.client });
+  assert.equal(motion.calls[0]!.system, MOTION_POLICY, "explainer text uses the motion policy");
+  assert.doesNotMatch(MOTION_POLICY, /logo|identifiable real person|branded product/, "on-screen text may name brands");
+  assert.match(MOTION_POLICY, /quote, endorsement/, "fake quotes of real people stay blocked");
+  assert.match(MOTION_POLICY, /hate/, "safety rules stay");
+  assert.equal(moderationKind({ kind: "video", provider: "opencmo-motion" }), MOTION_KIND);
+  assert.equal(moderationKind({ kind: "video", provider: "fal" }), "video", "AI video keeps the strict policy");
 
   assert.deepEqual(specText({ prompt: "a cat", model: "fal-veo", voice: "Aria", refs: ["x"] }), ["a cat"]);
 

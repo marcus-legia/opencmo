@@ -13,7 +13,7 @@ import { hitRateLimit, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler
 import { wakeWorker } from "@/lib/modal";
 
 import { availableModel, loadCatalog, specHash, type GenerationRow } from "./models";
-import { moderateText, specText } from "./moderation";
+import { moderateText, moderationKind, specText } from "./moderation";
 
 export type CreateRequest = {
   jobId: string;
@@ -196,7 +196,7 @@ export async function checkGeneration(supabase: SupabaseClient, request: CreateR
   // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it.
   await requireCredits(supabase, priceOf(model, spec));
   // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
-  await moderateText(specText(spec).join("\n"), { kind: model.kind });
+  await moderateText(specText(spec).join("\n"), { kind: moderationKind(model) });
   return { request, model, spec };
 }
 

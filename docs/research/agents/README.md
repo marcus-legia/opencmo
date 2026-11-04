@@ -8,6 +8,7 @@ Mới nhất ở trên. Mỗi lượt thêm một dòng và kiểm danh sách n�
 
 | Ngày | Chủ đề | Báo cáo | Nguồn chính |
 |---|---|---|---|
+| 2026-11-04 | Bản đồ agent team (Assistant, CMO chat, jobs, video team) và model của từng vai; moderation báo "blocked" khi hết credit, explainer bị chặn vì nhắc tên brand; Creem Moderation API | [2026-11-04-agent-team-model-map.md](2026-11-04-agent-team-model-map.md) | Code nội bộ; docs Creem |
 | 2026-10-17 | Evals cho agent: đo "duyệt nguyên văn" từ production, judge theo tầng sau bước kiểm bằng code, eval onboarding/Sales/memory-safety, so hai lần chạy theo cặp | [2026-10-17-agent-evals-draft-signal.md](2026-10-17-agent-evals-draft-signal.md) | inbox-zero, inspect_ai, promptfoo, autoevals, agentevals; release notes Claude (Haiku 5.5) và Gemini (4 Argon) |
 
 ## Repo đã đọc
