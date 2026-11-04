@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "qa:logs": "node scripts/pull-prod-logs.mjs",
     "build": "npm run build --workspace @opencmo/web",
     "typecheck": "npm run typecheck --workspace @opencmo/web",
     "db:reset": "supabase db reset",
