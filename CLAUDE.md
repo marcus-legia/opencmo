@@ -146,7 +146,7 @@ apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes v
   lib/generate/         AI media generation
   lib/cmo/              the AI CMO job engine
   lib/mcp/              MCP server (API keys → short-lived user JWT under RLS)
-  app/api/webhooks/     payment webhooks (Creem; Polar until retired) → one atomic RPC each
+  app/api/webhooks/     inbound webhooks: payments (Creem; Polar until retired) and Zernio, each → one atomic RPC
   lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds
 supabase/migrations/    at the repo ROOT; every migration needs a pgTAP test in supabase/tests/
 scripts/dev.mjs         one-command dev stack
