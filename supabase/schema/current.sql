@@ -3352,6 +3352,15 @@ CREATE FUNCTION public.cmo_as_written() RETURNS real
 
 
 --
+-- Name: cmo_brain_started(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_brain_started(p_input jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $$ select coalesce(p_input->>'source', '') in ('schedule', 'event', 'replan') $$;
+
+
+--
 -- Name: marketing_documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4513,6 +4522,52 @@ begin
   update public.cmo_runs set steps = p_steps, lease_until = now() + interval '300 seconds'
   where id = p_run and attempt = p_attempt and status = 'running' and not public.cmo_paused(user_id);
   return found;
+end;
+$$;
+
+
+--
+-- Name: cmo_runs_budget_gate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_runs_budget_gate() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_root public.work_orders;
+  v_in_flight integer;
+  v_budget integer;
+  v_hour integer;
+  v_ceiling integer;
+begin
+  if new.credits <= 0 or new.kind in ('plan_week', 'publish_post') or not public.cmo_brain_started(new.input) then
+    return new;
+  end if;
+  select * into v_root from public.work_orders
+  where user_id = new.user_id and parent_id is null and week = date_trunc('week', current_date)::date;
+  if not found then
+    return new;
+  end if;
+  -- Runs already holding credits this week count as spent: they settle later.
+  select coalesce(sum(credits), 0)::integer into v_in_flight from public.cmo_runs
+  where user_id = new.user_id and status in ('queued', 'running') and created_at >= v_root.week::timestamptz;
+  if v_root.spent_credits + v_in_flight + new.credits > v_root.budget_credits then
+    raise exception 'This week''s credit budget (% credits) is used up. Raise it in Settings, or ask your CMO for this yourself.',
+      v_root.budget_credits using errcode = 'P0001';
+  end if;
+
+  select weekly_credit_budget into v_budget from public.profiles where id = new.user_id;
+  v_ceiling := greatest(10, ceil(coalesce(v_budget, 0) * 0.4)::integer);
+  select coalesce(sum(credits), 0)::integer into v_hour from public.cmo_runs
+  where user_id = new.user_id and created_at > now() - interval '1 hour' and public.cmo_brain_started(input);
+  if v_hour + new.credits > v_ceiling then
+    update public.profiles set cmo_paused_at = coalesce(cmo_paused_at, now()) where id = new.user_id;
+    perform public.work_order_event(v_root, 'note',
+      'Paused: your CMO started ' || (v_hour + new.credits) || ' credits of work within an hour (limit ' || v_ceiling
+      || '). Resume it when you are ready.');
+  end if;
+  return new;
 end;
 $$;
 
@@ -17036,6 +17091,13 @@ CREATE TRIGGER cmo_draft_outcomes_platform BEFORE INSERT ON public.cmo_draft_out
 --
 
 CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EACH ROW EXECUTE FUNCTION public.cmo_memories_classify();
+
+
+--
+-- Name: cmo_runs cmo_runs_budget_gate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_runs_budget_gate BEFORE INSERT ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.cmo_runs_budget_gate();
 
 
 --

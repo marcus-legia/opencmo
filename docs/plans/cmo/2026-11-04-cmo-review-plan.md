@@ -162,10 +162,17 @@ Steps 3, 5, 6 and 9 of the goal test.
 Step 11 of the goal test. Today the weekly budget is soft, overspend is logged and never refused, and there is no cost
 ceiling.
 
-- [ ] **B3.1** `work_order_spend` **refuses** a paid step that would pass the order's remaining budget. It raises a
-  `price` card ("this needs N more credits") instead (after D6). pgTAP: over-budget spend raises, never charges.
-- [ ] **B3.2** **Cost ceiling.** If credits held in the last hour pass a threshold (e.g. 40 % of the weekly budget), pause
-  the founder's tree (`cmo_paused_at`) and raise a card. pgTAP.
+- [x] **B3.1** **The weekly budget is hard for work the brain starts** (D6).
+  - A `before insert` trigger on `cmo_runs` refuses a paid run with source `schedule`, `event` or `replan` that would
+    take the week past its budget. Credits held by runs still in flight count.
+  - It is refused before any credit is held, and the reason reaches the order, the cron log and the Brain page.
+  - The founder's own asks (chat, buttons, MCP) and Studio steps behind an approved price card are not gated.
+  - Design change: `work_order_spend` records money after it moved, so the gate sits where a run is created, not there
+    (`20270107010000_cmo_review_budget_gate.sql`, pgTAP 250).
+- [x] **B3.2** **Cost ceiling.**
+  - More than max(10, 40 % of the weekly budget) credits of brain-started runs within an hour pauses the founder's
+    brain (`cmo_paused_at`) and writes a note on the week.
+  - The run that crossed the line still goes; later ones wait for Resume.
 - [ ] **B3.3** **Registry limits enforced at runtime.** `max_steps` and `credits` in `packages/contracts/capabilities.json`
   are only drift-checked today. Read them in the job runner (`lib/cmo/jobs/*`) and in `studio-orders.ts`; stop a job
   that passes `max_steps` with `error.code = 'max_steps'`.
