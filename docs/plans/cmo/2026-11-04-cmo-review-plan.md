@@ -55,6 +55,8 @@ Each batch below moves one or more of these steps from "built" to "works".
 
 ## 1. Decisions the owner must make first
 
+**Decided 2026-11-04: the owner took every recommendation below (D1–D8).**
+
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
 | D1 | Release UI v2 to production and retire the v1 CMO screens | **Yes.** The CMO cannot work in v1: Studio and schedule cards have no screen there. | B1 |
@@ -76,25 +78,36 @@ Steps 1, 8 and 10 of the goal test. Mostly configuration; the code items are sma
   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`;
   - `ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, `OPENCMO_PUBLISH_LIVE=1` (after D2);
   - `SCRAPECREATORS_API_KEY`, `CRON_SECRET`, `OPENCMO_MCP_CONFIRM_KEY`.
-- [ ] **B1.2** Add every variable above to `.env.example`, with a one-line comment each. The Zernio variables are missing
-  from it today.
+- [ ] **B1.2 owner** Add every variable above to `apps/web/.env.example`, with a one-line comment each. The Zernio
+  variables and `NEXT_PUBLIC_OPENCMO_UI` are missing from it today. Agents cannot write `.env*` files here (a permission
+  rule), so the owner pastes the block given in PR #162.
 - [ ] **B1.3 owner** Modal secret: `OPENCMO_WEB_URL`, `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
   Redeploy. Confirm the per-minute `sweep` and the hourly `cmo_digest` are scheduled (`packages/engine/modal_app.py`).
   Without the secret, `sweep` skips firing slots and the digest never runs.
 - [ ] **B1.4 owner** Zernio dashboard: add a webhook pointed at `/api/webhooks/zernio` with the shared secret.
 - [ ] **B1.5 owner** Supabase prod: `supabase db push` through `20270105010000_review_followups.sql` before the deploy
   (see the "main via PR only" rule).
-- [ ] **B1.6** `opencmo doctor`-style **web health check**: `/api/v1/health/cmo` (admin only), plus a Settings line that
-  lists every live switch (UI, email, push, publish, ScrapeCreators, Modal clock last seen). This is so a missing key is
-  visible instead of silently doing nothing. Done: the page shows red for an unset key on a local stack.
-- [ ] **B1.7** Timezone from the browser: at onboarding and on first app load, write
-  `Intl.DateTimeFormat().resolvedOptions().timeZone` to `profiles.timezone` while it is still the default `'UTC'`.
-  Done: a fresh account in `Asia/Ho_Chi_Minh` gets slots in local time (e2e).
-- [ ] **B1.8** Retire the v1 decide path once D1 ships: `app/api/v1/cmo/items/[id]/route.ts` and FeedPanel call
-  `cmo_decide_post` and the other old RPCs directly. Route them through `approval_decide`, or delete the v1 screens.
-  Done: `grep cmo_decide_` in `apps/web` finds only SQL wrappers.
-- [ ] **B1.9** Until D1 ships, **the brain does not raise cards the founder cannot see**: with the flag off,
-  `plan_week` makes no `build_video` order and raises no schedule card. Drop this item if B1.8 lands first.
+- [x] **B1.6** **Live switches** on the owner's Costs page (`/app/settings/costs`, gated by `app_owners` through
+  `provider_spend_report`). It lists UI v2, email, push, Zernio posting, the webhook secret, the social reader, cron,
+  MCP and the global pause. Each switch asks the module that decides it (`emailSender`, `vapidFromEnv`,
+  `publishAnalytics`), so the page cannot drift from the code, and it never shows a secret value
+  (`lib/ops/switches.ts` + `.check.ts`, in `check:contracts`).
+  - Not done: "Modal clock last seen". It needs a heartbeat table; the follow-up is to write one row per `sweep`.
+- [x] **B1.7** Timezone from the browser.
+  - `profiles.timezone_source` (`default | browser | founder`) and `profile_timezone_detect(text)`
+    (`20270106010000_cmo_review_timezone.sql`, pgTAP 245).
+  - `components/shell/TimezoneSync.tsx` sends the zone once per browser, from both shells.
+  - The zone is written only while the founder never chose one. Saving Settings marks the zone as the founder's, even
+    UTC.
+  - Existing accounts with a zone other than UTC are marked `founder`.
+- [ ] **B1.8** Retire the v1 decide path once v2 is live on production.
+  - Found while building: the v2 screens also call the old routes. Sales calls `/cmo/opportunities/[id]` and Setup
+    calls `/cmo/goals/[id]`, so this is more than deleting v1.
+  - It is not a safety gap. `approvals_sync` keeps `approvals` in step with every old RPC. Nothing goes out without a
+    schedule card, and that card is hash-checked three times.
+  - Do it after B4.8: give the Sales and Setup screens the card's id and `contentHash`, then delete `CmoWorkspace` and
+    `app/api/v1/cmo/items`. Done: `grep cmo_decide_` in `apps/web` finds only SQL wrappers.
+- [x] **B1.9** Dropped: D1 releases v2, so every card has a screen. If v2 is ever rolled back, revisit this item.
 
 ## 3. B2 — Close the week's loop (code)
 

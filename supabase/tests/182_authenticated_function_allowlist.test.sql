@@ -110,6 +110,7 @@ insert into allowed values
   ('push_subscribe(text,text,text,text)'),
   ('push_unsubscribe(text)'),
   ('put_editor_transcript(uuid,text)'),
+  ('profile_timezone_detect(text)'),  -- cmo-review B1.7: own row only, writes only a zone the founder never chose
   ('provider_spend_allowed()'),
   ('provider_spend_report(integer)'),
   ('provider_usage_record_mine(text,integer,text)'),
