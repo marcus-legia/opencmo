@@ -178,8 +178,11 @@ ceiling.
     limit. It fails with a refund instead of looping.
   - Every job in `jobs.check.ts` runs under the limits.
   - Studio order steps are each a founder card already, so they are not limited here.
-- [ ] **B3.4** **Studio credit check reads the order's budget**, not only the founder's balance (`adapter.ts:99`,
-  `studio_step_raise`).
+- [x] **B3.4** **The Studio price card reads the order's budget.**
+  - A price card the brain raises for a video order says "N credits past this video's budget" when it is
+    (`steps.ts`, `withBudgetNote`).
+  - The card is still the founder's decision, so it is raised, not refused. The founder's balance check stays as it
+    was.
 - [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
   check that drops items that do not fit it (e.g. no paid video for a pre-launch founder with no product page). Today
   stage fit exists only in the eval judge.
