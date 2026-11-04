@@ -17,6 +17,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { reportClientError } from "@/lib/client-errors";
+
 import type { ClipDocument } from "@opencmo/clip-doc";
 import {
   NUDGE,
@@ -100,6 +102,7 @@ export function TranscriptPanel({
       (error) => {
         if (!live) return;
         console.error("[transcript] could not load", error);
+        reportClientError("reported", error, { source: "editor:transcript" });
         setStatus("error");
       },
     );
@@ -470,7 +473,10 @@ function VoiceoverTranscript({ doc, context, onSeek }: { doc: ClipDocument; cont
     });
     Promise.all(layers.map(async (layer) => ({ ...layer, transcript: await context().readTranscript(layer.src) }))).then(
       (loaded) => live && setBlocks(loaded),
-      (error) => console.error("[transcript] voiceover could not load", error),
+      (error) => {
+        console.error("[transcript] voiceover could not load", error);
+        reportClientError("reported", error, { source: "editor:voiceover-transcript" });
+      },
     );
     return () => {
       live = false;

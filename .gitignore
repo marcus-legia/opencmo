@@ -38,6 +38,8 @@ next-env.d.ts
 /packages/engine/clips/
 # Frame kiểm tra mà `modal run modal_app.py` ghi ra thư mục đang đứng.
 modal-kiem.png
+# Production logs pulled by `npm run qa:logs`; they carry user ids.
+/docs/qa/logs/
 /work/
 
 # Hệ điều hành / editor

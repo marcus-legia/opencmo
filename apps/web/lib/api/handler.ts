@@ -21,6 +21,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { z } from "zod";
 
+import { errorFields, logEvent } from "../log";
 import { createServerClient } from "../supabase/server";
 import {
   ApiError,
@@ -78,6 +79,28 @@ export function jsonResponse(data: unknown, status = 200): NextResponse {
 
 function errorResponse(status: number, detail: unknown): NextResponse {
   return jsonResponse({ detail }, status);
+}
+
+/** The path only: a query string can carry anything the caller typed. */
+function requestFields(request: NextRequest, user: string): Record<string, unknown> {
+  let path = "";
+  try {
+    path = new URL(request.url).pathname;
+  } catch {
+    // A test double without a URL; the log line is still worth writing.
+  }
+  return { method: request.method, path, user: user || undefined };
+}
+
+/**
+ * An error answer the caller will see, logged so it can be found later. 5xx is ours to fix; 4xx shows where people hit
+ * a limit or a validation message. 401 stays out: every signed-out poll would fill the log with it.
+ */
+function refused(request: NextRequest, user: string, status: number, detail: unknown): NextResponse {
+  if (status !== 401) {
+    logEvent(status >= 500 ? "error" : "warn", "api_error", { ...requestFields(request, user), status, detail });
+  }
+  return errorResponse(status, detail);
 }
 
 /**
@@ -169,12 +192,11 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
   routeContext?: RouteContext,
 ): Promise<NextResponse> {
   {
+    let user: { id: string; email?: string } = { id: "" };
     try {
       if (WRITE_METHODS.has(request.method) && crossSite(request)) {
-        return errorResponse(403, "Cross-site access denied.");
+        return refused(request, user.id, 403, "Cross-site access denied.");
       }
-
-      let user: { id: string; email?: string } = { id: "" };
 
       if (options.auth !== false) {
         const { data, error } = await supabase.auth.getUser();
@@ -188,7 +210,7 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
       if (options.body) {
         const raw = await readJson(request, options.maxBodyBytes);
         const parsed = options.body.safeParse(raw ?? {});
-        if (!parsed.success) return errorResponse(422, zodMessage(parsed.error));
+        if (!parsed.success) return refused(request, user.id, 422, zodMessage(parsed.error));
         body = parsed.data;
       }
 
@@ -208,11 +230,11 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
       return jsonResponse(result ?? null);
     } catch (err) {
       if (err instanceof ApiError) {
-        return errorResponse(err.status, err.detail ?? err.message);
+        return refused(request, user.id, err.status, err.detail ?? err.message);
       }
-      // Lỗi PostgREST đi qua `rpcOrThrow`; tới đây là thứ ta chưa lường. Nguyên
-      // văn chỉ vào log (tiếng Việt, của ta), client nhận câu chung.
-      console.error("[api] lỗi không lường trước", err);
+      // PostgREST errors arrive through `rpcOrThrow`, so this is something we did not expect. The original text goes
+      // to the log only; the client gets the generic sentence.
+      logEvent("error", "api_unexpected", { ...requestFields(request, user.id), status: 500, ...errorFields(err) });
       return errorResponse(500, GENERIC_ERROR);
     }
   }

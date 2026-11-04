@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 
+import { errorFields, logEvent } from "./lib/log";
+
 /**
  * Sentry phía server. Không có DSN thì không khởi tạo gì cả — nhờ vậy chạy local
  * và chạy CI không phải cấu hình thêm, và không có sự kiện rác nào được gửi đi.
@@ -16,4 +18,16 @@ export function register() {
   });
 }
 
-export const onRequestError = Sentry.captureRequestError;
+/** Server render errors: `digest` is the only link to what the error boundary reports from the browser. */
+export const onRequestError: typeof Sentry.captureRequestError = (error, request, context) => {
+  logEvent("error", "request_error", {
+    ...errorFields(error),
+    digest: (error as { digest?: string } | null)?.digest,
+    path: request.path?.split("?")[0],
+    method: request.method,
+    routerKind: context.routerKind,
+    routePath: context.routePath,
+    routeType: context.routeType,
+  });
+  return Sentry.captureRequestError(error, request, context);
+};
