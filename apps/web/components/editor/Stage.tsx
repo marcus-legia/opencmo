@@ -16,6 +16,8 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Renderer } from "@opencmo/clip-render";
 
+import { reportClientError } from "@/lib/client-errors";
+
 import type { Tool } from "./actions";
 import { panBy, zoomAt, type Camera, type Size } from "./camera";
 
@@ -109,6 +111,7 @@ export function Stage({
           if (offCtx) renderer.render(offCtx as never, frame);
         } catch (error) {
           console.error("[editor] render failed", error);
+          reportClientError("reported", error, { source: "editor:render" });
         }
         drawn.current = { renderer, frame, redraw };
       }
@@ -138,6 +141,7 @@ export function Stage({
         if (offCtx) other.renderer.render(offCtx as never, other.frame);
       } catch (error) {
         console.error("[editor] render failed", error);
+        reportClientError("reported", error, { source: "editor:render" });
       }
       const ox = (x + other.dx * s) * dpr;
       const oy = (y + other.dy * s) * dpr;

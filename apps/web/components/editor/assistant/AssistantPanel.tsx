@@ -42,6 +42,7 @@ import { ContactSheet } from "./ContactSheet";
 import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
+import { reportClientError } from "@/lib/client-errors";
 
 /** `activity`/`lastEvent`: thanh "đang làm" của lượt live — người dùng phải thấy agent còn sống. */
 type LiveTurn = TurnView & { thinking?: string; activity?: Activity; lastEvent?: number };
@@ -172,6 +173,7 @@ export function AssistantPanel({
         return next.session;
       } catch (error) {
         console.error("[assistant] could not load", error);
+        reportClientError("reported", error, { source: "assistant:load" });
         setAvailable(false);
         return null;
       }
@@ -244,6 +246,7 @@ export function AssistantPanel({
         }
       } catch (error) {
         console.error("[assistant] tool", request.name, error);
+        reportClientError("reported", error, { source: `assistant:tool:${request.name}` });
         results.push({ tool_use_id: request.id, error: ((error as Error).message || "The editor could not do this.").slice(0, 300) });
       }
     }

@@ -69,6 +69,7 @@ import { Soundboard } from "./soundboard/Soundboard";
 import { SlidePanel, SlideStrip, readSlides, slideAt } from "./slides/SlidesView";
 import { Timeline } from "./timeline/Timeline";
 import { studioItemHref } from "@/components/screens/studio/href";
+import { reportClientError } from "@/lib/client-errors";
 
 /** Trần chờ một lượt export: worker có trần 30 phút cho exporter, cộng xếp hàng. */
 const EXPORT_WAIT_MS = 40 * 60_000;
@@ -238,6 +239,7 @@ function Workspace({
       return createRenderer(doc, media, { scale });
     } catch (error) {
       console.error("[editor] could not build the renderer", error);
+      reportClientError("reported", error, { source: "editor:renderer" });
       return null;
     }
     // `generation` đổi khi độ dài/transcript về: cây phải dựng lại.
@@ -430,6 +432,7 @@ function Workspace({
       } catch (error) {
         if (error instanceof DocumentInvalidError) {
           console.error("[editor] op produced an invalid document", ops, error);
+          reportClientError("reported", error, { source: "editor:invalid-op" });
           setNotice("This change would break the project, so it was not applied.");
           return null;
         }

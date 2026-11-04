@@ -9,6 +9,7 @@ import "@/styles/blog.css";
 import "@/styles/app.css";
 import "@/styles/cmo.css";
 
+import { ClientErrorReporter } from "@/components/ClientErrorReporter";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         {/* Real-user Core Web Vitals; only reports on Vercel deployments with Speed Insights enabled. */}
         <SpeedInsights />
+        <ClientErrorReporter />
       </body>
     </html>
   );
