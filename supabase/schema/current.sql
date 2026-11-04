@@ -2241,6 +2241,43 @@ $$;
 
 
 --
+-- Name: approvals_studio_lesson(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_studio_lesson() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_what text;
+  v_title text;
+begin
+  if new.kind not in ('finished_video', 'shorts_batch', 'slideshow') or new.status <> 'skipped'
+     or new.reason is null or char_length(trim(new.reason)) = 0
+     or (old.reason is not distinct from new.reason and old.status = new.status) then
+    return new;
+  end if;
+  v_what := case new.kind when 'finished_video' then 'the video' when 'shorts_batch' then 'the shorts' else 'the slideshow' end;
+  v_title := nullif(trim(coalesce(new.snapshot->>'title', '')), '');
+  -- At the cap (200, as cmo_remember), the least important, oldest note goes.
+  if (select count(*) from public.cmo_memories where user_id = new.user_id) >= 200 then
+    delete from public.cmo_memories where id in (
+      select id from public.cmo_memories where user_id = new.user_id order by importance, created_at limit 1);
+  end if;
+  insert into public.cmo_memories (user_id, type, kind, topic, importance, body)
+  -- type 'feedback': cmo_memories_classify files it as the founder's feedback.
+  values (new.user_id, 'feedback', 'preference', 'video', 3,
+    left('Sent back ' || v_what || coalesce(' “' || left(v_title, 120) || '”', '') || ': ' || trim(new.reason), 600));
+  return new;
+exception when others then
+  -- A memory is a lesson, never a reason to lose the founder's decision.
+  raise warning 'studio lesson for card % not written: %', new.id, sqlerrm;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: approvals_sync(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -16822,6 +16859,13 @@ CREATE TRIGGER approvals_caption_approve AFTER UPDATE OF status ON public.approv
 --
 
 CREATE TRIGGER approvals_caption_rules AFTER INSERT ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_caption_rules();
+
+
+--
+-- Name: approvals approvals_studio_lesson; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_studio_lesson AFTER UPDATE OF status, reason ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_studio_lesson();
 
 
 --

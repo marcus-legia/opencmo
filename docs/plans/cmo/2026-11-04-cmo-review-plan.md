@@ -143,9 +143,13 @@ Steps 3, 5, 6 and 9 of the goal test.
   - A founder with competitors but no X handles now gets research from HN alone.
   - HN being slow or busy never fails the run.
   - Not done: Reels in niche video research. It waits on what ScrapeCreators returns for Reels (R0, D3).
-- [ ] **B2.6** **Studio send-back teaches.** A send-back reason on a Studio card writes `approvals.reason` only. Also
-  write a voice/preference memory (topic `video`) and a `cmo_draft_outcomes` row for the department `studio`, so the next
-  brief reads it. pgTAP.
+- [x] **B2.6** **Studio send-back teaches.**
+  - A reason on a sent-back finished video, shorts batch or slideshow becomes a topic `video` memory (importance 3).
+    Writer's video brief reads it through `writerMemory`.
+  - Built as the trigger `approvals_studio_lesson`, so `approval_decide` stays as it is
+    (`20270106030000_cmo_review_studio_sendback.sql`, pgTAP 247).
+  - Not done: a `cmo_draft_outcomes` row for Studio. Its department check allows only post and sales, and the
+    approval measures in B5.6 will read `approvals` directly.
 - [ ] **B2.7** **Same-day posts on one card** (approval rule 3). Batch the post cards of one day into one card, the way
   shorts already are. Approve all, or open each one.
 
