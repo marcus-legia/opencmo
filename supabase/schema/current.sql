@@ -10880,6 +10880,8 @@ declare
   v_reminded integer := 0;
   v_failed integer := 0;
   v_unconfirmed integer := 0;
+  v_user uuid;
+  v_measured integer := 0;
 begin
   -- Never late: past its window, a slot that has not started posting is missed.
   for v_slot in
@@ -10955,8 +10957,29 @@ begin
     v_unconfirmed := v_unconfirmed + 1;
   end loop;
 
+  -- 24 hours after a post went out, its numbers are read (cmo-review B2.4): reply outcomes and post metrics land the
+  -- day after, not at the next daily loop. Once per post: a pull_metrics run queued after that moment covers it, and
+  -- cmo_enqueue merges a founder's posts into the run already waiting.
+  for v_user in
+    select distinct s.user_id from public.schedule_slots s
+    where s.status = 'published' and s.published_at is not null
+      and s.published_at between now() - interval '48 hours' and now() - interval '24 hours'
+      and not public.cmo_paused(s.user_id)
+      and not exists (select 1 from public.cmo_runs r where r.user_id = s.user_id and r.kind = 'pull_metrics'
+                      and r.created_at >= s.published_at + interval '24 hours')
+    limit 50
+  loop
+    begin
+      perform public.cmo_enqueue(v_user, 'pull_metrics', jsonb_build_object('source', 'event'));
+      v_measured := v_measured + 1;
+    exception when others then
+      -- The day's cap or a paused founder: the daily loop reads it instead.
+      null;
+    end;
+  end loop;
+
   return jsonb_build_object('fired', v_fired, 'reminded', v_reminded, 'missed', v_missed, 'failed', v_failed,
-    'unconfirmed', v_unconfirmed);
+    'unconfirmed', v_unconfirmed, 'measured', v_measured);
 end;
 $$;
 

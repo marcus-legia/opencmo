@@ -134,9 +134,11 @@ Steps 3, 5, 6 and 9 of the goal test.
   - The planner prompt asks for a slideshow most weeks. The fake plan adds one only when the brief says "slideshow".
   - Not done yet: post images from a post, and MCP/adapter entries for slideshows. Post images stay "only when a post
     asks for one" (D5), but nothing asks yet, so this moves to B5.5.
-- [ ] **B2.4** **Metrics 24 h after posting.** Today `pull_metrics` is a daily loop. Add a per-slot follow-up at
-  `posted_at + 24 h` (an event rule or a sweep check) so reply outcomes and post metrics land on time. Keep the daily
-  loop as the catch-all.
+- [x] **B2.4** **Metrics 24 h after posting.**
+  - Modal's per-minute sweep already calls `schedule_claim_due`. It now also queues one `pull_metrics` run
+    (`source: event`) per founder whose post turned 24 h old, at most once per post.
+  - It skips paused founders, and the day's cap leaves the post to the daily loop.
+  - No Modal change was needed (`20270106040000_cmo_review_metrics_24h.sql`, pgTAP 248).
 - [x] **B2.5** **Research reads Hacker News** (R4).
   - `competitor-research.ts` searches HN for up to 3 competitor names from Competitor Analysis. It measures stories
     against the search's own median (points + comments) and cites HN discussion URLs.
