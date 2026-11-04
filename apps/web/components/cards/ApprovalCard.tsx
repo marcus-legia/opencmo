@@ -20,6 +20,7 @@ import {
   CorrectionBody,
   FinishedVideoBody,
   GoalBody,
+  PlanBody,
   PostBody,
   PriceBody,
   ReplyBody,
@@ -65,6 +66,7 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   slideshow: { label: "Send back", action: "send_back" },
   correction: { label: "Dismiss", action: "reject" },
   schedule: { label: "Cancel", action: "cancel" },
+  plan: { label: "Skip", action: "skip" },
 };
 
 function firstText(card: Card): string {
@@ -119,6 +121,8 @@ export function ApprovalCard({
   /** Slideshow card: a decision was refused (the slideshow was edited elsewhere since it was rendered). */
   const [slideStale, setSlideStale] = useState(false);
   const [draft, setDraft] = useState(() => firstText(card));
+  /** Week plan card: the items the founder unticked. */
+  const [dropped, setDropped] = useState<ReadonlySet<string>>(() => new Set());
   const beats = card.body.kind === "script" ? card.body.beats : [];
 
   const blocked = blockedReason(card, sample);
@@ -209,6 +213,7 @@ export function ApprovalCard({
       // An unchanged beat approves the script as the card's hash covers it.
       return run(words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" });
     }
+    if (card.kind === "plan") return run({ action: "approve", ...(dropped.size ? { drop: [...dropped] } : {}) });
     return run({ action: "approve" });
   }
 
@@ -297,6 +302,13 @@ export function ApprovalCard({
       }
       case "correction":
         return [primary(editing ? "Keep edited rule" : PRIMARY_ACTION.correction), editAction(), ...declineAction];
+      case "plan": {
+        const left = card.body.items.length - dropped.size;
+        return [
+          { ...primary(dropped.size ? `Approve ${left} of ${card.body.items.length}` : PRIMARY_ACTION.plan), disabled: left === 0 ? "Keep at least one item, or skip the card." : undefined },
+          ...declineAction,
+        ];
+      }
     }
   })();
 
@@ -361,6 +373,20 @@ export function ApprovalCard({
             <SlideshowBody body={card.body} cardId={card.id} editable={captionsBlocked} edited={slideEdited} onSaveSlide={saveSlide} onSaveCaption={saveCaption} />
           ) : card.body.kind === "schedule" ? (
             <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
+          ) : card.body.kind === "plan" ? (
+            <PlanBody
+              body={card.body}
+              cardId={card.id}
+              dropped={dropped}
+              editable={captionsBlocked}
+              onToggle={(itemId) =>
+                setDropped((was) => {
+                  const next = new Set(was);
+                  if (!next.delete(itemId)) next.add(itemId);
+                  return next;
+                })
+              }
+            />
           ) : (
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}

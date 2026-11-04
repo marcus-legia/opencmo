@@ -113,15 +113,17 @@ Steps 1, 8 and 10 of the goal test. Mostly configuration; the code items are sma
 
 Steps 3, 5, 6 and 9 of the goal test.
 
-- [ ] **B2.1** **Week plan card.** Today the Monday plan raises only a `goal` card; the items are not shown. Add a
-  `plan` card kind:
-  - it shows the week's items with a reason each;
-  - the founder can drop an item or approve all;
-  - dropping an item cancels its order;
-  - approving releases the tree.
-
-  New migration (`approvals.kind` check, `approval_snapshot`, `approval_decide`), pgTAP, and a card body in
-  `components/cards/`. Done: dropping the video item cancels the `build_video` order and its children.
+- [x] **B2.1** **Week plan card.**
+  - `plan_week` raises a `plan` card (`ref_kind 'work_order'`, the week's root order) that shows every calendar item of
+    the week, with its goal.
+  - Unticking items and approving drops them while they are still only planned. The tree is then resynced through
+    `work_orders_plan_week`, whose cleanup cancels the dropped items' orders and fails their queued runs (refunded).
+  - Skip keeps everything. A replan replaces the card.
+  - Built in `20270106050000_cmo_review_plan_card.sql` (pgTAP 249), the card contract and fixture, `PlanBody`, and
+    `ApprovalCard`.
+  - **Design change from this plan:** the card does not hold the week. Every post, reply and paid step still has its
+    own card, so gating the whole tree would add a wait without adding a check.
+  - Not seen in a browser yet: the local stack has no signed-in user. Look at `/app/inbox/card-plan` (sample) in B4.
 - [x] **B2.2** **Three shorts, not one** (D4).
   - `cmo_video_seconds()` = 60 replaces the hard-coded 30 s in `work_orders_plan_week` and `work_orders_brief_rules`
     (`20270106020000_cmo_review_week_studio.sql`, pgTAP 246).

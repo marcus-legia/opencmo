@@ -393,6 +393,30 @@ export const CORRECTION_CARD: ApprovalCard = {
   },
 };
 
+/** cmo-review B2.1: the week plan, one row per calendar item, ticked to keep. */
+export const PLAN_CARD: ApprovalCard = {
+  ...base,
+  id: "card-plan",
+  kind: "plan",
+  department: "brain",
+  title: "Week of 2026-10-26: 3 posts, 2 for Studio, 1 Reddit",
+  summary: "Untick what you do not want this week; the rest goes ahead. Each post, reply and paid step still asks you on its own card.",
+  meta: "Goal: Publish 3 posts about cutting by words",
+  body: {
+    kind: "plan",
+    week: "2026-10-26",
+    goal: "Publish 3 posts about cutting by words",
+    items: [
+      { itemId: "plan-1", department: "post", platform: "X", day: "2026-10-26", idea: "Cut a demo by deleting words", reason: "Your pillar on editing" },
+      { itemId: "plan-2", department: "video", platform: "Shorts", day: "2026-10-27", idea: "How the CMO plans a week, in one minute", reason: "The launch needs a demo" },
+      { itemId: "plan-3", department: "post", platform: "LinkedIn", day: "2026-10-28", idea: "What a solo founder's week of marketing looks like", reason: "Your strategy names LinkedIn" },
+      { itemId: "plan-4", department: "sales", platform: "Reddit", day: "2026-10-28", idea: "Join threads about editing demo videos", reason: "Help first on Reddit" },
+      { itemId: "plan-5", department: "video", platform: "Slideshow", day: "2026-10-29", idea: "Five cuts every demo needs, in five slides", reason: "Your pillar on editing" },
+      { itemId: "plan-6", department: "post", platform: "X", day: "2026-10-30", idea: "Captions that stay in sync after every cut", reason: "Last week's best post was about captions" },
+    ],
+  },
+};
+
 /** P6: an X thread (W4) and a video whose look check still found a problem (S4). */
 export const P6_CARDS: ApprovalCard[] = [
   {
@@ -456,6 +480,7 @@ export const ALL_KINDS: ApprovalCard[] = [
   SLIDESHOW_CARD,
   SCHEDULE_CARD,
   CORRECTION_CARD,
+  PLAN_CARD,
 ];
 
 /** Every sample card `/app/inbox/[id]` can open outside production: each kind, the P3 platforms, the states. */

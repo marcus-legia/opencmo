@@ -1568,10 +1568,10 @@ CREATE TABLE public.approvals (
     CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT approvals_held_until CHECK (((status <> 'held'::text) OR (held_until IS NOT NULL))),
-    CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text]))),
+    CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text, 'plan'::text]))),
     CONSTRAINT approvals_price_credits_check CHECK ((price_credits >= 0)),
     CONSTRAINT approvals_reason_check CHECK ((char_length(reason) <= 400)),
-    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text, 'schedule_slot'::text]))),
+    CONSTRAINT approvals_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'goal'::text, 'correction'::text, 'studio_step'::text, 'editor_project'::text, 'short_batch'::text, 'schedule_slot'::text, 'work_order'::text]))),
     CONSTRAINT approvals_snapshot_check CHECK (((jsonb_typeof(snapshot) = 'object'::text) AND (octet_length((snapshot)::text) <= 32768))),
     CONSTRAINT approvals_status_check CHECK ((status = ANY (ARRAY['waiting'::text, 'held'::text, 'approved'::text, 'edited'::text, 'skipped'::text, 'expired'::text, 'cancelled'::text])))
 );
@@ -1650,6 +1650,16 @@ begin
   end if;
 
   perform set_config('opencmo.decided_via', v_via, true);
+  -- The week plan card (cmo-review B2.1) has its own function: it drops items and closes, nothing else runs.
+  if v_row.kind = 'plan' then
+    perform public.plan_card_decide(v_row, p_action, v_payload);
+    perform set_config('opencmo.decided_via', '', true);
+    select * into v_row from public.approvals where id = p_id;
+    if v_reason is not null and v_row.status = 'skipped' then
+      update public.approvals set reason = v_reason where id = p_id returning * into v_row;
+    end if;
+    return v_row;
+  end if;
   case v_row.kind
     when 'post' then
       if p_action not in ('approve', 'skip') then
@@ -1993,10 +2003,16 @@ CREATE FUNCTION public.approval_snapshot(p_ref_kind text, p_ref_id uuid) RETURNS
     SET search_path TO 'public'
     AS $$
 declare
-  v jsonb := public.approval_snapshot_base(p_ref_kind, p_ref_id);
+  v jsonb;
   v_look public.look_checks;
   v_extra jsonb;
 begin
+  -- The week plan card (cmo-review B2.1): the week's calendar as the brain planned it. Status stays out, so drafting a
+  -- post does not change the card the founder is reading; an item they drop leaves it.
+  if p_ref_kind = 'work_order' then
+    return public.plan_snapshot(p_ref_id);
+  end if;
+  v := public.approval_snapshot_base(p_ref_kind, p_ref_id);
   if v is null then
     return v;
   end if;
@@ -7977,6 +7993,49 @@ $$;
 
 
 --
+-- Name: plan_card_decide(public.approvals, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.plan_card_decide(p_row public.approvals, p_action text, p_payload jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_drop jsonb := coalesce(p_payload->'drop', '[]'::jsonb);
+  v_id text;
+  v_dropped integer := 0;
+begin
+  if p_action not in ('approve', 'skip') then
+    raise exception 'Choose approve or skip.' using errcode = '22023';
+  end if;
+  if p_action = 'skip' then
+    perform public.approval_close('work_order', p_row.ref_id, 'skipped');
+    return;
+  end if;
+  if jsonb_typeof(v_drop) <> 'array' or jsonb_array_length(v_drop) > 30 then
+    raise exception 'Say which items to drop.' using errcode = '22023';
+  end if;
+  for v_id in select jsonb_array_elements_text(v_drop) loop
+    if not (p_row.snapshot->'items' @> jsonb_build_array(jsonb_build_object('item_id', v_id))) then
+      raise exception 'That item is not on this card.' using errcode = '22023';
+    end if;
+    delete from public.content_items where id = v_id::uuid and user_id = p_row.user_id and status = 'planned';
+    if found then
+      v_dropped := v_dropped + 1;
+    end if;
+  end loop;
+  if v_dropped > 0 then
+    -- The plan's own cleanup cancels the dropped items' orders and their queued runs; no new card from it.
+    perform set_config('opencmo.plan_resync', '1', true);
+    perform public.work_orders_plan_week(p_row.user_id, gen_random_uuid());
+    perform set_config('opencmo.plan_resync', '', true);
+  end if;
+  perform public.approval_close('work_order', p_row.ref_id, case when v_dropped > 0 then 'edited' else 'approved' end);
+end;
+$$;
+
+
+--
 -- Name: plan_quota(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7995,6 +8054,30 @@ CREATE FUNCTION public.plan_quota(p_plan text) RETURNS TABLE(previews_per_day in
       when 'starter' then 30
       else 5
     end;
+$$;
+
+
+--
+-- Name: plan_snapshot(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.plan_snapshot(p_root uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case when count(c.id) = 0 then null else jsonb_build_object(
+    'kind', 'plan',
+    'week', r.week,
+    'title', r.title,
+    'goal', g.goal,
+    'items', jsonb_agg(jsonb_build_object('item_id', c.id, 'department', c.department, 'platform', c.platform,
+      'day', c.day, 'idea', c.idea, 'reason', c.reason) order by c.day, c.created_at, c.id)) end
+  from public.work_orders r
+  left join public.cmo_goals g on g.user_id = r.user_id and g.week = r.week and g.status = 'approved'
+  left join public.content_items c on c.user_id = r.user_id and c.clip_id is null
+    and c.day between r.week and r.week + 6 and c.status <> 'skipped'
+  where r.id = p_root and r.parent_id is null
+  group by r.id, r.week, r.title, g.goal
 $$;
 
 
@@ -14229,6 +14312,14 @@ begin
         case v_item.department when 'post' then 'A draft waits on the founder''s card.' else 'Threads worth a reply wait on cards.' end),
       least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop', v_item.id);
   end loop;
+
+  -- The week on one card (cmo-review B2.1): a replan replaces this week's card, last week's goes. A resync after the
+  -- founder dropped items from the card raises nothing.
+  if coalesce(current_setting('opencmo.plan_resync', true), '') <> '1' then
+    update public.approvals set status = 'cancelled', decided_at = now()
+    where user_id = p_user and kind = 'plan' and status in ('waiting', 'held') and ref_id <> v_root.id;
+    perform public.approval_raise(p_user, 'work_order', v_root.id);
+  end if;
 
   if not exists (select 1 from public.work_orders where root_id = v_root.id and kind = 'review_week') then
     perform public.work_order_create(p_user, v_week, v_root.id, 'review_week', 'Sunday review',
