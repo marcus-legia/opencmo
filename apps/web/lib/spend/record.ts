@@ -14,7 +14,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { SupabaseClient } from "@/lib/api/handler";
 
 export type SpendProvider = "anthropic" | "scrapecreators";
-export type SpendRefKind = "cmo_run" | "agent_turn" | "mcp";
+export type SpendRefKind = "cmo_run" | "agent_turn" | "mcp" | "work_order";
 
 /**
  * `service`: the CMO runner's own service-role client, which records for `userId` with any provider. `founder`: the

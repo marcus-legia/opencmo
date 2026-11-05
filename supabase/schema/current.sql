@@ -12722,6 +12722,39 @@ $$;
 
 
 --
+-- Name: studio_order_hold(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_order_hold(p_order_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_held integer;
+begin
+  if not public.studio_brain_call() then
+    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
+  end if;
+  if not exists (
+    select 1 from public.work_orders
+    where id = p_order_id and user_id = v_user and kind in ('build_video', 'cut_shorts', 'build_slideshow', 'build_post_image')
+      and status not in ('done', 'cancelled')
+  ) then
+    raise exception 'Order not found.' using errcode = 'P0002';
+  end if;
+  perform public.lock_credit_owner(v_user);
+  v_held := public.credit_held('work_order', p_order_id);
+  if v_held >= public.studio_plan_hold() then
+    return v_held;
+  end if;
+  perform public.credit_hold(v_user, 'work_order', p_order_id, public.studio_plan_hold() - v_held, 'CMO video team hold');
+  return public.studio_plan_hold();
+end;
+$$;
+
+
+--
 -- Name: studio_order_move(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12802,6 +12835,35 @@ CREATE TABLE public.work_orders (
 
 
 --
+-- Name: studio_order_release_hold(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_order_release_hold() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_held integer;
+  v_used integer;
+begin
+  if new.status not in ('done', 'failed', 'cancelled') or old.status in ('done', 'failed', 'cancelled') then
+    return new;
+  end if;
+  perform public.lock_credit_owner(new.user_id);
+  v_held := public.credit_held('work_order', new.id);
+  if v_held <= 0 then
+    return new;
+  end if;
+  v_used := public.agent_credits((select coalesce(sum(micro_usd), 0)::bigint from public.work_order_usage where order_id = new.id));
+  if v_used < v_held then
+    perform public.credit_settle(new.user_id, 'work_order', new.id, v_used, 'CMO video team hold returned');
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: studio_orders_claim(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12826,6 +12888,16 @@ begin
   end loop;
 end;
 $$;
+
+
+--
+-- Name: studio_plan_hold(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_plan_hold() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select 5 $$;
 
 
 --
@@ -17787,6 +17859,13 @@ CREATE TRIGGER work_orders_follow_approval AFTER UPDATE OF status ON public.appr
 --
 
 CREATE TRIGGER work_orders_follow_run AFTER INSERT OR UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.work_orders_follow_run();
+
+
+--
+-- Name: work_orders work_orders_release_hold; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER work_orders_release_hold AFTER UPDATE OF status ON public.work_orders FOR EACH ROW EXECUTE FUNCTION public.studio_order_release_hold();
 
 
 --

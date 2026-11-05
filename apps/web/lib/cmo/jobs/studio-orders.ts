@@ -27,7 +27,7 @@ import { runLookSendBacks } from "@/lib/departments/studio/look-redo";
 import { renderEdit } from "@/lib/departments/studio/render";
 import { PostImageBriefSchema, SlideshowBriefSchema, VideoBriefSchema, type StudioAdapter, type StudioContext } from "@/lib/departments/studio/types";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
-import { balance } from "@/lib/cmo/mcp/account";
+import { withSpend } from "@/lib/spend/record";
 import { brainClientFor } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -95,11 +95,16 @@ export function briefOf(order: Order) {
 async function runOrder(admin: SupabaseClient, order: Order): Promise<void> {
   const { ctx, adapter } = brainStudio(order.user_id, order.id);
   try {
-    // The team's model calls are paid from the balance: with nothing left the order fails as needs_credits (nothing
-    // re-queues it after a top-up yet; see the R2 review follow-ups).
-    const credits = (await balance(ctx.supabase, order.user_id))?.credits;
-    if (credits !== undefined && credits < 1) {
-      return move(admin, order.id, "failed", "", { code: "needs_credits", message: "Top up credits so the video team can work." });
+    // Charge before running (D9): the team's model calls are paid from an allowance held now, before the first one.
+    // Short of it the order fails as needs_credits and no model is called (nothing re-queues it after a top-up yet;
+    // see the R2 review follow-ups). What the team does not use comes back when the order ends (SQL trigger).
+    try {
+      await rpcOrThrow(ctx.supabase, "studio_order_hold", { p_order_id: order.id });
+    } catch (error) {
+      if (error instanceof ApiError && /Not enough credits/.test(error.message)) {
+        return move(admin, order.id, "failed", "", { code: "needs_credits", message: "Top up credits so the video team can work." });
+      }
+      throw error;
     }
     if (order.kind === "build_video") {
       const built = await adapter.buildVideo(briefOf(order));
@@ -242,11 +247,14 @@ export async function drainStudioOrders(admin: SupabaseClient, opts: { budgetMs?
   let done = 0;
   while (Date.now() < deadline) {
     const orders = (await rpcOrThrow<Order[]>(admin, "studio_orders_claim", { p_order: null, p_limit: 3 })) ?? [];
-    for (const order of orders) await runOrder(admin, order);
+    // Inside the founder's spend context: the daily spend cap sees the team's model calls (`structured()`).
+    const spending = <T>(userId: string, orderId: string, run: () => Promise<T>) =>
+      withSpend({ via: "service", client: admin, userId, refKind: "work_order", refId: orderId }, run);
+    for (const order of orders) await spending(order.user_id, order.id, () => runOrder(admin, order));
     const steps = (await rpcOrThrow<Step[]>(admin, "studio_steps_claim", { p_limit: 5 })) ?? [];
-    for (const step of steps) await runStep(admin, step);
+    for (const step of steps) await spending(step.user_id, step.order_id, () => runStep(admin, step));
     const ready = (await rpcOrThrow<Step[]>(admin, "studio_steps_ready", { p_limit: 5 })) ?? [];
-    for (const step of ready) await runNext(admin, step);
+    for (const step of ready) await spending(step.user_id, step.order_id, () => runNext(admin, step));
     // P6 S4: a render the look check sent back gets its one redo (or its card, when nothing can be redone).
     const sentBack = await runLookSendBacks(admin, (userId, orderId) => brainStudio(userId, orderId ?? "").ctx).catch((error: unknown) => {
       console.error("[studio-orders] look send-backs", error);

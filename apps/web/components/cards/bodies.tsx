@@ -260,7 +260,7 @@ export function ScriptBody({
       <div className="v2-card-meta">
         {body.seconds ? <span>{formatSeconds(body.seconds)}</span> : null}
         {body.aspect ? <span>{body.aspect}</span> : null}
-        {body.nextPriceCredits !== null ? <span>Keyframes next: {body.nextPriceCredits} credits</span> : null}
+        {body.nextPriceCredits !== null ? <span>Whole video: {body.nextPriceCredits} credits</span> : null}
       </div>
     </>
   );

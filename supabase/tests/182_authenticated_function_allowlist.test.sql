@@ -148,6 +148,8 @@ insert into allowed values
   ('short_render_refused(uuid)'),
   ('studio_record_usage(uuid,text,integer,integer,integer,integer)'),
   ('studio_brain_call()'),
+  ('studio_order_hold(uuid)'),
+  ('studio_plan_hold()'),
   ('signup_credits()'),
   ('slice_transcript(jsonb,numeric,numeric)'),
   ('snapshot_editor_revision(uuid,text)'),
