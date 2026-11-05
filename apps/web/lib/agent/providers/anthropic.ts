@@ -198,7 +198,7 @@ export const ALWAYS_LOADED = new Set([
   "create_video", "redo_keyframe", "edit_video", "replace_background", "plan_video", "generate_media", "add_voiceover", "request_export", "add_captions",
   // The explainer guide looks up supporting symbols with find_icons: deferred, every /explain would
   // need a tool search first.
-  "preview_explainer", "add_explainer", "find_icons",
+  "plan_explainer", "preview_explainer", "add_explainer", "find_icons",
 ]);
 
 const TOOL_SEARCH = { type: "tool_search_tool_bm25_20251119", name: "tool_search_tool_bm25" } as const;

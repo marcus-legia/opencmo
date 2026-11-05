@@ -8,8 +8,9 @@ import { showAssistant, signIn, state } from "./helpers";
 
 /**
  * Explainers (docs/explainer-build.md acceptance tests 3 and 4, v2 in docs/explainer-v2-build.md C6):
- * on a New edit, /explain shows the storyboard with a picture per beat; "go" renders preview stills
- * in the panel and then a price card with the beats and their pictures; Approve places one layer
+ * on a New edit, /explain shows the storyboard with a picture per beat; "go" shows the one card (the beats,
+ * their pictures and the price, before any code: charge before running); Approve renders preview stills in
+ * the panel and then places one layer
  * "Explainer: …" that renders (fake agent, OPENCMO_MOTION=local, fake voice) and plays; Ctrl+Z
  * removes it. Once the generation has the voice's word timings, the editor adds a visible captions
  * layer "Captions · …" (one Undo step).
@@ -21,7 +22,7 @@ type Doc = { document: { stage: { children: { width: number; height: number; wor
 /** The fake vaccine storyboard (`lib/agent/providers/fake-explainers.ts`), in order. */
 const BEAT_WORDS = [12, 15, 12, 12, 12, 10];
 
-test("New edit: /explain → storyboard → go → stills → approve → the explainer renders, plays and gets captions", async ({ page }, testInfo) => {
+test("New edit: /explain → storyboard → go → the one card → approve → stills → the explainer renders, plays and gets captions", async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   page.on("pageerror", (error) => console.log(`[editor] ${error.message}`));
   await signIn(page, state().users.b);
@@ -43,15 +44,18 @@ test("New edit: /explain → storyboard → go → stills → approve → the ex
 
   await page.getByLabel("Message the assistant").fill("go");
   await page.getByTestId("assistant-send").click();
-  // Stills come back from the server render and show in the panel, then the price card.
-  await expect(page.getByTestId("assistant-approval")).toBeVisible({ timeout: 240_000 });
-  await expect(page.locator(".ed2-asst-list img").first()).toBeVisible();
-  await expect(page.getByTestId("assistant-approval")).toContainText(/Explainer “.+” · \d+s · 16:9 · paper, playful · voice .+ · \d+ credits?/);
+  // The one card comes before any code or render: the storyboard, its pictures and the price.
+  await expect(page.getByTestId("assistant-approval")).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator(".ed2-asst-list img")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-approval")).toContainText(/Explainer “.+” · \d+s · 16:9 · paper, playful · voice .+ · up to \d+ credits/);
   await expect(page.getByTestId("assistant-approval")).toContainText("Beat 1 · Voice:");
   await expect(page.getByTestId("assistant-approval")).toContainText("Picture: a syringe icon");
   await page.screenshot({ path: testInfo.outputPath("01-explainer-card.png") });
   await page.getByTestId("assistant-approve").click();
-  await expect(page.getByTestId("assistant-reply").last()).toContainText(/being generated/, { timeout: 120_000 });
+  // Approved: stills come back from the server render and show in the panel, then the render starts without a second card.
+  await expect(page.locator(".ed2-asst-list img").first()).toBeVisible({ timeout: 240_000 });
+  await expect(page.getByTestId("assistant-reply").last()).toContainText(/being generated/, { timeout: 240_000 });
+  await expect(page.getByTestId("assistant-approval")).toHaveCount(0);
 
   // One layer, full frame: the blank 9:16 edit took the explainer's 16:9 frame and length.
   const read = async () => (await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()) as Doc;

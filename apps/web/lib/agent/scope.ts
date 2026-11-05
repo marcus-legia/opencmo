@@ -6,6 +6,8 @@
  * (`capture_frames`), or wait for the user to approve (priced tools).
  */
 
+import { randomUUID } from "node:crypto";
+
 import { activeScene, frameAspect, MASTER_SRC, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
 import type { ClipDocument } from "@opencmo/clip-doc";
 
@@ -42,7 +44,22 @@ import {
   voiceoverToolSpec,
   type PreparedGeneration,
 } from "./generate-tool";
-import { addExplainerInput, explainerCard, explainerText, explainerToolSpecs, MOTION_TEMPLATE_TOOLS, prepareExplainer, runMotionTemplateTool, runPreviewExplainer } from "./explainer-tool";
+import {
+  addExplainerInput,
+  explainerText,
+  explainerToolSpecs,
+  MOTION_TEMPLATE_TOOLS,
+  openExplainerOrder,
+  PLAN_FIRST,
+  planExplainerCard,
+  prepareExplainer,
+  preparePlanExplainer,
+  runAddExplainer,
+  runMotionTemplateTool,
+  runPlanExplainer,
+  runPreviewExplainer,
+  type PreparedExplainerPlan,
+} from "./explainer-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
@@ -81,7 +98,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 }
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
-const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -90,7 +107,7 @@ export type Plan =
   | {
       kind: "approval";
       input: unknown;
-      card: ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> | DecisionCard;
+      card: ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof planExplainerCard> | DecisionCard;
     }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
@@ -312,31 +329,24 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
       }
       if (call.name === "add_explainer") {
-        // One check of everything the render shows or says: the script, and the words in the code
-        // (the spec only holds the script, so `screen` alone would miss the labels). Before the code
-        // is saved, so refused code never lands in `scene_codes`.
-        const request = addExplainerInput.safeParse(call.input);
-        if (request.success) {
-          try {
-            await moderateText(explainerText(request.data), { kind: MOTION_KIND });
-          } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
-            return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
-          }
-        }
-        const snapshot = await workspace.read();
-        const accent = readBrand(snapshot.document)?.colors.accent;
-        const prepared = await prepareExplainer(call.input, {
-          // Code previewed in this turn: add_explainer only takes code the model has looked at.
-          previewed: host.previewed,
-          save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
-          lookupImage,
-          ...(accent ? { accent } : {}),
-        });
+        // Paid from the plan the user approved (plan_explainer): no second card, and nothing without one. The checks
+        // run in `run`, which MCP calls directly.
+        if (!(await openExplainerOrder(supabase))) return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: PLAN_FIRST }), summary: "Plan the explainer first" };
+        return { kind: "run" };
+      }
+      if (call.name === "plan_explainer") {
+        const prepared = preparePlanExplainer(call.input);
         if (typeof prepared === "string") {
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not plan the explainer" };
         }
-        return { kind: "approval", input: prepared, card: explainerCard(prepared, clipId) };
+        // What the video will say and show, checked before the card: a refused storyboard costs nothing.
+        try {
+          await moderateText(explainerText({ title: prepared.plan.title, beats: prepared.plan.beats, code: "" }), { kind: MOTION_KIND });
+        } catch (err) {
+          const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+        }
+        return { kind: "approval", input: prepared, card: planExplainerCard(prepared, clipId) };
       }
       if (call.name === "create_video") {
         // The director plans here, before the card; its model calls are charged on this turn.
@@ -422,7 +432,10 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                 : MOTION_TEMPLATE_TOOLS.has(call.name)
                   ? Promise.resolve(runMotionTemplateTool(call.name, call.input))
                   : call.name === "preview_explainer"
-                  ? workspace.read().then(({ document }) => {
+                  ? (async () => {
+                      // No render before the user approved the storyboard and its price (D9).
+                      if (!(await openExplainerOrder(supabase))) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
+                      const { document } = await workspace.read();
                       const accent = readBrand(document)?.colors.accent;
                       return runPreviewExplainer(call.input, {
                         preview: previewMotion,
@@ -430,7 +443,35 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                         signAssets: (refs) => previewAssets(supabase, refs),
                         ...(accent ? { accent } : {}),
                       });
-                    })
+                    })()
+                  : call.name === "add_explainer"
+                  ? (async () => {
+                      // One check of everything the render shows or says: the script, and the words in the code (the
+                      // spec only holds the script). Before the code is saved, so refused code never lands in `scene_codes`.
+                      const request = addExplainerInput.safeParse(call.input);
+                      if (request.success) {
+                        try {
+                          await moderateText(explainerText(request.data), { kind: MOTION_KIND });
+                        } catch (err) {
+                          const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+                          return { ok: false, content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+                        }
+                      }
+                      const { document } = await workspace.read();
+                      const accent = readBrand(document)?.colors.accent;
+                      const prepared = await prepareExplainer(call.input, {
+                        // Code previewed in this request: add_explainer only takes code the model has looked at.
+                        previewed: host.previewed,
+                        save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
+                        lookupImage,
+                        ...(accent ? { accent } : {}),
+                      });
+                      if (typeof prepared === "string") return { ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
+                      return runAddExplainer(
+                        { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env), ...(host.alive ? { alive: host.alive } : {}) },
+                        prepared,
+                      );
+                    })()
                   : runTool(call.name, call.input, env),
     async decide(call, input, approved) {
       // Where a long take's keyframes are listed: the project as it is now, saved with its manifest.
@@ -515,12 +556,23 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           wrote: false,
         };
       }
+      const source: JobSource = host.turnId
+        ? { kind: "agent_turn", id: host.turnId }
+        : host.workOrderId
+          ? { kind: "work_order", id: host.workOrderId }
+          : { kind: "mcp", id: null };
+      if (call.name === "plan_explainer") {
+        if (!approved) {
+          return {
+            outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined this explainer. Nothing was rendered or charged; ask what to change." }), summary: "Declined" },
+            extra: {},
+            wrote: false,
+          };
+        }
+        const outcome = await runPlanExplainer({ supabase, source }, input as PreparedExplainerPlan, randomUUID());
+        return { outcome, extra: {}, wrote: false };
+      }
       if (call.name === "create_video") {
-        const source: JobSource = host.turnId
-          ? { kind: "agent_turn", id: host.turnId }
-          : host.workOrderId
-            ? { kind: "work_order", id: host.workOrderId }
-            : { kind: "mcp", id: null };
         const { outcome, generationId } = await runCreateVideo(
           {
             supabase,

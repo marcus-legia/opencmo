@@ -640,9 +640,11 @@ export const TASKS: EvalTask[] = [
       const notes: string[] = [];
       const reply = outcome.reply ?? "";
       const waited = check(notes, !outcome.tools.some((name) => ["preview_explainer", "add_explainer"].includes(name)), `tools before the user said go: ${outcome.tools.join(", ")}`);
-      const beats = reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
+      // The storyboard in the reply, or on the plan_explainer card (which asks by itself).
+      const card = (outcome.cards ?? []).find((item) => item.tool === "plan_explainer");
+      const beats = card ? card.changes.filter((line) => /^Beat \d+ /.test(line)) : reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
       const scripted = check(notes, beats.length >= 3, `script has ${beats.length} beats: ${reply.slice(0, 300)}`);
-      const asked = check(notes, /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
+      const asked = check(notes, Boolean(card) || /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
       return { pass: waited && scripted && asked, notes };
     },
   },
@@ -652,9 +654,10 @@ export const TASKS: EvalTask[] = [
     setup: blankEdit,
     grade(outcome) {
       const notes: string[] = [];
+      const planned = outcome.tools.indexOf("plan_explainer");
       const previewed = outcome.tools.indexOf("preview_explainer");
       const added = outcome.tools.lastIndexOf("add_explainer");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const order = check(notes, planned >= 0 && previewed > planned && added > previewed, `plan, then preview, then add; tools: ${outcome.tools.join(", ")}`);
       const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
       if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
       const scene = gen!.spec.scene as { template?: string; code_ref?: string; beats?: { say: string; label?: string }[] } | undefined;
@@ -715,9 +718,10 @@ export const TASKS: EvalTask[] = [
     setup: blankEdit,
     grade(outcome) {
       const notes: string[] = [];
+      const planned = outcome.tools.indexOf("plan_explainer");
       const previewed = outcome.tools.indexOf("preview_explainer");
       const added = outcome.tools.lastIndexOf("add_explainer");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const order = check(notes, planned >= 0 && previewed > planned && added > previewed, `plan, then preview, then add; tools: ${outcome.tools.join(", ")}`);
       const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
       if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
       const scene = gen!.spec.scene as { theme?: string; personality?: string } | undefined;

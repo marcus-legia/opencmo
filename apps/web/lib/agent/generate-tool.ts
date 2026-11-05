@@ -369,6 +369,8 @@ type GenerateEnv = {
   applyOp: (op: Op) => Promise<ToolOutcome>;
   /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
   alive?: () => Promise<boolean>;
+  /** A job the user already confirmed (`credit_orders`): every piece is paid from its hold, not the balance. */
+  orderId?: string;
 };
 
 const STOPPED: ToolOutcome = {
@@ -417,10 +419,10 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // is checked first: past the balance the whole batch is refused before any piece is moderated (review C4).
   let ready: PreparedCreate[];
   try {
-    if (runs.length > 1) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
+    if (runs.length > 1 && !env.orderId) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
     ready = await Promise.all(
       runs.map(({ model, spec }) =>
-        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() }),
+        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), ...(env.orderId ? { orderId: env.orderId } : {}) }),
       ),
     );
   } catch (err) {

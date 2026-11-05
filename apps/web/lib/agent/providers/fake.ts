@@ -28,7 +28,8 @@
  *   "/video …" (slash directive), or "make a … video" on a blank edit → create_video at the length and frame asked
  *                        ("20-second", "square"; else 15 s and the edit's frame) · "/image …" → generate_media image at 0 s
  *   "/explain …"       → shows the storyboard (say, label, picture per beat) and asks; then "go" (or "go ahead"
- *                        up front) → preview_explainer → a subject check per still → add_explainer (price card)
+ *                        up front) → plan_explainer (the one card: storyboard + price) → preview_explainer → a subject
+ *                        check per still → add_explainer (renders from the approval, no second card)
  *                        Vaccine topics use the v2 vaccine scene, everything else Track A's showcase (`fake-explainers.ts`).
  *   "/roughcut"        → proposes the cut and asks; then "go" (or "just do it" up front) → find_retakes + find_filler_words → ONE remove_words
  *                        (earlier takes + fillers) → remove_silence 0.6 s / 0.15 s → reports what went
@@ -84,6 +85,12 @@ const wantsDirections = (ask: string) => /\bshow me (a couple of|two|three|some)
 const directionsInput = (explainer: FakeExplainer) => {
   const { code, ...rest } = explainer;
   return { ...rest, variants: [{ label: "Kinetic type", code }, { label: "Gradient flow", code }], times: [1] };
+};
+/** What plan_explainer takes: the storyboard, the direction, the look and the voice; no code yet. */
+const planInput = (explainer: FakeExplainer) => {
+  const { code: _code, ...rest } = explainer as FakeExplainer & { code?: string; times?: unknown; sheet?: unknown; variants?: unknown };
+  const { times: _times, sheet: _sheet, variants: _variants, ...plan } = rest as typeof rest & { times?: unknown; sheet?: unknown; variants?: unknown };
+  return { ...plan, ...((plan as { silent?: boolean }).silent ? {} : { voice: explainerVoice() }) };
 };
 /** The words that asked for an explainer: the latest `/explain` command of the conversation. */
 /** add_explainer takes the previewed scene, not the preview's look requests (sheet, zoom, times). */
@@ -178,6 +185,17 @@ function script(history: StoredMessage[]): unknown[] {
       if (parsed.skipped) return [text("No problem, I'll keep it as it is.")];
       return [text(`You chose: ${[...(parsed.user_answer?.choices ?? []), parsed.user_answer?.text].filter(Boolean).join(", ")}.`)];
     }
+    if (previous.includes("plan_explainer")) {
+      const raw = typeof results[0]!.content === "string" ? (results[0]!.content as string) : "{}";
+      const parsed = JSON.parse(raw) as { declined?: boolean; ok?: boolean; error?: string; INVALID_INPUT?: string };
+      if (parsed.declined) return [text("Okay, nothing was made. Tell me what to change in the storyboard.")];
+      if (!parsed.ok) return [text(`That didn't work: ${parsed.error ?? parsed.INVALID_INPUT ?? "unknown error"}`)];
+      // Approved: the previews run now, the directions first when the user asked for them.
+      const ask = explainAsk(history);
+      const explainer = explainerFor(ask);
+      if (wantsDirections(ask)) return [text("Two directions for the opening shot first."), use("preview_explainer", directionsInput(explainer))];
+      return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer, ask))];
+    }
     if (previous.includes("preview_explainer")) {
       // A result with stills is a list of blocks (text + images); the JSON is in the text block.
       const content = results[0]!.content;
@@ -192,7 +210,7 @@ function script(history: StoredMessage[]): unknown[] {
       const explainer = explainerFor(explainAsk(history));
       const checked = explainer.beats.map((beat, index) => `Still ${index + 1}: shows ${beat.visual}; the beat says “${beat.say}”`).join("\n");
       return [
-        text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}.\n${checked}\nEvery still shows what its beat says. Here is the price.`),
+        text(`I looked at the stills${parsed.issues?.length ? ` (${parsed.issues.length} layout notes)` : ""}.\n${checked}\nEvery still shows what its beat says. Rendering it now, as approved.`),
         use("add_explainer", { ...addInput(explainerInput(explainer, explainAsk(history))), voice: explainerVoice() }),
       ];
     }
@@ -449,9 +467,9 @@ function script(history: StoredMessage[]): unknown[] {
   // straight away when the user already said so ("go ahead", "no need to show it").
   if (/<command name="\/explain">/.test(ask)) {
     const explainer = explainerFor(ask);
-    if (wantsDirections(ask)) return [text("Two directions for the opening shot first."), use("preview_explainer", directionsInput(explainer))];
-    if (/\bgo ahead\b|\bjust (do|make) it\b|no need to (show|ask)/.test(ask)) {
-      return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainer, ask))];
+    // The storyboard and its price go on the one card first: nothing renders before the user approves it.
+    if (wantsDirections(ask) || /\bgo ahead\b|\bjust (do|make) it\b|no need to (show|ask)/.test(ask)) {
+      return [text("Here is the storyboard and its price."), use("plan_explainer", planInput(explainer))];
     }
     const look = [explainer.theme, explainer.personality].filter(Boolean).join(", ");
     const beats = explainer.beats.map((beat, index) => `${index + 1}. ${beat.say}${beat.label ? ` [${beat.label}]` : ""}\n   Picture: ${beat.visual}`).join("\n");
@@ -467,7 +485,7 @@ function script(history: StoredMessage[]): unknown[] {
     (message) => message.role === "assistant" && (message.content as Block[]).some((block) => block.type === "text" && block.text?.startsWith(EXPLAINER_SCRIPT)),
   );
   if (proposed && /^\s*(go|yes|ok|make it)\b/.test(ask)) {
-    return [text("Writing the animation and previewing it."), use("preview_explainer", explainerInput(explainerFor(explainAsk(history)), explainAsk(history)))];
+    return [text("Here is the storyboard and its price."), use("plan_explainer", planInput(explainerFor(explainAsk(history))))];
   }
   if (/<command name="\/image">/.test(ask)) {
     return [

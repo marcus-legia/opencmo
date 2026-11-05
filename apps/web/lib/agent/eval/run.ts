@@ -46,7 +46,7 @@ import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
-import { explainerCard, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "../explainer-tool";
+import { explainerToolSpecs, PLAN_FIRST, planExplainerCard, prepareExplainer, preparePlanExplainer, runPreviewExplainer } from "../explainer-tool";
 import { previewMotion } from "@/lib/motion/preview";
 import { generateCard, generateToolSpec, prepareGeneration, prepareVoiceover, voiceoverToolSpec, type PreparedGeneration } from "../generate-tool";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, VERIFY_GATE, applyOpTool, checkErrorKeys, failingCheck, isWriteTool, runCheck, runTool } from "../tools";
@@ -149,6 +149,8 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   const cards: { tool: string; changes: string[]; credits: number }[] = [];
   let steps = 0;
   let stopped = "done";
+  // An approved plan_explainer in this run: previews and the render need it (charge before running).
+  let explainerPlanned = false;
   let openCheck: string | null = null;
   let gated = false;
   let baseline: Set<string> | undefined;
@@ -237,6 +239,28 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         results.push({ id: call.id, name: call.name, ok: true, content: JSON.stringify({ ok: true, ...(answer.data as object) }), images });
         continue;
       }
+      if (call.name === "plan_explainer") {
+        // The one card of an explainer: approved at once unless the run stops at the first card.
+        const prepared = preparePlanExplainer(call.input);
+        if (typeof prepared === "string") {
+          results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }) });
+          continue;
+        }
+        const card = planExplainerCard(prepared, "eval");
+        cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
+        if (options.untilCard) {
+          stopped = "card";
+          break;
+        }
+        explainerPlanned = true;
+        results.push({ id: call.id, name: call.name, ok: true, content: JSON.stringify({ ok: true, approved: true, plan: prepared.plan, next: "Approved. Write the code, preview_explainer it, then add_explainer: no second card." }) });
+        continue;
+      }
+      if ((call.name === "preview_explainer" || call.name === "add_explainer") && !explainerPlanned) {
+        // As in the app: nothing renders before the user approved the plan.
+        results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ error: PLAN_FIRST }) });
+        continue;
+      }
       if (call.name === "preview_explainer") {
         // Same renderer as the app: the local CLI (OPENCMO_MOTION=local) or Modal.
         const outcome = await runPreviewExplainer(call.input, { preview: previewMotion });
@@ -253,13 +277,8 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
           results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }) });
           continue;
         }
+        // Paid from the approved plan: no card of its own.
         generations.push(prepared);
-        const card = explainerCard(prepared, "eval");
-        cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
-        if (options.untilCard) {
-          stopped = "card";
-          break;
-        }
         const applied = await applyOpTool(prepared.op, env);
         if (applied.version !== undefined) wrote = true;
         results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });

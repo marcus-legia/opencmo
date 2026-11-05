@@ -45,7 +45,7 @@ export const PRICED = new Set([
   "create_video",
   "redo_keyframe",
   "edit_video",
-  "add_explainer",
+  "plan_explainer",
   "plan_video",
   "request_export",
   ...CAPTION_TOOLS,
@@ -195,7 +195,8 @@ function toMcp(spec: ToolSpec): McpTool {
       if (spec.name === "preview_explainer" && !(await previewAllowed(ctx))) {
         return errorResult(`You have used the ${PREVIEW_LIMIT} explainer previews of this hour. Wait a bit, or add the explainer from the last clean preview.`);
       }
-      const { scope } = await studioSession(ctx.supabase, "mcp", String(values.clip_id));
+      // add_explainer takes only code this client previewed: its preview_token proves it.
+      const { scope } = await studioSession(ctx.supabase, "mcp", String(values.clip_id), spec.name === "add_explainer" ? { previewed: previewProof(ctx, values) } : {});
       const outcome = await scope.run(call(values));
       if (spec.name === "preview_explainer" && outcome.ok && typeof values.code === "string") {
         return fromOutcome(outcome, { preview_token: sign(ctx.userId, "preview", sha256(values.code), PREVIEW_SECONDS) });
