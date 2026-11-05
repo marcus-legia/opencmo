@@ -7,4 +7,4 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
-| 2026-11-04 | [Move payments from Polar to Creem](2026-11-04-polar-to-creem-plan.md) | Owner decision; `docs/creem-llm.txt`; `docs/research/security/2026-10-17-security-credits-billing-polar.md` | — |
+| 2026-11-04 | [Move payments from Polar to Creem](2026-11-04-polar-to-creem-plan.md) | Owner decision; `docs/creem-llm.txt`; `docs/research/security/2026-10-17-security-credits-billing-polar.md` | branch `creem-payment` |

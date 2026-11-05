@@ -5,9 +5,24 @@
 - **Source:** Creem docs snapshot in [`docs/creem-llm.txt`](../../creem-llm.txt) (line numbers below point into it), and
   today's Polar integration (`apps/web/lib/polar.ts`, `apps/web/app/api/webhooks/polar/route.ts`,
   `process_polar_event` in `supabase/schema/current.sql`).
-- **Branch / PR:** `claude/withorb-payment-support-xzq6al`. One branch, one PR per phase below (each phase ships green on
-  its own).
-- **Status:** plan only. Nothing is built yet.
+- **Branch / PR:** `creem-payment`, one draft PR for all phases (owner, 2026-11-05). Each commit is still green on its
+  own.
+- **Status:** being built, test mode first. Phase 5 (live key, review, retiring Polar) needs its own approval.
+
+## Changes since this plan was written (owner, 2026-11-05)
+
+These override the sections below where they disagree.
+
+1. **One branch and one PR** instead of one PR per phase.
+2. **Test-mode catalogue:** Monthly $69 and Annual $690, both 580 credits per month; packs $25 / 200 credits and
+   $50 / 400 credits. These replace the $80 / $720 starting points of phase 0 and come from the launch pricing decision of
+   2026-10-31.
+3. **Annual plan credits are in scope:** a monthly grant job, not a separate plan after phase 2.
+4. **No `CREEM_API_BASE`.** The API URL comes from the key prefix (`creem_test_` → `https://test-api.creem.io`, anything
+   else → `https://api.creem.io`), so a key and a URL cannot disagree and a test key can never call production.
+5. **`billing_catalog` is not seeded by a migration.** Test and live product ids differ, so migrations create the empty
+   table and `scripts/creem-catalog.mjs` fills it for one environment.
+6. **Credits still do not expire.** The 60-day and 12-month rules in the launch pricing doc are a separate decision.
 
 ## What Creem is, and what changes
 
