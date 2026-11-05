@@ -26,6 +26,8 @@ const ENGINE_KEYS = new Set([
   // AI images/video/cut-outs and their output moderation run on fal: without the key the local
   // worker cannot generate, and moderation silently skips.
   "FAL_KEY", "OPENCMO_AI_FAKE",
+  // Creem's prompt screening, repeated in the worker just before a model is called.
+  "CREEM_API_KEY",
   // Explainers: where clip-motion renders, and the free silent voice for runs without a fal key.
   "OPENCMO_MOTION", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_MOTION_SCALE", "OPENCMO_MOTION_CHROME",
   "OPENCMO_MOTION_CONCURRENCY", "OPENCMO_MOTION_ASSET_ORIGIN",

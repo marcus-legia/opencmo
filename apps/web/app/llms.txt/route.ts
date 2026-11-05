@@ -1,18 +1,17 @@
 import { CATEGORIES } from "@/content/blog/categories";
 import { getAllPosts } from "@/lib/blog";
-import { PLANS } from "@/lib/pricing";
+import { plansOnSale } from "@/lib/billing-catalog";
 import { SITE_DESCRIPTION, absoluteUrl } from "@/lib/site";
 
 export const dynamic = "force-static";
 
 /**
  * `/llms.txt` (llmstxt.org): bản tóm tắt bằng Markdown cho mô hình ngôn ngữ —
- * OpenCMO là gì, giá, và mục lục bài viết. Giá đọc từ PLANS để không bao giờ
- * lệch với bảng giá trên trang.
+ * What OpenCMO is, its prices and the post index. Prices come from the catalogue, so they match the pricing page.
  */
-export function GET() {
+export async function GET() {
   const posts = getAllPosts();
-  const paid = PLANS.filter((plan) => plan.price > 0);
+  const paid = (await plansOnSale()).filter((plan) => plan.price > 0);
   const lines = [
     "# OpenCMO",
     "",

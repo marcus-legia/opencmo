@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import Any
 
 import httpx
 import pytest
@@ -396,3 +397,99 @@ def test_prompt_check_without_keys_refuses_in_production(monkeypatch):
     with pytest.raises(ProviderError) as err:
         moderation.check_prompt(get_model("gemini-image"), {"prompt": "a red fox", "aspectRatio": "1:1"})
     assert str(err.value) == moderation.NOT_CHECKED
+
+
+class _CreemReply:
+    def __init__(self, body: Any = None, status: int = 200) -> None:
+        self.body, self.status_code = body, status
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("failed", request=httpx.Request("POST", "http://x"), response=httpx.Response(self.status_code))
+
+    def json(self) -> Any:
+        if self.body is None:
+            raise ValueError("not json")
+        return self.body
+
+
+def _creem(monkeypatch: pytest.MonkeyPatch, reply: Any) -> list[dict]:
+    """Answers Creem's call and fails on any other, so the policy check stays out of the result: no LLM key is set."""
+    calls: list[dict] = []
+
+    def post(url: str, **kwargs: Any) -> Any:
+        calls.append({"url": url, **kwargs})
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    for name in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY", "CMO_LLM_API_KEY", "OPENCMO_ENV"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(moderation.httpx, "post", post)
+    return calls
+
+
+PROMPT_SPEC = {"prompt": "a red fox", "aspectRatio": "1:1"}
+
+
+def test_creem_allow_goes_on_in_the_right_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _creem(monkeypatch, _CreemReply({"decision": "allow", "later": "ignored"}))
+    monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")
+    moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert calls[0]["url"] == "https://test-api.creem.io/v1/moderation/prompt"
+    assert calls[0]["headers"]["x-api-key"] == "creem_test_k"
+    assert calls[0]["json"] == {"prompt": "a red fox"}
+    monkeypatch.setenv("CREEM_API_KEY", "creem_live_k")
+    moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert calls[1]["url"] == "https://api.creem.io/v1/moderation/prompt"
+
+
+@pytest.mark.parametrize("decision", ["flag", "deny"])
+def test_creem_flag_and_deny_block(monkeypatch: pytest.MonkeyPatch, decision: str) -> None:
+    _creem(monkeypatch, _CreemReply({"decision": decision}))
+    monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")
+    with pytest.raises(ProviderError) as blocked:
+        moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert str(blocked.value) == moderation.PROMPT_BLOCKED
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        _CreemReply({"decision": "something new"}),
+        _CreemReply({"decision": "allow"}, status=500),
+        _CreemReply(None),
+        _CreemReply(["not an object"]),
+        httpx.ConnectTimeout("slow"),
+    ],
+)
+def test_creem_fails_closed(monkeypatch: pytest.MonkeyPatch, reply: Any) -> None:
+    _creem(monkeypatch, reply)
+    monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")
+    with pytest.raises(ProviderError) as failed:
+        moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert str(failed.value) == moderation.UNAVAILABLE
+
+
+def test_creem_skips_audio_and_screens_motion(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _creem(monkeypatch, _CreemReply({"decision": "deny"}))
+    monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")
+    moderation.check_prompt(get_model("gemini-voice"), {"prompt": "Welcome to our bakery.", "voice": "Aria"})
+    assert calls == []
+    with pytest.raises(ProviderError):
+        moderation.check_prompt(get_model("motion-explainer"), {"prompt": "a banner", "aspectRatio": "16:9"})
+    assert len(calls) == 1
+
+
+def test_creem_key_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _creem(monkeypatch, _CreemReply({"decision": "allow"}))
+    monkeypatch.delenv("CREEM_API_KEY", raising=False)
+    moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert calls == [], "outside production, no key skips Creem"
+    monkeypatch.setenv("OPENCMO_ENV", "production")
+    for key in ("", "creem_test_k"):
+        monkeypatch.setenv("CREEM_API_KEY", key)
+        with pytest.raises(ProviderError) as refused:
+            moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+        assert str(refused.value) == moderation.NOT_CHECKED
+    assert calls == [], "the sandbox is never asked from production"

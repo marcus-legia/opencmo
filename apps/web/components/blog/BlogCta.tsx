@@ -1,4 +1,4 @@
-import { offerPrices } from "@/lib/pricing";
+import { offerPrices } from "@/lib/billing-catalog";
 
 /**
  * Calls to action in a post. Same promise and form as the landing hero: the website
@@ -6,8 +6,8 @@ import { offerPrices } from "@/lib/pricing";
  *
  * `inline` sits mid-post, after the reader has learned something; `end` closes the post.
  */
-export function BlogCta({ variant = "end" }: { variant?: "inline" | "end" }) {
-  const { annual } = offerPrices();
+export async function BlogCta({ variant = "end" }: { variant?: "inline" | "end" }) {
+  const { annual } = await offerPrices();
   const id = `blog-cta-${variant}`;
   if (variant === "inline") {
     return (

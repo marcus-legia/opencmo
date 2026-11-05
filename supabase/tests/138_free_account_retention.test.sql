@@ -25,12 +25,12 @@ update public.profiles set retention_from = now() - interval '31 days'
 where id::text like 'e1380000-%' and id <> 'e1380000-0000-4000-8000-00000000000b';
 update public.profiles set retention_exempt = true where id = 'e1380000-0000-4000-8000-000000000011';
 
-insert into public.polar_purchases (order_id, customer_id, user_id, total_amount, refunded_amount, paid_at) values
-  ('ord-c', 'cus-c', 'e1380000-0000-4000-8000-00000000000c', 1500, 0, now()),
-  ('ord-d', 'cus-d', 'e1380000-0000-4000-8000-00000000000d', 1500, 1500, now()),
-  ('ord-e', 'cus-e', 'e1380000-0000-4000-8000-00000000000e', 0, 0, now());
-insert into public.polar_subscriptions (subscription_id, customer_id, user_id, plan, status, provider_updated_at, status_priority, event_id)
-values ('sub-f', 'cus-f', 'e1380000-0000-4000-8000-00000000000f', 'starter', 'active', now(), 1, 'evt-f');
+insert into public.creem_transactions (transaction_id, customer_id, user_id, product_id, amount, refunded_amount, paid_at) values
+  ('tran-c', 'cus-c', 'e1380000-0000-4000-8000-00000000000c', 'prod', 1500, 0, now()),
+  ('tran-d', 'cus-d', 'e1380000-0000-4000-8000-00000000000d', 'prod', 1500, 1500, now()),
+  ('tran-e', 'cus-e', 'e1380000-0000-4000-8000-00000000000e', 'prod', 0, 0, now());
+insert into public.creem_subscriptions (subscription_id, customer_id, user_id, product_id, plan, interval, status, provider_event_at, status_priority, event_id)
+values ('sub-f', 'cus-f', 'e1380000-0000-4000-8000-00000000000f', 'prod', 'starter', 'month', 'active', now(), 0, 'evt-f');
 
 select is(public.account_is_paid('e1380000-0000-4000-8000-00000000000c'), true, 'đơn đã trả → đã trả tiền');
 select is(public.account_is_paid('e1380000-0000-4000-8000-00000000000d'), false, 'đơn hoàn hết → coi như chưa trả');

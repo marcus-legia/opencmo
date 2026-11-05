@@ -25,7 +25,6 @@
     "db:push:dry": "supabase db push --dry-run",
     "db:push": "supabase db push",
     "dev:web": "npm run dev --workspace @opencmo/web",
-    "check:polar": "npm run check:polar --workspace @opencmo/web",
     "check:pricing": "npm run check:pricing --workspace @opencmo/web",
     "test:editor-core": "npm run test --workspace @opencmo/editor-core",
     "check:editor-core": "npm run check --workspace @opencmo/editor-core",

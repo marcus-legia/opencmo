@@ -199,7 +199,7 @@ allowlist (`USER_MEDIA_FORMATS` / `USER_INPUT`).
 | DB | **Supabase Postgres** | |
 | Storage | **Supabase Storage** | **RLS applies to files too** — see below |
 | Queue | **Postgres** (`claim_*` functions) | No separate service; `for update skip locked` handles contention |
-| Billing | Polar (merchant of record) | Handles VAT/sales tax |
+| Billing | Creem (merchant of record) | Handles VAT/sales tax |
 | Errors | Sentry (optional) | |
 | Landing hero 3D | `three` (pinned in `apps/web`; marketing pages only, not the product) | Loaded with `import()` after first paint; static SVG fallback without WebGL or with reduced motion |
 
@@ -393,7 +393,7 @@ packs and video briefs were removed with the clipping tool (2026-10-20).
 | Moderation | Claude Haiku (prompts on the web, frames on the worker) plus fal NSFW | Vercel, Modal |
 | Image, video, voice, sound generation | fal for every model, including Veo, Nano Banana, Gemini TTS and ElevenLabs (voice with word timestamps, sound effects, music); the direct ElevenLabs adapter stays only as a fallback | Modal |
 | Transcripts | ElevenLabs Scribe | Modal |
-| Social reading · payments · errors | ScrapeCreators · Polar · Sentry | Vercel |
+| Social reading · payments · errors | ScrapeCreators · Creem · Sentry | Vercel |
 
 ### Deploy order
 

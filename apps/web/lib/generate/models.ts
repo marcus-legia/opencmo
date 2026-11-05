@@ -10,7 +10,7 @@ import { AI_MODELS, type AiModel, type GenerationSpec } from "@opencmo/editor-co
 import type { SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@/lib/settings-schema";
 
-import { moderationReady } from "./moderation";
+import { creemModerationKey, moderationReady } from "./moderation";
 import { isProduction } from "@/lib/production";
 
 /**
@@ -68,7 +68,7 @@ const allowedHere = (model: AiModel): boolean =>
     isProduction() &&
     PROMPT_MEDIA_KINDS.has(model.kind) &&
     !model.limits.scene &&
-    !moderationReady()
+    !(moderationReady() && creemModerationKey())
   );
 
 type CatalogRow = { id: string; name: string; price: AiModel["price"]; limits: AiModel["limits"]; enabled: boolean };

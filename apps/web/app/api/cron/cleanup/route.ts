@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
   // hàng đợi, ở đây xoá user — cascade xoá hàng DB; vòng dưới xoá file ngay lượt này.
   const accounts = await purgeUnpaidAccounts(supabase);
 
+  // An annual plan's monthly credits. Before the file sweep, which can use up the time budget. A failure here must not
+  // stop the cleanup: the next daily run catches up, and the key per month keeps it from granting twice.
+  const { error: annualError } = await supabase.rpc("grant_annual_credits");
+  if (annualError) console.error("[cleanup] annual credit grants failed", annualError.code);
+
   let removed = 0;
   let failed = 0;
   let queueFailed = false;

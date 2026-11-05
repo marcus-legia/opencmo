@@ -196,7 +196,7 @@ export async function checkGeneration(supabase: SupabaseClient, request: CreateR
   // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it.
   await requireCredits(supabase, priceOf(model, spec));
   // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
-  await moderateText(specText(spec).join("\n"), { kind: moderationKind(model) });
+  await moderateText(specText(spec).join("\n"), { kind: moderationKind(model), externalId: `job_${request.jobId}` });
   return { request, model, spec };
 }
 

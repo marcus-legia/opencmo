@@ -13,7 +13,7 @@ import { gsap, onAnchorClick, prefersReducedMotion } from "./motion";
  * Footer: the last website form on a brand-colour block, the link grid on paper below,
  * and a giant "OpenCMO" wordmark at the bottom.
  *
- * The four legal links + support email are a Polar/Creem review requirement (rule 6):
+ * The four legal links + support email are a Creem review requirement (rule 6):
  * always visible while logged out.
  */
 export function LandingFooter({ action }: { action: string }) {

@@ -76,7 +76,7 @@ export function localSupabaseCredentials({
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      // Không truyền `process.env`: nó có thể chứa service-role remote, Polar,
+      // Không truyền `process.env`: nó có thể chứa service-role remote, Creem,
       // provider token hoặc secret khác do Next/.env.local đã nạp.
       env: { ...CHILD_ENV },
     });

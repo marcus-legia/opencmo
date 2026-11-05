@@ -84,7 +84,7 @@ proof on production, prices, and the path from payment to first export.
 
 | Item | What | Size | Research questions |
 |---|---|---|---|
-| ES.1 | Credit price per model and per slash command, wired to billing (usage billing to Polar is not connected yet) | M | Margin per model at fal prices; what a $15 starter buys; `check:pricing` |
+| ES.1 | Credit price per model and per slash command, wired to billing (usage billing is not connected yet; payments move from Polar to Creem, see [plan](../billing/2026-11-04-polar-to-creem-plan.md)) | M | Margin per model at fal prices; what a $15 starter buys; `check:pricing` |
 | ES.2 | Run every slash command live on production with real providers: `/video` with a chain, `/broll` stills → animate, `/animate`, `/edit` (Kling edit with an uploaded video, never called live), `/background`, `/music`, `/voiceover` | M | Failure modes per provider; fal concurrency on a new account; real wait vs the card's estimate |
 | ES.3 | `/broll` on the user's own talk end to end: pick lines, stills, approve, animate, place on the quotes, one undo | S | Today it is two approvals (stills, then animate); measure whether users want one card for the whole pack |
 | ES.4 | Bring other videos in: several uploads in one edit, cut any of them by words, use the user's own clips as B-roll (`place_broll` from the library) | S | Upload size/length caps; transcript wait per file; New edit with no master video |

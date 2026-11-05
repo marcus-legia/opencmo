@@ -106,6 +106,9 @@ PROMPT_BLOCKED = "This request goes against our content policy. Your credits wer
 #: Fake mode: same mark as `FAKE_FLAG` on the web.
 FAKE_PROMPT_MARK = "[[flag]]"
 PROMPT_MAX_CHARS = 8000
+CREEM_TEST_API = "https://test-api.creem.io"
+CREEM_LIVE_API = "https://api.creem.io"
+CREEM_TIMEOUT_SECONDS = 5.0
 #: Keys whose strings are not words for the model (`specText` on the web), plus the code a scene carries here.
 _NOT_TEXT = re.compile(r"(code_ref|code|model|voice|aspectRatio|theme|template|resolution|quality)")
 
@@ -183,8 +186,47 @@ def prompt_text(value: Any, key: str = "") -> list[str]:
     return []
 
 
+def _creem_key() -> str | None:
+    """The key to screen with. Live, a test key does not count: Creem's review only sees live calls."""
+    key = os.environ.get("CREEM_API_KEY", "").strip()
+    if not key or (production() and key.startswith("creem_test_")):
+        return None
+    return key
+
+
+def _screen_with_creem(model: AiModel, text: str) -> None:
+    """Creem's own screening, as `screenWithCreem` on the web. Creem requires that no prompt reaches a model without a
+    decision, and `create_generation` is callable straight through PostgREST, so the web's call alone cannot promise it.
+    Repeated prompts are free. Fails closed; `flag` blocks like `deny`; audio is outside Creem's scope."""
+    if model.kind in ("voice", "audio"):
+        return
+    key = _creem_key()
+    if not key:
+        if production():
+            raise ProviderError(NOT_CHECKED)
+        return
+    base = CREEM_TEST_API if key.startswith("creem_test_") else CREEM_LIVE_API
+    try:
+        response = httpx.post(
+            f"{base}/v1/moderation/prompt",
+            headers={"x-api-key": key, "content-type": "application/json"},
+            json={"prompt": text},
+            timeout=CREEM_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        decision = response.json().get("decision")
+    except (httpx.HTTPError, ValueError, AttributeError) as exc:
+        log.error("Creem screening could not answer: %s", type(exc).__name__)
+        raise ProviderError(UNAVAILABLE) from exc
+    if decision in ("flag", "deny"):
+        raise ProviderError(PROMPT_BLOCKED)
+    if decision != "allow":
+        log.error("Creem screening gave an unknown decision")
+        raise ProviderError(UNAVAILABLE)
+
+
 def check_prompt(model: AiModel, spec: dict) -> None:
-    """The spec's text against the web's prompt policy, before a provider or renderer sees it.
+    """The spec's text against Creem's screening and the web's prompt policy, before a provider or renderer sees it.
 
     Raises a non-retryable `ProviderError(PROMPT_BLOCKED)`: the task fails and the trigger refunds.
     Our own renderers are checked too, though their output is not (`SKIP_PROVIDERS`). Scene code
@@ -194,6 +236,7 @@ def check_prompt(model: AiModel, spec: dict) -> None:
     text = "\n".join(prompt_text(spec))[:PROMPT_MAX_CHARS].strip()
     if not text:
         return
+    _screen_with_creem(model, text)
     if model.provider == "fake":
         if FAKE_PROMPT_MARK in text:
             raise ProviderError(PROMPT_BLOCKED)
