@@ -230,17 +230,18 @@ async function main(): Promise<void> {
 
   // 7. The system prompt routes by intent to tools that exist, and keeps its promises.
   {
-    const { SYSTEM_PROMPT } = await import("./prompt");
+    const { SYSTEM_PROMPT, SYSTEM_RULES } = await import("./prompt");
+    assert.ok(SYSTEM_PROMPT.startsWith(SYSTEM_RULES) && SYSTEM_PROMPT.includes('<skill name="no-ai-slop">'), "the Assistant carries no-ai-slop after its rules");
     const { clipToolSpecs } = await import("./scope");
     const offered = new Set(clipToolSpecs().map((spec) => spec.name));
-    const named = new Set([...SYSTEM_PROMPT.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
+    const named = new Set([...SYSTEM_RULES.matchAll(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g)].map((match) => match[0]));
     for (const word of ["untrusted_data", "user_answer", "clip_context", "project_state", "your_skills"]) named.delete(word);
     for (const name of named) assert.ok(offered.has(name), `the prompt names ${name}, which is not a tool`);
     for (const route of ["create_video", "edit_video", "replace_background", "plan_video", "place_broll", "generate_media", "wait_for_media", "preview_explainer", "add_explainer", "request_export", "find_retakes"]) {
       assert.ok(named.has(route), `the routing names ${route}`);
     }
     assert.match(SYSTEM_PROMPT, /independent reads in ONE step/, "parallel reads are asked for");
-    assert.ok(SYSTEM_PROMPT.length < 6000, `the prompt stays short (${SYSTEM_PROMPT.length} chars)`);
+    assert.ok(SYSTEM_RULES.length < 6000, `the rules stay short (${SYSTEM_RULES.length} chars; the no-ai-slop guide comes on top)`);
   }
 
   // 8. Explainers draw their subject in scene code (a Mark); icons are a library for small symbols.

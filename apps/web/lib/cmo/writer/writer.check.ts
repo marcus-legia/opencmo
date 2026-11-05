@@ -53,7 +53,7 @@ for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule: an
 }
 
 // No AI Slop is guidance in a skill, read by the writer, the checker, sales and CMO chat; never a code check.
-assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["checker", "cmo", "sales", "x_writer"]);
+assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
 assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /advice/.test(REVIEW_SYSTEM), "the checker reads the guidance as advice");

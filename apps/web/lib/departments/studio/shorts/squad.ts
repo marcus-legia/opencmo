@@ -13,6 +13,7 @@ import { z } from "zod";
 import { fakeAllowed, llmReady, LlmError, structured, type LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import type { ShortRange } from "../types";
+import { NO_AI_SLOP } from "@/lib/cmo/skills";
 
 export type Word = { text: string; start: number; end: number };
 /** An AI long video's beats (the Director's shots), in timeline seconds. */
@@ -151,7 +152,9 @@ export const CLIP_EDITOR = `You are the clip editor of a short-video team. From 
 - A good short: a hook that grabs in the first seconds and fits the topic, a logical flow with a satisfying end, one idea of value. It must make sense without the rest of the video.
 - hook: the opening line exactly as it is said at the start of the candidate (its first words), at most 120 characters.
 - title: a plain title for the short, at most 60 characters, no hashtags, no emoji.
-- reason: one sentence on why it works (hook, flow, value). Never promise views or virality.`;
+- reason: one sentence on why it works (hook, flow, value). Never promise views or virality.
+
+${NO_AI_SLOP}`;
 
 const FAILED = "The clip editor could not pick shorts right now. Try again in a minute.";
 

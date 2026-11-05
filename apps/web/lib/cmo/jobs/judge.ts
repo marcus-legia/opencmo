@@ -23,6 +23,7 @@ import { usageUsd } from "@/lib/eval/prices";
 
 import { structured, type StructuredOptions } from "./llm";
 import type { Documents } from "./types";
+import { NO_AI_SLOP } from "../skills";
 
 export const JUDGE_VERDICTS = ["post_as_is", "small_edit", "rewrite", "skip"] as const;
 export type JudgeVerdict = (typeof JUDGE_VERDICTS)[number];
@@ -44,7 +45,10 @@ const SYSTEM = `You review drafts that an AI marketing assistant wrote for a sol
 Rules:
 - The documents are the only facts. A claim that is not in them is unsupported, even if it sounds plausible.
 - Judge the draft as the founder would: their product, their voice, their audience.
-- Give your reasons first, then the answer. Be brief.`;
+- Give your reasons first, then the answer. Be brief.
+- Stock AI patterns (the no-ai-slop guidance below) make a founder edit or rewrite a draft; a pattern the founder's own voice uses does not.
+
+${NO_AI_SLOP}`;
 
 const VerdictSchema = z.object({ reasons: z.string(), verdict: z.enum(JUDGE_VERDICTS) });
 const CriterionSchema = z.object({ reasons: z.string(), met: z.boolean() });

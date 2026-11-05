@@ -33,6 +33,15 @@ export function skillText(name: SkillName): string {
 }
 
 /**
+ * The no-ai-slop guide, for every system prompt that writes words a person reads: scripts, voice-overs,
+ * storyboards, on-screen text, posts, captions, titles, plans, research notes and replies to the founder
+ * (owner, 2026-11-05). Fixed text, so it stays inside the cached prefix.
+ */
+export const NO_AI_SLOP = `Every word you write that a person will read or hear (scripts, voice-overs, storyboards, on-screen text, posts, captions, titles, plans, notes and your replies) follows the no-ai-slop guidance below.
+
+${skillText("no-ai-slop")}`;
+
+/**
  * Chỉ mục skill một agent dùng được: tên + một câu mô tả. Playbook riêng đứng trước thư viện để
  * model chọn playbook khi hai bên cùng chủ đề (vd. x-writing trước social).
  */
