@@ -14,6 +14,22 @@ import type { SlashMenuItem } from "@/lib/agent/slash";
 import type { DocumentSession } from "@/lib/editor/session";
 
 /** The Video agent team's plan, shown as a beat table on the approval card. */
+/**
+ * The browser lost the connection (offline, a dropped stream). Not a server answer: a turn already
+ * started keeps running on the server and the panel catches up once it can read the session again.
+ */
+export class ConnectionLost extends Error {
+  constructor() {
+    super("Connection lost.");
+    this.name = "ConnectionLost";
+  }
+}
+
+/** fetch and stream reads reject with a TypeError when the network fails ("Failed to fetch", "network error"). */
+const lost = (error: unknown): never => {
+  throw error instanceof TypeError ? new ConnectionLost() : error;
+};
+
 export type Storyboard = {
   seconds: number;
   personality: string;
@@ -218,7 +234,7 @@ export class AssistantClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    });
+    }).catch(lost);
     if (!response.ok || !(response.headers.get("content-type") ?? "").includes("text/event-stream")) {
       throw new Error(messageOf(await response.json().catch(() => null)));
     }
@@ -227,7 +243,7 @@ export class AssistantClient {
     // Nhận bản mới theo thứ tự, không chồng hai lượt adopt lên nhau.
     let adopting: Promise<void> = Promise.resolve();
     for (;;) {
-      const { value, done } = await reader.read();
+      const { value, done } = await reader.read().catch(lost);
       if (done) break;
       buffer += value;
       let at: number;
