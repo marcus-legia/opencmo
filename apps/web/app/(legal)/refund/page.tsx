@@ -26,7 +26,7 @@ export default function RefundPage() {
         },
         {
           heading: "How to ask",
-          body: <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> from your account email with the date of the charge. We reply within 2 business days. Refunds are issued by our payment provider, the merchant of record (currently Polar), to the original payment method.</p>,
+          body: <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> from your account email with the date of the charge. We reply within 2 business days. Refunds are issued by our payment provider, the merchant of record (currently Creem), to the original payment method.</p>,
         },
       ]}
     />

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     const { data: result, error } = await createAdminClient().rpc("process_polar_event", {
       p_event_id: request.headers.get("webhook-id"), p_event_type: type,
       p_event_at: eventAt, p_data: data,
-      p_purchase_plan: purchasePlan?.id ?? null, p_credits: purchasePlan?.credits ?? null,
+      p_purchase_plan: purchasePlan?.id ?? null, p_credits: purchasePlan?.polarCredits ?? null,
       p_entitlement_plan: entitlementPlan?.id ?? null,
     });
     if (error) {

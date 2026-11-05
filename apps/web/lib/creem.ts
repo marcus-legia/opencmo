@@ -9,9 +9,34 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { ApiError } from "@/lib/api/errors";
+
 /** The URL follows the key, so a test key can never reach production and a live key can never reach the sandbox. */
 export function creemApiBase(apiKey: string): string {
   return apiKey.startsWith("creem_test_") ? "https://test-api.creem.io" : "https://api.creem.io";
+}
+
+/** A server call to Creem. The key stays on the server; a failure reaches the user as a retryable message, without details. */
+export async function creemPost<T>(path: string, body: unknown): Promise<T> {
+  const apiKey = process.env.CREEM_API_KEY?.trim();
+  if (!apiKey) throw new ApiError(503, "Payments are not set up on this server.");
+  let response: Response;
+  try {
+    response = await fetch(`${creemApiBase(apiKey)}${path}`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    console.error("[creem] could not reach", path);
+    throw new ApiError(502, "Could not reach the payment provider. Please try again.");
+  }
+  if (!response.ok) {
+    console.error("[creem] refused", path, response.status);
+    throw new ApiError(502, "The payment provider refused this request. Please try again.");
+  }
+  return (await response.json()) as T;
 }
 
 export function verifySignature(body: string, signature: string | null, secret: string): { ok: true } | { ok: false; reason: string } {
