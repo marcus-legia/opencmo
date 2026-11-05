@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-11-05 | [Agent team, model roles, no-ai-slop and moderation](2026-11-05-agent-team-models-moderation-spec.md) (spec): two brains, Claude only (Sonnet leads and writes, Haiku small tasks), no-ai-slop on every writing prompt, Creem in front of prompts | Owner conversation 2026-11-04/05, #165 #167 #168 #169, Creem #166 | `cmo-review` → `main` |
 | 2026-11-04 | [CMO review](2026-11-04-cmo-review-plan.md): what is still missing for a CMO that works end to end in production | Audit of `docs/architecture/` vs `main` `dbf14aa4` | `cmo-review` → `main` |
 | 2026-11-02 | [CMO chat decisions](2026-11-02-cmo-chat-decisions-plan.md): approve, schedule and set things from the chat | Chat-control audit #137 + owner 2026-11-02 | `plan/cmo-chat-decisions` → `cmo-build` |
 | 2026-11-02 | [CMO chat live](2026-11-02-cmo-chat-live-plan.md): finished runs come back to the chat, long chats stay fast, ratings kept | Chat-control audit #137, #138 follow-ups | `plan/cmo-chat-live` → `cmo-build` |
