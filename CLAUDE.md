@@ -35,7 +35,7 @@ The editor is locked in as the spearhead: build it until it can make every marke
   slash command (`/video`, `/broll`, `/animate`, `/edit`…; `apps/web/lib/agent/slash.ts`), puts generated
   shots in as B-roll on the right words, and lets the user bring in their other videos and edit them all
   together. Post and Sales stay in the code but come after the editor sells. Generated media still follows the
-  product rules below (moderation, no real people, no model names as features).
+  product rules below (moderation by Creem's rules, no model names as features).
 - The phase roadmap is [`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md).
   Each item gets its own research and plan before it is built; do not build an item from the roadmap line alone.
 
@@ -52,10 +52,23 @@ The editor is locked in as the spearhead: build it until it can make every marke
   always a finished edit in the user's project, never a link, a raw third-party video or another
   creator's content. Market it as "cut short clips from your finished video", not as a clipping
   tool.
-- **AI images/video only with moderation.** Prompts go through `lib/generate/moderation.ts`
-  before credits are held; generated images and video frames go through
-  `opencmo/ai/moderation.py` before upload. No identifiable real people, no other brands'
-  logos, premade voices only — no cloning, dubbing or lip-sync.
+- **Moderation follows Creem's rules, and only Creem's** (owner, 2026-11-05). We write no content policy of our
+  own. Every image and video prompt is screened by Creem's Moderation API (`flag` blocks like `deny`) before
+  credits are held; Claude Haiku checks prompts and output frames against the same rules, quoted from Creem's
+  docs. Creem forbids NSFW and sexually suggestive content, face-swap, deepfake and face-manipulation tools, and
+  "uncensored / no filter" marketing, so: premade voices only, no cloning, dubbing or lip-sync. Spec:
+  `docs/plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`.
+- **Charge before running, then run in one go** (owner, 2026-11-05). A paid job shows its storyboard (or plan)
+  and one credit estimate that covers everything it will spend: media, voice, music, renders and the agents'
+  tokens. The user confirms once, the credits are held, and the job runs to the end without stopping for another
+  approval. No paid step (keyframes, explainer previews, model calls) runs before that confirmation; credits come
+  back only for what failed or was blocked.
+- **One model provider: Claude** (owner, 2026-11-05). Sonnet for the CMO chat, the Editor Assistant and every
+  agent that writes or plans; Haiku for small tasks (checker, translation, picks, moderation). No Gemini, Groq or
+  other LLM vendor without the owner (`.claude/skills/llm-provider-keys`).
+- **Every word a person reads or hears goes through no-ai-slop** (owner, 2026-11-05): scripts, voice-overs,
+  storyboards, on-screen text, posts, captions, titles, plans, replies. A new prompt that writes for a reader
+  embeds `NO_AI_SLOP` and is added to `lib/cmo/skills/no-ai-slop.check.ts`.
 - **Copy describes software, not a service**: "drafts you approve and publish", not "we grow
   your audience". Don't market model names (Gemini, Veo, ElevenLabs…) as features.
 - **Don't ship "coming soon"**: anything on the landing page must work.

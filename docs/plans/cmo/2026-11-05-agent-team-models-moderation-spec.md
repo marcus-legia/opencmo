@@ -1,4 +1,4 @@
-# Agent team, model roles, no-ai-slop and moderation (spec)
+# Agent team, model roles, no-ai-slop, moderation and charging (spec)
 
 Date: 2026-11-05. Owner conversation 2026-11-04 → 11-05 (session `moderation-policy-agent-team`), PRs #165, #167, #168,
 #169 (merged), Creem PR #166 (open, test mode) and the Sales finder spec #133 (pulled into this branch).
@@ -16,8 +16,10 @@ which described the code before #169. The live map is the artifact https://claud
 | D3 | **Sonnet leads and writes; Haiku does small tasks.** Groq never writes copy. | 2026-11-05 | Done, #169 |
 | D4 | **Haiku is not the chat lead.** It can call tools, but it is weaker than Sonnet at choosing among ~90 tools and planning several steps; it runs inside tools instead. | 2026-11-05 | Done (Sonnet leads) |
 | D5 | **Every word a person reads or hears goes through no-ai-slop**: scripts, voice-overs, storyboards, on-screen text, posts, captions, titles, plans, replies. | 2026-11-05 | Done, #169 |
-| D6 | **Creem screens every image and video prompt**, as Creem requires. After Creem, no LLM prompt check. | 2026-11-05 | Creem in #166; LLM prompt check still there (§5.3) |
+| D6 | **Creem screens every image and video prompt**, as Creem requires. | 2026-11-05 | Built in #166 (test mode) |
 | D7 | The Editor Assistant stays outside the agent registry for now: it already runs Sonnet. | 2026-11-05 | No work |
+| D8 | **Moderation follows Creem's rules and only Creem's.** No content policy of our own: the Haiku checks quote Creem's rules. Haiku keeps checking image and video prompts for two weeks of live Creem traffic, audio prompts for good (Creem skips audio), and output frames for good. | 2026-11-05 | To build (§5.3) |
+| D9 | **Charge before running, then run in one go.** Storyboard and one credit estimate for the whole job → the user confirms once → credits held → the job runs to the end with no second approval. No paid step before the confirmation. | 2026-11-05 | To build (§6) |
 
 ## 2. Who calls whom
 
@@ -110,7 +112,7 @@ New prompts that write for a reader must be added to that check.
 | Output | `check_output` | the image, or 3 frames at 10/50/90 % | Haiku vision + fal NSFW |
 | Look check, page capture | `look_check_task.py`, `capture_page_task.py` | export frames; captured pages | Haiku vision |
 
-Policies:
+Policies on `main` today (all five are replaced by one Creem policy, §5.3):
 
 - `POLICY`: AI images and video. Strict: no identifiable real people, no other brands' logos or branded products.
 - `AUDIO_POLICY`: voice, music and sound. Scripts may name people and products.
@@ -158,25 +160,35 @@ What #166 builds:
   `lib/generate/models.ts`).
 - The output check on the worker is unchanged: Creem only sees prompts.
 
-### 5.3 Target after Creem goes live
+### 5.3 Target: Creem's rules only
 
-D6 says no LLM prompt check after Creem. #166 still keeps it (Creem first, then Haiku). The target:
+Owner, 2026-11-05: "everything follows Creem's rules; no rules of our own". One policy, `CREEM_POLICY`, replaces
+`POLICY`, `AUDIO_POLICY`, `MOTION_POLICY`, `OWN_FOOTAGE_POLICY` and `CAPTURE_POLICY` on the web and the worker. It
+quotes Creem's published rules and adds nothing:
 
-| Kind | Prompt check | Output check |
+- the Moderation API's decisions (`flag` and `deny` block);
+- "Content policy requirements" of the AI wrapper compliance page (`docs/creem-llm.txt` L23478-23482): no suggestive,
+  borderline or sexually provocative material; no face-swap, deepfake or face-manipulation;
+- the Acceptable Use Policy Creem requires us to publish: no NSFW, explicit or sexually suggestive content, and no
+  harmful content;
+- Creem's prohibited products list (L23368-23398) where it describes content (for example weapons and drugs).
+
+The policy text lives once, in `packages/contracts/` (as `ai-models.json` does), so the web and the worker read the same
+words. When Creem changes its docs, only that file changes.
+
+| Kind | Prompt | Output frames |
 |---|---|---|
-| AI image / video (`fal`) | **Creem only** | Haiku vision + fal NSFW (unchanged) |
-| Our motion renderer | **Creem only** | none (we draw the user's words; same as a text layer) |
-| Voice, music, sound | **Haiku with `AUDIO_POLICY`** (Creem skips audio) | none |
+| AI image / video (`fal`) | Creem; **plus** Haiku with `CREEM_POLICY` for two weeks of live traffic, then Creem alone | Haiku with `CREEM_POLICY` + fal NSFW |
+| Our motion renderer | Creem only | none (we draw the user's words, like a text layer) |
+| Voice, music, sound | Haiku with `CREEM_POLICY` (Creem's API skips audio) | none |
+| Background removal, own-footage edits, page captures | Creem does not require screening (L23470); Haiku with `CREEM_POLICY` on the frames | Haiku with `CREEM_POLICY` |
 
-Why audio keeps the LLM check: with Creem alone, a voice-over script would reach the voice model with no check at all.
-Voices are premade (no cloning), so the risk is harmful words spoken in the user's video, not impersonation. **Owner to
-confirm**: keep Haiku for audio prompts (recommended, a few hundredths of a cent per script), or accept no prompt check
-for audio.
+What this changes for users: prompts and frames that only named a real person or showed another brand's logo are no
+longer blocked; a deepfake or face-swap of a real person still is. Voices stay premade (no cloning, dubbing or lip-sync),
+because a voice clone is the audio form of a deepfake and Creem's review tests outputs.
 
-What dropping the LLM check on images and video costs: the product rules "no identifiable real people" and "no other
-brands' logos" are then enforced only on the **output** (frames), not on the prompt. A prompt for "Elon Musk at a desk"
-is charged, generated, then refunded when the frames are blocked, and we pay the media provider. Accept that, or keep
-Haiku on image/video prompts until Creem's live behaviour is measured (open question Q1).
+The two weeks: compare Creem's live decisions with Haiku's on the same prompts (both logged with the job id). Drop the
+Haiku prompt check for image and video when Haiku blocks nothing Creem allows that Creem's rules forbid.
 
 ### 5.4 Merging #166 onto `main`
 
@@ -186,9 +198,57 @@ no longer exists. When rebasing:
 - keep `screenWithCreem`, `creemModerationKey`, `_screen_with_creem`, `_creem_key` and their tests;
 - take `main`'s Claude-only checker (`moderateText` without `gemini`, `askClaude` only; worker `_check_claude` only,
   `UNAVAILABLE` on an unpaid key);
-- then apply §5.3 in a follow-up (or in #166, if the owner prefers).
+- then apply §5.3 (one `CREEM_POLICY`) in a follow-up.
 
-## 6. Production fixes made in this session
+## 6. Charge before running, then run in one go
+
+Owner, 2026-11-05: "running first and charging after loses money. Show the storyboard and the credit estimate; once the
+user confirms, run everything in one go."
+
+### 6.1 Where money leaks today
+
+| Flow | Today | Leak |
+|---|---|---|
+| `/video` (`lib/agent/create-video.ts`, `long-take.ts`) | Card 1 → keyframes made → contact sheet → card 2 → shots | Two stops; keyframes and the director's and Assistant's tokens are spent before the user decides to go on |
+| Explainer (`preview_explainer`, `add_explainer`) | The Assistant writes code and renders previews, then shows the price card | Previews are paid from the turn's hold (raised to 20 credits), outside the price the user sees |
+| Studio (`lib/cmo/jobs/studio-orders.ts`) | The video team's model calls are recorded at 0 credits (QA checklist H10) | We pay the model, the user does not |
+| Assistant turns | Usage above the turn's hold is never billed (H10) | We pay the rest |
+| Output blocked by moderation | The user is refunded; fal was already paid (H07) | We pay fal |
+
+### 6.2 Target flow
+
+1. **Plan (cheap, before any confirmation).** The director, or the Assistant, writes the storyboard: say, picture,
+   motion and on-screen text per beat, voice and music. Only the planning tokens are spent here, inside the turn's
+   normal hold.
+2. **One card.** The storyboard and one estimate covering everything the job will spend: keyframes, shots, voice,
+   music, explainer render, and a token allowance for the agents that run it. The estimate rounds up; nothing is
+   asked again later.
+3. **Confirm → hold → run.** One `credit_hold` for the whole estimate, in the same transaction that creates the work
+   (web rule 1). The job then runs end to end: keyframes, then shots, voice and music, assembly. No contact sheet stop,
+   no paid preview.
+4. **Settle.** `credit_settle` charges what was used; the rest comes back. A failed or blocked step refunds only its
+   own share.
+5. **After.** Redo of a keyframe or a shot is a new job with its own card and price.
+
+Per flow:
+
+- `/video`: `create_video` and `animate_video` merge into one approval. Keyframes and shots run in one job; the
+  contact sheet becomes a view of the finished video with Redo buttons, not a gate.
+- Explainer: the storyboard and the direction are confirmed with the price; the paid render runs after. The Assistant
+  may check its own code with frames it renders only inside the held amount (the hold covers a fixed number of
+  preview frames), never before the confirmation.
+- Studio: the card that starts a video carries the full estimate, the video team's model calls included, and they are
+  charged from that hold instead of at 0.
+- Assistant turns: the hold of a turn that will run paid tools is the card's estimate, so usage above it is the
+  exception it was meant to be, and it is billed.
+- Moderation stays in front of the hold: Creem and the Haiku prompt check run before the card is shown, so a blocked
+  prompt costs nothing. An output blocked after generation is still refunded to the user; that cost is ours, and it
+  is why the prompt check runs first.
+
+Trade-off: the user no longer sees the keyframes before the shots are made. Bad frames are fixed with Redo after, at a
+price. The estimate must carry a margin, because the job does not stop to ask for more credits.
+
+## 7. Production fixes made in this session
 
 | PR | Fix |
 |---|---|
@@ -197,30 +257,32 @@ no longer exists. When rebasing:
 | #168 | A dropped stream or a failed reload no longer turns the panel into "The assistant isn't available on this server yet"; it reads again every 5 s, and a lost connection says the turn keeps running |
 | #169 | Claude only (§3); no-ai-slop everywhere (§4) |
 
-## 7. Still to do
+## 8. Still to do
 
 | # | Work | Why | Size | Blocks on |
 |---|---|---|---|---|
 | T1 | Anthropic key and credit on Vercel, Modal `opencmo` and `opencmo-mcp` | One provider now: without it AI media is off and the CMO falls back to the founder's Claude | S (ops) | none |
 | T2 | Remove `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_COMPAT_*`, `OPENCMO_MODERATION_VISION_MODEL`, `CMO_LLM_PROVIDER(S)` from Vercel and Modal; run `check_deploy_env.py` | Unused secrets | S (ops) | #169 deployed |
 | T3 | Rebase #166 onto `main` (§5.4), then go live and request Creem's review | Creem compliance | M | T1 |
-| T4 | §5.3: drop the LLM prompt check for image, video and motion; keep it for audio | D6 | S | T3, owner on Q1/Q2 |
+| T4 | §5.3: one `CREEM_POLICY` in `packages/contracts/` replaces the five policies on the web and the worker; Haiku prompt check for image/video stays two weeks, then goes; motion is Creem only | D8 | S | T3 |
+| T9 | §6: plan "charge before running": one card per job, one hold, no second approval; `/video` in one job; explainer render after the confirmation; Studio model calls charged; Assistant hold = the card's estimate | D9 | L (plan first, touches credits) | none |
 | T5 | Keep-alive for the Assistant's SSE stream (a comment line every ~15 s in `lib/agent/sse.ts`) | Streams over 2 min dropped in production; measure on Vercel first | S | none |
 | T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
 | T7 | Library shows both "Generated" and "generated" | A duplicate folder, case only | S | none |
 | T8 | Optional: split an "explainer coder" role from the Assistant | Only if an eval shows Sonnet writes weak explainer code | M | eval |
 
-## 8. Sales finder (#133)
+## 9. Sales finder (#133)
 
 The Sales finder spec ([`2026-10-31-sales-finder-spec.md`](2026-10-31-sales-finder-spec.md)) is merged into this branch
 unchanged. Under this spec its agents run as follows: `sales` drafts on Sonnet with no-ai-slop (already in
 `sales-scan.ts`), and thread scoring runs on the Haiku `checker`. The finder's own model calls must use registry agents,
 never a new provider.
 
-## 9. Open questions
+## 10. Answered questions
 
-| # | Question | Default if no answer |
+| # | Question | Answer (owner, 2026-11-05) |
 |---|---|---|
-| Q1 | After Creem, keep Haiku on image/video prompts until Creem's live decisions are measured (it blocks real people and logos before we pay for a generation)? | Keep for 2 weeks of live traffic, compare blocks, then drop |
-| Q2 | Keep Haiku on audio prompts (Creem skips audio)? | Keep |
-| Q3 | Measure Haiku as the Assistant (D4) with the eval? | Not now |
+| Q1 | After Creem, keep Haiku on image/video prompts? | Yes, two weeks of live traffic, with Creem's rules only (D8) |
+| Q2 | Keep Haiku on audio prompts? | Yes, with Creem's rules only (D8) |
+| Q3 | Measure Haiku as the Assistant with the eval? | Not now |
+| Q4 | Keep our own rules on real people and other brands' logos? | No: Creem's rules only (D8) |
