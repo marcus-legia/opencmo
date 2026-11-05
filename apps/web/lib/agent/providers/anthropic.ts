@@ -303,6 +303,30 @@ export function closeDanglingToolUses(history: StoredMessage[], ran: Map<string,
   return out;
 }
 
+/**
+ * Strict tool sets the API refused for grammar size, by their names. The size can't be computed here, so the
+ * first refusal is remembered for this server instance: without it every step of every turn paid a 400 and a
+ * second request before it could start (production logs, 2026-11-05).
+ */
+const grammarRefused = new Set<string>();
+
+/** The memo key of the strict set `specs` would send; empty when nothing would be strict. */
+export const strictKey = (specs: ToolSpec[]): string => [...strictTools(specs)].sort().join(",");
+
+/** Whether a step should try strict tools for these specs. */
+export const strictAllowed = (specs: ToolSpec[]): boolean => {
+  const key = strictKey(specs);
+  return key !== "" && !grammarRefused.has(key);
+};
+
+/** Records that the API refused the strict grammar of these specs. True the first time (worth a log line). */
+export const refuseStrict = (specs: ToolSpec[]): boolean => {
+  const key = strictKey(specs);
+  if (grammarRefused.has(key)) return false;
+  grammarRefused.add(key);
+  return true;
+};
+
 /** 400s caused by the strict tool grammar, e.g. "Too many strict tools", "compiled grammar is too large". */
 function isStrictLimit(err: unknown): boolean {
   return err instanceof Anthropic.BadRequestError && /strict|grammar|optional parameters/i.test(err.message);
@@ -328,7 +352,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
     failureMessage,
     async step({ history, tools: specs, system, signal, ran, clearOldToolResults }: StepRequest, onDelta: (delta: Delta) => void): Promise<Step> {
       let jsonRetries = 0;
-      let useStrict = true;
+      let useStrict = strictAllowed(specs);
       const editing = contextEditing(process.env, clearOldToolResults);
       // The CMO and project scopes have few tools; only the editor's large set is worth searching.
       const search = toolSearchOn() && specs.length > ALWAYS_LOADED.size;
@@ -402,7 +426,7 @@ export function anthropicProvider(model: string = ANTHROPIC_MODEL, apiKey?: stri
           if (useStrict && isStrictLimit(err)) {
             // A schema change pushed the strict grammar over a limit: run the turn without strict
             // (zod still checks every input) instead of failing it.
-            console.warn("[agent] strict tools rejected, retrying without strict", (err as Error).message);
+            if (refuseStrict(specs)) console.warn("[agent] strict tools rejected, retrying without strict (remembered for this instance)", (err as Error).message);
             useStrict = false;
             continue;
           }
