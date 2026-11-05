@@ -25,7 +25,9 @@ const sceneOf = (document: ClipDocument) => document.stage.children[0] as unknow
 const count = (document: ClipDocument, pattern: RegExp) => JSON.stringify(document).match(pattern)?.length ?? 0;
 
 async function main(): Promise<void> {
-  const { createVideoToolSpec, prepareCreateVideo, videoPieces } = await import("./create-video");
+  const { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } = await import("./create-video");
+  const { priceOf } = await import("@opencmo/editor-core/generate");
+  const { specHash } = await import("@/lib/generate/models");
   const { generateCard } = await import("./generate-tool");
   const { screenPieces } = await import("./screen-pieces");
   const { musicModel, slashCommandsFor, slashDirective } = await import("./slash");
@@ -35,7 +37,9 @@ async function main(): Promise<void> {
   const { memoryWorkspace } = await import("./workspace");
   const { applyOpTool } = await import("./tools");
   const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, TRANSCRIPT } = await import("./eval/fixture");
-  const { longTakeResult, withKeyframes } = await import("./keyframe-library");
+  const { runCreateVideo } = await import("./create-video");
+  const { withPieces } = await import("./keyframe-library");
+  const { declarationsOf, resolve } = await import("@/components/editor/generate/useGenerations");
 
   /** A blank "New edit" (where /video runs): an empty 9:16 scene. */
   const blank = (): ClipDocument => {
@@ -54,81 +58,136 @@ async function main(): Promise<void> {
   }
 
   /**
-   * Approve card 1: the op `runGeneration` applies after holding the keyframe credits, then the
-   * pending keyframe records it lists in the library, on the same document.
+   * Approve the one card through `runCreateVideo`, with the database replaced: the job's hold, each
+   * piece started from it (keyframes first), the library records, then the op on the same document.
    */
-  async function approve(planned: Awaited<ReturnType<typeof prepareCreateVideo>>, document = blank()) {
+  async function approve(planned: Awaited<ReturnType<typeof prepareCreateVideo>>, document = blank(), options: { failOp?: boolean } = {}) {
     assert.ok(typeof planned !== "string");
     const workspace = memoryWorkspace(
       { version: 1, document, manifest: fixtureManifest() },
       { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": TRANSCRIPT }, master: FIXTURE_MASTER },
     );
-    const outcome = await applyOpTool(planned.prepared.op, { workspace });
-    assert.ok(outcome.ok, `the approved keyframes could not be set up: ${outcome.content}`);
-    const after = (await workspace.read()).document;
-    const { prepared } = planned;
-    const specs = [prepared.spec, ...(prepared.extra ?? []).map((item) => item.spec)];
-    const ids = specs.map((_spec, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
-    const manifest = withKeyframes(fixtureManifest(), { model: prepared.model, specs, folder: prepared.library!.folder, names: prepared.library!.names, ids, now: "2026-10-23T00:00:00.000Z" });
-    return { document: after, manifest, result: longTakeResult(prepared.longTake!, ids) };
+    const calls: string[] = [];
+    let manifest: unknown = fixtureManifest();
+    let next = 0;
+    const supabase = {
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls.push(name === "credit_order_open" ? `${name}:${String(args.p_estimate)}` : name);
+        return { data: name === "credit_order_open" ? { id: "order-1" } : 0, error: null };
+      },
+    };
+    const outcome = await runCreateVideo(
+      {
+        supabase: supabase as never,
+        jobId: "job",
+        clipId: "clip",
+        source: { kind: "agent_turn", id: "turn" },
+        applyOp: async (op) => {
+          calls.push("place");
+          return options.failOp ? { ok: false, content: "{}", summary: "The clip changed." } : applyOpTool(op, { workspace });
+        },
+        store: {
+          read: async () => ({ version: 1, document: (await workspace.read()).document, manifest }),
+          write: async (_version, _document, written) => {
+            calls.push("library");
+            manifest = written;
+          },
+        },
+        create: {
+          check: async (_supabase, request) => {
+            assert.equal(request.orderId, "order-1", "every piece is paid from the job's hold");
+            return { request, model: { id: request.model } as never, spec: request.spec as never };
+          },
+          start: async (_supabase, item) => {
+            calls.push(`start:${(item.spec as { startAfter?: string }).startAfter ? "shot" : "piece"}`);
+            return { generation: { id: `00000000-0000-4000-8000-${String(next++).padStart(12, "0")}`, credits_reserved: 1 } as never, reused: false };
+          },
+        },
+      },
+      planned.prepared,
+    );
+    return { outcome, calls, document: (await workspace.read()).document, manifest: manifest as ReturnType<typeof withPieces> };
   }
 
-  // 1. "/video a 20-second video introducing a note-taking app" on a New edit: card 1 prices the
-  // keyframes only and says what the video will cost after them.
+  // 1. "/video a 20-second video introducing a note-taking app" on a New edit: ONE card prices the
+  // whole video, and approving it starts everything at once.
   {
     const asked = await ask({ prompt: "a 20-second video introducing a note-taking app for students", seconds: 20 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    const [summary, then, flow, ...rest] = asked.card.changes;
-    assert.equal(summary, "Create a 20s 9:16 video, step 1 of 2: 5 keyframes · 5 credits");
-    assert.match(then!, /^Then about \d+ credits for the video \(ready in about .+\): 4 shots, voice-over \(Test A\), music$/, then);
+    const [summary, parts, flow, once, ...rest] = asked.card.changes;
+    assert.match(summary!, /^Create a 20s 9:16 video: 4 shots on 5 keyframes, voice-over \(Test A\), music · (\d+) credits · ready in about .+$/, summary);
+    assert.match(parts!, /^5 keyframes · 5 credits · 4 shots · \d+ credits$/, parts);
     assert.equal(flow, "Shots flow from one keyframe into the next, with 1 cut where the story changes place");
+    assert.match(once!, /^One approval makes the whole video/);
     assert.ok(!asked.card.changes.some((line) => /Test video|Test image/.test(line)), "the card names no model");
     assert.ok(rest.some((line) => line.startsWith("Script: ")), "the card shows the script the voice will read");
-    assert.equal(asked.card.credits, 5, "approving holds only the keyframes");
+    const runs = [{ model: asked.planned.prepared.model, spec: asked.planned.prepared.spec }, ...(asked.planned.prepared.extra ?? [])];
+    assert.equal(asked.card.credits, runs.reduce((sum, run) => sum + priceOf(run.model, run.spec), 0), "the price is every piece: keyframes, shots, voice, music");
+    assert.equal(Number(/· (\d+) credits ·/.exec(summary!)![1]), asked.card.credits);
+    assert.deepEqual(runs.map((run) => run.model.kind), ["image", "image", "image", "image", "image", "video", "video", "video", "video", "voice", "audio"]);
     assert.equal(asked.card.storyboard.seconds, 20);
     assert.deepEqual(asked.card.storyboard.beats.map((beat) => [beat.at, beat.dur]), [[0, 5], [5, 5], [10, 5], [15, 5]]);
     assert.ok(asked.card.storyboard.beats.every((beat) => beat.motion && beat.motion !== "—"), "every beat has its part of the voice-over");
     assert.match(asked.card.storyboard.beats[2]!.label, /^✂ cut · /, "the beat after a hard cut is marked");
-    // Keyframes 2-5 ride on the first; nothing of the video itself starts yet.
-    assert.equal(asked.planned.prepared.extra?.length, 4);
-    assert.ok([asked.planned.prepared.model, ...(asked.planned.prepared.extra ?? []).map((item) => item.model)].every((model) => model.kind === "image"));
-    // Every keyframe, shot, the script and the music are moderated now, each named on its own.
+    // Each shot waits for the keyframes it joins; the cut before beat 3 leaves shot 2 without an end frame.
+    const hashes = runs.slice(0, 5).map((run) => specHash(run.model.id, run.spec));
+    assert.deepEqual(
+      runs.slice(5, 9).map((run) => [hashes.indexOf(String(run.spec.startAfter)), run.spec.endAfter ? hashes.indexOf(String(run.spec.endAfter)) : null]),
+      [[0, 1], [1, null], [2, 3], [3, 4]],
+    );
+    // Every keyframe, shot, the script and the music are moderated before the card, each named on its own.
     const labels = videoPieces(asked.planned).map((piece) => piece.label);
     assert.equal(labels.length, 5 + 4 + 2);
     assert.match(labels[2]!, /^Keyframe 3 \(/);
     assert.match(labels[5]!, /^Shot 1 \(/);
 
-    const { document, manifest, result } = await approve(asked.planned);
+    const { outcome, calls, document, manifest } = await approve(asked.planned);
+    assert.ok(outcome.outcome.ok, outcome.outcome.content);
+    // One hold for the estimate, keyframes before shots, the library before the scene, then the job closes.
+    assert.equal(calls[0], `credit_order_open:${asked.card.credits}`);
+    assert.deepEqual(calls.filter((call) => call.startsWith("start:")), [...Array(5).fill("start:piece"), ...Array(4).fill("start:shot"), "start:piece", "start:piece"]);
+    assert.ok(calls.indexOf("library") < calls.indexOf("place"), "listed before the scene names them");
+    assert.equal(calls.at(-1), "credit_order_close");
     const scene = sceneOf(document);
     assert.deepEqual([scene.width, scene.height], [1080, 1920]);
-    assert.equal(count(document, /"generate":"video"/g), 0, "no shot is placed before the second approval");
+    assert.equal(count(document, /"generate":"video"/g), 4, "the four shots are placed at once");
     const keyframes = manifest.assets.filter((record) => record.path.startsWith("Generated/Fake video/keyframes/"));
     assert.deepEqual(keyframes.map((record) => record.path.split("/").pop()!.slice(0, 3)).sort(), ["01 ", "02 ", "03 ", "04 ", "05 "]);
-    assert.ok(keyframes.every((record) => (record as { state?: string }).state === "pending" && record.generation?.id), "pending, with their generation");
-    assert.deepEqual(result.keyframes.map((item) => item.index), [0, 1, 2, 3, 4]);
-    assert.equal(result.plan.shots.length, 4);
+    // The editor finds each placed shot by its own key and waits on the generation already paid for: it never asks again.
+    const listed = new Map(manifest.assets.map((record) => [record.generation?.key, record.generation?.id]));
+    const shots = declarationsOf(document).filter((declaration) => declaration.generate === "video");
+    assert.equal(shots.length, 4);
+    for (const declaration of shots) assert.ok(listed.get(JSON.stringify(resolve(declaration))), `shot ${declaration.prompt.slice(0, 30)} is listed with its generation`);
+    for (const declaration of shots) {
+      const start = declaration.startFrame as Parameters<typeof resolve>[0];
+      assert.ok(listed.get(JSON.stringify(resolve(start))), "its keyframe is listed with its generation");
+    }
     // Listing them twice (a retried save) adds nothing.
-    const again = withKeyframes(manifest, { model: asked.planned.prepared.model, specs: [asked.planned.prepared.spec], folder: "x", names: ["y"], ids: ["z"], now: "" });
-    assert.equal(again.assets.length, manifest.assets.length);
+    assert.equal(withPieces(manifest, "x", [{ key: [...listed.keys()][0]!, type: "IMAGE", name: "y", id: "z" }], "").assets.length, manifest.assets.length);
+
+    // The clip changed under the card: every piece started is cancelled and the job's hold comes back.
+    const failed = await approve(asked.planned, blank(), { failOp: true });
+    assert.equal(failed.outcome.outcome.ok, false);
+    assert.equal(failed.calls.filter((call) => call === "cancel_generation").length, 11);
+    assert.equal(failed.calls.at(-1), "credit_order_close");
   }
 
   // 2. No length given: 30 s, six beats, the last ending on a closing keyframe.
   {
     const asked = await ask({ prompt: "a video about our booking app" });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.equal(asked.card.changes[0], "Create a 30s 9:16 video, step 1 of 2: 7 keyframes · 7 credits");
-    assert.equal(1 + (asked.planned.prepared.extra?.length ?? 0), 7, "one generation per keyframe");
+    assert.match(asked.card.changes[0]!, /^Create a 30s 9:16 video: 6 shots on 7 keyframes/);
+    assert.equal(asked.planned.prepared.library!.names.length, 7, "one generation per keyframe");
   }
-  // A minute: twelve beats, thirteen keyframes, and the video priced on card 1 from the shot model.
+  // A minute: twelve beats, thirteen keyframes, all priced on the one card.
   {
     const asked = await ask({ prompt: "a one-minute tour of our booking app", seconds: 60 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.equal(asked.card.changes[0], "Create a 60s 9:16 video, step 1 of 2: 13 keyframes · 13 credits");
-    // fake-video is 1 credit a second and makes 5 s shots; the fake voice and music add their own.
+    assert.match(asked.card.changes[0]!, /^Create a 60s 9:16 video: 12 shots on 13 keyframes/);
+    // fake-video is 1 credit a second and makes 5 s shots; the keyframes, voice and music add their own.
     const shots = asked.planned.later.filter((piece) => piece.kind === "video").length;
     assert.equal(shots, 12);
-    assert.match(asked.card.changes[1]!, /^Then about (\d+) credits for the video/);
-    assert.ok(Number(/about (\d+) credits/.exec(asked.card.changes[1]!)![1]) >= 60, "at least the 60 shot seconds");
+    assert.ok(asked.card.credits! >= 60 + 13, "at least the 60 shot seconds and the keyframes");
   }
 
   // 3. Square and landscape: the frame follows.
@@ -146,15 +205,16 @@ async function main(): Promise<void> {
     const asked = await ask({ prompt: "a long product tour", seconds: 90 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
     assert.equal(asked.card.storyboard.seconds, 90);
-    assert.ok(1 + (asked.planned.prepared.extra?.length ?? 0) <= 19);
+    assert.ok(asked.planned.prepared.library!.names.length <= 19);
+    // The whole video is in flight at once: within what one user may run.
+    assert.ok(1 + (asked.planned.prepared.extra?.length ?? 0) <= GENERATION_ACTIVE_LIMIT);
   }
 
   // 5. "/video a 5-second outro" (scenario 14): one shot, two keyframes, not a schema error.
   {
     const asked = await ask({ prompt: "a 5-second outro: a laptop on a desk at golden hour", seconds: 5 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.match(asked.card.changes[0]!, /^Create a 5s 9:16 video, step 1 of 2: 2 keyframes/);
-    assert.match(asked.card.changes[1]!, /: 1 shot, voice-over \(Test A\), music$/);
+    assert.match(asked.card.changes[0]!, /^Create a 5s 9:16 video: 1 shot on 2 keyframes, voice-over \(Test A\), music/);
   }
   // Below what a model can make, the Assistant is told the range.
   {
@@ -197,11 +257,12 @@ async function main(): Promise<void> {
     assert.match(JSON.parse(keyframe!.content).INVALID_INPUT, /^Against the content policy: Keyframe 2 \(/);
   }
 
-  // 9. A voice the user asked for is the one on the card and handed to stage 2.
+  // 9. A voice the user asked for is the one on the card and the one made.
   {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10, voice: "Test B" });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
-    assert.match(asked.card.changes[1]!, /voice-over \(Test B\)/);
+    assert.match(asked.card.changes[0]!, /voice-over \(Test B\)/);
+    assert.equal(asked.planned.later.find((piece) => piece.kind === "voice")?.spec.voice, "Test B");
     assert.equal(asked.planned.prepared.longTake?.voice, "Test B");
   }
 

@@ -7331,7 +7331,7 @@ $$;
 CREATE FUNCTION public.generation_active_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select 24 $$;
+    AS $$ select 40 $$;
 
 
 --

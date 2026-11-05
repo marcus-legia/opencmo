@@ -78,7 +78,7 @@ async function editedRequest(ctx: StudioContext, stepId: string): Promise<{ clip
 }
 
 export function studio(ctx: StudioContext, options: SessionOptions = {}): StudioAdapter {
-  const session = (clipId: string) => studioSession(ctx.supabase, ctx.caller, clipId, options);
+  const session = (clipId: string) => studioSession(ctx.supabase, ctx.caller, clipId, { ...options, ...(ctx.orderId ? { workOrderId: ctx.orderId } : {}) });
 
   async function plan(clipId: string, tool: string, input: unknown, planOptions: PlanOptions = {}): Promise<StudioPlan> {
     allow(ctx, "plan");
@@ -127,7 +127,7 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
     const next = action.kind === "approve" && approved.outcome.ok ? nextStep(prepared.tool, approved.outcome.content) : undefined;
     const notes: string[] = [];
     // A brain-made video wears the founder's Brand Kit once it is built; the founder applies their own in the editor.
-    if (ctx.caller === "brain" && prepared.tool === "animate_video" && action.kind === "approve" && approved.outcome.ok) {
+    if (ctx.caller === "brain" && prepared.tool === "create_video" && action.kind === "approve" && approved.outcome.ok) {
       const branded = await scope.run({ id: randomUUID(), name: "apply_brand_kit", input: {} });
       if (!branded.ok) notes.push(problem(branded.content));
     }
@@ -181,17 +181,16 @@ function outcomeGeneration(content: string): string | undefined {
   }
 }
 
-/** Card 1 approved: once its keyframes are done, card 2 is `animate_video` on what `create_video` returned. */
+/**
+ * The one card approved: the whole video was started at once (keyframes, shots, voice, music), so the
+ * next step is the render, once every piece is done. There is no second card to pay.
+ */
 function nextStep(tool: string, content: string): StudioDecision["next"] {
   if (tool !== "create_video") return undefined;
   try {
-    const value = JSON.parse(content) as { result?: { keyframes?: { generation_id: string }[] }; voice?: string };
-    if (!value.result) return undefined;
-    return {
-      tool: "animate_video",
-      input: { ...value.result, ...(value.voice ? { voice: value.voice } : {}) },
-      waitFor: (value.result.keyframes ?? []).map((keyframe) => keyframe.generation_id),
-    };
+    const value = JSON.parse(content) as { generation_ids?: unknown };
+    if (!Array.isArray(value.generation_ids)) return undefined;
+    return { tool: "render", input: null, waitFor: value.generation_ids.filter((id): id is string => typeof id === "string") };
   } catch {
     return undefined;
   }

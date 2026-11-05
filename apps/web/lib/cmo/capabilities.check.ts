@@ -171,7 +171,7 @@ check("every priced Studio tool is listed, priced on a card, for the Assistant a
 });
 
 check("the brain reaches single Studio tools only through the long-take team", () => {
-  const team = new Set(["create_video", "animate_video", "redo_keyframe"]);
+  const team = new Set(["create_video", "redo_keyframe"]);
   for (const c of registry.capabilities) {
     if (c.department === "studio" && !Object.values(ENTRY_NAME).includes(c.name) && c.callers.includes("brain")) {
       assert.ok(team.has(c.name), `${c.name}: the brain briefs the team, it does not drive single tools (brain.md §7b)`);

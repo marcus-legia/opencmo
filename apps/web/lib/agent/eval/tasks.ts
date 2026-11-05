@@ -116,8 +116,8 @@ function blankEdit(document: ClipDocument): void {
 
 /**
  * A whole video was asked for: create_video is the tool reached, with the length (and frame) the
- * user asked for, and its card says so. Without `--until-card` the keyframes must also be started,
- * in the video's frame; the shots come after a second approval (animate_video), graded when reached.
+ * user asked for, and its one card prices the whole video. Without `--until-card` the keyframes and
+ * the shots must also be started, in the video's frame, from that one approval.
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
@@ -132,18 +132,18 @@ function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }
   const card = (outcome.cards ?? []).find((item) => item.tool === "create_video");
   const shown = check(
     notes,
-    Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video, step 1 of 2: \\d+ keyframes`).test(card!.changes[0] ?? ""),
+    Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video: \\d+ shots? on \\d+ keyframes.* · \\d+ credits?`).test(card!.changes[0] ?? ""),
     `card: ${card?.changes[0] ?? "never reached a create_video card"}`,
   );
-  const priceLater = check(notes, Boolean(card?.changes.some((line) => /^Then about \d+ credits for the video/.test(line))), "card 1 does not say what the video costs after the keyframes");
-  if (outcome.untilCard) return { pass: seconds && aspect && shown && priceLater, notes };
+  if (outcome.untilCard) return { pass: seconds && aspect && shown, notes };
   const gen = outcome.generations?.find((item) => item.longTake);
-  const keyframes = check(notes, Boolean(gen) && [gen!.model, ...(gen!.extra ?? []).map((item) => item.model)].every((model) => model.kind === "image"), "no keyframes were started");
+  const kinds = gen ? [gen.model, ...(gen.extra ?? []).map((item) => item.model)].map((model) => model.kind) : [];
+  const started = check(notes, kinds[0] === "image" && kinds.includes("video"), `the keyframes and shots were not both started (kinds: ${kinds.join(", ") || "none"})`);
   const frame = check(notes, gen?.spec.aspectRatio === (want.aspect ?? "9:16"), `keyframes in ${String(gen?.spec.aspectRatio)}`);
-  return { pass: seconds && aspect && shown && priceLater && keyframes && frame && waiting(outcome, notes), notes };
+  return { pass: seconds && aspect && shown && started && frame && waiting(outcome, notes), notes };
 }
 
-/** After stage 1 the edit is still empty (the keyframes are in the library): only that may be reported. */
+/** The eval renders nothing, so the placed scene's media is still missing: only that may be reported. */
 function waiting(outcome: Outcome, notes: string[]): boolean {
   const errors = outcome.report.issues.filter((issue) => issue.severity === "error" && !["no-visuals", "black-gap"].includes(issue.code));
   return check(notes, !errors.length, `check has errors beyond the empty edit: ${errors.map((issue) => issue.code).join(", ")}`);

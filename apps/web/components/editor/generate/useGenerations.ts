@@ -378,42 +378,48 @@ export function useGenerations({
           assets: current.assets.map((record) => (record.generation?.key === key ? { ...record, state: "error", error: message } : record)) as LibraryRecord[],
         }));
       try {
-        // A piece the server started (a long take's keyframe) that failed or was cancelled stays
-        // failed: the POST below would not reuse a dead generation, so it would start and charge a
-        // new one no card approved.
+        // A piece the server started and listed (a /video's keyframes and shots, paid from the job the
+        // user confirmed) is waited on by its id, never asked for again: a shot started on keyframes
+        // still being made has a different spec from the one this editor would send once they are
+        // done, so a POST would start, and charge, a second shot no card approved. One that failed or
+        // was cancelled stays failed for the same reason.
         const startedId = partial.generation?.id;
-        if (startedId) {
-          const started = await api<GenerationView>(`generations/${encodeURIComponent(startedId)}`).catch(() => null);
-          if (started && (started.status === "failed" || started.status === "cancelled")) {
-            await fail(started.error ?? (started.status === "cancelled" ? "Generation was cancelled." : "Generation failed. Your credits were refunded."));
-            return;
-          }
+        let generation: GenerationView;
+        const known = startedId ? await api<GenerationView>(`generations/${encodeURIComponent(startedId)}`).catch(() => null) : null;
+        if (known && (known.status === "failed" || known.status === "cancelled")) {
+          await fail(known.error ?? (known.status === "cancelled" ? "Generation was cancelled." : "Generation failed. Your credits were refunded."));
+          return;
         }
-        const spec = await serverSpec(resolved.spec, () => libraryRef.current.latest(), () => !recordFor(libraryRef.current.latest(), key));
-        const requestId = crypto.randomUUID();
-        const post = () =>
-          api<{ generation: GenerationView }>("generations", {
-            method: "POST",
-            body: JSON.stringify({ job_id: projectId, clip_id: clipId, model: resolved.model, spec, request_id: requestId }),
-          });
-        // Ảnh vừa upload còn đang được worker kiểm (probe) vài giây: chờ thay vì báo hỏng.
-        // Server từ chối TRƯỚC khi đặt credit, nên gửi lại không trừ hai lần.
-        let attempt = post();
-        const waitStarted = Date.now();
-        for (;;) {
-          try {
-            await attempt;
-            break;
-          } catch (error) {
-            // A shot that continues another is refused until that one is started (Regenerate starts
-            // the whole chain at once); the refusal comes before any credit is held.
-            const stillUploading = /still uploading|Start the shot before this one first/i.test((error as Error).message);
-            if (!stillUploading || Date.now() - waitStarted > PROBE_WAIT_MS || !recordFor(libraryRef.current.latest(), key)) throw error;
-            await sleep(POLL_MS);
-            attempt = post();
+        if (known) {
+          generation = known;
+        } else {
+          if (startedId) throw new StillRunning("Could not read the generation. Trying again shortly.");
+          const spec = await serverSpec(resolved.spec, () => libraryRef.current.latest(), () => !recordFor(libraryRef.current.latest(), key));
+          const requestId = crypto.randomUUID();
+          const post = () =>
+            api<{ generation: GenerationView }>("generations", {
+              method: "POST",
+              body: JSON.stringify({ job_id: projectId, clip_id: clipId, model: resolved.model, spec, request_id: requestId }),
+            });
+          // A just-uploaded image is still being probed on the worker for a few seconds: wait instead of
+          // failing. The server refuses BEFORE holding credits, so sending again never charges twice.
+          let attempt = post();
+          const waitStarted = Date.now();
+          for (;;) {
+            try {
+              await attempt;
+              break;
+            } catch (error) {
+              // A shot that continues another is refused until that one is started (Regenerate starts
+              // the whole chain at once); the refusal comes before any credit is held.
+              const stillUploading = /still uploading|Start the shot before this one first/i.test((error as Error).message);
+              if (!stillUploading || Date.now() - waitStarted > PROBE_WAIT_MS || !recordFor(libraryRef.current.latest(), key)) throw error;
+              await sleep(POLL_MS);
+              attempt = post();
+            }
           }
+          generation = (await attempt).generation;
         }
-        const { generation } = await attempt;
         credits.current?.();
         const started = Date.now();
         // POST chỉ trả trạng thái, không kèm `asset` (GET mới ký URL). Lượt dùng lại

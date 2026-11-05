@@ -174,8 +174,8 @@ async function runStep(admin: SupabaseClient, step: Step): Promise<void> {
       return move(admin, step.order_id, "waiting_order", `Making keyframe ${index + 1} again`);
     }
     if (decided.next) {
-      await finish(decided.next.waitFor.length ? "running" : "done", { generationId: decided.generationId, next: decided.next, waitFor: decided.next.waitFor });
-      return move(admin, step.order_id, "waiting_order", "Making the keyframes");
+      await finish(decided.next.waitFor.length ? "running" : "done", { generationId: decided.generationId, next: { tool: decided.next.tool, input: decided.next.input }, waitFor: decided.next.waitFor });
+      return move(admin, step.order_id, "waiting_order", "Making the keyframes, shots, voice-over and music");
     }
     if (step.tool === "animate_video") {
       const waitFor = await pendingGenerations(ctx.supabase, step.clip_id);

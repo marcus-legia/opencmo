@@ -44,7 +44,6 @@ import type { Image, Provider, StoredMessage, ToolResult } from "../providers/ty
 import { backgroundToolSpec, prepareBackground } from "../background-tool";
 import { editToolSpec, prepareEdit } from "../edit-tool";
 import { createVideoToolSpec, prepareCreateVideo } from "../create-video";
-import { longTakeResult } from "../keyframe-library";
 import { slashDirective } from "../slash";
 import { PLAN_VIDEO_TOOL, prepareVideo } from "../video-team";
 import { explainerCard, explainerToolSpecs, prepareExplainer, runPreviewExplainer } from "../explainer-tool";
@@ -263,11 +262,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         }
         const applied = await applyOpTool(prepared.op, env);
         if (applied.version !== undefined) wrote = true;
-        // A long take's stage 1 answers with its plan and keyframes, as `runGeneration` does, so a
-        // model can go on to animate_video.
-        const ids = [prepared.spec, ...(prepared.extra ?? [])].map((_item, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
-        const started = prepared.longTake ? { result: longTakeResult(prepared.longTake, ids) } : {};
-        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, ...started, note: "Generation started (eval: not rendered)." }) : applied.content });
+        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });
         continue;
       }
       if (call.name === "plan_video") {
@@ -322,11 +317,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
         }
         const applied = await applyOpTool(prepared.op, env);
         if (applied.version !== undefined) wrote = true;
-        // A long take's stage 1 answers with its plan and keyframes, as `runGeneration` does, so a
-        // model can go on to animate_video.
-        const ids = [prepared.spec, ...(prepared.extra ?? [])].map((_item, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
-        const started = prepared.longTake ? { result: longTakeResult(prepared.longTake, ids) } : {};
-        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, ...started, note: "Generation started (eval: not rendered)." }) : applied.content });
+        results.push({ id: call.id, name: call.name, ok: applied.ok, content: applied.ok ? JSON.stringify({ ok: true, note: "Generation started (eval: not rendered)." }) : applied.content });
         continue;
       }
       const outcome = await runTool(call.name, call.input, env);

@@ -51,7 +51,11 @@ async function main() {
   assert.equal(made.storyboard.beats.length, 3);
   assert.equal(made.prepared.longTake?.seconds, 15, "the length comes from the plan's shots");
   assert.ok(made.prepared.lines?.[0]?.includes("15s"), "the card names the length");
-  assert.equal(made.prepared.credits, 3, "three keyframes: two continuous shots share theirs, the last is a cut");
+  assert.equal(made.prepared.library?.names.length, 3, "three keyframes: two continuous shots share theirs, the last is a cut");
+  const runs = [{ model: made.prepared.model, spec: made.prepared.spec }, ...(made.prepared.extra ?? [])];
+  // One card: the keyframes (1 credit each), the three 5 s shots on fake-video (1 credit a second), the voice and the music.
+  assert.ok(made.prepared.credits >= 3 + 15, `the card prices the whole video: ${made.prepared.credits}`);
+  assert.equal(runs.filter((run) => run.model.kind === "video").length, 3);
 
   // A plan in the format before long takes gets told the fields, not a zod path.
   const old = await ask({ plan: { ...plan, shots: [{ seconds: 5, idea: "x", subject: "a desk" }] } });
@@ -118,7 +122,7 @@ async function main() {
       assert.ok(typeof cut !== "string", String(cut));
       assert.ok(cut.prepared.lines?.includes(SEPARATE_SHOTS), "the fallback adds its line");
       assert.ok(cut.prepared.longTake?.plan.shots.every((item) => !item.continues), "every beat is a cut");
-      assert.equal(1 + (cut.prepared.extra?.length ?? 0), 3, "one keyframe per cut shot");
+      assert.equal(cut.prepared.library?.names.length, 3, "one keyframe per cut shot");
       assert.ok(!cut.prepared.lines?.some((line) => /Veo|Seedance|Kling|Nano Banana|Seedream/.test(line)), "no model name on the card");
     } finally {
       process.env.OPENCMO_AI_FAKE = "1";

@@ -22,6 +22,8 @@ export type SessionOptions = {
   previewed?: () => Promise<string[]>;
   /** Charges the video team's model calls; absent → none are expected (MCP brings its own plans). */
   recordUsage?: (usage: LlmUsage) => Promise<void>;
+  /** The work order this call runs for: a confirmed job (a whole /video) holds its credits under it. */
+  workOrderId?: string;
 };
 
 export type StudioSession = { scope: Scope; context: Awaited<ReturnType<typeof clipContext>> };
@@ -40,6 +42,7 @@ export async function studioSession(supabase: SupabaseClient, caller: StudioCall
         console.warn(`[studio:${caller}] unexpected model usage`, usage.model);
       }),
     previewed: options.previewed ?? (async () => []),
+    ...(options.workOrderId ? { workOrderId: options.workOrderId } : {}),
   };
   return { scope: await clipScopeWith(supabase, context, clipId, host), context };
 }

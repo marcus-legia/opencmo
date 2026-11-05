@@ -49,21 +49,9 @@ import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
-import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, runCreateVideo, videoPieces, type JobSource } from "./create-video";
 import { saveKeyframes } from "./keyframe-library";
-import {
-  animateVideoToolSpec,
-  keyframeReader,
-  prepareAnimateVideo,
-  prepareRedoKeyframe,
-  redoKeyframeToolSpec,
-  redoSheetKeyframe,
-  runRedoKeyframe,
-  type ListKeyframe,
-  type ContactSheet,
-  type PreparedAnimate,
-  type PreparedRedo,
-} from "./long-take";
+import { prepareRedoKeyframe, redoKeyframeToolSpec, runRedoKeyframe, type ListKeyframe, type PreparedRedo } from "./long-take";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
 import { EDITOR_TOOLS, runEditorTool } from "./cmo-editor";
@@ -93,7 +81,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 }
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
-const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -102,7 +90,7 @@ export type Plan =
   | {
       kind: "approval";
       input: unknown;
-      card: (ReturnType<typeof generateCard> & { sheet?: ContactSheet }) | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> | DecisionCard;
+      card: ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> | DecisionCard;
     }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
@@ -123,7 +111,7 @@ export interface Scope {
   context?(): Promise<string>;
   plan(call: ToolCall): Promise<Plan>;
   run(call: ToolCall): Promise<ToolOutcome>;
-  /** `redo`: the user redid one keyframe on `animate_video`'s contact sheet instead of approving it. */
+  /** `redo`: a keyframe redone on a contact sheet, from before /video ran in one go; such a card is out of date. */
   decide(call: ToolCall, input: unknown, approved: boolean, redo?: { index: number }): Promise<Approved>;
   isWrite(name: string): boolean;
 }
@@ -150,7 +138,7 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const background = backgroundToolSpec();
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
-  const longTake = [animateVideoToolSpec(), redoKeyframeToolSpec()].filter((spec) => spec !== null);
+  const longTake = [redoKeyframeToolSpec()].filter((spec) => spec !== null);
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
   return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs(), ...captureToolSpecs(), ...longTake];
 }
@@ -170,6 +158,8 @@ export type ClipHost = {
   alive?: () => Promise<boolean>;
   /** The Assistant turn, for undo, read when the tool runs; absent over MCP, where undo is not offered. */
   readonly turnId?: string;
+  /** The Studio order this runs for: a confirmed job's hold belongs to it. */
+  readonly workOrderId?: string;
 };
 
 export async function clipScope(
@@ -366,29 +356,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         if (blocked) return { kind: "invalid", ...blocked };
         return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
       }
-      if (call.name === "animate_video") {
-        const snapshot = await workspace.read();
-        const planned = await prepareAnimateVideo(call.input, {
-          document: snapshot.document,
-          readKeyframes: keyframeReader(supabase, context.clip.job_id),
-          sign: async (paths) => {
-            const { data } = await supabase.storage.from("media").createSignedUrls(paths, SHEET_URL_SECONDS);
-            return paths.map((_path, index) => data?.[index]?.signedUrl ?? null);
-          },
-        });
-        if (typeof planned === "string") {
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not prepare the video" };
-        }
-        const needed = 1 + (planned.prepared.extra?.length ?? 0);
-        const { count: running } = await supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
-        if ((running ?? 0) + needed > GENERATION_ACTIVE_LIMIT) {
-          const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, then call animate_video again.`;
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
-        }
-        const blocked = await screenPieces(planned.pieces, "animate_video");
-        if (blocked) return { kind: "invalid", ...blocked };
-        return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), sheet: planned.sheet } };
-      }
       if (call.name === "redo_keyframe") {
         const snapshot = await workspace.read();
         const prepared = prepareRedoKeyframe(call.input, snapshot.document);
@@ -465,7 +432,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                       });
                     })
                   : runTool(call.name, call.input, env),
-    async decide(call, input, approved, redo) {
+    async decide(call, input, approved) {
       // Where a long take's keyframes are listed: the project as it is now, saved with its manifest.
       const keyframeStore = {
         read: () => ensureProject(supabase, context, clipId),
@@ -475,10 +442,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
       };
       const listKeyframe: ListKeyframe = (entry, id) =>
         saveKeyframes(keyframeStore, { model: entry.model, specs: [entry.spec], folder: entry.folder, names: [entry.name], ids: [id] });
-      if (call.name === "animate_video" && !approved && redo) {
-        const outcome = await redoSheetKeyframe({ supabase, jobId: context.clip.job_id, clipId, addToLibrary: listKeyframe }, input as PreparedAnimate, redo.index);
-        return { outcome, extra: {}, wrote: false };
-      }
       if (call.name === "redo_keyframe") {
         if (!approved) {
           return {
@@ -535,6 +498,14 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runCaptions(supabase, clipId, input as PreparedCaptions, (op) => applyOpTool(op, env));
         return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
       }
+      if (call.name === "animate_video") {
+        // A card from before /video ran in one go (2026-11-06): its second step no longer exists.
+        return {
+          outcome: { ok: false, content: JSON.stringify({ error: "This video step no longer exists: /video now makes the whole video after one approval. Ask for the video again." }), summary: "Out of date" },
+          extra: {},
+          wrote: false,
+        };
+      }
       if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
       const prepared = input as PreparedGeneration;
       if (!approved) {
@@ -544,6 +515,26 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           wrote: false,
         };
       }
+      if (call.name === "create_video") {
+        const source: JobSource = host.turnId
+          ? { kind: "agent_turn", id: host.turnId }
+          : host.workOrderId
+            ? { kind: "work_order", id: host.workOrderId }
+            : { kind: "mcp", id: null };
+        const { outcome, generationId } = await runCreateVideo(
+          {
+            supabase,
+            jobId: context.clip.job_id,
+            clipId,
+            source,
+            applyOp: (op) => applyOpTool(op, env),
+            store: keyframeStore,
+            ...(host.alive ? { alive: host.alive } : {}),
+          },
+          prepared,
+        );
+        return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };
+      }
       const { outcome, generationId } = await runGeneration(
         {
           supabase,
@@ -551,8 +542,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           clipId,
           applyOp: (op) => applyOpTool(op, env),
           ...(host.alive ? { alive: host.alive } : {}),
-          addToLibrary: (done, ids) =>
-            saveKeyframes(keyframeStore, { model: done.model, specs: [done.spec, ...(done.extra ?? []).map((item) => item.spec)], folder: done.library!.folder, names: done.library!.names, ids }),
         },
         prepared as Parameters<typeof runGeneration>[1],
       );
@@ -561,9 +550,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
     isWrite: (name) => name === "undo" || name === "apply_brand_kit" || name === "plan_video" || CAPTION_TOOLS.has(name) || isWriteTool(name),
   };
 }
-
-/** Contact-sheet pictures stay viewable while the card waits, and a little after. */
-const SHEET_URL_SECONDS = 6 * 60 * 60;
 
 /** Kết quả `check` nối sau `<project_state>`: chỉ khi có issue, để tin nhắn gọn. */
 function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {

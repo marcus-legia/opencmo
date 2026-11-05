@@ -1,4 +1,5 @@
 -- 20261115090000: room for a whole /video in flight, and a typical time per text-to-video model.
+-- 20270109040000: a whole long take (keyframes, shots, voice, music) in flight at once.
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -6,7 +7,7 @@ set search_path to public, extensions;
 
 select plan(3);
 
-select is(public.generation_active_limit(), 24, 'up to 24 generations in flight per user');
+select is(public.generation_active_limit(), 40, 'up to 40 generations in flight per user: the longest /video in one go');
 select is((select (limits->>'typicalSeconds')::int from public.ai_models where id = 'fal-seedance'), 45, 'seedance typical time');
 -- Counted as "none missing", not a fixed total, so a new video row does not break this test.
 select is((select count(*)::int from public.ai_models where kind = 'video' and provider in ('fal', 'fake')
