@@ -338,6 +338,26 @@ This must be live in production **before** requesting Creem's review.
 - **Creem affiliates and referral program** (L12046, L16151). Growth work. It comes after the editor sells (Strategy
   in `CLAUDE.md`).
 
+## Verification answers (test mode, 2026-11-05)
+
+Measured on real deliveries from test checkouts, a cancel and full refunds.
+
+| # | Answer |
+|---|---|
+| V1 | **Yes, and yes.** `subscription.paid` fires on the first charge and arrived about a second **before** `checkout.completed`. D3 holds and matching must work from `subscription.paid` alone. No `subscription.active` fired on the first purchase, so `subscription.paid` also opens the entitlement. |
+| V2 | **Not measured.** It needs a dashboard resend. The 30-day cap stays as designed. |
+| V3 | Billed at $0.30 per 1,000 units, one unit per 1,000 characters, repeated prompts free (docs). Test calls report 0 units and took 1-3 s through the CLI. **The sandbox answered `allow` to all four prompts tried, including clearly prohibited ones, so `flag` and `deny` can only be tested with a fake fetch.** Only live calls count for Creem's review. |
+| V4 | **Yes** on `subscription.paid`, `scheduled_cancel`, `active` and `canceled`. `subscription.update`, `past_due`, `expired` not seen. |
+| V5 | **Yes.** Hex HMAC-SHA256 of the raw body, keyed with the whole secret as UTF-8, `whsec_` prefix included. All eight deliveries matched. |
+| V6 | **Yes.** `checkout.completed` carries `order.id`, `order.transaction` and `metadata`; `refund.created` carries `transaction.id`, `transaction.order` and `refund_amount`. |
+
+Also found:
+
+- Event order uses the envelope's `created_at`, the one timestamp every event type carries.
+- `success_url` refuses `127.0.0.1`. Local checkouts must use `http://localhost:3000`.
+- The refund API and CLI are full refunds only, so a partial refund is covered by pgTAP, not by a real delivery.
+- Refunding a payment does not cancel its subscription. They are separate actions in Creem.
+
 ## Verification list (do these in test mode before writing phase 1)
 
 | # | Question | Why it matters |

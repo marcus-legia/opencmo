@@ -58,6 +58,14 @@ CREATE FUNCTION public.account_is_paid(p_user uuid) RETURNS boolean
     or exists (
       select 1 from public.polar_subscriptions s
       where s.user_id = p_user and s.status in ('active', 'past_due')
+    )
+    or exists (
+      select 1 from public.creem_transactions t
+      where t.user_id = p_user and t.amount > 0 and t.refunded_amount < t.amount
+    )
+    or exists (
+      select 1 from public.creem_subscriptions s
+      where s.user_id = p_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
     );
 $$;
 
@@ -2439,6 +2447,20 @@ CREATE FUNCTION public.best_time_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
     AS $$ select '{"minPosts": 10, "minPostsPerHour": 2, "windowDays": 90, "settleHours": 24}'::jsonb $$;
+
+
+--
+-- Name: billing_catalog_refuse_delete(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.billing_catalog_refuse_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+begin
+  raise exception 'A billing product cannot be deleted. Set on_sale to false instead.' using errcode = '55000';
+end;
+$$;
 
 
 --
@@ -7121,6 +7143,61 @@ $$;
 
 
 --
+-- Name: grant_annual_credits(timestamp with time zone, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.grant_annual_credits(p_now timestamp with time zone DEFAULT now(), p_limit integer DEFAULT 1000) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+ r record; v_tran public.creem_transactions%rowtype; v_monthly integer; v_credits integer; v_rows integer;
+ v_due timestamptz; v_total integer := 0;
+begin
+ for r in
+  select s.subscription_id,s.customer_id,s.user_id,s.product_id from public.creem_subscriptions s
+  where s.interval='year' and s.user_id is not null and s.grant_anchor is not null
+    and s.status in ('active','trialing','scheduled_cancel') and s.grants_in_period<12
+    and s.grant_anchor + s.grants_in_period * interval '1 month' <= p_now
+  order by s.grant_anchor limit p_limit
+ loop
+  -- The same lock order as `process_creem_event`, so a webhook and this job cannot deadlock.
+  perform pg_advisory_xact_lock(hashtextextended('creem:customer:'||r.customer_id,0));
+  perform 1 from public.profiles where id=r.user_id for update;
+  perform pg_advisory_xact_lock(hashtextextended('creem:subscription:'||r.subscription_id,0));
+  select credits into v_monthly from public.billing_catalog where creem_product_id=r.product_id;
+  if v_monthly is null then continue; end if;
+  loop
+   v_due := null;
+   select s.grant_anchor + s.grants_in_period * interval '1 month' into v_due from public.creem_subscriptions s
+    where s.subscription_id=r.subscription_id and s.status in ('active','trialing','scheduled_cancel') and s.grants_in_period<12
+      and s.grant_anchor + s.grants_in_period * interval '1 month' <= p_now
+      and (s.current_period_end is null or s.grant_anchor + s.grants_in_period * interval '1 month' < s.current_period_end);
+   exit when v_due is null;
+   select t.* into v_tran from public.creem_transactions t join public.creem_subscriptions s on s.current_transaction_id=t.transaction_id
+    where s.subscription_id=r.subscription_id for update of t;
+   exit when v_tran.transaction_id is null;
+   -- Fully refunded or disputed: nothing more is owed. Partly refunded: the rest of the year shrinks with the money.
+   exit when v_tran.amount>0 and v_tran.refunded_amount>=v_tran.amount;
+   v_credits := case when v_tran.amount>0 then (v_monthly::numeric*(v_tran.amount-v_tran.refunded_amount)/v_tran.amount)::integer else v_monthly end;
+   insert into public.credit_ledger(user_id,delta,reason,external_id)
+   select r.user_id,v_credits,'Annual plan monthly credits','creem:'||r.subscription_id||':'||to_char(v_due,'YYYY-MM')
+   where v_credits>0
+   on conflict(external_id) where external_id is not null do nothing;
+   get diagnostics v_rows=row_count;
+   if v_rows=1 then
+    update public.creem_transactions set granted_credits=granted_credits+v_credits where transaction_id=v_tran.transaction_id;
+    v_total := v_total+v_credits;
+   end if;
+   update public.creem_subscriptions set grants_in_period=grants_in_period+1 where subscription_id=r.subscription_id;
+  end loop;
+ end loop;
+ return v_total;
+end;
+$$;
+
+
+--
 -- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8200,6 +8277,208 @@ $$;
 
 
 --
+-- Name: process_creem_event(text, text, timestamp with time zone, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.process_creem_event(p_event_id text, p_event_type text, p_event_at timestamp with time zone, p_object jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+ -- A customer is an object on checkouts and subscriptions, a bare id inside a transaction.
+ v_customer text := coalesce(
+   nullif(p_object#>>'{customer,id}',''),
+   case when jsonb_typeof(p_object->'customer')='string' then nullif(p_object->>'customer','') end,
+   nullif(p_object#>>'{transaction,customer}','')
+ );
+ v_email text := nullif(p_object#>>'{customer,email}','');
+ -- Set by our checkout route. It decides the account: the email is what the buyer typed on Creem's page.
+ v_external text := coalesce(
+   nullif(p_object#>>'{metadata,user_id}',''),
+   nullif(p_object#>>'{customer,metadata,user_id}',''),
+   nullif(p_object#>>'{checkout,metadata,user_id}','')
+ );
+ v_external_user uuid; v_user uuid; v_link text; v_result jsonb; v_rows integer;
+ v_product text := nullif(p_object#>>'{product,id}',''); v_stored_product text;
+ v_catalog public.billing_catalog%rowtype;
+ v_tran public.creem_transactions%rowtype;
+ v_tran_id text; v_order_id text; v_amount bigint; v_currency text;
+ v_sub_id text; v_status text; v_priority integer; v_plan text; v_interval text;
+ v_granted integer := 0; v_clawed integer := 0;
+ v_refund bigint; v_target integer; v_balance integer; v_key text;
+begin
+ if coalesce(p_event_id,'')='' or p_event_at is null or jsonb_typeof(p_object) is distinct from 'object' then
+  raise exception 'Invalid billing event.' using errcode='22023';
+ end if;
+ if p_event_type not in ('checkout.completed','subscription.paid','subscription.active','subscription.trialing',
+   'subscription.update','subscription.past_due','subscription.unpaid','subscription.paused',
+   'subscription.scheduled_cancel','subscription.canceled','subscription.expired','refund.created','dispute.created') then
+  return jsonb_build_object('ok',true,'ignored',p_event_type);
+ end if;
+ perform pg_advisory_xact_lock(hashtextextended('creem:event:'||p_event_id,0));
+ select result into v_result from public.creem_webhook_receipts where event_id=p_event_id;
+ if found then return v_result || jsonb_build_object('duplicate',true,'credits',0); end if;
+
+ if p_event_type in ('refund.created','dispute.created') then
+  v_tran_id := nullif(p_object#>>'{transaction,id}','');
+  if v_tran_id is null then raise exception 'Invalid billing event.' using errcode='22023'; end if;
+  select user_id,customer_id into v_user,v_customer from public.creem_transactions where transaction_id=v_tran_id;
+  -- Raising answers 5xx, so Creem delivers it again: the payment's own event may simply not have arrived yet.
+  if not found then raise exception 'Unknown billing transaction.' using errcode='22023'; end if;
+  if v_user is null then return jsonb_build_object('ok',true,'skipped','account no longer exists'); end if;
+  perform pg_advisory_xact_lock(hashtextextended('creem:customer:'||v_customer,0));
+  select credit_balance into v_balance from public.profiles where id=v_user for update;
+  if not found then return jsonb_build_object('ok',true,'skipped','account no longer exists'); end if;
+  select * into v_tran from public.creem_transactions where transaction_id=v_tran_id for update;
+  if p_event_type='refund.created' then
+   v_refund := (p_object->>'refund_amount')::bigint;
+   if v_refund is null or v_refund<0 then raise exception 'Invalid refund amount.' using errcode='22023'; end if;
+   v_refund := least(v_tran.amount, v_tran.refunded_amount+v_refund);
+   v_key := 'creem:refund:'||coalesce(nullif(p_object->>'id',''),p_event_id);
+  else
+   v_refund := v_tran.amount;
+   v_key := 'creem:dispute:'||v_tran_id;
+   raise warning 'creem: dispute on transaction % for user %', v_tran_id, v_user;
+  end if;
+  v_target := case when v_tran.amount>0 then (v_tran.granted_credits::numeric*v_refund/v_tran.amount)::integer else v_tran.granted_credits end;
+  -- The balance never goes negative: spent credits stay spent, and Creem has already taken the money back.
+  v_clawed := least(greatest(v_target-v_tran.clawed_credits,0), greatest(coalesce(v_balance,0),0));
+  if v_clawed>0 then
+   insert into public.credit_ledger(user_id,delta,reason,external_id)
+   values(v_user,-v_clawed,case when p_event_type='refund.created' then 'Refund' else 'Payment dispute' end,v_key)
+   on conflict(external_id) where external_id is not null do nothing;
+   get diagnostics v_rows=row_count;
+   if v_rows=0 then v_clawed:=0; end if;
+  end if;
+  update public.creem_transactions set refunded_amount=v_refund,clawed_credits=clawed_credits+v_clawed where transaction_id=v_tran_id;
+  v_result := jsonb_build_object('ok',true,'credits',-v_clawed);
+  insert into public.creem_webhook_receipts(event_id,event_type,occurred_at,user_id,result) values(p_event_id,p_event_type,p_event_at,v_user,v_result);
+  return v_result;
+ end if;
+
+ if v_customer is null then raise exception 'Invalid billing event.' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('creem:customer:'||v_customer,0));
+ select user_id into v_user from public.creem_customers where customer_id=v_customer;
+ if found then
+  if v_user is null then return jsonb_build_object('ok',true,'skipped','account no longer exists'); end if;
+  perform 1 from public.profiles where id=v_user for update;
+  if not found then return jsonb_build_object('ok',true,'skipped','account no longer exists'); end if;
+ else
+  -- The regex guards the cast: a stray value would throw 22P02, which is a 5xx and a retry that can never succeed.
+  if v_external ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' then
+   select id,creem_customer_id into v_external_user,v_link from public.profiles where id=v_external::uuid for update;
+   if found then v_user := v_external_user; end if;
+  end if;
+  if v_user is null then
+   if v_email is null then return jsonb_build_object('ok',true,'skipped','no email on event'); end if;
+   if (select count(*) from public.profiles where lower(email)=lower(v_email))<>1 then
+    return jsonb_build_object('ok',true,'skipped','no matching account');
+   end if;
+   select id,creem_customer_id into v_user,v_link from public.profiles where lower(email)=lower(v_email) for update;
+  end if;
+  if v_link is not null and v_link<>v_customer then
+   -- Matched by email, a second customer proves nothing. Matched by the id our checkout set, the payment is the
+   -- account's: credit it, keep the first link, and map this customer so its later events find the account.
+   if v_external_user is null then return jsonb_build_object('ok',true,'skipped','account already linked'); end if;
+   raise warning 'creem: user % pays from customer %, account is linked to %', v_user, v_customer, v_link;
+  else
+   update public.profiles set creem_customer_id=v_customer where id=v_user;
+  end if;
+  insert into public.creem_customers(customer_id,user_id) values(v_customer,v_user) on conflict (customer_id) do nothing;
+ end if;
+
+ if v_product is not null then
+  select * into v_catalog from public.billing_catalog where creem_product_id=v_product;
+ end if;
+ -- Money came in for a product we cannot map: 5xx, so Creem retries once the row exists.
+ if v_catalog.creem_product_id is null and p_event_type in ('checkout.completed','subscription.paid') then
+  raise exception 'Unknown billing product.' using errcode='22023';
+ end if;
+
+ if p_event_type='checkout.completed' then
+  -- A subscription's first checkout only links the customer: `subscription.paid` grants, so credits come once.
+  if v_catalog.kind='pack' then
+   v_order_id := nullif(p_object#>>'{order,id}','');
+   v_tran_id := nullif(p_object#>>'{order,transaction}','');
+   if v_order_id is null or v_tran_id is null then raise exception 'Invalid billing event.' using errcode='22023'; end if;
+   if exists(select 1 from public.creem_transactions where transaction_id=v_tran_id and user_id is distinct from v_user) then
+    raise exception 'Purchase belongs to another account.' using errcode='22023';
+   end if;
+   v_amount := coalesce((p_object#>>'{order,amount_paid}')::bigint,(p_object#>>'{order,amount}')::bigint,0);
+   insert into public.creem_transactions(transaction_id,order_id,customer_id,user_id,product_id,amount,currency,paid_at)
+   values(v_tran_id,v_order_id,v_customer,v_user,v_product,v_amount,p_object#>>'{order,currency}',p_event_at)
+   on conflict(transaction_id) do nothing;
+   insert into public.credit_ledger(user_id,delta,reason,external_id)
+   values(v_user,v_catalog.credits,'Credit pack purchase','creem:order:'||v_order_id)
+   on conflict(external_id) where external_id is not null do nothing;
+   get diagnostics v_rows=row_count;
+   if v_rows=1 then
+    v_granted := v_catalog.credits;
+    update public.creem_transactions set granted_credits=granted_credits+v_granted where transaction_id=v_tran_id;
+   end if;
+  end if;
+ else
+  v_sub_id := nullif(p_object->>'id','');
+  v_status := coalesce(nullif(p_object->>'status',''),substr(p_event_type,length('subscription.')+1));
+  if v_sub_id is null then raise exception 'Invalid billing event.' using errcode='22023'; end if;
+  if v_status not in ('active','trialing','paused','past_due','unpaid','scheduled_cancel','canceled','expired') then
+   v_result := jsonb_build_object('ok',true,'skipped','unknown subscription status');
+   insert into public.creem_webhook_receipts(event_id,event_type,occurred_at,user_id,result) values(p_event_id,p_event_type,p_event_at,v_user,v_result);
+   return v_result;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('creem:subscription:'||v_sub_id,0));
+  if exists(select 1 from public.creem_subscriptions where subscription_id=v_sub_id and (customer_id<>v_customer or user_id is distinct from v_user)) then
+   raise exception 'Subscription belongs to another account.' using errcode='22023';
+  end if;
+  -- `into` clears its targets when no row is found, so the stored product goes through its own variable.
+  select plan,interval,product_id into v_plan,v_interval,v_stored_product from public.creem_subscriptions where subscription_id=v_sub_id;
+  v_product := coalesce(v_product,v_stored_product);
+  if v_catalog.kind='plan' then v_plan:=v_catalog.plan_id; v_interval:=v_catalog.interval; end if;
+  -- A retired or foreign product with no stored subscription has no entitlement to change.
+  if v_plan is null or v_product is null then return jsonb_build_object('ok',true,'skipped','unmapped subscription product'); end if;
+  v_priority := case v_status when 'active' then 0 when 'trialing' then 0 when 'scheduled_cancel' then 1 when 'past_due' then 1
+    when 'unpaid' then 2 when 'paused' then 2 else 3 end;
+  insert into public.creem_subscriptions(subscription_id,customer_id,user_id,product_id,plan,interval,status,current_period_end,provider_event_at,status_priority,event_id)
+  values(v_sub_id,v_customer,v_user,v_product,v_plan,v_interval,v_status,(p_object->>'current_period_end_date')::timestamptz,p_event_at,v_priority,p_event_id)
+  on conflict(subscription_id) do update set product_id=excluded.product_id,plan=excluded.plan,interval=excluded.interval,status=excluded.status,
+   current_period_end=coalesce(excluded.current_period_end,creem_subscriptions.current_period_end),
+   provider_event_at=excluded.provider_event_at,status_priority=excluded.status_priority,event_id=excluded.event_id
+  where (excluded.provider_event_at,excluded.status_priority)>(creem_subscriptions.provider_event_at,creem_subscriptions.status_priority);
+
+  if p_event_type='subscription.paid' then
+   if v_catalog.kind is distinct from 'plan' then raise exception 'Invalid paid product.' using errcode='22023'; end if;
+   v_tran_id := coalesce(nullif(p_object->>'last_transaction_id',''),nullif(p_object#>>'{last_transaction,id}',''));
+   if v_tran_id is null then raise exception 'Invalid billing event.' using errcode='22023'; end if;
+   if exists(select 1 from public.creem_transactions where transaction_id=v_tran_id and user_id is distinct from v_user) then
+    raise exception 'Purchase belongs to another account.' using errcode='22023';
+   end if;
+   v_amount := coalesce((p_object#>>'{last_transaction,amount_paid}')::bigint,(p_object#>>'{last_transaction,amount}')::bigint,0);
+   v_currency := p_object#>>'{last_transaction,currency}';
+   v_order_id := nullif(p_object#>>'{last_transaction,order}','');
+   insert into public.creem_transactions(transaction_id,order_id,customer_id,user_id,product_id,subscription_id,amount,currency,paid_at)
+   values(v_tran_id,v_order_id,v_customer,v_user,v_product,v_sub_id,v_amount,v_currency,p_event_at)
+   on conflict(transaction_id) do nothing;
+   insert into public.credit_ledger(user_id,delta,reason,external_id)
+   values(v_user,v_catalog.credits,v_catalog.plan_id||' plan payment','creem:tran:'||v_tran_id)
+   on conflict(external_id) where external_id is not null do nothing;
+   get diagnostics v_rows=row_count;
+   if v_rows=1 then
+    v_granted := v_catalog.credits;
+    update public.creem_transactions set granted_credits=granted_credits+v_granted where transaction_id=v_tran_id;
+    update public.creem_subscriptions set current_transaction_id=v_tran_id,grant_anchor=p_event_at,grants_in_period=1 where subscription_id=v_sub_id;
+   end if;
+  end if;
+  perform public.recompute_plan(v_user);
+ end if;
+
+ v_result := jsonb_build_object('ok',true,'credits',v_granted);
+ insert into public.creem_webhook_receipts(event_id,event_type,occurred_at,user_id,result) values(p_event_id,p_event_type,p_event_at,v_user,v_result);
+ return v_result;
+end;
+$_$;
+
+
+--
 -- Name: process_polar_event(text, text, timestamp with time zone, jsonb, text, integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8210,9 +8489,8 @@ CREATE FUNCTION public.process_polar_event(p_event_id text, p_event_type text, p
 declare
  v_customer text := coalesce(nullif(p_data->>'customer_id',''),nullif(p_data#>>'{customer,id}',''));
  v_email text := coalesce(p_data#>>'{customer,email}',p_data#>>'{user,email}',p_data->>'customer_email');
- -- `customer_external_id` do link checkout của ta gắn vào (`app/app/billing`).
- -- Nó là `profiles.id`, nên khớp bằng nó là khớp CHẮC; email chỉ là đường lùi
- -- cho những lần mua không đi qua link của ta.
+ -- `customer_external_id` is `profiles.id`, set by our checkout link, so it is a sure match. The email is only a
+ -- fallback for purchases that did not come through that link.
  v_external text := coalesce(
    nullif(p_data#>>'{customer,external_id}',''),
    nullif(p_data->>'customer_external_id',''),
@@ -8246,13 +8524,10 @@ begin
   perform 1 from public.profiles where id=v_user for update;
   if not found then return jsonb_build_object('ok',true,'skipped','account no longer exists'); end if;
  else
-  -- Khớp bằng external_id TRƯỚC. Email là chuỗi người mua tự gõ ở trang Polar;
-  -- gõ khác email đăng nhập là tiền vào mà credit không bao giờ cộng, và route
-  -- trả 200 nên Polar không gửi lại. `external_id` do ta gắn vào link checkout
-  -- nên không có chỗ cho người dùng gõ sai.
+  -- Match by external id FIRST. The email is whatever the buyer typed on Polar's page: a different one means money
+  -- in and credits never granted, and the route answers 200 so Polar never resends.
   --
-  -- Ép kiểu có canh regex: `external_id` là chuỗi tuỳ ý bên Polar, và một giá
-  -- trị không phải uuid sẽ ném lỗi 22P02 — tức 500 và Polar retry vĩnh viễn.
+  -- The regex guards the cast: a non-uuid external id would throw 22P02, a 500 Polar retries forever.
   if v_external is not null
      and v_external ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
   then
@@ -8338,9 +8613,7 @@ begin
    provider_updated_at=excluded.provider_updated_at,status_priority=excluded.status_priority,event_id=excluded.event_id
   where (excluded.provider_updated_at,excluded.status_priority)>(polar_subscriptions.provider_updated_at,polar_subscriptions.status_priority)
    and polar_subscriptions.customer_id=excluded.customer_id and polar_subscriptions.user_id=excluded.user_id;
-  select plan into v_plan from public.polar_subscriptions where user_id=v_user and status<>'revoked'
-  order by case plan when 'creator' then 2 else 1 end desc limit 1;
-  update public.profiles set plan=coalesce(v_plan,'free') where id=v_user;
+  perform public.recompute_plan(v_user);
  end if;
  v_result:=jsonb_build_object('ok',true,'credits',v_granted);
  insert into public.polar_webhook_receipts(event_id,event_type,occurred_at,user_id,result) values(p_event_id,p_event_type,p_event_at,v_user,v_result);
@@ -8914,6 +9187,7 @@ begin
   delete from public.upload_reservations
    where status = 'reserved' and expires_at < now() - interval '1 day';
   delete from public.polar_webhook_receipts where received_at < now() - interval '90 days';
+  delete from public.creem_webhook_receipts where received_at < now() - interval '90 days';
   return v_rows;
 end;
 $$;
@@ -9490,6 +9764,29 @@ begin
   end loop;
 
   return jsonb_build_object('requeued', v_requeued, 'failed', v_failed);
+end;
+$$;
+
+
+--
+-- Name: recompute_plan(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.recompute_plan(p_user uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare v_plan text;
+begin
+  select plan into v_plan from (
+    select s.plan from public.polar_subscriptions s where s.user_id = p_user and s.status <> 'revoked'
+    union all
+    select s.plan from public.creem_subscriptions s
+     where s.user_id = p_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
+  ) held
+  order by case plan when 'creator' then 2 else 1 end desc limit 1;
+  update public.profiles set plan = coalesce(v_plan, 'free') where id = p_user;
+  return coalesce(v_plan, 'free');
 end;
 $$;
 
@@ -14596,6 +14893,30 @@ CREATE TABLE public.best_slots (
 
 
 --
+-- Name: billing_catalog; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.billing_catalog (
+    creem_product_id text NOT NULL,
+    slug text NOT NULL,
+    kind text NOT NULL,
+    plan_id text,
+    credits integer NOT NULL,
+    price_cents integer NOT NULL,
+    "interval" text,
+    on_sale boolean DEFAULT true NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT billing_catalog_credits_check CHECK ((credits > 0)),
+    CONSTRAINT billing_catalog_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
+    CONSTRAINT billing_catalog_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'pack'::text]))),
+    CONSTRAINT billing_catalog_kind_shape CHECK ((((kind = 'plan'::text) AND (plan_id IS NOT NULL) AND ("interval" IS NOT NULL)) OR ((kind = 'pack'::text) AND (plan_id IS NULL) AND ("interval" IS NULL)))),
+    CONSTRAINT billing_catalog_plan_id_check CHECK ((plan_id = ANY (ARRAY['starter'::text, 'creator'::text]))),
+    CONSTRAINT billing_catalog_price_cents_check CHECK ((price_cents > 0))
+);
+
+
+--
 -- Name: caption_translations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14746,6 +15067,80 @@ CREATE TABLE public.credit_ledger (
     ref_id uuid,
     CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'job_fee'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text, 'work_order'::text]))),
     CONSTRAINT credit_ledger_ref_pair CHECK (((ref_kind IS NULL) = (ref_id IS NULL)))
+);
+
+
+--
+-- Name: creem_customers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.creem_customers (
+    customer_id text NOT NULL,
+    user_id uuid
+);
+
+
+--
+-- Name: creem_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.creem_subscriptions (
+    subscription_id text NOT NULL,
+    customer_id text NOT NULL,
+    user_id uuid,
+    product_id text NOT NULL,
+    plan text NOT NULL,
+    "interval" text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamp with time zone,
+    provider_event_at timestamp with time zone NOT NULL,
+    status_priority integer NOT NULL,
+    event_id text NOT NULL,
+    current_transaction_id text,
+    grant_anchor timestamp with time zone,
+    grants_in_period integer DEFAULT 0 NOT NULL,
+    CONSTRAINT creem_subscriptions_grants_in_period_check CHECK ((grants_in_period >= 0)),
+    CONSTRAINT creem_subscriptions_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
+    CONSTRAINT creem_subscriptions_plan_check CHECK ((plan = ANY (ARRAY['starter'::text, 'creator'::text]))),
+    CONSTRAINT creem_subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'trialing'::text, 'paused'::text, 'past_due'::text, 'unpaid'::text, 'scheduled_cancel'::text, 'canceled'::text, 'expired'::text])))
+);
+
+
+--
+-- Name: creem_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.creem_transactions (
+    transaction_id text NOT NULL,
+    order_id text,
+    customer_id text NOT NULL,
+    user_id uuid,
+    product_id text NOT NULL,
+    subscription_id text,
+    amount bigint DEFAULT 0 NOT NULL,
+    currency text,
+    granted_credits integer DEFAULT 0 NOT NULL,
+    clawed_credits integer DEFAULT 0 NOT NULL,
+    refunded_amount bigint DEFAULT 0 NOT NULL,
+    paid_at timestamp with time zone NOT NULL,
+    CONSTRAINT creem_transactions_amount_check CHECK ((amount >= 0)),
+    CONSTRAINT creem_transactions_clawed_credits_check CHECK ((clawed_credits >= 0)),
+    CONSTRAINT creem_transactions_granted_credits_check CHECK ((granted_credits >= 0)),
+    CONSTRAINT creem_transactions_refunded_amount_check CHECK ((refunded_amount >= 0))
+);
+
+
+--
+-- Name: creem_webhook_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.creem_webhook_receipts (
+    event_id text NOT NULL,
+    event_type text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    user_id uuid,
+    result jsonb NOT NULL,
+    received_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -15089,6 +15484,7 @@ CREATE TABLE public.profiles (
     digest_hour smallint DEFAULT 7,
     cmo_paused_at timestamp with time zone,
     timezone_source text DEFAULT 'default'::text NOT NULL,
+    creem_customer_id text,
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
@@ -15594,6 +15990,22 @@ ALTER TABLE ONLY public.best_slots
 
 
 --
+-- Name: billing_catalog billing_catalog_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.billing_catalog
+    ADD CONSTRAINT billing_catalog_pkey PRIMARY KEY (creem_product_id);
+
+
+--
+-- Name: billing_catalog billing_catalog_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.billing_catalog
+    ADD CONSTRAINT billing_catalog_slug_key UNIQUE (slug);
+
+
+--
 -- Name: brand_kits brand_kits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15735,6 +16147,38 @@ ALTER TABLE ONLY public.content_items
 
 ALTER TABLE ONLY public.credit_ledger
     ADD CONSTRAINT credit_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: creem_customers creem_customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_customers
+    ADD CONSTRAINT creem_customers_pkey PRIMARY KEY (customer_id);
+
+
+--
+-- Name: creem_subscriptions creem_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_subscriptions
+    ADD CONSTRAINT creem_subscriptions_pkey PRIMARY KEY (subscription_id);
+
+
+--
+-- Name: creem_transactions creem_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_transactions
+    ADD CONSTRAINT creem_transactions_pkey PRIMARY KEY (transaction_id);
+
+
+--
+-- Name: creem_webhook_receipts creem_webhook_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_webhook_receipts
+    ADD CONSTRAINT creem_webhook_receipts_pkey PRIMARY KEY (event_id);
 
 
 --
@@ -16541,6 +16985,27 @@ CREATE INDEX credit_ledger_user_idx ON public.credit_ledger USING btree (user_id
 
 
 --
+-- Name: creem_subscriptions_annual_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_subscriptions_annual_due_idx ON public.creem_subscriptions USING btree (grant_anchor) WHERE ("interval" = 'year'::text);
+
+
+--
+-- Name: creem_subscriptions_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_subscriptions_user_idx ON public.creem_subscriptions USING btree (user_id);
+
+
+--
+-- Name: creem_transactions_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_transactions_user_idx ON public.creem_transactions USING btree (user_id);
+
+
+--
 -- Name: deliverables_order_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -16776,6 +17241,13 @@ CREATE INDEX post_metrics_item_idx ON public.post_metrics USING btree (item_id, 
 --
 
 CREATE INDEX post_metrics_user_idx ON public.post_metrics USING btree (user_id, measured_at DESC);
+
+
+--
+-- Name: profiles_creem_customer_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX profiles_creem_customer_unique ON public.profiles USING btree (creem_customer_id) WHERE (creem_customer_id IS NOT NULL);
 
 
 --
@@ -17063,6 +17535,13 @@ CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.content
 --
 
 CREATE TRIGGER approvals_sync AFTER INSERT OR DELETE OR UPDATE ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.approvals_sync('opportunity');
+
+
+--
+-- Name: billing_catalog billing_catalog_no_delete; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER billing_catalog_no_delete BEFORE DELETE ON public.billing_catalog FOR EACH ROW EXECUTE FUNCTION public.billing_catalog_refuse_delete();
 
 
 --
@@ -17615,6 +18094,38 @@ ALTER TABLE ONLY public.content_items
 
 ALTER TABLE ONLY public.credit_ledger
     ADD CONSTRAINT credit_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: creem_customers creem_customers_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_customers
+    ADD CONSTRAINT creem_customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: creem_subscriptions creem_subscriptions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_subscriptions
+    ADD CONSTRAINT creem_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: creem_transactions creem_transactions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_transactions
+    ADD CONSTRAINT creem_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: creem_webhook_receipts creem_webhook_receipts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.creem_webhook_receipts
+    ADD CONSTRAINT creem_webhook_receipts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -18374,6 +18885,19 @@ ALTER TABLE public.artifacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.best_slots ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: billing_catalog; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.billing_catalog ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: billing_catalog billing_catalog_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY billing_catalog_read ON public.billing_catalog FOR SELECT TO authenticated, anon USING (on_sale);
+
+
+--
 -- Name: brand_kits; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -18456,6 +18980,30 @@ ALTER TABLE public.content_items ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.credit_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: creem_customers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.creem_customers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: creem_subscriptions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.creem_subscriptions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: creem_transactions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.creem_transactions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: creem_webhook_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.creem_webhook_receipts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: deliverables; Type: ROW SECURITY; Schema: public; Owner: -
