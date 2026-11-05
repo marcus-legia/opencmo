@@ -67,7 +67,7 @@ for (const name of SCREEN_NAMES) {
   });
 }
 
-check("cards: one sample of each of the ten kinds", () => {
+check("cards: one sample of each of the eleven kinds", () => {
   assert.deepEqual(ALL_KINDS.map((c) => c.kind), [...CARD_KINDS]);
   for (const card of SAMPLE_CARDS) ApprovalCardSchema.parse(card);
 });
@@ -116,6 +116,16 @@ check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
     }, { department: "sales", ref_kind: "opportunity" }),
     row("goal", { kind: "goal", week: "2026-10-26", goal: "Publish 3 posts", metric: "posts", target: 3 }, { department: "brain", ref_kind: "goal" }),
     row("correction", { kind: "correction", rule: "No question openers.", source_edits: [{ before: "Tired?", after: "Editing takes long." }] }, { department: "brain", ref_kind: "correction" }),
+    row("plan", {
+      kind: "plan",
+      week: "2026-10-26",
+      title: "Week of Oct 26",
+      goal: null,
+      items: [
+        { item_id: "e2490000-0000-4000-8000-000000000001", department: "post", platform: "X", day: "2026-10-26", idea: "Cut by words", reason: "Pillar" },
+        { item_id: "e2490000-0000-4000-8000-000000000002", department: "video", platform: "Slideshow", day: "2026-10-28", idea: "Five cuts", reason: "" },
+      ],
+    }, { department: "brain", ref_kind: "work_order" }),
   ];
   for (const r of rows) {
     const card = approvalToCard(r);

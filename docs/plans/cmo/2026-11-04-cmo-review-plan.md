@@ -113,33 +113,47 @@ Steps 1, 8 and 10 of the goal test. Mostly configuration; the code items are sma
 
 Steps 3, 5, 6 and 9 of the goal test.
 
-- [ ] **B2.1** **Week plan card.** Today the Monday plan raises only a `goal` card; the items are not shown. Add a
-  `plan` card kind:
-  - it shows the week's items with a reason each;
-  - the founder can drop an item or approve all;
-  - dropping an item cancels its order;
-  - approving releases the tree.
-
-  New migration (`approvals.kind` check, `approval_snapshot`, `approval_decide`), pgTAP, and a card body in
-  `components/cards/`. Done: dropping the video item cancels the `build_video` order and its children.
-- [ ] **B2.2** **Three shorts, not one** (after D4). `20261228120000_p2_video_orders.sql:312` briefs at `'seconds', 30`.
-  Change it in a new migration: take the seconds from the video brief, default 60. Check that the Shorts reviewer
-  accepts 15–20 s shorts. Done: a fake 60 s transcript gives a 3-short batch card (extend `p2-acceptance`).
-- [ ] **B2.3** **Slideshows and post images are ordered** (after D5).
-  - `plan-week.ts:20` allows only `post | sales | video`. Add `slideshow` (at most 1 a week), and the SQL that turns it
-    into `write_slides` → `build_slideshow` (the rules exist, but only `p5-acceptance.e2e.ts:115` creates the order).
-  - A post item may ask for a post image, which creates `build_post_image`.
-  - Add the capabilities to the registry and expose them in the Studio adapter for MCP.
-
-  Done: a plan with a slideshow item ends in a slideshow card with no manual insert (e2e).
-- [ ] **B2.4** **Metrics 24 h after posting.** Today `pull_metrics` is a daily loop. Add a per-slot follow-up at
-  `posted_at + 24 h` (an event rule or a sweep check) so reply outcomes and post metrics land on time. Keep the daily
-  loop as the catch-all.
-- [ ] **B2.5** **Research reads Hacker News** (R4): `competitor-research.ts` is X only; add `lib/cmo/social/hn.ts` as a
-  source. Also add Reels to the niche video research if ScrapeCreators has it.
-- [ ] **B2.6** **Studio send-back teaches.** A send-back reason on a Studio card writes `approvals.reason` only. Also
-  write a voice/preference memory (topic `video`) and a `cmo_draft_outcomes` row for the department `studio`, so the next
-  brief reads it. pgTAP.
+- [x] **B2.1** **Week plan card.**
+  - `plan_week` raises a `plan` card (`ref_kind 'work_order'`, the week's root order) that shows every calendar item of
+    the week, with its goal.
+  - Unticking items and approving drops them while they are still only planned. The tree is then resynced through
+    `work_orders_plan_week`, whose cleanup cancels the dropped items' orders and fails their queued runs (refunded).
+  - Skip keeps everything. A replan replaces the card.
+  - Built in `20270106050000_cmo_review_plan_card.sql` (pgTAP 249), the card contract and fixture, `PlanBody`, and
+    `ApprovalCard`.
+  - **Design change from this plan:** the card does not hold the week. Every post, reply and paid step still has its
+    own card, so gating the whole tree would add a wait without adding a check.
+  - Not seen in a browser yet: the local stack has no signed-in user. Look at `/app/inbox/card-plan` (sample) in B4.
+- [x] **B2.2** **Three shorts, not one** (D4).
+  - `cmo_video_seconds()` = 60 replaces the hard-coded 30 s in `work_orders_plan_week` and `work_orders_brief_rules`
+    (`20270106020000_cmo_review_week_studio.sql`, pgTAP 246).
+  - Writer's brief may still choose another length, as before.
+  - Still to confirm with a real 60 s transcript in B4.2.
+- [x] **B2.3** **Slideshows are ordered** (D5).
+  - A plan item in the video department with platform `Slideshow` (at most one a week, counted apart from the video,
+    `plan-week.ts`) becomes `write_slides` → `build_slideshow` (TikTok, 9:16).
+  - A replan that drops it cancels both orders and fails the queued slides run.
+  - The planner prompt asks for a slideshow most weeks. The fake plan adds one only when the brief says "slideshow".
+  - Not done yet: post images from a post, and MCP/adapter entries for slideshows. Post images stay "only when a post
+    asks for one" (D5), but nothing asks yet, so this moves to B5.5.
+- [x] **B2.4** **Metrics 24 h after posting.**
+  - Modal's per-minute sweep already calls `schedule_claim_due`. It now also queues one `pull_metrics` run
+    (`source: event`) per founder whose post turned 24 h old, at most once per post.
+  - It skips paused founders, and the day's cap leaves the post to the daily loop.
+  - No Modal change was needed (`20270106040000_cmo_review_metrics_24h.sql`, pgTAP 248).
+- [x] **B2.5** **Research reads Hacker News** (R4).
+  - `competitor-research.ts` searches HN for up to 3 competitor names from Competitor Analysis. It measures stories
+    against the search's own median (points + comments) and cites HN discussion URLs.
+  - A founder with competitors but no X handles now gets research from HN alone.
+  - HN being slow or busy never fails the run.
+  - Not done: Reels in niche video research. It waits on what ScrapeCreators returns for Reels (R0, D3).
+- [x] **B2.6** **Studio send-back teaches.**
+  - A reason on a sent-back finished video, shorts batch or slideshow becomes a topic `video` memory (importance 3).
+    Writer's video brief reads it through `writerMemory`.
+  - Built as the trigger `approvals_studio_lesson`, so `approval_decide` stays as it is
+    (`20270106030000_cmo_review_studio_sendback.sql`, pgTAP 247).
+  - Not done: a `cmo_draft_outcomes` row for Studio. Its department check allows only post and sales, and the
+    approval measures in B5.6 will read `approvals` directly.
 - [ ] **B2.7** **Same-day posts on one card** (approval rule 3). Batch the post cards of one day into one card, the way
   shorts already are. Approve all, or open each one.
 
@@ -148,25 +162,45 @@ Steps 3, 5, 6 and 9 of the goal test.
 Step 11 of the goal test. Today the weekly budget is soft, overspend is logged and never refused, and there is no cost
 ceiling.
 
-- [ ] **B3.1** `work_order_spend` **refuses** a paid step that would pass the order's remaining budget. It raises a
-  `price` card ("this needs N more credits") instead (after D6). pgTAP: over-budget spend raises, never charges.
-- [ ] **B3.2** **Cost ceiling.** If credits held in the last hour pass a threshold (e.g. 40 % of the weekly budget), pause
-  the founder's tree (`cmo_paused_at`) and raise a card. pgTAP.
-- [ ] **B3.3** **Registry limits enforced at runtime.** `max_steps` and `credits` in `packages/contracts/capabilities.json`
-  are only drift-checked today. Read them in the job runner (`lib/cmo/jobs/*`) and in `studio-orders.ts`; stop a job
-  that passes `max_steps` with `error.code = 'max_steps'`.
-- [ ] **B3.4** **Studio credit check reads the order's budget**, not only the founder's balance (`adapter.ts:99`,
-  `studio_step_raise`).
-- [ ] **B3.5** **Stage fit.** The planner prompt (`plan-week.ts`) gets the business stage from the strategy. Add a code
-  check that drops items that do not fit it (e.g. no paid video for a pre-launch founder with no product page). Today
-  stage fit exists only in the eval judge.
-- [ ] **B3.6** **Replan uses the repair hint.** `replanBrief` in `jobs/progress.ts` reads only `error.message`. Read
-  `error.code` and `error.repair_hint` too, and allow replanning `write_caption`, `write_slides` and `build_video`, not
-  only `post_draft` and `sales_scan`.
-- [ ] **B3.7** **Price cards expire** (approval rule 4): a price card older than 72 h expires, and the order waits for a
-  new one.
-- [ ] **B3.8** The global kill switch `OPENCMO_CMO_PAUSED` is also read by Modal `claim_due_slots`, not only at the web
-  route.
+- [x] **B3.1** **The weekly budget is hard for work the brain starts** (D6).
+  - A `before insert` trigger on `cmo_runs` refuses a paid run with source `schedule`, `event` or `replan` that would
+    take the week past its budget. Credits held by runs still in flight count.
+  - It is refused before any credit is held, and the reason reaches the order, the cron log and the Brain page.
+  - The founder's own asks (chat, buttons, MCP) and Studio steps behind an approved price card are not gated.
+  - Design change: `work_order_spend` records money after it moved, so the gate sits where a run is created, not there
+    (`20270107010000_cmo_review_budget_gate.sql`, pgTAP 250).
+- [x] **B3.2** **Cost ceiling.**
+  - More than max(10, 40 % of the weekly budget) credits of brain-started runs within an hour pauses the founder's
+    brain (`cmo_paused_at`) and writes a note on the week.
+  - The run that crossed the line still goes; later ones wait for Resume.
+- [x] **B3.3** **Registry step limits are enforced at runtime** for CMO jobs.
+  - `lib/cmo/step-limits.ts` reads `max_steps` from `capabilities.json`, and the job runner stops a run at its kind's
+    limit. It fails with a refund instead of looping.
+  - Every job in `jobs.check.ts` runs under the limits.
+  - Studio order steps are each a founder card already, so they are not limited here.
+- [x] **B3.4** **The Studio price card reads the order's budget.**
+  - A price card the brain raises for a video order says "N credits past this video's budget" when it is
+    (`steps.ts`, `withBudgetNote`).
+  - The card is still the founder's decision, so it is raised, not refused. The founder's balance check stays as it
+    was.
+- [x] **B3.5** **Stage fit.**
+  - The planner prompt says to fit the business's stage.
+  - `fitStage` in `plan-week.ts` drops an item that needs customer proof (quotes, testimonials, reviews, case studies,
+    results) when the documents hold none. The brain eval judges by the same regex.
+  - The documents have no stage field, so proof in the documents is the signal.
+- [x] **B3.6** **Replan uses the repair hint.**
+  - `replanBrief` adds the failure's `repair_hint`.
+  - `build_video` and `build_slideshow` are replannable too, next to posts and Reddit. A sent-back video becomes a
+    replan of the week with the founder's reason and the fix.
+  - A failure marked `retryable: false` is left to the founder.
+  - Captions follow their video and are not replanned on their own (`progress.ts`, `progress.check.ts`).
+- [x] **B3.7** Dropped: price cards do not expire.
+  - Card 2 comes after the keyframes were made and paid for, so an expired card would throw paid work away.
+  - Nothing is spent until the founder approves. The card's price and hash keep it honest while it waits.
+- [x] **B3.8** The global kill switch `OPENCMO_CMO_PAUSED=1` is read by Modal's sweep too (`paused_everywhere`).
+  - While it is set, no slot is fired and no run is dispatched. Before, slots fired into runs the web refused, then
+    missed their window.
+  - **Owner:** add `OPENCMO_CMO_PAUSED` to the Modal secret when you pause, and redeploy Modal for the code.
 
 ## 5. B4 — Real runs (acceptance on production)
 

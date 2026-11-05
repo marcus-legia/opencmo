@@ -51,6 +51,8 @@ const body = z.object({
   accountId: z.uuid().nullable().optional(),
   /** Schedule card, `set_options`: the platform fields to change (merged into the slot's). */
   options: ScheduleOptionsSchema.optional(),
+  /** Week plan card, `approve`: the calendar items to drop (cmo-review B2.1). */
+  drop: z.array(z.uuid()).max(30).optional(),
 });
 
 /**

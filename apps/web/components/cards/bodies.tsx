@@ -669,3 +669,46 @@ export function CorrectionBody({
     </>
   );
 }
+
+/**
+ * The week plan (cmo-review B2.1): one row per calendar item, ticked to keep. Unticking only marks the item; nothing
+ * is dropped until the founder approves the week.
+ */
+export function PlanBody({
+  body,
+  cardId,
+  dropped,
+  onToggle,
+  editable,
+}: {
+  body: Body<"plan">;
+  cardId: string;
+  dropped: ReadonlySet<string>;
+  onToggle: (itemId: string) => void;
+  /** Why the ticks cannot change now (decided, busy), or null. */
+  editable: string | null;
+}) {
+  const dayLabel = (day: string) => new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
+  return (
+    <>
+      {body.goal ? <p className="v2-card-goal">{body.goal}</p> : null}
+      <ul className="v2-card-plan" aria-label="This week's plan">
+        {body.items.map((item) => {
+          const id = `${cardId}-keep-${item.itemId}`;
+          return (
+            <li key={item.itemId} data-dropped={dropped.has(item.itemId) || undefined}>
+              <label htmlFor={id}>
+                <input id={id} type="checkbox" checked={!dropped.has(item.itemId)} disabled={editable !== null} onChange={() => onToggle(item.itemId)} />
+                <span>
+                  <b>{dayLabel(item.day)}</b> {item.idea}
+                  {item.reason ? <span className="v2-muted"> · {item.reason}</span> : null}
+                </span>
+              </label>
+              <span className="v2-muted">{item.platform}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}

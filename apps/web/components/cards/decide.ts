@@ -12,7 +12,8 @@ import { formatWhen } from "./schedule";
 
 /** The actions `approval_decide` accepts, per kind (contract doc S3). */
 export type Decision =
-  | { action: "approve"; text?: string }
+  /** `drop` (week plan card): the items the founder unticked; they are removed if still only planned. */
+  | { action: "approve"; text?: string; drop?: string[] }
   /** `beat` (script cards): the beat whose words `text` replaces; absent, `text` is the whole draft. */
   | { action: "edit"; text: string; beat?: number }
   | { action: "skip"; reason?: string }
@@ -139,6 +140,9 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;
       if (card.kind === "finished_video") return `Marked finished. Shorts can be cut from it${suffix}.`;
       if (card.kind === "correction") return `Kept as a rule. Every draft follows it${suffix}.`;
+      if (card.kind === "plan") return decision.action === "approve" && decision.drop?.length
+        ? `Week approved without ${decision.drop.length} ${decision.drop.length === 1 ? "item" : "items"}${suffix}.`
+        : `Week approved. Your CMO works through it${suffix}.`;
       if (card.body.kind === "schedule") {
         const when = formatWhen(card.body.at, card.body.timezone);
         return card.body.mode === "publish"

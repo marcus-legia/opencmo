@@ -378,6 +378,10 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-plan { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 13px; }
 .v2-card-plan li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--v2-paper3); }
 .v2-card-plan li:last-child { border-bottom: 0; }
+/* Week plan card (cmo-review B2.1): a tick per item; an unticked one is struck through until the week is approved. */
+.v2-card-plan label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.v2-card-plan input[type="checkbox"] { margin-top: 2px; flex: none; }
+.v2-card-plan li[data-dropped] label > span { text-decoration: line-through; opacity: 0.55; }
 .v2-card-beats { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .v2-card-beats li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; }
 .v2-card-beats b { font-weight: 600; }

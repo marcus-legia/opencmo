@@ -61,9 +61,28 @@ async function replacedSeconds(ctx: StudioContext, stepId: string): Promise<numb
   return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
+/** Credits this price goes past what the brain's order has left (cmo-review B3.4); 0 when it fits or has no order. */
+async function overOrderBudget(ctx: StudioContext, credits: number): Promise<number> {
+  if (!ctx.orderId || credits <= 0) return 0;
+  const { data, error } = await ctx.supabase
+    .from("work_orders")
+    .select("budget_credits, spent_credits")
+    .eq("id", ctx.orderId)
+    .maybeSingle<{ budget_credits: number; spent_credits: number }>();
+  if (error) throw new Error(`work_orders read: ${error.message}`);
+  if (!data) return 0;
+  return Math.max(0, credits - Math.max(0, data.budget_credits - data.spent_credits));
+}
+
+/** The price card's line, saying when approving it goes past the video's budget (the founder decides, knowing it). */
+export function withBudgetNote(what: string, over: number): string {
+  return over > 0 ? `${what ? `${what} · ` : ""}${over} credits past this video's budget`.slice(0, 200) : what;
+}
+
 export async function raiseStep(ctx: StudioContext, plan: Priced, options: { redoOf?: string } = {}): Promise<{ stepId: string }> {
   const { kind, card } = stepCard(plan);
   if (kind === "price" && card.seconds == null && options.redoOf) card.seconds = await replacedSeconds(ctx, options.redoOf);
+  if (kind === "price") card.what = withBudgetNote(String(card.what ?? ""), await overOrderBudget(ctx, plan.credits));
   const row = await rpcOrThrow<{ id: string } | { id: string }[]>(ctx.supabase, "studio_step_raise", {
     p_clip_id: plan.prepared.clipId,
     p_tool: plan.prepared.tool,

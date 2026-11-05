@@ -12,7 +12,7 @@ import { pendingVoiceovers, voiceRowMatches } from "./finish";
 import { LOOK_QUESTION_IDS, LookResultSchema, lookNextStep, lookNote, lookSendBack } from "./look-check";
 import { redoable } from "./look-redo";
 import { renderRequestId } from "./render";
-import { stepCard } from "./steps";
+import { stepCard, withBudgetNote } from "./steps";
 import { mayCall, VideoBriefSchema } from "./types";
 import { briefRequest } from "./video";
 
@@ -117,3 +117,9 @@ assert.ok(!redoable({ kind: "finished_video" }, ["no_black_frames"]), "nothing t
 assert.ok(!redoable({ kind: "shorts_batch" }, ["sound_present"]) && !redoable({ kind: "slideshow" }, ["text_readable"]));
 
 console.log("studio adapter: access, brief, cards, render ids, finishVideo matching and the look check rules correct");
+
+// cmo-review B3.4: a price past what the video's order has left says so on the card; one that fits says nothing more.
+assert.equal(withBudgetNote("8 shots · 40 s", 0), "8 shots · 40 s");
+assert.equal(withBudgetNote("8 shots · 40 s", 12), "8 shots · 40 s · 12 credits past this video's budget");
+assert.equal(withBudgetNote("", 5), "5 credits past this video's budget");
+assert.ok(withBudgetNote("x".repeat(300), 5).length <= 200);
