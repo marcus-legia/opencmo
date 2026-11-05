@@ -55,7 +55,7 @@ The editor is locked in as the spearhead: build it until it can make every marke
 - **Moderation is Creem's** (owner, 2026-11-05). Every image and video prompt is screened by Creem's Moderation
   API (`flag` blocks like `deny`) before credits are held. We run no LLM prompt check and write no content policy
   of our own; the one LLM step is a review of the finished image or frames before the user gets it (Haiku vision
-  and fal NSFW), against Creem's rules quoted as they are. Creem forbids NSFW and sexually suggestive content,
+  and fal NSFW), against Creem's rules quoted as they are (`packages/contracts/creem-policy.json`). Creem forbids NSFW and sexually suggestive content,
   face-swap, deepfake and face-manipulation tools, and "uncensored / no filter" marketing, so: premade voices
   only, no cloning, dubbing or lip-sync. Spec: `docs/plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`.
 - **Charge before running, then run in one go** (owner, 2026-11-05). A paid job shows its storyboard (or plan)
@@ -195,8 +195,9 @@ and Creem's docs are in `docs/creem-llm.txt`.
     would stop getting credits.
 - **Credits are granted once per payment.** Subscriptions grant on `subscription.paid`, keyed by transaction. Packs
   grant on `checkout.completed`, keyed by order. A refund or dispute takes back the credits of that payment.
-- **Every image or video generation prompt goes through the Creem Moderation API** before our own check. This is a
-  Creem requirement for AI generation products: without it the account can be suspended.
+- **Every image or video generation prompt goes through the Creem Moderation API**, and only through it (no check of
+  our own on prompts, D8). This is a Creem requirement for AI generation products: without it the account can be
+  suspended.
 
 ## Working style
 

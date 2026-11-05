@@ -28,8 +28,6 @@ from opencmo.ai.catalog import (
     with_row,
 )
 from opencmo.ai.moderation import (
-    check_input,
-    check_input_video,
     check_output,
     check_prompt,
     text_quality,
@@ -143,7 +141,6 @@ def _continuation_frame(store: Any, task: Task, generation: dict[str, Any], mode
         raise SpecError(SHOT_BEFORE) from exc
     if not frame.exists() or frame.stat().st_size == 0:
         raise SpecError(SHOT_BEFORE)
-    check_input(model, frame)
     return str(frame)
 
 
@@ -180,7 +177,6 @@ def _keyframe(store: Any, task: Task, generation: dict[str, Any], key: str, mode
         out = reencode_image(raw, workdir / f"keyframe-{key}.jpg", INPUT_EDGE)
     except FFmpegError as exc:
         raise SpecError(KEYFRAME_NOT_READY) from exc
-    check_input(model, out)
     return str(out)
 
 
@@ -205,7 +201,6 @@ def _prepare_inputs(
             out = reencode_image(raw, workdir / f"input-{index}.jpg", INPUT_EDGE)
         except FFmpegError as exc:
             raise SpecError(INPUT_UNREADABLE) from exc
-        check_input(model, out)
         return str(out)
 
     prepared = dict(spec)
@@ -275,7 +270,6 @@ def _source_clip(store: Any, task: Task, model: Any, spec: dict[str, Any], workd
         raise SpecError(VIDEO_NOT_FOUND) from exc
     if not out.exists() or out.stat().st_size == 0:
         raise SpecError(VIDEO_NOT_FOUND)
-    check_input_video(model, out, workdir, spec)
     return str(out)
 
 

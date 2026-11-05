@@ -18,8 +18,8 @@ which described the code before #169. The live map is the artifact https://claud
 | D5 | **Every word a person reads or hears goes through no-ai-slop**: scripts, voice-overs, storyboards, on-screen text, posts, captions, titles, plans, replies. | 2026-11-05 | Done, #169 |
 | D6 | **Creem screens every image and video prompt**, as Creem requires. | 2026-11-05 | Built in #166 (test mode) |
 | D7 | The Editor Assistant stays outside the agent registry for now: it already runs Sonnet. | 2026-11-05 | No work |
-| D8 | **Moderation is Creem's.** Creem screens every image and video prompt; we run **no LLM prompt check** of our own and write no policy of our own. The only LLM step left is a **review of the finished output before the user gets it** (Haiku vision on the image or frames, plus fal NSFW), judged against Creem's rules quoted as they are. | 2026-11-05 | To build (§5.3) |
-| D9 | **Charge before running, then run in one go.** Storyboard and one credit estimate for the whole job → the user confirms once → credits held → the job runs to the end with no second approval. No paid step before the confirmation. | 2026-11-05 | To build (§6) |
+| D8 | **Moderation is Creem's.** Creem screens every image and video prompt; we run **no LLM prompt check** of our own and write no policy of our own. The only LLM step left is a **review of the finished output before the user gets it** (Haiku vision on the image or frames, plus fal NSFW), judged against Creem's rules quoted as they are. | 2026-11-05 | Done (T4, `cmo-review`) |
+| D9 | **Charge before running, then run in one go.** Storyboard and one credit estimate for the whole job → the user confirms once → credits held → the job runs to the end with no second approval. No paid step before the confirmation. | 2026-11-05 | Done (T9 phases 1–6, `cmo-review`) |
 
 ## 2. Who calls whom
 
@@ -264,9 +264,9 @@ price. The estimate must carry a margin, because the job does not stop to ask fo
 |---|---|---|---|---|
 | T1 | Anthropic key and credit on Vercel, Modal `opencmo` and `opencmo-mcp` | One provider now: without it AI media is off and the CMO falls back to the founder's Claude | S (ops) | none |
 | T2 | Remove `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_COMPAT_*`, `OPENCMO_MODERATION_VISION_MODEL`, `CMO_LLM_PROVIDER(S)` from Vercel and Modal; run `check_deploy_env.py` | Unused secrets | S (ops) | #169 deployed |
-| T3 | Rebase #166 onto `main` (§5.4), then go live and request Creem's review | Creem compliance | M | T1 |
-| T4 | §5.3: remove the LLM prompt and input checks (web and worker) and our five policies; Creem alone screens prompts; the output review and look check use `CREEM_POLICY` from `packages/contracts/` | D8 | S | T3 |
-| T9 | §6: [plan](2026-11-06-charge-before-running-plan.md) (approved 2026-11-06): one card, one hold per job, no second approval; six phases. **Phases 1–4 done** (turn overage, `credit_orders`, keyframe chaining, `/video` in one go); 5 (Studio card and work-order tokens) and 6 (explainer) to do | D9 | L | none |
+| T3 | **Done** for the code: #166 merged `main` (744ee6c5) and was merged into `cmo-review` (cfcb4327). Still to do: go live with a live Creem key and request Creem's review | Creem compliance | M | T1 |
+| T4 | **Done**: Creem alone screens image and video prompts (web `moderateText`, worker `check_prompt`), audio is not screened, the input checks and our five policies are gone; the output review, page captures and the look check use `CREEM_POLICY` from `packages/contracts/creem-policy.json` | D8 | S | T3 |
+| T9 | §6: [plan](2026-11-06-charge-before-running-plan.md) (approved 2026-11-06): one card, one hold per job, no second approval; six phases. **Done, phases 1–6** (turn overage, `credit_orders`, keyframe chaining, `/video` in one go, Studio hold, explainer plan first) | D9 | L | none |
 | T5 | **Done** (`aa002d45`): keep-alive for the Assistant's SSE stream (a comment line every 15 s in `lib/agent/sse.ts`, `sse.check.ts`) | Streams over 2 min dropped in production; still to confirm on Vercel with a turn over 2 min | S | none |
 | T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
 | T7 | **Done** (`70378ae3`): the Generate panel saves under `Generated/` like the Assistant. Items already in `generated/` stay (their path is also the clip's `src`) | A duplicate folder, case only | S | none |

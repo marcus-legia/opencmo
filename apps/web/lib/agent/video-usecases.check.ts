@@ -242,15 +242,17 @@ async function main(): Promise<void> {
     const asked = await ask({ prompt: "a video about our booking app", seconds: 10 });
     assert.ok(!("error" in asked), "error" in asked ? asked.error : "");
     assert.equal(await screenPieces(videoPieces(asked.planned)), null, "a clean plan passes");
+    // Voice-over scripts are not screened (D8: Creem does not require it, and we add no check of our own).
     const voice = asked.planned.later.find((piece) => piece.kind === "voice")!;
     voice.spec = { ...voice.spec, prompt: `${String(voice.spec.prompt)} [[flag]]` };
+    assert.equal(await screenPieces(videoPieces(asked.planned)), null, "the script is heard, not drawn");
+    voice.spec = { ...voice.spec, prompt: String(voice.spec.prompt).replace(" [[flag]]", "") };
+    const shot = asked.planned.later.find((piece) => piece.kind === "video")!;
+    shot.spec = { ...shot.spec, prompt: `${String(shot.spec.prompt)} [[flag]]` };
     const blocked = await screenPieces(videoPieces(asked.planned));
     assert.ok(blocked);
-    assert.equal(
-      JSON.parse(blocked.content).INVALID_INPUT,
-      "Against the content policy: The voice-over script. Rewrite it without that content and call create_video again.",
-    );
-    voice.spec = { ...voice.spec, prompt: String(voice.spec.prompt).replace(" [[flag]]", "") };
+    assert.match(JSON.parse(blocked.content).INVALID_INPUT, /^Against the content policy: Shot 1 \(.+\)\. Rewrite it without that content and call create_video again\.$/);
+    shot.spec = { ...shot.spec, prompt: String(shot.spec.prompt).replace(" [[flag]]", "") };
     const second = asked.planned.prepared.extra![0]!;
     second.spec = { ...second.spec, prompt: `${String(second.spec.prompt)} [[flag]]` };
     const keyframe = await screenPieces(videoPieces(asked.planned));

@@ -116,7 +116,8 @@ def _with_engine(img: modal.Image, *, face: bool = False) -> modal.Image:
     # cannot route any work.
     # The edit-length cap the web Upload panel shares (opencmo/worker/process_job.py).
     # Platform profiles Writer and the cards share (opencmo/platforms.py).
-    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json"):
+    # The output review policy, quoted from Creem (opencmo/ai/moderation.py; the web reads the same file).
+    for name in ("ai-models.json", "task-kinds.json", "upload-limits.json", "platforms.json", "creem-policy.json"):
         img = img.add_local_file(
             _PACKAGES / "contracts" / name, remote_path=f"/root/contracts/{name}", copy=True
         )

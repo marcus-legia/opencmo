@@ -144,7 +144,7 @@ def moderate(png: Path, height: int, workdir: Path) -> None:
     tiles = _tiles(png, height, workdir)
     for wait in (*CHECK_BACKOFF, None):
         try:
-            moderation.check_images(tiles, moderation.CAPTURE_POLICY)
+            moderation.check_images(tiles)
             return
         except ProviderError as exc:
             if not exc.retryable:
