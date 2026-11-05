@@ -28,7 +28,7 @@ export type ApprovalRow = {
   id: string;
   kind: CardKind;
   department: Department;
-  ref_kind: "content_item" | "opportunity" | "goal" | "correction" | "studio_step" | "editor_project" | "short_batch" | "schedule_slot";
+  ref_kind: "content_item" | "opportunity" | "goal" | "correction" | "studio_step" | "editor_project" | "short_batch" | "schedule_slot" | "work_order";
   ref_id: string;
   status: ApprovalCard["status"];
   snapshot: Record<string, unknown>;
@@ -138,6 +138,31 @@ function build(row: ApprovalRow): Built | null {
         summary: `Goal for the week of ${str(s.week)}: ${target} ${metric}. Approving it lets the plan aim at it.`,
         meta: `Week of ${str(s.week)}`,
         body: { kind: "goal", goalId: row.ref_id, week: str(s.week), goal: clip(str(s.goal), 200), metric, target, plan: [], budgetCredits: null },
+      };
+    }
+    case "plan": {
+      // cmo-review B2.1: the week's calendar items, as SQL's `plan_snapshot` wrote them.
+      const raw = (Array.isArray(s.items) ? s.items : []) as Record<string, unknown>[];
+      const items = raw
+        .map((i) => ({
+          itemId: str(i.item_id),
+          department: (i.department === "sales" || i.department === "video" ? i.department : "post") as "post" | "sales" | "video",
+          platform: clip(str(i.platform), 20),
+          day: str(i.day),
+          idea: clip(str(i.idea), 300),
+          reason: clip(str(i.reason), 300),
+        }))
+        .filter((i) => i.itemId && /^\d{4}-\d{2}-\d{2}$/.test(i.day))
+        .slice(0, 30);
+      if (!items.length || !/^\d{4}-\d{2}-\d{2}$/.test(str(s.week))) return null;
+      const goal = str(s.goal) ? clip(str(s.goal), 200) : null;
+      const count = (d: string) => items.filter((i) => i.department === d).length;
+      const parts = [count("post") && `${count("post")} posts`, count("video") && `${count("video")} for Studio`, count("sales") && `${count("sales")} Reddit`].filter(Boolean);
+      return {
+        title: clip(`Week of ${str(s.week)}: ${parts.join(", ")}`, 300),
+        summary: "Untick what you do not want this week; the rest goes ahead. Each post, reply and paid step still asks you on its own card.",
+        meta: goal ? clip(`Goal: ${goal}`, 200) : "No goal approved for this week",
+        body: { kind: "plan", week: str(s.week), goal, items },
       };
     }
     case "correction": {

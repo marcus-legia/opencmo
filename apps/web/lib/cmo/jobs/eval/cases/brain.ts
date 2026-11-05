@@ -14,6 +14,7 @@ import type { CaseResult } from "@/lib/eval/compare";
 
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
+import { NEEDS_CUSTOMERS } from "../../plan-week";
 import { mondayOf } from "../../summarize-memory";
 import type { PlanItem } from "../../types";
 import { ideaIssues } from "../core";
@@ -26,7 +27,6 @@ import { registerCases, type EvalCase, type EvalEnv } from "../types";
 const BUDGET_MS = 240_000;
 const EARLY: ReadonlySet<BrainStage> = new Set(["pre_launch", "launched_no_users"]);
 /** What an early business does not have yet: asking for it makes the plan undoable. */
-const NEEDS_CUSTOMERS = /\b(testimonial|case stud(y|ies)|customer (story|stories|quote|review)s?|reviews? from|our (customers|users) (say|love)|results? (from|of) (our )?(customers|users))\b/i;
 
 const mentionsVideo = (p: BrainEvalProfile) => /video|clip|record|reel|short|tiktok/i.test(`${JSON.stringify(p.docs.content_strategy ?? {})} ${p.brief ?? ""} ${p.goal}`);
 
@@ -37,7 +37,7 @@ export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[])
   const salesPerDay = new Map<string, number>();
   for (const item of plan) if (item.department === "sales") salesPerDay.set(item.day, (salesPerDay.get(item.day) ?? 0) + 1);
   if ([...salesPerDay.values()].some((n) => n > 1)) issues.push("more than one Reddit item on a day");
-  if (!mentionsVideo(profile) && plan.some((i) => i.department === "video")) issues.push("a video nobody asked for");
+  if (!mentionsVideo(profile) && plan.some((i) => i.department === "video" && i.platform !== "Slideshow")) issues.push("a video nobody asked for");
   plan.forEach((item, index) => {
     if (!item.reason.trim()) issues.push(`item ${index + 1}: no reason`);
     for (const issue of ideaIssues(item.idea, item.reason, profile.docs)) issues.push(`item ${index + 1}: ${issue}`);

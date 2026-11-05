@@ -61,6 +61,13 @@ assert.equal(progressReport([tree[0]!, tree[3]!, tree[4]!], NOW).replan, null, "
 assert.equal(progressReport([order({ status: "failed", brief: { replan_of: "x" } })], NOW).replan, null, "a replan's order is not replanned");
 assert.match(replanBrief(tree[1]!, NOW), /^Replan: "Cut by words" is stuck\. It failed: The model did not answer\./);
 assert.ok(replanBrief(order({ title: "x".repeat(400) }), NOW).length <= 300, "the brief fits the run input");
+// cmo-review B3.6: the repair hint goes to the Planner; a video sent back is replanned; a failure no replan can help is not.
+const sentBack = order({ id: "v", kind: "build_video", title: "How the CMO plans a week", status: "failed",
+  error: { code: "sent_back", message: "The voice is too fast", repair_hint: "Change what the founder asked, then render the video again.", retryable: true } });
+assert.match(replanBrief(sentBack, NOW), /It failed: The voice is too fast\. To fix it: Change what the founder asked/);
+assert.equal(progressReport([sentBack], NOW).replan?.id, "v", "a sent-back video is replanned");
+assert.equal(progressReport([{ ...sentBack, error: { code: "over_budget", message: "Budget used up", retryable: false } }], NOW).replan, null,
+  "a failure a replan cannot help is left to the founder");
 assert.equal(nextCheckAt(NOW).toISOString(), "2026-10-30T00:05:00.000Z");
 assert.equal(nextCheckAt(new Date("2026-10-29T00:01:00Z")).toISOString(), "2026-10-29T00:05:00.000Z");
 

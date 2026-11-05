@@ -5,13 +5,17 @@
  * the posts that beat THAT account's own median (the outlier-research skill), then the model draws the hooks and
  * formats that work now, plus ideas for the founder. Self-check: every hook must point to a URL among the posts read;
  * a hook without a real URL is dropped (no invented evidence).
+ *
+ * Hacker News too (cmo-review B2.5, `research-sales.md` R4): stories that name a competitor, measured against the
+ * search's own median (points + comments), so a founder with competitors but no X handles still gets research.
  */
 
 import { z } from "zod";
 
 import { skillText } from "../skills";
 import { handleOf, xTopPosts } from "../social/research";
-import { outliers, ScBudget, SocialReadError, type Outlier } from "../social/scrapecreators";
+import { HnBudget, HnReadError, searchHn, type HnThread } from "../social/hn";
+import { outliers, ScBudget, SocialReadError, type Outlier, type SocialPost } from "../social/scrapecreators";
 import { escapeAttribute, escapeForTag } from "../untrusted";
 import { documentsBlock } from "./context";
 import { LlmError } from "./llm";
@@ -19,6 +23,8 @@ import type { JobContext, JobOutput } from "./runner";
 import type { CompetitorInsight, Documents } from "./types";
 
 const MAX_ACCOUNTS = 4;
+/** Hacker News searches per run: one per competitor name. */
+const MAX_HN_NAMES = 3;
 
 export const InsightSchema = z.object({
   hooks: z
@@ -28,7 +34,7 @@ export const InsightSchema = z.object({
   ideas: z.array(z.object({ idea: z.string().describe("A post idea for THIS founder's product, in their voice"), inspired_by: z.string().describe("URL that inspired it") })).describe("Three to five ideas"),
 });
 
-const SYSTEM = `You are the research agent of a solo founder's marketing team. You study competitors' posts on X that beat their own baseline and explain what the founder can learn from them.
+const SYSTEM = `You are the research agent of a solo founder's marketing team. You study competitors' posts on X, and Hacker News stories about them, that beat their own baseline and explain what the founder can learn from them.
 
 ${skillText("outlier-research")}
 
@@ -49,6 +55,26 @@ export function watchedHandles(docs: Documents, input: Record<string, unknown>):
     .map(handleOf)
     .filter((h) => /^[A-Za-z0-9_]{1,15}$/.test(h) && !seen.has(h.toLowerCase()) && seen.add(h.toLowerCase()))
     .slice(0, MAX_ACCOUNTS);
+}
+
+/** Competitor names to search on Hacker News, from Competitor Analysis (a name of 3 to 60 characters). */
+export function competitorNames(docs: Documents): string[] {
+  const competitors = Array.isArray(docs.competitors?.competitors) ? (docs.competitors!.competitors as { name?: unknown }[]) : [];
+  const seen = new Set<string>();
+  return competitors
+    .map((c) => (typeof c.name === "string" ? c.name.trim() : ""))
+    .filter((n) => n.length >= 3 && n.length <= 60 && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
+    .slice(0, MAX_HN_NAMES);
+}
+
+const HN_ITEM = "https://news.ycombinator.com/item?id=";
+
+/**
+ * An HN story as a post the outlier maths can measure: points count as likes, comments as replies. It keeps the text
+ * platform "reddit" (likes + replies), and is told apart from X by its URL (always an HN discussion page).
+ */
+export function hnPost(t: HnThread): SocialPost {
+  return { platform: "reddit", url: t.url, author: t.author, text: t.text ? `${t.title}\n${t.text}` : t.title, postedAt: t.postedAt, views: 0, likes: t.points, replies: t.comments, reposts: 0 };
 }
 
 /** Self-check: keep only hooks and ideas whose URL is among the posts read; attach the real lift and opening line. */
@@ -80,8 +106,9 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
   const docs = await ctx.step("read_doc", "Read your competitors", () => store.documents(run.user_id));
   const handles = watchedHandles(docs, run.input);
-  if (!handles.length) {
-    throw new LlmError("Add your competitors' X handles to Competitor Analysis first, then run research again.");
+  const names = competitorNames(docs);
+  if (!handles.length && !names.length) {
+    throw new LlmError("Add your competitors (with their X handles) to Competitor Analysis first, then run research again.");
   }
 
   const budget = new ScBudget(MAX_ACCOUNTS * 2);
@@ -109,11 +136,34 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
       winners.push(...result.items.filter((p) => p.label !== "normal").slice(0, 6));
     }
   }
+  const hnBudget = new HnBudget(MAX_HN_NAMES);
+  const search = ctx.searchHn ?? ((query: string) => searchHn(query, hnBudget));
+  for (const name of names) {
+    const found = await ctx.step(
+      "find_hn",
+      `Reading Hacker News about ${name}`,
+      async () => {
+        try {
+          return outliers((await search(name)).map(hnPost));
+        } catch (error) {
+          // Hacker News being slow or busy never fails the run: X alone still makes the insight.
+          if (error instanceof HnReadError) return null;
+          throw error;
+        }
+      },
+      (found) => (found ? `${name}: ${found.items.filter((p) => p.label !== "normal").length} standout stories` : `${name}: Hacker News not readable`),
+      { memo: `find_hn:${name.toLowerCase()}` },
+    );
+    if (found?.items.length) {
+      accounts.push({ handle: `Hacker News: ${name}`, posts: found.items.length, baseline: found.baseline, confidence: found.confidence });
+      winners.push(...found.items.filter((p) => p.label !== "normal").slice(0, 4));
+    }
+  }
   if (!winners.length) throw new LlmError("No competitor posts stood out this week. Try adding more competitors.");
 
   const raw = await ctx.step("extract_patterns", "Finding hooks that work", async () => {
     // Competitors' posts are outside text: escaped so one cannot close <post> and speak as the founder.
-    const posts = winners.map((p) => `<post url="${escapeAttribute(p.url)}" lift="${p.lift}" label="${p.label}">${escapeForTag(p.text)}</post>`).join("\n");
+    const posts = winners.map((p) => `<post url="${escapeAttribute(p.url)}" source="${p.url.startsWith(HN_ITEM) ? "hacker news" : "x"}" lift="${p.lift}" label="${p.label}">${escapeForTag(p.text)}</post>`).join("\n");
     return ctx.think({
       title: "Find the hooks and formats that work in competitors' standout posts",
       fake: () => ({
@@ -133,5 +183,5 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
   const insight: CompetitorInsight = { accounts, ...groundInsight(raw, winners), measured_at: new Date().toISOString() };
   if (!insight.hooks.length) throw new LlmError("Could not find hooks backed by real posts this time. Your credits were refunded.");
   await ctx.step("save_insight", "Saving what works", () => store.saveInsight(run.user_id, run.id, insight), () => `${insight.hooks.length} hooks, ${insight.ideas.length} ideas`);
-  return { hooks: insight.hooks.length, ideas: insight.ideas.length, lookups: budget.used };
+  return { hooks: insight.hooks.length, ideas: insight.ideas.length, lookups: budget.used, hn_searches: hnBudget.used };
 }

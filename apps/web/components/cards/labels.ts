@@ -19,6 +19,7 @@ const KIND_LABEL: Record<ApprovalCard["kind"], string> = {
   slideshow: "Slideshow",
   schedule: "Time",
   correction: "Correction",
+  plan: "Week plan",
 };
 
 /** "Writer · Post · X": the head every card and queue row starts with. */
@@ -66,6 +67,8 @@ export function headNote(card: ApprovalCard, now = Date.now()): string | null {
       return card.expiresAt ? untilLabel(card.expiresAt, now) : null;
     case "correction":
       return body.times ? `from ${body.times} ${body.times === 1 ? "edit" : "edits"}` : null;
+    case "plan":
+      return `${body.items.length} ${body.items.length === 1 ? "item" : "items"}`;
   }
 }
 
@@ -93,5 +96,7 @@ export function approvedLine(card: ApprovalCard): string {
       return "You approved the time";
     case "correction":
       return "You kept a new rule";
+    case "plan":
+      return "You approved the week plan";
   }
 }

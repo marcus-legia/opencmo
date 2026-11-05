@@ -89,6 +89,13 @@ def test_claim_due_slots_calls_the_rpc():
     assert seen["auth"] == "Bearer key"
 
 
+def test_paused_everywhere_reads_the_global_kill_switch():
+    assert cmo_dispatch.paused_everywhere({"OPENCMO_CMO_PAUSED": "1"})
+    assert cmo_dispatch.paused_everywhere({"OPENCMO_CMO_PAUSED": " 1 "})
+    assert not cmo_dispatch.paused_everywhere({"OPENCMO_CMO_PAUSED": "0"})
+    assert not cmo_dispatch.paused_everywhere({})
+
+
 def test_claim_due_slots_before_the_migration_claims_nothing():
     with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404, json={}))) as client:
         assert cmo_dispatch.claim_due_slots("https://db.example", "key", client=client) == {}

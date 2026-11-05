@@ -1,5 +1,5 @@
 /**
- * One approval card (S3, `Cards.dc.html`): ten kinds, one anatomy.
+ * One approval card (S3, `Cards.dc.html`): eleven kinds, one anatomy.
  *
  * Head: department and kind. Body: the thing itself (`body`, one shape per kind). Foot: price, account, time.
  * The Dashboard queue shows `title` collapsed and `summary` + `meta` open; `/app/inbox/[id]` shows the full body.
@@ -23,6 +23,7 @@ export const CARD_KINDS = [
   "slideshow",
   "schedule",
   "correction",
+  "plan",
 ] as const;
 export const CardKindSchema = z.enum(CARD_KINDS);
 export type CardKind = z.infer<typeof CardKindSchema>;
@@ -469,6 +470,29 @@ const CorrectionBody = z.object({
   examples: z.array(z.object({ before: z.string().max(300), after: z.string().max(300) })),
 });
 
+/**
+ * The week plan (cmo-review B2.1, `ref_kind = 'work_order'`, the week's root order): every calendar item of the week.
+ * Approving with `drop` removes items that are still only planned; the others have their own cards by then.
+ */
+const PlanBody = z.object({
+  kind: z.literal("plan"),
+  week: day,
+  goal: z.string().max(200).nullable(),
+  items: z
+    .array(
+      z.object({
+        itemId: z.string(),
+        department: z.enum(["post", "sales", "video"]),
+        /** As the calendar writes it: "X", "LinkedIn", "Reddit", "Shorts", "Slideshow"… */
+        platform: z.string().max(20),
+        day,
+        idea: z.string().max(300),
+        reason: z.string().max(300),
+      }),
+    )
+    .max(30),
+});
+
 export const CardBodySchema = z.discriminatedUnion("kind", [
   PostBody,
   ReplyBody,
@@ -480,6 +504,7 @@ export const CardBodySchema = z.discriminatedUnion("kind", [
   SlideshowBody,
   ScheduleBody,
   CorrectionBody,
+  PlanBody,
 ]);
 export type CardBody = z.infer<typeof CardBodySchema>;
 
@@ -522,6 +547,7 @@ export const PRIMARY_ACTION: Record<CardKind, string> = {
   slideshow: "Approve",
   schedule: "Approve time",
   correction: "Keep as a rule",
+  plan: "Approve week",
 };
 
 /**
@@ -567,4 +593,5 @@ export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set([
   "shorts_batch",
   "slideshow",
   "schedule",
+  "plan",
 ]);

@@ -29,6 +29,15 @@ def web_config(env: dict[str, str]) -> tuple[str, str] | None:
     return (url, secret) if url and secret else None
 
 
+def paused_everywhere(env: dict[str, str]) -> bool:
+    """The global kill switch (`OPENCMO_CMO_PAUSED=1`, brain.md §9), read here too (cmo-review B3.8).
+
+    The web app refuses every run while it is set, but the sweep still fired due slots into `publish_post` runs that
+    never ran and then missed their window. With the same variable in the Modal secret, nothing is claimed at all.
+    """
+    return env.get("OPENCMO_CMO_PAUSED", "").strip() == "1"
+
+
 def count_dispatchable(
     supabase_url: str, service_role_key: str, *, limit: int = MAX_DISPATCH, client: httpx.Client | None = None
 ) -> int:

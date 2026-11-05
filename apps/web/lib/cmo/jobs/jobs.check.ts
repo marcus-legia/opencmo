@@ -62,6 +62,32 @@ async function main() {
     "05 X Idea", "05 Threads Idea", "05 LinkedIn Idea", "06 LinkedIn Idea", "07 LinkedIn Idea",
   ]);
 
+  // cmo-review B3.3: each job kind runs under the registry's max_steps (every job in this file runs under them).
+  const { maxSteps } = await import("../step-limits");
+  assert.equal(maxSteps("post_draft"), 12);
+  assert.equal(maxSteps("sales_scan"), 30);
+  assert.equal(maxSteps("build_video"), 40, "Studio kinds come from the same registry");
+  assert.equal(maxSteps("not_a_kind"), null);
+
+  // A slideshow is a Studio item apart from videos: one a week, never counted against the one video (cmo-review B2.3).
+  const studio = toPlanItems({ items: [
+    { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },
+    { day_offset: 2, department: "video", platform: "slideshow", idea: "Five cuts", reason: "r" },
+    { day_offset: 3, department: "video", platform: "Slideshow", idea: "A second slideshow", reason: "r" },
+    { day_offset: 4, department: "video", platform: "TikTok", idea: "A second video", reason: "r" },
+  ] }, today);
+  assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
+
+  // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
+  const { fitStage } = await import("./plan-week");
+  const proofless = { product: { name: "Cutline", one_liner: "Cut video by words" } } as Documents;
+  const staged = [
+    { department: "post" as const, platform: "X", day: "2026-10-05", idea: "Share a testimonial from an early user", reason: "Proof" },
+    { department: "post" as const, platform: "X", day: "2026-10-06", idea: "How cutting by words works", reason: "Pillar" },
+  ];
+  assert.deepEqual(fitStage(staged, proofless).map((i) => i.idea), ["How cutting by words works"]);
+  assert.equal(fitStage(staged, { ...proofless, strategy: { proof: "Testimonials: “Saved me hours” (Ana, freelancer)" } } as Documents).length, 2, "with proof in the documents it stays");
+
   // The fake plan reads which post platforms besides X the founder names (strategy, rhythm, goal, brief).
   assert.deepEqual(namedPlatforms({ cadence: "X daily, LinkedIn twice a week" }, undefined), ["LinkedIn"]);
   assert.deepEqual(namedPlatforms("Post on threads and linkedin too"), ["Threads", "LinkedIn"]);
@@ -314,13 +340,26 @@ async function main() {
   const w7 = mem7.enqueue("competitor_research");
   await drainCmoQueue(mem7.store);
   assert.equal(w7.status, "done", `W7 xong (${w7.error})`);
-  assert.deepEqual(w7.steps.map((s) => s.tool), ["read_doc", "find_outliers", "extract_patterns", "save_insight"]);
+  assert.deepEqual(w7.steps.map((s) => s.tool), ["read_doc", "find_outliers", "find_hn", "extract_patterns", "save_insight"]);
   assert.ok(mem7.insights[0]!.hooks.every((h) => h.url.startsWith("https://x.com/freshbooks/status/")));
   const mem7b = memoryStore(docs);
   const w7b = mem7b.enqueue("competitor_research");
   await drainCmoQueue(mem7b.store);
   assert.equal(w7b.status, "failed");
   assert.match(String(w7b.error), /X handles/);
+
+  // cmo-review B2.5: Hacker News stories about a competitor count as research, measured against the search's median;
+  // a competitor with no X handle is researched on HN alone.
+  const { competitorNames, hnPost } = await import("./competitor-research");
+  assert.deepEqual(competitorNames({ competitors: { competitors: [{ name: "FreshBooks" }, { name: "freshbooks" }, { name: "X" }, { name: "Wave" }] } }), ["FreshBooks", "Wave"]);
+  const story = hnPost({ url: "https://news.ycombinator.com/item?id=1", objectId: "1", community: "Hacker News", title: "Show HN: A", author: "a", text: "", points: 120, comments: 30, postedAt: null });
+  assert.equal(story.likes + story.replies, 150, "points and comments are the measure");
+  const mem7c = memoryStore({ ...docs, competitors: { competitors: [{ name: "FreshBooks", website: "", difference: "" }] } });
+  const w7c = mem7c.enqueue("competitor_research");
+  const hnHits = [400, 12, 9, 8, 7].map((points, i) => ({ url: `https://news.ycombinator.com/item?id=${i + 1}`, objectId: String(i + 1), community: "Hacker News" as const, title: `Story ${i}`, author: "a", text: "", points, comments: 0, postedAt: null }));
+  await drainCmoQueue(mem7c.store, { searchHn: async () => hnHits });
+  assert.equal(w7c.status, "done", `HN alone makes an insight (${w7c.error})`);
+  assert.ok(mem7c.insights[0]!.hooks.every((h) => h.url.startsWith("https://news.ycombinator.com/item?id=")), "hooks cite HN discussions");
 
   // Insight vào prompt của Planner/X writer; quá 21 ngày thì không.
   const { insightBlock } = await import("./context");
