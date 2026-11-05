@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  ConnectionLost,
   continuesOnItsOwn,
   type Action,
   type ApprovalCard,
@@ -109,7 +110,9 @@ export function AssistantPanel({
    */
   prefill?: { text: string; nonce: number; send?: boolean } | null;
 }) {
+  // `available` is the server's answer only; a load that could not reach the server sets `unreachable` instead.
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [broll, setBroll] = useState(false);
   const [explain, setExplain] = useState(false);
@@ -162,6 +165,7 @@ export function AssistantPanel({
     async (wanted?: string, sessionId?: string) => {
       try {
         const next = await client.load(wanted ?? readModel(), sessionId);
+        setUnreachable(false);
         setAvailable(next.available);
         setBroll(Boolean(next.broll));
         setExplain(Boolean(next.explain));
@@ -174,7 +178,8 @@ export function AssistantPanel({
       } catch (error) {
         console.error("[assistant] could not load", error);
         reportClientError("reported", error, { source: "assistant:load" });
-        setAvailable(false);
+        // A failed read says nothing about the server's Assistant: keep the panel and try again.
+        setUnreachable(true);
         return null;
       }
     },
@@ -183,6 +188,12 @@ export function AssistantPanel({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  // Unreachable: read again every 5 s until the panel can see the session (and a turn left running) again.
+  useEffect(() => {
+    if (!unreachable) return;
+    const timer = setTimeout(() => void refresh(model, session?.id), 5000);
+    return () => clearTimeout(timer);
+  }, [unreachable, refresh, model, session?.id]);
   // Rời panel giữa lượt: lượt vẫn chạy trên server, nhưng lớp khoá canvas không được kẹt lại.
   useEffect(() => () => onBusy(false), [onBusy]);
 
@@ -330,7 +341,11 @@ export function AssistantPanel({
       await drive((handler) => client.turn(current.id, text, Object.keys(attachments).length ? attachments : undefined, handler), current.id);
       setAttach({ frame: false, playhead: false, selection: false });
     } catch (error) {
-      notify(`The assistant could not start. ${(error as Error).message}`);
+      notify(
+        error instanceof ConnectionLost
+          ? "Connection lost. If the assistant started, it keeps working; check the chat before sending again."
+          : `The assistant could not start. ${(error as Error).message}`,
+      );
       setDraft(text);
     } finally {
       await finish(run);
@@ -347,7 +362,11 @@ export function AssistantPanel({
     try {
       await drive((handler) => start(session.id, handler), session.id);
     } catch (error) {
-      notify(`The assistant could not continue. ${(error as Error).message}`);
+      notify(
+        error instanceof ConnectionLost
+          ? "Connection lost. The assistant keeps working; this panel catches up when you are back online."
+          : `The assistant could not continue. ${(error as Error).message}`,
+      );
     } finally {
       await finish(run);
     }
@@ -461,6 +480,17 @@ export function AssistantPanel({
     void send(prefill.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill, available, busy]);
+
+  if (available === null && unreachable) {
+    return (
+      <section className="ed2-asst" data-testid="assistant-panel">
+        <p className="ed2-muted ed2-trn-note">Could not reach the assistant. Trying again…</p>
+        <button type="button" className="ed2-btn" onClick={() => void refresh(model, session?.id)}>
+          Try now
+        </button>
+      </section>
+    );
+  }
 
   if (available === false) {
     return (

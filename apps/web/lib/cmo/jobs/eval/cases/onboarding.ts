@@ -82,8 +82,8 @@ async function runSite(site: SiteFixture, env: EvalEnv): Promise<CaseResult> {
   const notes = [...issues, ...(prices ? [] : ["pricing not checked: the fake drafts do not read prices"])];
   if (issues.length) return { ...base, pass: false, decided_by: "code", notes };
   const graded = await Promise.all([
-    factuality("one-liner", drafts.product.one_liner, site.reference.one_liner, env.provider),
-    factuality("ideal customer", drafts.strategy.icp, site.reference.icp, env.provider),
+    factuality("one-liner", drafts.product.one_liner, site.reference.one_liner),
+    factuality("ideal customer", drafts.strategy.icp, site.reference.icp),
   ]);
   const [oneLiner, icp] = graded.map((g) => g.label);
   const cost = graded.reduce((sum, g) => sum + g.cost_usd, 0);

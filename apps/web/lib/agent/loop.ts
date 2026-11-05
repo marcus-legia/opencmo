@@ -43,7 +43,6 @@ import {
   SLOW_PLANS,
   STOP_POLL_MS,
 } from "./limits";
-import { canSwitchFrom } from "./model";
 import { TAINT_GATED_TOOLS, TAINT_MESSAGE, TAINTING_TOOLS } from "./cmo-tools";
 import type { Ledger } from "./ledger";
 import { StepAborted, type Image, type Provider, type StoredMessage, type ToolCall, type ToolResult } from "./providers/types";
@@ -51,9 +50,6 @@ import type { Scope } from "./scope";
 import { captureInput, checkErrorKeys, failingCheck, readGroup, VERIFY_GATE } from "./tools";
 
 export type Emit = (event: string, data: unknown) => void;
-
-/** Shown when the chat's model cannot answer and another one can: a chat is bound to its model. */
-export const SWITCH_MODEL_MESSAGE = "This chat's model is not available right now. Start a new chat to continue on another model.";
 
 export type Turn = { id: string; session_id: string; number: number; prompt: string; checkpoint_id?: string | null };
 
@@ -134,7 +130,7 @@ async function history(supabase: SupabaseClient, sessionId: string, fromTurn = 1
 async function ranTools(supabase: SupabaseClient, provider: Provider, sessionId: string, past: StoredMessage[]): Promise<Map<string, { ok: boolean; content: string }>> {
   const ids = provider.danglingCalls(past);
   if (!ids.length) return new Map();
-  // Within this chat only: Claude's ids are unique everywhere, Gemini's are short and can repeat.
+  // Within this chat only.
   const { data } = await supabase
     .from("agent_tool_calls")
     .select("tool_use_id, status, content, agent_turns!inner(session_id)")
@@ -558,11 +554,10 @@ export async function runTurn(env: TurnEnv): Promise<void> {
       return;
     }
     console.error("[agent] turn failed", err);
-    // The provider itself could not answer: remember it, so the next chat starts on the other one.
+    // Claude itself could not answer: remember it, so the CMO's brain and the next caller know.
     const kind = outage(err);
-    if (kind && provider.kind !== "fake" && !provider.ownKey) markDown(provider.kind, kind, provider.model);
-    // Only when a new chat would really start elsewhere: an agent on a key of its own is not moved.
-    const message = kind && !provider.ownKey && canSwitchFrom(provider.kind) ? SWITCH_MODEL_MESSAGE : provider.failureMessage(err);
+    if (kind && provider.kind === "anthropic" && !provider.ownKey) markDown("anthropic", kind, provider.model);
+    const message = provider.failureMessage(err);
     try {
       await finish(env, "failed", message);
     } catch (closeErr) {

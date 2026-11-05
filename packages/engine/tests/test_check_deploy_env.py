@@ -30,11 +30,6 @@ def _healthy() -> dict[str, dict[str, str | None]]:
         seen[MCP].setdefault(key, URLS.get(key) or env.fingerprint(key, f"value of {key}"))
     for place, key, expected in env.EXPECTED:
         seen[place][key] = expected
-    # Groq, the default endpoint: no compat URL or vision model named.
-    for shared in env.SHARED:
-        if shared.what in ("OpenAI-compatible endpoint", "moderation vision model"):
-            for place, key in shared.holders:
-                seen[place][key] = None
     return seen
 
 
@@ -128,38 +123,32 @@ def test_a_url_pasted_on_the_wrong_line_is_reported():
     ]
 
 
-def test_moderation_needs_one_provider_key_per_place_not_anthropic_or_fal():
+def test_moderation_needs_the_anthropic_key_in_each_place():
     seen = _healthy()
-    for place, key in [(p, k) for shared in env.SHARED if shared.what in ("Anthropic key", "fal key") for p, k in shared.holders]:
+    for place, key in [(p, k) for shared in env.SHARED if shared.what == "fal key" for p, k in shared.holders]:
         seen[place][key] = None
     problems, _ = env.check(seen)
-    assert problems == [], "Groq alone is enough"
-    for key in env.MODERATION_KEYS:
-        seen[WORKER][key] = None
+    assert problems == [], "fal is optional"
+    seen[WORKER]["ANTHROPIC_API_KEY"] = None
     problems, _ = env.check(seen)
-    assert problems and all("opencmo: no moderation key" in problem or "Groq key" in problem for problem in problems)
+    assert "opencmo: no moderation key (ANTHROPIC_API_KEY): AI media cannot be checked" in problems
 
 
-def test_the_worker_must_be_able_to_check_frames_on_another_endpoint():
+def test_a_removed_provider_key_left_set_is_a_note():
     seen = _healthy()
-    for place, key in [(p, k) for shared in env.SHARED if shared.what == "Anthropic key" for p, k in shared.holders]:
-        seen[place][key] = None
-    for place in (VERCEL, WORKER, MCP):
-        seen[place]["OPENAI_COMPAT_BASE_URL"] = "https://openrouter.ai/api/v1"
-        seen[place]["OPENAI_COMPAT_API_KEY"] = env.fingerprint("OPENAI_COMPAT_API_KEY", "sk")
-    problems, _ = env.check(seen)
-    assert any("moderation cannot check images" in problem for problem in problems), problems
-    for place in (VERCEL, WORKER, MCP):
-        seen[place]["OPENCMO_MODERATION_VISION_MODEL"] = "vendor/vision"
-    problems, _ = env.check(seen)
-    assert problems == [], problems
+    seen[WORKER]["GEMINI_API_KEY"] = env.fingerprint("GEMINI_API_KEY", "g")
+    seen[VERCEL]["GROQ_API_KEY"] = env.fingerprint("GROQ_API_KEY", "q")
+    problems, notes = env.check(seen)
+    assert problems == []
+    assert "opencmo:GEMINI_API_KEY is set but nothing reads it any more (Claude only): remove it" in notes
+    assert any(note.startswith(f"{VERCEL}:GROQ_API_KEY is set") for note in notes)
 
 
 def test_an_optional_key_set_somewhere_must_be_set_and_equal_everywhere():
     seen = _healthy()
-    seen[MCP]["GROQ_API_KEY"] = None
+    seen[MCP]["ANTHROPIC_API_KEY"] = None
     problems, _ = env.check(seen)
-    assert "Groq key: opencmo-mcp:GROQ_API_KEY is not set" in problems
+    assert "Anthropic key: opencmo-mcp:ANTHROPIC_API_KEY is not set" in problems
 
 
 def test_the_look_token_must_match_and_its_url_name_the_look_endpoint():
@@ -170,12 +159,6 @@ def test_the_look_token_must_match_and_its_url_name_the_look_endpoint():
     problems, _ = env.check(seen)
     assert any(problem.startswith("look token differs") for problem in problems)
     assert any("OPENCMO_LOOK_URL points at the wrong endpoint" in problem for problem in problems)
-
-
-def test_the_groq_url_is_the_moderation_one():
-    from opencmo.ai import moderation
-
-    assert env.GROQ_BASE_URL == moderation.GROQ_BASE_URL
 
 
 def test_motion_asset_origin_must_equal_the_worker_supabase_url():

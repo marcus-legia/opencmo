@@ -9,7 +9,6 @@
  * feasibility, one question at a time. The judge's questions are in the report under `plan-judge`.
  */
 
-import type { ProviderKind } from "@/lib/cmo/agents/registry";
 import type { CaseResult } from "@/lib/eval/compare";
 
 import { cascade } from "../../judge";
@@ -57,7 +56,7 @@ async function runProfile(profile: BrainEvalProfile, env: EvalEnv): Promise<Case
   const plan = mem.items.filter((i) => i.run_id === run.id) as unknown as PlanItem[];
   const text = planText(plan);
   if (env.provider !== "fake") env.log(`${profile.name} (${profile.stage}, goal: ${profile.goal})\n${text}`);
-  const judge = env.provider === "fake" ? fakePlanJudge() : planJudge({ drafter: env.provider as ProviderKind });
+  const judge = env.provider === "fake" ? fakePlanJudge() : planJudge();
   return [
     { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
     await cascade(id("plan"), env.epoch, planIssues(profile, plan), judge, { job: profile.goal, docs: profile.docs, output: text, criteria: [...PLAN_JUDGE_QUESTIONS] }),

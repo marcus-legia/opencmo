@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     ["n-3", null, "From a skip reason", 0.1],
   ]);
   assert.deepEqual(library.data.skills.writing.map((s) => [s.id, s.readBy]), [
-    ["no-ai-slop", ["Writer", "Checker", "Sales", "CMO chat"]],
+    ["no-ai-slop", ["Writer", "Checker", "Sales", "CMO chat", "Studio", "Editor Assistant"]],
     ["platform-profiles", ["Writer", "Checker"]],
   ]);
   assert.ok(library.data.skills.video.some((s) => s.origin === "built_in"), "the style skills we ship");

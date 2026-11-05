@@ -28,8 +28,6 @@ const ENGINE_KEYS = new Set([
   "FAL_KEY", "OPENCMO_AI_FAKE",
   // Creem's prompt screening, repeated in the worker just before a model is called.
   "CREEM_API_KEY",
-  // The standby checker of output moderation when Claude cannot answer.
-  "GEMINI_API_KEY", "OPENCMO_MODERATION_GEMINI_MODEL",
   // Explainers: where clip-motion renders, and the free silent voice for runs without a fal key.
   "OPENCMO_MOTION", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_MOTION_SCALE", "OPENCMO_MOTION_CHROME",
   "OPENCMO_MOTION_CONCURRENCY", "OPENCMO_MOTION_ASSET_ORIGIN",

@@ -18,7 +18,7 @@ import { resolveMediaRefs } from "@/lib/generate/create";
 import { previewAssets } from "@/lib/motion/assets";
 import { previewMotion } from "@/lib/motion/preview";
 import { moderateText, moderationKind, MOTION_KIND, specText } from "@/lib/generate/moderation";
-import { skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
+import { NO_AI_SLOP, skillIndex as cmoSkillIndex } from "@/lib/cmo/skills";
 import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
@@ -591,7 +591,7 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   return {
     kind: "cmo",
     tools: CMO_TOOL_SPECS,
-    system: `${CMO_SYSTEM_PROMPT}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy, and no-ai-slop before writing any text that goes out):\n${cmoSkillIndex("cmo")}`,
+    system: `${CMO_SYSTEM_PROMPT}\n\n${NO_AI_SLOP}\n\nYour playbooks and marketing library (read one with read_skill before planning research, writing a brief or advising on strategy):\n${cmoSkillIndex("cmo")}`,
     context: async () => `${await cmoContext(supabase)}${sessionId ? await runsFinishedBlock(supabase, sessionId) : ""}`,
     state: () => cmoState(supabase),
     async plan(call) {

@@ -1,83 +1,47 @@
 /**
- * Which provider a new Assistant chat gets: the configured default, and the other one while the
- * default cannot answer.
+ * Which provider an Assistant chat runs on: Claude only (owner, 2026-11-05).
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/model.check.ts
  */
 import assert from "node:assert/strict";
 
 import { clearHealth, markDown } from "../llm-health";
-import { agentChatProvider, agentProvider, availableModels, canSwitchFrom, providerForModel } from "./model";
-import { geminiFormat } from "./providers/gemini-history";
+import { agentChatProvider, agentProvider, assistantDown, availableModels, formatFor, kindOf, providerForModel } from "./model";
+import { ANTHROPIC_MODEL } from "./providers/anthropic";
 
 const env = process.env as Record<string, string | undefined>;
-for (const key of ["OPENCMO_AGENT_FAKE", "OPENCMO_AGENT_PROVIDER", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY"]) delete env[key];
+for (const key of ["OPENCMO_AGENT_FAKE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY"]) delete env[key];
 
 assert.equal(agentProvider(), null, "no key: the Assistant is not set up");
-
+assert.deepEqual(availableModels(), []);
 env.GEMINI_API_KEY = "g";
-assert.equal(agentProvider()!.kind, "gemini", "only a Gemini key: Gemini");
+env.GROQ_API_KEY = "q";
+assert.equal(agentProvider(), null, "another vendor's key does not set it up");
+assert.equal(agentChatProvider("cmo"), null);
+
 env.ANTHROPIC_API_KEY = "a";
-assert.equal(agentProvider()!.kind, "anthropic", "both keys: Claude by default");
-assert.deepEqual(availableModels().map((model) => model.label), ["Claude Sonnet 5.5", "Gemini Pro"]);
-env.OPENCMO_AGENT_PROVIDER = "gemini";
-assert.equal(agentProvider()!.kind, "gemini", "the configured default wins");
-assert.equal(availableModels()[0]!.label, "Gemini Pro", "the default is listed first");
-delete env.OPENCMO_AGENT_PROVIDER;
+assert.equal(agentProvider()!.kind, "anthropic");
+assert.deepEqual(availableModels().map((model) => model.label), ["Claude Sonnet 5.5"], "one model to offer");
 
-// Claude cannot answer (no credit): new chats start on Gemini, and a failed Claude chat can say so.
+// Claude out of credit: still Claude (nothing else to run on); the panel can say it is down.
 clearHealth();
 markDown("anthropic", "account", "claude-sonnet-5-5");
-assert.equal(agentProvider()!.kind, "gemini");
-assert.equal(availableModels()[0]!.label, "Gemini Pro");
-assert.equal(canSwitchFrom("anthropic"), true);
-assert.equal(canSwitchFrom("gemini"), false, "the other provider is down: nowhere to switch");
-// A chat that exists stays on its own model: its history is in that provider's format.
-assert.equal(providerForModel("gemini-3.1-pro-preview")!.kind, "gemini");
-
-// A busy Haiku (the checking tier) says nothing about the Assistant's model.
-clearHealth();
-markDown("anthropic", "busy", "claude-haiku-5-5");
 assert.equal(agentProvider()!.kind, "anthropic");
-markDown("anthropic", "account", "claude-haiku-5-5");
-
-// Both down: the configured default is tried anyway.
-markDown("gemini", "busy", "gemini-pro-latest");
-assert.equal(agentProvider()!.kind, "anthropic");
-assert.equal(canSwitchFrom("anthropic"), false);
-
-// One key only: nothing to switch to.
+assert.equal(assistantDown(ANTHROPIC_MODEL), true);
 clearHealth();
-delete env.GEMINI_API_KEY;
-markDown("anthropic", "account", "claude-sonnet-5-5");
-assert.equal(agentProvider()!.kind, "anthropic");
-assert.equal(canSwitchFrom("anthropic"), false);
+assert.equal(assistantDown(ANTHROPIC_MODEL), false);
 
-// The CMO chat: a new chat starts on the provider that answers, an existing chat continues on its
-// own family, and an agent on a key of its own is never moved by the shared key's health.
-clearHealth();
-env.ANTHROPIC_API_KEY = "a";
-env.GEMINI_API_KEY = "g";
-assert.equal(agentChatProvider("cmo")!.kind, "anthropic");
-markDown("anthropic", "account", "claude-sonnet-5-5");
-assert.equal(agentChatProvider("cmo")!.kind, "gemini", "new CMO chat while Claude is out");
-assert.equal(agentChatProvider("cmo", "anthropic")!.kind, "anthropic", "an existing Claude chat stays on Claude");
-clearHealth();
-assert.equal(agentChatProvider("cmo", "gemini")!.kind, "gemini", "a chat opened on the fallback continues there");
-assert.equal(agentChatProvider("cmo", "gemini")!.model, "gemini-pro-latest");
+// A chat continues only on the model it started on; a chat from the removed Gemini cannot.
+assert.equal(providerForModel(ANTHROPIC_MODEL)!.kind, "anthropic");
+assert.equal(providerForModel("claude-sonnet-4-5"), null, "an older Claude id: start a new chat");
+assert.equal(providerForModel("gemini-pro-latest"), null);
+assert.equal(kindOf("gemini-3.1-pro-preview"), "retired");
+assert.equal(formatFor("gemini-pro-latest").kind, "anthropic", "an old chat is drawn without a Gemini reader");
+
+// The CMO chat runs on the `cmo` agent of the registry, on its own key when it has one.
+assert.equal(agentChatProvider("cmo")!.model, "claude-sonnet-5-5");
 env.CMO_AGENT_CMO_API_KEY = "own";
 assert.equal(agentChatProvider("cmo")!.ownKey, true);
 delete env.CMO_AGENT_CMO_API_KEY;
-delete env.GEMINI_API_KEY;
-assert.equal(agentChatProvider("cmo", "gemini"), null, "no Gemini key: a Gemini chat cannot continue");
 
-// Unanswered calls of a Gemini history: only ids Gemini set can name a stored result.
-const history = [
-  { role: "user" as const, content: [{ text: "hi" }] },
-  { role: "assistant" as const, content: [{ functionCall: { id: "call_1", name: "a", args: {} } }, { functionCall: { name: "b", args: {} } }, { functionCall: { id: "call_3", name: "c", args: {} } }] },
-  { role: "user" as const, content: geminiFormat.toolResults([{ id: "call_1", name: "a", ok: true, content: "{}" }]) },
-];
-assert.deepEqual(geminiFormat.danglingCalls(history), ["call_3"]);
-assert.deepEqual(geminiFormat.danglingCalls(history.slice(0, 1)), []);
-
-console.log("agent model: default, configured and failover providers correct");
+console.log("agent model: Claude only, chats bound to their model");

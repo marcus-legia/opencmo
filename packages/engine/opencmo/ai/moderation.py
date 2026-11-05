@@ -3,15 +3,13 @@
 The prompt was already checked on the web before credits were held
 (`apps/web/lib/generate/moderation.ts`), but `create_generation` is also callable straight through
 PostgREST: `check_prompt` checks the text once more before any provider sees it. The output check
-looks at what the model actually drew — a clean prompt can still produce an unsafe image. The image or three video frames go to a vision model against
+looks at what the model actually drew — a clean prompt can still produce an unsafe image. The image or three video frames go to Claude Haiku against
 the product rules (no identifiable real people, no other brands' logos, no sexual, violent or
 hateful content), and to fal's NSFW classifier as a second opinion when the worker has a fal key.
 
-The vision model is the `moderation` agent of the web's registry, with the same env: providers are
-tried in the order of `CMO_LLM_PROVIDERS` (OpenAI-compatible such as Groq, then Claude, then Gemini
-when unset), each one the worker has a key for. When one cannot answer (no credit, a bad key, rate
-limits, an outage) the next applies the same policy; a verdict is final and is never retried on
-another model.
+Claude is the only checker (owner, 2026-11-05: one provider). When it cannot answer for good (no
+credit, a bad key) the work fails as UNAVAILABLE and is refunded; when it is busy the output check
+waits and asks again.
 
 Blocked -> a non-retryable `ProviderError`: the worker fails the task, the trigger refunds the
 credits, and the file never reaches the bucket.
@@ -45,12 +43,6 @@ UNCHECKED = "Could not check the result. Please try again."
 UNAVAILABLE = "Content checks are unavailable right now, so this could not be made. Your credits were refunded."
 NSFW_ENDPOINT = "https://fal.run/fal-ai/x-ailab/nsfw"
 CLAUDE_MODEL = os.environ.get("OPENCMO_MODERATION_MODEL", "claude-haiku-5-5")
-GEMINI_MODEL = os.environ.get("OPENCMO_MODERATION_GEMINI_MODEL", "gemini-flash-latest")
-GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-#: A model on the OpenAI-compatible endpoint that reads images (Groq's id at the time of writing).
-COMPAT_VISION_MODEL = os.environ.get("OPENCMO_MODERATION_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
-PROVIDER_KINDS = ("openai", "anthropic", "gemini")
 _REAL_PERSON = "an identifiable real person (a recognisable public figure or celebrity); "
 
 
@@ -174,51 +166,13 @@ def production() -> bool:
 
 
 def ready() -> bool:
-    """A policy checker has a key. Production only enables AI images/video when the web side says
-    the same (`moderationReady`); the deploy check keeps the keys alike."""
-    return bool(_policy_checkers())
+    """Claude has a key. Production only enables AI images/video when the web side says the same
+    (`moderationReady`); the deploy check keeps the keys alike."""
+    return bool(_anthropic_key())
 
 
 def _anthropic_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ""
-
-
-def _gemini_key() -> str:
-    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
-
-
-def _compat_base_url() -> str:
-    return (os.environ.get("OPENAI_COMPAT_BASE_URL") or GROQ_BASE_URL).rstrip("/")
-
-
-def _compat_key() -> str:
-    """The key for `_compat_base_url()`: Groq's own key first on Groq, only the compat key
-    elsewhere, so the Groq key is never sent to another vendor's endpoint."""
-    groq, compat = os.environ.get("GROQ_API_KEY") or "", os.environ.get("OPENAI_COMPAT_API_KEY") or ""
-    return (groq or compat) if _compat_base_url() == GROQ_BASE_URL else compat
-
-
-def _compat_ready() -> bool:
-    """The default vision model is a Groq id: another endpoint needs its own model named."""
-    return bool(_compat_key()) and (
-        _compat_base_url() == GROQ_BASE_URL or bool(os.environ.get("OPENCMO_MODERATION_VISION_MODEL"))
-    )
-
-
-def _kind(name: str) -> str | None:
-    name = name.strip().lower()
-    return "openai" if name == "groq" else name if name in PROVIDER_KINDS else None
-
-
-def _provider_order() -> list[str]:
-    """`CMO_LLM_PROVIDERS` first, then any provider it leaves out (lib/cmo/agents/registry.ts)."""
-    listed = [kind for kind in (_kind(name) for name in os.environ.get("CMO_LLM_PROVIDERS", "").split(",")) if kind]
-    return list(dict.fromkeys([*listed, *PROVIDER_KINDS]))
-
-
-def _policy_checkers() -> list[str]:
-    keys = {"openai": _compat_ready(), "anthropic": _anthropic_key(), "gemini": _gemini_key()}
-    return [kind for kind in _provider_order() if keys[kind]]
 
 
 def prompt_text(value: Any, key: str = "") -> list[str]:
@@ -426,134 +380,15 @@ def _ask(text: str | None) -> str:
 
 
 def _check_policy(images: list[Path], policy: str, text: str | None = None) -> None:
-    """The first checker's verdict; the next checker's only when a provider cannot answer.
-    With `text`, the prompt is judged instead of images."""
-    checks = {"openai": _check_compat, "anthropic": _check_claude, "gemini": _check_gemini}
-    order = _policy_checkers()
-    busy = False
-    for index, kind in enumerate(order):
-        try:
-            checks[kind](images, policy, text)
-            return
-        except _Out as out:
-            busy = busy or out.retryable
-            if index + 1 < len(order):
-                log.warning("%s could not check the output; asking %s", kind, order[index + 1])
-    # Nobody answered: busy is retried in place, anything else is never delivered unchecked.
-    if busy:
-        raise ProviderError(UNCHECKED, retryable=True)
-    log.error("No content checker could answer (%s): failing as unavailable, not as a block", ", ".join(order) or "none")
-    raise ProviderError(UNAVAILABLE)
-
-
-def _out_for_status(status: int) -> _Out | None:
-    """The outage an HTTP status means, or None when the provider answered and our request is at fault."""
-    if status in (401, 402, 403, 404):
-        return _Out(retryable=False)
-    if status == 429 or status >= 500:
-        return _Out(retryable=True)
-    return None
-
-
-def _unfenced(text: str) -> str:
-    """JSON mode answers sometimes arrive inside a Markdown code fence."""
-    match = re.fullmatch(r"\s*```(?:json)?\s*(.*?)\s*```\s*", text or "", re.DOTALL)
-    return match.group(1) if match else text
-
-
-def _check_compat(images: list[Path], policy: str, text: str | None = None) -> None:
-    """An OpenAI-compatible vision model (Groq…), the verdict as JSON."""
-    content: list[dict] = [{"type": "image_url", "image_url": {"url": _data_url(image)}} for image in images]
-    content.append({"type": "text", "text": _ask(text)})
-    schema = _Verdict.model_json_schema()
-
-    def post(response_format: dict, system: str) -> httpx.Response:
-        try:
-            return httpx.post(
-                f"{_compat_base_url()}/chat/completions",
-                headers={"Authorization": f"Bearer {_compat_key()}"},
-                json={
-                    "model": COMPAT_VISION_MODEL,
-                    "max_tokens": 1024,
-                    "temperature": 0,
-                    "response_format": response_format,
-                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
-                },
-                timeout=60,
-            )
-        except httpx.HTTPError as exc:
-            raise _Out(retryable=True) from exc
-
-    response = post({"type": "json_schema", "json_schema": {"name": "verdict", "schema": schema}}, policy)
-    if response.status_code == 400 and ("response_format" in response.text or "json_schema" in response.text):
-        # A model without JSON schema output: JSON mode, the shape in the instructions.
-        response = post({"type": "json_object"}, f"{policy} Answer with one JSON object: {json.dumps(schema)}")
-    out = _out_for_status(response.status_code)
-    if out:
-        log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
-        raise out
-    if response.status_code >= 400:
-        # Our request was refused (image too large, unknown model…): no verdict, so the next
-        # checker is asked; with none left the output is blocked, never passed unchecked.
-        log.error("OpenAI-compatible moderation returned %s: %s", response.status_code, response.text[:300])
-        raise _Out(retryable=False)
+    """Claude's verdict. With `text`, the prompt is judged instead of images."""
     try:
-        choice = response.json()["choices"][0]
-        if choice.get("finish_reason") == "length":
-            # Cut off before the verdict: no answer, not a block. Retried like a busy check.
-            raise ProviderError(UNCHECKED, retryable=True)
-        verdict = _Verdict.model_validate_json(_unfenced(choice["message"]["content"]), strict=True)
-    except (KeyError, IndexError, TypeError, ValueError):
-        log.warning("Output blocked: %s gave no verdict", COMPAT_VISION_MODEL)
-        raise ProviderError(BLOCKED) from None
-    if not verdict.allowed:
-        log.warning("Output blocked by the policy check (%s): %s", COMPAT_VISION_MODEL, verdict.category)
-        raise ProviderError(BLOCKED)
-
-
-def _check_gemini(images: list[Path], policy: str, text: str | None = None) -> None:
-    parts: list[dict] = [{"inlineData": {"mimeType": _mime(image), "data": _b64(image)}} for image in images]
-    parts.append({"text": _ask(text)})
-    body = {
-        "systemInstruction": {"parts": [{"text": policy}]},
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": {
-                "type": "OBJECT",
-                "properties": {"allowed": {"type": "BOOLEAN"}, "category": {"type": "STRING"}},
-                "required": ["allowed", "category"],
-            },
-            # Thinking tokens count against the cap.
-            "maxOutputTokens": 4096,
-        },
-    }
-    try:
-        response = httpx.post(
-            GEMINI_ENDPOINT.format(model=GEMINI_MODEL),
-            headers={"x-goog-api-key": _gemini_key()},
-            json=body,
-            timeout=60,
-        )
-    except httpx.HTTPError as exc:
-        raise _Out(retryable=True) from exc
-    out = _out_for_status(response.status_code)
-    if out or response.status_code >= 400:
-        log.error("Gemini moderation returned %s: %s", response.status_code, response.text[:300])
-        if out:
-            raise out
-        raise ProviderError(BLOCKED)
-    data = response.json()
-    try:
-        # A safety block has no candidates; an answer that is not the verdict is no answer.
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        verdict = _Verdict.model_validate_json(text, strict=True)
-    except (KeyError, IndexError, TypeError, ValueError):
-        log.warning("Output blocked: %s gave no verdict (%s)", GEMINI_MODEL, str(data.get("promptFeedback") or "")[:200])
-        raise ProviderError(BLOCKED) from None
-    if not verdict.allowed:
-        log.warning("Output blocked by the policy check (%s): %s", GEMINI_MODEL, verdict.category)
-        raise ProviderError(BLOCKED)
+        _check_claude(images, policy, text)
+    except _Out as out:
+        # Busy is retried in place; a key or credit problem is never delivered unchecked.
+        if out.retryable:
+            raise ProviderError(UNCHECKED, retryable=True) from out
+        log.error("Claude could not check (key or credit): failing as unavailable, not as a block")
+        raise ProviderError(UNAVAILABLE) from out
 
 
 def _check_claude(images: list[Path], policy: str, text: str | None = None) -> None:
@@ -630,8 +465,7 @@ def text_quality(model: AiModel, spec: dict, path: Path) -> dict | None:
     """`{"text": "none" | "minor" | "severe"}` for a finished image, or None when nobody could tell.
 
     A hint for the editor's badge ("This keyframe has garbled text. Redo it?"), never a verdict: it
-    runs after moderation passed, never fails or refunds the generation, and costs one vision call
-    on the first checker that answers.
+    runs after moderation passed, never fails or refunds the generation, and costs one Claude vision call.
     """
     if model.kind != "image":
         return None
@@ -639,65 +473,24 @@ def text_quality(model: AiModel, spec: dict, path: Path) -> dict | None:
         return {"text": "severe"} if FAKE_GARBLED in str(spec.get("prompt") or "") else None
     if not needs_check(model):
         return None
-    asks = {"openai": _ask_compat, "anthropic": _ask_claude, "gemini": _ask_gemini}
-    for kind in _policy_checkers():
-        started = time.monotonic()
-        try:
-            answer = asks[kind](path)
-        except Exception as exc:  # noqa: BLE001 - a hint: any failure means "ask the next one"
-            log.warning("Text check: %s could not answer (%s)", kind, type(exc).__name__)
-            continue
-        level = answer.get("text") if isinstance(answer, dict) else None
-        if level in TEXT_LEVELS:
-            log.info("Text check by %s: %s in %.1fs, tokens=%s", kind, level, time.monotonic() - started, answer.get("_usage"))
-            return {"text": level}
-        log.warning("Text check: %s gave no answer", kind)
+    if not ready():
+        return None
+    started = time.monotonic()
+    try:
+        answer = _ask_claude(path)
+    except Exception as exc:  # noqa: BLE001 - a hint: any failure means "no hint"
+        log.warning("Text check: Claude could not answer (%s)", type(exc).__name__)
+        return None
+    level = answer.get("text") if isinstance(answer, dict) else None
+    if level in TEXT_LEVELS:
+        log.info("Text check: %s in %.1fs, tokens=%s", level, time.monotonic() - started, answer.get("_usage"))
+        return {"text": level}
+    log.warning("Text check: Claude gave no answer")
     return None
 
 
 class _TextVerdict(BaseModel):
     text: str
-
-
-def _ask_compat(path: Path) -> dict:
-    response = httpx.post(
-        f"{_compat_base_url()}/chat/completions",
-        headers={"Authorization": f"Bearer {_compat_key()}"},
-        json={
-            "model": COMPAT_VISION_MODEL,
-            "max_tokens": 256,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": f"{TEXT_POLICY} Answer with one JSON object: {json.dumps(_TEXT_SCHEMA)}"},
-                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": _data_url(path)}}]},
-            ],
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    body = response.json()
-    return {**json.loads(_unfenced(body["choices"][0]["message"]["content"])), "_usage": body.get("usage")}
-
-
-def _ask_gemini(path: Path) -> dict:
-    response = httpx.post(
-        GEMINI_ENDPOINT.format(model=GEMINI_MODEL),
-        headers={"x-goog-api-key": _gemini_key()},
-        json={
-            "systemInstruction": {"parts": [{"text": TEXT_POLICY}]},
-            "contents": [{"role": "user", "parts": [{"inlineData": {"mimeType": _mime(path), "data": _b64(path)}}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": {"type": "OBJECT", "properties": {"text": {"type": "STRING", "enum": list(TEXT_LEVELS)}}, "required": ["text"]},
-                "maxOutputTokens": 2048,
-            },
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    body = response.json()
-    return {**json.loads(body["candidates"][0]["content"]["parts"][0]["text"]), "_usage": body.get("usageMetadata")}
 
 
 def _ask_claude(path: Path) -> dict:

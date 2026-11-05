@@ -487,7 +487,7 @@ const shortDate = (at: string) => new Date(at).toLocaleDateString("en-US", { mon
 /** The registry agents a built-in writing skill names, as the Library calls them. */
 function readersOf(agents: readonly string[]): LibraryScreen["skills"]["writing"][number]["readBy"] {
   const name = (agent: string): (typeof SKILL_READERS)[number] | null =>
-    agent === "writer" || agent.endsWith("_writer") ? "Writer" : agent === "checker" ? "Checker" : agent === "sales" ? "Sales" : agent === "cmo" ? "CMO chat" : null;
+    agent === "writer" || agent.endsWith("_writer") ? "Writer" : agent === "checker" ? "Checker" : agent === "sales" ? "Sales" : agent === "cmo" ? "CMO chat" : agent === "director" || agent === "shorts" ? "Studio" : null;
   return [...new Set(agents.map(name).filter((r): r is (typeof SKILL_READERS)[number] => r !== null))];
 }
 
@@ -520,7 +520,7 @@ async function library({ supabase }: LoadContext): Promise<Partial<LibraryScreen
       const slop = CMO_SKILLS["no-ai-slop"];
       return {
         writing: [
-          { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in" as const, note: clip(`Guidance, never a hard filter: ${slop.description}`, 200), readBy: readersOf(slop.agents) },
+          { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in" as const, note: clip(`Guidance, never a hard filter: ${slop.description}`, 200), readBy: [...readersOf(slop.agents), "Editor Assistant"] },
           {
             id: "platform-profiles",
             name: "Platform profiles",

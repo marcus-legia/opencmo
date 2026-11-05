@@ -2,8 +2,7 @@
 
 Black, frozen and silent stretches are found by ffmpeg in `look_check_task.py`; only what needs eyes comes
 here: are captions fully inside the frame, and is on-screen text readable. One call answers both for up to
-12 frames, on the first provider that answers (same keys, order and endpoints as `moderation.py`, so a
-vendor's key never goes to another vendor).
+12 frames, on Claude (the same key and model as `moderation.py`).
 
 A hint for the founder, never a gate: no key, a provider error or an answer that does not parse gives
 `None` for that question ("not checked"), and the card is raised either way.
@@ -17,7 +16,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import httpx
 from pydantic import BaseModel
 
 from opencmo.ai import moderation as m
@@ -96,53 +94,17 @@ def judge(frames: list[Path], times: list[float]) -> dict[str, dict[str, Any] | 
 
 
 def _ask(frames: list[Path]) -> dict[str, Any] | None:
-    asks = {"openai": _ask_compat, "anthropic": _ask_claude, "gemini": _ask_gemini}
-    for kind in m._policy_checkers():
-        try:
-            return asks[kind](frames)
-        except Exception as exc:  # noqa: BLE001 - a hint: any failure means "ask the next one"
-            log.warning("Look judge: %s could not answer (%s)", kind, type(exc).__name__)
+    if not m.ready():
+        return None
+    try:
+        return _ask_claude(frames)
+    except Exception as exc:  # noqa: BLE001 - a hint: any failure means "not checked"
+        log.warning("Look judge: Claude could not answer (%s)", type(exc).__name__)
     return None
 
 
 def _labelled(frames: list[Path]) -> str:
     return f"Frames 1 to {len(frames)}, in order. Answer as JSON: {json.dumps(_SCHEMA)}"
-
-
-def _ask_compat(frames: list[Path]) -> dict[str, Any]:
-    content: list[dict] = [{"type": "image_url", "image_url": {"url": m._data_url(f)}} for f in frames]
-    content.append({"type": "text", "text": _labelled(frames)})
-    response = httpx.post(
-        f"{m._compat_base_url()}/chat/completions",
-        headers={"Authorization": f"Bearer {m._compat_key()}"},
-        json={
-            "model": m.COMPAT_VISION_MODEL,
-            "max_tokens": 512,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "messages": [{"role": "system", "content": POLICY}, {"role": "user", "content": content}],
-        },
-        timeout=90,
-    )
-    response.raise_for_status()
-    return json.loads(m._unfenced(response.json()["choices"][0]["message"]["content"]))
-
-
-def _ask_gemini(frames: list[Path]) -> dict[str, Any]:
-    parts: list[dict] = [{"inlineData": {"mimeType": m._mime(f), "data": m._b64(f)}} for f in frames]
-    parts.append({"text": _labelled(frames)})
-    response = httpx.post(
-        m.GEMINI_ENDPOINT.format(model=m.GEMINI_MODEL),
-        headers={"x-goog-api-key": m._gemini_key()},
-        json={
-            "systemInstruction": {"parts": [{"text": POLICY}]},
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": 2048},
-        },
-        timeout=90,
-    )
-    response.raise_for_status()
-    return json.loads(m._unfenced(response.json()["candidates"][0]["content"]["parts"][0]["text"]))
 
 
 def _ask_claude(frames: list[Path]) -> dict[str, Any]:

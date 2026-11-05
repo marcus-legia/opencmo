@@ -389,8 +389,8 @@ packs and video briefs were removed with the clipping tool (2026-10-20).
 
 | Function | Provider | Called from |
 |---|---|---|
-| Agent LLM | one default: `CMO_LLM_PROVIDER` (web) = `OPENCMO_LLM_PROVIDER` (engine); choose with `npm run cmo:eval` | Vercel |
-| Moderation | OpenAI moderations (free) | Vercel, Modal |
+| Agent LLM | Claude only (owner, 2026-11-05): Sonnet for the Assistant, CMO chat and drafting agents, Haiku for small tasks; one agent can be moved with `CMO_AGENT_<ID>_MODEL` | Vercel |
+| Moderation | Claude Haiku (prompts on the web, frames on the worker) plus fal NSFW | Vercel, Modal |
 | Image, video, voice, sound generation | fal for every model, including Veo, Nano Banana, Gemini TTS and ElevenLabs (voice with word timestamps, sound effects, music); the direct ElevenLabs adapter stays only as a fallback | Modal |
 | Transcripts | ElevenLabs Scribe | Modal |
 | Social reading · payments · errors | ScrapeCreators · Creem · Sentry | Vercel |
@@ -400,5 +400,4 @@ packs and video briefs were removed with the clipping tool (2026-10-20).
 1. Apply migrations (`supabase db push`): 20261109–20261111 add memory tiers, goals and briefs.
 2. Add `OPENCMO_WEB_URL` and `CRON_SECRET` to the Modal secret `opencmo`, then `modal deploy`.
 3. Merge: Vercel deploys and drops the old crons.
-4. Run `npm run cmo:eval -- --provider gemini --yes` and `-- --provider anthropic --yes`, then set
-   `CMO_LLM_PROVIDER` (Vercel) and `OPENCMO_LLM_PROVIDER` (Modal) to the winner.
+4. Run `npm run cmo:eval -- --provider anthropic --yes` to grade the jobs on Claude.

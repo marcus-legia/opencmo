@@ -1,8 +1,8 @@
 ---
 name: no-ai-slop
 kind: playbook
-description: Editing principles and the stock patterns that make writing read as AI, to watch while drafting or reviewing any text that goes out. Advice, not a rule; the founder's own voice wins.
-agents: [x_writer, checker, sales, cmo]
+description: Editing principles and the stock patterns that make writing read as AI. Every prompt that writes words a person reads or hears carries it: scripts, storyboards, on-screen text, posts, captions, plans and replies. Advice, not a rule; the founder's own voice wins.
+agents: [x_writer, threads_writer, linkedin_writer, instagram_writer, tiktok_writer, youtube_writer, brief_writer, slides_writer, writer, checker, sales, cmo, onboarding, planner, research, director, shorts]
 source: no-ai-slop/skills/no-ai-slop (SKILL.md, eval.md), adapted for drafts a founder approves
 license: MIT — Copyright (c) 2026 Peter Yang
 ---

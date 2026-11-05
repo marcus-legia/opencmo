@@ -3,8 +3,7 @@
  * a rule break needs no model to call it a fail, and it costs nothing. Only outputs that pass the
  * code reach the model judge, which:
  *
- * - runs as `checker` on the provider that did NOT draft (`prefer`), so a model does not grade its
- *   own provider's writing;
+ * - runs as `checker` in its own context, so it is not persuaded by the draft's reasoning;
  * - predicts what the founder would do with the draft (`post_as_is | small_edit | rewrite | skip`),
  *   reasons before the label so the label follows from them;
  * - then asks each binary criterion on its own, which agrees with people more than one rubric
@@ -17,12 +16,12 @@
 
 import { z } from "zod";
 
-import { otherProvider, type ProviderKind } from "@/lib/cmo/agents/registry";
 import type { CaseResult } from "@/lib/eval/compare";
 import { usageUsd } from "@/lib/eval/prices";
 
 import { structured, type StructuredOptions } from "./llm";
 import type { Documents } from "./types";
+import { NO_AI_SLOP } from "../skills";
 
 export const JUDGE_VERDICTS = ["post_as_is", "small_edit", "rewrite", "skip"] as const;
 export type JudgeVerdict = (typeof JUDGE_VERDICTS)[number];
@@ -44,7 +43,10 @@ const SYSTEM = `You review drafts that an AI marketing assistant wrote for a sol
 Rules:
 - The documents are the only facts. A claim that is not in them is unsupported, even if it sounds plausible.
 - Judge the draft as the founder would: their product, their voice, their audience.
-- Give your reasons first, then the answer. Be brief.`;
+- Give your reasons first, then the answer. Be brief.
+- Stock AI patterns (the no-ai-slop guidance below) make a founder edit or rewrite a draft; a pattern the founder's own voice uses does not.
+
+${NO_AI_SLOP}`;
 
 const VerdictSchema = z.object({ reasons: z.string(), verdict: z.enum(JUDGE_VERDICTS) });
 const CriterionSchema = z.object({ reasons: z.string(), met: z.boolean() });
@@ -54,20 +56,14 @@ type Call = <S extends z.ZodType>(opts: StructuredOptions<S>) => Promise<z.infer
 const brief = (input: JudgeInput) =>
   `<documents>\n${JSON.stringify(input.docs, null, 1)}\n</documents>\n\n<task>${input.job}</task>\n\n<draft>\n${input.output}\n</draft>`;
 
-/**
- * A model judge. `drafter` is the provider that wrote the outputs; the judge prefers the other
- * one and falls back to the same provider (separate context) only when the other has no key.
- * `call` is `structured` in production of the eval and a stub in tests.
- */
-export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?: number }): Judge {
+/** A model judge. `call` is `structured` in production of the eval and a stub in tests. */
+export function modelJudge(opts: { call?: Call; timeoutMs?: number } = {}): Judge {
   const call: Call = opts.call ?? structured;
-  const prefer: ProviderKind = otherProvider(opts.drafter);
   return async (input) => {
     let cost = 0;
     const ask = <S extends z.ZodType>(label: string, prompt: string, schema: S) =>
       call({
         agent: "checker",
-        prefer,
         system: SYSTEM,
         prompt,
         schema,
@@ -113,7 +109,7 @@ export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs
 export function fakeJudge(): Judge {
   const call: Call = async (opts) =>
     (opts.schema === (VerdictSchema as z.ZodType) ? { reasons: "fake judge", verdict: "small_edit" } : { reasons: "fake judge", met: true }) as never;
-  return modelJudge({ drafter: "anthropic", call });
+  return modelJudge({ call });
 }
 
 /**

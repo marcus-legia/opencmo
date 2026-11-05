@@ -1,20 +1,15 @@
 /**
  * Which LLM provider can answer right now.
  *
- * The product runs on Claude, Gemini or an OpenAI-compatible API (Groq…). When one of them cannot answer (no
- * credit, a revoked key, rate limits, an outage), a call moves to the next and the failed one is skipped for a while, so
- * the next user does not pay for the same failure. The memory is per server instance: every
- * instance learns from its own first failure.
+ * The product runs on Claude only. When it cannot answer (no credit, a revoked key, rate limits, an outage), the
+ * failure is remembered for a while: the CMO's brain hands work to the founder's own Claude, and the next user does
+ * not wait for the same failure. The memory is per server instance: every instance learns from its own first failure.
  *
  * Content moderation does NOT use this memory (`lib/generate/moderation.ts`): it asks its primary
  * checker every time, so nothing another feature does can move it to the standby.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { ApiError } from "@google/genai";
-
-import { OpenAiCompatError } from "./openai-compat";
-
-export type LlmProvider = "anthropic" | "gemini" | "openai";
+export type LlmProvider = "anthropic";
 
 /**
  * `account`: the key or its credit; someone must fix it. `busy`: rate limit or outage; it passes.
@@ -36,25 +31,6 @@ export function outage(error: unknown): Outage | null {
     // Anthropic reports an empty balance as a 400 invalid_request_error.
     if (status === 400 && /credit balance|billing/i.test(error.message)) return "account";
     return status === 429 || status >= 500 ? "busy" : null;
-  }
-  if (error instanceof ApiError) {
-    if (error.status === 401 || error.status === 402 || error.status === 403) return "account";
-    if (error.status === 400 && /api key/i.test(error.message)) return "account";
-    if (error.status === 429 && /per_day/i.test(error.message)) return "quota";
-    return error.status === 429 || error.status >= 500 ? "busy" : null;
-  }
-  if (error instanceof OpenAiCompatError) {
-    // 404: this model id is not on the endpoint. It says nothing about the key or the provider's other models, so it
-    // is remembered for this model only (quota-like), not as an account outage that would block all of them (review R6).
-    if (error.status === 404) return "quota";
-    if (error.status === 401 || error.status === 402 || error.status === 403) return "account";
-    if (error.status === 429 && /per day|\(TPD\)|\(RPD\)|daily/i.test(error.message)) return "quota";
-    return error.status === 0 || error.status === 429 || error.status >= 500 ? "busy" : null;
-  }
-  // @google/genai rethrows the raw fetch failure (DNS, refused, reset) instead of an ApiError: the provider could not be
-  // reached, so the call fails over like Anthropic's APIConnectionError (review R6).
-  if (error instanceof TypeError && /fetch failed|network|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(`${error.message} ${String((error as { cause?: unknown }).cause ?? "")}`)) {
-    return "busy";
   }
   return null;
 }

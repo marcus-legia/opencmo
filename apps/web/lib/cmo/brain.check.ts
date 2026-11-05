@@ -18,16 +18,14 @@ assert.equal(decideBrain({ credits: 500, providersUp: 2, forced: true }).reason,
 
 const env = { ANTHROPIC_API_KEY: "a", GEMINI_API_KEY: "g" } as unknown as NodeJS.ProcessEnv;
 clearHealth();
-assert.equal(providersUp(env), 2);
-assert.equal(providersUp({ ANTHROPIC_API_KEY: "a" } as unknown as NodeJS.ProcessEnv), 1, "a missing key is a provider down");
+assert.equal(providersUp(env), 1, "Claude only: another vendor's key counts for nothing");
+assert.equal(providersUp({ GEMINI_API_KEY: "g" } as unknown as NodeJS.ProcessEnv), 0, "no Anthropic key: no provider");
 assert.equal(providersUp({} as NodeJS.ProcessEnv), 0);
-markDown("anthropic", "account", "claude-sonnet-5-5");
-assert.equal(providersUp(env), 1, "a key out of credit takes its provider down");
-markDown("gemini", "busy", "gemini-pro-latest");
+markDown("anthropic", "busy", "claude-sonnet-5-5");
 assert.equal(providersUp(env), 1, "a busy model is not an account outage");
-markDown("gemini", "account", "gemini-pro-latest");
-assert.equal(providersUp(env), 0, "both accounts down");
-assert.equal(providersUp(env, Date.now() + 11 * 60_000), 2, "and back once the skip window passes");
+markDown("anthropic", "account", "claude-sonnet-5-5");
+assert.equal(providersUp(env), 0, "a key out of credit takes Claude down");
+assert.equal(providersUp(env, Date.now() + 11 * 60_000), 1, "and back once the skip window passes");
 clearHealth();
 
 console.log("brain.check — mode switch: credits, provider accounts, busy is not down.");
