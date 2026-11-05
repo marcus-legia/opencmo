@@ -929,6 +929,8 @@ begin
     );
     v_count := v_count + 1;
   end loop;
+  -- Jobs left open (a tab closed mid-job, a crash): give back what they still hold.
+  perform public.credit_orders_reap();
   return v_count;
 end;
 $$;
@@ -5843,10 +5845,10 @@ $_$;
 
 
 --
--- Name: create_generation(uuid, uuid, text, jsonb, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: create_generation(uuid, uuid, text, jsonb, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.create_generation(p_job_id uuid, p_clip_id uuid, p_model text, p_spec jsonb, p_spec_hash text, p_request_id uuid) RETURNS jsonb
+CREATE FUNCTION public.create_generation(p_job_id uuid, p_clip_id uuid, p_model text, p_spec jsonb, p_spec_hash text, p_request_id uuid, p_order_id uuid DEFAULT NULL::uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $_$
@@ -5857,6 +5859,7 @@ declare
   v_task public.tasks;
   v_price int;
   v_parent public.generations;
+  v_order public.credit_orders;
 begin
   if p_request_id is null then
     raise exception 'Missing request id.' using errcode = '22023';
@@ -5922,7 +5925,20 @@ begin
   end if;
 
   v_price := public.ai_price(v_model, p_spec);
-  if public.credit_balance(v_user) < v_price then
+  if p_order_id is not null then
+    -- Part of a job the user confirmed once (charge before running): its price comes out of the job's
+    -- hold, never out of a balance that may have been spent since the confirmation.
+    select * into v_order from public.credit_orders where id = p_order_id and user_id = v_user;
+    if not found then
+      raise exception 'Job not found.' using errcode = 'P0002';
+    end if;
+    if v_order.status <> 'open' then
+      raise exception 'This job is closed. Start it again.' using errcode = 'P0001';
+    end if;
+    if public.credit_held('credit_order', v_order.id) < v_price then
+      raise exception 'This job needs more credits than its estimate. Start it again.' using errcode = 'P0001';
+    end if;
+  elsif public.credit_balance(v_user) < v_price then
     raise exception 'Not enough credits: % needed, % left. Top up on the Credits page.',
       v_price, public.credit_balance(v_user) using errcode = 'P0001';
   end if;
@@ -5947,7 +5963,9 @@ begin
           case when v_parent.id is not null and v_parent.status <> 'done' then 'awaiting_input' else 'queued' end)
   returning * into v_task;
   update public.generations set task_id = v_task.id where id = v_generation.id returning * into v_generation;
-  if v_price > 0 then
+  if v_price > 0 and v_order.id is not null then
+    perform public.credit_order_draw(v_order.id, 'generation', v_generation.id, v_price, 'Generate hold', p_job_id);
+  elsif v_price > 0 then
     perform public.credit_hold(v_user, 'generation', v_generation.id, v_price, 'Generate hold', p_job_id);
   end if;
 
@@ -6168,6 +6186,184 @@ begin
   insert into public.credit_ledger (user_id, delta, reason, job_id, ref_kind, ref_id)
   values (p_user, -p_amount, p_reason, p_job_id, p_ref_kind, p_ref_id);
   return p_amount;
+end;
+$$;
+
+
+--
+-- Name: credit_order_close(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.credit_order_close(p_order_id uuid) RETURNS integer
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.credit_order_close_for(public.require_user(), p_order_id);
+$$;
+
+
+--
+-- Name: credit_order_close_for(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.credit_order_close_for(p_user uuid, p_order_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_order public.credit_orders;
+  v_back integer := 0;
+begin
+  perform public.lock_credit_owner(p_user);
+  select * into v_order from public.credit_orders where id = p_order_id and user_id = p_user for update;
+  if not found then
+    raise exception 'Job not found.' using errcode = 'P0002';
+  end if;
+  if v_order.status = 'closed' then
+    return 0;
+  end if;
+  v_back := greatest(public.credit_held('credit_order', v_order.id), 0);
+  perform public.credit_refund(p_user, 'credit_order', v_order.id, 'Job refund');
+  update public.credit_orders set status = 'closed', closed_at = now() where id = v_order.id;
+  return v_back;
+end;
+$$;
+
+
+--
+-- Name: credit_order_draw(uuid, text, uuid, integer, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.credit_order_draw(p_order_id uuid, p_ref_kind text, p_ref_id uuid, p_amount integer, p_reason text, p_job_id uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_order public.credit_orders;
+  v_left integer;
+begin
+  if p_amount is null or p_amount <= 0 then
+    return 0;
+  end if;
+  select * into v_order from public.credit_orders where id = p_order_id;
+  if not found then
+    raise exception 'Job not found.' using errcode = 'P0002';
+  end if;
+  perform public.lock_credit_owner(v_order.user_id);
+  select * into v_order from public.credit_orders where id = p_order_id for update;
+  if v_order.status <> 'open' then
+    raise exception 'This job is closed. Start it again.' using errcode = 'P0001';
+  end if;
+  v_left := public.credit_held('credit_order', v_order.id);
+  if v_left < p_amount then
+    raise exception 'This job needs more credits than its estimate. Start it again.' using errcode = 'P0001';
+  end if;
+  perform public.credit_settle(v_order.user_id, 'credit_order', v_order.id, v_left - p_amount, 'Job hold moved', p_job_id);
+  perform public.credit_hold(v_order.user_id, p_ref_kind, p_ref_id, p_amount, p_reason, p_job_id);
+  return p_amount;
+end;
+$$;
+
+
+--
+-- Name: credit_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.credit_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    estimate_credits integer NOT NULL,
+    source_kind text,
+    source_id uuid,
+    request_id uuid NOT NULL,
+    status text DEFAULT 'open'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    closed_at timestamp with time zone,
+    CONSTRAINT credit_orders_estimate_credits_check CHECK (((estimate_credits > 0) AND (estimate_credits <= 5000))),
+    CONSTRAINT credit_orders_kind_check CHECK ((kind = ANY (ARRAY['long_take'::text, 'explainer'::text, 'studio_video'::text]))),
+    CONSTRAINT credit_orders_source_kind_check CHECK ((source_kind = ANY (ARRAY['agent_turn'::text, 'work_order'::text, 'mcp'::text]))),
+    CONSTRAINT credit_orders_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text])))
+);
+
+
+--
+-- Name: credit_order_open(text, integer, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.credit_order_open(p_kind text, p_estimate integer, p_source_kind text, p_source_id uuid, p_request_id uuid) RETURNS public.credit_orders
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_order public.credit_orders;
+begin
+  if p_request_id is null then
+    raise exception 'Missing request id.' using errcode = '22023';
+  end if;
+  if p_kind is null or p_kind not in ('long_take', 'explainer', 'studio_video') then
+    raise exception 'Invalid job.' using errcode = '22023';
+  end if;
+  if p_estimate is null or p_estimate <= 0 or p_estimate > 5000 then
+    raise exception 'Invalid job estimate.' using errcode = '22023';
+  end if;
+  if p_source_kind is not null and p_source_kind not in ('agent_turn', 'work_order', 'mcp') then
+    raise exception 'Invalid job.' using errcode = '22023';
+  end if;
+  if p_source_kind = 'agent_turn' and not exists (
+    select 1 from public.agent_turns t join public.agent_sessions s on s.id = t.session_id
+    where t.id = p_source_id and s.user_id = v_user
+  ) then
+    raise exception 'Job not found.' using errcode = 'P0002';
+  end if;
+  if p_source_kind = 'work_order' and not exists (
+    select 1 from public.work_orders where id = p_source_id and user_id = v_user
+  ) then
+    raise exception 'Job not found.' using errcode = 'P0002';
+  end if;
+  perform public.lock_credit_owner(v_user);
+  select * into v_order from public.credit_orders where request_id = p_request_id;
+  if found then
+    if v_order.user_id <> v_user then
+      raise exception 'That request id was already used.' using errcode = '22023';
+    end if;
+    return v_order;
+  end if;
+  insert into public.credit_orders (user_id, kind, estimate_credits, source_kind, source_id, request_id)
+  values (v_user, p_kind, p_estimate, p_source_kind, p_source_id, p_request_id)
+  returning * into v_order;
+  perform public.credit_hold(v_user, 'credit_order', v_order.id, p_estimate, 'Job hold');
+  return v_order;
+end;
+$$;
+
+
+--
+-- Name: credit_orders_reap(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.credit_orders_reap() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_order record;
+  v_count integer := 0;
+begin
+  for v_order in
+    select id, user_id from public.credit_orders
+    where status = 'open' and created_at < now() - interval '24 hours'
+    order by created_at limit 200
+  loop
+    perform 1 from public.profiles where id = v_order.user_id for update skip locked;
+    if not found and exists (select 1 from public.profiles where id = v_order.user_id) then
+      continue;
+    end if;
+    perform public.credit_order_close_for(v_order.user_id, v_order.id);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
 end;
 $$;
 
@@ -14747,7 +14943,7 @@ CREATE TABLE public.credit_ledger (
     external_id text,
     ref_kind text,
     ref_id uuid,
-    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'job_fee'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text, 'work_order'::text]))),
+    CONSTRAINT credit_ledger_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['job'::text, 'job_fee'::text, 'generation'::text, 'captions'::text, 'caption_translation'::text, 'agent_turn'::text, 'cmo_run'::text, 'work_order'::text, 'credit_order'::text]))),
     CONSTRAINT credit_ledger_ref_pair CHECK (((ref_kind IS NULL) = (ref_id IS NULL)))
 );
 
@@ -15741,6 +15937,22 @@ ALTER TABLE ONLY public.credit_ledger
 
 
 --
+-- Name: credit_orders credit_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.credit_orders
+    ADD CONSTRAINT credit_orders_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: credit_orders credit_orders_request_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.credit_orders
+    ADD CONSTRAINT credit_orders_request_id_key UNIQUE (request_id);
+
+
+--
 -- Name: deliverables deliverables_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -16541,6 +16753,20 @@ CREATE INDEX credit_ledger_ref_idx ON public.credit_ledger USING btree (ref_kind
 --
 
 CREATE INDEX credit_ledger_user_idx ON public.credit_ledger USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: credit_orders_open_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX credit_orders_open_idx ON public.credit_orders USING btree (created_at) WHERE (status = 'open'::text);
+
+
+--
+-- Name: credit_orders_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX credit_orders_user_idx ON public.credit_orders USING btree (user_id, created_at DESC);
 
 
 --
@@ -17621,6 +17847,14 @@ ALTER TABLE ONLY public.credit_ledger
 
 
 --
+-- Name: credit_orders credit_orders_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.credit_orders
+    ADD CONSTRAINT credit_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: deliverables deliverables_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18459,6 +18693,19 @@ ALTER TABLE public.content_items ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.credit_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: credit_orders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.credit_orders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: credit_orders credit_orders_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY credit_orders_own ON public.credit_orders FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
 
 --
 -- Name: deliverables; Type: ROW SECURITY; Schema: public; Owner: -
