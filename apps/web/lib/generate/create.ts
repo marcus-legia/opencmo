@@ -145,17 +145,18 @@ async function reusable(supabase: SupabaseClient, request: CreateRequest, hash: 
  * rate limit and moderation: the editor retries it every couple of seconds while the chain starts.
  */
 async function requireParent(supabase: SupabaseClient, request: CreateRequest, spec: GenerationSpec): Promise<void> {
-  const after = (spec as { after?: unknown }).after;
-  if (typeof after !== "string") return;
-  const parent = await supabase
-    .from("generations")
-    .select("id")
-    .eq("job_id", request.jobId)
-    .eq("spec_hash", after)
-    .in("status", ["queued", "running", "done"])
-    .limit(1);
-  if (parent.error) throw parent.error;
-  if (!parent.data?.length) throw new ApiError(422, "Start the shot before this one first.");
+  const { after, startAfter, endAfter } = spec as { after?: unknown; startAfter?: unknown; endAfter?: unknown };
+  const live = async (hash: string, kind?: string) => {
+    let query = supabase.from("generations").select("id").eq("job_id", request.jobId).eq("spec_hash", hash).in("status", ["queued", "running", "done"]);
+    if (kind) query = query.eq("kind", kind);
+    const parent = await query.limit(1);
+    if (parent.error) throw parent.error;
+    return Boolean(parent.data?.length);
+  };
+  if (typeof after === "string" && !(await live(after))) throw new ApiError(422, "Start the shot before this one first.");
+  for (const keyframe of [startAfter, endAfter]) {
+    if (typeof keyframe === "string" && !(await live(keyframe, "image"))) throw new ApiError(422, "Start the keyframes of this shot first.");
+  }
 }
 
 /** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */

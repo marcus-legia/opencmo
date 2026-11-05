@@ -98,6 +98,9 @@ INPUT_UNREADABLE = "That image could not be used. Pick a PNG, JPEG or WebP of at
 #: A shot that continues another downloads the parent's file: a short generated video.
 PARENT_MAX_BYTES = 200 * 1024 * 1024
 SHOT_BEFORE = "The shot before this one is not ready. Your credits were refunded."
+KEYFRAME_NOT_READY = "A keyframe of this shot is not ready. Your credits were refunded."
+#: A shot on a keyframe still being made (`startAfter` / `endAfter`) reads it through this generation column.
+KEYFRAME_COLUMNS = {"startAfter": ("start_after_id", "startImage"), "endAfter": ("end_after_id", "endImage")}
 
 
 def _continuation_frame(store: Any, task: Task, generation: dict[str, Any], model: Any, workdir: Path) -> str:
@@ -142,6 +145,43 @@ def _continuation_frame(store: Any, task: Task, generation: dict[str, Any], mode
         raise SpecError(SHOT_BEFORE)
     check_input(model, frame)
     return str(frame)
+
+
+def _keyframe(store: Any, task: Task, generation: dict[str, Any], key: str, model: Any, workdir: Path) -> str:
+    """The finished keyframe a shot starts or ends on (`startAfter` / `endAfter`), checked like any input image.
+
+    The keyframe is looked up by the generation's own column and must be an image of the same user and project, be
+    done, and still hash to the spec's value, so a row edited by hand cannot borrow someone else's image.
+    """
+    column, _ = KEYFRAME_COLUMNS[key]
+    spec = generation.get("spec") or {}
+    parent_id = str(generation.get(column) or "")
+    parent = store.get_generation(parent_id) if parent_id else None
+    if (
+        not parent
+        or parent.get("user_id") != task.user_id
+        or parent.get("job_id") != task.job_id
+        or parent.get("kind") != "image"
+        or parent.get("status") != "done"
+        or parent.get("spec_hash") != spec.get(key)
+        or not parent.get("media_asset_id")
+    ):
+        raise SpecError(KEYFRAME_NOT_READY)
+    asset = store.get_media_asset(str(parent["media_asset_id"]))
+    path = str((asset or {}).get("storage_path") or "")
+    if not path.startswith(f"media/{task.user_id}/"):
+        raise SpecError(KEYFRAME_NOT_READY)
+    raw = workdir / f"keyframe-{key}"
+    try:
+        store.download_object("media", path[len("media/"):], raw, max_bytes=INPUT_MAX_BYTES)
+    except Exception as exc:
+        raise SpecError(KEYFRAME_NOT_READY) from exc
+    try:
+        out = reencode_image(raw, workdir / f"keyframe-{key}.jpg", INPUT_EDGE)
+    except FFmpegError as exc:
+        raise SpecError(KEYFRAME_NOT_READY) from exc
+    check_input(model, out)
+    return str(out)
 
 
 def _prepare_inputs(
@@ -190,6 +230,11 @@ def _prepare_inputs(
         # Providers know nothing of chains: they get the parent's last frame as the first frame.
         prepared.pop("after")
         prepared["startImage"] = _continuation_frame(store, task, generation or {}, model, workdir)
+    for key, (_, image_key) in KEYFRAME_COLUMNS.items():
+        if key in spec:
+            # Nor of keyframes: they get the finished image as the first or last frame.
+            prepared.pop(key)
+            prepared[image_key] = _keyframe(store, task, generation or {}, key, model, workdir)
     return prepared
 
 

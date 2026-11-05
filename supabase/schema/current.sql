@@ -1206,8 +1206,8 @@ begin
     if v_max_refs > 0 then v_allowed := v_allowed || array['references']; end if;
   end if;
   if p_model.kind = 'video' then
-    if coalesce((p_model.limits->>'firstFrame')::boolean, false) then v_allowed := v_allowed || array['startImage', 'after']; end if;
-    if coalesce((p_model.limits->>'lastFrame')::boolean, false) then v_allowed := v_allowed || array['endImage']; end if;
+    if coalesce((p_model.limits->>'firstFrame')::boolean, false) then v_allowed := v_allowed || array['startImage', 'after', 'startAfter']; end if;
+    if coalesce((p_model.limits->>'lastFrame')::boolean, false) then v_allowed := v_allowed || array['endImage', 'endAfter']; end if;
     if coalesce((p_model.limits->>'audio')::boolean, false) then v_allowed := v_allowed || array['audio']; end if;
     if v_source then v_allowed := v_allowed || array['sourceVideo', 'sourceStart']; end if;
     if v_voiced then v_allowed := v_allowed || array['voice']; end if;
@@ -1253,6 +1253,20 @@ begin
   end if;
   if p_spec ? 'after' and p_spec ? 'startImage' then
     raise exception 'A shot that continues the previous one cannot also start from an image.' using errcode = '22023';
+  end if;
+  -- A shot that starts or ends on a keyframe still being made (/video in one go): the keyframe's spec hash. The
+  -- worker swaps in the finished keyframe, so the shot cannot also name an image for the same end.
+  if (p_spec ? 'startAfter' and (jsonb_typeof(p_spec->'startAfter') is distinct from 'string'
+        or p_spec->>'startAfter' !~ '^[0-9a-f]{64}$'))
+      or (p_spec ? 'endAfter' and (jsonb_typeof(p_spec->'endAfter') is distinct from 'string'
+        or p_spec->>'endAfter' !~ '^[0-9a-f]{64}$')) then
+    raise exception 'Invalid generation request.' using errcode = '22023';
+  end if;
+  if p_spec ? 'startAfter' and (p_spec ? 'startImage' or p_spec ? 'after') then
+    raise exception 'A shot starts from one frame only.' using errcode = '22023';
+  end if;
+  if p_spec ? 'endAfter' and p_spec ? 'endImage' then
+    raise exception 'A shot ends on one frame only.' using errcode = '22023';
   end if;
   if (p_spec ? 'startImage' and not public.ai_media_ref_ok(p_spec->'startImage'))
       or (p_spec ? 'endImage' and not public.ai_media_ref_ok(p_spec->'endImage')) then
@@ -5206,10 +5220,18 @@ begin
   set status = 'done', output = jsonb_build_object('media_asset_id', v_asset.id), error = null,
       finished_at = now(), lease_until = null
   where id = p_task_id;
-  -- Shots that continue this one can start now; the worker's sweep claims them.
+  -- Shots that continue this one, or start or end on this keyframe, can start once every frame they wait on is
+  -- done; the worker's sweep claims them.
   update public.tasks set status = 'queued'
   where status = 'awaiting_input'
-    and id in (select task_id from public.generations where after_id = v_generation.id);
+    and id in (
+      select g.task_id from public.generations g
+      where v_generation.id in (g.after_id, g.start_after_id, g.end_after_id)
+        and not exists (
+          select 1 from public.generations p
+          where p.id in (g.after_id, g.start_after_id, g.end_after_id) and p.status <> 'done'
+        )
+    );
   return true;
 end;
 $_$;
@@ -5873,6 +5895,9 @@ declare
   v_price int;
   v_parent public.generations;
   v_order public.credit_orders;
+  v_start public.generations;
+  v_end public.generations;
+  v_waits boolean;
 begin
   if p_request_id is null then
     raise exception 'Missing request id.' using errcode = '22023';
@@ -5968,12 +5993,37 @@ begin
     end if;
   end if;
 
-  insert into public.generations (user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved, after_id)
-  values (v_user, p_job_id, p_clip_id, v_model.kind, v_model.id, p_spec, p_spec_hash, v_price, v_parent.id)
+  -- A shot on keyframes still being made waits for them: same project and owner, images, still live.
+  if p_spec ? 'startAfter' then
+    select * into v_start from public.generations
+    where job_id = p_job_id and user_id = v_user and spec_hash = p_spec->>'startAfter' and kind = 'image'
+      and status in ('queued', 'running', 'done')
+    for update;
+    if not found then
+      raise exception 'Start the keyframes of this shot first.' using errcode = '22023';
+    end if;
+  end if;
+  if p_spec ? 'endAfter' then
+    select * into v_end from public.generations
+    where job_id = p_job_id and user_id = v_user and spec_hash = p_spec->>'endAfter' and kind = 'image'
+      and status in ('queued', 'running', 'done')
+    for update;
+    if not found then
+      raise exception 'Start the keyframes of this shot first.' using errcode = '22023';
+    end if;
+  end if;
+  v_waits := (v_parent.id is not null and v_parent.status <> 'done')
+    or (v_start.id is not null and v_start.status <> 'done')
+    or (v_end.id is not null and v_end.status <> 'done');
+
+  insert into public.generations (user_id, job_id, clip_id, kind, model, spec, spec_hash, credits_reserved, after_id,
+                                  start_after_id, end_after_id)
+  values (v_user, p_job_id, p_clip_id, v_model.kind, v_model.id, p_spec, p_spec_hash, v_price, v_parent.id,
+          v_start.id, v_end.id)
   returning * into v_generation;
   insert into public.tasks (user_id, kind, job_id, clip_id, payload, request_id, status)
   values (v_user, 'generate', p_job_id, p_clip_id, jsonb_build_object('generation_id', v_generation.id), p_request_id,
-          case when v_parent.id is not null and v_parent.status <> 'done' then 'awaiting_input' else 'queued' end)
+          case when v_waits then 'awaiting_input' else 'queued' end)
   returning * into v_task;
   update public.generations set task_id = v_task.id where id = v_generation.id returning * into v_generation;
   if v_price > 0 and v_order.id is not null then
@@ -13446,6 +13496,11 @@ begin
         finished_at = now()
     where status = 'awaiting_input'
       and id in (select task_id from public.generations where after_id = v_generation.id);
+    update public.tasks
+    set status = 'failed', error = 'A keyframe of this shot did not finish. Your credits were refunded.',
+        finished_at = now()
+    where status = 'awaiting_input'
+      and id in (select task_id from public.generations where v_generation.id in (start_after_id, end_after_id));
   elsif new.status in ('failed', 'cancelled') then
     update public.generations
     set status = new.status,
@@ -13467,6 +13522,11 @@ begin
         finished_at = now()
     where status = 'awaiting_input'
       and id in (select task_id from public.generations where after_id = v_generation.id);
+    update public.tasks
+    set status = 'failed', error = 'A keyframe of this shot did not finish. Your credits were refunded.',
+        finished_at = now()
+    where status = 'awaiting_input'
+      and id in (select task_id from public.generations where v_generation.id in (start_after_id, end_after_id));
   end if;
   return new;
 end;
@@ -15292,6 +15352,8 @@ CREATE TABLE public.generations (
     after_id uuid,
     sent_at timestamp with time zone,
     quality jsonb,
+    start_after_id uuid,
+    end_after_id uuid,
     CONSTRAINT generations_credits_final_check CHECK ((credits_final >= 0)),
     CONSTRAINT generations_credits_reserved_check CHECK ((credits_reserved >= 0)),
     CONSTRAINT generations_kind_check CHECK ((kind = ANY (ARRAY['image'::text, 'video'::text, 'voice'::text, 'audio'::text]))),
@@ -17049,10 +17111,24 @@ CREATE INDEX generations_after_idx ON public.generations USING btree (after_id) 
 
 
 --
+-- Name: generations_end_after_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_end_after_idx ON public.generations USING btree (end_after_id) WHERE (end_after_id IS NOT NULL);
+
+
+--
 -- Name: generations_live_hash_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX generations_live_hash_idx ON public.generations USING btree (job_id, spec_hash) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text]));
+
+
+--
+-- Name: generations_start_after_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_start_after_idx ON public.generations USING btree (start_after_id) WHERE (start_after_id IS NOT NULL);
 
 
 --
@@ -18186,6 +18262,14 @@ ALTER TABLE ONLY public.generations
 
 
 --
+-- Name: generations generations_end_after_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.generations
+    ADD CONSTRAINT generations_end_after_id_fkey FOREIGN KEY (end_after_id) REFERENCES public.generations(id) ON DELETE SET NULL;
+
+
+--
 -- Name: generations generations_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18207,6 +18291,14 @@ ALTER TABLE ONLY public.generations
 
 ALTER TABLE ONLY public.generations
     ADD CONSTRAINT generations_model_fkey FOREIGN KEY (model) REFERENCES public.ai_models(id);
+
+
+--
+-- Name: generations generations_start_after_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.generations
+    ADD CONSTRAINT generations_start_after_id_fkey FOREIGN KEY (start_after_id) REFERENCES public.generations(id) ON DELETE SET NULL;
 
 
 --

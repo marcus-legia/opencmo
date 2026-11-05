@@ -101,7 +101,13 @@ export type GenerationSpec = {
 	sourceStart?: number;
 	/** /video: spec hash of the shot this one continues; the worker starts it from that shot's last frame. */
 	after?: string;
+	/** /video in one go: spec hashes of the keyframes (image generations) this shot starts and ends on. */
+	startAfter?: string;
+	endAfter?: string;
 };
+
+/** Another generation of the same project, named by its spec hash (`after`, `startAfter`, `endAfter`). */
+const specHashRef = z.string().regex(/^[0-9a-f]{64}$/, 'Invalid generation request.');
 
 /** Tên object media của người dùng: kiểm hình dạng ở đây, chủ sở hữu + tồn tại ở SQL. */
 const mediaRef = z
@@ -162,8 +168,8 @@ export function specSchema(model: AiModel) {
 				}),
 				...resolution,
 				...references,
-				...(limits.firstFrame ? { startImage: mediaRef.optional(), after: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid generation request.').optional() } : {}),
-				...(limits.lastFrame ? { endImage: mediaRef.optional() } : {}),
+				...(limits.firstFrame ? { startImage: mediaRef.optional(), after: specHashRef.optional(), startAfter: specHashRef.optional() } : {}),
+				...(limits.lastFrame ? { endImage: mediaRef.optional(), endAfter: specHashRef.optional() } : {}),
 				...(limits.audio ? { audio: z.boolean().optional() } : {}),
 				...(limits.sourceVideo
 					? {
@@ -179,9 +185,16 @@ export function specSchema(model: AiModel) {
 				// Explainers voice their narration in the render job: the premade voice is part of the spec.
 				...(isExplainer(model) && !isMotionClip(model) ? { voice: z.enum((limits.voices ?? ['default']) as [string, ...string[]], { error: 'Choose one of the listed voices.' }) } : {}),
 				seed,
-			}).refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
-				message: 'A shot that continues the previous one cannot also start from an image.',
-			});
+			})
+				.refine((spec) => !('after' in spec && spec.after !== undefined && 'startImage' in spec && spec.startImage !== undefined), {
+					message: 'A shot that continues the previous one cannot also start from an image.',
+				})
+				.refine((spec) => !('startAfter' in spec && spec.startAfter !== undefined && (('startImage' in spec && spec.startImage !== undefined) || ('after' in spec && spec.after !== undefined))), {
+					message: 'A shot starts from one frame only.',
+				})
+				.refine((spec) => !('endAfter' in spec && spec.endAfter !== undefined && 'endImage' in spec && spec.endImage !== undefined), {
+					message: 'A shot ends on one frame only.',
+				});
 		case 'voice':
 			return z.strictObject({
 				prompt,
