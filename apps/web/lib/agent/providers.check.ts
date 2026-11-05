@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, dropUnansweredServerToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, strictTools } from "./providers/anthropic";
+import { ALWAYS_LOADED, anthropicFormat, closeDanglingToolUses, dropUnansweredServerToolUses, contextEditing, imagesOver, toolSearchOn, danglingToolUses, toolDefinitions, NOT_COMPLETED, MAX_STRICT_OPTIONAL, MAX_STRICT_TOOLS, optionalParams, refuseStrict, strictAllowed, strictKey, strictTools } from "./providers/anthropic";
 import type { GoogleGenAI } from "@google/genai";
 
 import { closeDanglingCalls, geminiProvider } from "./providers/gemini";
@@ -35,6 +35,16 @@ const bigSpec = { name: "generate_media", description: "", schema: optionalSchem
 const sent = strictTools([...TOOL_SPECS, bigSpec, pricedSpec]);
 assert.ok(TOOL_SPECS.filter((spec) => spec.strict).length > MAX_STRICT_TOOLS, "the clip scope has more eligible tools than the cap");
 assert.ok(sent.size <= MAX_STRICT_TOOLS, "strict tools capped");
+
+// A strict set the API refused for grammar size is not tried again: one 400 per instance, not one per step.
+const refusedSpecs = [...TOOL_SPECS, bigSpec, pricedSpec];
+assert.ok(strictAllowed(refusedSpecs), "strict is tried first");
+assert.equal(refuseStrict(refusedSpecs), true, "the first refusal is logged");
+assert.equal(strictAllowed(refusedSpecs), false, "later steps skip strict");
+assert.equal(refuseStrict(refusedSpecs), false, "no second log line");
+assert.ok(strictAllowed([pricedSpec]), "another strict set is still tried");
+assert.equal(strictKey([{ name: "plain", description: "", schema: optionalSchema(0), strict: false }]), "", "no strict tools, no key");
+assert.equal(strictAllowed([{ name: "plain", description: "", schema: optionalSchema(0), strict: false }]), false);
 assert.ok(!sent.has("generate_media"), "one large priced schema does not crowd out the small ones");
 // Eager streaming skips the API's JSON check: only strict tools (valid JSON by grammar) may use it.
 const defined = toolDefinitions([...TOOL_SPECS, bigSpec, pricedSpec], true) as { name: string }[];
