@@ -32,7 +32,7 @@ set local request.jwt.claims = '{"sub":"e1930000-0000-4000-8000-00000000000a"}';
 create temporary table s as select * from public.agent_open_session('e1932000-0000-4000-8000-00000000000a', 'claude-sonnet-5-5');
 grant select on s to authenticated;
 
--- Stop, then the call it cut short records its usage: billed, never past the hold.
+-- Stop, then the call it cut short records its usage: billed in full, never past the balance.
 create temporary table t1 as select * from public.agent_begin_turn((select id from s), 'Write a long script', '[{"text":"Write a long script"}]');
 grant select on t1 to authenticated;
 select is((select status from public.agent_stop((select id from s))), 'stopped', 'Stop closes the running turn');
@@ -41,12 +41,16 @@ grant select on before_usage to authenticated;
 select is((select credits from before_usage), 0, 'nothing was recorded before Stop');
 select lives_ok($$ select public.agent_record_usage_for(auth.uid(), (select id from t1), 'claude-sonnet-5-5', 50000000, 0, 0, 0) $$,
   'the stopped call records its usage after the close');
-select is((select credits from public.agent_turns where id = (select id from t1)), (select hold_credits from t1),
-  'the turn is billed for it, capped at its hold');
-select is(public.credit_balance(auth.uid()), (select balance from before_usage) - (select hold_credits from t1),
-  'the balance pays exactly what was added');
+select is((select credits from public.agent_turns where id = (select id from t1)), (select balance from before_usage),
+  'the turn is billed past its hold, up to the balance (50M Sonnet tokens are far more than the 50 credits on hand)');
+select is(public.credit_balance(auth.uid()), 0,
+  'the balance pays what was added, never below zero');
 select is((select count(*)::int from public.credit_ledger where user_id = auth.uid() and reason = 'Assistant usage after Stop'), 1,
   'one ledger row for it');
+
+reset role;
+insert into public.credit_ledger(user_id, delta, reason) values ('e1930000-0000-4000-8000-00000000000a', 50, 'test grant');
+set local role authenticated;
 
 -- A resume names its pause: answers from an older pause (another tab) are refused.
 create temporary table t2 as select * from public.agent_begin_turn((select id from s), 'Make an image', '[{"text":"Make an image"}]');

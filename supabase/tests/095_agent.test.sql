@@ -119,7 +119,13 @@ select is(
   public.agent_record_usage_for(auth.uid(), (select id from t2), 'claude-opus-5', 400000, 0, 0, 0),
   40, 'usage vượt khoản giữ vẫn được ghi'
 );
-select is((select credits from public.agent_stop((select id from s))), 5, 'Stop chốt, credit không vượt khoản giữ');
+select is((select credits from public.agent_stop((select id from s))), 10,
+  'Stop bills usage past the hold, up to the balance (hold 5 + balance 5)');
+select is(public.credit_balance('e9500000-0000-4000-8000-00000000000a'), 0, 'the balance paid the overage');
+reset role;
+insert into public.credit_ledger(user_id, delta, reason) values
+  ('e9500000-0000-4000-8000-00000000000a', 5, 'test grant');
+set local role authenticated;
 select throws_ok(
   $$ select public.agent_append_for(auth.uid(), (select id from t2), 'assistant', '[{"type":"text","text":"late"}]') $$,
   'P0001', 'This assistant turn was stopped.', 'lượt đã Stop từ chối tin nhắn mới'
