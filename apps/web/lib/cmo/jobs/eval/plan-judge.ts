@@ -9,7 +9,6 @@
 
 import { z } from "zod";
 
-import { otherProvider, type ProviderKind } from "@/lib/cmo/agents/registry";
 import { usageUsd } from "@/lib/eval/prices";
 
 import type { Judge, JudgeResult } from "../judge";
@@ -31,15 +30,13 @@ const CriterionSchema = z.object({ reasons: z.string(), met: z.boolean() });
 
 type Call = <S extends z.ZodType>(opts: StructuredOptions<S>) => Promise<z.infer<S>>;
 
-export function planJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?: number }): Judge {
+export function planJudge(opts: { call?: Call; timeoutMs?: number } = {}): Judge {
   const call: Call = opts.call ?? structured;
-  const prefer = otherProvider(opts.drafter);
   return async (input) => {
     let cost = 0;
     const ask = <S extends z.ZodType>(label: string, prompt: string, schema: S) =>
       call({
         agent: "checker",
-        prefer,
         system: PLAN_SYSTEM,
         prompt,
         schema,
@@ -80,7 +77,7 @@ export function planJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?
 export function fakePlanJudge(): Judge {
   const call: Call = async (o) =>
     (o.schema === (VerdictSchema as z.ZodType) ? { reasons: "fake judge", verdict: "accept_as_is" } : { reasons: "fake judge", met: true }) as never;
-  return planJudge({ drafter: "anthropic", call });
+  return planJudge({ call });
 }
 
 /** A plan as the judge reads it: one line per item, in day order. */

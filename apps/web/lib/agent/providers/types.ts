@@ -2,10 +2,8 @@
  * Giao diện trung lập giữa vòng lặp Assistant và một nhà cung cấp model.
  *
  * Vòng lặp (tool, CAS, checkpoint, credit, SSE) chỉ nói bằng các kiểu ở đây.
- * Mỗi provider giữ lịch sử ở DẠNG NATIVE của nó — content block của Claude,
- * `parts` của Gemini kèm `thoughtSignature` — vì cả hai đều đòi gửi lại khối
- * suy nghĩ đúng như đã nhận. Không có chuyển đổi qua lại: phiên gắn với MỘT
- * model (`agent_open_session`).
+ * History is kept in the provider's NATIVE shape (Claude's content blocks), because thinking blocks
+ * must be sent back exactly as received. A session is bound to ONE model (`agent_open_session`).
  */
 
 import type { ToolSpec } from "../tools";
@@ -65,7 +63,7 @@ export type ToolResult = {
   images?: Image[];
 };
 
-export type ProviderKind = "anthropic" | "gemini" | "fake";
+export type ProviderKind = "anthropic" | "fake";
 
 /** Phần định dạng — không cần khoá API, nên `view.ts` dùng được để vẽ panel. */
 export interface Format {

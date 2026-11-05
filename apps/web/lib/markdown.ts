@@ -1,6 +1,6 @@
 /**
  * Markdown của câu trả lời Assistant → cây khối/đoạn, để panel dựng thành
- * phần tử React. Model (Claude, Gemini) trả lời bằng markdown; in thẳng ra là
+ * phần tử React. Model (Claude) trả lời bằng markdown; in thẳng ra là
  * `**1. Build…**` và `*   **The Idea:**` nằm nguyên trên màn hình.
  *
  * Không dùng thư viện và không đi qua HTML: cây này chỉ có chữ, React tự thoát

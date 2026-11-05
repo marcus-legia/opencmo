@@ -26,8 +26,6 @@ const ENGINE_KEYS = new Set([
   // AI images/video/cut-outs and their output moderation run on fal: without the key the local
   // worker cannot generate, and moderation silently skips.
   "FAL_KEY", "OPENCMO_AI_FAKE",
-  // The standby checker of output moderation when Claude cannot answer.
-  "GEMINI_API_KEY", "OPENCMO_MODERATION_GEMINI_MODEL",
   // Explainers: where clip-motion renders, and the free silent voice for runs without a fal key.
   "OPENCMO_MOTION", "OPENCMO_MOTION_FAKE_VOICE", "OPENCMO_MOTION_SCALE", "OPENCMO_MOTION_CHROME",
   "OPENCMO_MOTION_CONCURRENCY", "OPENCMO_MOTION_ASSET_ORIGIN",

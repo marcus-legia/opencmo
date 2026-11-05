@@ -13,8 +13,8 @@ Deploy:
     modal secret create opencmo-motion MOTION_PREVIEW_TOKEN=... # explainer previews; same as Vercel, not the worker token
     modal deploy modal_app.py
 
-Optional: add GEMINI_API_KEY to the `opencmo` secret. Gemini then checks AI output when Claude
-cannot answer (no credit, an outage); without it such output is refunded, never delivered.
+Claude (ANTHROPIC_API_KEY in the `opencmo` secret) checks AI output; when it cannot answer for good (no
+credit, a bad key) the output is refunded, never delivered.
 
 Deploy only after every migration is applied to the database: in the other order the worker calls RPCs that do
 not exist yet and every job and task fails.

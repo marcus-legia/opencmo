@@ -29,12 +29,12 @@ export async function loadSession(supabase: SupabaseClient, id: string | undefin
   const session = data as SessionRow | null;
   // The multi-clip project chat is gone with the clipping tool; its old sessions stay read-only history.
   if (!session || (session.scope !== "cmo" && !session.clip_id)) throw notFound("Assistant session not found.");
-  // A CMO chat runs on the `cmo` agent's current model of the chat's own provider family: history
-  // only replays within a family.
+  // A CMO chat runs on the `cmo` agent's current Claude model; a chat from a removed provider cannot
+  // replay its history on Claude.
   const family = kindOf(session.model);
   const provider =
-    session.scope === "cmo" ? (family === "fake" ? agentChatProvider("cmo") : agentChatProvider("cmo", family)) : providerForModel(session.model);
-  // The chat's model is gone but another one runs (a bumped ANTHROPIC_MODEL, a removed Gemini): a new chat works now.
+    session.scope === "cmo" ? (family === "retired" ? null : agentChatProvider("cmo")) : providerForModel(session.model);
+  // The chat's model is gone but another one runs (a bumped ANTHROPIC_MODEL, a chat from the removed Gemini): a new chat works now.
   if (!provider && availableModels().length) throw new ApiError(409, "This chat used a model that is no longer available. Start a new chat.");
   if (!provider) throw new ApiError(503, "The assistant is not available yet.");
   return { session, provider };

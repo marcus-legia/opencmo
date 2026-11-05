@@ -19,7 +19,6 @@ import type { Ledger } from "../ledger";
 import { runTurn } from "../loop";
 import { anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
-import { geminiKey, geminiProvider } from "../providers/gemini";
 import type { Provider, StoredMessage } from "../providers/types";
 import { cmoScope, type Scope } from "../scope";
 import { slashDirective } from "../slash";
@@ -150,8 +149,7 @@ export async function runCmoTasks(provider: Provider, opts: { epoch?: number; ta
 function providerFor(name: string): Provider {
   if (name === "fake") return fakeProvider;
   if (name === "anthropic") return anthropicProvider();
-  if (name === "gemini") return geminiProvider(geminiKey());
-  throw new Error(`Unknown provider ${name}; use fake, anthropic or gemini.`);
+  throw new Error(`Unknown provider ${name}; use fake or anthropic.`);
 }
 
 async function main() {

@@ -5,7 +5,6 @@
  *   npm run agent:eval -- --provider anthropic --yes      # model thật: TỐN TIỀN API
  *   npm run agent:eval -- --provider anthropic --task hook --yes
  *   npm run agent:eval -- --provider anthropic --yes --until-card --task video-
- *   CMO_LLM_PROVIDER=gemini npm run agent:eval -- --provider gemini --yes   # Gemini, sub-agents too
  *
  * `--until-card` stops a task at the first price card (what the user would approve), so a real
  * model costs only its own tokens and the director's, never media credits. `--task video-` runs
@@ -21,7 +20,7 @@
  * `ask_user` được trả lời bằng câu soạn sẵn của bài. Chấm bằng code
  * (`tasks.ts`), ghi báo cáo + contact sheet cuối vào `--out`.
  *
- * Model thật cần khoá trong env (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`) và
+ * Model thật cần khoá trong env (`ANTHROPIC_API_KEY`) và
  * `--yes`: không có `--yes` thì chỉ in ước lượng chi phí rồi thoát.
  */
 
@@ -41,7 +40,6 @@ import { KEEP_IMAGES } from "../limits";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { ANTHROPIC_MODEL, anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
-import { GEMINI_MODEL, geminiKey, geminiProvider } from "../providers/gemini";
 import type { Image, Provider, StoredMessage, ToolResult } from "../providers/types";
 import { backgroundToolSpec, prepareBackground } from "../background-tool";
 import { editToolSpec, prepareEdit } from "../edit-tool";
@@ -102,7 +100,7 @@ function positive(flag: string, raw: string | undefined): number | null {
 /** Price per million tokens (USD) of the model each provider runs the Assistant on; the fake one is free. */
 function priceFor(provider: string): Price {
   if (provider === "fake") return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  return priceOf(provider === "gemini" ? GEMINI_MODEL : ANTHROPIC_MODEL);
+  return priceOf(ANTHROPIC_MODEL);
 }
 
 function providerFor(name: string): Provider {
@@ -110,10 +108,6 @@ function providerFor(name: string): Provider {
   if (name === "anthropic") {
     if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_API_KEY chưa có trong env.");
     return anthropicProvider();
-  }
-  if (name === "gemini") {
-    if (!geminiKey()) throw new Error("GEMINI_API_KEY is not set.");
-    return geminiProvider(geminiKey());
   }
   throw new Error(`provider lạ: ${name}`);
 }
