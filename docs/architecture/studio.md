@@ -69,7 +69,7 @@ Every squad has the long take's shape: LLM step → code reviewer (sends back on
 - **Callers:** brain (work order + brief), founder in the editor (chat, buttons, slash commands), MCP (founder's
   Claude with its own plans).
 - **Studio adapter** (`lib/departments/studio`, new, extracted from MCP's studio group): entry points from the
-  registry (`create_video`, `animate_video`, `redo_keyframe`, `plan_video`, `cut_shorts`, `make_slideshow`,
+  registry (`create_video`, `redo_keyframe`, `plan_video`, `cut_shorts`, `make_slideshow`,
   `make_post_image`); plan → card → decide (brain cards go to the Approval inbox); every call under the founder's
   RLS session (a brain order mints a short-lived user JWT as MCP does); checks the order's remaining credits before
   a card offers to spend; writes a deliverable (`kind`, `parent_id`, `editor_project_id`) with a status.

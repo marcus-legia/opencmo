@@ -27,7 +27,7 @@ card kinds; reminders that open a card but never decide it.
 |---|---|---|---|
 | CMO inbox ("Awaiting your approval") | `components/cmo/workspace/FeedPanel.tsx`, `lib/cmo/pending.ts`, `actions.ts` | X posts (approve with edited text, skip with reason, mark posted), Reddit threads (replied, dismiss), weekly goals (approve, change target, reject) | built |
 | Decision RPCs | `cmo_decide_post`, `cmo_decide_opportunity`, `cmo_decide_goal`, `cmo_mark_posted` | owner check, advisory lock, "already decided", 280 characters, 5 X approvals a day, outcome rows | built |
-| Assistant chat cards | `lib/agent/loop.ts` (`awaiting_approval`), `scope.ts` priced tools | generations, voice-over, 3D, background, edit video, explainer, `create_video`, `animate_video`; price shown, nothing spent before approve | built |
+| Assistant chat cards | `lib/agent/loop.ts` (`awaiting_approval`), `scope.ts` priced tools | generations, voice-over, 3D, background, edit video, explainer, `create_video`; price shown, nothing spent before approve | built |
 | MCP confirm codes | `packages/mcp-server/src/confirm.ts` | the same priced tools; a signed code valid one hour (`PREVIEW_SECONDS = 3600`) | built |
 | Founder's Claude inbox | `cmo_inbox`, `inbox_submit` | not an approval: model calls waiting for the founder's Claude | built |
 | One table, snapshot, Studio and Schedule cards, reminders | none | — | missing |

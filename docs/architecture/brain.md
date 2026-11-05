@@ -188,7 +188,7 @@ own agent team plans and makes the video. The brain never drives single tools in
 two jobs: an AI long video, then short clips cut from it. Editing the founder's own video stays hands-on.
 
 **Studio agent team.** Lead = the pipeline runtime: it owns the phases and the approval cards. Entry points:
-`create_video`, `animate_video`, `redo_keyframe`, `plan_video`, `cut_clips` (new); each priced one is
+`create_video`, `redo_keyframe`, `plan_video`, `cut_clips` (new); each priced one is
 plan (price, nothing spent) → card → decide. Callers: the brain (new), the Assistant chat, MCP (founder's Claude,
 brings its own plan).
 
@@ -217,11 +217,11 @@ is made; the brain owns what video the week needs.
 Sequence (Brain · Studio agent team · Worker + fal · You):
 
 1. Video brief → Director writes the plan.
-2. Reviewer checks it; price of keyframes (nothing spent).
-3. **Card 1**: storyboard + keyframe price. 4. You approve.
-5. Team runs stage 1. 6. Keyframes + Text checker (worker). 7. Generations done → order resumes.
-8. **Card 2**: contact sheet + exact video price. 9. You approve (or redo one keyframe).
-10. Shot maker, Voice + music, Builder → one scene → render.
+2. Reviewer checks it; price of the whole video: keyframes, shots, voice-over, music (nothing spent).
+3. **Card 1**: storyboard + that one price. 4. You approve: one job hold for the estimate (`credit_orders`).
+5. Every piece starts at once from the hold; each shot waits on the worker for its keyframes; Builder places one scene.
+6. Keyframes + Text checker (worker). 7. Generations done → order resumes → render.
+8–10. (Card 2, the contact sheet, was removed on 2026-11-06: charge before running, D9. One keyframe is changed after with `redo_keyframe`, at its own price.)
 11. **Card 3**: finished video, open in the editor to tweak. 12. You approve = this edit is finished.
 13. *New*: `cut_clips` → Clip editor picks, Clip reviewer checks, Builder. 14. *New*: Renderer, one export per clip.
 15. *New*: **Card 4**: clips; approved ones go to Schedule.
@@ -229,7 +229,7 @@ Sequence (Brain · Studio agent team · Worker + fal · You):
 | Piece | How | State |
 |---|---|---|
 | Video brief | `build_video` work order; maps onto `create_video` input (prompt, seconds, aspect, voice) + Brand Kit + strategy voice | new |
-| Cards 1 and 2 | the team's storyboard card and contact sheet in the Approval inbox; redo one keyframe as today | cards built; inbox placement new |
+| Card 1 | the team's storyboard card with the one price of the whole video, in the Approval inbox (card 2 removed 2026-11-06) | card built; inbox placement new |
 | Card 3 finished | approving the rendered video marks the edit finished | new |
 | Clips squad | as above | new |
 | Export of a named timeline | export draws the active timeline over its workarea; exporting a clip timeline without switching the founder's view needs a check | to check |

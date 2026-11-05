@@ -563,6 +563,7 @@ error           { code, message, retryable,
     </div>
     <p class="hint">Scroll sideways to see the whole diagram.</p>
     <div class="diagram">
+<p><b>Since 2026-11-06 (charge before running, D9):</b> cards 1 and 2 below are one card. It shows the storyboard and the price of the whole video; approving holds that estimate once and starts the keyframes, shots, voice-over and music together, each shot waiting for its keyframes. There is no contact sheet; one keyframe is changed afterwards with <code>redo_keyframe</code>, at its own price. The diagram still shows the two-card flow.</p>
 <svg class="wide" viewBox="0 0 1140 720" role="img" aria-label="Sequence: the brain orders an AI video through the same Studio agent team MCP uses; three approval cards (storyboard and keyframe price, contact sheet and video price, finished video), then the brain cuts clips from the finished edit and sends them for a fourth approval.">
 <defs><marker id="sq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
 <marker id="sqn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
@@ -612,7 +613,7 @@ error           { code, message, retryable,
         <thead><tr><th>Piece</th><th>How</th><th>State</th></tr></thead>
         <tbody>
           <tr><td>Video brief</td><td>A <code>build_video</code> work order from the week plan. The brief maps onto <code>create_video</code>'s input (prompt, seconds, aspect, voice) plus the Brand Kit and the strategy's voice</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>Cards 1 and 2</td><td>The team's storyboard card and contact sheet, shown in the Approval inbox; redo one keyframe on card 2 as today</td><td><span class="st part">cards built; inbox placement new</span></td></tr>
+          <tr><td>Card 1</td><td>The team's storyboard card with the one price of the whole video, shown in the Approval inbox (card 2, the contact sheet, was removed on 2026-11-06)</td><td><span class="st part">card built; inbox placement new</span></td></tr>
           <tr><td>Card 3 · finished</td><td>Approving the rendered video marks the edit finished, which is what the clip rule needs</td><td><span class="st miss">new</span></td></tr>
           <tr><td>Clips squad</td><td>Clip editor reads beats and word timings (the voice-over has them), picks 2–5 ranges of 15–60 s; Clip reviewer checks whole sentences, hook first, platform length; Builder copies the timeline, sets workarea and 9:16; Renderer exports each</td><td><span class="st miss">new</span></td></tr>
           <tr><td>Export of a named timeline</td><td>Export draws the active timeline over its workarea today; exporting a clip timeline without switching the founder's view needs a check</td><td><span class="st part">to check</span></td></tr>
