@@ -266,7 +266,7 @@ price. The estimate must carry a margin, because the job does not stop to ask fo
 | T2 | Remove `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_COMPAT_*`, `OPENCMO_MODERATION_VISION_MODEL`, `CMO_LLM_PROVIDER(S)` from Vercel and Modal; run `check_deploy_env.py` | Unused secrets | S (ops) | #169 deployed |
 | T3 | Rebase #166 onto `main` (§5.4), then go live and request Creem's review | Creem compliance | M | T1 |
 | T4 | §5.3: remove the LLM prompt and input checks (web and worker) and our five policies; Creem alone screens prompts; the output review and look check use `CREEM_POLICY` from `packages/contracts/` | D8 | S | T3 |
-| T9 | §6: plan "charge before running": one card per job, one hold, no second approval; `/video` in one job; explainer render after the confirmation; Studio model calls charged; Assistant hold = the card's estimate | D9 | L (plan first, touches credits) | none |
+| T9 | §6: [plan](2026-11-06-charge-before-running-plan.md) (approved 2026-11-06): one card, one hold per job, no second approval; six phases | D9 | L | none |
 | T5 | Keep-alive for the Assistant's SSE stream (a comment line every ~15 s in `lib/agent/sse.ts`) | Streams over 2 min dropped in production; measure on Vercel first | S | none |
 | T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
 | T7 | Library shows both "Generated" and "generated" | A duplicate folder, case only | S | none |

@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-11-06 | [Charge before running, then run in one go](2026-11-06-charge-before-running-plan.md) (T9): one card, one hold per job (`credit_orders`), `/video` and Studio without a second approval, explainer confirmed before code, Assistant overage billed | Spec 2026-11-05 D9 + code audit | `cmo-review` → `main` |
 | 2026-11-05 | [Agent team, model roles, no-ai-slop, moderation and charging](2026-11-05-agent-team-models-moderation-spec.md) (spec): two brains, Claude only (Sonnet leads and writes, Haiku small tasks), no-ai-slop on every writing prompt, moderation by Creem (output review only), charge before running | Owner conversation 2026-11-04/05, #165 #167 #168 #169, Creem #166 | `cmo-review` → `main` |
 | 2026-11-04 | [CMO review](2026-11-04-cmo-review-plan.md): what is still missing for a CMO that works end to end in production | Audit of `docs/architecture/` vs `main` `dbf14aa4` | `cmo-review` → `main` |
 | 2026-11-02 | [CMO chat decisions](2026-11-02-cmo-chat-decisions-plan.md): approve, schedule and set things from the chat | Chat-control audit #137 + owner 2026-11-02 | `plan/cmo-chat-decisions` → `cmo-build` |
