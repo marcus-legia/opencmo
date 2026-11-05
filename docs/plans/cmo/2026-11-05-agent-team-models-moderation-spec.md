@@ -18,7 +18,7 @@ which described the code before #169. The live map is the artifact https://claud
 | D5 | **Every word a person reads or hears goes through no-ai-slop**: scripts, voice-overs, storyboards, on-screen text, posts, captions, titles, plans, replies. | 2026-11-05 | Done, #169 |
 | D6 | **Creem screens every image and video prompt**, as Creem requires. | 2026-11-05 | Built in #166 (test mode) |
 | D7 | The Editor Assistant stays outside the agent registry for now: it already runs Sonnet. | 2026-11-05 | No work |
-| D8 | **Moderation follows Creem's rules and only Creem's.** No content policy of our own: the Haiku checks quote Creem's rules. Haiku keeps checking image and video prompts for two weeks of live Creem traffic, audio prompts for good (Creem skips audio), and output frames for good. | 2026-11-05 | To build (§5.3) |
+| D8 | **Moderation is Creem's.** Creem screens every image and video prompt; we run **no LLM prompt check** of our own and write no policy of our own. The only LLM step left is a **review of the finished output before the user gets it** (Haiku vision on the image or frames, plus fal NSFW), judged against Creem's rules quoted as they are. | 2026-11-05 | To build (§5.3) |
 | D9 | **Charge before running, then run in one go.** Storyboard and one credit estimate for the whole job → the user confirms once → credits held → the job runs to the end with no second approval. No paid step before the confirmation. | 2026-11-05 | To build (§6) |
 
 ## 2. Who calls whom
@@ -160,35 +160,36 @@ What #166 builds:
   `lib/generate/models.ts`).
 - The output check on the worker is unchanged: Creem only sees prompts.
 
-### 5.3 Target: Creem's rules only
+### 5.3 Target: Creem moderates, we only review the output
 
-Owner, 2026-11-05: "everything follows Creem's rules; no rules of our own". One policy, `CREEM_POLICY`, replaces
-`POLICY`, `AUDIO_POLICY`, `MOTION_POLICY`, `OWN_FOOTAGE_POLICY` and `CAPTURE_POLICY` on the web and the worker. It
-quotes Creem's published rules and adds nothing:
+Owner, 2026-11-05: "Creem does the moderation for us. Drop the LLM moderation check entirely; keep only a review
+before the result reaches the user."
 
-- the Moderation API's decisions (`flag` and `deny` block);
-- "Content policy requirements" of the AI wrapper compliance page (`docs/creem-llm.txt` L23478-23482): no suggestive,
-  borderline or sexually provocative material; no face-swap, deepfake or face-manipulation;
-- the Acceptable Use Policy Creem requires us to publish: no NSFW, explicit or sexually suggestive content, and no
-  harmful content;
-- Creem's prohibited products list (L23368-23398) where it describes content (for example weapons and drugs).
-
-The policy text lives once, in `packages/contracts/` (as `ai-models.json` does), so the web and the worker read the same
-words. When Creem changes its docs, only that file changes.
-
-| Kind | Prompt | Output frames |
+| Step | Today | Target |
 |---|---|---|
-| AI image / video (`fal`) | Creem; **plus** Haiku with `CREEM_POLICY` for two weeks of live traffic, then Creem alone | Haiku with `CREEM_POLICY` + fal NSFW |
-| Our motion renderer | Creem only | none (we draw the user's words, like a text layer) |
-| Voice, music, sound | Haiku with `CREEM_POLICY` (Creem's API skips audio) | none |
-| Background removal, own-footage edits, page captures | Creem does not require screening (L23470); Haiku with `CREEM_POLICY` on the frames | Haiku with `CREEM_POLICY` |
+| Image / video prompt (web, before the hold) | Creem (#166), then Haiku | **Creem only** |
+| Image / video prompt (worker, a direct RPC call) | Creem (#166), then Haiku | **Creem only** |
+| Motion (our Remotion renderer) | Creem (#166), then Haiku with `MOTION_POLICY` | **Creem only** |
+| Voice, music, sound prompt | Haiku with `AUDIO_POLICY` (Creem skips audio) | **No check** (Creem does not require one, L23470) |
+| Input images and video fed to a model | Haiku vision | **Removed**: what comes out is reviewed |
+| **Output** (the image, or 3 frames at 10/50/90 %) | Haiku vision + fal NSFW, our `POLICY` | **Kept**: Haiku vision + fal NSFW against `CREEM_POLICY` |
+| Look check of an export, page captures | Haiku vision | Kept, `CREEM_POLICY` |
 
-What this changes for users: prompts and frames that only named a real person or showed another brand's logo are no
-longer blocked; a deepfake or face-swap of a real person still is. Voices stay premade (no cloning, dubbing or lip-sync),
-because a voice clone is the audio form of a deepfake and Creem's review tests outputs.
+`CREEM_POLICY` is not a policy of ours: it quotes Creem's published rules and adds nothing (no suggestive, borderline
+or sexually provocative material; no face-swap, deepfake or face-manipulation; no NSFW or harmful content, as the
+Acceptable Use Policy Creem requires says). It lives once in `packages/contracts/` so the web and the worker read the
+same words. `POLICY`, `AUDIO_POLICY`, `MOTION_POLICY`, `OWN_FOOTAGE_POLICY`, `CAPTURE_POLICY`, `moderateText`'s LLM
+path, `check_input` and `check_input_video` go away.
 
-The two weeks: compare Creem's live decisions with Haiku's on the same prompts (both logged with the job id). Drop the
-Haiku prompt check for image and video when Haiku blocks nothing Creem allows that Creem's rules forbid.
+What this changes:
+
+- A prompt that only names a real person or a brand is no longer blocked by us; Creem decides. A deepfake or face-swap
+  is still blocked, by Creem on the prompt and by the output review.
+- Voice-over scripts are not checked. Voices stay premade (no cloning, dubbing or lip-sync), as Creem forbids face and
+  voice manipulation.
+- Cost: one Haiku vision call per finished image or video, and no Haiku call per prompt.
+- An output blocked by the review is refunded to the user after fal was paid; that cost is ours, and it is rare when
+  Creem screens the prompt first.
 
 ### 5.4 Merging #166 onto `main`
 
@@ -198,7 +199,7 @@ no longer exists. When rebasing:
 - keep `screenWithCreem`, `creemModerationKey`, `_screen_with_creem`, `_creem_key` and their tests;
 - take `main`'s Claude-only checker (`moderateText` without `gemini`, `askClaude` only; worker `_check_claude` only,
   `UNAVAILABLE` on an unpaid key);
-- then apply §5.3 (one `CREEM_POLICY`) in a follow-up.
+- then apply §5.3 (Creem only on prompts, output review with `CREEM_POLICY`) in a follow-up.
 
 ## 6. Charge before running, then run in one go
 
@@ -241,7 +242,7 @@ Per flow:
   charged from that hold instead of at 0.
 - Assistant turns: the hold of a turn that will run paid tools is the card's estimate, so usage above it is the
   exception it was meant to be, and it is billed.
-- Moderation stays in front of the hold: Creem and the Haiku prompt check run before the card is shown, so a blocked
+- Moderation stays in front of the hold: Creem screens the prompts before the card is shown, so a blocked
   prompt costs nothing. An output blocked after generation is still refunded to the user; that cost is ours, and it
   is why the prompt check runs first.
 
@@ -264,7 +265,7 @@ price. The estimate must carry a margin, because the job does not stop to ask fo
 | T1 | Anthropic key and credit on Vercel, Modal `opencmo` and `opencmo-mcp` | One provider now: without it AI media is off and the CMO falls back to the founder's Claude | S (ops) | none |
 | T2 | Remove `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_COMPAT_*`, `OPENCMO_MODERATION_VISION_MODEL`, `CMO_LLM_PROVIDER(S)` from Vercel and Modal; run `check_deploy_env.py` | Unused secrets | S (ops) | #169 deployed |
 | T3 | Rebase #166 onto `main` (§5.4), then go live and request Creem's review | Creem compliance | M | T1 |
-| T4 | §5.3: one `CREEM_POLICY` in `packages/contracts/` replaces the five policies on the web and the worker; Haiku prompt check for image/video stays two weeks, then goes; motion is Creem only | D8 | S | T3 |
+| T4 | §5.3: remove the LLM prompt and input checks (web and worker) and our five policies; Creem alone screens prompts; the output review and look check use `CREEM_POLICY` from `packages/contracts/` | D8 | S | T3 |
 | T9 | §6: plan "charge before running": one card per job, one hold, no second approval; `/video` in one job; explainer render after the confirmation; Studio model calls charged; Assistant hold = the card's estimate | D9 | L (plan first, touches credits) | none |
 | T5 | Keep-alive for the Assistant's SSE stream (a comment line every ~15 s in `lib/agent/sse.ts`) | Streams over 2 min dropped in production; measure on Vercel first | S | none |
 | T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
@@ -282,7 +283,7 @@ never a new provider.
 
 | # | Question | Answer (owner, 2026-11-05) |
 |---|---|---|
-| Q1 | After Creem, keep Haiku on image/video prompts? | Yes, two weeks of live traffic, with Creem's rules only (D8) |
-| Q2 | Keep Haiku on audio prompts? | Yes, with Creem's rules only (D8) |
+| Q1 | After Creem, keep Haiku on image/video prompts? | No: Creem only; Haiku reviews the output before the user gets it (D8) |
+| Q2 | Keep Haiku on audio prompts? | No: Creem does not require it for audio (D8) |
 | Q3 | Measure Haiku as the Assistant with the eval? | Not now |
 | Q4 | Keep our own rules on real people and other brands' logos? | No: Creem's rules only (D8) |

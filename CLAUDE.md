@@ -52,12 +52,12 @@ The editor is locked in as the spearhead: build it until it can make every marke
   always a finished edit in the user's project, never a link, a raw third-party video or another
   creator's content. Market it as "cut short clips from your finished video", not as a clipping
   tool.
-- **Moderation follows Creem's rules, and only Creem's** (owner, 2026-11-05). We write no content policy of our
-  own. Every image and video prompt is screened by Creem's Moderation API (`flag` blocks like `deny`) before
-  credits are held; Claude Haiku checks prompts and output frames against the same rules, quoted from Creem's
-  docs. Creem forbids NSFW and sexually suggestive content, face-swap, deepfake and face-manipulation tools, and
-  "uncensored / no filter" marketing, so: premade voices only, no cloning, dubbing or lip-sync. Spec:
-  `docs/plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`.
+- **Moderation is Creem's** (owner, 2026-11-05). Every image and video prompt is screened by Creem's Moderation
+  API (`flag` blocks like `deny`) before credits are held. We run no LLM prompt check and write no content policy
+  of our own; the one LLM step is a review of the finished image or frames before the user gets it (Haiku vision
+  and fal NSFW), against Creem's rules quoted as they are. Creem forbids NSFW and sexually suggestive content,
+  face-swap, deepfake and face-manipulation tools, and "uncensored / no filter" marketing, so: premade voices
+  only, no cloning, dubbing or lip-sync. Spec: `docs/plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`.
 - **Charge before running, then run in one go** (owner, 2026-11-05). A paid job shows its storyboard (or plan)
   and one credit estimate that covers everything it will spend: media, voice, music, renders and the agents'
   tokens. The user confirms once, the credits are held, and the job runs to the end without stopping for another
