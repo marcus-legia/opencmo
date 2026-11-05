@@ -6,6 +6,7 @@
  * asks the module instead of re-reading the variable, so the page cannot drift from what the code does.
  */
 
+import { mcpEndpoint } from "@/lib/cmo/connect";
 import { publishAnalytics } from "@/lib/departments/publish/analytics";
 import { emailSender } from "@/lib/notify/email";
 import { vapidFromEnv } from "@/lib/notify/push";
@@ -26,6 +27,7 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
   const email = emailSender(env);
   const zernio = publishAnalytics(env);
   const push = vapidFromEnv(env) !== null;
+  const mcp = mcpEndpoint(env as NodeJS.ProcessEnv) !== null;
   return [
     {
       id: "ui_v2",
@@ -80,10 +82,14 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
         : "Set CRON_SECRET here and in the Modal secret; without it every cron route refuses.",
     },
     {
+      // The web app only needs the URL (it shows "Connect Claude"); the confirm key is read by the MCP server on Modal
+      // (secret `opencmo-mcp`), so it is not checked here.
       id: "mcp",
       label: "Connect Claude (MCP)",
-      on: set(env, "OPENCMO_MCP_URL") && set(env, "OPENCMO_MCP_CONFIRM_KEY"),
-      detail: set(env, "OPENCMO_MCP_URL") && set(env, "OPENCMO_MCP_CONFIRM_KEY") ? "On." : "Set OPENCMO_MCP_URL and OPENCMO_MCP_CONFIRM_KEY.",
+      on: mcp,
+      detail: mcp
+        ? "On. The MCP server on Modal also needs OPENCMO_MCP_CONFIRM_KEY in its secret opencmo-mcp."
+        : "Set OPENCMO_MCP_URL (and OPENCMO_MCP_CONFIRM_KEY in the Modal secret opencmo-mcp).",
     },
     {
       id: "paused",

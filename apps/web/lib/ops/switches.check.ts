@@ -27,6 +27,7 @@ assert.equal(live.publish?.on, true);
 assert.equal(live.email?.on, true);
 assert.equal(live.paused?.on, false);
 assert.equal(byId({ OPENCMO_PUBLISH_FAKE: "1" }).publish?.on, false, "the fake adapter is not live posting");
+assert.equal(byId({ OPENCMO_MCP_URL: "https://mcp.example" }).mcp?.on, true, "the web app needs only the URL; the confirm key lives on Modal");
 
 const text = JSON.stringify(cmoSwitches({ ZERNIO_API_KEY: "zk-secret", OPENCMO_PUBLISH_LIVE: "1", RESEND_API_KEY: "re-secret", OPENCMO_EMAIL_LIVE: "1" }));
 assert.ok(!text.includes("zk-secret") && !text.includes("re-secret"), "no secret value reaches the page");
