@@ -1,8 +1,7 @@
 /**
  * Hằng số credit dùng chung — KHÔNG `server-only`.
  *
- * Tách khỏi `lib/pricing.ts` vì file đó đọc `process.env.POLAR_*` ở thân module
- * và đã được khoá bằng `server-only`. Hai con số dưới đây thì màn tạo job cần
+ * Tách khỏi `lib/pricing.ts` vì file đó được khoá bằng `server-only`. Hai con số dưới đây thì màn tạo job cần
  * để biết có nên hiện tường mua gói hay không, và màn đó là client component.
  *
  * Không có gì bí mật ở đây: chúng là luật tính tiền mà người dùng phải thấy.

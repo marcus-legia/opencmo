@@ -11,7 +11,7 @@ export const SITE_NAME = "OpenCMO";
 export const SITE_DESCRIPTION =
   "OpenCMO is an AI CMO for founders: it learns your business from your website and runs three departments — Video, Post and Sales — that draft your marketing for you to approve.";
 
-/** Email hỗ trợ — phải TRÙNG email khai với bên thanh toán (Polar/Creem đối chiếu khi duyệt). */
+/** Email hỗ trợ — phải TRÙNG email khai với bên thanh toán (Creem đối chiếu khi duyệt). */
 export const SUPPORT_EMAIL = "support@opencmo.io";
 
 export function absoluteUrl(path = "/"): string {

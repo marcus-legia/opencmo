@@ -84,11 +84,11 @@ Container view of `main` (`eb858ca`).
 
 | Container | Holds |
 |---|---|
-| Vercel `apps/web` | UI (editor, approval, Brand Kit) · API v1 (reads under RLS, writes via owner RPCs) · CMO engine `lib/cmo` (12 agents, skills, runner of `cmo_runs`) · Assistant `lib/agent` + Generate `lib/generate` · Polar webhook, `/api/cron/*`, `/api/internal/cmo/run`. Service role: webhooks, cron, CMO runner only. |
-| Supabase | Auth (Google OAuth, email) · Postgres: queues `tasks`, `cmo_runs`; CMO `marketing_documents`, `content_items`, `opportunities`, `post_metrics`, `cmo_memories`; editor `editor_projects`, `media_assets`, `generations`, `brand_kits`, `scene_codes`; money and limits `credit_ledger`, `polar_*`, `operation_log`, `rate_limits`, `api_keys`, `mcp_grants` · Storage: `sources`, `media`, `exports`, `clips`, `brand` |
+| Vercel `apps/web` | UI (editor, approval, Brand Kit) · API v1 (reads under RLS, writes via owner RPCs) · CMO engine `lib/cmo` (12 agents, skills, runner of `cmo_runs`) · Assistant `lib/agent` + Generate `lib/generate` · Creem webhook, `/api/cron/*`, `/api/internal/cmo/run`. Service role: webhooks, cron, CMO runner only. |
+| Supabase | Auth (Google OAuth, email) · Postgres: queues `tasks`, `cmo_runs`; CMO `marketing_documents`, `content_items`, `opportunities`, `post_metrics`, `cmo_memories`; editor `editor_projects`, `media_assets`, `generations`, `brand_kits`, `scene_codes`; money and limits `credit_ledger`, `creem_*`, `operation_log`, `rate_limits`, `api_keys`, `mcp_grants` · Storage: `sources`, `media`, `exports`, `clips`, `brand` |
 | Modal `opencmo-mcp` | `packages/mcp-server`, always warm, API key → 5-minute user JWT, paid plans only, wakes the worker; no worker secrets |
 | Modal `opencmo` worker | `submit` → `run_task`; `sweep` every minute; `cmo_schedule` 00:05, `cleanup` 03:00; task kinds `probe_media`, `transcribe_media`, `transcribe_asset`, `generate`, `render_document`, `capture_page`; `look`, `render_three` (GPU), `render_motion`; `moderation.py`; peak RAM < 2 GB; holds the service role |
-| Bought | LLM (Anthropic, Gemini, Groq, OpenAI-compatible; called by Vercel, worker, MCP) · fal.ai + NSFW classifier, ElevenLabs voice + Scribe (Vercel, worker) · ScrapeCreators (Vercel) · Polar, Sentry, GitHub CI, Google OAuth |
+| Bought | LLM (Anthropic, Gemini, Groq, OpenAI-compatible; called by Vercel, worker, MCP) · fal.ai + NSFW classifier, ElevenLabs voice + Scribe (Vercel, worker) · ScrapeCreators (Vercel) · Creem, Sentry, GitHub CI, Google OAuth |
 
 Edges:
 
@@ -101,7 +101,7 @@ Edges:
 7. Founder's Claude → MCP with an API key.
 8. MCP → Postgres under RLS with a user JWT; MCP → worker `wake`.
 9. Browser → platform: intent link, the founder taps post.
-10. Polar → Vercel webhook, with a receipts table.
+10. Creem → Vercel webhook, with a receipts table.
 11. *Proposed*: worker `publish_post` → Zernio → platforms at the approved time.
 
 What the PR #117 system diagram got wrong: stacked one-way boxes hid paths 2, 4, 6 and 9; MCP is its own Modal app
@@ -158,7 +158,7 @@ tokens.
 | Posting to TikTok, IG, YouTube, LinkedIn, Threads, FB | buy: Zernio | unaudited TikTok clients post privately to ≤ 5 users a day; Meta needs app review; the aggregator carries reviews and token refresh | ~$6 an account, first 2 free [3]; Ayrshare $149/month for one profile [4] |
 | Social account tokens | buy: Zernio holds them | we keep ids only | included |
 | Metrics after posting | mixed | ScrapeCreators today, Zernio analytics later | per call |
-| Payments, sign-in, files, errors | keep | Polar, Supabase, Sentry | as today |
+| Payments, sign-in, files, errors | keep | Creem, Supabase, Sentry | as today |
 
 Prices are from third-party pages, not checked on the providers' pages. Not verified: whether Zernio's TikTok client
 has passed audit. [1] https://automationatlas.io/answers/resend-pricing-explained-2026/ ·

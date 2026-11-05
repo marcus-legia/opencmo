@@ -146,7 +146,7 @@ apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes v
   lib/generate/         AI media generation
   lib/cmo/              the AI CMO job engine
   lib/mcp/              MCP server (API keys → short-lived user JWT under RLS)
-  app/api/webhooks/     inbound webhooks: payments (Creem; Polar until retired) and Zernio, each → one atomic RPC
+  app/api/webhooks/     inbound webhooks: payments (Creem) and Zernio, each → one atomic RPC
   lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds
 supabase/migrations/    at the repo ROOT; every migration needs a pgTAP test in supabase/tests/
 scripts/dev.mjs         one-command dev stack
@@ -169,9 +169,8 @@ scripts/dev.mjs         one-command dev stack
 The plan is [`docs/plans/billing/2026-11-04-polar-to-creem-plan.md`](docs/plans/billing/2026-11-04-polar-to-creem-plan.md),
 and Creem's docs are in `docs/creem-llm.txt`.
 
-- **Creem is the payment provider (merchant of record). It replaces Polar.** New sales go through Creem. The Polar
-  webhook and tables stay only for past orders and existing Polar subscribers, until the plan's phase 5 retires them.
-  Do not build new features on Polar.
+- **Creem is the only payment provider (merchant of record).** Polar was removed on 2026-11-05: code, tables and env. Do
+  not bring it back.
 - **Payment model: a subscription plus one-time credit packs.** No usage-based (pay-as-you-go) billing, and no Creem
   meters, credit wallets or auto-refill. Our credit ledger is the only balance. Creem only collects money and reports
   that it was paid.

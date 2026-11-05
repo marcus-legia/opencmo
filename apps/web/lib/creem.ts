@@ -1,7 +1,7 @@
 /**
  * Creem, the payment provider: the API URL, its webhook signature and event envelope.
  *
- * Plain `fetch` and `node:crypto` instead of an SDK, as in `lib/polar.ts`: the path money comes in stays readable.
+ * Plain `fetch` and `node:crypto` instead of an SDK: the path money comes in stays readable.
  *
  * The signature is a hex HMAC-SHA256 of the raw body, keyed with the whole secret as UTF-8 (`whsec_` included), checked
  * against real deliveries. The body MUST be the raw one: parsing and stringifying again changes it. It has no timestamp,

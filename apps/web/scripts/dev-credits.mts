@@ -1,6 +1,6 @@
 /**
  * Adds credits to a user on the LOCAL Supabase stack, so AI media can be tried in dev (new
- * accounts start at 0 and the only real top-up is the Polar webhook).
+ * accounts start at 0 and the only real top-up is the Creem webhook).
  *
  *   npm run dev:credits -- you@example.com          # +1000
  *   npm run dev:credits -- you@example.com 250

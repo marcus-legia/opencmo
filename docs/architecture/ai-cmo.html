@@ -478,7 +478,7 @@ body{margin:0}
       <p class="lede">The container view of the code on <code>main</code> (<code>eb858ca</code>). Every edge is numbered. Dashed green is proposed.</p></div>
     <p class="hint">Scroll sideways to see the whole diagram.</p>
     <div class="diagram">
-      <svg class="wide" viewBox="0 0 1280 690" role="img" aria-label="System today: the browser calls Vercel and uploads straight to Supabase Storage; Vercel writes Postgres through RPCs and calls Modal submit; the Modal worker claims tasks from Postgres; Modal schedules call back into Vercel; MCP is its own Modal app; Polar sends webhooks to Vercel; proposed parts are dashed.">
+      <svg class="wide" viewBox="0 0 1280 690" role="img" aria-label="System today: the browser calls Vercel and uploads straight to Supabase Storage; Vercel writes Postgres through RPCs and calls Modal submit; the Modal worker claims tasks from Postgres; Modal schedules call back into Vercel; MCP is its own Modal app; Creem sends webhooks to Vercel; proposed parts are dashed.">
         <defs>
           <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
           <marker id="ah3n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker>
@@ -517,7 +517,7 @@ body{margin:0}
         <text class="t-s" x="56" y="428">lib/agent · lib/generate</text>
         <rect class="n-in" x="44" y="448" width="272" height="64" rx="8"/>
         <text class="t-b" x="56" y="468">Webhook + cron routes</text>
-        <text class="t-s" x="56" y="486">/api/webhooks/polar · /api/cron/*</text>
+        <text class="t-s" x="56" y="486">/api/webhooks/creem · /api/cron/*</text>
         <text class="t-s" x="56" y="502">/api/internal/cmo/run</text>
         <rect class="n-new" x="44" y="520" width="272" height="44" rx="8"/>
         <text class="t-new" x="56" y="538">PROPOSED</text>
@@ -544,7 +544,7 @@ body{margin:0}
         <text class="t-s" x="396" y="403">editor_projects · media_assets</text>
         <text class="t-s" x="396" y="418">generations · brand_kits · scene_codes</text>
         <text class="t-chip" x="396" y="442">MONEY + LIMITS</text>
-        <text class="t-s" x="396" y="458">credit_ledger · polar_* · operation_log</text>
+        <text class="t-s" x="396" y="458">credit_ledger · creem_* · operation_log</text>
         <text class="t-s" x="396" y="473">rate_limits · api_keys · mcp_grants</text>
         <rect class="n-new" x="384" y="492" width="282" height="42" rx="8"/>
         <text class="t-new" x="396" y="509">PROPOSED</text>
@@ -606,7 +606,7 @@ body{margin:0}
 
         <rect class="n-ext" x="1050" y="470" width="200" height="80" rx="10"/>
         <text class="t-eye-ext" x="1064" y="492">OPERATIONS</text>
-        <text class="t-m" x="1064" y="514">Polar · Sentry</text>
+        <text class="t-m" x="1064" y="514">Creem · Sentry</text>
         <text class="t-s" x="1064" y="530">GitHub CI · Google OAuth</text>
         <text class="t-s" x="1064" y="544">webhooks into Vercel</text>
 
@@ -635,7 +635,7 @@ body{margin:0}
         <path class="e" d="M734 262H670" marker-end="url(#ah3)"/>
         <!-- 9 browser -> platforms (intent) -->
         <path class="e" d="M120 40V18H1150V36" marker-end="url(#ah3)"/>
-        <!-- 10 polar -> vercel webhook -->
+        <!-- 10 creem -> vercel webhook -->
         <path class="e" d="M1050 515H1030V672H110V624" marker-end="url(#ah3)"/>
         <!-- 11 worker -> zernio -> platforms (proposed) -->
         <path class="e-new" d="M984 542H1046" marker-end="url(#ah3n)"/>
@@ -669,7 +669,7 @@ body{margin:0}
       <li><span class="no">7</span><span>The founder's Claude connects to MCP with an API key (paid plans).</span></li>
       <li><span class="no">8</span><span>MCP reads and writes under RLS with a 5-minute user JWT; it wakes the worker through <code>wake</code>.</span></li>
       <li><span class="no">9</span><span>Posting today: the browser opens an intent link and the founder taps post.</span></li>
-      <li><span class="no">10</span><span>Polar webhooks into Vercel, with a receipts table against replays.</span></li>
+      <li><span class="no">10</span><span>Creem webhooks into Vercel, with a receipts table against replays.</span></li>
       <li class="new"><span class="no">11</span><span>Proposed: a <code>publish_post</code> task calls Zernio at the approved time, only while the approval is still valid.</span></li>
     </ol>
     <div class="prose">
@@ -828,7 +828,7 @@ body{margin:0}
           <tr><td>Posting to TikTok, IG, YouTube, LinkedIn, Threads, FB</td><td><span class="dec buy">Zernio</span></td><td>An unaudited TikTok client can only post privately, to at most 5 users a day; Meta needs app review. An aggregator carries the app reviews and token refresh</td><td>~$6 an account, first 2 free <sup>3</sup>; Ayrshare $149/month for one profile <sup>4</sup></td></tr>
           <tr><td>Social account tokens</td><td><span class="dec buy">Zernio holds</span></td><td>We keep ids only, a smaller security surface</td><td>included above</td></tr>
           <tr><td>Metrics after posting</td><td><span class="dec mix">mixed</span></td><td>Today public numbers through ScrapeCreators; later Zernio analytics for connected accounts</td><td>per call</td></tr>
-          <tr><td>Payments, sign-in, files, errors</td><td><span class="dec buy">keep</span></td><td>Polar, Supabase, Sentry</td><td>as today</td></tr>
+          <tr><td>Payments, sign-in, files, errors</td><td><span class="dec buy">keep</span></td><td>Creem, Supabase, Sentry</td><td>as today</td></tr>
         </tbody>
       </table>
     </div>

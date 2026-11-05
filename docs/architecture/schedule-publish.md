@@ -94,7 +94,7 @@ drag and drop; moving an item changes the time and supersedes its card.
 - One function `publish(deliverable, slot)` → `{ status, external_id, url, error }`; the brain and event rules never
   know which adapter ran.
 - Media goes from the worker straight to Zernio's presigned upload, never through Next.js (web rule 3).
-- Zernio webhooks land on a signed Vercel route with a receipts table against replays (like Polar's) and set slot and
+- Zernio webhooks land on a signed Vercel route with a receipts table against replays (like Creem's) and set slot and
   deliverable status; a failure raises a card with the reason and a retry that reuses the still-valid approval.
 - Connecting an account is the founder's own OAuth through Zernio's connect link; `social_accounts` stores Zernio
   profile and account ids, platform and handle; disconnecting removes them.

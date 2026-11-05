@@ -1,6 +1,6 @@
 /**
  * Creem's webhook signature and envelope, on real test-mode bodies (`fixtures/creem-deliveries.json`). The expected
- * signatures were computed outside this code, so a bug here cannot agree with itself. Polar's finding 1 was exactly that.
+ * signatures were computed outside this code, so a bug here cannot agree with itself.
  *
  *     tsx lib/creem-signature.check.ts
  */

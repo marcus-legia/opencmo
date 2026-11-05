@@ -17,7 +17,6 @@ app/
     settings/  billing/     account, API keys, plans
   api/
     webhooks/creem/         payments → credits (one atomic RPC)
-    webhooks/polar/         past orders and existing Polar subscribers only
     cron/cleanup/           expired projects and unpaid accounts → durable deletion queue
     cron/cmo/               the AI CMO's daily schedule
     mcp/                    MCP server (personal API keys)

@@ -23,6 +23,9 @@ These override the sections below where they disagree.
 5. **`billing_catalog` is not seeded by a migration.** Test and live product ids differ, so migrations create the empty
    table and `scripts/creem-catalog.mjs` fills it for one environment.
 6. **Credits still do not expire.** The 60-day and 12-month rules in the launch pricing doc are a separate decision.
+7. **Polar is removed outright** (owner, 2026-11-05), not kept until phase 5. Its API showed no subscription and no
+   order ever. D1 and D2 no longer apply as written: only Creem tables remain. `20270108020000_remove_polar.sql` drops
+   the tables, the RPC and the profile column, and exempts from cleanup anyone they show as having paid.
 
 ## What Creem is, and what changes
 
@@ -316,6 +319,7 @@ This must be live in production **before** requesting Creem's review.
 
 ### Phase 5: cut over and retire Polar
 
+- [ ] Remove `POLAR_*` from Vercel and the Polar webhook endpoint on Polar's side. Export nothing: there is no data.
 - [ ] Before any deploy of this code: set a live `CREEM_API_KEY` on Vercel production AND in the worker's Modal secret.
   Without it, live AI images, video and explainers are refused (fail closed), and the worker refuses them too.
 - [ ] Insert the live products into `billing_catalog`, or the pages show no plans and paid events answer 5xx.

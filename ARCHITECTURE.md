@@ -199,7 +199,7 @@ allowlist (`USER_MEDIA_FORMATS` / `USER_INPUT`).
 | DB | **Supabase Postgres** | |
 | Storage | **Supabase Storage** | **RLS applies to files too** — see below |
 | Queue | **Postgres** (`claim_*` functions) | No separate service; `for update skip locked` handles contention |
-| Billing | Creem (merchant of record); Polar only for existing subscribers | Handles VAT/sales tax |
+| Billing | Creem (merchant of record) | Handles VAT/sales tax |
 | Errors | Sentry (optional) | |
 | Landing hero 3D | `three` (pinned in `apps/web`; marketing pages only, not the product) | Loaded with `import()` after first paint; static SVG fallback without WebGL or with reduced motion |
 

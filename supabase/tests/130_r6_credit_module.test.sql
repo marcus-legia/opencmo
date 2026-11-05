@@ -24,8 +24,8 @@ select ok(not has_function_privilege('authenticated', 'public.credit_refund(uuid
 select is(
   (select array_agg(p.proname::text order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prosrc ilike '%insert into public.credit_ledger%'),
-  array['credit_hold', 'credit_settle', 'grant_annual_credits', 'process_creem_event', 'process_polar_event'],
-  'only the credit module and the payment webhooks write to the ledger'
+  array['credit_hold', 'credit_settle', 'grant_annual_credits', 'process_creem_event'],
+  'only the credit module and the payment webhook write to the ledger'
 );
 select throws_ok(
   $$ insert into public.credit_ledger (user_id, delta, reason, ref_kind) values ('e1300000-0000-4000-8000-00000000000a', 1, 'x', 'job') $$,

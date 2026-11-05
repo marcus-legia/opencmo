@@ -7,11 +7,7 @@
  *   2. The cheapest paid tier already drops the watermark. It only pushes people past the FIRST payment.
  */
 
-// `productId` reads `process.env.POLAR_*` at module level. A price card is exactly the file someone turns into
-// `"use client"` later: the field would silently become `undefined`, and the natural fix would publish Polar's product
-// ids as `NEXT_PUBLIC_*`. `server-only` makes that a build error.
-//
-// The cost: `check:polar` and `check:pricing` run outside Next, so they need `--conditions=react-server` (`package.json`).
+// Server-side, like the catalogue it goes with. `check:pricing` runs outside Next, hence `--conditions=react-server` (`package.json`).
 import "server-only";
 
 export type PlanId = "free" | "starter" | "creator";
@@ -33,10 +29,6 @@ export type Plan = {
   maxExportResolution: 720 | 1080;
   watermark: boolean;
   features: string[];
-  /** Polar's product id: existing Polar subscribers still renew until phase 5 of the Creem plan. */
-  productId?: string;
-  /** What a Polar payment grants. Fixed: changing Creem's numbers must not change what old subscribers get. */
-  polarCredits?: number;
   highlight?: boolean;
   quota: { previews: number; exports: number; storageBytes: number; storageObjects: number };
 };
@@ -73,7 +65,6 @@ export const PLANS: Plan[] = [
     interval: "month",
     billedPrice: 69,
     credits: 580,
-    polarCredits: 150,
     previewsPerDay: 100,
     exportsPerDay: 30,
     maxExportResolution: 1080,
@@ -84,7 +75,6 @@ export const PLANS: Plan[] = [
       "580 credits per month",
       "No watermark, full-resolution 1080×1920 download",
     ],
-    productId: process.env.POLAR_PRODUCT_STARTER,
   },
   {
     id: "creator",
@@ -94,7 +84,6 @@ export const PLANS: Plan[] = [
     interval: "year",
     billedPrice: 690,
     credits: 580,
-    polarCredits: 400,
     previewsPerDay: 300,
     exportsPerDay: 100,
     maxExportResolution: 1080,
@@ -104,7 +93,6 @@ export const PLANS: Plan[] = [
     features: [
       "Everything in Monthly, 580 credits every month, billed $690 once a year",
     ],
-    productId: process.env.POLAR_PRODUCT_CREATOR,
   },
 ];
 
@@ -139,9 +127,4 @@ export function isPaidPlan(plan: string | null | undefined): boolean {
 
 export function planById(id: string): Plan | undefined {
   return PLANS.find((p) => p.id === id);
-}
-
-/** The plan of a Polar product id: the Polar webhook grants its `polarCredits`. */
-export function planByProductId(productId: string): Plan | undefined {
-  return PLANS.find((p) => p.productId && p.productId === productId);
 }

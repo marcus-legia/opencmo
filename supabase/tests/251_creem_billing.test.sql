@@ -117,18 +117,12 @@ select is(pg_temp.plan(1),'free','canceled is terminal, unlike Polar');
 select lives_ok($$select public.process_creem_event('s3','subscription.active','2026-12-06 10:30Z',pg_temp.sub(1,'sub_1','prod_month','active'))$$,'an older event');
 select is(pg_temp.plan(1),'free','an older event does not bring it back');
 
--- Both providers: either one active keeps the plan, in both directions.
-insert into polar_customers(customer_id,user_id) values('polar_cust_3',pg_temp.u(3));
-insert into polar_subscriptions(subscription_id,customer_id,user_id,plan,status,provider_updated_at,status_priority,event_id)
-values('polar_sub_3','polar_cust_3',pg_temp.u(3),'starter','active','2026-11-01',0,'pe');
-select lives_ok($$select public.process_creem_event('b1','subscription.paid','2026-11-05 10:00Z',pg_temp.sub(3,'sub_3','prod_month','active','tran_3'))$$,'polar + creem');
-select lives_ok($$select public.process_creem_event('b2','subscription.canceled','2026-11-06 10:00Z',pg_temp.sub(3,'sub_3','prod_month','canceled'))$$,'creem canceled');
-select is(pg_temp.plan(3),'starter','polar active + creem canceled stays paid');
-select lives_ok($$select public.process_polar_event('b3','subscription.active','2026-11-06 11:00Z','{"id":"polar_sub_3","customer_id":"polar_cust_3","customer":{"id":"polar_cust_3","email":"creem-three@test.local"}}','starter',null,'starter')$$,'polar still routes through recompute_plan');
-select is(pg_temp.plan(3),'starter','polar events keep the plan');
-select lives_ok($$select public.process_creem_event('b4','subscription.paid','2026-11-07 10:00Z',pg_temp.sub(3,'sub_3b','prod_month','active','tran_3b'))$$,'a new creem subscription');
-select lives_ok($$select public.process_polar_event('b5','subscription.revoked','2026-11-07 11:00Z','{"id":"polar_sub_3","customer_id":"polar_cust_3","customer":{"id":"polar_cust_3","email":"creem-three@test.local"}}','starter',null,'starter')$$,'a late polar revoke');
-select is(pg_temp.plan(3),'starter','a late polar revoke does not drop a creem subscriber');
+-- A plan follows what is still held: one subscription ending does not drop the other.
+select lives_ok($$select public.process_creem_event('b1','subscription.paid','2026-11-05 10:00Z',pg_temp.sub(3,'sub_3','prod_month','active','tran_3'))$$,'first subscription');
+select lives_ok($$select public.process_creem_event('b2','subscription.paid','2026-11-05 11:00Z',pg_temp.sub(3,'sub_3b','prod_year','active','tran_3b',69000))$$,'second subscription');
+select is(pg_temp.plan(3),'creator','the better plan wins');
+select lives_ok($$select public.process_creem_event('b3','subscription.canceled','2026-11-06 10:00Z',pg_temp.sub(3,'sub_3b','prod_year','canceled'))$$,'the better one ends');
+select is(pg_temp.plan(3),'starter','the other still holds');
 
 -- Matching: no metadata falls back to the email; a bad id does not raise; an unknown buyer is skipped.
 select is((public.process_creem_event('m1','subscription.paid','2026-11-05 10:00Z',

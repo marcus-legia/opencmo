@@ -77,7 +77,7 @@ export default async function LandingPage() {
   const action = user ? "/app" : "/login";
 
   // Footer nằm NGOÀI <main>: footer trong main không phải landmark contentinfo, nên
-  // trình đọc màn hình (và người duyệt Polar dùng nó) không tìm thấy bốn link pháp lý.
+  // trình đọc màn hình (và người duyệt Creem dùng nó) không tìm thấy bốn link pháp lý.
   return (
     <div className="landing">
       <LandingMotion />
