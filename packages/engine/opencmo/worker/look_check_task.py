@@ -224,7 +224,8 @@ def _moderate(stills: list[Path]) -> dict[str, Any] | None:
     try:
         moderation.check_images(stills)
     except ProviderError as error:
-        if error.retryable:
+        # Busy or out of credit: nothing was judged, so the card must not say a frame failed.
+        if error.retryable or str(error) == moderation.UNAVAILABLE:
             return None
         return {"pass": False, "why": "A frame did not pass the content check"}
     return {"pass": True, "why": ""}
