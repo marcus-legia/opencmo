@@ -2,12 +2,12 @@ name: AI evals
 
 # Real-model evals of the AI CMO jobs and the editor Assistant. They cost API money and are not
 # deterministic, so they never run on pull requests (CI runs the same evals with the fake
-# provider). A weekly run grades the small CMO set on both providers and compares each report with
+# provider). A weekly run grades the small CMO set on Claude and compares each report with
 # the previous one of the same suite and provider; a manual run picks the suite, jobs, provider,
 # epochs and cap.
 #
 # API keys live only in the `ai-evals` environment of this workflow (Settings → Environments →
-# ai-evals: ANTHROPIC_API_KEY, GEMINI_API_KEY; limit its deployment branches to `main`). A provider
+# ai-evals: ANTHROPIC_API_KEY; limit its deployment branches to `main`). A provider
 # without a key is skipped with a notice. The keys reach only the step that runs the eval: never
 # `npm ci`, whose install scripts would otherwise see them.
 
@@ -25,7 +25,7 @@ on:
         default: ""
       provider:
         type: choice
-        options: [fake, anthropic, gemini]
+        options: [fake, anthropic]
         default: fake
       epochs:
         type: string
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'schedule' && '[{"suite":"cmo","provider":"anthropic"},{"suite":"cmo","provider":"gemini"}]' || format('[{{"suite":"{0}","provider":"{1}"}}]', inputs.suite || 'cmo', inputs.provider || 'fake')) }}
+        include: ${{ fromJSON(github.event_name == 'schedule' && '[{"suite":"cmo","provider":"anthropic"}]' || format('[{{"suite":"{0}","provider":"{1}"}}]', inputs.suite || 'cmo', inputs.provider || 'fake')) }}
     env:
       SUITE: ${{ matrix.suite }}
       PROVIDER: ${{ matrix.provider }}
@@ -72,11 +72,9 @@ jobs:
         env:
           # Only whether a key is set, never the key itself.
           HAS_ANTHROPIC: ${{ secrets.ANTHROPIC_API_KEY != '' }}
-          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
         run: |
           missing=false
           if [ "$PROVIDER" = anthropic ] && [ "$HAS_ANTHROPIC" != true ]; then missing=true; fi
-          if [ "$PROVIDER" = gemini ] && [ "$HAS_GEMINI" != true ]; then missing=true; fi
           if [ "$missing" = true ]; then
             echo "::notice::No $PROVIDER key in the ai-evals environment; skipping this eval."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -122,9 +120,7 @@ jobs:
         # bash with pipefail, so `| tee` does not hide a failing eval.
         shell: bash
         env:
-          # Both: the judge grades on the provider that did not draft.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           out="$RUNNER_TEMP/out"
           mkdir -p "$out"

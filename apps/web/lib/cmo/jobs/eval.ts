@@ -3,13 +3,13 @@
  *
  *   npm run cmo:eval -- --provider fake                          # CI: checks the harness, costs nothing
  *   npm run cmo:eval -- --provider anthropic --yes               # real model: COSTS API MONEY
- *   npm run cmo:eval -- --provider gemini --yes --job w1,w2      # some jobs only
+ *   npm run cmo:eval -- --provider anthropic --yes --job w1,w2   # some jobs only
  *   npm run cmo:eval -- --provider anthropic --yes --epochs 3 --max-usd 2 --compare base.json
  *
  * Cases come from a registry (`eval/types.ts`): W1/W2 in `eval/core.ts`, the rest from every
  * file in `eval/cases/`. Each runs the real job (prompts, schemas, checks, fixes) against an
  * in-memory store, then is graded by code first and, where a case asks for it, by the cascade
- * judge (`judge.ts`) on the provider that did not draft.
+ * judge (`judge.ts`), the `checker` agent in its own context.
  *
  * Flags:
  *   --epochs N     run everything N times (default 1); a comparison uses each case's majority
@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { summarize, type EvalReport } from "@/lib/eval/compare";
 import { gitInfo, printComparison, writeReport } from "@/lib/eval/report";
 
-type Provider = "fake" | "anthropic" | "gemini";
+type Provider = "fake" | "anthropic";
 
 function args() {
   const argv = process.argv.slice(2);
@@ -74,14 +74,8 @@ async function loadCases() {
 
 async function main() {
   const options = args();
-  if (!["fake", "anthropic", "gemini"].includes(options.provider)) throw new Error(`Unknown provider ${options.provider}; use fake, anthropic or gemini.`);
-  if (options.provider === "fake") {
-    process.env.OPENCMO_AGENT_FAKE = "1";
-  } else {
-    process.env.OPENCMO_AGENT_FAKE = "";
-    // Every CMO agent drafts on the chosen provider; the judge then prefers the other one.
-    process.env.CMO_LLM_PROVIDER = options.provider;
-  }
+  if (!["fake", "anthropic"].includes(options.provider)) throw new Error(`Unknown provider ${options.provider}; use fake or anthropic.`);
+  process.env.OPENCMO_AGENT_FAKE = options.provider === "fake" ? "1" : "";
 
   const all = await loadCases();
   const known = [...new Set(all.map((c) => c.job))];
@@ -104,7 +98,7 @@ async function main() {
   const { drainCmoQueue } = await import("./runner");
   const { fakeJudge, modelJudge } = await import("./judge");
   const { runCases, tableRow } = await import("./eval/runner");
-  const judge = options.provider === "fake" ? fakeJudge() : modelJudge({ drafter: options.provider });
+  const judge = options.provider === "fake" ? fakeJudge() : modelJudge();
 
   const started_at = new Date().toISOString();
   const outcome = await runCases({

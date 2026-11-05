@@ -3,8 +3,7 @@
  * a rule break needs no model to call it a fail, and it costs nothing. Only outputs that pass the
  * code reach the model judge, which:
  *
- * - runs as `checker` on the provider that did NOT draft (`prefer`), so a model does not grade its
- *   own provider's writing;
+ * - runs as `checker` in its own context, so it is not persuaded by the draft's reasoning;
  * - predicts what the founder would do with the draft (`post_as_is | small_edit | rewrite | skip`),
  *   reasons before the label so the label follows from them;
  * - then asks each binary criterion on its own, which agrees with people more than one rubric
@@ -17,7 +16,6 @@
 
 import { z } from "zod";
 
-import { otherProvider, type ProviderKind } from "@/lib/cmo/agents/registry";
 import type { CaseResult } from "@/lib/eval/compare";
 import { usageUsd } from "@/lib/eval/prices";
 
@@ -58,20 +56,14 @@ type Call = <S extends z.ZodType>(opts: StructuredOptions<S>) => Promise<z.infer
 const brief = (input: JudgeInput) =>
   `<documents>\n${JSON.stringify(input.docs, null, 1)}\n</documents>\n\n<task>${input.job}</task>\n\n<draft>\n${input.output}\n</draft>`;
 
-/**
- * A model judge. `drafter` is the provider that wrote the outputs; the judge prefers the other
- * one and falls back to the same provider (separate context) only when the other has no key.
- * `call` is `structured` in production of the eval and a stub in tests.
- */
-export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs?: number }): Judge {
+/** A model judge. `call` is `structured` in production of the eval and a stub in tests. */
+export function modelJudge(opts: { call?: Call; timeoutMs?: number } = {}): Judge {
   const call: Call = opts.call ?? structured;
-  const prefer: ProviderKind = otherProvider(opts.drafter);
   return async (input) => {
     let cost = 0;
     const ask = <S extends z.ZodType>(label: string, prompt: string, schema: S) =>
       call({
         agent: "checker",
-        prefer,
         system: SYSTEM,
         prompt,
         schema,
@@ -117,7 +109,7 @@ export function modelJudge(opts: { drafter: ProviderKind; call?: Call; timeoutMs
 export function fakeJudge(): Judge {
   const call: Call = async (opts) =>
     (opts.schema === (VerdictSchema as z.ZodType) ? { reasons: "fake judge", verdict: "small_edit" } : { reasons: "fake judge", met: true }) as never;
-  return modelJudge({ drafter: "anthropic", call });
+  return modelJudge({ call });
 }
 
 /**

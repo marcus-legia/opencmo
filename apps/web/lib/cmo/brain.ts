@@ -14,7 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { AGENT_HOLD_CREDITS } from "@/lib/agent/limits";
 import { agentCandidates } from "@/lib/cmo/agents/registry";
-import { accountDown, type LlmProvider } from "@/lib/llm-health";
+import { accountDown } from "@/lib/llm-health";
 import { isProduction } from "@/lib/production";
 
 import type { Brain } from "./jobs/types";
@@ -38,7 +38,7 @@ export function decideBrain(input: { credits: number; providersUp: number; force
  */
 export function providersUp(env: NodeJS.ProcessEnv = process.env, now: number = Date.now()): number {
   if (env.OPENCMO_AGENT_FAKE === "1" && !isProduction()) return 1;
-  return agentCandidates("planner", env).filter((agent) => !accountDown(agent.provider as LlmProvider, now)).length;
+  return agentCandidates("planner", env).filter((agent) => !accountDown(agent.provider, now)).length;
 }
 
 /** Dev and e2e only: `OPENCMO_BRAIN=claude` runs the inbox path with the keys still set. */

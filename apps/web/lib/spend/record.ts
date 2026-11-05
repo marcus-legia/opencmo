@@ -13,7 +13,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { SupabaseClient } from "@/lib/api/handler";
 
-export type SpendProvider = "anthropic" | "gemini" | "groq" | "openai_compat" | "scrapecreators";
+export type SpendProvider = "anthropic" | "scrapecreators";
 export type SpendRefKind = "cmo_run" | "agent_turn" | "mcp";
 
 /**
@@ -82,8 +82,7 @@ export async function recordSpend(provider: SpendProvider, modelOrEndpoint: stri
   }
 }
 
-/** The ledger's name for a CMO model provider; `openai` is whichever compatible endpoint the server points at. */
-export function spendProviderOf(provider: "anthropic" | "gemini" | "openai", baseUrl: string): SpendProvider {
-  if (provider !== "openai") return provider;
-  return /groq\.com/i.test(baseUrl) ? "groq" : "openai_compat";
+/** The ledger's name for a CMO model provider. */
+export function spendProviderOf(provider: "anthropic"): SpendProvider {
+  return provider;
 }

@@ -50,9 +50,7 @@ async function main() {
   // A ledger that cannot be written never fails the work.
   await withSpend({ via: "service", client: client([], { fail: true }), userId: "u1", refKind: "cmo_run" }, () => recordSpend("scrapecreators", "/v1/x", { call: 1 }));
 
-  assert.equal(spendProviderOf("openai", "https://api.groq.com/openai/v1"), "groq");
-  assert.equal(spendProviderOf("openai", "https://openrouter.ai/api/v1"), "openai_compat");
-  assert.equal(spendProviderOf("gemini", ""), "gemini");
+  assert.equal(spendProviderOf("anthropic"), "anthropic");
 
   console.log("spend.check ok");
 }
