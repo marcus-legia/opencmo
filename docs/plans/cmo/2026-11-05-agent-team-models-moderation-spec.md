@@ -267,9 +267,9 @@ price. The estimate must carry a margin, because the job does not stop to ask fo
 | T3 | Rebase #166 onto `main` (§5.4), then go live and request Creem's review | Creem compliance | M | T1 |
 | T4 | §5.3: remove the LLM prompt and input checks (web and worker) and our five policies; Creem alone screens prompts; the output review and look check use `CREEM_POLICY` from `packages/contracts/` | D8 | S | T3 |
 | T9 | §6: [plan](2026-11-06-charge-before-running-plan.md) (approved 2026-11-06): one card, one hold per job, no second approval; six phases | D9 | L | none |
-| T5 | Keep-alive for the Assistant's SSE stream (a comment line every ~15 s in `lib/agent/sse.ts`) | Streams over 2 min dropped in production; measure on Vercel first | S | none |
+| T5 | **Done** (`aa002d45`): keep-alive for the Assistant's SSE stream (a comment line every 15 s in `lib/agent/sse.ts`, `sse.check.ts`) | Streams over 2 min dropped in production; still to confirm on Vercel with a turn over 2 min | S | none |
 | T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
-| T7 | Library shows both "Generated" and "generated" | A duplicate folder, case only | S | none |
+| T7 | **Done** (`70378ae3`): the Generate panel saves under `Generated/` like the Assistant. Items already in `generated/` stay (their path is also the clip's `src`) | A duplicate folder, case only | S | none |
 | T8 | Optional: split an "explainer coder" role from the Assistant | Only if an eval shows Sonnet writes weak explainer code | M | eval |
 
 ## 9. Sales finder (#133)
