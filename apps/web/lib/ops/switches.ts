@@ -62,6 +62,14 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
             : "Set ZERNIO_API_KEY and OPENCMO_PUBLISH_LIVE=1 after the Zernio checks. Until then cards offer copy and open.",
     },
     {
+      id: "creem",
+      label: "Creem payments and prompt screening",
+      on: set(env, "CREEM_API_KEY") && set(env, "CREEM_WEBHOOK_SECRET"),
+      detail: set(env, "CREEM_API_KEY") && set(env, "CREEM_WEBHOOK_SECRET")
+        ? env.CREEM_API_KEY?.trim().startsWith("creem_test_") ? "On, in test mode." : "On."
+        : "Set CREEM_API_KEY and CREEM_WEBHOOK_SECRET, and point Creem's webhook at /api/webhooks/creem. Without the key, live AI images and video stay off.",
+    },
+    {
       id: "zernio_webhook",
       label: "Zernio webhook secret",
       on: set(env, "ZERNIO_WEBHOOK_SECRET"),

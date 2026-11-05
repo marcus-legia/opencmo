@@ -316,6 +316,9 @@ This must be live in production **before** requesting Creem's review.
 
 ### Phase 5: cut over and retire Polar
 
+- [ ] Before any deploy of this code: set a live `CREEM_API_KEY` on Vercel production AND in the worker's Modal secret.
+  Without it, live AI images, video and explainers are refused (fail closed), and the worker refuses them too.
+- [ ] Insert the live products into `billing_catalog`, or the pages show no plans and paid events answer 5xx.
 - [ ] Request the Creem review. Switch production env to the live key and products, and smoke-test one real $80
   purchase (refund it afterwards and confirm the clawback).
 - [ ] Remove `POLAR_CHECKOUT_*` from production so no new Polar sale is possible.

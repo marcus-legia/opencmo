@@ -14,7 +14,7 @@ import { ApiError as GeminiError } from "@google/genai";
 import { ApiError } from "@/lib/api/errors";
 import { clearHealth, markDown } from "@/lib/llm-health";
 
-import { AUDIO_POLICY, moderateText, moderationKind, moderationReady, MOTION_KIND, MOTION_POLICY, POLICY, specText } from "./moderation";
+import { AUDIO_POLICY, BLOCKED_MESSAGE, creemModerationKey, moderateText, moderationKind, moderationReady, MOTION_KIND, MOTION_POLICY, POLICY, specText } from "./moderation";
 
 type Reply = { stop_reason: string; parsed_output: unknown } | Error;
 
@@ -197,6 +197,91 @@ function readinessChecks(): void {
   assert.equal(moderationReady(env({})), false);
 }
 
+/** Creem's screening, with a fake fetch: the sandbox answers `allow` to everything, so nothing else can reach these. */
+async function creemChecks(): Promise<void> {
+  const realFetch = globalThis.fetch;
+  const saved = { key: process.env.CREEM_API_KEY, env: process.env.OPENCMO_ENV };
+  const calls: { url: string; body: { prompt?: string; external_id?: string }; apiKey: string | null }[] = [];
+  const answer = (reply: () => Response | Promise<Response>) => {
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)), apiKey: new Headers(init.headers).get("x-api-key") });
+      return reply();
+    }) as typeof fetch;
+  };
+  const decide = (decision: string) => () => Response.json({ id: "m1", object: "moderation_result", decision, usage: { units: 1 }, later: "ignored" });
+  // Our own check is a fake Claude that allows, so every result below is Creem's.
+  const allowed = clientFor({ stop_reason: "end_turn", parsed_output: { allowed: true, category: "none" } });
+  const run = async (kind?: string): Promise<number | string> => {
+    try {
+      await moderateText("a cat on a sofa", { kind, externalId: "job_1", client: allowed.client });
+      return 200;
+    } catch (error) {
+      assert.ok(error instanceof ApiError);
+      return error.status === 422 ? error.message : error.status;
+    }
+  };
+  try {
+    process.env.CREEM_API_KEY = "creem_test_key";
+    delete process.env.OPENCMO_ENV;
+
+    answer(decide("allow"));
+    assert.equal(await run("image"), 200, "allow goes on to our check");
+    assert.equal(allowed.calls.length, 1, "our check still runs after Creem");
+    assert.equal(calls[0]?.url, "https://test-api.creem.io/v1/moderation/prompt", "a test key stays in the sandbox");
+    assert.equal(calls[0]?.apiKey, "creem_test_key");
+    assert.deepEqual(calls[0]?.body, { prompt: "a cat on a sofa", external_id: "job_1" });
+
+    const before = allowed.calls.length;
+    answer(decide("flag"));
+    assert.equal(await run("video"), BLOCKED_MESSAGE, "flag blocks");
+    answer(decide("deny"));
+    assert.equal(await run("image"), BLOCKED_MESSAGE, "deny blocks");
+    answer(decide("something new"));
+    assert.equal(await run("image"), 503, "an unknown decision fails closed");
+    answer(() => new Response("nope", { status: 500 }));
+    assert.equal(await run("image"), 503, "a 5xx fails closed");
+    answer(() => new Response("not json"));
+    assert.equal(await run("image"), 503, "an unreadable answer fails closed");
+    answer(() => Promise.reject(new DOMException("The operation timed out.", "TimeoutError")));
+    assert.equal(await run("video"), 503, "a timeout fails closed");
+    assert.equal(allowed.calls.length, before, "nothing Creem refused reaches our paid check");
+
+    calls.length = 0;
+    answer(decide("deny"));
+    assert.equal(await run("voice"), 200, "voice is outside Creem's scope");
+    assert.equal(await run("audio"), 200, "audio is outside Creem's scope");
+    assert.equal(calls.length, 0, "audio never calls Creem");
+    assert.equal(await run(MOTION_KIND), BLOCKED_MESSAGE, "motion text is screened: the words become a video");
+    assert.equal(await run(), BLOCKED_MESSAGE, "an unknown kind is screened");
+
+    process.env.CREEM_API_KEY = "creem_live_key";
+    calls.length = 0;
+    answer(decide("allow"));
+    assert.equal(await run("image"), 200);
+    assert.equal(calls[0]?.url, "https://api.creem.io/v1/moderation/prompt", "a live key goes live");
+
+    delete process.env.CREEM_API_KEY;
+    calls.length = 0;
+    assert.equal(await run("image"), 200, "without a key, outside production, Creem is skipped");
+    assert.equal(calls.length, 0);
+
+    process.env.OPENCMO_ENV = "production";
+    assert.equal(await run("image"), 503, "live without a key: nothing is created");
+    process.env.CREEM_API_KEY = "creem_test_key";
+    assert.equal(await run("image"), 503, "live with a test key: nothing is created, the review only sees live calls");
+    assert.equal(calls.length, 0, "and the sandbox is never asked");
+    assert.equal(creemModerationKey(), null);
+    process.env.CREEM_API_KEY = "creem_live_key";
+    assert.equal(creemModerationKey(), "creem_live_key");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (saved.key === undefined) delete process.env.CREEM_API_KEY;
+    else process.env.CREEM_API_KEY = saved.key;
+    if (saved.env === undefined) delete process.env.OPENCMO_ENV;
+    else process.env.OPENCMO_ENV = saved.env;
+  }
+}
+
 async function main(): Promise<void> {
   readinessChecks();
   await standbyChecks();
@@ -258,6 +343,7 @@ async function main(): Promise<void> {
       else process.env[name] = value;
     }
   }
+  await creemChecks();
   console.log("moderation: every check passed");
 }
 

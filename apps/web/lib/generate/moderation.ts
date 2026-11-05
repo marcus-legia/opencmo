@@ -11,7 +11,7 @@
  * with a key checks (Groq, Claude, Gemini…), and when that provider cannot answer (no credit, rate
  * limits, an outage) the next one applies the same policy. If no check can run, the request is
  * refused: a user retrying beats delivering something unchecked. A verdict is final: a block is
- * never retried on another model.
+ * never retried on another model. Creem's own screening runs first (`screenWithCreem`).
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -20,6 +20,7 @@ import { ApiError as GeminiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/api/errors";
+import { creemApiBase } from "@/lib/creem";
 import { agentCandidates, GROQ_BASE_URL, providerOrder, type ProviderKind, type ResolvedAgent } from "@/lib/cmo/agents/registry";
 import { outage } from "@/lib/llm-health";
 import { compatJson, OpenAiCompatError, OpenAiCompatTimeout } from "@/lib/openai-compat";
@@ -198,13 +199,61 @@ function checkers(client?: Client, gemini?: Standby): Checker[] {
   });
 }
 
+const CREEM_TIMEOUT_MS = 5_000;
+
+/** The Creem key this server may screen with. Live, a test key does not count: Creem's review only sees live calls. */
+export const creemModerationKey = (env: NodeJS.ProcessEnv = process.env): string | null => {
+  const key = env.CREEM_API_KEY?.trim();
+  if (!key) return null;
+  const live = env.VERCEL_ENV === "production" || env.OPENCMO_ENV === "production";
+  return live && key.startsWith("creem_test_") ? null : key;
+};
+
+/**
+ * Creem's own screening, which it requires of AI generation products: an account without it can be suspended and its
+ * funds held. It runs before our check and fails closed. `flag` blocks like `deny`, as Creem recommends. Audio is
+ * outside its scope. Our renderer's motion text is screened too: the user's words still become a video.
+ */
+async function screenWithCreem(input: string, kind: string | undefined, externalId: string | undefined): Promise<void> {
+  if (kind && AUDIO_KINDS.has(kind)) return;
+  const apiKey = creemModerationKey();
+  if (!apiKey) {
+    if (isProduction()) throw new ApiError(503, "Content checks are not set up on this server, so AI media cannot be created yet.");
+    return;
+  }
+  let decision: unknown;
+  try {
+    const response = await fetch(`${creemApiBase(apiKey)}/v1/moderation/prompt`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "content-type": "application/json" },
+      body: JSON.stringify({ prompt: input, ...(externalId ? { external_id: externalId } : {}) }),
+      signal: AbortSignal.timeout(CREEM_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`status ${response.status}`);
+    decision = ((await response.json()) as { decision?: unknown } | null)?.decision;
+  } catch (error) {
+    console.error("[moderation] creem could not answer", error instanceof Error ? error.message : "");
+    throw new ApiError(503, UNCHECKED_MESSAGE);
+  }
+  if (decision === "flag" || decision === "deny") throw new ApiError(422, BLOCKED_MESSAGE);
+  if (decision !== "allow") {
+    console.error("[moderation] creem gave an unknown decision");
+    throw new ApiError(503, UNCHECKED_MESSAGE);
+  }
+}
+
 /**
  * Throws 422 when the text is blocked, 503 when it could not be checked. Skipped without a key, outside production.
- * `kind` is the model kind the text goes to (`policyFor`).
+ * `kind` is the model kind the text goes to (`policyFor`). `externalId` ties Creem's record to our work, for audits.
  */
-export async function moderateText(text: string, { kind, client, gemini }: { kind?: string; client?: Client; gemini?: Standby } = {}): Promise<void> {
+export async function moderateText(
+  text: string,
+  { kind, client, gemini, externalId }: { kind?: string; client?: Client; gemini?: Standby; externalId?: string } = {},
+): Promise<void> {
   const input = text.slice(0, MAX_CHARS).trim();
   if (!input) return;
+  // Ahead of the fake-mode branch, so the routing can be tried on a local stack with a test key.
+  await screenWithCreem(input, kind, externalId);
   if (!client && aiFakeEnabled() && !moderationReady()) {
     if (input.includes(FAKE_FLAG)) throw new ApiError(422, BLOCKED_MESSAGE);
     return;
