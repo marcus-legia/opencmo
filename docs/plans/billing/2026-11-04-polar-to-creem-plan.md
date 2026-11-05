@@ -365,6 +365,37 @@ Also found:
 - The refund API and CLI are full refunds only, so a partial refund is covered by pgTAP, not by a real delivery.
 - Refunding a payment does not cancel its subscription. They are separate actions in Creem.
 
+## End-to-end run (test mode, 2026-11-05)
+
+Local Next on local Supabase, real Creem test checkouts through our API, real webhooks through `creem listen`.
+
+| Scenario | Result |
+|---|---|
+| Monthly purchase | +580 once, plan opened, receipt written |
+| Same payment under a new event id, then an exact replay | No credits added (signed events we sent) |
+| Credit pack while paid | +200 by order |
+| Pack while free, second plan while paid, unknown slug, no session | 403, 409, 422, 401 |
+| Annual purchase, monthly job | +580, then +580 a month, a rerun adds nothing, a missed run catches up |
+| Full refund of a pack and of an annual plan | Credits taken back, annual grants stop |
+| Scheduled cancel, then immediate cancel | Stays paid, then free |
+| Bad signature, event over 30 days old | 401, 400, nothing written |
+| Allowed prompt | Passes, credit held, task created |
+| Prompt blocked by our own check | 422, nothing held |
+| Key Creem refuses | 503, nothing held (image prompt) |
+| Billing page, `llms.txt` | Read the catalogue; portal link returned |
+
+Not run through the app:
+
+- **`flag` and `deny`:** the sandbox allows everything, so only fakes cover them. Try them live before the review.
+- **Partial refund:** Creem's API and CLI only refund in full. pgTAP covers it.
+- **A refund of a monthly plan:** the test store answered "Insufficient balance". The same path ran for the annual plan.
+- **Cancel from the portal page:** the link was returned, the cancel itself went through the CLI.
+- **Assistant, `/video`, `/broll`, `/animate`, MCP:** traced in code to `moderateText`, not run. The worker's `check_prompt` covers any direct call, and has unit tests only: no local worker ran.
+- **The cleanup cron route** calling the annual job: the job ran directly.
+- **V2:** a dashboard resend.
+
+Found on the way: a paid monthly user has no in-app switch to annual. The checkout route refuses a second plan, so that needs Creem's upgrade API as its own piece of work.
+
 ## Verification list (do these in test mode before writing phase 1)
 
 | # | Question | Why it matters |

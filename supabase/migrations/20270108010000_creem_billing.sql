@@ -328,7 +328,7 @@ begin
    values(v_tran_id,v_order_id,v_customer,v_user,v_product,v_sub_id,v_amount,v_currency,p_event_at)
    on conflict(transaction_id) do nothing;
    insert into public.credit_ledger(user_id,delta,reason,external_id)
-   values(v_user,v_catalog.credits,v_catalog.plan_id||' plan payment','creem:tran:'||v_tran_id)
+   values(v_user,v_catalog.credits,'Plan payment','creem:tran:'||v_tran_id)
    on conflict(external_id) where external_id is not null do nothing;
    get diagnostics v_rows=row_count;
    if v_rows=1 then
