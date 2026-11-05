@@ -146,6 +146,7 @@ apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes v
   lib/generate/         AI media generation
   lib/cmo/              the AI CMO job engine
   lib/mcp/              MCP server (API keys → short-lived user JWT under RLS)
+  app/api/webhooks/     inbound webhooks: payments (Creem; Polar until retired) and Zernio, each → one atomic RPC
   lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds
 supabase/migrations/    at the repo ROOT; every migration needs a pgTAP test in supabase/tests/
 scripts/dev.mjs         one-command dev stack
@@ -162,6 +163,28 @@ scripts/dev.mjs         one-command dev stack
 5. Money only moves through `credit_hold` / `credit_settle` / `credit_refund` /
    `credit_held`. After a new migration, regenerate `supabase/schema/current.sql` with
    `scripts/dump-schema.sh`.
+
+## Billing (owner, 2026-11-04)
+
+The plan is [`docs/plans/billing/2026-11-04-polar-to-creem-plan.md`](docs/plans/billing/2026-11-04-polar-to-creem-plan.md),
+and Creem's docs are in `docs/creem-llm.txt`.
+
+- **Creem is the payment provider (merchant of record). It replaces Polar.** New sales go through Creem. The Polar
+  webhook and tables stay only for past orders and existing Polar subscribers, until the plan's phase 5 retires them.
+  Do not build new features on Polar.
+- **Payment model: a subscription plus one-time credit packs.** No usage-based (pay-as-you-go) billing, and no Creem
+  meters, credit wallets or auto-refill. Our credit ledger is the only balance. Creem only collects money and reports
+  that it was paid.
+- **Packs are sold only to paid users,** and a pack's credit costs more than a plan's.
+- **Prices are tested in production.**
+  - Price and credits per product live in the billing catalogue (data), not in code or copy.
+  - Pages read displayed prices from the catalogue. Never hardcode a price on the landing page or in docs.
+  - A price test adds a new Creem product. It never deletes a product id someone still holds, because their renewals
+    would stop getting credits.
+- **Credits are granted once per payment.** Subscriptions grant on `subscription.paid`, keyed by transaction. Packs
+  grant on `checkout.completed`, keyed by order. A refund or dispute takes back the credits of that payment.
+- **Every image or video generation prompt goes through the Creem Moderation API** before our own check. This is a
+  Creem requirement for AI generation products: without it the account can be suspended.
 
 ## Working style
 
