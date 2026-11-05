@@ -382,11 +382,14 @@ begin
     return v_turn;
   end if;
 
-  select least(v_turn.hold_credits, public.agent_credits(coalesce(sum(u.micro_usd), 0)::bigint))
+  -- Every credit used is billed (owner, 2026-11-05): a step that ran past the hold (a long answer, a
+  -- sub-agent) is charged too, up to what the user has. The hold is the gate between steps, not a cap.
+  select least(public.agent_credits(coalesce(sum(u.micro_usd), 0)::bigint),
+               v_turn.hold_credits + greatest(public.credit_balance(v_user), 0))
     into v_credits
   from public.agent_usage u where u.turn_id = p_turn_id;
 
-  -- Hoàn phần giữ chưa dùng: đang giữ (= hold_credits) − số đã dùng.
+  -- The unused part of the hold comes back; usage past it is charged from the balance.
   perform public.credit_settle(v_user, 'agent_turn', v_turn.id, v_credits, 'Assistant refund');
 
   update public.agent_tool_calls set status = 'failed', result = '{"summary":"Not completed"}'::jsonb
@@ -1028,9 +1031,9 @@ begin
 
   select * into v_turn from public.agent_turns where id = p_turn_id for update;
   if v_turn.status not in ('running', 'awaiting_browser', 'awaiting_approval', 'awaiting_input', 'awaiting_continue') then
-    -- Already settled: charge what this usage adds, up to the hold the user approved and never
-    -- past the balance (the hold was given back at the close and may be spent since).
-    v_credits := least(v_turn.hold_credits, public.agent_credits(v_total));
+    -- Already settled: charge what this usage adds, never past the balance (the hold was given back at
+    -- the close and may be spent since). Not capped at the hold any more (owner, 2026-11-05).
+    v_credits := public.agent_credits(v_total);
     if v_credits > coalesce(v_turn.credits, 0) then
       v_credits := coalesce(v_turn.credits, 0)
         + least(v_credits - coalesce(v_turn.credits, 0), greatest(public.credit_balance(p_user), 0));
