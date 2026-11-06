@@ -31,6 +31,7 @@ from pydantic import BaseModel
 
 from opencmo.ai.catalog import AiModel
 from opencmo.ai.providers.base import ProviderError
+from opencmo.backends.retry import TRANSIENT_STATUS
 from opencmo.media.ffmpeg import USER_INPUT, run
 
 log = logging.getLogger(__name__)
@@ -168,6 +169,12 @@ def _screen_with_creem(model: AiModel, text: str) -> None:
         )
         response.raise_for_status()
         decision = response.json().get("decision")
+    except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+        # Busy or slow (timeout, 429, 5xx): nothing was paid yet, so the task goes back in the queue. Failing it would
+        # also fail and refund every shot of a /video waiting on this keyframe.
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        log.warning("Creem screening could not answer: %s %s", type(exc).__name__, status or "")
+        raise ProviderError(UNAVAILABLE, retryable=status is None or status in TRANSIENT_STATUS) from exc
     except (httpx.HTTPError, ValueError, AttributeError) as exc:
         log.error("Creem screening could not answer: %s", type(exc).__name__)
         raise ProviderError(UNAVAILABLE) from exc

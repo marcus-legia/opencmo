@@ -212,6 +212,9 @@ def _generation_matches(declaration: dict[str, Any], record: dict[str, Any]) -> 
 # A long-take shot declares its keyframe as a nested `generate` declaration; its `generations` row
 # stores the keyframe the server resolved it to, as a storage path under these keys.
 _RESOLVED_FRAMES = {"startFrame": "startImage", "endFrame": "endImage"}
+# A shot of a /video made in one go names its keyframe generation by spec hash instead, since the
+# keyframe was still being made when the shot was created.
+_CHAINED_FRAMES = {"startFrame": "startAfter", "endFrame": "endAfter"}
 
 
 def _bare_path(path: Any) -> str:
@@ -222,6 +225,7 @@ def _generation_row_matches(
     declaration: dict[str, Any],
     row: dict[str, Any],
     frame_path: Callable[[dict[str, Any]], str | None] | None = None,
+    frame_hash: Callable[[dict[str, Any]], str | None] | None = None,
 ) -> bool:
     """A finished `generations` row for this declaration: same prompt, same model when the
     declaration names one, and every spec field the declaration wrote. A nested keyframe
@@ -237,9 +241,15 @@ def _generation_row_matches(
             continue
         wanted = declaration[name]
         resolved = _RESOLVED_FRAMES.get(name)
-        if resolved and isinstance(wanted, dict) and "generate" in wanted and name not in spec and resolved in spec:
+        chained = _CHAINED_FRAMES.get(name)
+        nested = isinstance(wanted, dict) and "generate" in wanted and name not in spec
+        if resolved and nested and resolved in spec:
             path = frame_path(wanted) if frame_path else None
             if path is None or _bare_path(path) != _bare_path(spec[resolved]):
+                return False
+        elif chained and nested and chained in spec:
+            made_from = frame_hash(wanted) if frame_hash else None
+            if made_from is None or made_from != spec[chained]:
                 return False
         elif spec.get(name) != wanted:
             return False
@@ -340,8 +350,17 @@ class _Sources:
         if self.generations is None:
             self.generations = self.store.done_generations(self.task.job_id)
         for row in self.generations:
-            if _generation_row_matches(declaration, row, self._finished_frame_path):
+            if _generation_row_matches(declaration, row, self._finished_frame_path, self._finished_frame_hash):
                 return str(row["media_asset_id"])
+        return None
+
+    def _finished_frame_hash(self, declaration: dict[str, Any]) -> str | None:
+        """Spec hash of a nested keyframe's finished generation in this project: the one a chained shot names."""
+        if self.generations is None:
+            self.generations = self.store.done_generations(self.task.job_id)
+        for row in self.generations:
+            if _generation_row_matches(declaration, row, self._finished_frame_path, self._finished_frame_hash):
+                return str(row.get("spec_hash") or "") or None
         return None
 
     def _finished_frame_path(self, declaration: dict[str, Any]) -> str | None:

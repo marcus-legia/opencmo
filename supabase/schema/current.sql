@@ -387,6 +387,11 @@ begin
                v_turn.hold_credits + greatest(public.credit_balance(v_user), 0))
     into v_credits
   from public.agent_usage u where u.turn_id = p_turn_id;
+  -- An approved explainer quoted its writing and checking as "up to agent_3d_hold_credits()": past that, it is ours.
+  if exists (select 1 from public.credit_orders o
+             where o.source_kind = 'agent_turn' and o.source_id = p_turn_id and o.kind = 'explainer') then
+    v_credits := least(v_credits, public.agent_3d_hold_credits());
+  end if;
 
   -- The unused part of the hold comes back; usage past it is charged from the balance.
   perform public.credit_settle(v_user, 'agent_turn', v_turn.id, v_credits, 'Assistant refund');
@@ -1035,6 +1040,10 @@ begin
     -- Already settled: charge what this usage adds, never past the balance (the hold was given back at
     -- the close and may be spent since). Not capped at the hold any more (owner, 2026-11-05).
     v_credits := public.agent_credits(v_total);
+    if exists (select 1 from public.credit_orders o
+               where o.source_kind = 'agent_turn' and o.source_id = p_turn_id and o.kind = 'explainer') then
+      v_credits := least(v_credits, public.agent_3d_hold_credits());
+    end if;
     if v_credits > coalesce(v_turn.credits, 0) then
       v_credits := coalesce(v_turn.credits, 0)
         + least(v_credits - coalesce(v_turn.credits, 0), greatest(public.credit_balance(p_user), 0));
@@ -5905,11 +5914,13 @@ begin
   if p_spec_hash is null or p_spec_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'Invalid generation request.' using errcode = '22023';
   end if;
-  -- Khoá theo người dùng: kiểm số dư, trần đang chạy và trùng hash phải đọc
-  -- một trạng thái mà hai request song song không cùng thấy.
+  -- One lock per user: the balance, the running cap and a duplicate hash must be read from one state that two
+  -- parallel requests cannot both see.
   perform pg_advisory_xact_lock(hashtextextended(v_user::text, 2905));
-
-  -- Gửi lại cùng request id (mạng rớt sau khi server đã ghi) → trả lại đúng lượt đó.
+  -- The credit owner before any generation row (keyframes, the shot it continues), the order complete_generation
+  -- takes them in.
+  perform public.lock_credit_owner(v_user);
+  -- The same request id again (the network dropped after the server wrote it) gets that generation back.
   select g.* into v_generation from public.generations g
   join public.tasks t on t.id = g.task_id
   where t.request_id = p_request_id and g.user_id = v_user;
@@ -6343,18 +6354,20 @@ CREATE TABLE public.credit_orders (
     status text DEFAULT 'open'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     closed_at timestamp with time zone,
+    subject text,
     CONSTRAINT credit_orders_estimate_credits_check CHECK (((estimate_credits > 0) AND (estimate_credits <= 5000))),
     CONSTRAINT credit_orders_kind_check CHECK ((kind = ANY (ARRAY['long_take'::text, 'explainer'::text, 'studio_video'::text]))),
     CONSTRAINT credit_orders_source_kind_check CHECK ((source_kind = ANY (ARRAY['agent_turn'::text, 'work_order'::text, 'mcp'::text]))),
-    CONSTRAINT credit_orders_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text])))
+    CONSTRAINT credit_orders_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text]))),
+    CONSTRAINT credit_orders_subject_check CHECK (((subject IS NULL) OR (length(subject) <= 200)))
 );
 
 
 --
--- Name: credit_order_open(text, integer, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: credit_order_open(text, integer, text, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.credit_order_open(p_kind text, p_estimate integer, p_source_kind text, p_source_id uuid, p_request_id uuid) RETURNS public.credit_orders
+CREATE FUNCTION public.credit_order_open(p_kind text, p_estimate integer, p_source_kind text, p_source_id uuid, p_request_id uuid, p_subject text DEFAULT NULL::text) RETURNS public.credit_orders
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -6372,6 +6385,9 @@ begin
     raise exception 'Invalid job estimate.' using errcode = '22023';
   end if;
   if p_source_kind is not null and p_source_kind not in ('agent_turn', 'work_order', 'mcp') then
+    raise exception 'Invalid job.' using errcode = '22023';
+  end if;
+  if p_subject is not null and length(p_subject) > 200 then
     raise exception 'Invalid job.' using errcode = '22023';
   end if;
   if p_source_kind = 'agent_turn' and not exists (
@@ -6393,8 +6409,8 @@ begin
     end if;
     return v_order;
   end if;
-  insert into public.credit_orders (user_id, kind, estimate_credits, source_kind, source_id, request_id)
-  values (v_user, p_kind, p_estimate, p_source_kind, p_source_id, p_request_id)
+  insert into public.credit_orders (user_id, kind, estimate_credits, source_kind, source_id, request_id, subject)
+  values (v_user, p_kind, p_estimate, p_source_kind, p_source_id, p_request_id, p_subject)
   returning * into v_order;
   perform public.credit_hold(v_user, 'credit_order', v_order.id, p_estimate, 'Job hold');
   return v_order;
@@ -12792,6 +12808,35 @@ $$;
 
 
 --
+-- Name: studio_order_release_hold(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.studio_order_release_hold() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_held integer;
+  v_used integer;
+begin
+  if new.status not in ('done', 'failed', 'cancelled') or old.status in ('done', 'failed', 'cancelled') then
+    return new;
+  end if;
+  perform public.lock_credit_owner(new.user_id);
+  v_held := public.credit_held('work_order', new.id);
+  if v_held <= 0 then
+    return new;
+  end if;
+  v_used := public.agent_credits((select coalesce(sum(micro_usd), 0)::bigint from public.work_order_usage where order_id = new.id));
+  if v_used < v_held then
+    perform public.credit_settle(new.user_id, 'work_order', new.id, v_used, 'CMO video team hold returned');
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: work_orders; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12832,35 +12877,6 @@ CREATE TABLE public.work_orders (
     CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
     CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
 );
-
-
---
--- Name: studio_order_release_hold(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_order_release_hold() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_held integer;
-  v_used integer;
-begin
-  if new.status not in ('done', 'failed', 'cancelled') or old.status in ('done', 'failed', 'cancelled') then
-    return new;
-  end if;
-  perform public.lock_credit_owner(new.user_id);
-  v_held := public.credit_held('work_order', new.id);
-  if v_held <= 0 then
-    return new;
-  end if;
-  v_used := public.agent_credits((select coalesce(sum(micro_usd), 0)::bigint from public.work_order_usage where order_id = new.id));
-  if v_used < v_held then
-    perform public.credit_settle(new.user_id, 'work_order', new.id, v_used, 'CMO video team hold returned');
-  end if;
-  return new;
-end;
-$$;
 
 
 --
@@ -17082,6 +17098,13 @@ CREATE INDEX credit_ledger_user_idx ON public.credit_ledger USING btree (user_id
 --
 
 CREATE INDEX credit_orders_open_idx ON public.credit_orders USING btree (created_at) WHERE (status = 'open'::text);
+
+
+--
+-- Name: credit_orders_subject_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX credit_orders_subject_idx ON public.credit_orders USING btree (user_id, kind, subject) WHERE (status = 'open'::text);
 
 
 --

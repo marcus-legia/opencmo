@@ -23,7 +23,7 @@ insert into public.credit_ledger(user_id, delta, reason) values
   ('e2530000-0000-4000-8000-00000000000b', 20, 'test grant');
 
 -- ================================================================ rights on the functions
-select ok(has_function_privilege('authenticated', 'public.credit_order_open(text,integer,text,uuid,uuid)', 'execute'), 'a user opens a job');
+select ok(has_function_privilege('authenticated', 'public.credit_order_open(text,integer,text,uuid,uuid,text)', 'execute'), 'a user opens a job');
 select ok(has_function_privilege('authenticated', 'public.credit_order_close(uuid)', 'execute'), 'a user closes a job');
 select ok(not has_function_privilege('authenticated', 'public.credit_order_draw(uuid,text,uuid,integer,text,uuid)', 'execute'), 'only the server draws');
 select ok(not has_function_privilege('authenticated', 'public.credit_order_close_for(uuid,uuid)', 'execute'), 'only the server closes for a user');

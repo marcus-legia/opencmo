@@ -458,6 +458,29 @@ def test_creem_fails_closed(monkeypatch: pytest.MonkeyPatch, reply: Any) -> None
     assert str(failed.value) == moderation.UNAVAILABLE
 
 
+@pytest.mark.parametrize(
+    ("reply", "retryable"),
+    [
+        (httpx.ConnectTimeout("slow"), True),
+        (httpx.ReadTimeout("slow"), True),
+        (_CreemReply({"decision": "allow"}, status=429), True),
+        (_CreemReply({"decision": "allow"}, status=503), True),
+        (_CreemReply({"decision": "allow"}, status=401), False),
+        (_CreemReply({"decision": "something new"}), False),
+        (_CreemReply(None), False),
+    ],
+)
+def test_a_busy_creem_requeues_the_task_instead_of_failing_it(monkeypatch: pytest.MonkeyPatch, reply: Any, retryable: bool) -> None:
+    """Review 2026-11-06: a /video runs 39 tasks at once; one 429 on a keyframe must not fail it, and with it every shot
+    waiting on it. Nothing was paid before the screening, so a retry costs nothing. A bad key or answer stays final."""
+    _creem(monkeypatch, reply)
+    monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")
+    with pytest.raises(ProviderError) as failed:
+        moderation.check_prompt(get_model("gemini-image"), PROMPT_SPEC)
+    assert str(failed.value) == moderation.UNAVAILABLE
+    assert failed.value.retryable is retryable
+
+
 def test_creem_skips_audio_and_screens_motion(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _creem(monkeypatch, _CreemReply({"decision": "deny"}))
     monkeypatch.setenv("CREEM_API_KEY", "creem_test_k")

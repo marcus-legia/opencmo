@@ -48,6 +48,7 @@ import { normalizeSpec } from "@/lib/generate/create";
 import { availableModels } from "@/lib/generate/models";
 
 import { runGeneration, type LookupImage, type PreparedGeneration } from "./generate-tool";
+import type { JobSource } from "./create-video";
 import { AGENT_3D_HOLD_CREDITS } from "./limits";
 import type { Image } from "./providers/types";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
@@ -620,15 +621,19 @@ export function preparePlanExplainer(input: unknown): PreparedExplainerPlan | st
 }
 
 /** The one card of an explainer: the storyboard and everything it will cost. */
-export function planExplainerCard(prepared: PreparedExplainerPlan, clipId: string) {
+/**
+ * `allowance`: the Assistant's writing and checking, billed on its turn and capped at this by `agent_close_turn`.
+ * Over MCP and in Studio the code is written elsewhere, so nothing is quoted for it.
+ */
+export function planExplainerCard(prepared: PreparedExplainerPlan, clipId: string, allowance = 0) {
   const { plan } = prepared;
-  const total = prepared.credits + AGENT_3D_HOLD_CREDITS;
+  const total = prepared.credits + allowance;
   const look = [plan.theme, plan.personality].filter(Boolean).join(", ");
   return {
     clips: [{ id: clipId, label: "This clip" }],
     changes: [
       `${plan.silent ? "Motion clip" : "Explainer"} “${plan.title}” · ${prepared.seconds}s · ${plan.format}${look ? ` · ${look}` : ""} · ${plan.voice ? `voice ${plan.voice}` : "No narration"} · up to ${total} credits`,
-      `Render · ${prepared.credits} credits · writing and checking the animation · billed as used, up to ${AGENT_3D_HOLD_CREDITS} credits`,
+      `Render · ${prepared.credits} credits${allowance ? ` · writing and checking the animation · billed as used, up to ${allowance} credits` : ""}`,
       ...plan.beats.map(
         (item, index) => `Beat ${index + 1} · ${plan.silent ? `${item.seconds ?? 0}s` : "Voice"}: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
       ),
@@ -638,16 +643,21 @@ export function planExplainerCard(prepared: PreparedExplainerPlan, clipId: strin
   };
 }
 
-/** The open explainer job of the signed-in user (read under RLS), newest first. */
-export async function openExplainerOrder(supabase: SupabaseClient): Promise<{ id: string; estimate_credits: number } | null> {
-  const { data, error } = await supabase
+/** The clip and the conversation an explainer job was approved in: only they may draw from it. */
+export type ExplainerScope = { clipId: string; source: JobSource };
+const subjectOf = (clipId: string) => `clip:${clipId}`;
+
+/** The open explainer job approved for this clip in this conversation (read under RLS), newest first. */
+export async function openExplainerOrder(supabase: SupabaseClient, scope: ExplainerScope): Promise<{ id: string; estimate_credits: number } | null> {
+  let query = supabase
     .from("credit_orders")
     .select("id, estimate_credits")
     .eq("kind", "explainer")
     .eq("status", "open")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ id: string; estimate_credits: number }>();
+    .eq("subject", subjectOf(scope.clipId))
+    .eq("source_kind", scope.source.kind);
+  query = scope.source.id ? query.eq("source_id", scope.source.id) : query.is("source_id", null);
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle<{ id: string; estimate_credits: number }>();
   if (error) throw error;
   return data ?? null;
 }
@@ -656,13 +666,13 @@ export const PLAN_FIRST = "Show the storyboard and the price with plan_explainer
 
 /** Approved: one job holds the render price; the model codes from the approved plan. */
 export async function runPlanExplainer(
-  env: { supabase: SupabaseClient; source: { kind: "agent_turn" | "work_order"; id: string } | { kind: "mcp"; id: null } },
+  env: { supabase: SupabaseClient } & ExplainerScope,
   prepared: PreparedExplainerPlan,
   requestId: string,
 ): Promise<ToolOutcome> {
   try {
-    // A plan approved again replaces the old one: its hold comes back first.
-    const old = await openExplainerOrder(env.supabase);
+    // A plan approved again here replaces the old one: its hold comes back first.
+    const old = await openExplainerOrder(env.supabase, env);
     if (old) await rpcOrThrow(env.supabase, "credit_order_close", { p_order_id: old.id });
     const order = await rpcOrThrow<{ id: string }>(env.supabase, "credit_order_open", {
       p_kind: "explainer",
@@ -670,6 +680,7 @@ export async function runPlanExplainer(
       p_source_kind: env.source.kind,
       p_source_id: env.source.id,
       p_request_id: requestId,
+      p_subject: subjectOf(env.clipId),
     });
     return {
       ok: true,
@@ -692,10 +703,10 @@ export async function runPlanExplainer(
 
 /** add_explainer after the approval: the render starts from the job's hold, then the job closes (the rest comes back). */
 export async function runAddExplainer(
-  env: Parameters<typeof runGeneration>[0],
+  env: Parameters<typeof runGeneration>[0] & { source: JobSource },
   prepared: PreparedExplainer,
 ): Promise<ToolOutcome> {
-  const order = await openExplainerOrder(env.supabase);
+  const order = await openExplainerOrder(env.supabase, { clipId: env.clipId, source: env.source });
   if (!order) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
   const { outcome } = await runGeneration({ ...env, orderId: order.id }, prepared);
   const overEstimate = !outcome.ok && /more credits than its estimate/.test(outcome.content);

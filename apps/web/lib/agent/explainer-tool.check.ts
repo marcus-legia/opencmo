@@ -16,6 +16,7 @@ import { z } from "zod";
 import {
   explainerCard,
   explainerToolSpecs,
+  openExplainerOrder,
   PLAN_FIRST,
   planExplainerCard,
   prepareExplainer,
@@ -86,7 +87,7 @@ async function main() {
   assert.ok(typeof planned !== "string", String(planned));
   assert.equal(planned.credits, prepared.credits, "the plan's price is the render add_explainer starts");
   assert.match(preparePlanExplainer({ ...storyboard }) as string, /^voice: choose one of/);
-  const planCard = planExplainerCard(planned, "clip");
+  const planCard = planExplainerCard(planned, "clip", 20);
   assert.match(planCard.changes[0]!, /^Explainer “.+” · \d+s · .+ · paper, playful · voice Aria · up to \d+ credits$/);
   assert.equal(planCard.credits, planned.credits + 20, "the card shows the render and the code allowance");
   assert.match(planCard.changes[1]!, /^Render · \d+ credits · writing and checking the animation · billed as used, up to 20 credits$/);
@@ -95,24 +96,38 @@ async function main() {
   assert.equal(specs.find((spec) => spec.name === "plan_explainer")?.approval, true, "the plan is the card");
   assert.ok(!specs.find((spec) => spec.name === "add_explainer")?.approval, "add_explainer asks again for nothing");
 
-  // A fake database: open jobs, and what each RPC was asked.
-  const jobs: { id: string; estimate_credits: number; open: boolean }[] = [];
+  // A fake database: open jobs, and what each RPC was asked. Reads filter like PostgREST: only the eq/is columns given.
+  const jobs: { id: string; estimate_credits: number; open: boolean; subject: string; source_kind: string; source_id: string | null }[] = [];
   const rpcs: string[] = [];
   const db = {
     from: () => {
+      const where: Record<string, unknown> = {};
       const query = {
         select: () => query,
-        eq: () => query,
+        eq: (column: string, value: unknown) => ((where[column] = value), query),
+        is: (column: string, value: unknown) => ((where[column] = value), query),
         order: () => query,
         limit: () => query,
-        maybeSingle: async () => ({ data: [...jobs].reverse().find((job) => job.open) ?? null, error: null }),
+        maybeSingle: async () => {
+          const match = (job: (typeof jobs)[number]) =>
+            job.open &&
+            Object.entries(where).every(([column, value]) => ["kind", "status"].includes(column) || (job as Record<string, unknown>)[column] === value);
+          return { data: [...jobs].reverse().find(match) ?? null, error: null };
+        },
       };
       return query;
     },
     rpc: async (name: string, args: Record<string, unknown>) => {
       rpcs.push(name);
       if (name === "credit_order_open") {
-        jobs.push({ id: `job-${jobs.length + 1}`, estimate_credits: Number(args.p_estimate), open: true });
+        jobs.push({
+          id: `job-${jobs.length + 1}`,
+          estimate_credits: Number(args.p_estimate),
+          open: true,
+          subject: String(args.p_subject),
+          source_kind: String(args.p_source_kind),
+          source_id: (args.p_source_id as string | null) ?? null,
+        });
         return { data: { id: jobs.at(-1)!.id }, error: null };
       }
       if (name === "credit_order_close") {
@@ -122,15 +137,28 @@ async function main() {
       return { data: null, error: null };
     },
   };
-  const env = { supabase: db as never, jobId: "j", clipId: "c", applyOp: async () => ({ ok: true, content: "{}", summary: "" }) };
+  const turn = { kind: "agent_turn" as const, id: "turn-1" };
+  const env = { supabase: db as never, jobId: "j", clipId: "c", source: turn, applyOp: async () => ({ ok: true, content: "{}", summary: "" }) };
   const refused = await runAddExplainer(env, prepared);
   assert.equal(refused.ok, false);
   assert.match(refused.content, new RegExp(PLAN_FIRST.slice(0, 40)));
-  const approved = await runPlanExplainer({ supabase: db as never, source: { kind: "mcp", id: null } }, planned, "00000000-0000-4000-8000-000000000001");
+  const approved = await runPlanExplainer({ supabase: db as never, clipId: "c", source: turn }, planned, "00000000-0000-4000-8000-000000000001");
   assert.ok(approved.ok, approved.content);
   assert.equal(jobs[0]!.estimate_credits, planned.credits, "one job holds the render price");
-  await runPlanExplainer({ supabase: db as never, source: { kind: "mcp", id: null } }, planned, "00000000-0000-4000-8000-000000000002");
-  assert.deepEqual(jobs.map((job) => job.open), [false, true], "a plan approved again gives the old hold back first");
+  assert.equal(jobs[0]!.subject, "clip:c", "the job names the clip it was approved for");
+  // Review 2026-11-06: an approval is not a blank cheque for another clip or another conversation.
+  assert.equal(await openExplainerOrder(db as never, { clipId: "other", source: turn }), null, "another clip cannot draw from it");
+  assert.equal(await openExplainerOrder(db as never, { clipId: "c", source: { kind: "agent_turn", id: "turn-2" } }), null, "nor another turn");
+  assert.equal(await openExplainerOrder(db as never, { clipId: "c", source: { kind: "mcp", id: null } }), null, "nor MCP");
+  assert.equal((await openExplainerOrder(db as never, { clipId: "c", source: turn }))?.id, "job-1", "its own clip and turn can");
+  await runPlanExplainer({ supabase: db as never, clipId: "other", source: turn }, planned, "00000000-0000-4000-8000-000000000003");
+  assert.deepEqual(jobs.map((job) => job.open), [true, true], "approving another clip's plan leaves this one's hold alone");
+  await runPlanExplainer({ supabase: db as never, clipId: "c", source: turn }, planned, "00000000-0000-4000-8000-000000000002");
+  assert.deepEqual(jobs.map((job) => job.open), [false, true, true], "a plan approved again here gives the old hold back first");
+  // The card quotes the Assistant's writing only where it is billed (the editor), never over MCP.
+  assert.equal(planExplainerCard(planned, "c").credits, planned.credits, "MCP: the render alone");
+  assert.equal(planExplainerCard(planned, "c", 20).credits, planned.credits + 20, "editor: render plus the capped writing");
+  assert.doesNotMatch(planExplainerCard(planned, "c").changes[1]!, /writing/);
 
   // A3: a numeric direction first, previews at chosen times, the review checklist with every clean preview.
   const noDirection = await runPreviewExplainer({ ...input, direction: undefined }, { preview: async () => assert.fail("must not render") });

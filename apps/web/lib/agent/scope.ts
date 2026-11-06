@@ -77,6 +77,7 @@ import { screenPieces } from "./screen-pieces";
 import { PLAN_VIDEO_TOOL, prepareVideo, type PreparedVideo, type VideoCard } from "./video-team";
 import { BROWSER_INPUTS, OWN_VIDEO_TOOLS, TOOL_SPECS, applyOpTool, askInput, isWriteTool, runCheck, runTool, type ToolOutcome, type ToolSpec } from "./tools";
 import { withSpend } from "@/lib/spend/record";
+import { AGENT_3D_HOLD_CREDITS } from "./limits";
 
 /**
  * Kiểm lời của lượt sinh LÚC BÁO GIÁ: lời bị chặn thì không hiện thẻ duyệt cho
@@ -243,6 +244,10 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   };
   const start = await workspace.read();
   const blank = blankEdit(context, start.document);
+  // Read when a tool runs: `turnId` is filled in after the scope is built.
+  const jobSource = (): JobSource =>
+    host.turnId ? { kind: "agent_turn", id: host.turnId } : host.workOrderId ? { kind: "work_order", id: host.workOrderId } : { kind: "mcp", id: null };
+  const explainerScope = () => ({ clipId, source: jobSource() });
   return {
     kind: "clip",
     tools: clipToolSpecs({ blank }),
@@ -331,7 +336,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
       if (call.name === "add_explainer") {
         // Paid from the plan the user approved (plan_explainer): no second card, and nothing without one. The checks
         // run in `run`, which MCP calls directly.
-        if (!(await openExplainerOrder(supabase))) return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: PLAN_FIRST }), summary: "Plan the explainer first" };
+        if (!(await openExplainerOrder(supabase, explainerScope()))) return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: PLAN_FIRST }), summary: "Plan the explainer first" };
         return { kind: "run" };
       }
       if (call.name === "plan_explainer") {
@@ -346,7 +351,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
           return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
         }
-        return { kind: "approval", input: prepared, card: planExplainerCard(prepared, clipId) };
+        return { kind: "approval", input: prepared, card: planExplainerCard(prepared, clipId, host.turnId ? AGENT_3D_HOLD_CREDITS : 0) };
       }
       if (call.name === "create_video") {
         // The director plans here, before the card; its model calls are charged on this turn.
@@ -434,7 +439,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                   : call.name === "preview_explainer"
                   ? (async () => {
                       // No render before the user approved the storyboard and its price (D9).
-                      if (!(await openExplainerOrder(supabase))) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
+                      if (!(await openExplainerOrder(supabase, explainerScope()))) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
                       const { document } = await workspace.read();
                       const accent = readBrand(document)?.colors.accent;
                       return runPreviewExplainer(call.input, {
@@ -468,7 +473,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                       });
                       if (typeof prepared === "string") return { ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
                       return runAddExplainer(
-                        { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env), ...(host.alive ? { alive: host.alive } : {}) },
+                        { supabase, jobId: context.clip.job_id, clipId, source: jobSource(), applyOp: (op) => applyOpTool(op, env), ...(host.alive ? { alive: host.alive } : {}) },
                         prepared,
                       );
                     })()
@@ -547,20 +552,8 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           wrote: false,
         };
       }
-      if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
-      const prepared = input as PreparedGeneration;
-      if (!approved) {
-        return {
-          outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined this generation. No credits were spent." }), summary: "Declined" },
-          extra: {},
-          wrote: false,
-        };
-      }
-      const source: JobSource = host.turnId
-        ? { kind: "agent_turn", id: host.turnId }
-        : host.workOrderId
-          ? { kind: "work_order", id: host.workOrderId }
-          : { kind: "mcp", id: null };
+      const source = jobSource();
+      // Before the priced-tool guard: the explainer's one card is not a generation card.
       if (call.name === "plan_explainer") {
         if (!approved) {
           return {
@@ -569,8 +562,17 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
             wrote: false,
           };
         }
-        const outcome = await runPlanExplainer({ supabase, source }, input as PreparedExplainerPlan, randomUUID());
+        const outcome = await runPlanExplainer({ supabase, clipId, source }, input as PreparedExplainerPlan, randomUUID());
         return { outcome, extra: {}, wrote: false };
+      }
+      if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
+      const prepared = input as PreparedGeneration;
+      if (!approved) {
+        return {
+          outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined this generation. No credits were spent." }), summary: "Declined" },
+          extra: {},
+          wrote: false,
+        };
       }
       if (call.name === "create_video") {
         const { outcome, generationId } = await runCreateVideo(

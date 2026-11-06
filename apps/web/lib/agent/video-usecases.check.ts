@@ -39,6 +39,7 @@ async function main(): Promise<void> {
   const { fixtureDocument, fixtureManifest, FIXTURE_DURATIONS, FIXTURE_MASTER, TRANSCRIPT } = await import("./eval/fixture");
   const { runCreateVideo } = await import("./create-video");
   const { withPieces } = await import("./keyframe-library");
+  const { ApiError } = await import("@/lib/api/errors");
   const { declarationsOf, resolve } = await import("@/components/editor/generate/useGenerations");
 
   /** A blank "New edit" (where /video runs): an empty 9:16 scene. */
@@ -61,8 +62,26 @@ async function main(): Promise<void> {
    * Approve the one card through `runCreateVideo`, with the database replaced: the job's hold, each
    * piece started from it (keyframes first), the library records, then the op on the same document.
    */
-  async function approve(planned: Awaited<ReturnType<typeof prepareCreateVideo>>, document = blank(), options: { failOp?: boolean } = {}) {
+  /** jsonb's key order (shorter keys first, then bytewise), which the op has after `agent_tool_calls.input`. */
+  const jsonb = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(jsonb)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value)
+              .sort(([a], [b]) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+              .map(([key, item]) => [key, jsonb(item)]),
+          )
+        : value;
+
+  async function approve(
+    planned: Awaited<ReturnType<typeof prepareCreateVideo>>,
+    document = blank(),
+    options: { failOp?: boolean; failCheck?: number; running?: number; failStart?: number; sent?: number } = {},
+  ) {
     assert.ok(typeof planned !== "string");
+    // The approval runs on the stored input, as loop.ts and Studio do, not on the in-memory card.
+    planned = { ...planned, prepared: { ...planned.prepared, op: jsonb(planned.prepared.op) as never } };
     const workspace = memoryWorkspace(
       { version: 1, document, manifest: fixtureManifest() },
       { durations: FIXTURE_DURATIONS, transcripts: { "assets/transcript.json": TRANSCRIPT }, master: FIXTURE_MASTER },
@@ -73,6 +92,11 @@ async function main(): Promise<void> {
     const supabase = {
       rpc: async (name: string, args: Record<string, unknown>) => {
         calls.push(name === "credit_order_open" ? `${name}:${String(args.p_estimate)}` : name);
+        if (name === "cancel_generation") {
+          // The first `sent` pieces were already sent to their provider: cancelling them keeps their credits.
+          const index = Number(String(args.p_id).slice(-12));
+          return { data: { sent_at: index < (options.sent ?? 0) ? "2026-11-06T00:00:00Z" : null }, error: null };
+        }
         return { data: name === "credit_order_open" ? { id: "order-1" } : 0, error: null };
       },
     };
@@ -95,10 +119,17 @@ async function main(): Promise<void> {
         },
         create: {
           check: async (_supabase, request) => {
-            assert.equal(request.orderId, "order-1", "every piece is paid from the job's hold");
+            calls.push("check");
+            assert.equal(request.orderId, undefined, "every piece is checked before the job holds anything");
+            const after = (request.spec as { startAfter?: string }).startAfter;
+            if (after) assert.ok(request.batch?.has(after), "a shot's keyframe is in the batch checked with it");
+            if (calls.filter((call) => call === "check").length === options.failCheck) throw new ApiError(503, "Could not check this request. Please try again.");
             return { request, model: { id: request.model } as never, spec: request.spec as never };
           },
+          running: async () => options.running ?? 0,
           start: async (_supabase, item) => {
+            assert.equal(item.request.orderId, "order-1", "every piece is paid from the job's hold");
+            if (next === options.failStart) throw new ApiError(409, "Too many generations are running.");
             calls.push(`start:${(item.spec as { startAfter?: string }).startAfter ? "shot" : "piece"}`);
             return { generation: { id: `00000000-0000-4000-8000-${String(next++).padStart(12, "0")}`, credits_reserved: 1 } as never, reused: false };
           },
@@ -143,8 +174,8 @@ async function main(): Promise<void> {
 
     const { outcome, calls, document, manifest } = await approve(asked.planned);
     assert.ok(outcome.outcome.ok, outcome.outcome.content);
-    // One hold for the estimate, keyframes before shots, the library before the scene, then the job closes.
-    assert.equal(calls[0], `credit_order_open:${asked.card.credits}`);
+    // Every piece checked, then one hold for the estimate, keyframes before shots, the library before the scene, then the job closes.
+    assert.deepEqual(calls.slice(0, 12), [...Array(11).fill("check"), `credit_order_open:${asked.card.credits}`]);
     assert.deepEqual(calls.filter((call) => call.startsWith("start:")), [...Array(5).fill("start:piece"), ...Array(4).fill("start:shot"), "start:piece", "start:piece"]);
     assert.ok(calls.indexOf("library") < calls.indexOf("place"), "listed before the scene names them");
     assert.equal(calls.at(-1), "credit_order_close");
@@ -170,6 +201,23 @@ async function main(): Promise<void> {
     assert.equal(failed.outcome.outcome.ok, false);
     assert.equal(failed.calls.filter((call) => call === "cancel_generation").length, 11);
     assert.equal(failed.calls.at(-1), "credit_order_close");
+
+    // Review 2026-11-06: a refusal found after the keyframes started cost their credits. Every check now runs first.
+    const refused = await approve(asked.planned, blank(), { failCheck: 8 });
+    assert.equal(refused.outcome.outcome.ok, false);
+    assert.ok(!refused.calls.some((call) => call.startsWith("start:") || call.startsWith("credit_order_open")), "a shot refused by its check starts nothing and holds nothing");
+    assert.match(refused.outcome.outcome.content, /Please try again|Nothing was charged/);
+    const busy = await approve(asked.planned, blank(), { running: 35 });
+    assert.equal(busy.outcome.outcome.ok, false);
+    assert.ok(!busy.calls.some((call) => call.startsWith("start:")), "the in-flight cap is read before anything starts");
+    assert.match(busy.outcome.outcome.content, /needs 11 generations at once and 35 are still running/);
+    // A start refused halfway: the reply says which credits stayed with the pieces already sent, never "returned" for all.
+    const half = await approve(asked.planned, blank(), { failStart: 6, sent: 2 });
+    assert.equal(half.outcome.outcome.ok, false);
+    assert.equal(half.calls.filter((call) => call === "cancel_generation").length, 6);
+    assert.match(half.outcome.outcome.content, /2 credits for pieces already sent to be made were kept; the rest came back/);
+    const clean = await approve(asked.planned, blank(), { failStart: 6 });
+    assert.match(clean.outcome.outcome.content, /Your credits were returned/);
   }
 
   // 2. No length given: 30 s, six beats, the last ending on a closing keyframe.

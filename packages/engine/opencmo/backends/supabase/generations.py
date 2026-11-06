@@ -29,7 +29,7 @@ class GenerationsMixin(_Http):
                 "job_id": f"eq.{job_id}",
                 "status": "eq.done",
                 "media_asset_id": "not.is.null",
-                "select": "id,model,spec,media_asset_id",
+                "select": "id,model,spec,spec_hash,media_asset_id",
                 "order": "created_at.desc",
             },
         )
