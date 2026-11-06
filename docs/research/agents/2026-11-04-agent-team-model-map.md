@@ -1,5 +1,7 @@
 # AI agent & automation: bản đồ agent team — model nào gọi model nào, và moderation đang lỗi ở đâu  (2026-11-04)
 
+> **Cập nhật 2026-11-05:** báo cáo này mô tả code trước #169. Quyết định cuối cùng (chỉ Claude, Sonnet/Haiku, no-ai-slop, Creem) nằm ở [`../../plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`](../../plans/cmo/2026-11-05-agent-team-models-moderation-spec.md).
+
 ## TL;DR
 
 - **Lỗi "không render được vì policy" có hai nguồn, cả hai đã sửa trong PR này:**

@@ -10,7 +10,7 @@ import { LandingMotion } from "@/components/landing/LandingMotion";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { PLANS, offerPrices } from "@/lib/pricing";
+import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catalog";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 
 // Ai/cái gì/giá bao nhiêu — ba thứ máy trả lời câu hỏi cần để nhắc tới OpenCMO
 // đúng. `offers` và FAQ đọc cùng nguồn với trang: giá và câu trả lời không lệch nhau.
-function landingLd(faq: { q: string; a: string }[]) {
+function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
   return [
     {
       "@context": "https://schema.org",
@@ -50,7 +50,7 @@ function landingLd(faq: { q: string; a: string }[]) {
       description: DESCRIPTION,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      offers: PLANS.filter((plan) => plan.price > 0).map((plan) => ({
+      offers: plans.filter((plan) => plan.price > 0).map((plan) => ({
         "@type": "Offer",
         name: plan.name,
         price: plan.billedPrice,
@@ -70,18 +70,18 @@ function landingLd(faq: { q: string; a: string }[]) {
 export default async function LandingPage() {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const prices = offerPrices();
+  const [prices, plans] = await Promise.all([offerPrices(), plansOnSale()]);
   const faq = faqs(prices);
   // Ô WEBSITE (không phải link video): onboarding đọc nó để dựng chiến lược
   // (docs/cmo/san-pham.md §3.1). `site` đi qua đăng nhập tới app.
   const action = user ? "/app" : "/login";
 
   // Footer nằm NGOÀI <main>: footer trong main không phải landmark contentinfo, nên
-  // trình đọc màn hình (và người duyệt Polar dùng nó) không tìm thấy bốn link pháp lý.
+  // trình đọc màn hình (và người duyệt Creem dùng nó) không tìm thấy bốn link pháp lý.
   return (
     <div className="landing">
       <LandingMotion />
-      <JsonLd data={landingLd(faq)} />
+      <JsonLd data={landingLd(faq, plans)} />
       <LandingNav user={!!user} />
       <main>
         <Hero action={action} />

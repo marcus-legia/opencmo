@@ -30,7 +30,7 @@ export default function PrivacyPage() {
         },
         {
           heading: "Service providers",
-          body: <p>We use providers to run OpenCMO: hosting and database (Vercel, Supabase), media processing (Modal), AI model providers that process prompts and transcripts to produce drafts, our payment provider acting as merchant of record (currently Polar), and, when you use those features, public social data and publishing integrations. They process data only on our instructions.</p>,
+          body: <p>We use providers to run OpenCMO: hosting and database (Vercel, Supabase), media processing (Modal), AI model providers that process prompts and transcripts to produce drafts, our payment provider acting as merchant of record (currently Creem), and, when you use those features, public social data and publishing integrations. They process data only on our instructions.</p>,
         },
         {
           heading: "Retention",

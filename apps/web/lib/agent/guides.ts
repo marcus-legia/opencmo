@@ -286,15 +286,15 @@ When <clip_context> has "brand", the clip is on the user's brand kit:
 - Captions already use the brand style; do not change caption style unless asked.
 - You cannot create or change brand kits. If the user wants their brand applied or edited, tell them: menu › Apply brand kit in the editor, or the Brand kit page in the app.`,
 
-  explainer: `# Animated explainers and motion clips (/explain → preview_explainer → add_explainer)
+  explainer: `# Animated explainers and motion clips (/explain → plan_explainer → preview_explainer → add_explainer)
 
-An explainer is a 15-90 s narrated animation of ONE idea; a motion clip (silent: true) is 3-30 s with no voice. Both are Remotion scenes YOU write: your own art direction, your own drawings, your own motion. The viewer must understand it with the sound off: every beat SHOWS what its narration names, drawn in the scene code (SVG, CSS, type), not stock clip-art. The bar is a launch video by a top design team. It renders as one video layer; an explainer gets its own voice and captions (credits after the user approves).
+An explainer is a 15-90 s narrated animation of ONE idea; a motion clip (silent: true) is 3-30 s with no voice. Both are Remotion scenes YOU write: your own art direction, your own drawings, your own motion. The viewer must understand it with the sound off: every beat SHOWS what its narration names, drawn in the scene code (SVG, CSS, type), not stock clip-art. The bar is a launch video by a top design team. It renders as one video layer; an explainer gets its own voice and captions. Nothing is previewed, rendered or charged before the user approves plan_explainer: the storyboard, the direction and one price.
 
 ## 1. Art direction first
 Before the storyboard, decide the look of THIS video: palette (hex values), background, fonts, motion vocabulary.
 - list_motion_styles → named directions with what each suits (kinetic type for hooks and claims, gradient flow for results and numbers, neon tech for how software works…). get_motion_style { id } → its guide (palette, background, fonts, motion numbers, composition, do and don't) and an example shot's code: read the code, it shows the techniques.
 - Or derive your own from the user's brand (apply_brand_kit colours, their site) the same way: 1 field colour, 1 ink, 1 accent (2 at most), a display font and a text font from kit.fonts, a motion character.
-- Let the user pick the look before you write the whole video (a pro motion team settles style frames first): choose two or three directions that fit (styles or one from the brand), write ONLY the hero shot of beat 1 in each (a short scene, same beats), and preview them together with preview_explainer variants [{ label, code }] and times [the hero moment]. It returns one image, the directions side by side left to right, and counts as one preview. Show it and ask which one (ask_user with the labels). Skip this when the user already named a style or a template, or for a quick fix of a scene they have.
+- Let the user pick the look before you write the whole video (a pro motion team settles style frames first), right after they approved the plan (previews run only then): choose two or three directions that fit (styles or one from the brand), write ONLY the hero shot of beat 1 in each (a short scene, same beats), and preview them together with preview_explainer variants [{ label, code }] and times [the hero moment]. It returns one image, the directions side by side left to right, and counts as one preview. Show it and ask which one (ask_user with the labels). Skip this when the user already named a style or a template, or for a quick fix of a scene they have.
 - Then one direction for the whole video. Tell the user which one and why in one line with the storyboard.
 - theme and personality on the tools only seed kit.color and the library pieces; your scene paints its own background and picks its own colours. Send theme "blueprint" for a dark direction, "paper" for a light one.
 
@@ -303,7 +303,7 @@ For EVERY beat:
 1. say (6-20 words of narration, about 4 s) and label (the main words on screen, at most 5).
 2. The subject: what is DRAWN (the sea is a band under a curve, a ship a hull path, a mast line and a sail; a claim is set as big type; a number rolls up), and how it moves or changes.
 3. visual: one line, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon draws across it; a ship sinks hull-first".
-Show the storyboard (say, label, visual per beat) and the direction in one line, and ask "Shall I make it?". Wait for the go unless the user already said to go ahead.
+Show it with plan_explainer { title, beats (with visual), direction, format, theme, personality, voice, silent? }: the card holds the storyboard, the direction and the one price (the render, plus writing and checking the animation, billed as used). The user approves there; never write code or preview before that. If they decline, ask what to change and plan again.
 - One structure: problem → mechanism → result; question → steps → answer; myth → why it fails → what works; before → change → after.
 - Beat 1 is the hook: a surprising question or fact, never "In this video…". 4-12 beats.
 - Each beat transforms the picture; no slideshow of separate pictures, no rows of cards, no title-plus-bullets screens.
@@ -387,7 +387,7 @@ When the user asks for an animation over part of their video ("explain this in t
 - After it renders, capture a frame in the middle: the animation in its band, the face whole in the other, captions not crossing the seam.
 
 ## 5. Add it
-add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice, start?, place? }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration (from the beats' seconds for a silent clip). The card shows each beat, the voice and the price; after approval the layer "Explainer: <title>" renders in a few minutes, and a captions layer follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
+add_explainer { title, beats (with visual), direction, code (exactly what you last previewed), format, theme, personality, voice, start?, place? }. format = clip_context.frame on a clip; on a blank New edit 9:16 unless the user asked for another shape. The duration comes from the narration (from the beats' seconds for a silent clip). Send the same title, beats, format and voice as the approved plan: it renders from that approval with no second card (a longer video than approved is refused: plan_explainer again). The layer "Explainer: <title>" renders in a few minutes, and a captions layer follows when the voice has word timings. Call wait_for_media, then capture a frame in its middle to confirm it plays.`,
 
   voiceover: `# Voiceover (add_voiceover, when available)
 
@@ -427,19 +427,18 @@ The Video agent team builds intros: do not assemble them with add_text and keyfr
 4. After it is applied, capture at the end of each beat and at the last second: the title is readable, nothing is cut off, the clip shows through after the intro.
 5. When the user is happy, save_skill "motion-profile" with one line: the personality, the mood and anything they asked for ("premium, calm, brand blue, no tagline").`,
 
-  video: `# A whole AI video (create_video → animate_video, /video)
+  video: `# A whole AI video (create_video, /video)
 
-A /video is made in two approvals, so the user sees every picture before the expensive part:
-- Card 1 (create_video): a director writes the voice-over, splits it into beats and gives each a keyframe (its first frame) and a motion. The card shows the storyboard, the keyframe price and about what the video will cost after. Approving makes only the keyframes (stills), into the library under Generated/<title>/keyframes.
-- Card 2 (animate_video): the keyframes in order with their words, a Redo on each, and the exact video price. Approving makes every shot at once (each moves from its keyframe to the next), the voice-over, captions and a music bed, placed as one block on the timeline.
+A /video is made in ONE approval: the user sees the storyboard and one price for everything before anything is paid.
+- The card (create_video): a director writes the voice-over, splits it into beats and gives each a keyframe (its first frame) and a motion. The card shows the storyboard and the full price: keyframes, the shots between them, the voice-over, captions and a music bed.
+- Approving starts all of it at once and places the video as one block on the timeline. The keyframes land in the library under Generated/<title>/keyframes; each shot waits for its keyframes, then moves from one to the next. Nothing asks again and nothing more is charged.
 
 1. Use it on a blank "New edit" only. On a clip of the user's own footage, add AI shots with B-roll (read_guide "broll") or generate_media instead: create_video would reframe and cover their video, and it refuses to run there.
 2. Pass the user's words as prompt. Pass seconds, aspect, voice or model only when the user asked for them. Shots come out at the model's shot lengths, so the video can end up a second shorter or longer than asked; say so if it matters.
-3. If card 1 is cancelled, ask what to change (story, length, tone) and call create_video again. Nothing was charged.
-4. After card 1 is approved, call wait_for_media (again if some are still generating), then animate_video with the plan, aspect, model and keyframes from create_video's result (and its voice, when it returned one). Never call animate_video before the keyframes are done: it refuses a missing keyframe.
-5. A keyframe the user does not like: Redo it on card 2 (1 credit, new picture) instead of making the whole video again. Once the video is placed, redo_keyframe makes a new keyframe and remakes only the at most 2 shots that start or end on it; the old files stay in the library.
-6. Continue or cut: a beat that continues flows into the next keyframe with no cut (same place, or a camera move that gets there); a cut starts the next beat on a fresh keyframe. Cut where the story changes place or idea; continue inside one place. When no model can end on a frame for this aspect, card 1 says every beat is a separate shot.
-7. After card 2 is approved the shots fill in as they finish. Call wait_for_media, then capture a frame in the middle of a few shots and at a few seams: each fills the frame, the shots join without a jump, the on-screen text is readable, the captions follow the voice.`,
+3. If the card is cancelled, ask what to change (story, length, tone) and call create_video again. Nothing was charged.
+4. A keyframe the user does not like, once the video is placed: redo_keyframe makes a new keyframe and remakes only the at most 2 shots that start or end on it, at their own price; the old files stay in the library. Never make the whole video again for one moment.
+5. Continue or cut: a beat that continues flows into the next keyframe with no cut (same place, or a camera move that gets there); a cut starts the next beat on a fresh keyframe. Cut where the story changes place or idea; continue inside one place. When no model can end on a frame for this aspect, the card says every beat is a separate shot.
+6. After approval the shots fill in as they finish. Call wait_for_media, then capture a frame in the middle of a few shots and at a few seams: each fills the frame, the shots join without a jump, the on-screen text is readable, the captions follow the voice.`,
 
   edit: `# Edit your own video with words (edit_video, /edit)
 

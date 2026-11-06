@@ -87,9 +87,11 @@ OpenCMO assists; it does not act on the user's behalf. Contributions must not ad
 - automatic posting, liking, following, commenting, multiple accounts or fake engagement;
 - downloading videos the user does not own (links require the "Is this your video?"
   confirmation; uploads are the main path);
-- voice cloning, dubbing or lip-sync of real people, or AI images/video of identifiable real
-  people or other brands' logos. Every generation goes through moderation
-  (`lib/generate/moderation.ts`, `opencmo/ai/moderation.py`).
+- voice cloning, dubbing or lip-sync, or anything else Creem's content rules forbid (NSFW and
+  sexually suggestive content, face-swap and deepfakes). Creem screens every image and video
+  prompt; finished outputs are reviewed before the user gets them (`lib/generate/moderation.ts`,
+  `opencmo/ai/moderation.py`). No LLM prompt check or content policy of our own;
+- a paid step that runs before the user has confirmed one credit estimate for the whole job.
 
 ## Language and style
 

@@ -16,7 +16,12 @@ import { z } from "zod";
 import {
   explainerCard,
   explainerToolSpecs,
+  PLAN_FIRST,
+  planExplainerCard,
   prepareExplainer,
+  preparePlanExplainer,
+  runAddExplainer,
+  runPlanExplainer,
   PREVIEW_ROUNDS,
   previewExplainerInput,
   previewJob,
@@ -74,6 +79,58 @@ async function main() {
   const card = explainerCard(prepared, "clip");
   assert.match(card.changes[0]!, / · paper, playful · voice Aria · /);
   assert.match(card.changes[1]!, /· Picture: a drawn syringe slides in from the left/);
+
+  // Charge before running (D9): the storyboard is priced before any code, at the price the render will have.
+  const { code: _planCode, ...storyboard } = input;
+  const planned = preparePlanExplainer({ ...storyboard, voice: "Aria" });
+  assert.ok(typeof planned !== "string", String(planned));
+  assert.equal(planned.credits, prepared.credits, "the plan's price is the render add_explainer starts");
+  assert.match(preparePlanExplainer({ ...storyboard }) as string, /^voice: choose one of/);
+  const planCard = planExplainerCard(planned, "clip");
+  assert.match(planCard.changes[0]!, /^Explainer “.+” · \d+s · .+ · paper, playful · voice Aria · up to \d+ credits$/);
+  assert.equal(planCard.credits, planned.credits + 20, "the card shows the render and the code allowance");
+  assert.match(planCard.changes[1]!, /^Render · \d+ credits · writing and checking the animation · billed as used, up to 20 credits$/);
+  assert.ok(planCard.changes.some((line) => /Picture: a drawn syringe slides in from the left/.test(line)), "the pictures are on the one card");
+  const specs = explainerToolSpecs();
+  assert.equal(specs.find((spec) => spec.name === "plan_explainer")?.approval, true, "the plan is the card");
+  assert.ok(!specs.find((spec) => spec.name === "add_explainer")?.approval, "add_explainer asks again for nothing");
+
+  // A fake database: open jobs, and what each RPC was asked.
+  const jobs: { id: string; estimate_credits: number; open: boolean }[] = [];
+  const rpcs: string[] = [];
+  const db = {
+    from: () => {
+      const query = {
+        select: () => query,
+        eq: () => query,
+        order: () => query,
+        limit: () => query,
+        maybeSingle: async () => ({ data: [...jobs].reverse().find((job) => job.open) ?? null, error: null }),
+      };
+      return query;
+    },
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      rpcs.push(name);
+      if (name === "credit_order_open") {
+        jobs.push({ id: `job-${jobs.length + 1}`, estimate_credits: Number(args.p_estimate), open: true });
+        return { data: { id: jobs.at(-1)!.id }, error: null };
+      }
+      if (name === "credit_order_close") {
+        for (const job of jobs) if (job.id === args.p_order_id) job.open = false;
+        return { data: 0, error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+  const env = { supabase: db as never, jobId: "j", clipId: "c", applyOp: async () => ({ ok: true, content: "{}", summary: "" }) };
+  const refused = await runAddExplainer(env, prepared);
+  assert.equal(refused.ok, false);
+  assert.match(refused.content, new RegExp(PLAN_FIRST.slice(0, 40)));
+  const approved = await runPlanExplainer({ supabase: db as never, source: { kind: "mcp", id: null } }, planned, "00000000-0000-4000-8000-000000000001");
+  assert.ok(approved.ok, approved.content);
+  assert.equal(jobs[0]!.estimate_credits, planned.credits, "one job holds the render price");
+  await runPlanExplainer({ supabase: db as never, source: { kind: "mcp", id: null } }, planned, "00000000-0000-4000-8000-000000000002");
+  assert.deepEqual(jobs.map((job) => job.open), [false, true], "a plan approved again gives the old hold back first");
 
   // A3: a numeric direction first, previews at chosen times, the review checklist with every clean preview.
   const noDirection = await runPreviewExplainer({ ...input, direction: undefined }, { preview: async () => assert.fail("must not render") });

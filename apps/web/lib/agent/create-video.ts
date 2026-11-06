@@ -1,17 +1,19 @@
 /**
- * `create_video` (/video), stage 1 of a long take: a director writes the voice-over script and splits
- * it into beats, each with a keyframe (its first frame) and a motion line; code reviews the plan and
- * prices it. The user approves card 1, and only the keyframes are made (stills, 1 credit each), into
- * the library. Stage 2 (`animate_video`) makes the shots between them after a second approval, so
- * the expensive video is never paid for before the user has seen the pictures it moves between.
+ * `create_video` (/video): a director writes the voice-over script and splits it into beats, each with a
+ * keyframe (its first frame) and a motion line; code reviews the plan and prices ALL of it: keyframes, the
+ * shots between them, the voice-over and the music. The user approves one card, one hold covers the whole
+ * estimate (`credit_order_open`), and everything starts at once; each shot waits on the worker for the
+ * keyframes it starts and ends on. No paid step runs before the approval and nothing asks again after
+ * it (owner decision D9). One moment is changed later with `redo_keyframe`, at its own price.
  */
 
-import { randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
 import {
   activeScene,
+  checkShots,
   keyframeCount,
   keyframeIndexes,
   LongTakePlanSchema,
@@ -21,6 +23,8 @@ import {
   VIDEO_FRAMES,
   WORDS_PER_SECOND,
   frameAspect,
+  type CreateVideo,
+  type KeyframeSource,
   type LongTakePlan,
   type LongTakeShot,
 } from "@opencmo/editor-core";
@@ -28,15 +32,17 @@ import { priceOf, type AiModel, type GenerationSpec } from "@opencmo/editor-core
 import type { ClipDocument } from "@opencmo/clip-doc";
 
 import { fakeAllowed, LlmError, llmReady, structured, type LlmUsage } from "@/lib/cmo/jobs/llm";
-import { normalizeSpec } from "@/lib/generate/create";
+import { checkGeneration, normalizeSpec, startGeneration } from "@/lib/generate/create";
 import { composeKeyframePrompt, composeShotPrompt } from "@/lib/generate/brief";
-import { availableModel, availableModels } from "@/lib/generate/models";
+import { availableModel, availableModels, specHash } from "@/lib/generate/models";
 import { ApiError } from "@/lib/api/errors";
+import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 import { voiceModelFor, type PreparedGeneration } from "./generate-tool";
+import { imageKey, saveLibrary, shotKey, withPieces, type LibraryPiece, type ProjectStore } from "./keyframe-library";
 import type { Piece } from "./screen-pieces";
 import { musicModel } from "./slash";
-import { sanitize, type ToolSpec } from "./tools";
+import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
 import type { Storyboard } from "./video-team";
 import { NO_AI_SLOP } from "@/lib/cmo/skills";
 
@@ -68,7 +74,7 @@ ${NO_AI_SLOP}`;
 
 const DIRECTOR_MS = 45_000;
 /** Same as `generation_active_limit()` in SQL (pgTAP 145 pins it): generations one user may have in flight. */
-export const GENERATION_ACTIVE_LIMIT = 24;
+export const GENERATION_ACTIVE_LIMIT = 40;
 const FAILED = "The director could not plan this video. Try again or describe it differently.";
 /** Card 1 line when no model for this frame can end a shot on a given frame (F10). */
 export const SEPARATE_SHOTS = "This frame uses separate shots: each one starts on its own keyframe, with a cut between them.";
@@ -280,7 +286,8 @@ export function createVideoToolSpec(): ToolSpec | null {
   return {
     name: "create_video",
     description:
-      'Make a whole AI video from a prompt on this edit (usually a blank New edit), in two approvals. This tool is step 1: a director writes the voice-over script and splits it into beats with a keyframe (first frame) and a motion each; the user approves the storyboard and the keyframe price, and the keyframes are made into the library. Then wait for them (wait_for_media) and call animate_video with the plan, aspect, model and keyframes this tool returns: step 2 shows the keyframes and the exact video price, then makes the shots between the keyframes, the voice-over, captions and a music bed. Use it when the user asks for a video from scratch (/video), on a blank edit; read_guide "video". Do not use it to add B-roll to a speaker clip.',
+      'Make a whole AI video from a prompt on this edit (usually a blank New edit), in one approval. A director writes the voice-over script and splits it into beats with a keyframe (first frame) and a motion each; the user approves the storyboard and ONE price for everything: the keyframes, the shots between them, the voice-over, captions and a music bed. Approving starts all of it at once and places the scene; each shot appears when it is ready. Use it when the user asks for a video from scratch (/video), on a blank edit; read_guide "video". To change one moment afterwards, use redo_keyframe. Do not use it to add B-roll to a speaker clip.',
+
     schema: sanitize(z.toJSONSchema(createVideoToolInput, { io: "input" })).schema as Record<string, unknown>,
     strict: true,
     approval: true,
@@ -290,7 +297,7 @@ export function createVideoToolSpec(): ToolSpec | null {
 export type PlannedVideo = {
   prepared: PreparedGeneration;
   storyboard: Storyboard;
-  /** Text moderated now that is generated only in stage 2 (shots, voice, music): a block costs nothing yet. */
+  /** The shots, the voice-over and the music, named for moderation (the keyframes are `prepared`'s first runs). */
   later: Piece[];
 };
 
@@ -376,57 +383,100 @@ export async function prepareCreateVideo(
   seconds = Math.round(timed.reduce((sum, shot) => sum + shot.length, 0) * 10) / 10;
   if (Math.abs(seconds - requested) > 1) return `The plan is ${seconds}s long; ask for about ${requested}s again.`;
 
-  const specs: GenerationSpec[] = [];
-  const shotsLater = shotPrompts(plan, video, aspect, joins);
+  // Every piece is priced and moderated now, before the one card: keyframes, then the shots between them,
+  // the voice-over and the music. Approving starts them all at once (`runCreateVideo`).
+  const keyframes: GenerationSpec[] = [];
   const later: Piece[] = [];
-  let videoCredits = 0;
   let voiceName: string | undefined;
+  let op: CreateVideo;
+  const extra: { model: AiModel; spec: GenerationSpec }[] = [];
   try {
     for (const description of keyframeDescriptions(plan)) {
       const prompt = composeKeyframePrompt(description, plan.style, { maxChars: keyframeModel.limits.maxPromptChars ?? 2000, aspectRatio: aspect });
-      specs.push(normalizeSpec(keyframeModel, { prompt, aspectRatio: aspect, seed: randomInt(0, 2_147_483_647) }));
+      keyframes.push(normalizeSpec(keyframeModel, { prompt, aspectRatio: aspect, seed: randomInt(0, 2_147_483_647) }));
     }
-    for (const [index, shot] of shotsLater.entries()) {
-      const spec = normalizeSpec(video, { prompt: shot.prompt, aspectRatio: aspect, duration: shot.duration, seed: 0 });
-      videoCredits += priceOf(video, spec);
+    const hashes = keyframes.map((spec) => specHash(keyframeModel.id, spec));
+    const sources = keyframes.map((spec) => keyframeSourceOf(keyframeModel, spec));
+    const edges = keyframeIndexes(plan);
+    const shots: CreateVideo["shots"] = [];
+    for (const [index, shot] of shotPrompts(plan, video, aspect, joins).entries()) {
+      const { start, length, duration } = timed[index]!;
+      const from = edges[index]!.start;
+      const to = joins ? edges[index]!.end : null;
+      // Seeds fixed by the keyframes they join: the same card approved twice asks for the same shots.
+      const seed = seedOf(video.id, hashes[from]!, to === null ? "cut" : hashes[to]!, String(duration));
+      const audio = video.limits.audio ? { audio: false } : {};
+      // The shot waits for its keyframes on the worker (`startAfter` / `endAfter`); the scene names them by
+      // their declarations, which the editor resolves to the same files.
+      const spec = normalizeSpec(video, {
+        prompt: shot.prompt,
+        aspectRatio: aspect,
+        duration,
+        seed,
+        startAfter: hashes[from],
+        ...(to === null ? {} : { endAfter: hashes[to] }),
+        ...audio,
+      });
+      extra.push({ model: video, spec });
       later.push({ label: `Shot ${index + 1} (${plan.shots[index]!.motion})`, spec, kind: "video" });
+      shots.push({
+        start,
+        length,
+        model: video.id,
+        prompt: shot.prompt,
+        seed,
+        duration,
+        ...(plan.shots[index]!.text ? { text: plan.shots[index]!.text } : {}),
+        start_frame: sources[from]!,
+        ...(to === null ? {} : { end_frame: sources[to]! }),
+        ...audio,
+      });
     }
+    let voice: CreateVideo["voice"];
     if (voiceModel?.limits.voices?.length) {
       voiceName = request.voice && voiceModel.limits.voices.includes(request.voice) ? request.voice : voiceModel.limits.voices[0]!;
-      const spec = normalizeSpec(voiceModel, { prompt: plan.script, voice: voiceName, seed: 0 });
-      videoCredits += priceOf(voiceModel, spec);
+      voice = { text: plan.script, voice: voiceName, seed: seedOf("voice", plan.script, voiceName) };
+      const spec = normalizeSpec(voiceModel, { prompt: voice.text, voice: voiceName, seed: voice.seed });
+      extra.push({ model: voiceModel, spec });
       later.push({ label: "The voice-over script", spec, kind: "voice" });
     }
+    let music: CreateVideo["music"];
     if (musicModel) {
       const duration = Math.min(musicModel.limits.maxSeconds ?? seconds, Math.max(musicModel.limits.minSeconds ?? 1, Math.ceil(seconds)));
-      const spec = normalizeSpec(musicModel, { prompt: `Instrumental only, no vocals. ${plan.music}`, duration, seed: 0 });
-      videoCredits += priceOf(musicModel, spec);
+      const prompt = `Instrumental only, no vocals. ${plan.music}`;
+      music = { model: musicModel.id, prompt, seed: seedOf("music", prompt, String(duration)), duration };
+      const spec = normalizeSpec(musicModel, { prompt, duration, seed: music.seed });
+      extra.push({ model: musicModel, spec });
       later.push({ label: "The music", spec, kind: musicModel.kind });
     }
+    op = { op: "create_video", aspect: aspect as CreateVideo["aspect"], seconds, title: plan.title, shots, ...(voice ? { voice } : {}), ...(music ? { music } : {}) };
   } catch (err) {
     return err instanceof ApiError ? err.message : "Invalid shot.";
   }
+  const problem = checkShots(op);
+  if (problem) return problem;
 
-  const keyframeCredits = specs.reduce((sum, spec) => sum + priceOf(keyframeModel, spec), 0);
-  const count = specs.length;
-  const frame = VIDEO_FRAMES[aspect as keyof typeof VIDEO_FRAMES];
-  // Every shot starts at once in stage 2: the wait is about one shot, plus the worker picking them up.
-  const wait = video.limits.typicalSeconds ? ` (ready in ${minutes(video.limits.typicalSeconds + 60)})` : "";
+  const keyframeCredits = keyframes.reduce((sum, spec) => sum + priceOf(keyframeModel, spec), 0);
+  const shotCredits = op.shots.reduce((sum, shot, index) => sum + priceOf(video, extra[index]!.spec), 0);
+  const total = keyframeCredits + extra.reduce((sum, item) => sum + priceOf(item.model, item.spec), 0);
+  // Keyframes first, then every shot starts with them and waits for its own: about one keyframe and one shot.
+  const wait = video.limits.typicalSeconds ? ` · ready in ${minutes(video.limits.typicalSeconds + 90)}` : "";
   const cuts = plan.shots.filter((shot, index) => !shot.continues && index < plan.shots.length - 1).length;
+  const names = keyframeDescriptions(plan).map((text, index) => `${String(index + 1).padStart(2, "0")} ${libraryName(text)}`);
   return {
     prepared: {
       model: keyframeModel,
-      spec: specs[0]!,
-      extra: specs.slice(1).map((spec) => ({ model: keyframeModel, spec })),
-      // Stage 1 only sets the frame; the keyframes go to the library, not the timeline.
-      op: { op: "set_frame", ...frame } as never,
-      credits: keyframeCredits,
-      library: { folder: `Generated/${libraryName(plan.title)}/keyframes`, names: keyframeDescriptions(plan).map((text, index) => `${String(index + 1).padStart(2, "0")} ${libraryName(text)}`) },
+      spec: keyframes[0]!,
+      extra: [...keyframes.slice(1).map((spec) => ({ model: keyframeModel, spec })), ...extra],
+      op: op as never,
+      credits: total,
+      library: { folder: `Generated/${libraryName(plan.title)}/keyframes`, names },
       longTake: { plan, aspect, seconds, model: video.id, ...(voiceName ? { voice: voiceName } : {}) },
       lines: [
-        `Create a ${seconds}s ${aspect} video, step 1 of 2: ${count} keyframes · ${credits(keyframeCredits)}`,
-        `Then about ${credits(videoCredits)} for the video${wait}: ${timed.length === 1 ? "1 shot" : `${timed.length} shots`}${voiceName ? `, voice-over (${voiceName})` : ""}${later.some((piece) => piece.label === "The music") ? ", music" : ""}`,
+        `Create a ${seconds}s ${aspect} video: ${timed.length === 1 ? "1 shot" : `${timed.length} shots`} on ${keyframes.length} keyframes${voiceName ? `, voice-over (${voiceName})` : ""}${op.music ? ", music" : ""} · ${credits(total)}${wait}`,
+        `${keyframes.length} keyframes · ${credits(keyframeCredits)} · ${timed.length === 1 ? "1 shot" : `${timed.length} shots`} · ${credits(shotCredits)}`,
         joins ? (cuts ? `Shots flow from one keyframe into the next, with ${cuts === 1 ? "1 cut" : `${cuts} cuts`} where the story changes place` : "Shots flow from one keyframe into the next, as one continuous take") : SEPARATE_SHOTS,
+        "One approval makes the whole video. Redo one keyframe after, at its own price.",
         `Script: ${plan.script}`,
       ],
     },
@@ -453,15 +503,175 @@ export function libraryName(text: string): string {
   return cut.replace(/[.\s]+$/, "") || "Video";
 }
 
+/** A seed fixed by what a piece is made from: the same request gives the same spec, so it is never paid twice. */
+export function seedOf(...parts: string[]): number {
+  return createHash("sha256").update(parts.join("\n")).digest().readUInt32BE(0) & 0x7fffffff;
+}
+
+/** A keyframe's declaration in the scene: the spec it is made with, so the editor finds the same generation. */
+export function keyframeSourceOf(model: AiModel, spec: GenerationSpec): KeyframeSource {
+  return {
+    generate: "image",
+    prompt: spec.prompt,
+    model: model.id,
+    aspectRatio: String(spec.aspectRatio) as KeyframeSource["aspectRatio"],
+    ...(spec.resolution ? { resolution: spec.resolution } : {}),
+    seed: spec.seed!,
+  };
+}
+
 /**
  * Each piece of a planned video, named as moderation reports it, so a block says which one to
- * rewrite: the keyframes made now, then the shots, script and music made in stage 2.
+ * rewrite: the keyframes, then the shots, the script and the music.
  */
 export function videoPieces(planned: PlannedVideo): Piece[] {
-  const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])];
+  const keyframes = planned.prepared.library?.names.length ?? 1;
+  const runs = [{ model: planned.prepared.model, spec: planned.prepared.spec }, ...(planned.prepared.extra ?? [])].slice(0, keyframes);
   const descriptions = planned.prepared.longTake ? keyframeDescriptions(planned.prepared.longTake.plan) : [];
   return [
     ...runs.map(({ model, spec }, index) => ({ label: `Keyframe ${index + 1} (${descriptions[index] ?? spec.prompt})`, spec, kind: model.kind })),
     ...planned.later,
   ];
+}
+
+/** Who a job's hold belongs to: the Assistant turn, the Studio order, or an MCP call (no row of its own). */
+export type JobSource = { kind: "agent_turn" | "work_order"; id: string } | { kind: "mcp"; id: null };
+
+type RunEnv = {
+  supabase: SupabaseClient;
+  jobId: string;
+  clipId: string;
+  source: JobSource;
+  /** Applies the `create_video` op through the shared write path (CAS + checkpoint), as every write tool. */
+  applyOp: (op: never) => Promise<ToolOutcome>;
+  /** The project as it is now, to list the pieces in its library before the scene names them. */
+  store: ProjectStore;
+  /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
+  alive?: () => Promise<boolean>;
+  /** Tests replace the checks and the start of each generation (no database). */
+  create?: { check: typeof checkGeneration; start: typeof startGeneration };
+};
+
+const fail = (message: string): { outcome: ToolOutcome } => ({ outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } });
+
+/**
+ * After the one approval: hold the whole estimate once, start every piece from that hold (keyframes
+ * first, since the shots name them), list them in the library, then place the scene. Whatever goes wrong
+ * before the scene is placed cancels what started and gives the hold back.
+ */
+export async function runCreateVideo(env: RunEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string; generationIds?: string[] }> {
+  const op = prepared.op as unknown as CreateVideo;
+  const runs = [{ model: prepared.model, spec: prepared.spec }, ...(prepared.extra ?? [])];
+  const keyframeCount = prepared.library?.names.length ?? 0;
+  if (op?.op !== "create_video" || !keyframeCount || runs.length < keyframeCount + op.shots.length) return fail("This video card is out of date. Ask for the video again.");
+  if (env.alive && !(await env.alive())) {
+    return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was generated or charged." }), summary: "Stopped" } };
+  }
+
+  let orderId: string;
+  try {
+    const order = await rpcOrThrow<{ id: string }>(env.supabase, "credit_order_open", {
+      p_kind: "long_take",
+      p_estimate: prepared.credits,
+      p_source_kind: env.source.kind,
+      p_source_id: env.source.id,
+      p_request_id: randomUUID(),
+    });
+    orderId = order.id;
+  } catch (err) {
+    return fail(err instanceof ApiError && err.status < 500 ? err.message : "The video could not be started.");
+  }
+
+  const started: { id: string; credits: number; reused: boolean }[] = [];
+  // Only what this approval started: a reused generation belongs to an earlier placement. Its own hold is
+  // refunded by cancelling it; what the job still holds comes back when the job closes.
+  const giveBack = async () => {
+    const mine = started.filter((item) => !item.reused);
+    const cancelled = await Promise.allSettled(mine.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id })));
+    cancelled.forEach((result, index) => {
+      if (result.status === "rejected") console.error("[agent] create_video: cancel_generation failed", mine[index]!.id, result.reason);
+    });
+    await closeOrder();
+  };
+  const closeOrder = () =>
+    rpcOrThrow(env.supabase, "credit_order_close", { p_order_id: orderId }).catch((err: unknown) => console.error("[agent] create_video: credit_order_close failed", orderId, err));
+
+  const check = env.create?.check ?? checkGeneration;
+  const start = env.create?.start ?? startGeneration;
+  try {
+    // Keyframes, then the rest: `create_generation` refuses a shot whose keyframes were not started.
+    for (const group of [runs.slice(0, keyframeCount), runs.slice(keyframeCount)]) {
+      const ready = await Promise.all(
+        group.map(({ model, spec }) => check(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), orderId })),
+      );
+      if (env.alive && !(await env.alive())) {
+        await giveBack();
+        return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was placed and the credits were returned." }), summary: "Stopped" } };
+      }
+      for (const item of ready) {
+        const { generation, reused } = await start(env.supabase, item);
+        started.push({ id: generation.id, credits: reused ? 0 : generation.credits_reserved, reused });
+      }
+    }
+  } catch (err) {
+    await giveBack();
+    if (!(err instanceof ApiError)) console.error("[agent] create_video failed", err);
+    return fail(err instanceof ApiError && err.status < 500 ? err.message : "The video could not be started. Your credits were returned.");
+  }
+
+  // Listed BEFORE the scene names them: an editor that saw a shot first would ask for it itself, with the
+  // keyframe files instead of `startAfter`, which is another spec and another charge.
+  const ids = started.map((item) => item.id);
+  const folder = prepared.library!.folder;
+  const keyframes: LibraryPiece[] = runs.slice(0, keyframeCount).map(({ model, spec }, index) => ({
+    key: imageKey(model, spec),
+    type: "IMAGE",
+    name: prepared.library!.names[index] ?? `${String(index + 1).padStart(2, "0")} Keyframe`,
+    id: ids[index] ?? null,
+  }));
+  const shots: LibraryPiece[] = op.shots.map((shot, index) => ({
+    key: shotKey(shot, op.aspect),
+    type: "VIDEO",
+    name: `${String(index + 1).padStart(2, "0")} Shot`,
+    id: ids[keyframeCount + index] ?? null,
+  }));
+  try {
+    await saveLibrary(env.store, (manifest, now) => withPieces(withPieces(manifest, folder, keyframes, now), folder.replace(/\/keyframes$/, "/shots"), shots, now));
+  } catch (err) {
+    console.error("[agent] create_video: library records failed", err);
+    await giveBack();
+    return fail("The video could not be added to your media, so it was not started. Your credits were returned; try again.");
+  }
+
+  if (env.alive && !(await env.alive())) {
+    await giveBack();
+    return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was placed and the credits were returned." }), summary: "Stopped" } };
+  }
+  const applied = await env.applyOp(prepared.op as never);
+  if (!applied.ok) {
+    await giveBack();
+    return { outcome: applied };
+  }
+  // The estimate is exact, so the job holds nothing more; a reused piece's share comes back here.
+  await closeOrder();
+
+  const charged = started.reduce((sum, item) => sum + item.credits, 0);
+  return {
+    generationId: ids[0],
+    generationIds: ids,
+    outcome: {
+      ok: true,
+      content: JSON.stringify({
+        ok: true,
+        generation_id: ids[0],
+        generation_ids: ids,
+        credits: charged,
+        pieces: ids.length,
+        note: `The whole video started at once: ${keyframeCount} keyframes, ${op.shots.length} shots${op.voice ? ", the voice-over" : ""}${op.music ? " and the music" : ""}. The scene is placed; each shot appears when it is ready, after its keyframes. The user does not need to do anything. To change one moment, use redo_keyframe once the shots are done.`,
+      }),
+      summary: `Started the video (${credits(charged)})`,
+      version: applied.version,
+      documentHash: applied.documentHash,
+    },
+  };
 }

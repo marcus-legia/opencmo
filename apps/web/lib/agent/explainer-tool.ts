@@ -1,13 +1,17 @@
 /**
- * Explainer tools of the editor Assistant (`docs/explainer-build.md`, Track C).
+ * Explainer tools of the editor Assistant (`docs/explainer-build.md`, Track C), charged before running (D9):
  *
- * `preview_explainer` renders stills of the scene code the model wrote (Remotion, through
- * `previewMotion`) and returns them as images plus a layout report, so the model looks at its own
- * work and fixes it, rendered on the server. Free.
+ * `plan_explainer` shows the storyboard (say / label / picture per beat), the direction and ONE price before any
+ * code is written: the render, plus writing and checking the animation (billed as used, up to
+ * `AGENT_3D_HOLD_CREDITS`). Approving holds the render price in one job (`credit_orders`).
  *
- * `add_explainer` saves the previewed code (`scene_codes`, by hash), builds the `motion-explainer`
- * spec and shows a price card listing the beats; on Approve the generation starts and op
- * `add_explainer` places one video layer. The voice is generated inside the render job.
+ * `preview_explainer` renders stills of the scene code the model wrote (Remotion, through `previewMotion`) and
+ * returns them as images plus a layout report, so the model looks at its own work and fixes it. It runs only once
+ * a plan was approved: no render happens before the user agreed to the price.
+ *
+ * `add_explainer` saves the previewed code (`scene_codes`, by hash), builds the `motion-explainer` spec, starts it
+ * from the approved job (no second card) and op `add_explainer` places one video layer. The voice is generated
+ * inside the render job.
  */
 
 import { randomInt } from "node:crypto";
@@ -39,10 +43,12 @@ import { MOTION_STYLES, motionStyle } from "@opencmo/clip-motion/styles";
 import { MOTION_TEMPLATES, motionTemplate } from "@opencmo/clip-motion/templates";
 
 import { ApiError } from "@/lib/api/errors";
+import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { normalizeSpec } from "@/lib/generate/create";
 import { availableModels } from "@/lib/generate/models";
 
-import type { LookupImage, PreparedGeneration } from "./generate-tool";
+import { runGeneration, type LookupImage, type PreparedGeneration } from "./generate-tool";
+import { AGENT_3D_HOLD_CREDITS } from "./limits";
 import type { Image } from "./providers/types";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -208,6 +214,20 @@ export const addExplainerInput = z
   })
   .superRefine(silentRules);
 
+/** What the user approves before any code: the storyboard, the direction, the look and the voice. */
+export const planExplainerInput = z
+  .object({
+    title: sceneFields.title,
+    beats: sceneFields.beats,
+    silent: sceneFields.silent,
+    direction,
+    format: sceneFields.format,
+    theme: sceneFields.theme,
+    personality: sceneFields.personality,
+    voice: z.string().min(1).max(100).optional().describe("A premade narration voice from the list in this tool's description. Leave it out for a silent clip."),
+  })
+  .superRefine(silentRules);
+
 /** What `previewMotion` takes: the `MotionJob` of `packages/clip-motion/src/job.ts`. */
 export type MotionJob = {
   title: string;
@@ -338,18 +358,24 @@ export function explainerToolSpecs(): ToolSpec[] {
   return [
     ...motionTemplateSpecs(),
     {
+      name: "plan_explainer",
+      description: `First step of every explainer or motion clip, before any code: show the user the storyboard (say / label / visual per beat), your motion direction, the look and the voice, with ONE price: the render, plus writing and checking the animation (billed as used, up to ${AGENT_3D_HOLD_CREDITS} credits). The user approves on a card; nothing is rendered or charged before that. Then write the code, preview_explainer it, and add_explainer it: no second card. If the user changes the storyboard after approving, call plan_explainer again. Voices: ${voicesOf().join(", ")}. read_guide "explainer" first.`,
+      schema: sanitize(z.toJSONSchema(planExplainerInput, { io: "input" })).schema as Record<string, unknown>,
+      strict: false,
+      approval: true,
+    },
+    {
       name: "preview_explainer",
       description:
-        `Render stills of an explainer you wrote and look at them. Write the direction (the motion spec with numbers) before the code. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. Before the whole video, variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. Free. read_guide "explainer" first.`,
+        `Render stills of an explainer you wrote and look at them. Only after the user approved plan_explainer: it is refused before. Code from the approved direction. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
     {
       name: "add_explainer",
-      description: `Render an animated explainer (15-90 s, narrated) or, with silent: true, a silent motion clip (3-30 s: an intro, a logo reveal, a product moment), as one video layer, from code you previewed with preview_explainer in this request. It costs credits: the user sees the beats, the voice and the price and must approve. Voices: ${voicesOf().join(", ")}.`,
+      description: `Render the explainer (15-90 s, narrated) or, with silent: true, the silent motion clip (3-30 s) the user approved with plan_explainer, as one video layer, from code you previewed with preview_explainer. It is paid from that approval: no second card. Send the same title, beats, format and voice as the approved plan; a longer video than planned is refused (plan_explainer again). Voices: ${voicesOf().join(", ")}.`,
       schema: sanitize(z.toJSONSchema(addExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
-      approval: true,
     },
   ];
 }
@@ -564,3 +590,121 @@ export function explainerCard(prepared: PreparedExplainer, clipId: string) {
   };
 }
 
+
+// ------------------------------------------------------------------ charge before running (D9)
+
+export type PreparedExplainerPlan = {
+  model: { id: string };
+  /** The render: what the approval holds in one job. */
+  credits: number;
+  plan: z.infer<typeof planExplainerInput>;
+  seconds: number;
+};
+
+/** The storyboard priced before any code: the render of exactly these beats and this voice. */
+export function preparePlanExplainer(input: unknown): PreparedExplainerPlan | string {
+  const parsed = planExplainerInput.safeParse(input);
+  if (!parsed.success) return issueOf(parsed.error);
+  const plan = parsed.data;
+  const silent = plan.silent === true;
+  const model = silent ? clipModel() : explainerModel();
+  if (!model) return silent ? "Silent motion clips are not available." : "Explainers are not available.";
+  const voices = model.limits.voices ?? [];
+  if (!silent && (!plan.voice || !voices.includes(plan.voice))) return `voice: choose one of ${voices.join(", ")}.`;
+  const seconds = silent ? clipSeconds(clipBeats(plan.beats)) : explainerSeconds(specBeats(plan.beats));
+  // The price depends on the length and the narration, not on the code: the render add_explainer starts is this price.
+  // The narration is priced from the scene's beats, as `ai_price` reads them: the same beats the render will carry.
+  const beats = silent ? clipBeats(plan.beats) : specBeats(plan.beats);
+  const credits = priceOf(model, { prompt: plan.title, aspectRatio: plan.format, duration: seconds, ...(silent ? {} : { voice: plan.voice }), seed: 0, scene: { beats } } as unknown as GenerationSpec);
+  return { model: { id: model.id }, credits, plan, seconds };
+}
+
+/** The one card of an explainer: the storyboard and everything it will cost. */
+export function planExplainerCard(prepared: PreparedExplainerPlan, clipId: string) {
+  const { plan } = prepared;
+  const total = prepared.credits + AGENT_3D_HOLD_CREDITS;
+  const look = [plan.theme, plan.personality].filter(Boolean).join(", ");
+  return {
+    clips: [{ id: clipId, label: "This clip" }],
+    changes: [
+      `${plan.silent ? "Motion clip" : "Explainer"} “${plan.title}” · ${prepared.seconds}s · ${plan.format}${look ? ` · ${look}` : ""} · ${plan.voice ? `voice ${plan.voice}` : "No narration"} · up to ${total} credits`,
+      `Render · ${prepared.credits} credits · writing and checking the animation · billed as used, up to ${AGENT_3D_HOLD_CREDITS} credits`,
+      ...plan.beats.map(
+        (item, index) => `Beat ${index + 1} · ${plan.silent ? `${item.seconds ?? 0}s` : "Voice"}: “${item.say}”${item.label ? ` · On screen: ${item.label}` : ""} · Picture: ${item.visual}`,
+      ),
+      "One approval makes it: the stills are checked and the video renders without asking again.",
+    ],
+    credits: total,
+  };
+}
+
+/** The open explainer job of the signed-in user (read under RLS), newest first. */
+export async function openExplainerOrder(supabase: SupabaseClient): Promise<{ id: string; estimate_credits: number } | null> {
+  const { data, error } = await supabase
+    .from("credit_orders")
+    .select("id, estimate_credits")
+    .eq("kind", "explainer")
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; estimate_credits: number }>();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export const PLAN_FIRST = "Show the storyboard and the price with plan_explainer first; the user approves it before anything is rendered.";
+
+/** Approved: one job holds the render price; the model codes from the approved plan. */
+export async function runPlanExplainer(
+  env: { supabase: SupabaseClient; source: { kind: "agent_turn" | "work_order"; id: string } | { kind: "mcp"; id: null } },
+  prepared: PreparedExplainerPlan,
+  requestId: string,
+): Promise<ToolOutcome> {
+  try {
+    // A plan approved again replaces the old one: its hold comes back first.
+    const old = await openExplainerOrder(env.supabase);
+    if (old) await rpcOrThrow(env.supabase, "credit_order_close", { p_order_id: old.id });
+    const order = await rpcOrThrow<{ id: string }>(env.supabase, "credit_order_open", {
+      p_kind: "explainer",
+      p_estimate: Math.max(1, prepared.credits),
+      p_source_kind: env.source.kind,
+      p_source_id: env.source.id,
+      p_request_id: requestId,
+    });
+    return {
+      ok: true,
+      content: JSON.stringify({
+        ok: true,
+        approved: true,
+        order_id: order.id,
+        credits: prepared.credits,
+        plan: prepared.plan,
+        next: "The user approved this storyboard and its price. Write the scene code from it (same title, beats, format, voice and direction), preview_explainer it and fix what the review finds, then add_explainer: it renders without another card.",
+      }),
+      summary: `Explainer approved (${prepared.credits} credits held)`,
+    };
+  } catch (err) {
+    const message = err instanceof ApiError && err.status < 500 ? err.message : "The explainer could not be approved.";
+    if (!(err instanceof ApiError)) console.error("[agent] plan_explainer failed", err);
+    return { ok: false, content: JSON.stringify({ error: message }), summary: message };
+  }
+}
+
+/** add_explainer after the approval: the render starts from the job's hold, then the job closes (the rest comes back). */
+export async function runAddExplainer(
+  env: Parameters<typeof runGeneration>[0],
+  prepared: PreparedExplainer,
+): Promise<ToolOutcome> {
+  const order = await openExplainerOrder(env.supabase);
+  if (!order) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
+  const { outcome } = await runGeneration({ ...env, orderId: order.id }, prepared);
+  const overEstimate = !outcome.ok && /more credits than its estimate/.test(outcome.content);
+  if (outcome.ok || overEstimate) {
+    await rpcOrThrow(env.supabase, "credit_order_close", { p_order_id: order.id }).catch((err: unknown) => console.error("[agent] add_explainer: close failed", order.id, err));
+  }
+  if (overEstimate) {
+    const message = "This explainer is longer than the one the user approved. Show it again with plan_explainer (the new price), then add it.";
+    return { ok: false, content: JSON.stringify({ error: message }), summary: message };
+  }
+  return outcome;
+}

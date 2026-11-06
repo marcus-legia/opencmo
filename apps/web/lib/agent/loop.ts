@@ -75,7 +75,7 @@ export type Answer = {
   data?: unknown;
   error?: string;
   approved?: boolean;
-  /** Redo of one keyframe on `animate_video`'s contact sheet, in place of approving it. */
+  /** Redo of one keyframe on a contact sheet: only cards from before /video ran in one go send it, and they are out of date. */
   redo?: { index: number };
   answer?: { choices?: string[]; text?: string; skipped?: boolean };
 };

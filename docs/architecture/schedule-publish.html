@@ -316,7 +316,7 @@ external_id, external_url, error</pre>
     <div class="prose">
       <p><b>One function</b>, <code>publish(deliverable, slot)</code>, returns <code>{ status, external_id, url, error }</code>, so the brain and the event rules never know which adapter ran.</p>
       <p><b>Media goes from the worker straight to Zernio's presigned upload</b>, never through Next.js (web rule 3). The worker reads the export from Storage with a signed URL.</p>
-      <p><b>Webhooks</b> from Zernio land on a signed Vercel route, with a receipts table against replays (as Polar's webhooks do), and set the slot and deliverable status. A failure raises a card with the reason and a retry that reuses the same approval while it is still valid.</p>
+      <p><b>Webhooks</b> from Zernio land on a signed Vercel route, with a receipts table against replays (as Creem's webhooks do), and set the slot and deliverable status. A failure raises a card with the reason and a retry that reuses the same approval while it is still valid.</p>
       <p><b>Connecting an account</b> is the founder's own OAuth through Zernio's connect link, once per account; <code>social_accounts</code> stores the Zernio profile and account ids, the platform and the handle. Disconnecting removes them.</p>
     </div>
   </section>

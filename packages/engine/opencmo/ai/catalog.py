@@ -241,9 +241,10 @@ def capability_keys(model: AiModel) -> set[str]:
     if model.kind == "video":
         if limits.get("firstFrame"):
             # `after`: a /video shot that continues the previous one starts from its last frame.
-            keys |= {"startImage", "after"}
+            keys |= {"startImage", "after", "startAfter"}
         if limits.get("lastFrame"):
-            keys.add("endImage")
+            # `startAfter` / `endAfter`: a /video shot on keyframes still being made (their spec hashes).
+            keys |= {"endImage", "endAfter"}
         if limits.get("audio"):
             keys.add("audio")
         if limits.get("sourceVideo"):
@@ -266,6 +267,13 @@ def validate_spec(model: AiModel, spec: dict[str, Any]) -> None:
             raise SpecError("Invalid generation request.")
         if "startImage" in spec:
             raise SpecError("A shot that continues the previous one cannot also start from an image.")
+    for key in ("startAfter", "endAfter"):
+        if key in spec and (not isinstance(spec[key], str) or not re.fullmatch(r"[0-9a-f]{64}", spec[key])):
+            raise SpecError("Invalid generation request.")
+    if "startAfter" in spec and ("startImage" in spec or "after" in spec):
+        raise SpecError("A shot starts from one frame only.")
+    if "endAfter" in spec and "endImage" in spec:
+        raise SpecError("A shot ends on one frame only.")
     prompt = spec.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         raise SpecError("Write a prompt first.")

@@ -187,7 +187,7 @@ function build(row: ApprovalRow): Built | null {
       const v = parsed.data;
       return {
         title: clip(`Script for “${v.title}” · ${v.beats.length} ${v.beats.length === 1 ? "beat" : "beats"}`, 300),
-        summary: "Approve the words and pictures; the keyframes are made next at the price below.",
+        summary: "Approve the words and pictures; the whole video (keyframes, shots, voice-over, music) is made at the price below.",
         meta: "Nothing spent until you approve",
         body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: v.price_credits },
       };

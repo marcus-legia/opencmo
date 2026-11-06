@@ -21,6 +21,11 @@ export type CreateRequest = {
   model: string;
   spec: unknown;
   requestId: string;
+  /**
+   * A job the user confirmed once (`credit_order_open`): its price comes out of the job's hold, so the
+   * balance (already lowered by that hold) is not checked again.
+   */
+  orderId?: string;
 };
 
 /** Spec đã qua schema của model — thứ được băm và lưu. Ném 422 tiếng Anh. */
@@ -145,17 +150,18 @@ async function reusable(supabase: SupabaseClient, request: CreateRequest, hash: 
  * rate limit and moderation: the editor retries it every couple of seconds while the chain starts.
  */
 async function requireParent(supabase: SupabaseClient, request: CreateRequest, spec: GenerationSpec): Promise<void> {
-  const after = (spec as { after?: unknown }).after;
-  if (typeof after !== "string") return;
-  const parent = await supabase
-    .from("generations")
-    .select("id")
-    .eq("job_id", request.jobId)
-    .eq("spec_hash", after)
-    .in("status", ["queued", "running", "done"])
-    .limit(1);
-  if (parent.error) throw parent.error;
-  if (!parent.data?.length) throw new ApiError(422, "Start the shot before this one first.");
+  const { after, startAfter, endAfter } = spec as { after?: unknown; startAfter?: unknown; endAfter?: unknown };
+  const live = async (hash: string, kind?: string) => {
+    let query = supabase.from("generations").select("id").eq("job_id", request.jobId).eq("spec_hash", hash).in("status", ["queued", "running", "done"]);
+    if (kind) query = query.eq("kind", kind);
+    const parent = await query.limit(1);
+    if (parent.error) throw parent.error;
+    return Boolean(parent.data?.length);
+  };
+  if (typeof after === "string" && !(await live(after))) throw new ApiError(422, "Start the shot before this one first.");
+  for (const keyframe of [startAfter, endAfter]) {
+    if (typeof keyframe === "string" && !(await live(keyframe, "image"))) throw new ApiError(422, "Start the keyframes of this shot first.");
+  }
 }
 
 /** Same sentence as `create_generation` when the balance is short (read under RLS: the caller's own row). */
@@ -193,10 +199,11 @@ export async function checkGeneration(supabase: SupabaseClient, request: CreateR
   await requireParent(supabase, request, spec);
   // Everything below costs us: the free refusals above come first, so a retry loop waiting on them is free.
   await hitRateLimit(supabase, GENERATION_RATE_LIMIT);
-  // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it.
-  await requireCredits(supabase, priceOf(model, spec));
+  // Moderation is a paid LLM call: an account that cannot pay for the generation never reaches it. A piece of a
+  // confirmed job is already paid for by the job's hold; `create_generation` checks what the hold has left.
+  if (!request.orderId) await requireCredits(supabase, priceOf(model, spec));
   // Moderate the text BEFORE credits are held: a block costs nothing and creates no task.
-  await moderateText(specText(spec).join("\n"), { kind: moderationKind(model) });
+  await moderateText(specText(spec).join("\n"), { kind: moderationKind(model), externalId: `job_${request.jobId}` });
   return { request, model, spec };
 }
 
@@ -214,6 +221,7 @@ export async function startGeneration(
       p_spec: spec,
       p_spec_hash: specHash(model.id, spec),
       p_request_id: request.requestId,
+      ...(request.orderId ? { p_order_id: request.orderId } : {}),
     },
   );
   if (!result.reused && result.generation.task_id) await wakeWorker({ task_id: result.generation.task_id });

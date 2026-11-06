@@ -47,7 +47,7 @@ export default function TermsPage() {
           body: (
             <>
               <p>Paid plans are monthly subscriptions that include a bundle of credits. Work done by OpenCMO uses credits as shown on our pricing section. Unused credits do not carry over unless the plan says so.</p>
-              <p>Payments are processed by our payment provider acting as merchant of record (currently Polar), which also handles sales tax and invoices. You can cancel at any time from your billing page; your plan stays active until the end of the paid period. Refunds follow our <Link href="/refund">Refund Policy</Link>.</p>
+              <p>Payments are processed by our payment provider acting as merchant of record (currently Creem), which also handles sales tax and invoices. You can cancel at any time from your billing page; your plan stays active until the end of the paid period. Refunds follow our <Link href="/refund">Refund Policy</Link>.</p>
             </>
           ),
         },

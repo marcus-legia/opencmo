@@ -857,6 +857,79 @@ def test_after_is_validated_like_sql():
         validate_spec(get_model("fal-nano-banana"), {"prompt": "x", "aspectRatio": "1:1", "after": "a" * 64})
 
 
+# ------------------------------------------------------------------- shots on keyframes (/video in one go)
+
+KEYFRAME_ID = "99999999-3333-4333-8444-555555555555"
+
+
+def _keyframe_store(tmp_path, *, keyframe_overrides=None):
+    """A shot that starts on a keyframe (`startAfter`) which finished as a green image in the media bucket."""
+    import subprocess
+
+    keyframe_spec = {"prompt": "a desk at dawn", "aspectRatio": "9:16", "seed": 1}
+    keyframe_hash = generate_task.spec_hash("fal-nano-banana", keyframe_spec)
+    spec = {"prompt": "the light moves", "aspectRatio": "9:16", "duration": 5, "seed": 2, "startAfter": keyframe_hash}
+    shot = _generation(model="fal-seedance", spec=spec, spec_hash=generate_task.spec_hash("fal-seedance", spec), start_after_id=KEYFRAME_ID)
+    keyframe = {
+        "id": KEYFRAME_ID, "user_id": "user-1", "job_id": "job-1", "status": "done", "kind": "image",
+        "model": "fal-nano-banana", "spec": keyframe_spec, "spec_hash": keyframe_hash, "media_asset_id": "asset-2",
+        **(keyframe_overrides or {}),
+    }
+    image = tmp_path / "keyframe.png"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=green:s=360x640", "-frames:v", "1", str(image)], check=True)
+    store = FakeStore(shot)
+    store.get_generation = lambda gen_id: {GEN_ID: shot, KEYFRAME_ID: keyframe}.get(gen_id)
+    store.get_media_asset = lambda _id: {"id": "asset-2", "storage_path": "media/user-1/job-1/gen-keyframe.png"}
+    store.downloads = []
+
+    def download_object(bucket, path, dest, *, max_bytes=None):
+        store.downloads.append((bucket, path, max_bytes))
+        dest.write_bytes(image.read_bytes())
+        return dest
+
+    store.download_object = download_object
+    return store
+
+
+def test_a_shot_starts_on_its_finished_keyframe(monkeypatch, tmp_path):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _keyframe_store(tmp_path)
+    generate_task.process(store, _task())
+    assert store.failed == [], store.failed
+    assert store.downloads == [("media", "user-1/job-1/gen-keyframe.png", generate_task.INPUT_MAX_BYTES)]
+    assert adapter.spec["startImage"].endswith("keyframe-startAfter.jpg")
+    assert "startAfter" not in adapter.spec, "providers never see the keyframe reference"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"user_id": "user-2"},
+    {"job_id": "job-2"},
+    {"status": "running"},
+    {"kind": "video"},
+    {"spec_hash": "f" * 64},
+])
+def test_a_keyframe_that_is_not_ready_or_not_ours_is_refused(monkeypatch, tmp_path, overrides):
+    adapter = _RecordingAdapter()
+    monkeypatch.setattr(generate_task, "adapter_for", lambda _model: adapter)
+    store = _keyframe_store(tmp_path, keyframe_overrides=overrides)
+    generate_task.process(store, _task())
+    assert store.failed == [generate_task.KEYFRAME_NOT_READY]
+    assert adapter.spec is None
+
+
+def test_keyframes_are_validated_like_sql():
+    model = get_model("fal-seedance")
+    base = {"prompt": "x", "aspectRatio": "9:16", "duration": 5}
+    validate_spec(model, {**base, "startAfter": "a" * 64, "endAfter": "b" * 64})
+    with pytest.raises(SpecError, match="Invalid generation request"):
+        validate_spec(model, {**base, "startAfter": "nope"})
+    with pytest.raises(SpecError, match="starts from one frame only"):
+        validate_spec(model, {**base, "startAfter": "a" * 64, "after": "b" * 64})
+    with pytest.raises(SpecError, match="ends on one frame only"):
+        validate_spec(model, {**base, "endAfter": "a" * 64, "endImage": "user-1/a.png"})
+
+
 def test_explainer_tai_code_cua_dung_nguoi(monkeypatch):
     # Explainers carry only code_ref too; the code is loaded for the task's owner.
     beats = [{"say": "One."}, {"say": "Two."}, {"say": "Three."}]

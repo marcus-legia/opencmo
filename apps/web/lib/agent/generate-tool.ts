@@ -28,7 +28,6 @@ import { checkGeneration, normalizeSpec, requireCredits, startGeneration, type P
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
-import { longTakeResult } from "./keyframe-library";
 import { sanitize, type ToolOutcome, type ToolSpec } from "./tools";
 
 /**
@@ -144,9 +143,9 @@ export type PreparedGeneration = {
   extra?: { model: AiModel; spec: GenerationSpec }[];
   /** Card lines that replace the generic "Generate …" summary. */
   lines?: string[];
-  /** Pieces that land in the library (a long take's keyframes), named in run order, not on the timeline. */
+  /** A long take's keyframes: listed in this library folder, named in run order (`runCreateVideo`). */
   library?: { folder: string; names: string[] };
-  /** A long take's stage 1: its result names each keyframe's generation for `animate_video`. */
+  /** A long take (`create_video`): its plan, frame and model, kept on the card for an edited storyboard. */
   longTake?: Omit<CreateVideoResult, "keyframes"> & { voice?: string };
 };
 
@@ -370,8 +369,8 @@ type GenerateEnv = {
   applyOp: (op: Op) => Promise<ToolOutcome>;
   /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
   alive?: () => Promise<boolean>;
-  /** Lists `prepared.library` pieces in the library, by generation id in run order. */
-  addToLibrary?: (prepared: PreparedGeneration, ids: string[]) => Promise<void>;
+  /** A job the user already confirmed (`credit_orders`): every piece is paid from its hold, not the balance. */
+  orderId?: string;
 };
 
 const STOPPED: ToolOutcome = {
@@ -420,10 +419,10 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // is checked first: past the balance the whole batch is refused before any piece is moderated (review C4).
   let ready: PreparedCreate[];
   try {
-    if (runs.length > 1) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
+    if (runs.length > 1 && !env.orderId) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
     ready = await Promise.all(
       runs.map(({ model, spec }) =>
-        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID() }),
+        checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), ...(env.orderId ? { orderId: env.orderId } : {}) }),
       ),
     );
   } catch (err) {
@@ -454,11 +453,6 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
     return { outcome: applied };
   }
   const ids = started.map((item) => item.id);
-  if (prepared.library && env.addToLibrary) {
-    // The generations run either way and the editor lists them when it resolves them: a failed
-    // library save loses only the folder, not paid work.
-    await env.addToLibrary(prepared, ids).catch((err: unknown) => console.error("[agent] keyframes not listed in the library", err));
-  }
   const credits = `${generation.credits_reserved} ${generation.credits_reserved === 1 ? "credit" : "credits"}`;
   // Variants are alternatives of one piece; `extra` are other pieces (a /video's shots, voice, music).
   const variants = 1 + (prepared.variants?.length ?? 0);
@@ -474,10 +468,8 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
         credits: generation.credits_reserved,
         ...(variants > 1 ? { variants } : {}),
         ...(pieces > variants ? { pieces } : {}),
-        ...(prepared.longTake ? { result: longTakeResult(prepared.longTake, ids), ...(prepared.longTake.voice ? { voice: prepared.longTake.voice } : {}) } : {}),
-        note: prepared.longTake
-          ? `${pieces} keyframes started; they appear in the library under ${prepared.library?.folder ?? "Generated"}. Next: wait_for_media until they are done, then call animate_video with result.plan, result.aspect, result.model and result.keyframes (and voice, when given). It shows the user the keyframes and the exact price of the video before anything else is charged.`
-          : variants > 1
+        note:
+          variants > 1
             ? `${variants} variants started; one is shown on the clip. The user can pick another in the Inspector (Variants) once they are ready.`
             : pieces > 1
               ? `${pieces} pieces started at once; each appears on the clip when it is ready. The user does not need to do anything.`

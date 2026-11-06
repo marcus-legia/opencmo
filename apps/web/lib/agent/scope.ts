@@ -6,6 +6,8 @@
  * (`capture_frames`), or wait for the user to approve (priced tools).
  */
 
+import { randomUUID } from "node:crypto";
+
 import { activeScene, frameAspect, MASTER_SRC, planVoiceover, quoteRange, readBrand, speechSources, summarizeProject } from "@opencmo/editor-core";
 import type { ClipDocument } from "@opencmo/clip-doc";
 
@@ -42,28 +44,31 @@ import {
   voiceoverToolSpec,
   type PreparedGeneration,
 } from "./generate-tool";
-import { addExplainerInput, explainerCard, explainerText, explainerToolSpecs, MOTION_TEMPLATE_TOOLS, prepareExplainer, runMotionTemplateTool, runPreviewExplainer } from "./explainer-tool";
+import {
+  addExplainerInput,
+  explainerText,
+  explainerToolSpecs,
+  MOTION_TEMPLATE_TOOLS,
+  openExplainerOrder,
+  PLAN_FIRST,
+  planExplainerCard,
+  prepareExplainer,
+  preparePlanExplainer,
+  runAddExplainer,
+  runMotionTemplateTool,
+  runPlanExplainer,
+  runPreviewExplainer,
+  type PreparedExplainerPlan,
+} from "./explainer-tool";
 import { EXPORT_TOOL, exportCard, prepareExport, runExport, type PreparedExport } from "./export-tool";
 import { runTurnTool, TURN_TOOL_SPECS, TURN_TOOLS } from "./turn-tools";
 import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
-import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, videoPieces } from "./create-video";
+import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, runCreateVideo, videoPieces, type JobSource } from "./create-video";
 import { saveKeyframes } from "./keyframe-library";
-import {
-  animateVideoToolSpec,
-  keyframeReader,
-  prepareAnimateVideo,
-  prepareRedoKeyframe,
-  redoKeyframeToolSpec,
-  redoSheetKeyframe,
-  runRedoKeyframe,
-  type ListKeyframe,
-  type ContactSheet,
-  type PreparedAnimate,
-  type PreparedRedo,
-} from "./long-take";
+import { prepareRedoKeyframe, redoKeyframeToolSpec, runRedoKeyframe, type ListKeyframe, type PreparedRedo } from "./long-take";
 import type { Ledger } from "./ledger";
 import { turnStatus } from "./loop";
 import { EDITOR_TOOLS, runEditorTool } from "./cmo-editor";
@@ -93,7 +98,7 @@ async function screen(prepared: PreparedGeneration): Promise<Plan | null> {
 }
 
 /** Tool tốn credit: đi qua thẻ duyệt giá rồi `runGeneration`. */
-const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video", "add_explainer", "animate_video"]);
+const PRICED_TOOLS = new Set(["generate_media", "add_voiceover", "replace_background", "create_video", "edit_video"]);
 
 /** Tool call sau khi phạm vi xem xét nó. */
 export type Plan =
@@ -102,7 +107,7 @@ export type Plan =
   | {
       kind: "approval";
       input: unknown;
-      card: (ReturnType<typeof generateCard> & { sheet?: ContactSheet }) | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof explainerCard> | DecisionCard;
+      card: ReturnType<typeof generateCard> | Awaited<ReturnType<typeof exportCard>> | VideoCard | ReturnType<typeof planExplainerCard> | DecisionCard;
     }
   | { kind: "input"; input: unknown; card: QuestionCard }
   | { kind: "invalid"; content: string; summary: string };
@@ -123,7 +128,7 @@ export interface Scope {
   context?(): Promise<string>;
   plan(call: ToolCall): Promise<Plan>;
   run(call: ToolCall): Promise<ToolOutcome>;
-  /** `redo`: the user redid one keyframe on `animate_video`'s contact sheet instead of approving it. */
+  /** `redo`: a keyframe redone on a contact sheet, from before /video ran in one go; such a card is out of date. */
   decide(call: ToolCall, input: unknown, approved: boolean, redo?: { index: number }): Promise<Approved>;
   isWrite(name: string): boolean;
 }
@@ -150,7 +155,7 @@ export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
   const background = backgroundToolSpec();
   const video = createVideoToolSpec();
   const editTool = editToolSpec();
-  const longTake = [animateVideoToolSpec(), redoKeyframeToolSpec()].filter((spec) => spec !== null);
+  const longTake = [redoKeyframeToolSpec()].filter((spec) => spec !== null);
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
   return [...base, ...priced, EXPORT_TOOL, ...SKILL_SPECS, ...TURN_TOOL_SPECS, ...CAPTION_TOOL_SPECS, BRAND_TOOL_SPEC, PLAN_VIDEO_TOOL, ...(background ? [background] : []), ...(video ? [video] : []), ...(editTool ? [editTool] : []), WAIT_TOOL_SPEC, ...explainerToolSpecs(), ...captureToolSpecs(), ...longTake];
 }
@@ -170,6 +175,8 @@ export type ClipHost = {
   alive?: () => Promise<boolean>;
   /** The Assistant turn, for undo, read when the tool runs; absent over MCP, where undo is not offered. */
   readonly turnId?: string;
+  /** The Studio order this runs for: a confirmed job's hold belongs to it. */
+  readonly workOrderId?: string;
 };
 
 export async function clipScope(
@@ -322,31 +329,24 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         return { kind: "approval", input: prepared, card: generateCard(prepared, clipId) };
       }
       if (call.name === "add_explainer") {
-        // One check of everything the render shows or says: the script, and the words in the code
-        // (the spec only holds the script, so `screen` alone would miss the labels). Before the code
-        // is saved, so refused code never lands in `scene_codes`.
-        const request = addExplainerInput.safeParse(call.input);
-        if (request.success) {
-          try {
-            await moderateText(explainerText(request.data), { kind: MOTION_KIND });
-          } catch (err) {
-            const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
-            return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
-          }
-        }
-        const snapshot = await workspace.read();
-        const accent = readBrand(snapshot.document)?.colors.accent;
-        const prepared = await prepareExplainer(call.input, {
-          // Code previewed in this turn: add_explainer only takes code the model has looked at.
-          previewed: host.previewed,
-          save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
-          lookupImage,
-          ...(accent ? { accent } : {}),
-        });
+        // Paid from the plan the user approved (plan_explainer): no second card, and nothing without one. The checks
+        // run in `run`, which MCP calls directly.
+        if (!(await openExplainerOrder(supabase))) return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: PLAN_FIRST }), summary: "Plan the explainer first" };
+        return { kind: "run" };
+      }
+      if (call.name === "plan_explainer") {
+        const prepared = preparePlanExplainer(call.input);
         if (typeof prepared === "string") {
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not plan the explainer" };
         }
-        return { kind: "approval", input: prepared, card: explainerCard(prepared, clipId) };
+        // What the video will say and show, checked before the card: a refused storyboard costs nothing.
+        try {
+          await moderateText(explainerText({ title: prepared.plan.title, beats: prepared.plan.beats, code: "" }), { kind: MOTION_KIND });
+        } catch (err) {
+          const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+        }
+        return { kind: "approval", input: prepared, card: planExplainerCard(prepared, clipId) };
       }
       if (call.name === "create_video") {
         // The director plans here, before the card; its model calls are charged on this turn.
@@ -365,29 +365,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const blocked = await screenPieces(videoPieces(planned));
         if (blocked) return { kind: "invalid", ...blocked };
         return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), storyboard: planned.storyboard } };
-      }
-      if (call.name === "animate_video") {
-        const snapshot = await workspace.read();
-        const planned = await prepareAnimateVideo(call.input, {
-          document: snapshot.document,
-          readKeyframes: keyframeReader(supabase, context.clip.job_id),
-          sign: async (paths) => {
-            const { data } = await supabase.storage.from("media").createSignedUrls(paths, SHEET_URL_SECONDS);
-            return paths.map((_path, index) => data?.[index]?.signedUrl ?? null);
-          },
-        });
-        if (typeof planned === "string") {
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: planned }), summary: "Could not prepare the video" };
-        }
-        const needed = 1 + (planned.prepared.extra?.length ?? 0);
-        const { count: running } = await supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
-        if ((running ?? 0) + needed > GENERATION_ACTIVE_LIMIT) {
-          const message = `This video needs ${needed} generations at once and ${running} are still running. Wait for them to finish, then call animate_video again.`;
-          return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: message }), summary: "Too many generations running" };
-        }
-        const blocked = await screenPieces(planned.pieces, "animate_video");
-        if (blocked) return { kind: "invalid", ...blocked };
-        return { kind: "approval", input: planned.prepared, card: { ...generateCard(planned.prepared, clipId), sheet: planned.sheet } };
       }
       if (call.name === "redo_keyframe") {
         const snapshot = await workspace.read();
@@ -455,7 +432,10 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                 : MOTION_TEMPLATE_TOOLS.has(call.name)
                   ? Promise.resolve(runMotionTemplateTool(call.name, call.input))
                   : call.name === "preview_explainer"
-                  ? workspace.read().then(({ document }) => {
+                  ? (async () => {
+                      // No render before the user approved the storyboard and its price (D9).
+                      if (!(await openExplainerOrder(supabase))) return { ok: false, content: JSON.stringify({ error: PLAN_FIRST }), summary: "Plan the explainer first" };
+                      const { document } = await workspace.read();
                       const accent = readBrand(document)?.colors.accent;
                       return runPreviewExplainer(call.input, {
                         preview: previewMotion,
@@ -463,9 +443,37 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                         signAssets: (refs) => previewAssets(supabase, refs),
                         ...(accent ? { accent } : {}),
                       });
-                    })
+                    })()
+                  : call.name === "add_explainer"
+                  ? (async () => {
+                      // One check of everything the render shows or says: the script, and the words in the code (the
+                      // spec only holds the script). Before the code is saved, so refused code never lands in `scene_codes`.
+                      const request = addExplainerInput.safeParse(call.input);
+                      if (request.success) {
+                        try {
+                          await moderateText(explainerText(request.data), { kind: MOTION_KIND });
+                        } catch (err) {
+                          const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
+                          return { ok: false, content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
+                        }
+                      }
+                      const { document } = await workspace.read();
+                      const accent = readBrand(document)?.colors.accent;
+                      const prepared = await prepareExplainer(call.input, {
+                        // Code previewed in this request: add_explainer only takes code the model has looked at.
+                        previewed: host.previewed,
+                        save: (code) => rpcOrThrow<string>(supabase, "save_scene_code", { p_code: code }),
+                        lookupImage,
+                        ...(accent ? { accent } : {}),
+                      });
+                      if (typeof prepared === "string") return { ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }), summary: "Could not prepare the explainer" };
+                      return runAddExplainer(
+                        { supabase, jobId: context.clip.job_id, clipId, applyOp: (op) => applyOpTool(op, env), ...(host.alive ? { alive: host.alive } : {}) },
+                        prepared,
+                      );
+                    })()
                   : runTool(call.name, call.input, env),
-    async decide(call, input, approved, redo) {
+    async decide(call, input, approved) {
       // Where a long take's keyframes are listed: the project as it is now, saved with its manifest.
       const keyframeStore = {
         read: () => ensureProject(supabase, context, clipId),
@@ -475,10 +483,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
       };
       const listKeyframe: ListKeyframe = (entry, id) =>
         saveKeyframes(keyframeStore, { model: entry.model, specs: [entry.spec], folder: entry.folder, names: [entry.name], ids: [id] });
-      if (call.name === "animate_video" && !approved && redo) {
-        const outcome = await redoSheetKeyframe({ supabase, jobId: context.clip.job_id, clipId, addToLibrary: listKeyframe }, input as PreparedAnimate, redo.index);
-        return { outcome, extra: {}, wrote: false };
-      }
       if (call.name === "redo_keyframe") {
         if (!approved) {
           return {
@@ -535,6 +539,14 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runCaptions(supabase, clipId, input as PreparedCaptions, (op) => applyOpTool(op, env));
         return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
       }
+      if (call.name === "animate_video") {
+        // A card from before /video ran in one go (2026-11-06): its second step no longer exists.
+        return {
+          outcome: { ok: false, content: JSON.stringify({ error: "This video step no longer exists: /video now makes the whole video after one approval. Ask for the video again." }), summary: "Out of date" },
+          extra: {},
+          wrote: false,
+        };
+      }
       if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
       const prepared = input as PreparedGeneration;
       if (!approved) {
@@ -544,6 +556,37 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           wrote: false,
         };
       }
+      const source: JobSource = host.turnId
+        ? { kind: "agent_turn", id: host.turnId }
+        : host.workOrderId
+          ? { kind: "work_order", id: host.workOrderId }
+          : { kind: "mcp", id: null };
+      if (call.name === "plan_explainer") {
+        if (!approved) {
+          return {
+            outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The user declined this explainer. Nothing was rendered or charged; ask what to change." }), summary: "Declined" },
+            extra: {},
+            wrote: false,
+          };
+        }
+        const outcome = await runPlanExplainer({ supabase, source }, input as PreparedExplainerPlan, randomUUID());
+        return { outcome, extra: {}, wrote: false };
+      }
+      if (call.name === "create_video") {
+        const { outcome, generationId } = await runCreateVideo(
+          {
+            supabase,
+            jobId: context.clip.job_id,
+            clipId,
+            source,
+            applyOp: (op) => applyOpTool(op, env),
+            store: keyframeStore,
+            ...(host.alive ? { alive: host.alive } : {}),
+          },
+          prepared,
+        );
+        return { outcome, extra: generationId ? { generation_id: generationId } : {}, wrote: outcome.ok && outcome.version !== undefined };
+      }
       const { outcome, generationId } = await runGeneration(
         {
           supabase,
@@ -551,8 +594,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
           clipId,
           applyOp: (op) => applyOpTool(op, env),
           ...(host.alive ? { alive: host.alive } : {}),
-          addToLibrary: (done, ids) =>
-            saveKeyframes(keyframeStore, { model: done.model, specs: [done.spec, ...(done.extra ?? []).map((item) => item.spec)], folder: done.library!.folder, names: done.library!.names, ids }),
         },
         prepared as Parameters<typeof runGeneration>[1],
       );
@@ -561,9 +602,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
     isWrite: (name) => name === "undo" || name === "apply_brand_kit" || name === "plan_video" || CAPTION_TOOLS.has(name) || isWriteTool(name),
   };
 }
-
-/** Contact-sheet pictures stay viewable while the card waits, and a little after. */
-const SHEET_URL_SECONDS = 6 * 60 * 60;
 
 /** Kết quả `check` nối sau `<project_state>`: chỉ khi có issue, để tin nhắn gọn. */
 function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {

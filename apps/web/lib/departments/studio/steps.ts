@@ -5,14 +5,16 @@
  */
 
 import { rpcOrThrow } from "@/lib/api/handler";
-import type { SheetTile } from "@/lib/agent/long-take";
 import type { LongTakePlan } from "@opencmo/editor-core";
 
 import type { StudioContext, StudioPlan } from "./types";
 
 type Priced = Extract<StudioPlan, { kind: "priced" }>;
 
-/** Card 1 for `create_video`; card 2 (and a redone keyframe) for `animate_video` / `redo_keyframe`. */
+/**
+ * The card for `create_video` (the whole video, one approval), or the price card of a redone keyframe
+ * (`redo_keyframe`). A stored contact sheet from before /video ran in one go still reads its tiles.
+ */
 export function stepCard(plan: Priced): { kind: "script" | "price"; card: Record<string, unknown> } {
   const prepared = plan.prepared.input as { longTake?: { plan: LongTakePlan; aspect: string; seconds: number } };
   const title = plan.lines[0] ?? "";
@@ -28,7 +30,7 @@ export function stepCard(plan: Priced): { kind: "script" | "price"; card: Record
       },
     };
   }
-  const tiles: { index: number; words: string; path: string | null; garbled: boolean; credits: number }[] = ((plan.sheet as { tiles?: SheetTile[] } | undefined)?.tiles ?? []).map((tile) => ({
+  const tiles: { index: number; words: string; path: string | null; garbled: boolean; credits: number }[] = ((plan.sheet as { tiles?: { index: number; words: string; path: string; garbled: boolean; credits: number }[] } | undefined)?.tiles ?? []).map((tile) => ({
     index: tile.index,
     words: tile.words,
     path: tile.path,

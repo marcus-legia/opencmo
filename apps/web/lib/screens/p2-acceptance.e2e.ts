@@ -96,7 +96,7 @@ export async function run(): Promise<void> {
   const studio1 = await screen("studio", userId);
   assert.ok(studio1.data.items.some((i) => i.kind === "video" && i.approvalId === card1.id), "Studio shows the video waiting on card 1");
   assert.ok(studio1.data.team?.steps.some((s) => s.state === "running"), "the Video team panel is live");
-  step(`card 1: ${card1.body.kind === "script" ? card1.body.beats.length : 0} beats, keyframes ${card1.priceCredits ?? 0} credits`);
+  step(`card 1: ${card1.body.kind === "script" ? card1.body.beats.length : 0} beats, the whole video ${card1.priceCredits ?? 0} credits`);
   const stale = await me.rpc("approval_decide", { p_id: card1.id, p_action: "approve", p_payload: { content_hash: "0".repeat(64), via: "app" } });
   assert.match(stale.error?.message ?? "", /changed/, "a stale card is refused");
 
@@ -112,22 +112,14 @@ export async function run(): Promise<void> {
   await decide(edited, "approve");
   step("approved card 1 (a stale hash was refused first)");
 
-  // Card 2 once the keyframes are made; redo one keyframe, then the new contact sheet.
-  const sheet = await until("card 2", userId, () => waitingCard(userId, "price"), minutes(10));
-  assert.ok(sheet.body.kind === "price" && sheet.body.keyframes.length > 0, "card 2 shows the contact sheet");
-  await decide(sheet, "redo", { index: 1 });
-  const card2 = await until("card 2 after a redo", userId, async () => {
-    const card = await waitingCard(userId, "price");
-    return card && card.id !== sheet.id ? card : null;
-  }, minutes(10));
-  assert.ok(card2.body.kind === "price" && card2.body.keyframes.length === (sheet.body.kind === "price" ? sheet.body.keyframes.length : 0), "the same sheet, one keyframe made again");
-  step("redid keyframe 2: a new contact sheet");
-  step(`card 2: ${card2.body.kind === "price" ? card2.body.keyframes.length : 0} keyframes, video ${card2.priceCredits ?? 0} credits`);
-  await decide(card2, "approve");
-  step("approved card 2");
+  // One approval made the whole video (charge before running, D9): no contact sheet, no second price.
+  const { data: held } = await admin.from("credit_orders").select("kind, estimate_credits, status").eq("user_id", userId);
+  assert.ok(held?.some((order) => order.kind === "long_take" && order.estimate_credits === edited.priceCredits), "one job hold for the card's price");
+  step("the card's price was held once; keyframes, shots, voice and music started together");
 
   // Card 3 once shots, voice and the render are done.
-  const card3 = await until("card 3", userId, () => waitingCard(userId, "finished_video"), minutes(15));
+  assert.equal(await waitingCard(userId, "price"), null, "no card 2");
+  const card3 = await until("card 3", userId, () => waitingCard(userId, "finished_video"), minutes(25));
   assert.ok(card3.body.kind === "finished_video" && card3.body.previewUrl, "card 3 plays the render");
   step(`card 3: rendered, ${card3.body.kind === "finished_video" ? Math.round(card3.body.seconds) : 0} s`);
   await decide(card3, "approve");

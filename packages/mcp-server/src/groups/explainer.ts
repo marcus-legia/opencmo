@@ -1,6 +1,6 @@
 /**
  * Explainer kit (A5): what Claude needs to write a storyboard and scene code before it touches a
- * clip — voices, looks, formats, limits, price, the icon search. `preview_explainer`
+ * clip — voices, looks, formats, limits, price, the icon search. `plan_explainer`, `preview_explainer`
  * and `add_explainer` are studio tools (they take clip_id: the clip's brand accent and frame).
  */
 
@@ -75,7 +75,7 @@ registerGroup({
             previews_per_hour: PREVIEW_LIMIT,
           },
           price: price
-            ? `${price.credits} credit${price.credits === 1 ? "" : "s"} per started 10 s, plus ${price.voiceKchars ?? 0} per started 1,000 characters of narration. add_explainer quotes the exact price first.`
+            ? `${price.credits} credit${price.credits === 1 ? "" : "s"} per started 10 s, plus ${price.voiceKchars ?? 0} per started 1,000 characters of narration. plan_explainer quotes the exact price before any code.`
             : "Narrated explainers are not available on this server.",
           silent_clip: clip
             ? {

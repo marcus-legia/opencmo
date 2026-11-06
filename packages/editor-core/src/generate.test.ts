@@ -59,6 +59,15 @@ describe('trường theo khả năng model', () => {
 });
 
 describe('chained shots (/video)', () => {
+	it('a shot takes the keyframes it starts and ends on, one frame per end', () => {
+		const ok = { prompt: 'x', aspectRatio: '9:16', duration: 5, startAfter: 'a'.repeat(64), endAfter: 'b'.repeat(64) };
+		expect(specSchema(model('fal-seedance')).safeParse(ok).success).toBe(true);
+		expect(specSchema(model('fal-seedance')).safeParse({ ...ok, startAfter: 'nope' }).success).toBe(false);
+		expect(specSchema(model('fal-seedance')).safeParse({ ...ok, after: 'c'.repeat(64) }).success).toBe(false);
+		expect(specSchema(model('fal-seedance')).safeParse({ ...ok, endImage: `${UID}/a.png` }).success).toBe(false);
+		expect(specSchema(model('fal-nano-banana')).safeParse({ prompt: 'x', aspectRatio: '1:1', startAfter: 'a'.repeat(64) }).success).toBe(false);
+	});
+
 	it('a video model that starts from a frame takes after, but not with a start image', () => {
 		const ok = { prompt: 'x', aspectRatio: '9:16', duration: 5, after: 'a'.repeat(64) };
 		expect(specSchema(model('fal-seedance')).safeParse(ok).success).toBe(true);

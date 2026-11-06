@@ -1,21 +1,20 @@
 "use client";
 
 /**
- * Phân giải khai báo `generate.*` trong document thành asset thật (spec AI
- * Studio §7.5, editor-rewrite B8) — việc `OpenCmoAi` làm trong fork:
+ * Turns the document's `generate.*` declarations into real assets (AI Studio spec §7.5,
+ * editor-rewrite B8), the job `OpenCmoAi` does in the fork:
  *
- * - Mỗi khai báo chưa có record khớp: đặt một record "partial" `pending` trong
- *   thư viện (dưới `generated/`), gọi `POST /api/v1/generations`, hỏi lại tới
- *   khi xong. Cùng spec trong cùng project thì server trả lại lượt đã có — nên
- *   mở lại tab giữa chừng là tiếp tục đúng lượt đó, không trừ credit lần hai.
- * - Xong: tải file về OPFS, record thật thế chỗ partial (cùng đường dẫn), có
- *   `generation.key` (để worker và preview khớp khai báo) và `cloud.mediaId`.
- * - Hỏng: partial thành `error` với câu của server; không tự chạy lại.
- * - Người dùng xoá partial đang chạy = huỷ: gọi huỷ để credit được hoàn.
+ * - A declaration with no matching record: place a `pending` "partial" record in the library
+ *   (under `Generated/`), call `POST /api/v1/generations`, and poll until done. The same spec in
+ *   the same project gets the existing generation back from the server, so reopening the tab
+ *   halfway continues that generation and never charges twice.
+ * - Done: download the file into OPFS; the real record replaces the partial (same path), with
+ *   `generation.key` (so the worker and the preview match the declaration) and `cloud.mediaId`.
+ * - Failed: the partial becomes `error` with the server's message; it is not retried by itself.
+ * - The user deleting a running partial cancels it, so the credits are refunded.
  *
- * Khoá (`generation.key`) cùng dạng với fork: `{type, model, spec}` đã chuẩn
- * hoá, cùng thứ tự field — nên cùng một khai báo khớp cùng một record ở cả
- * hai editor.
+ * The key (`generation.key`) has the fork's shape: the normalised `{type, model, spec}`, fields in
+ * the same order, so one declaration matches one record in both editors.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,7 +30,8 @@ import { generationMatches, libraryRecord } from "../media";
 import type { LibraryApi } from "../library/useLibrary";
 import { describe, keepLocal } from "../library/store";
 
-const GENERATED_DIR = "generated";
+/** Same folder as the Assistant's long takes (`Generated/<title>/keyframes`), with the same case. */
+const GENERATED_DIR = "Generated";
 const POLL_MS = 1500;
 /**
  * Trạng thái lượt sinh tới qua Realtime (G1): worker ghi `generations` là client đọc lại
@@ -378,42 +378,48 @@ export function useGenerations({
           assets: current.assets.map((record) => (record.generation?.key === key ? { ...record, state: "error", error: message } : record)) as LibraryRecord[],
         }));
       try {
-        // A piece the server started (a long take's keyframe) that failed or was cancelled stays
-        // failed: the POST below would not reuse a dead generation, so it would start and charge a
-        // new one no card approved.
+        // A piece the server started and listed (a /video's keyframes and shots, paid from the job the
+        // user confirmed) is waited on by its id, never asked for again: a shot started on keyframes
+        // still being made has a different spec from the one this editor would send once they are
+        // done, so a POST would start, and charge, a second shot no card approved. One that failed or
+        // was cancelled stays failed for the same reason.
         const startedId = partial.generation?.id;
-        if (startedId) {
-          const started = await api<GenerationView>(`generations/${encodeURIComponent(startedId)}`).catch(() => null);
-          if (started && (started.status === "failed" || started.status === "cancelled")) {
-            await fail(started.error ?? (started.status === "cancelled" ? "Generation was cancelled." : "Generation failed. Your credits were refunded."));
-            return;
-          }
+        let generation: GenerationView;
+        const known = startedId ? await api<GenerationView>(`generations/${encodeURIComponent(startedId)}`).catch(() => null) : null;
+        if (known && (known.status === "failed" || known.status === "cancelled")) {
+          await fail(known.error ?? (known.status === "cancelled" ? "Generation was cancelled." : "Generation failed. Your credits were refunded."));
+          return;
         }
-        const spec = await serverSpec(resolved.spec, () => libraryRef.current.latest(), () => !recordFor(libraryRef.current.latest(), key));
-        const requestId = crypto.randomUUID();
-        const post = () =>
-          api<{ generation: GenerationView }>("generations", {
-            method: "POST",
-            body: JSON.stringify({ job_id: projectId, clip_id: clipId, model: resolved.model, spec, request_id: requestId }),
-          });
-        // Ảnh vừa upload còn đang được worker kiểm (probe) vài giây: chờ thay vì báo hỏng.
-        // Server từ chối TRƯỚC khi đặt credit, nên gửi lại không trừ hai lần.
-        let attempt = post();
-        const waitStarted = Date.now();
-        for (;;) {
-          try {
-            await attempt;
-            break;
-          } catch (error) {
-            // A shot that continues another is refused until that one is started (Regenerate starts
-            // the whole chain at once); the refusal comes before any credit is held.
-            const stillUploading = /still uploading|Start the shot before this one first/i.test((error as Error).message);
-            if (!stillUploading || Date.now() - waitStarted > PROBE_WAIT_MS || !recordFor(libraryRef.current.latest(), key)) throw error;
-            await sleep(POLL_MS);
-            attempt = post();
+        if (known) {
+          generation = known;
+        } else {
+          if (startedId) throw new StillRunning("Could not read the generation. Trying again shortly.");
+          const spec = await serverSpec(resolved.spec, () => libraryRef.current.latest(), () => !recordFor(libraryRef.current.latest(), key));
+          const requestId = crypto.randomUUID();
+          const post = () =>
+            api<{ generation: GenerationView }>("generations", {
+              method: "POST",
+              body: JSON.stringify({ job_id: projectId, clip_id: clipId, model: resolved.model, spec, request_id: requestId }),
+            });
+          // A just-uploaded image is still being probed on the worker for a few seconds: wait instead of
+          // failing. The server refuses BEFORE holding credits, so sending again never charges twice.
+          let attempt = post();
+          const waitStarted = Date.now();
+          for (;;) {
+            try {
+              await attempt;
+              break;
+            } catch (error) {
+              // A shot that continues another is refused until that one is started (Regenerate starts
+              // the whole chain at once); the refusal comes before any credit is held.
+              const stillUploading = /still uploading|Start the shot before this one first/i.test((error as Error).message);
+              if (!stillUploading || Date.now() - waitStarted > PROBE_WAIT_MS || !recordFor(libraryRef.current.latest(), key)) throw error;
+              await sleep(POLL_MS);
+              attempt = post();
+            }
           }
+          generation = (await attempt).generation;
         }
-        const { generation } = await attempt;
         credits.current?.();
         const started = Date.now();
         // POST chỉ trả trạng thái, không kèm `asset` (GET mới ký URL). Lượt dùng lại

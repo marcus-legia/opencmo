@@ -48,7 +48,7 @@ Do these before testing. A failure here invalidates later results.
 - [ ] PF02 · P0 · Log check: on opencmo.io, open the browser console, run `setTimeout(() => { throw new Error("qa logging check") })`, then `npm run qa:logs -- --since 15m` → the file has a `client_error` line with that message.
 - [ ] PF03 · P0 · The Modal worker is current (#158 fixed a failing `modal deploy`), and an export works on it.
 - [ ] PF04 · P0 · `npm run db:push:dry` lists no pending migrations. PRs #146–#150 never ran pgTAP locally, so check `20270105010000_review_followups.sql` is applied.
-- [ ] PF05 · P0 · `cd packages/engine && .venv312/bin/modal run check_deploy_env.py` passes. It doesn't cover `POLAR_*`, `ZERNIO_*`, `RESEND_API_KEY`, `SCRAPECREATORS_API_KEY`, VAPID, or `OPENCMO_ENV` on the worker.
+- [ ] PF05 · P0 · `cd packages/engine && .venv312/bin/modal run check_deploy_env.py` passes. It doesn't cover `CREEM_*`, `ZERNIO_*`, `RESEND_API_KEY`, `SCRAPECREATORS_API_KEY`, VAPID, or `OPENCMO_ENV` on the worker.
 - [ ] PF06 · P0 · The Modal `opencmo` secret has `OPENCMO_ENV=production`. Without it, a worker with no moderation keys **skips checks instead of refusing**.
 
 **Configuration**
@@ -544,7 +544,7 @@ Sign in as B and use A's IDs. Every one of these should fail.
 **Endpoints**
 
 - [ ] O14 · P0 · Cron routes without a token and with the wrong token → refused. `CRON_SECRET` doesn't open `/api/cron/cleanup`.
-- [ ] O15 · P0 · POST `/api/webhooks/polar` with a bad signature → 401. **Don't send anything that could grant credits.**
+- [ ] O15 · P0 · POST `/api/webhooks/creem` with a bad signature → 401. **Don't send anything that could grant credits.**
 - [ ] O16 · P1 · `/api/v1/client-errors`, new this week: cross-origin → 403; over 16 KB → 413; over 30/min → 429.
 - [ ] O17 · P1 · A pulled log file has no query strings, tokens, or prompts in it.
 - [ ] O18 · P2 · Response headers: CSP present, API answers `no-store`.

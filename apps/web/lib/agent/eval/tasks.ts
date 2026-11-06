@@ -116,8 +116,8 @@ function blankEdit(document: ClipDocument): void {
 
 /**
  * A whole video was asked for: create_video is the tool reached, with the length (and frame) the
- * user asked for, and its card says so. Without `--until-card` the keyframes must also be started,
- * in the video's frame; the shots come after a second approval (animate_video), graded when reached.
+ * user asked for, and its one card prices the whole video. Without `--until-card` the keyframes and
+ * the shots must also be started, in the video's frame, from that one approval.
  */
 function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }): Grade {
   const notes: string[] = [];
@@ -132,18 +132,18 @@ function gradeVideo(outcome: Outcome, want: { seconds: number; aspect?: string }
   const card = (outcome.cards ?? []).find((item) => item.tool === "create_video");
   const shown = check(
     notes,
-    Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video, step 1 of 2: \\d+ keyframes`).test(card!.changes[0] ?? ""),
+    Boolean(card) && new RegExp(`^Create a ${want.seconds}s ${want.aspect ?? "9:16"} video: \\d+ shots? on \\d+ keyframes.* · \\d+ credits?`).test(card!.changes[0] ?? ""),
     `card: ${card?.changes[0] ?? "never reached a create_video card"}`,
   );
-  const priceLater = check(notes, Boolean(card?.changes.some((line) => /^Then about \d+ credits for the video/.test(line))), "card 1 does not say what the video costs after the keyframes");
-  if (outcome.untilCard) return { pass: seconds && aspect && shown && priceLater, notes };
+  if (outcome.untilCard) return { pass: seconds && aspect && shown, notes };
   const gen = outcome.generations?.find((item) => item.longTake);
-  const keyframes = check(notes, Boolean(gen) && [gen!.model, ...(gen!.extra ?? []).map((item) => item.model)].every((model) => model.kind === "image"), "no keyframes were started");
+  const kinds = gen ? [gen.model, ...(gen.extra ?? []).map((item) => item.model)].map((model) => model.kind) : [];
+  const started = check(notes, kinds[0] === "image" && kinds.includes("video"), `the keyframes and shots were not both started (kinds: ${kinds.join(", ") || "none"})`);
   const frame = check(notes, gen?.spec.aspectRatio === (want.aspect ?? "9:16"), `keyframes in ${String(gen?.spec.aspectRatio)}`);
-  return { pass: seconds && aspect && shown && priceLater && keyframes && frame && waiting(outcome, notes), notes };
+  return { pass: seconds && aspect && shown && started && frame && waiting(outcome, notes), notes };
 }
 
-/** After stage 1 the edit is still empty (the keyframes are in the library): only that may be reported. */
+/** The eval renders nothing, so the placed scene's media is still missing: only that may be reported. */
 function waiting(outcome: Outcome, notes: string[]): boolean {
   const errors = outcome.report.issues.filter((issue) => issue.severity === "error" && !["no-visuals", "black-gap"].includes(issue.code));
   return check(notes, !errors.length, `check has errors beyond the empty edit: ${errors.map((issue) => issue.code).join(", ")}`);
@@ -586,7 +586,8 @@ export const TASKS: EvalTask[] = [
       // Every keyframe starts at once: one per beat, plus the closing one when the last beat flows on.
       const parallel = check(notes, 1 + (gen!.extra?.length ?? 0) >= shots, "not every keyframe starts together");
       const length = check(notes, gen!.longTake!.seconds === 15, `planned ${gen!.longTake!.seconds}s`);
-      const placed = check(notes, !all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "video"), "shots were placed before the second approval");
+      // One card, then everything runs: the shots are on the timeline right after it, waiting on their keyframes.
+      const placed = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "video"), "the shots were not placed after the one approval");
       return { pass: covered && parallel && length && placed && waiting(outcome, notes), notes };
     },
   },
@@ -640,9 +641,11 @@ export const TASKS: EvalTask[] = [
       const notes: string[] = [];
       const reply = outcome.reply ?? "";
       const waited = check(notes, !outcome.tools.some((name) => ["preview_explainer", "add_explainer"].includes(name)), `tools before the user said go: ${outcome.tools.join(", ")}`);
-      const beats = reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
+      // The storyboard in the reply, or on the plan_explainer card (which asks by itself).
+      const card = (outcome.cards ?? []).find((item) => item.tool === "plan_explainer");
+      const beats = card ? card.changes.filter((line) => /^Beat \d+ /.test(line)) : reply.split("\n").filter((line) => /^\s*(\d+[.)]|[-*•]|beat\s*\d+)/i.test(line));
       const scripted = check(notes, beats.length >= 3, `script has ${beats.length} beats: ${reply.slice(0, 300)}`);
-      const asked = check(notes, /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
+      const asked = check(notes, Boolean(card) || /\?\s*$/.test(reply.trim()) || outcome.tools.includes("ask_user"), "does not ask before making it");
       return { pass: waited && scripted && asked, notes };
     },
   },
@@ -652,9 +655,10 @@ export const TASKS: EvalTask[] = [
     setup: blankEdit,
     grade(outcome) {
       const notes: string[] = [];
+      const planned = outcome.tools.indexOf("plan_explainer");
       const previewed = outcome.tools.indexOf("preview_explainer");
       const added = outcome.tools.lastIndexOf("add_explainer");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const order = check(notes, planned >= 0 && previewed > planned && added > previewed, `plan, then preview, then add; tools: ${outcome.tools.join(", ")}`);
       const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
       if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
       const scene = gen!.spec.scene as { template?: string; code_ref?: string; beats?: { say: string; label?: string }[] } | undefined;
@@ -715,9 +719,10 @@ export const TASKS: EvalTask[] = [
     setup: blankEdit,
     grade(outcome) {
       const notes: string[] = [];
+      const planned = outcome.tools.indexOf("plan_explainer");
       const previewed = outcome.tools.indexOf("preview_explainer");
       const added = outcome.tools.lastIndexOf("add_explainer");
-      const order = check(notes, previewed >= 0 && added > previewed, `tools: ${outcome.tools.join(", ")}`);
+      const order = check(notes, planned >= 0 && previewed > planned && added > previewed, `plan, then preview, then add; tools: ${outcome.tools.join(", ")}`);
       const gen = outcome.generations?.find((item) => item.model.id === "motion-explainer");
       if (!check(notes, Boolean(gen), "no explainer prepared")) return { pass: false, notes };
       const scene = gen!.spec.scene as { theme?: string; personality?: string } | undefined;

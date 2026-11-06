@@ -241,11 +241,11 @@ check("the Video team's steps follow the order's steps", () => {
   assert.equal(waiting.find((s) => s.state === "running")?.label, "Storyboard · waits on you");
   assert.equal(waiting[1]!.label, "Director: 3 beats");
   const making = videoSteps({ status: "waiting_order" }, [{ ...script, status: "running", decision: "approve" }], false);
-  assert.equal(making.find((s) => s.state === "running")?.label, "Keyframes");
-  const sheet = { tool: "animate_video", kind: "price" as const, card: { shots: 4 }, next: { tool: "render" }, next_done_at: "2026-10-29T00:00:00Z", status: "done" as const, decision: "approve" };
-  const rendering = videoSteps({ status: "waiting_order" }, [{ ...script, status: "done", decision: "approve", next_done_at: "x" }, sheet], false);
+  assert.equal(making.find((s) => s.state === "running")?.label, "Keyframes, shots, voice-over and music");
+  assert.ok(!making.some((s) => /Contact sheet/.test(s.label)), "one approval: no second card");
+  const rendering = videoSteps({ status: "waiting_order" }, [{ ...script, status: "done", decision: "approve", next: { tool: "render" }, next_done_at: "x" }], false);
   assert.equal(rendering.find((s) => s.state === "running")?.label, "Render → finished video card");
-  assert.ok(videoSteps({ status: "done" }, [{ ...script, status: "done", decision: "approve" }, sheet], false).every((s) => s.state === "done"));
+  assert.ok(videoSteps({ status: "done" }, [{ ...script, status: "done", decision: "approve" }], false).every((s) => s.state === "done"));
 });
 check("a snapshot never holds a signed URL", () => {
   for (const snapshot of STUDIO_SNAPSHOTS) assert.doesNotMatch(JSON.stringify(snapshot), /https?:\/\//, snapshot.kind);

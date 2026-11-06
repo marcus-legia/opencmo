@@ -6,7 +6,7 @@ import { SUPPORT_EMAIL } from "@/lib/site";
 /**
  * Footer dùng chung cho landing, blog và trang pháp lý.
  *
- * Bốn link pháp lý + email hỗ trợ là điều kiện duyệt của Polar/Creem: người
+ * Bốn link pháp lý + email hỗ trợ là điều kiện duyệt của Creem: người
  * duyệt phải thấy chúng mà không cần đăng nhập, và email phải trùng email khai
  * với bên thanh toán (docs/cmo/san-pham.md §2, luật 6).
  */
