@@ -36,7 +36,7 @@ import { priceOf, type Price } from "@/lib/eval/prices";
 import { gitInfo, printComparison, writeReport } from "@/lib/eval/report";
 
 import { clipContextBlock } from "../clip-context";
-import { KEEP_IMAGES } from "../limits";
+import { AGENT_3D_HOLD_CREDITS, KEEP_IMAGES } from "../limits";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { ANTHROPIC_MODEL, anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
@@ -246,7 +246,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
           results.push({ id: call.id, name: call.name, ok: false, content: JSON.stringify({ INVALID_INPUT: prepared }) });
           continue;
         }
-        const card = planExplainerCard(prepared, "eval");
+        const card = planExplainerCard(prepared, "eval", AGENT_3D_HOLD_CREDITS);
         cards.push({ tool: call.name, changes: card.changes, credits: card.credits });
         if (options.untilCard) {
           stopped = "card";

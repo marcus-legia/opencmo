@@ -76,7 +76,7 @@ insert into allowed values
   ('create_slideshow(text,text,uuid)'),
   ('create_generation(uuid,uuid,text,jsonb,text,uuid,uuid)'),
   ('credit_order_close(uuid)'),
-  ('credit_order_open(text,integer,text,uuid,uuid)'),
+  ('credit_order_open(text,integer,text,uuid,uuid,text)'),
   ('create_upload_edit(text,text,boolean)'),
   ('cut_shorts_order(uuid)'),
   ('credit_balance(uuid)'),
