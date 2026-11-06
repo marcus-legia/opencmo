@@ -586,7 +586,8 @@ export const TASKS: EvalTask[] = [
       // Every keyframe starts at once: one per beat, plus the closing one when the last beat flows on.
       const parallel = check(notes, 1 + (gen!.extra?.length ?? 0) >= shots, "not every keyframe starts together");
       const length = check(notes, gen!.longTake!.seconds === 15, `planned ${gen!.longTake!.seconds}s`);
-      const placed = check(notes, !all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "video"), "shots were placed before the second approval");
+      // One card, then everything runs: the shots are on the timeline right after it, waiting on their keyframes.
+      const placed = check(notes, all(outcome.document).some((item) => (item.entity.src as { generate?: string } | undefined)?.generate === "video"), "the shots were not placed after the one approval");
       return { pass: covered && parallel && length && placed && waiting(outcome, notes), notes };
     },
   },
