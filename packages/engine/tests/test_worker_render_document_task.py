@@ -542,6 +542,35 @@ def test_long_take_shot_made_from_another_keyframe_is_not_used(monkeypatch):
     assert store.failed is not None and "is not in this project's library" in store.failed
 
 
+def _chained_rows(start_after: str) -> list[dict]:
+    """A /video made in one go: the shot names its keyframe generation by spec hash (`startAfter`)."""
+    keyframe = {k: v for k, v in KEYFRAME.items() if k not in ("generate", "model")}
+    shot = {k: v for k, v in LONG_SHOT.items() if k not in ("generate", "model", "startFrame")}
+    return [
+        {"id": "g-key", "model": "fal-nano-banana", "spec": keyframe, "spec_hash": "a" * 64, "media_asset_id": "m-fox"},
+        {"id": "g-shot", "model": "fal-seedance", "spec": {**shot, "startAfter": start_after}, "spec_hash": "c" * 64, "media_asset_id": "m-shot"},
+    ]
+
+
+def test_one_go_shot_exports_with_no_tab_through_the_keyframe_it_names(monkeypatch):
+    """Review 2026-11-06: a Studio /video is exported with no editor open, so its shot (stored with
+    `startAfter`) is found in the project's generations through the keyframe generation it names."""
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}], [])
+    store = FakeStore()
+    store.generations = _chained_rows("a" * 64)
+    rd.process(store, _task())
+    assert store.failed is None
+    assert ("media", "u1/j1/gen-shot.mp4") in store.downloads
+
+
+def test_one_go_shot_on_another_keyframe_is_not_used(monkeypatch):
+    _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}], [])
+    store = FakeStore()
+    store.generations = _chained_rows("b" * 64)
+    rd.process(store, _task())
+    assert store.failed is not None and "is not in this project's library" in store.failed
+
+
 def test_a_keyframe_shared_by_two_shots_is_looked_up_once(monkeypatch):
     second = {**LONG_SHOT, "prompt": "keep pushing in", "seed": 8}
     _fake_node(monkeypatch, [{"kind": "video", "src": LONG_SHOT}, {"kind": "video", "src": second}], [])
