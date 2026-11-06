@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   activeScene,
   checkShots,
+  createVideoInput as createVideoOpInput,
   keyframeCount,
   keyframeIndexes,
   LongTakePlanSchema,
@@ -549,8 +550,15 @@ type RunEnv = {
   /** False once the user pressed Stop: nothing more is charged or placed for a stopped turn. */
   alive?: () => Promise<boolean>;
   /** Tests replace the checks and the start of each generation (no database). */
-  create?: { check: typeof checkGeneration; start: typeof startGeneration };
+  create?: { check: typeof checkGeneration; start: typeof startGeneration; running?: typeof runningGenerations };
 };
+
+/** The user's generations in flight (under RLS), as `create_generation` counts them against its cap. */
+export async function runningGenerations(supabase: SupabaseClient): Promise<number> {
+  const { count, error } = await supabase.from("generations").select("id", { count: "exact", head: true }).in("status", ["queued", "running"]);
+  if (error) throw error;
+  return count ?? 0;
+}
 
 const fail = (message: string): { outcome: ToolOutcome } => ({ outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } });
 
@@ -560,10 +568,43 @@ const fail = (message: string): { outcome: ToolOutcome } => ({ outcome: { ok: fa
  * before the scene is placed cancels what started and gives the hold back.
  */
 export async function runCreateVideo(env: RunEnv, prepared: PreparedGeneration): Promise<{ outcome: ToolOutcome; generationId?: string; generationIds?: string[] }> {
-  const op = prepared.op as unknown as CreateVideo;
+  // The op comes back from jsonb (`agent_tool_calls.input`, `studio_steps.input`), which reorders nested keys.
+  // Parsing restores the schema's order, so the library keys match the editor's `JSON.stringify(resolve(...))`.
+  const parsedOp = createVideoOpInput.safeParse(prepared.op);
+  if (!parsedOp.success) return fail("This video card is out of date. Ask for the video again.");
+  const op: CreateVideo = parsedOp.data;
   const runs = [{ model: prepared.model, spec: prepared.spec }, ...(prepared.extra ?? [])];
   const keyframeCount = prepared.library?.names.length ?? 0;
   if (op?.op !== "create_video" || !keyframeCount || runs.length < keyframeCount + op.shots.length) return fail("This video card is out of date. Ask for the video again.");
+  if (env.alive && !(await env.alive())) {
+    return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was generated or charged." }), summary: "Stopped" } };
+  }
+
+  const check = env.create?.check ?? checkGeneration;
+  const start = env.create?.start ?? startGeneration;
+  // Every check first (Creem, the rate limit, the parents), for every piece, before any piece starts: a refusal
+  // here costs nothing. Once a keyframe is sent to its provider, cancelling it no longer refunds it.
+  const batch = new Set(runs.slice(0, keyframeCount).map(({ model, spec }) => specHash(model.id, normalizeSpec(model, spec))));
+  let ready: Awaited<ReturnType<typeof checkGeneration>>[];
+  try {
+    ready = await Promise.all(
+      runs.map(({ model, spec }) => check(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), batch })),
+    );
+  } catch (err) {
+    if (!(err instanceof ApiError)) console.error("[agent] create_video: checks failed", err);
+    return fail(err instanceof ApiError && err.status < 500 ? err.message : "The video could not be checked. Nothing was charged; try again.");
+  }
+  // The in-flight cap, read again now: the card was shown a while ago, and a piece refused by it after the keyframes
+  // started would leave paid keyframes with no shots.
+  let running: number;
+  try {
+    running = await (env.create?.running ?? runningGenerations)(env.supabase);
+  } catch {
+    return fail("The video could not be started. Nothing was charged; try again.");
+  }
+  if (running + runs.length > GENERATION_ACTIVE_LIMIT) {
+    return fail(`This video needs ${runs.length} generations at once and ${running} are still running. Wait for them to finish, then approve it again. Nothing was charged.`);
+  }
   if (env.alive && !(await env.alive())) {
     return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was generated or charged." }), summary: "Stopped" } };
   }
@@ -583,40 +624,38 @@ export async function runCreateVideo(env: RunEnv, prepared: PreparedGeneration):
   }
 
   const started: { id: string; credits: number; reused: boolean }[] = [];
-  // Only what this approval started: a reused generation belongs to an earlier placement. Its own hold is
-  // refunded by cancelling it; what the job still holds comes back when the job closes.
-  const giveBack = async () => {
+  // Only what this approval started: a reused generation belongs to an earlier placement. Cancelling refunds a piece
+  // not yet sent to its provider; one already sent keeps its credits (it was paid for), and the reply says so.
+  const giveBack = async (): Promise<number> => {
     const mine = started.filter((item) => !item.reused);
-    const cancelled = await Promise.allSettled(mine.map((item) => rpcOrThrow(env.supabase, "cancel_generation", { p_id: item.id })));
+    const cancelled = await Promise.allSettled(mine.map((item) => rpcOrThrow<{ sent_at?: string | null }>(env.supabase, "cancel_generation", { p_id: item.id })));
+    let kept = 0;
     cancelled.forEach((result, index) => {
-      if (result.status === "rejected") console.error("[agent] create_video: cancel_generation failed", mine[index]!.id, result.reason);
+      if (result.status === "rejected") {
+        console.error("[agent] create_video: cancel_generation failed", mine[index]!.id, result.reason);
+        kept += mine[index]!.credits;
+      } else if (result.value?.sent_at) {
+        kept += mine[index]!.credits;
+      }
     });
     await closeOrder();
+    return kept;
   };
+  const returned = (kept: number) =>
+    kept ? `${credits(kept)} for pieces already sent to be made were kept; the rest came back.` : "Your credits were returned.";
   const closeOrder = () =>
     rpcOrThrow(env.supabase, "credit_order_close", { p_order_id: orderId }).catch((err: unknown) => console.error("[agent] create_video: credit_order_close failed", orderId, err));
 
-  const check = env.create?.check ?? checkGeneration;
-  const start = env.create?.start ?? startGeneration;
   try {
-    // Keyframes, then the rest: `create_generation` refuses a shot whose keyframes were not started.
-    for (const group of [runs.slice(0, keyframeCount), runs.slice(keyframeCount)]) {
-      const ready = await Promise.all(
-        group.map(({ model, spec }) => check(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), orderId })),
-      );
-      if (env.alive && !(await env.alive())) {
-        await giveBack();
-        return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was placed and the credits were returned." }), summary: "Stopped" } };
-      }
-      for (const item of ready) {
-        const { generation, reused } = await start(env.supabase, item);
-        started.push({ id: generation.id, credits: reused ? 0 : generation.credits_reserved, reused });
-      }
+    // Keyframes first: `create_generation` refuses a shot whose keyframes were not started.
+    for (const item of ready) {
+      const { generation, reused } = await start(env.supabase, { ...item, request: { ...item.request, orderId } });
+      started.push({ id: generation.id, credits: reused ? 0 : generation.credits_reserved, reused });
     }
   } catch (err) {
-    await giveBack();
+    const kept = await giveBack();
     if (!(err instanceof ApiError)) console.error("[agent] create_video failed", err);
-    return fail(err instanceof ApiError && err.status < 500 ? err.message : "The video could not be started. Your credits were returned.");
+    return fail(err instanceof ApiError && err.status < 500 ? `${err.message} ${returned(kept)}` : `The video could not be started. ${returned(kept)}`);
   }
 
   // Listed BEFORE the scene names them: an editor that saw a shot first would ask for it itself, with the
@@ -639,17 +678,18 @@ export async function runCreateVideo(env: RunEnv, prepared: PreparedGeneration):
     await saveLibrary(env.store, (manifest, now) => withPieces(withPieces(manifest, folder, keyframes, now), folder.replace(/\/keyframes$/, "/shots"), shots, now));
   } catch (err) {
     console.error("[agent] create_video: library records failed", err);
-    await giveBack();
-    return fail("The video could not be added to your media, so it was not started. Your credits were returned; try again.");
+    const kept = await giveBack();
+    return fail(`The video could not be added to your media, so it was not placed. ${returned(kept)} Try again.`);
   }
 
   if (env.alive && !(await env.alive())) {
-    await giveBack();
-    return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: "The user stopped the assistant. Nothing was placed and the credits were returned." }), summary: "Stopped" } };
+    const kept = await giveBack();
+    return { outcome: { ok: false, content: JSON.stringify({ stopped: true, message: `The user stopped the assistant. Nothing was placed. ${returned(kept)}` }), summary: "Stopped" } };
   }
-  const applied = await env.applyOp(prepared.op as never);
+  const applied = await env.applyOp(op as never);
   if (!applied.ok) {
-    await giveBack();
+    const kept = await giveBack();
+    if (kept) console.warn("[agent] create_video: placing failed after pieces were sent", kept);
     return { outcome: applied };
   }
   // The estimate is exact, so the job holds nothing more; a reused piece's share comes back here.

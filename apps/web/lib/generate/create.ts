@@ -26,6 +26,11 @@ export type CreateRequest = {
    * balance (already lowered by that hold) is not checked again.
    */
   orderId?: string;
+  /**
+   * Spec hashes of the other pieces of the same job, checked before any of them starts (`/video`): a shot whose
+   * keyframe is among them passes `requireParent`; `create_generation` still refuses it if the keyframe never started.
+   */
+  batch?: ReadonlySet<string>;
 };
 
 /** Spec đã qua schema của model — thứ được băm và lưu. Ném 422 tiếng Anh. */
@@ -152,6 +157,7 @@ async function reusable(supabase: SupabaseClient, request: CreateRequest, hash: 
 async function requireParent(supabase: SupabaseClient, request: CreateRequest, spec: GenerationSpec): Promise<void> {
   const { after, startAfter, endAfter } = spec as { after?: unknown; startAfter?: unknown; endAfter?: unknown };
   const live = async (hash: string, kind?: string) => {
+    if (request.batch?.has(hash)) return true;
     let query = supabase.from("generations").select("id").eq("job_id", request.jobId).eq("spec_hash", hash).in("status", ["queued", "running", "done"]);
     if (kind) query = query.eq("kind", kind);
     const parent = await query.limit(1);
