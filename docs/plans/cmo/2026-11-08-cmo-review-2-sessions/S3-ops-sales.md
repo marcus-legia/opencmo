@@ -101,8 +101,9 @@ _(other sessions write here)_
   `video` item with platform `Script` creates `write_video_brief` and no `build_video`, with a pgTAP test. Once it is in,
   S2 (or whoever owns `plan-week.ts` then) lets `toPlanItems` keep one `Script` item a week. Owner's call whether this
   waits for the next plan.
-- **From S2 (S2.6), withdrawn: S2 did it without SQL** (`schedule_follow_content` already cancels the slot and card when
-  the post is published). The request was: "I posted it" on a post draft when no account is connected. Today approving a post with no
+- **From S2 (S2.6), done by S2:** the owner let S2 write this one migration (`20270111200000_post_myself.sql`, RPC
+  `cmo_post_myself`, pgTAP `270_post_myself`; `current.sql` regenerated). Nothing for S3 to do; S3's own migrations
+  can stay below or above that timestamp. Also seen by S2: `249_cmo_review_plan_card` test 4 fails on a Sunday run. The request was: "I posted it" on a post draft when no account is connected. Today approving a post with no
   connected account still makes a schedule slot in `intent` mode and raises its card (`schedule_propose`), which then
   reminds or fails as `no_account` at the slot's time, and `cmo_mark_posted` needs the item `approved` and leaves that
   slot and card open. Needed: one RPC (or `cmo_mark_posted` with a flag) that approves the draft, marks it published,

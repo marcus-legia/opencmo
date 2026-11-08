@@ -130,18 +130,21 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     shows "no video speech" (`TranscriptPanel.tsx:163`); a post with no connected account still gets an `intent` slot and a
     schedule card (`schedule_propose`). Change: the disabled button is gone; while a file is sending, closing the tab or
     following a link to another page asks first, and the progress says to keep the page open; a video in the edit with
-    no transcript says the words could not be got and to upload it again (review fix 8). The X card: no SQL was needed
-    after all. The `schedule_follow_content` trigger already cancels a post's `proposed`/`waiting` slots and their cards
-    when the post becomes `published`. So a post draft whose platform has no connected account now offers "Copy and
-    open" and "I posted it" at once (`ApprovalCard.tsx`, platforms from the new `GET /api/v1/accounts`), with "Approve
-    and schedule" kept as a quiet choice. "I posted it" calls `POST /api/v1/approvals/[id]/posted`: `approval_decide`
-    approve (same hash and caps), then `cmo_mark_posted`, and the trigger drops the schedule card. A connected
-    platform is refused (409). The Assistant's "Keep going for up to 10 more?" is the per-request credit budget, not a
-    step limit (`MAX_STEPS` is 40); how often it shows needs production data: `select count(*) filter (where
-    pause_reason = 'budget') * 1.0 / count(*) from agent_turns where created_at > now() - interval '14 days'` (owner).
-    Check: typecheck, `layout.check`, `screens.check`, `check:contracts`. Not run here: the two-card flow on a
-    preview (no local stack); the two RPCs are not one transaction, so if the second fails the post stays approved with
-    its copy-and-open schedule card, which is the flow from before.
+    no transcript says the words could not be got and to upload it again (review fix 8). The X card: a post draft whose
+    platform has no connected account offers "Copy and open" and "I posted it" at once (`ApprovalCard.tsx`, platforms
+    from the new `GET /api/v1/accounts`, read again after a minute), with "Approve and schedule" kept as a quiet choice.
+    "I posted it" calls `POST /api/v1/approvals/[id]/posted`, which runs one RPC, `cmo_post_myself` (migration
+    `20270111200000_post_myself.sql`, pgTAP `270_post_myself`; owner allowed S2 this one migration on 2026-11-08). It
+    approves through `approval_decide` (same hash, caps and outcomes) and marks the post posted in one transaction; the
+    `schedule_follow_content` trigger cancels the slot and schedule card the approval proposed. A connected platform,
+    a thread and another founder's card are refused in SQL. The Assistant's "Keep going for up to 10 more?" is the
+    per-request credit budget, not a step limit (`MAX_STEPS` is 40); how often it shows needs production data:
+    `select count(*) filter (where pause_reason = 'budget') * 1.0 / count(*) from agent_turns where created_at > now() -
+    interval '14 days'` (owner).
+    Check: typecheck, `layout.check`, `screens.check`, `check:contracts`; pgTAP on a local Supabase (CLI 2.117.0):
+    `270_post_myself` and `182_authenticated_function_allowlist` pass. The full suite has one failure,
+    `249_cmo_review_plan_card` test 4 ("the week's three items"); it fails the same with the new function dropped, so
+    it is not this change. It looks date-dependent: the run was on a Sunday. Not run here: the cards on a preview.
 - [x] **S2.7 Copy and price fixes from the 2026-11-06 review:** `f03fe8f`
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
   - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.

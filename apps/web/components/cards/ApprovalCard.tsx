@@ -165,14 +165,8 @@ export function ApprovalCard({
    * are blocked); the founder then says "I posted it". A sample card opens nothing and copies nothing.
    */
   async function copyAndOpen(body: Extract<Card["body"], { kind: "schedule" }>) {
-    const text = body.preview.text ?? "";
-    const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, text) : null;
-    if (!target) return;
     if (sample) return toast("Sample card: nothing was copied or opened.");
-    const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
-    const tab = window.open(target.url, "_blank", "noopener,noreferrer");
-    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
-    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
+    return copyAndOpenText(body.where.platform, body.preview.text ?? "");
   }
 
   async function saveSlide(index: number, heading: string, words: string): Promise<boolean> {
@@ -264,7 +258,8 @@ export function ApprovalCard({
         if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
           const target = intentFor(postPlatform, postText());
           return [
-            ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
+            // X and Threads open their composer with the words in it; LinkedIn's label already says it copies.
+            ...(target ? [{ label: target.label, variant: "primary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
             {
               label: "I posted it",
               variant: target ? ("secondary" as const) : ("primary" as const),
@@ -315,7 +310,7 @@ export function ApprovalCard({
         if (body.state === "no_account") {
           const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, body.preview.text ?? "") : null;
           return [
-            ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
+            ...(target ? [{ label: target.label, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
             { label: "I posted it", variant: target ? ("secondary" as const) : ("primary" as const), checks: "posted", run: () => void run({ action: "posted" }) },
             ...declineAction,
           ];
