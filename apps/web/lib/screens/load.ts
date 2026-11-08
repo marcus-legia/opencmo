@@ -993,9 +993,21 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
  * panel for the video in progress; and every recent edit's finished state (`editStates`), which the page puts on the
  * upload cards it reads from `/api/v1/projects`. Uploads themselves stay on that route.
  */
+/** Longest a vertical edit runs and still counts as a short (the platforms' cap for Shorts, Reels and TikTok). */
+const SHORT_MAX_SECONDS = 60;
+
+/** A vertical frame whose work area is a minute or less: the founder made a short, whatever the edit is called. */
+export function isShortFrame(edit: { frame_w: unknown; frame_h: unknown; workarea: unknown }): boolean {
+  const { frame_w: w, frame_h: h, workarea } = edit;
+  if (typeof w !== "number" || typeof h !== "number" || h <= w) return false;
+  if (!Array.isArray(workarea) || typeof workarea[0] !== "number" || typeof workarea[1] !== "number") return false;
+  const seconds = workarea[1] - workarea[0];
+  return seconds > 0 && seconds <= SHORT_MAX_SECONDS;
+}
+
 async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
   type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
-  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null; created_at: string } | null };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null; created_at: string } | null; frame_w: unknown; frame_h: unknown; workarea: unknown };
   const videos = supabase
     .from("work_orders")
     .select("id, title, status, created_at, updated_at, error, brief")
@@ -1006,7 +1018,10 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
     .then((r) => must(r, "work_orders") as VideoOrder[]);
   const edits = supabase
     .from("editor_projects")
-    .select("clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook, created_at)")
+    // The frame and work area sit on the document's root scene; read by path so the documents stay in the database.
+    .select(
+      "clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook, created_at), frame_w:document->stage->children->0->width, frame_h:document->stage->children->0->height, workarea:document->stage->children->0->workarea",
+    )
     .order("updated_at", { ascending: false })
     .limit(100)
     .then((r) => must(r, "editor_projects") as unknown as Edit[]);
@@ -1147,7 +1162,7 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
       const editItems = own
         .filter((e) => !madeElsewhere.has(e.clip_id))
         .map((e) => {
-          const kind = e.clips!.kind === "slideshow" ? ("slideshow" as const) : e.clips!.kind === "short" ? ("short" as const) : ("video" as const);
+          const kind = e.clips!.kind === "slideshow" ? ("slideshow" as const) : e.clips!.kind === "short" || isShortFrame(e) ? ("short" as const) : ("video" as const);
           const finished = !!e.finished_hash && e.finished_hash === e.document_hash;
           const label = kind === "slideshow" ? "Slideshow" : kind === "short" ? "Short" : "Video";
           return {
