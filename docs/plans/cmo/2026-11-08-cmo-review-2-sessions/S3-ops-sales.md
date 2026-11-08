@@ -2,6 +2,23 @@
 
 Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md) · rules: [`README.md`](README.md).
 
+## Research notes
+
+- **S3.1.** Now: `lib/ops/switches.ts` only says whether a variable is set; the Costs page
+  (`app/app/settings/costs/page.tsx`) has no row that calls a provider, so the 401 of 2026-11-08 showed nowhere.
+  Change: `lib/ops/providers.ts`, one row per provider with the cheapest authenticated read, cached 5 minutes per
+  instance and checked again at once when a key changes:
+  - Anthropic `GET /v1/models?limit=1`; ScrapeCreators `GET /v1/credit/balance`; Creem `POST /v1/moderation/prompt`
+    with a fixed safe sentence (sandbox URL for a test key, as `lib/creem.ts`);
+  - fal `GET https://api.fal.ai/v1/account/billing` (free; a key without the Admin scope answers 403, so only 401 is
+    "invalid");
+  - ElevenLabs `GET /v1/user/subscription` (a restricted key without `user_read` answers 401 `missing_permissions`,
+    which is a known key);
+  - motion has no live call (the preview endpoint runs scene code): configuration only, and `OPENCMO_MOTION=local` in
+    production is called out;
+  - the Anthropic row also reads `llm-health.ts`: a real call that failed on the key since the check wins.
+  Check: `lib/ops/providers.check.ts` (a key set to `x` is "invalid key" for every live row; no key reaches the page).
+
 ## You own
 
 - `supabase/migrations/*` from `20270111010000` up, new `supabase/tests/2*`, and `supabase/schema/current.sql`.
@@ -33,7 +50,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
 
 ## Todo
 
-- [ ] **S3.1 Costs page: one live row per provider** (`lib/ops/switches.ts`, `app/app/settings/costs`).
+- [x] **S3.1 Costs page: one live row per provider** (`lib/ops/switches.ts`, `app/app/settings/costs`).
   - Rows: Anthropic, fal, ElevenLabs, motion, Creem, ScrapeCreators, next to the existing ones.
   - Each row runs a cheap live check, server side, cached for a few minutes, and never prints a key:
     - Anthropic: `GET /v1/models`;
