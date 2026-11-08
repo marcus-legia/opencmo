@@ -119,7 +119,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     orders only the brief: SQL, so it is a request in S3's file. The p2/p3 acceptance scripts (`lib/screens/p2-,
     p3-acceptance.e2e.ts`) seed a Studio video through the brief "make 1 video"; that step no longer plans one.
     Check: `jobs.check`, `studio-orders.check`, `coverage.check`, `cmo:eval --provider fake` all green.
-- [ ] **S2.6 No dead ends.** Partly done in `b15480b`; the X card waits on S3 (see the note).
+- [x] **S2.6 No dead ends.** `b15480b`, the X card in the commit after `58561ec`
   - Hide the disabled "arrives with…" buttons in Setup and Library. Sales is S3's.
   - Warn before leaving the page while an upload runs (`components/editor/upload/UploadPanel.tsx`).
   - When transcription failed, the editor says so and offers a retry, instead of "no speech".
@@ -130,12 +130,18 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     shows "no video speech" (`TranscriptPanel.tsx:163`); a post with no connected account still gets an `intent` slot and a
     schedule card (`schedule_propose`). Change: the disabled button is gone; while a file is sending, closing the tab or
     following a link to another page asks first, and the progress says to keep the page open; a video in the edit with
-    no transcript says the words could not be got and offers "Select the video to try again" (the inspector's Generate
-    captions). Not done: the X card's "Copy and open" + "I posted it" needs one SQL change (request in S3's file); the
-    client part waits for it. The Assistant's "Keep going for up to 10 more?" is the per-request credit budget, not a
+    no transcript says the words could not be got and to upload it again (review fix 8). The X card: no SQL was needed
+    after all. The `schedule_follow_content` trigger already cancels a post's `proposed`/`waiting` slots and their cards
+    when the post becomes `published`. So a post draft whose platform has no connected account now offers "Copy and
+    open" and "I posted it" at once (`ApprovalCard.tsx`, platforms from the new `GET /api/v1/accounts`), with "Approve
+    and schedule" kept as a quiet choice. "I posted it" calls `POST /api/v1/approvals/[id]/posted`: `approval_decide`
+    approve (same hash and caps), then `cmo_mark_posted`, and the trigger drops the schedule card. A connected
+    platform is refused (409). The Assistant's "Keep going for up to 10 more?" is the per-request credit budget, not a
     step limit (`MAX_STEPS` is 40); how often it shows needs production data: `select count(*) filter (where
     pause_reason = 'budget') * 1.0 / count(*) from agent_turns where created_at > now() - interval '14 days'` (owner).
-    Check: typecheck, `layout.check`.
+    Check: typecheck, `layout.check`, `screens.check`, `check:contracts`. Not run here: the two-card flow on a
+    preview (no local stack); the two RPCs are not one transaction, so if the second fails the post stays approved with
+    its copy-and-open schedule card, which is the flow from before.
 - [x] **S2.7 Copy and price fixes from the 2026-11-06 review:** `f03fe8f`
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
   - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.

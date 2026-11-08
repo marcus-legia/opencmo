@@ -29,6 +29,7 @@ import {
   ShortsBody,
   SlideshowBody,
 } from "./bodies";
+import { useConnectedPlatforms } from "./connected";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
@@ -142,6 +143,22 @@ export function ApprovalCard({
     return ok;
   }
 
+  // A post draft whose platform has no connected account offers copy and open and "I posted it" right away (S2.6).
+  const connected = useConnectedPlatforms(sample || card.body.kind !== "post");
+  const postPlatform = card.body.kind === "post" ? card.body.platforms[0]?.platform : undefined;
+  const postYourself =
+    card.body.kind === "post" && connected !== null && postPlatform !== undefined && !connected.has(postPlatform) && !card.body.platforms.some((p) => p.thread);
+  const postText = () => (editing ? draft.trim() : shown);
+
+  async function copyAndOpenText(platform: string, text: string) {
+    const target = isPublishPlatform(platform) ? intentFor(platform, text) : null;
+    if (!target) return;
+    const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
+    const tab = window.open(target.url, "_blank", "noopener,noreferrer");
+    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
+    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
+  }
+
   /**
    * The copy-and-open moment of a post with no connected account (P4 F9): X and Threads open their composer with the
    * words in it, LinkedIn's text is copied first. The tab opens and the text is copied inside the click (later ones
@@ -244,6 +261,23 @@ export function ApprovalCard({
       case "post":
         // A thread (P6 W4) is approved as written: one edited post would no longer match the thread it opens.
         if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...declineAction];
+        if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
+          const target = intentFor(postPlatform, postText());
+          return [
+            ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
+            {
+              label: "I posted it",
+              variant: target ? ("secondary" as const) : ("primary" as const),
+              run: () => {
+                const text = postText();
+                void run({ action: "posted_self", text: text !== firstText(card) ? text : undefined });
+              },
+            },
+            editAction(),
+            { label: "Approve and schedule", variant: "quiet", run: approve },
+            ...declineAction,
+          ];
+        }
         return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
       case "reply":
         return [

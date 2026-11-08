@@ -76,7 +76,7 @@ export function useDashboard() {
         id: `you-${card.id}-${Date.now()}`,
         at: new Date().toISOString(),
         who: "you" as const,
-        text: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" ? approvedLine(card) : `You set aside: ${card.title}`.slice(0, 200),
+        text: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" || decision.action === "posted_self" ? approvedLine(card) : `You set aside: ${card.title}`.slice(0, 200),
       };
       epoch.current += 1;
       setState({ ...before, data: { ...before.data, queue: before.data.queue.filter((c) => c.id !== card.id), log: [line, ...before.data.log].slice(0, 50) } });
