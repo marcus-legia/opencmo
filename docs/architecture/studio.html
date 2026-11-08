@@ -157,106 +157,53 @@ td:first-child{font-weight:600;white-space:nowrap}
 .card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
 
 body{margin:0}
+
+/* Twin of the markdown page, regenerated 2026-11-08: plain blocks the md uses. */
+pre{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0}
+.sec ul,.sec ol.plain{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.sec ul ul{margin-top:6px}
+.sec h3{margin-top:4px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">opencmo.io · architecture · studio · research before build · 2026-10-25</p>
+    <p class="eyebrow">opencmo.io · architecture · studio · built · 2026-11-08</p>
     <h1>Studio: the video department</h1>
-    <p class="lede">Studio is the editor plus the Video agent team. It makes every visual deliverable: AI long videos, shorts cut from a finished edit, slideshows and post images, and it hosts the founder's hands-on edits of their own video. This page says what Studio is today, what others teach, and how it becomes a department the brain can brief. Markdown twin for agents: <code>studio.md</code>. Parent pages: <code>ai-cmo.html</code>, <code>brain.html</code>. Status: proposed.</p>
-    <nav class="toc" aria-label="Sections">
-      <a href="#verdict">1 Verdict</a><a href="#today">2 Studio today</a><a href="#jobs">3 What Studio makes</a><a href="#learn">4 What others teach</a><a href="#design">5 Design</a><a href="#shorts">6 Shorts</a><a href="#slides">7 Slideshow</a><a href="#image">8 Post image</a><a href="#quality">9 Quality</a><a href="#evals">10 Evals</a><a href="#phases">11 Phases</a><a href="#decide">12 Decisions</a><a href="#sources">Sources</a>
-    </nav>
+    <div class="lede"><p>Status: <b>built</b> (<code>main</code> at <code>4f70a59</code>, 2026-11-08). Designed 2026-10-25, built in phases S0–S4 (P1–P6) and the CMO review (#169–#180). Markdown twin for agents: <code>studio.md</code>; the two say the same thing. Parent pages: <a href="ai-cmo.html"><code>ai-cmo.html</code></a>, <a href="brain.html"><code>brain.html</code></a>.</p>
+<p>Studio is the editor plus the Video agent team. It makes every visual deliverable (shorts cut from a finished edit, slideshows, post images, and the AI long video) and hosts the founder's hands-on edits of their own video.</p>
+<p><b>Where Studio sits now (owner, 2026-11-08).</b> The AI CMO leads and the editor comes last: Studio builds from words the founder already approved (step 4 of the loop in <a href="ai-cmo.html"><code>ai-cmo.html</code></a> §2), and the editor is where the founder fine-tunes by hand at the end. <b><code>/video</code> is hidden for now</b>: the full AI video (<code>create_video</code>) is built, but the web app, the landing page and the week plan stop offering it (plan S2.4–S2.5). The code, the MCP tool and the evals stay. Every other slash command stays as it is.</p></div>
+    <nav class="toc" aria-label="Sections"><a href="#verdict">Verdict</a><a href="#studio-as-built-main-4f70a59">Studio as built (<code>main</code>, <code>4f70a59</code>)</a><a href="#what-studio-makes">What Studio makes</a><a href="#what-others-teach">What others teach</a><a href="#design-one-adapter-seven-squads-shared-t">Design: one adapter, seven squads, shared tools</a><a href="#charge-before-running-in-studio">Charge before running in Studio</a><a href="#shorts-squad">Shorts squad</a><a href="#slideshow-squad">Slideshow squad</a><a href="#post-image-squad">Post image squad</a><a href="#quality-gates">Quality gates</a><a href="#evals">Evals</a><a href="#build-phases">Build phases</a><a href="#decisions-for-the-owner">Decisions for the owner</a><a href="#sources">Sources</a></nav>
   </header>
 
   <section class="sec" id="verdict">
-    <div class="sec-head"><p class="eyebrow">1</p><h2>Verdict</h2></div>
-    <div class="grid2">
-      <div class="card g"><span class="k">Studio is the most built department</span>
-        <ul>
-          <li>An editor with one write path (<code>editor-core</code> ops), one renderer for preview and export, server export on Modal.</li>
-          <li>Four built squads of the Video agent team: long take (<code>/video</code>), intro, explainer and 3D, B-roll and images; 12 slash commands; 26 models in the catalog.</li>
-          <li>Three callers already share it: the Assistant chat, MCP, and (proposed) the brain.</li>
-        </ul>
-      </div>
-      <div class="card r"><span class="k">What it needs to be a department</span>
-        <ul>
-          <li><b>One Studio adapter</b>, extracted from MCP's studio group, that the brain and MCP both call.</li>
-          <li><b>A "finished" state</b> for an edit and <b>export of a named timeline</b>.</li>
-          <li><b>Three new squads</b>: Shorts, Slideshow, Post image.</li>
-          <li><b>A look check</b> that draws frames from the full-size export before the founder sees a card.</li>
-        </ul>
-      </div>
-    </div>
-    <p class="prose-note">Ranked by the editor strategy: Shorts first (every OpenCMO video becomes 3 shorts for X, Shorts, Reels, TikTok), then Slideshow (cheap, popular on TikTok and LinkedIn, no video model needed), then Post image. Each lets us make the next marketing post end to end in the editor.</p>
+    <div class="sec-head"><p class="eyebrow">§1</p><h2>Verdict</h2></div>
+<p><b>Built:</b> one write path (<code>editor-core</code> ops), one renderer for preview and export, server export on Modal; the Studio adapter shared by the brain, the Assistant and MCP; a "finished" state; squads for the long take, intro, explainer, B-roll and images, shorts, slideshow and post image; a look check before a card; 12 slash commands; 25 models; charge before running on every paid job.</p>
+<p><b>Left:</b> the post image squad has no caller (nothing outside the acceptance runs creates a <code>build_post_image</code> order); <code>/video</code> is hidden and its leftovers (the contact-sheet branches) are removed by plan S2.8; making <code>/video</code> cheaper and showing it again gets its own plan.</p>
   </section>
 
-  <section class="sec" id="today">
-    <div class="sec-head"><p class="eyebrow">2</p><h2>Studio today</h2><p class="lede">Read from <code>main</code> (<code>eb858ca</code>).</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Part</th><th>Where</th><th>What it does</th><th>State</th></tr></thead>
-        <tbody>
-          <tr><td>Document + ops</td><td><code>packages/clip-doc</code>, <code>packages/editor-core</code></td><td>The project is a JSON document; every change is an op (cut by words, captions, frame, timelines, layouts, visuals, voice-over…), the only write path for buttons, Assistant and MCP</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Render + export</td><td><code>clip-render</code>, <code>clip-export</code>, task <code>render_document</code></td><td>Same Canvas 2D renderer in the browser and on the worker; export draws the active timeline over its workarea</td><td><span class="st ok">built</span>; Modal production run still open (roadmap E0.1)</td></tr>
-          <tr><td>Assistant</td><td><code>lib/agent/</code></td><td>The editor chat: tools = ops; 12 slash commands (<code>/style</code>, <code>/video</code>, <code>/image</code>, <code>/animate</code>, <code>/background</code>, <code>/edit</code>, <code>/broll</code>, <code>/intro</code>, <code>/voiceover</code>, <code>/music</code>, <code>/roughcut</code>, <code>/explain</code>); 22 eval tasks</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Video agent team</td><td><code>create-video.ts</code>, <code>long-take.ts</code>, <code>video-team.ts</code></td><td>Long take (director, code reviewer, keyframes, text checker, shots, voice and music, builder), intro (writer, motion director, reviewer, builder)</td><td><span class="st ok">built</span>; long-take Tasks 0, 1, 8 open</td></tr>
-          <tr><td>Generation</td><td><code>lib/generate</code>, <code>ai-models.json</code></td><td>26 models: images (nano-banana, seedream, Gemini), video (Veo, Kling, Kling v3, Seedance, Hailuo, Gemini), edit, upscale, cutout, voices, music, SFX, explainer, 3D; moderation at both ends</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>MCP studio group</td><td><code>packages/mcp-server/src/groups/studio.ts</code></td><td>Every Assistant clip tool without a chat: <code>plan</code> (price, nothing spent) → signed confirm → <code>decide</code></td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Look</td><td>Modal <code>look</code>, <code>opencmo.worker.look</code></td><td>Draws up to 12 frames of a clip with the export's renderer for Claude over MCP; nothing stored</td><td><span class="st part">built, untested on Modal</span></td></tr>
-          <tr><td>Finished state, named-timeline export, shorts, slideshow, post image</td><td>none</td><td>—</td><td><span class="st miss">missing</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="card y"><span class="k">Naming trap found in the code</span>
-      <p>The table <code>clips</code> is the editor's project unit (one uploaded or blank edit, <code>kind</code> <code>full | blank</code>), and the code calls a project a "clip" everywhere (<code>clip_id</code>, <code>ClipDocument</code>). Calling the short videos cut from an edit "clips" too would mix the two in every query and prompt. <b>Proposal:</b> in code they are <b>shorts</b> (<code>kind = short</code>, op <code>make_short</code>, order <code>cut_shorts</code>); the user-facing copy stays "cut short clips from your finished video".</p>
-    </div>
+  <section class="sec" id="studio-as-built-main-4f70a59">
+    <div class="sec-head"><p class="eyebrow">§2</p><h2>Studio as built (<code>main</code>, <code>4f70a59</code>)</h2></div>
+<p>State: ✅ done · 🟡 partial · ❌ not built.</p>
+<div class="tbl"><table><thead><tr><th>Part</th><th>Where</th><th>What it does</th><th>State</th></tr></thead><tbody><tr><td>Document + ops</td><td><code>packages/clip-doc</code>, <code>packages/editor-core</code></td><td>JSON document; every change is an op; the only write path for buttons, Assistant, MCP</td><td>✅</td></tr><tr><td>Render + export</td><td><code>clip-render</code>, <code>clip-export</code>, tasks <code>render_document</code>, <code>render_stills</code></td><td>same Canvas 2D renderer in browser and worker; export draws a named timeline over its workarea; stills for the PNG set</td><td>✅</td></tr><tr><td>Assistant</td><td><code>lib/agent/</code></td><td>tools = ops; 12 slash commands (<code>lib/agent/slash.ts</code>: <code>/style</code>, <code>/video</code>, <code>/image</code>, <code>/animate</code>, <code>/background</code>, <code>/edit</code>, <code>/broll</code>, <code>/intro</code>, <code>/voiceover</code>, <code>/music</code>, <code>/roughcut</code>, <code>/explain</code>); 42 eval tasks (<code>lib/agent/eval/tasks.ts</code>)</td><td>✅ · <code>/video</code> hidden (plan S2.4)</td></tr><tr><td>Video agent team</td><td><code>create-video.ts</code>, <code>long-take.ts</code>, <code>video-team.ts</code>, <code>explainer-tool.ts</code></td><td>long take (one storyboard card, one job hold, every piece in one go); intro; explainer (plan → preview → add)</td><td>✅</td></tr><tr><td>Generation</td><td><code>lib/generate</code>, <code>packages/contracts/ai-models.json</code></td><td>25 models: images (nano-banana, seedream…), video (Veo, Kling, Kling v3, Seedance, Hailuo, Kling edit), upscale, cutout, voices, music, SFX, explainer and motion clips (Remotion); Creem screens prompts, the worker reviews outputs</td><td>✅</td></tr><tr><td>Studio adapter</td><td><code>lib/departments/studio/adapter.ts</code>, <code>types.ts</code></td><td>eight entry points (<code>plan</code>, <code>decide</code>, <code>buildVideo</code>, <code>cutShorts</code>, <code>markFinished</code>, <code>renderShort</code>, <code>buildSlideshow</code>, <code>buildPostImage</code>) for the brain, the Assistant and MCP</td><td>✅</td></tr><tr><td>MCP studio group</td><td><code>packages/mcp-server/src/groups/studio.ts</code></td><td>every clip tool without a chat: plan → signed confirm (600 s) → decide</td><td>✅</td></tr><tr><td>Finished state</td><td><code>mark_finished</code>, <code>lib/departments/studio/finished.ts</code></td><td>the founder marks an edit finished at the document hash they saw; a later save clears it (<code>editor_projects_clear_finished</code>)</td><td>✅</td></tr><tr><td>Shorts</td><td><code>lib/departments/studio/shorts/</code>, op <code>make_short</code>, <code>short_batches</code>, <code>shorts</code></td><td>3 shorts from a finished edit, one batch card</td><td>✅</td></tr><tr><td>Slideshow</td><td><code>lib/departments/studio/slideshow/</code>, <code>clips.kind = slideshow</code>, ops in <code>editor-core/src/ops/slides.ts</code>, <code>components/editor/slides</code></td><td>Slides view in the editor; MP4 and PNG set from one document</td><td>✅</td></tr><tr><td>Post image</td><td><code>lib/departments/studio/slideshow/post-image.ts</code>, <code>20261231120000_p5_post_image.sql</code></td><td>one still from a frame or a captured page with a title layer; shown on its post's card</td><td>🟡 no caller yet</td></tr><tr><td>Look check</td><td>task <code>look_check</code>, <code>opencmo/ai/look_judge.py</code>, <code>look_checks</code></td><td>§9</td><td>✅</td></tr><tr><td>Studio lists editor edits (#177)</td><td><code>components/screens/studio/</code></td><td>the founder's own edits from their first save, finished or not; a vertical edit of 60 s or less is filed under Shorts</td><td>✅</td></tr><tr><td>The editor keeps the server's library (#176)</td><td><code>mergeLibrary</code> (<code>packages/clip-assets</code>), <code>DocumentSession.rebase</code></td><td>the tab merges the server's manifest instead of overwriting it, so pieces <code>/video</code> listed are not lost</td><td>✅</td></tr></tbody></table></div>
+<p><b>Naming trap:</b> the table <code>clips</code> is the editor's project unit (<code>kind</code> <code>full | blank | short | slideshow</code>), and code calls a project a "clip" (<code>clip_id</code>, <code>ClipDocument</code>). Short videos cut from an edit are <b>shorts</b> in code (<code>kind = short</code>, op <code>make_short</code>, order <code>cut_shorts</code>); user-facing copy stays "cut short clips from your finished video".</p>
   </section>
 
-  <section class="sec" id="jobs">
-    <div class="sec-head"><p class="eyebrow">3</p><h2>What Studio makes</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Deliverable</th><th>Who starts it</th><th>Squad</th><th>Paid steps</th><th>State</th></tr></thead>
-        <tbody>
-          <tr><td>AI long video</td><td>brain, founder, MCP</td><td>Long take</td><td>keyframes, shots (two cards)</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Own video, edited</td><td>founder only, hands-on</td><td>Assistant + ops</td><td>only what the founder asks for</td><td><span class="st ok">built</span>; "finished" is new</td></tr>
-          <tr><td>Shorts from a finished edit</td><td>brain (event: video approved), founder</td><td>Shorts</td><td>none (no generation)</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>Slideshow</td><td>brain (week plan), founder</td><td>Slideshow</td><td>AI images only when needed</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>Post image, cover, thumbnail</td><td>brain (a post needs one), founder</td><td>Post image</td><td>one image, or none (frame + title)</td><td><span class="st part">/image exists</span></td></tr>
-          <tr><td>Intro, explainer, 3D, B-roll</td><td>inside a video, founder or the long take</td><td>built squads</td><td>per card</td><td><span class="st ok">built</span></td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="what-studio-makes">
+    <div class="sec-head"><p class="eyebrow">§3</p><h2>What Studio makes</h2></div>
+<div class="tbl"><table><thead><tr><th>Deliverable</th><th>Who starts it</th><th>Squad</th><th>Paid steps</th><th>State</th></tr></thead><tbody><tr><td>Own video, edited</td><td>founder only, hands-on</td><td>Assistant + ops</td><td>only what the founder asks</td><td>✅ "Mark finished"</td></tr><tr><td>Shorts from a finished edit</td><td>brain (event: edit finished), founder ("Cut shorts")</td><td>Shorts</td><td>none</td><td>✅</td></tr><tr><td>Slideshow</td><td>brain (week plan: <code>write_slides</code> → <code>build_slideshow</code>), founder</td><td>Slideshow</td><td>AI images only when needed</td><td>✅</td></tr><tr><td>Post image, cover, thumbnail</td><td>—</td><td>Post image</td><td>one image, or none</td><td>🟡 no caller</td></tr><tr><td>Intro, explainer, B-roll, images, voice-over, music</td><td>inside a video, from the editor</td><td>built squads</td><td>one card each</td><td>✅</td></tr><tr><td>AI long video</td><td>brain (<code>build_video</code>), founder (<code>/video</code>), MCP</td><td>Long take</td><td>one card: keyframes, shots, voice, music</td><td>✅ built, <b>hidden</b> in the web app</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="learn">
-    <div class="sec-head"><p class="eyebrow">4</p><h2>What others teach</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead>
-        <tbody>
-          <tr><td>OpusClip (ClipAnything, Virality Score)</td><td>Clipping leader; picks moments from dialogue, visuals and sentiment; a 0–99 score built from hook, flow, value, trend</td><td>The criteria: a hook that grabs and fits the topic; logical flow with a satisfying end; one idea of value. Return them as reasons</td><td>A single "virality" number we cannot back with data; clipping other people's or linked videos (product rule)</td></tr>
-          <tr><td>Descript Underlord</td><td>Agentic co-editor working on the transcript; a saved prompt "Create Social Clips"; clips and filler removal use the same editing model</td><td>Shorts are edits, not a separate tool: same ops, same transcript, same undo; saved prompts ≈ our recipes and style skills</td><td>Credits drawn per chat turn without a price card</td></tr>
-          <tr><td>ClipsAI (MIT)</td><td>Python library: TextTiling with BERT embeddings over a word-timed transcript finds topic shifts; resize with diarization</td><td>Topic-shift segmentation for long own videos; the idea, rewritten in TypeScript over our transcript</td><td>Python frame work in the web path; WhisperX (we have Scribe)</td></tr>
-          <tr><td>Active-speaker report (2026-10-18)</td><td>Our own research: Scribe diarization + mouth openness; clip-forge's split rules</td><td>The reframe a short of a two-person recording needs</td><td>—</td></tr>
-          <tr><td>Agent Opus (internal study)</td><td>Planner + expert pipeline, keyframes first, two cards</td><td>Already in the long take; the same shape for every new squad: LLM step, code reviewer, builder</td><td>AGPL code</td></tr>
-          <tr><td>Higgsfield (internal study)</td><td>AI Employees = skills + memory; spend approval before render</td><td>Squads as named employees in the UI; price on the card before any render</td><td>Face and recreate features</td></tr>
-          <tr><td>VideoDB Director (MIT)</td><td>Open-source video agent framework; a reasoning engine composes 20+ agents; typed outputs</td><td>Typed outputs per squad (video, image, text), which our deliverables already are</td><td>A Python agent runtime</td></tr>
-          <tr><td>ReelFarm, SlideStorm, SlidesTok</td><td>TikTok slideshow tools at $19–99/month; SlidesTok turns a landing-page URL into slides</td><td>Demand is real; URL → slides is exactly what our onboarding documents already hold</td><td>Posting farms, many accounts (product rule)</td></tr>
-          <tr><td>TikTok Content Posting API</td><td>Photo posts: up to 35 images, a cover index, <code>auto_add_music</code>; unaudited apps post privately</td><td>The slideshow squad outputs a PNG set as well as an MP4</td><td>—</td></tr>
-          <tr><td>Opus remakes + Claude Design (report 2026-10-22)</td><td>Motion quality from a spec with numbers and a render → look → fix loop</td><td>The look check in every squad</td><td>—</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="what-others-teach">
+    <div class="sec-head"><p class="eyebrow">§4</p><h2>What others teach</h2></div>
+<div class="tbl"><table><thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead><tbody><tr><td>OpusClip (ClipAnything, Virality Score)</td><td>picks moments from dialogue, visuals, sentiment; 0–99 score from hook, flow, value, trend</td><td>the criteria as reasons: a hook that grabs and fits the topic, logical flow with a satisfying end, one idea of value</td><td>a single "virality" number we cannot back; clipping others' or linked videos</td></tr><tr><td>Descript Underlord</td><td>agentic co-editor on the transcript; saved prompt "Create Social Clips"</td><td>shorts are edits: same ops, transcript, undo; saved prompts ≈ recipes and style skills</td><td>credits per chat turn without a price card</td></tr><tr><td>ClipsAI (MIT)</td><td>TextTiling with BERT embeddings over a word-timed transcript; resize with diarization</td><td>topic-shift segmentation for long own videos, rewritten in TypeScript</td><td>Python frame work; WhisperX</td></tr><tr><td>Active-speaker report (2026-10-18)</td><td>Scribe diarization + mouth openness; clip-forge split rules</td><td>reframe for two-person shorts</td><td>—</td></tr><tr><td>Agent Opus (internal)</td><td>planner + expert pipeline, keyframes first, an approval before each paid stage</td><td>same squad shape: LLM step, code reviewer, builder</td><td>AGPL code</td></tr><tr><td>Higgsfield (internal)</td><td>AI Employees = skills + memory; spend approval</td><td>squads as named employees; price before render</td><td>face and recreate features</td></tr><tr><td>VideoDB Director (MIT)</td><td>open-source video agent framework, 20+ agents, typed outputs</td><td>typed outputs per squad</td><td>a Python agent runtime</td></tr><tr><td>ReelFarm, SlideStorm, SlidesTok</td><td>TikTok slideshow tools, $19–99/month; SlidesTok: landing URL → slides</td><td>demand is real; URL → slides is what our onboarding documents hold</td><td>posting farms, many accounts</td></tr><tr><td>TikTok Content Posting API</td><td>photo posts: up to 35 images, cover index, <code>auto_add_music</code>; unaudited apps post privately</td><td>slideshow outputs a PNG set as well as MP4</td><td>—</td></tr><tr><td>Opus remakes + Claude Design (report 2026-10-22)</td><td>spec with numbers + render → look → fix loop</td><td>the look check in every squad</td><td>—</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="design">
-    <div class="sec-head"><p class="eyebrow">5</p><h2>Design: one adapter, seven squads, shared tools</h2>
-      <p class="lede">Every squad has the same shape, learned from Agent Opus and already used by the long take: an LLM step, a code reviewer that sends it back once, a builder that writes ops, and a renderer. The adapter is the only door, so the brain, the founder and MCP get the same squads, cards and prices.</p></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+  <section class="sec" id="design-one-adapter-seven-squads-shared-t">
+    <div class="sec-head"><p class="eyebrow">§5</p><h2>Design: one adapter, seven squads, shared tools</h2></div>
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
 <svg class="wide" viewBox="0 0 1200 640" role="img" aria-label="Studio department: three callers reach one Studio adapter; the adapter runs seven squads; all squads share editor-core ops, generation, moderation, render and the look check; outputs are deliverables.">
 <defs><marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
 <marker id="san" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
@@ -266,61 +213,56 @@ body{margin:0}
 <path class="e" d="M600 64V86" marker-end="url(#sa)"/>
 <rect class="n-ext" x="840" y="14" width="320" height="50" rx="10"/><text class="t-b" x="1000" y="36" text-anchor="middle">MCP · founder&#x27;s Claude</text><text class="t-s" x="1000" y="54" text-anchor="middle">brings its own plans</text>
 <path class="e" d="M1000 64V86" marker-end="url(#sa)"/>
-<rect class="n-new" x="20" y="90" width="1160" height="64" rx="10"/><text class="t-b" x="38" y="114">Studio adapter · lib/departments/studio</text><text class="t-new" x="1162" y="114" text-anchor="end">NEW · extracted from MCP's studio group</text><text class="t-s" x="38" y="136">entry points from the registry · plan (price, nothing spent) → card → decide · user JWT under RLS · budget per order · writes deliverables</text>
+<rect class="n-new" x="20" y="90" width="1160" height="64" rx="10"/><text class="t-b" x="38" y="114">Studio adapter · lib/departments/studio</text><text class="t-new" x="1162" y="114" text-anchor="end">shared by the brain, the Assistant and MCP</text><text class="t-s" x="38" y="136">eight entry points · plan (one price) → card → decide · user JWT under RLS · order hold · writes deliverables</text>
 <path class="e" d="M600 154V176" marker-end="url(#sa)"/>
 <text class="t-eye" x="20" y="194">SQUADS</text>
-<rect class="n-in" x="20" y="204" width="158" height="84" rx="8"/><text class="t-b" x="30" y="224">Long take</text><text class="t-s" x="30" y="242">/video · director,</text><text class="t-s" x="30" y="257">keyframes, shots</text>
+<rect class="n-in" x="20" y="204" width="158" height="84" rx="8"/><text class="t-b" x="30" y="224">Long take</text><text class="t-s" x="30" y="242">/video (hidden) · director,</text><text class="t-s" x="30" y="257">keyframes, shots</text>
 <text class="t-chip" x="30" y="280">BUILT</text>
 <rect class="n-in" x="187" y="204" width="158" height="84" rx="8"/><text class="t-b" x="197" y="224">Intro</text><text class="t-s" x="197" y="242">/intro · writer,</text><text class="t-s" x="197" y="257">motion director</text>
 <text class="t-chip" x="197" y="280">BUILT</text>
-<rect class="n-in" x="354" y="204" width="158" height="84" rx="8"/><text class="t-b" x="364" y="224">Explainer · 3D</text><text class="t-s" x="364" y="242">/explain · clip-motion,</text><text class="t-s" x="364" y="257">clip-three</text>
+<rect class="n-in" x="354" y="204" width="158" height="84" rx="8"/><text class="t-b" x="364" y="224">Explainer</text><text class="t-s" x="364" y="242">/explain · Remotion,</text><text class="t-s" x="364" y="257">plan → preview → add</text>
 <text class="t-chip" x="364" y="280">BUILT</text>
 <rect class="n-in" x="521" y="204" width="158" height="84" rx="8"/><text class="t-b" x="531" y="224">B-roll + image</text><text class="t-s" x="531" y="242">/broll /image /animate</text><text class="t-s" x="531" y="257">placed on quotes</text>
 <text class="t-chip" x="531" y="280">BUILT</text>
 <rect class="n-new" x="688" y="204" width="158" height="84" rx="8"/><text class="t-b" x="698" y="224">Shorts</text><text class="t-s" x="698" y="242">cut from a finished</text><text class="t-s" x="698" y="257">edit, 9:16 and more</text>
-<text class="t-new" x="698" y="280">NEW</text>
+<text class="t-new" x="698" y="280">BUILT</text>
 <rect class="n-new" x="855" y="204" width="158" height="84" rx="8"/><text class="t-b" x="865" y="224">Slideshow</text><text class="t-s" x="865" y="242">brief → slides →</text><text class="t-s" x="865" y="257">MP4 + PNG set</text>
-<text class="t-new" x="865" y="280">NEW</text>
+<text class="t-new" x="865" y="280">BUILT</text>
 <rect class="n-new" x="1022" y="204" width="158" height="84" rx="8"/><text class="t-b" x="1032" y="224">Post image</text><text class="t-s" x="1032" y="242">cover, thumbnail,</text><text class="t-s" x="1032" y="257">image for a post</text>
-<text class="t-new" x="1032" y="280">NEW</text>
+<text class="t-new" x="1032" y="280">NO CALLER YET</text>
 <path class="e" d="M600 288V312" marker-end="url(#sa)"/>
 <rect class="n-dept" x="20" y="316" width="1160" height="196" rx="12"/><rect class="n-bar" x="20" y="316" width="1160" height="5" rx="2"/>
 <text class="t-eye" x="38" y="340">SHARED BY EVERY SQUAD</text>
 <rect class="n-in" x="38" y="352" width="212" height="70" rx="8"/><text class="t-b" x="48" y="372">editor-core ops</text><text class="t-s" x="48" y="390">the only write path;</text><text class="t-s" x="48" y="405">Version history per write</text>
 <rect class="n-in" x="266" y="352" width="212" height="70" rx="8"/><text class="t-b" x="276" y="372">Generation</text><text class="t-s" x="276" y="390">lib/generate + worker;</text><text class="t-s" x="276" y="405">credit hold, spec hash</text>
-<rect class="n-in" x="494" y="352" width="212" height="70" rx="8"/><text class="t-b" x="504" y="372">Moderation</text><text class="t-s" x="504" y="390">prompt before credits;</text><text class="t-s" x="504" y="405">image + 3 frames after</text>
+<rect class="n-in" x="494" y="352" width="212" height="70" rx="8"/><text class="t-b" x="504" y="372">Moderation</text><text class="t-s" x="504" y="390">Creem on the prompt;</text><text class="t-s" x="504" y="405">Haiku + fal NSFW after</text>
 <rect class="n-in" x="722" y="352" width="212" height="70" rx="8"/><text class="t-b" x="732" y="372">render_document</text><text class="t-s" x="732" y="390">clip-export on Modal;</text><text class="t-s" x="732" y="405">one export per timeline</text>
-<rect class="n-new" x="950" y="352" width="212" height="70" rx="8"/><text class="t-b" x="960" y="372">Look check</text><text class="t-s" x="960" y="390">Modal look: ≤ 12 frames</text><text class="t-s" x="960" y="405">+ a vision judge (new)</text>
+<rect class="n-new" x="950" y="352" width="212" height="70" rx="8"/><text class="t-b" x="960" y="372">Look check</text><text class="t-s" x="960" y="390">look_check: ≤ 12 frames</text><text class="t-s" x="960" y="405">+ a vision judge</text>
 <rect class="n-in" x="38" y="436" width="1124" height="60" rx="8"/><text class="t-b" x="52" y="458">Inputs every squad may read</text><text class="t-s" x="52" y="478">marketing documents and Brand Kit · media library and uploads · transcripts (Scribe words, voice-over word timings) · captured pages (capture_page) · style skills (packages/skills)</text>
 <path class="e" d="M600 512V536" marker-end="url(#sa)"/>
-<rect class="n-user" x="20" y="540" width="1160" height="84" rx="10"/><text class="t-b" x="38" y="564">Outputs: deliverables with a status</text><text class="t-s" x="38" y="586">kind = video · short · slideshow · image · each with parent_id and editor_project_id · cards in the Approval inbox · approved → Schedule</text><text class="t-s" x="38" y="606">Editing the founder's own video stays hands-on: it produces a deliverable only when the founder marks the edit finished</text>
+<rect class="n-user" x="20" y="540" width="1160" height="84" rx="10"/><text class="t-b" x="38" y="564">Outputs: deliverables with a status</text><text class="t-s" x="38" y="586">kind = video · short · slideshow · image · each pointing at what it wraps (ref_kind, ref_id) · cards in the Approval inbox · approved → Schedule</text><text class="t-s" x="38" y="606">Editing the founder's own video stays hands-on: it produces a deliverable only when the founder marks the edit finished</text>
 </svg>
 
     </div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Adapter duty</th><th>How</th></tr></thead>
-        <tbody>
-          <tr><td>Entry points</td><td>Listed in the capability registry (<code>brain.html</code> §7): <code>create_video</code>, <code>redo_keyframe</code>, <code>plan_video</code>, <code>cut_shorts</code>, <code>make_slideshow</code>, <code>make_post_image</code></td></tr>
-          <tr><td>Plan → card → decide</td><td>The split MCP already uses; the brain's cards go to the Approval inbox</td></tr>
-          <tr><td>Auth</td><td>Every call under the founder's RLS session; a brain order mints a short-lived user JWT as MCP does</td></tr>
-          <tr><td>Budget</td><td>Checks the order's remaining credits before a card offers to spend</td></tr>
-          <tr><td>Output</td><td>Writes a deliverable (<code>kind</code>, <code>parent_id</code>, <code>editor_project_id</code>) with a status, which the event rules read</td></tr>
-        </tbody>
-      </table>
-    </div>
+<p>Every squad has the long take's shape: LLM step → code reviewer (sends back once) → builder (ops) → renderer.</p>
+<ul><li><b>Callers:</b> brain (work order + brief, through the order runner <code>lib/cmo/jobs/studio-orders.ts</code>), founder in the editor (chat, buttons, slash commands), MCP (founder's Claude with its own plans).</li><li><b>Studio adapter</b> (<code>lib/departments/studio/adapter.ts</code>): plan → card → decide (brain cards go to the Approval inbox); every call under the founder's RLS session (a brain order mints a short-lived user JWT as MCP does); the order holds an allowance before its team calls a model (<code>studio_order_hold</code>); writes a deliverable with a status.</li><li><b>Squads:</b> Long take, Intro, Explainer, B-roll + image, Shorts, Slideshow, Post image.</li><li><b>Shared:</b> <code>editor-core</code> ops (only write path, Version history per write); generation (credit hold, spec hash, <code>credit_orders</code> for one-card jobs); moderation (Creem on the prompt before credits; Haiku vision + fal NSFW on the image or 3 frames after); <code>render_document</code> (one export per timeline); look check.</li><li><b>Inputs:</b> marketing documents and Brand Kit; media library and uploads; transcripts (Scribe words, voice-over word timings); captured pages; style skills.</li><li><b>Outputs:</b> deliverables <code>kind = video | short | slideshow | image</code>, cards in the Approval inbox, approved → Schedule. Editing the founder's own video produces a deliverable only when the founder marks the edit finished.</li></ul>
   </section>
 
-  <section class="sec" id="shorts">
-    <div class="sec-head"><p class="eyebrow">6</p><h2>Shorts squad</h2>
-      <p class="lede">Only from an edit the founder marked finished, in the founder's own project (product rule: "clips are cut from finished edits"). No generation credits.</p></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+  <section class="sec" id="charge-before-running-in-studio">
+    <div class="sec-head"><p class="eyebrow">§5b</p><h2>Charge before running in Studio</h2></div>
+<p>Owner rule (2026-11-05): a paid job shows one card with one price that covers everything, the founder confirms once, and the job runs to the end.</p>
+<ul><li><b><code>/video</code>, one card</b> (phase 4, <code>c9a4f40</code>). The storyboard card prices the whole video (keyframes, shots, voice-over, music). Approving opens one job (<code>credit_order_open</code>, <code>kind = long_take</code>); every piece starts at once and draws its price from the job (<code>credit_order_draw</code>); a shot names the keyframes it waits for with <code>startAfter</code> / <code>endAfter</code> (<code>20270109030000_keyframe_chaining.sql</code>), and a failed keyframe fails and refunds the shots that wait on it. The one-go cap (<code>generation_active_limit</code>, <code>20270109040000</code>) guards load, not money. The job closes when the scene is placed, and the reaper closes one left open for a day.</li><li><b>Explainers: <code>plan_explainer</code> → <code>preview_explainer</code> → <code>add_explainer</code></b> (<code>lib/agent/explainer-tool.ts</code>). <code>plan_explainer</code> shows the storyboard (say, label, picture per beat), the direction and one price before any code is written: the render, plus writing and checking the animation, billed as used up to <code>agent_3d_hold_credits()</code>. Approving holds the render price in one job (<code>kind = explainer</code>, tied to its clip and turn by <code>subject</code>). <code>preview_explainer</code> renders stills of the scene code and a layout report, so the model looks at its own work and fixes the worst problem; it runs only after the plan was approved. <code>add_explainer</code> saves the previewed code, starts the render from the approved job (no second card) and places one video layer; the voice is made inside the render job. Since #180 the Assistant re-plans in every turn, fixes the preview's issues and ends with the voice.</li><li><b>Studio order hold</b> (<code>20270109050000_studio_order_hold.sql</code>). A brain order holds <code>studio_plan_hold()</code> (5 credits) before the Director, the clip editor or the slides writer is called; usage is charged against it and the rest comes back when the order ends. Short of it the order fails as <code>needs_credits</code> and no model runs. The media of a brain video are held by their own job, confirmed on the storyboard card (<code>kind = studio_video</code>).</li><li><b>Review fixes</b> (<code>20270110010000_review_fixes.sql</code>): <code>create_generation</code> takes the credit owner's lock before a shot's keyframe rows (a keyframe finishing while its shot was created could deadlock); an explainer job draws only for its own clip and turn; an explainer turn's tokens are capped at <code>agent_3d_hold_credits()</code>.</li></ul>
+  </section>
+
+  <section class="sec" id="shorts-squad">
+    <div class="sec-head"><p class="eyebrow">§6</p><h2>Shorts squad</h2></div>
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
 <svg class="wide" viewBox="0 0 1200 324" role="img" aria-label="Two new squads as chains: shorts (segmenter, clip editor, clip reviewer, builder, renderer and look check) and slideshow (writer, reviewer, visuals, builder, renderer, two outputs).">
 <defs><marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
 <marker id="san" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
 <text class="t-new" x="20" y="30">SHORTS · from a finished edit only</text>
-<rect class="n-new" x="20" y="40" width="158" height="88" rx="8"/><text class="t-b" x="30" y="60">Segmenter</text><text class="t-s" x="30" y="78">sentence ends, beats,</text><text class="t-s" x="30" y="93">speaker turns,</text><text class="t-s" x="30" y="108">topic shifts</text><text class="t-chip" x="170" y="60" text-anchor="end">CODE</text>
+<rect class="n-new" x="20" y="40" width="158" height="88" rx="8"/><text class="t-b" x="30" y="60">Segmenter</text><text class="t-s" x="30" y="78">sentence ends,</text><text class="t-s" x="30" y="93">pauses, beats,</text><text class="t-s" x="30" y="108">15–60 s runs</text><text class="t-chip" x="170" y="60" text-anchor="end">CODE</text>
 <path class="e-new" d="M178 84H216" marker-end="url(#san)"/>
 <rect class="n-new" x="220" y="40" width="158" height="88" rx="8"/><text class="t-b" x="230" y="60">Clip editor</text><text class="t-s" x="230" y="78">ranks candidate</text><text class="t-s" x="230" y="93">ranges; reasons, not</text><text class="t-s" x="230" y="108">a &quot;virality&quot; number</text><text class="t-chip" x="370" y="60" text-anchor="end">LLM</text>
 <path class="e-new" d="M378 84H416" marker-end="url(#san)"/>
@@ -346,127 +288,53 @@ body{margin:0}
 </svg>
 
     </div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Step</th><th>AI long video</th><th>Founder's own video</th></tr></thead>
-        <tbody>
-          <tr><td>Words with times</td><td>Voice-over word timings and the plan's beats</td><td>Scribe words; diarization for who speaks</td></tr>
-          <tr><td>Segmenter (code)</td><td>Beats are the candidates</td><td>Sentence ends + pauses + speaker turns; topic shifts in the ClipsAI style for long talks</td></tr>
-          <tr><td>Clip editor (LLM)</td><td colspan="2">Ranks 5–8 candidate ranges of 15–60 s and returns 3 (the default) with a hook line, a title and reasons against OpusClip's criteria (hook, flow, value). One cheap call; the brief says the platform</td></tr>
-          <tr><td>Clip reviewer (code)</td><td colspan="2">Starts on a sentence and ends on one; a hook in the first 3 s; length per platform; no name or number split; no overlap; sends back once</td></tr>
-          <tr><td>Builder (<code>make_short</code> op)</td><td>Copy the timeline, set the workarea; already 9:16 when the video is</td><td>Copy, workarea, 9:16 with face or active-speaker reframe (report 2026-10-18)</td></tr>
-          <tr><td>Style</td><td colspan="2">A style skill (hook title, captions with emphasis, punch-ins) applied by the same op path</td></tr>
-          <tr><td>Renderer + look check</td><td colspan="2">One <code>render_document</code> per short timeline; frames from the full-size file before the card</td></tr>
-        </tbody>
-      </table>
-    </div>
+<p>Only from an edit the founder marked finished, in the founder's own project. No generation credits.</p>
+<p>Chain: Segmenter (code) → Clip editor (LLM, agent <code>shorts</code>) → Clip reviewer (code) → Builder (<code>make_short</code>) → Renderer (<code>renderShort</code>) → look check. Built in <code>lib/departments/studio/shorts/</code> (<code>squad.ts</code>, <code>cut.ts</code>).</p>
+<div class="tbl"><table><thead><tr><th>Step</th><th>What it does</th></tr></thead><tbody><tr><td>Words with times</td><td>Scribe words of the founder's video, or the voice-over word timings and beats of an AI video</td></tr><tr><td>Segmenter (code)</td><td>sentence ends and pauses give the candidates; every range comes from here, never from the model</td></tr><tr><td>Clip editor (LLM)</td><td>picks 3 (the default) of up to 8 candidates by id and writes hook, title and reason; one cheap call</td></tr><tr><td>Clip reviewer (code)</td><td>starts and ends on a whole sentence (no name or number split); 15–60 s; the hook inside the first 3 s; no overlap; sends back once</td></tr><tr><td>Builder (<code>make_short</code>)</td><td>copies the timeline, sets the workarea, frames 9:16 (face framing when the engine has it)</td></tr><tr><td>Renderer + look check</td><td>one <code>render_document</code> per short; frames of the full-size file checked before the card</td></tr><tr><td>Card</td><td>one <code>shorts_batch</code> card for all shorts of a video; approved shorts get captions and go to Schedule</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="slides">
-    <div class="sec-head"><p class="eyebrow">7</p><h2>Slideshow squad</h2>
-      <p class="lede">A slideshow is a document of timed slides, so it needs no new runtime: the same ops, renderer and export. It reuses what onboarding already knows (product, audience, voice) and the Brand Kit.</p></div>
-    <div class="grid2">
-      <div class="card b"><span class="k">Inputs and rules</span>
-        <ul>
-          <li>Brief from the week plan, the marketing documents, the Brand Kit, captured pages of the founder's own site (<code>capture_page</code>).</li>
-          <li>Writer: 5–10 slides; slide 1 is the hook; one idea per slide; the last slide is a call to action; No AI Slop applies as guidance (Writer department).</li>
-          <li>Visuals: the founder's own screenshots and captured pages first; an AI image only when a slide needs one, moderated, never with text inside the image.</li>
-          <li>Text is always an editor layer, so it stays editable and sharp.</li>
-        </ul>
-      </div>
-      <div class="card b"><span class="k">Two outputs from one document</span>
-        <ul>
-          <li><b>MP4</b> for Reels and Shorts: timed slides with transitions and an optional music bed.</li>
-          <li><b>PNG set</b> for TikTok photo mode (up to 35 images, cover index, recommended music by TikTok), Instagram and LinkedIn carousels: one still per slide drawn by the same renderer.</li>
-          <li>Both formats share approval: one card, the slides side by side.</li>
-        </ul>
-      </div>
-    </div>
-    <div class="card g"><span class="k">Decided 2026-10-26: one editor core, a Slides view</span>
-      <p>Owner's choice, following Canva (one editor for presentations and video, different views) and CapCut (photo mode and templates inside the main app). Not a second editor: a separate page with its own renderer would rebuild render, export, Brand Kit, captions and moderation, and CLAUDE.md allows one editor runtime.</p>
-      <ul>
-        <li><b>Entry:</b> "New" offers New video and New slideshow. A slideshow is a project of a new kind <code>slideshow</code> (the <code>clips</code> table allows <code>full | blank</code> today, so one migration adds it).</li>
-        <li><b>Slides view by default:</b> a slide strip on the left (add, delete, drag to reorder), the frame in the middle, text, image, colour and per-slide duration on the right. The timeline is hidden; "Timeline" switches to the full editor for transitions and music.</li>
-        <li><b>Same document underneath:</b> each slide is a timed span on one timeline, changed only through new <code>editor-core</code> ops (<code>add_slide</code>, <code>move_slide</code>, <code>set_slide_duration</code>…), so the Assistant and MCP get them too. MP4 through <code>render_document</code>; the PNG set is one still per slide from the same renderer.</li>
-        <li><b>From the brain:</b> a slideshow lands in the Approval inbox; the card allows quick text edits per slide, and "Open in Slides" for more.</li>
-        <li><b>Size:</b> Slides view, slide ops and PNG export M; entry and project kind S.</li>
-      </ul>
-    </div>
+  <section class="sec" id="slideshow-squad">
+    <div class="sec-head"><p class="eyebrow">§7</p><h2>Slideshow squad</h2></div>
+<p>A slideshow is a document of timed slides: same ops, renderer, export; no new runtime. Owner decision 2026-10-26: one editor core with a Slides view, not a second editor.</p>
+<p>Chain: Slides writer (<code>write_slides</code>, agent <code>slides_writer</code>) → Builder (slide ops) → Renderer → look check.</p>
+<ul><li>Inputs: brief from the week plan, marketing documents, Brand Kit, captured pages of the founder's own site.</li><li>Writer: 5–10 slides; slide 1 is the hook; one idea per slide; the last slide is a call to action; no-ai-slop in the prompt.</li><li>Visuals: the founder's screenshots and captured pages first; an AI image only when needed, moderated, never with text inside the image. Text is always an editor layer.</li><li>Outputs from one document: <b>MP4</b> (timed slides) through <code>render_document</code> and a <b>PNG set</b> (one still per slide) through <code>render_stills</code>; one <code>slideshow</code> card for both, with quick text edits per slide and "Open in Slides".</li><li>Editor: a project of kind <code>slideshow</code>; the Slides view (<code>components/editor/slides</code>) with the slide ops of <code>editor-core/src/ops/slides.ts</code>, so the Assistant and MCP get them too.</li></ul>
   </section>
 
-  <section class="sec" id="image">
-    <div class="sec-head"><p class="eyebrow">8</p><h2>Post image squad</h2></div>
-    <div class="prose">
-      <p>For a post that needs a picture, a cover for a video, or a YouTube thumbnail (roadmap E4.2). Prefer a frame of the founder's own video or a captured page with a title layer; generate an image only when none fits. Aspect per platform; text is a layer; Brand Kit fonts and colours. The <code>/image</code> command already makes the image; what is new is the recipe, the title layer and the deliverable.</p>
-    </div>
+  <section class="sec" id="post-image-squad">
+    <div class="sec-head"><p class="eyebrow">§8</p><h2>Post image squad</h2></div>
+<p>For a post that needs a picture, a video cover or a YouTube thumbnail. A frame of the founder's video or a captured page with a title layer, Brand Kit fonts and colours, one still (<code>build_post_image</code>). It makes a one-slide edit in the job of the video it takes a frame from, and writes an <code>image</code> deliverable linked to its post (<code>deliverables.post_id</code>); it has no card of its own, the post's card shows the image. Built and tested in the acceptance runs, but nothing creates the order yet.</p>
   </section>
 
-  <section class="sec" id="quality">
-    <div class="sec-head"><p class="eyebrow">9</p><h2>Quality gates</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Gate</th><th>Where</th><th>State</th></tr></thead>
-        <tbody>
-          <tr><td>Moderation of prompts and outputs</td><td><code>lib/generate/moderation.ts</code>, <code>opencmo/ai/moderation.py</code></td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Garbled text on keyframes</td><td>long take F9</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>No double payment</td><td>spec hash, request id</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Look check</td><td>Modal <code>look</code> draws up to 12 frames of the full-size export; a vision judge answers fixed questions: captions inside the frame, no black or frozen frames, text readable, sound present. A failure goes back to the squad once, then to the card with a note</td><td><span class="st miss">new</span> (CLAUDE.md "verify by looking", automated)</td></tr>
-          <tr><td>Brand fit</td><td>code: fonts and colours from the Brand Kit, logo placement</td><td><span class="st part">apply_brand exists</span></td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="quality-gates">
+    <div class="sec-head"><p class="eyebrow">§9</p><h2>Quality gates</h2></div>
+<div class="tbl"><table><thead><tr><th>Gate</th><th>Where</th><th>State</th></tr></thead><tbody><tr><td>Moderation</td><td>Creem's Moderation API on the prompt before credits (<code>lib/generate/moderation.ts</code>, again in <code>opencmo/ai/moderation.py</code>); Haiku vision + fal NSFW on the image or 3 video frames, against <code>packages/contracts/creem-policy.json</code></td><td>✅</td></tr><tr><td>Garbled text on keyframes</td><td>the long take's text check</td><td>✅</td></tr><tr><td>No double payment</td><td>spec hash, request id, <code>credit_orders</code></td><td>✅</td></tr><tr><td>Look check</td><td>worker task <code>look_check</code> on the full-size export, before any card: ffmpeg finds black, frozen and silent stretches; a Claude vision judge (<code>look_judge.py</code>) answers two fixed questions on up to 12 frames (captions inside the frame, text readable). A failure goes back to the squad once (<code>sent_back</code>), then to the card with a note; the judge is a hint, never a gate</td><td>✅</td></tr><tr><td>Brand fit</td><td>fonts, colours, logo from the Brand Kit</td><td>✅ <code>apply_brand_kit</code></td></tr></tbody></table></div>
   </section>
 
   <section class="sec" id="evals">
-    <div class="sec-head"><p class="eyebrow">10</p><h2>How we know Studio works</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Squad</th><th>Measure</th></tr></thead>
-        <tbody>
-          <tr><td>Long take</td><td>The plan's Task 0 and Task 8 frames: frozen shots, visible jumps at shot boundaries, garbled text; credits and wall time per 60 s</td></tr>
-          <tr><td>Shorts</td><td>Shorts approved as is; code checks pass rate (hook in 3 s, whole sentences); views per short from <code>post_metrics</code></td></tr>
-          <tr><td>Slideshow</td><td>Slideshows approved as is; text fits on every slide; time from brief to card</td></tr>
-          <tr><td>All</td><td>Look check pass rate; credits per approved deliverable; the Assistant's 22 eval tasks stay green</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <div class="sec-head"><p class="eyebrow">§10</p><h2>Evals</h2></div>
+<div class="tbl"><table><thead><tr><th>Squad</th><th>Measure</th></tr></thead><tbody><tr><td>Long take</td><td>frames of the acceptance video: frozen shots, jumps at shot boundaries, garbled text; credits and wall time per 60 s</td></tr><tr><td>Shorts</td><td>approved as is; code-check pass rate (whole sentences, length); views per short from <code>post_metrics</code></td></tr><tr><td>Slideshow</td><td>approved as is; text fits on every slide; time from brief to card</td></tr><tr><td>All</td><td>look check pass rate; credits per approved deliverable; the Assistant's 42 eval tasks stay green</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="phases">
-    <div class="sec-head"><p class="eyebrow">11</p><h2>Build phases</h2></div>
-    <ol class="order">
-      <li><span><b>S0 · Finish the long take.</b> Its open Tasks 0, 1 and 8 and the release: one real 60 s OpenCMO video on production. Everything after this assumes the long take works for real.</span></li>
-      <li><span><b>S1 · Studio adapter + finished state + named-timeline export.</b> Extract MCP's studio group into <code>lib/departments/studio</code>, MCP keeps its behaviour; add "finished" (card 3 or a button) and export of a timeline that is not the open one.</span></li>
-      <li><span><b>S2 · Shorts squad.</b> Segmenter, clip editor, reviewer, <code>make_short</code>, render; first on AI long videos (beats already known), then on the founder's own finished edits.</span></li>
-      <li><span><b>S3 · Slideshow and post image squads.</b> MP4 + PNG set from one document.</span></li>
-      <li><span><b>S4 · Look check + Studio evals.</b> The vision judge on the existing <code>look</code> function; measures on the dashboard.</span></li>
-    </ol>
-    <p class="prose-note">S0 is on the editor roadmap already. S1–S2 are editor work that makes marketing videos (every video → shorts), so they pass the spearhead test; they also line up with E4.1 (export set) and E4.5 (hand-off to Post). The brain meets Studio at the brain's B3, which needs S1.</p>
+  <section class="sec" id="build-phases">
+    <div class="sec-head"><p class="eyebrow">§11</p><h2>Build phases</h2></div>
+<p>All built: <b>S0</b> the long take · <b>S1</b> the Studio adapter, the finished state, named-timeline export · <b>S2</b> the Shorts squad · <b>S3</b> the Slideshow and Post image squads · <b>S4</b> the look check and Studio evals. Charge before running reached Studio in phases 2–6 of the 2026-11-06 plan (§5b).</p>
+<p>What is left, ranked by the CMO loop (owner, 2026-11-08): hide <code>/video</code> (plan S2.4) and remove its leftovers (S2.8); a caller for the post image squad; then, in the editor's own plans, the long take's release and showing <code>/video</code> again.</p>
+<p><b>History.</b> Until 2026-11-08 Studio was ranked by the editor strategy ("Shorts first, every OpenCMO video becomes 3 shorts, then Slideshow, then Post image"), and the long take used two cards (storyboard, then a contact sheet with the exact price). The contact sheet was removed on 2026-11-06.</p>
   </section>
 
-  <section class="sec" id="decide">
-    <div class="sec-head"><p class="eyebrow">12</p><h2>Decisions for the owner</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>Shorts from the founder's own finished edits too, or only from AI long videos?</td><td><b>Decided 2026-10-26: both.</b> AI videos first (S2), own edits once "finished" exists; the source is always a finished edit in the founder's project</td></tr>
-          <tr><td>2</td><td>How many shorts per video by default?</td><td><b>Decided: 3</b></td></tr>
-          <tr><td>3</td><td>Approve shorts one by one or as a batch?</td><td><b>Decided: as a batch.</b> One card, one approval for all shorts of a video</td></tr>
-          <tr><td>4</td><td>Name in code: <code>short</code> instead of <code>clip</code>?</td><td><b>Decided: <code>short</code></b> (naming trap, section 2)</td></tr>
-          <tr><td>5</td><td>Slideshow outputs: MP4 and PNG set?</td><td>Both from one document</td></tr>
-          <tr><td>—</td><td>Slideshow inside the editor or a separate page?</td><td><b>Decided:</b> one editor core with a Slides view and its own "New slideshow" entry (section 7)</td></tr>
-          <tr><td>6</td><td>Run the look check on every render, or only before a card?</td><td><b>Open.</b> Recommendation: only before a card; it costs a few vision calls per deliverable</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="decisions-for-the-owner">
+    <div class="sec-head"><p class="eyebrow">§12</p><h2>Decisions for the owner</h2></div>
+<div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Decision</th></tr></thead><tbody><tr><td>1</td><td>Shorts from the founder's own finished edits too?</td><td><b>decided 2026-10-26: both</b>; the source is always a finished edit in the founder's project</td></tr><tr><td>2</td><td>Shorts per video by default</td><td><b>decided: 3</b></td></tr><tr><td>3</td><td>Approve one by one or as a batch?</td><td><b>decided: as a batch</b>, one card</td></tr><tr><td>4</td><td>Name in code <code>short</code> instead of <code>clip</code>?</td><td><b>decided: <code>short</code></b></td></tr><tr><td>5</td><td>Slideshow outputs MP4 and PNG set?</td><td><b>built</b>: both from one document</td></tr><tr><td>—</td><td>Slideshow inside the editor or a separate page?</td><td><b>decided</b>: one editor core, a Slides view</td></tr><tr><td>6</td><td>Look check on every render or only before a card?</td><td><b>built</b>: only before a card</td></tr><tr><td>7</td><td><code>/video</code></td><td><b>decided 2026-11-08: hidden</b> in the web app, the landing page and the week plan; the code, MCP tool and evals stay</td></tr></tbody></table></div>
   </section>
 
-  <footer class="foot" id="sources">
-    <p><b>Sources.</b> Code: <code>packages/editor-core</code>, <code>packages/clip-export</code>, <code>apps/web/lib/agent/</code> (<code>slash.ts</code>, <code>create-video.ts</code>, <code>long-take.ts</code>, <code>video-team.ts</code>, <code>scope.ts</code>), <code>packages/mcp-server/src/groups/studio.ts</code>, <code>packages/engine/modal_app.py</code> (<code>look</code>), <code>packages/contracts/ai-models.json</code>, <code>supabase/schema/current.sql</code> (<code>clips</code>); plans <code>docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md</code>, <code>2026-10-23-ai-long-take-plan.md</code>; reports <code>docs/research/editor/</code>.</p>
-    <p>Outside: <a href="https://help.opus.pro/docs/article/virality-score">OpusClip Virality Score</a> · <a href="https://www.opus.pro/blog/best-video-clipping-tools">OpusClip blog</a> · <a href="https://help.descript.com/hc/en-us/articles/36803785502221-Underlord-beta-Your-AI-co-editor-in-Descript">Descript Underlord</a> · <a href="https://github.com/ClipsAI/clipsai">ClipsAI (MIT)</a> · <a href="https://www.clipsai.com/references/clip">ClipsAI clip reference</a> · <a href="https://github.com/video-db/Director">VideoDB Director</a> · <a href="https://ai.g2.com/marketplace/tools/reelfarm">ReelFarm</a> · <a href="https://ai.g2.com/marketplace/tools/slidestorm">SlideStorm</a> · <a href="https://trustmrr.com/startup/slidestok">SlidesTok</a> · <a href="https://developers.tiktok.com/doc/content-posting-api-reference-photo-post">TikTok photo post API</a>.</p>
-    <p>OpusClip's criteria come from its help page as quoted in search results (the page did not load here); slideshow tool prices come from directory listings and are unverified.</p>
-  </footer>
+  <section class="sec" id="sources">
+    <div class="sec-head"><p class="eyebrow">Sources</p><h2>Sources</h2></div>
+<p>Code: <code>packages/editor-core</code>, <code>packages/clip-export</code>, <code>apps/web/lib/agent/</code> (<code>slash.ts</code>, <code>create-video.ts</code>, <code>long-take.ts</code>, <code>video-team.ts</code>, <code>scope.ts</code>), <code>packages/mcp-server/src/groups/studio.ts</code>, <code>packages/engine/modal_app.py</code> (<code>look</code>), <code>packages/contracts/ai-models.json</code>, <code>supabase/schema/current.sql</code> (<code>clips</code>); plans <code>docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md</code>, <code>2026-10-23-ai-long-take-plan.md</code>; reports <code>docs/research/editor/</code>.</p>
+<p>Outside:</p>
+<ul><li><a href="https://help.opus.pro/docs/article/virality-score">https://help.opus.pro/docs/article/virality-score</a> (quoted via search results; the page did not load here)</li><li><a href="https://www.opus.pro/blog/best-video-clipping-tools">https://www.opus.pro/blog/best-video-clipping-tools</a></li><li><a href="https://help.descript.com/hc/en-us/articles/36803785502221-Underlord-beta-Your-AI-co-editor-in-Descript">https://help.descript.com/hc/en-us/articles/36803785502221-Underlord-beta-Your-AI-co-editor-in-Descript</a></li><li><a href="https://github.com/ClipsAI/clipsai">https://github.com/ClipsAI/clipsai</a> (MIT), <a href="https://www.clipsai.com/references/clip">https://www.clipsai.com/references/clip</a></li><li><a href="https://github.com/video-db/Director">https://github.com/video-db/Director</a></li><li><a href="https://ai.g2.com/marketplace/tools/reelfarm">https://ai.g2.com/marketplace/tools/reelfarm</a>, <a href="https://ai.g2.com/marketplace/tools/slidestorm">https://ai.g2.com/marketplace/tools/slidestorm</a>, <a href="https://trustmrr.com/startup/slidestok">https://trustmrr.com/startup/slidestok</a> (prices unverified)</li><li><a href="https://developers.tiktok.com/doc/content-posting-api-reference-photo-post">https://developers.tiktok.com/doc/content-posting-api-reference-photo-post</a></li></ul>
+  </section>
+
+  <footer class="foot"><p>Markdown twin for agents: <code>studio.md</code>. Both pages say the same thing; change them together.</p></footer>
 </div>
 </body>
 </html>
