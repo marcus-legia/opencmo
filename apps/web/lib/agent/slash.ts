@@ -71,7 +71,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: "explain",
     label: "Explain a concept",
     hint: "A narrated animated explainer, 15-90 s",
-    directive: 'read_guide "explainer" and follow its steps: choose the art direction first (list_motion_styles, get_motion_style), then call plan_explainer with the storyboard (say, label and visual of every beat), the direction and the voice: the user approves it and its one price before any code or preview. For a new video the user has no look for, after the approval preview 2-3 directions with preview_explainer variants and let them pick',
+    directive: 'read_guide "explainer" and follow its steps: choose the art direction first (list_motion_styles, get_motion_style), then call plan_explainer with the storyboard (say, label and visual of every beat), the direction and the voice: the user approves it and its one price before any code or preview. An approval from an earlier turn has ended: this turn starts with plan_explainer, never with scene code. For a new video the user has no look for, after the approval preview 2-3 directions with preview_explainer variants and let them pick',
     requires: ["plan_explainer"],
   },
   ...(styleReady ? [STYLE_COMMAND] : []),

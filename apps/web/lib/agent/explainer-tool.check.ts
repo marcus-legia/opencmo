@@ -31,6 +31,8 @@ import {
   runPreviewExplainer,
   SUBJECT_CHECK,
   type MotionJob,
+  ISSUES_GATE,
+  previewIssuesGate,
 } from "./explainer-tool";
 
 async function main() {
@@ -333,6 +335,17 @@ async function main() {
   );
 
   console.log("explainer-tool.check: ok");
+}
+
+// add_explainer is sent back once while the last preview of its code lists issues; never twice.
+{
+  const preview = (code: string, issues: string[]) => ({ name: "preview_explainer", status: "done", input: { code }, content: { text: JSON.stringify({ ok: true, issues }) } });
+  const empty = "The frame is more than 85% empty at 20.0 s: grow or add the visual.";
+  const held = previewIssuesGate([preview("A", [empty])], "A");
+  assert.ok(held?.startsWith(ISSUES_GATE) && held.includes("85% empty"), `held: ${held}`);
+  assert.equal(previewIssuesGate([preview("A", [])], "A"), null, "a clean preview goes through");
+  assert.equal(previewIssuesGate([preview("B", [empty]), preview("A", [])], "A"), null, "only the preview of this code counts");
+  assert.equal(previewIssuesGate([{ name: "add_explainer", status: "failed", input: { code: "A" }, content: { text: JSON.stringify({ error: held }) } }, preview("A", [empty])], "A"), null, "only once a turn");
 }
 
 void main().catch((error) => {
