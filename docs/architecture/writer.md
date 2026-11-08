@@ -1,40 +1,43 @@
 # Writer: the words department
 
-Status: **proposed** (2026-10-26), research before build. Markdown twin of [`writer.html`](writer.html), written for
-agents; the two must say the same thing. Parent pages: [`ai-cmo.md`](ai-cmo.md), [`brain.md`](brain.md),
-[`studio.md`](studio.md).
+Status: **built** (`main` at `4f70a59`, 2026-11-08). Designed 2026-10-26, built in phases W0–W4 (P1–P6) and the CMO
+review (#169–#180). Markdown twin of [`writer.html`](writer.html), written for agents; the two must say the same
+thing. Parent pages: [`ai-cmo.md`](ai-cmo.md), [`brain.md`](brain.md), [`studio.md`](studio.md).
 
-Writer writes every word that goes out: posts, captions, video titles and descriptions, the brief a video starts from,
-the text on slides; in the founder's voice, from the founder's documents, through code checks and a second model
-before a card.
+Writer writes every word that goes out: posts, threads, captions, video titles and descriptions, the brief a video
+starts from, the text on slides; in the founder's voice, from the founder's documents, through code checks and a
+second look before a card. In the owner's sketch of 2026-11-08 Writer is step 2: words are written, and approved,
+before anything is built from them.
 
 ## 1. Verdict
 
-**A strong core, only for X:** three versions with different hooks → code checks → a checker on the provider that did
-not draft → one fix → a card (`draft-post.ts`); code checks (280 characters, words to avoid, numbers of 10 or more must
-be in the documents, at most two hashtags; `check-post.ts`); a learning loop (version chosen, similarity, edit mode;
-`edit-taxonomy.ts`, `classify-edits.ts`); evals with a cascade judge (`lib/cmo/jobs/eval`).
+**Built:** a writer agent per platform profile (X, Threads, LinkedIn posts; Instagram, TikTok, YouTube captions), each
+drafting three versions → code checks per profile → the checker (Claude, in a separate context, so the draft does not
+persuade it) → one fix → a card (`draft-post.ts`); X threads (`draft-thread.ts`); the video brief and slide text for
+Studio; no-ai-slop as guidance in every prompt that writes for a reader; voice learned from approvals and edits; a
+learning loop and evals with a cascade judge.
 
-**Add, in order:** No AI Slop as writing guidance (a skill, not a code rule) and the fix to `x-writing.md`; platform
-profiles as data (one idea → X, Threads, LinkedIn); voice learned into memory from recent posts and edits (it follows
-the founder when their style changes); captions and video words for Studio.
+**Not built:** articles (later; owner, 2026-11-08: after the loop works for posts, slides and clips).
 
-## 2. Writer today (`main`, `eb858ca`)
+## 2. Writer as built (`main`, `4f70a59`)
+
+State: ✅ done · 🟡 partial · ❌ not built.
 
 | Part | Where | What it does | State |
 |---|---|---|---|
-| Agents | `lib/cmo/agents/registry.ts` | `x_writer` (X posts), `writer` (intro words), `director` (long-take script), `checker` | built |
-| X draft job | `jobs/draft-post.ts` | 3 versions with an angle each and a rationale; checker on the other provider; one fix; card with alternates | built |
-| Code checks | `jobs/check-post.ts` | length, words to avoid, unknown numbers, hashtags | built (X only) |
-| Skills | `lib/cmo/skills/` | `x-writing`, `content-calendar`, `short-video` (captions per platform) + 39 library playbooks for the CMO chat | built |
-| Voice | `documents.ts` (strategy) | a voice sentence and words to avoid; no samples of the founder's writing | partial |
-| Learning | `cmo_draft_outcomes`, `edit-taxonomy.ts` | version chosen, similarity, 8 edit modes; skip reasons → memory | built |
-| Other platforms, captions, YouTube text, video brief, slide text, No AI Slop | none | — | missing |
+| Agents | `lib/cmo/agents/registry.ts` | `x_writer`, `threads_writer`, `linkedin_writer`, `instagram_writer`, `tiktok_writer`, `youtube_writer`, `brief_writer`, `slides_writer`, `writer` (intro words), `director` (long-take script), `checker` (Haiku) | ✅ |
+| Post draft job | `jobs/draft-post.ts`, `lib/cmo/writer/` | 3 versions with an angle each and a rationale; the checker in a separate context; one fix; a card with alternates | ✅ X, Threads, LinkedIn |
+| X threads | `jobs/draft-thread.ts` | a thread when the founder asks for one | ✅ |
+| Words for Studio | `write_caption`, `write_video_brief`, `write_slides` (`lib/cmo/writer/jobs.ts`) | captions per platform (hashtags only here), YouTube title and description, the video brief, slide text | ✅ |
+| Code checks | `jobs/check-post.ts`, `lib/cmo/writer/checks.ts` | length per profile, words to avoid, numbers that must be in the documents, no links, hashtags per profile | ✅ |
+| Platform profiles | `packages/contracts/platforms.json`, `lib/cmo/platforms.ts` | one data file read by the prompts, the checks, the cards and SQL's `platform_profile()` | ✅ |
+| no-ai-slop | `lib/cmo/skills/no-ai-slop.md`, `NO_AI_SLOP`, `no-ai-slop.check.ts` | the guide in every prompt that writes for a reader; the check fails when a writing prompt does not carry it | ✅ |
+| Voice | `voice_notes_for`, `cmo_memories`, `cmo_lessons` | notes learned from approvals and edits, newer win | ✅ |
+| Learning | `cmo_draft_outcomes`, `edit-taxonomy.ts`, `classify-edits.ts` | version chosen, similarity, edit modes; skip reasons → memory; repeated edit modes → a correction card | ✅ |
+| Articles | — | — | ❌ later |
 
-**Two conflicts to fix in the same PR as No AI Slop:** `x-writing.md` lines 13, 16, 23 teach "The real reason
-[outcome] happens isn't what you think", "[Common advice] is wrong. Here's why:" and "the last post sums up" (binary
-contrast, colon reveal, recap ending). The fake drafts in `draft-post.ts` (checks, e2e) open with "Most founders skip
-this:" (faux-insight setup); change them too.
+The two conflicts of 2026-10-26 are fixed: `x-writing.md` no longer teaches the binary contrast, colon reveal and recap
+ending, and the fake drafts no longer open with a faux-insight setup.
 
 ## 3. What others teach
 
@@ -51,34 +54,36 @@ this:" (faux-insight setup); change them too.
 ## 4. Design: one pipeline, many platforms and kinds
 
 - **Inputs, all feeding the writer:** brief (work order: idea, angle, platforms, due day); documents (product,
-  strategy with voice and words to avoid, competitors); voice memory (new); corrections (tier 0 memory, new); platform
-  profile (data, new).
-- **Chain:** Writer (LLM; `x_writer` today; one agent per platform profile; 3 versions) → code checks (length, words
-  to avoid, numbers; no links and no hashtags in posts) → checker (other provider; facts and voice; No AI Slop as
-  advice, not a gate) → a failed check goes back to the writer once → card (versions side by side; approve, edit, skip).
-- **Learning loop** (built for X, extend to every kind): approved as is → a voice note in memory; edited → similarity + edit
-  mode; skipped → memory; repeated edit modes → a correction card on Sunday → tier 0 memory read first next time.
+  strategy with voice and words to avoid, competitors); voice notes; corrections (tier 0 memory); platform profile
+  (data).
+- **Chain:** Writer (LLM; one agent per platform profile; 3 versions) → code checks (length, words to avoid, numbers;
+  no links; hashtags per profile) → checker (Claude Haiku in a separate context; facts and voice; no-ai-slop as
+  advice, not a gate) → a failed check goes back to the writer once → card (versions side by side; approve, edit,
+  skip).
+- **Learning loop**, for every kind: approved as is → a voice note; edited → similarity + edit mode; skipped → memory;
+  repeated edit modes → a correction card, read first next time.
 - Per-platform and per-founder differences are data; the prompt stays stable (prompt cache).
 - **Who writes the video script:** Writer owns words that go out as text; Studio's Director owns long-take beats. For a
   video, Writer hands Studio a **video brief** (angle, three hook options, key points, call to action) and later writes
-  captions, title and description from the finished video. The Slideshow squad's writer step calls Writer's
-  `write_slides` capability.
+  captions, title and description from the finished video. The Slideshow squad's writer step is Writer's
+  `write_slides`.
 - **Over MCP** the founder's Claude can write instead (`checkRubric()` in `steps.ts`); code checks stay the last gate.
 
-## 5. No AI Slop in Writer: guidance, not a rule
+## 5. no-ai-slop in Writer: guidance, not a rule
 
-Decided 2026-10-26: style changes, and a founder's own voice may use a phrase the list warns against. No AI Slop is
-advice the writer reads, never a code check and never a gate that drops a draft.
+Decided 2026-10-26, and since 2026-11-05 a product rule: every word a person reads or hears goes through no-ai-slop.
+It is advice the writer reads, never a code check on a draft and never a gate that drops one.
 
 | Layer | What |
 |---|---|
-| Skill | `lib/cmo/skills/no-ai-slop.md` (MIT notice in `LICENSE.md` and `THIRD_PARTY_NOTICES.md`): editing principles and patterns to watch, without its chat questions or output format; loaded by `x_writer`, `sales`, CMO chat; ~1,700 words, cached |
-| Checker | reads the same skill as advice; may suggest a fix in its one round; a pattern alone never drops a version |
-| Founder's voice wins | when voice memory shows the founder writes a certain way, that beats the skill |
-| Measure | approve-as-is rate and edit modes before and after (`cmo:eval`, production) |
+| Skill | `lib/cmo/skills/no-ai-slop.md` (MIT notice in `LICENSE.md` and `THIRD_PARTY_NOTICES.md`): editing principles and patterns to watch, without its chat questions or output format; embedded as `NO_AI_SLOP` in every writing prompt (posts, captions, briefs, slides, plans, replies, scripts, on-screen text) |
+| Check on prompts | `lib/cmo/skills/no-ai-slop.check.ts` fails when a prompt that writes for a reader does not carry the guide; a new writing prompt is added there |
+| Checker | reads the same guide as advice; may suggest a fix in its one round; a pattern alone never drops a version |
+| Founder's voice wins | when voice notes show the founder writes a certain way, that beats the guide |
+| Measure | approve-as-is rate and edit modes (`cmo:eval`, production) |
 
 Code checks stay only for facts and product rules: length, the strategy's words to avoid, numbers that must be in the
-documents, no links and no hashtags in posts.
+documents, no links, hashtags per platform profile.
 
 ## 6. Voice: learned into memory, not fixed
 
@@ -93,60 +98,58 @@ brain keeps learning it from what the founder approves and how they edit, and ne
 
 ## 7. Platform profiles
 
-One data file (for example `packages/contracts/platforms.json`) read by Writer's prompt, the code checks, Schedule and
-the cards; numbers carry headroom.
+`packages/contracts/platforms.json`, read by Writer's prompts, the code checks, Schedule, the cards and SQL's
+`platform_profile()`.
 
-**Decided 2026-10-26: no links in any post; no hashtags in posts.** Hashtags go only on videos (captions for a video,
-short or slideshow on TikTok, Instagram, YouTube).
+**Decided 2026-10-26: no links in any post; no hashtags in posts.** Hashtags go only on video captions.
 
-| Platform | Limit | Visible before "more" | Tone |
-|---|---|---|---|
-| X | 280 | all | one idea, a clear first line |
-| Threads | 500 | all | conversational |
-| LinkedIn | 3,000 | ≈210 desktop, ≈140 phone | longer, short paragraphs, hook before the cut |
-| Instagram caption (video) | 2,200 | ≈125 | hook in the first line |
-| TikTok caption (video) | 2,200 (safe through APIs) | short | short, matches the video's hook |
-| YouTube | title 100, description 5,000 | title | searchable title; chapters later |
+| Profile | Kind | Limit | Visible before "more" | Hashtags |
+|---|---|---|---|---|
+| `x` | post | 280 | all | 0 |
+| `threads` | post | 500 | all | 0 |
+| `linkedin` | post | 3,000 | 140 | 0 |
+| `instagram_caption` | caption | 2,200 | 125 | up to 5 |
+| `tiktok_caption` | caption | 2,200 | 100 | up to 5 |
+| `youtube` | title + description | title 100, description 5,000 | title | up to 3 |
 
 ## 8. What Writer makes
 
-| Kind | For | Order kind | State |
+| Kind | For | Job kind | State |
 |---|---|---|---|
-| post | X, then Threads and LinkedIn from the same idea | `post_draft` | X built |
-| caption | a video, short or slideshow, one per platform | `write_caption` | new |
-| YouTube title + description | a long video | `write_caption` (YouTube profile) | new |
-| video brief | Studio's Director (angle, 3 hooks, key points, CTA) | `write_video_brief` | new |
-| slide text | Studio's Slideshow squad | `write_slides` | new |
-| X thread, long draft | X threads; a long post or article copied out | `post_draft` (thread), `write_article` | later |
+| post | X, Threads, LinkedIn from the same idea | `post_draft` | ✅ |
+| X thread | when the founder asks for one | `post_draft` (thread) | ✅ |
+| caption | a video, short or slideshow, one per platform | `write_caption` | ✅ |
+| YouTube title + description | a long video | `write_caption` (YouTube profile) | ✅ |
+| video brief | Studio's Director (angle, 3 hooks, key points, CTA) | `write_video_brief` | ✅ |
+| slide text | Studio's Slideshow squad | `write_slides` | ✅ |
+| article | a long post or article copied out | — | ❌ later |
 
 ## 9. Evals
 
-Approved as is per platform and kind (`cmo_draft_outcomes`, extended) · edit mode mix (fewer WRONG_VOICE and
-TOO_SALESY as voice memory grows) · code-check pass rate per platform · eval cases per platform in
-`lib/cmo/jobs/eval` (Threads, LinkedIn, captions) · views per post per platform and hook
-type (`post_metrics`).
+Approved as is per platform and kind (`cmo_draft_outcomes`) · edit mode mix (fewer WRONG_VOICE and TOO_SALESY as voice
+notes grow) · code-check pass rate per platform · eval cases per platform in `lib/cmo/jobs/eval` · views per post per
+platform and hook type (`post_metrics`).
 
 ## 10. Build phases
 
-- **W0** No AI Slop as guidance + post rules: the skill, `x-writing.md` and fake-draft fixes, no links and no hashtags
-  in posts as code checks, evals before and after. Small, no migration.
-- **W1** Platform profiles + Threads and LinkedIn posts: the data file; per-platform versions; checks per profile.
-- **W2** Voice memory: voice notes from approvals and edits in `cmo_memories`, newer wins; the Sunday lesson;
-  corrections from repeated edits.
-- **W3** Words for Studio: captions per platform, YouTube title and description, video brief, slide text.
-- **W4** Threads on X and long drafts, when founders ask.
+All built: **W0** no-ai-slop and post rules · **W1** platform profiles, Threads and LinkedIn posts · **W2** voice
+notes and corrections · **W3** words for Studio (captions, YouTube text, video brief, slide text) · **W4** X threads.
+Articles are left for later.
+
+What is left, ranked by the CMO loop (owner, 2026-11-08): the first week's drafts within minutes of paying (plan
+S2.2); a week plan without AI video, so Writer's video briefs serve the founder's own videos and slideshows (S2.5).
 
 ## 11. Decisions for the owner
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Voice | **decided 2026-10-26**: no fixed voice profile; learned into memory from recent approvals and edits, newer wins |
+| 1 | Voice | **decided 2026-10-26**: no fixed voice profile; learned from recent approvals and edits, newer wins |
 | 2 | Writing samples at onboarding | **decided**: no |
 | 3 | Links in posts | **decided**: never |
 | 4 | Hashtags | **decided**: none in posts; only on video captions |
-| 5 | No AI Slop | **decided**: guidance in a skill, not code and not a gate |
+| 5 | no-ai-slop | **decided**: guidance in every writing prompt, not a gate on drafts |
 | 6 | Who writes the video script? | **decided 2026-10-27**: Studio's Director; Writer writes the brief before and the captions after |
-| 7 | Articles | **decided**: later (W4) |
+| 7 | Articles | **decided**: later (owner, 2026-11-08: after the loop works for posts, slides and clips) |
 
 ## Sources
 
