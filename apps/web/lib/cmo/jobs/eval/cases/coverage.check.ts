@@ -54,7 +54,7 @@ async function main() {
   assert.ok(planIssues(early, [...ok.slice(0, 4), { ...ok[4]!, idea: "Share a customer story from a happy user" }]).some((i) => i.includes("needs customers")), "stage fit");
   assert.ok(planIssues(early, ok.slice(0, 3)).includes("3 items"));
   assert.ok(planIssues(early, [...ok.slice(0, 4), { ...ok[4]!, idea: "We saved founders 4,000 hours" }]).some((i) => i.includes("says 4,000")), "invented number");
-  assert.ok(planIssues(early, [...ok, { department: "video", platform: "x", day: day(6), idea: "A demo", reason: "Show it" }]).includes("a video nobody asked for"));
+  assert.ok(planIssues(early, [...ok, { department: "video", platform: "x", day: day(6), idea: "A demo", reason: "Show it" }]).includes("an AI video in the plan"), "no AI video in a week plan");
 
   // The whole path on the fake provider: every case that can pass today does.
   const env: EvalEnv = { drain: drainCmoQueue, provider: "fake", judge: fakeJudge(), epoch: 0, log: () => undefined, recordGen: () => undefined };

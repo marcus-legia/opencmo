@@ -3,23 +3,18 @@
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/jobs/studio-orders.check.ts
  *
- * A week plan keeps one video unless the founder asked for more; a video order's brief becomes the adapter's brief;
+ * A week plan orders no AI video, even when the brief asks for one; a video order's brief becomes the adapter's brief;
  * a redone keyframe swaps exactly one generation in card 2's input.
  */
 import assert from "node:assert/strict";
 
-import { toPlanItems, videosAsked } from "./plan-week";
+import { toPlanItems } from "./plan-week";
 import { briefOf, withKeyframe } from "./studio-orders";
 
 const video = (idea: string) => ({ day_offset: 1, department: "video" as const, platform: "Shorts", idea, reason: "why" });
 const post = { day_offset: 0, department: "post" as const, platform: "X", idea: "A post", reason: "why" };
 
-assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }).filter((i) => i.department === "video").length, 1, "one video a week");
-assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }, new Date(), 2).filter((i) => i.department === "video").length, 2, "unless asked");
-assert.equal(videosAsked("Make 2 videos about the launch"), 2);
-assert.equal(videosAsked("one video please"), 1);
-assert.equal(videosAsked("posts only"), 0);
-assert.equal(videosAsked(undefined), 0);
+assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }).filter((i) => i.department === "video").length, 0, "no AI video in a week plan (cmo-review-2 §2.2)");
 
 const order = (brief: Record<string, unknown>) => ({ id: "o", user_id: "u", kind: "build_video", brief });
 const b = briefOf(order({ objective: "How the CMO plans a week", angle: "Launch week", seconds: 45, aspect: "16:9" }));

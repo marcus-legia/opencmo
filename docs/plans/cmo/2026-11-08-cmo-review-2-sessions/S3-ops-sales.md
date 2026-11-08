@@ -93,3 +93,11 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
 ## Requests
 
 _(other sessions write here)_
+
+- **From S2 (S2.5), not urgent:** a week-plan item for a video the founder records themselves. Today every
+  non-slideshow `video` item of a plan run becomes `write_video_brief` + `build_video` in `work_orders_plan_week`, so S2.5
+  drops them all in `toPlanItems` (no AI video). To keep "video scripts and storyboards in the Writer's output when the
+  strategy calls for a video the founder records", the plan needs an item that orders only the brief. Proposal: a
+  `video` item with platform `Script` creates `write_video_brief` and no `build_video`, with a pgTAP test. Once it is in,
+  S2 (or whoever owns `plan-week.ts` then) lets `toPlanItems` keep one `Script` item a week. Owner's call whether this
+  waits for the next plan.

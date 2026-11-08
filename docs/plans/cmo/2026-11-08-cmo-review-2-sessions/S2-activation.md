@@ -82,7 +82,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     (`nav.ts:32-44`). Change: Dashboard alone on top; Writer, Studio, Schedule, then Sales; a "More" group with
     Library, Research, Analytics and Brain; Editor last. The tab bar, the shell's tabs and `lib/agent/panel.ts` read the
     new group. Check: typecheck, `panel.check`, `columns.check`.
-- [ ] **S2.4 Hide `/video`** (plan §2.2):
+- [x] **S2.4 Hide `/video`** (plan §2.2): `0074fa3`
   - Only `/video` (`create_video`). `/animate`, `/background`, `/edit`, `/broll` and the rest stay as they are.
   - One switch (one constant or one capability in `editor-core/capabilities.ts`, whichever the slash menu and
     `clipScopeWith` already read) hides `create_video` from the slash menu, the Assistant's tool list in the web app
@@ -111,6 +111,14 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - keep video scripts and storyboards in the Writer's output when the strategy calls for a video the founder records
     themselves.
   - Check: `plan-week` checks and the CMO eval.
+  - Note. Now: the prompt allows one "one-minute AI video" a week (`plan-week.ts:35`), `toPlanItems` keeps it as Shorts and
+    `fakePlan` adds one when the brief says "video" (`:151`); SQL turns each into `write_video_brief` + `build_video`.
+    Clips of the founder's own video are ordered by `cut_shorts_order_for` when an edit is finished, not by the plan.
+    Change: the prompt plans only a slideshow as video; `toPlanItems` drops every other video item; `videosAsked` and the
+    fake's video are gone; the brain eval flags any AI video. Scripts for a video the founder records need an item that
+    orders only the brief: SQL, so it is a request in S3's file. The p2/p3 acceptance scripts (`lib/screens/p2-,
+    p3-acceptance.e2e.ts`) seed a Studio video through the brief "make 1 video"; that step no longer plans one.
+    Check: `jobs.check`, `studio-orders.check`, `coverage.check`, `cmo:eval --provider fake` all green.
 - [ ] **S2.6 No dead ends.**
   - Hide the disabled "arrives with…" buttons in Setup and Library. Sales is S3's.
   - Warn before leaving the page while an upload runs (`components/editor/upload/UploadPanel.tsx`).
