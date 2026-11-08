@@ -18,8 +18,8 @@ with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2490000
 insert into t select 'run', id from r;
 select public.cmo_plan_week('e2490000-0000-4000-8000-00000000000a', (select id from t where name = 'run'), jsonb_build_array(
   jsonb_build_object('department', 'post', 'platform', 'X', 'day', current_date, 'idea', 'Cut by words', 'reason', 'Pillar one'),
-  jsonb_build_object('department', 'post', 'platform', 'X', 'day', current_date + 1, 'idea', 'Captions in one click', 'reason', 'Pillar two'),
-  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', current_date + 1, 'idea', 'How the CMO plans a week')));
+  jsonb_build_object('department', 'post', 'platform', 'X', 'day', date_trunc('week', current_date)::date + 6, 'idea', 'Captions in one click', 'reason', 'Pillar two'),
+  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', date_trunc('week', current_date)::date + 6, 'idea', 'How the CMO plans a week')));
 
 insert into t select 'card', id from public.approvals where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'plan' and status = 'waiting';
 select is((select count(*)::int from t where name = 'card'), 1, 'the plan raises one plan card');
