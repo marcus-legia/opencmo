@@ -213,7 +213,8 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-rail-count { min-width: 22px; padding: 1px 7px; border-radius: var(--v2-pill); background: var(--v2-brand-deep); color: #ffffff; font: 500 11px var(--v2-mono); text-align: center; }
 .v2-rail-processing { min-width: 22px; padding: 1px 7px; border-radius: var(--v2-pill); background: var(--v2-paper3); color: var(--v2-ink); font: 500 11px var(--v2-mono); text-align: center; }
 .v2-rail-stuck { width: 8px; height: 8px; background: var(--v2-stuck); }
-.v2-rail-foot { margin-top: auto; border-top: 1px solid var(--v2-line); padding-top: 14px; }
+/* Sticky so the credit balance stays in view when the rail is taller than the window and scrolls. */
+.v2-rail-foot { position: sticky; bottom: 0; margin-top: auto; border-top: 1px solid var(--v2-line); padding-top: 14px; background: var(--v2-paper); }
 .v2 .v2-rail-credits { display: flex; justify-content: space-between; align-items: center; min-height: 40px; padding: 0 10px; color: var(--v2-ink); }
 .v2-rail-credits-value { font: 500 13px var(--v2-mono); }
 .v2-rail-account summary { display: flex; align-items: center; min-height: 40px; padding: 0 10px; cursor: pointer; list-style: none; color: var(--v2-ink2); font-size: 12px; }
@@ -517,7 +518,10 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 
 /* the 56 px strip: icon and a corner square; the status lives in the link's name and title */
 :root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail { padding: 14px 8px; align-items: center; }
-:root[data-v2-rail="collapsed"] .v2-shell.is-cols :is(.v2-rail-brand > span, .v2-rail-heading, .v2-rail-text, .v2-rail-credits, .v2-rail-account) { display: none; }
+:root[data-v2-rail="collapsed"] .v2-shell.is-cols :is(.v2-rail-brand > span, .v2-rail-heading, .v2-rail-text, .v2-rail-credits-label, .v2-rail-account) { display: none; }
+/* The strip still shows the balance (number only): the editor hides its own, so without this no credit count is on screen. */
+:root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-credits { justify-content: center; width: 40px; padding: 0; }
+:root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-credits-value { font-size: 11px; }
 :root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-top { flex-direction: column; }
 :root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-item { position: relative; justify-content: center; width: 40px; padding: 0; align-items: center; }
 :root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-icon { display: block; }
@@ -562,7 +566,9 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
   .v2-shell.is-cols .v2-sash { display: none; }
   .v2-shell.is-cols[data-panel="hidden"] .v2-main { display: flex; }
   .v2-shell.is-cols .v2-rail { padding: 14px 8px; align-items: center; border-right: 1px solid var(--v2-line); }
-  .v2-shell.is-cols :is(.v2-rail-brand > span, .v2-rail-heading, .v2-rail-text, .v2-rail-credits, .v2-rail-account, .v2-rail-toggle) { display: none; }
+  .v2-shell.is-cols :is(.v2-rail-brand > span, .v2-rail-heading, .v2-rail-text, .v2-rail-credits-label, .v2-rail-account, .v2-rail-toggle) { display: none; }
+  .v2-shell.is-cols .v2-rail-credits { justify-content: center; width: 40px; padding: 0; }
+  .v2-shell.is-cols .v2-rail-credits-value { font-size: 11px; }
   .v2-shell.is-cols .v2-rail-item { position: relative; justify-content: center; width: 40px; padding: 0; align-items: center; }
   .v2-shell.is-cols .v2-rail-icon { display: block; }
   .v2-shell.is-cols .v2-rail-item[data-flag]::after { content: ""; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; background: var(--v2-brand); }

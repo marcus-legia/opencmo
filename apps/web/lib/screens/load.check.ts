@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 
-import { LOADERS } from "./load";
+import { LOADERS, isShortFrame } from "./load";
 import { compose } from "./registry";
 
 type Row = Record<string, unknown>;
@@ -176,6 +176,13 @@ async function main(): Promise<void> {
 
   console.log("load.check: Writer, Library, Schedule and Settings loaders ok");
 }
+
+// Studio files a vertical edit of a minute or less under Shorts; a landscape or longer one stays a video.
+assert.equal(isShortFrame({ frame_w: 1080, frame_h: 1920, workarea: [0, 15] }), true);
+assert.equal(isShortFrame({ frame_w: 1080, frame_h: 1920, workarea: [0, 60] }), true);
+assert.equal(isShortFrame({ frame_w: 1080, frame_h: 1920, workarea: [0, 90] }), false);
+assert.equal(isShortFrame({ frame_w: 1920, frame_h: 1080, workarea: [0, 15] }), false);
+assert.equal(isShortFrame({ frame_w: 1080, frame_h: 1920, workarea: null }), false);
 
 main().catch((err) => {
   console.error(`load.check: ${err instanceof Error ? err.message : String(err)}`);

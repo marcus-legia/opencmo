@@ -3218,6 +3218,13 @@ ul.ed2-menu {
   position: fixed;
   z-index: 60;
 }
+/* A top-bar menu portaled to <body>: above every column of the app shell, with the editor's type. */
+.ed2-menu-layer {
+  z-index: 1000;
+  color: var(--ds-text);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-13);
+}
 .ed2-context > .ed2-menu {
   position: static;
 }

@@ -560,6 +560,23 @@ export async function runningGenerations(supabase: SupabaseClient): Promise<numb
   return count ?? 0;
 }
 
+/** The name `create_blank_edit` gives an edit nobody named yet. */
+const UNTITLED = "Untitled edit";
+
+/**
+ * Names a still untitled edit after the video it now holds, so Studio and the clip picker do not list a row of
+ * "Untitled edit". A name the user chose is kept. Best effort: the video is placed either way.
+ */
+async function nameUntitledEdit(supabase: SupabaseClient, clipId: string, title: string): Promise<void> {
+  try {
+    const { data, error } = await supabase.from("clips").select("hook, kind").eq("id", clipId).maybeSingle();
+    if (error || !data || data.kind !== "blank" || (data.hook ?? "").trim() !== UNTITLED) return;
+    await rpcOrThrow(supabase, "rename_blank_edit", { p_clip_id: clipId, p_name: title.slice(0, 120) });
+  } catch (err) {
+    console.warn("[agent] create_video: could not name the edit", clipId, err);
+  }
+}
+
 const fail = (message: string): { outcome: ToolOutcome } => ({ outcome: { ok: false, content: JSON.stringify({ error: message }), summary: message } });
 
 /**
@@ -694,6 +711,7 @@ export async function runCreateVideo(env: RunEnv, prepared: PreparedGeneration):
   }
   // The estimate is exact, so the job holds nothing more; a reused piece's share comes back here.
   await closeOrder();
+  if (op.title) await nameUntitledEdit(env.supabase, env.clipId, op.title);
 
   const charged = started.reduce((sum, item) => sum + item.credits, 0);
   return {
