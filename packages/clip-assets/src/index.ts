@@ -309,6 +309,46 @@ export function typeOfMime(mime: string): 'VIDEO' | 'IMAGE' | 'AUDIO' | 'TRANSCR
   return null;
 }
 
+// ------------------------------------------------------------------ merge
+
+/**
+ * The tab's library with what the server added since `base` (the library the tab last saved).
+ *
+ * The tab is the library's main writer, but not the only one: the Assistant's `/video` and
+ * `redo_keyframe` list the pieces they started on the server, each carrying its generation id. A tab
+ * that took the Assistant's document and saved its own library over the server's dropped those
+ * records; the editor then never found a shot's keyframes and waited on them forever (2026-11-08).
+ *
+ * - A server record the tab has (same id or same generation key) keeps the tab's fields, but gets the
+ *   server's generation id when the tab has none: without it the editor asks for the piece again.
+ * - A server record the tab lacks is added, unless `base` had it: then the tab deleted it.
+ * - A server folder is added the same way.
+ */
+export function mergeLibrary(base: unknown, tab: unknown, server: unknown): Manifest {
+  const before = normalizeManifest(base);
+  const theirs = normalizeManifest(server);
+  let next = normalizeManifest(tab);
+  const hadId = new Set(before.assets.map((record) => record.id));
+  const hadKey = new Set(before.assets.map((record) => record.generation?.key).filter(Boolean));
+  for (const folder of theirs.folders) {
+    if (!before.folders.includes(folder)) next = createFolder(next, folder);
+  }
+  for (const record of theirs.assets) {
+    const key = record.generation?.key;
+    const mine = next.assets.find((item) => item.id === record.id || (!!key && item.generation?.key === key));
+    if (mine) {
+      const id = record.generation?.id;
+      if (id && mine.generation && !mine.generation.id) {
+        next = updateAsset(next, mine.id, { generation: { ...mine.generation, id } });
+      }
+      continue;
+    }
+    if (hadId.has(record.id) || (key && hadKey.has(key))) continue;
+    next = addAsset(next, record).manifest;
+  }
+  return next;
+}
+
 // ------------------------------------------------------------------ danh tính
 
 const SAMPLE = 1024 * 1024;

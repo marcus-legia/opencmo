@@ -27,6 +27,8 @@ export const GET = withApi({}, async ({ supabase, request }) => {
     version: project.version,
     document: project.document,
     document_hash: project.document_hash,
+    // The tab merges it on `rebase`: the Assistant lists the pieces it started here.
+    manifest: project.manifest ?? null,
   };
 });
 

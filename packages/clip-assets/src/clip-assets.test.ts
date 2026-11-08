@@ -6,6 +6,7 @@ import {
   createFolder,
   deleteFolder,
   foldersOf,
+  mergeLibrary,
   moveAssets,
   moveFolder,
   normalizeManifest,
@@ -153,3 +154,48 @@ it('id theo nội dung: ổn định, khác nội dung thì khác, file lớn ch
   expect(a).toBe(createHash('sha256').update('5hello').digest('hex').slice(0, 16));
 });
 
+
+describe('mergeLibrary', () => {
+  const pending = (id: string, path: string, key: string, generation?: string | null) => ({
+    id,
+    path,
+    type: 'VIDEO' as const,
+    createdAt: '2026-11-08T00:00:00Z',
+    generation: { key, ...(generation === undefined ? {} : { id: generation }) },
+    state: 'pending' as const,
+  });
+
+  it('keeps the pieces the Assistant listed on the server while the tab changed its own library', () => {
+    const base = lib(asset('a', 'one.mp4'));
+    const tab = lib(asset('a', 'one.mp4'), asset('b', 'upload.mp4'));
+    const server = {
+      version: 1,
+      folders: ['Generated/Ad/keyframes'],
+      assets: [asset('a', 'one.mp4'), pending('k1', 'Generated/Ad/keyframes/01 Keyframe', 'K1', 'gen-1')],
+    };
+    const out = mergeLibrary(base, tab, server);
+    expect(out.assets.map((record) => record.id).sort()).toEqual(['a', 'b', 'k1']);
+    expect(out.assets.find((record) => record.id === 'k1')?.generation).toEqual({ key: 'K1', id: 'gen-1' });
+    expect(out.folders).toContain('Generated/Ad/keyframes');
+  });
+
+  it('gives a piece the tab placed itself the generation id the server started for it', () => {
+    const tab = lib(pending('mine', 'Generated/Shot', 'S1') as never);
+    const server = lib(pending('theirs', 'Generated/Ad/shots/01 Shot', 'S1', 'gen-2') as never);
+    const out = mergeLibrary(lib(), tab, server);
+    expect(out.assets).toHaveLength(1);
+    expect(out.assets[0]).toMatchObject({ id: 'mine', generation: { key: 'S1', id: 'gen-2' } });
+  });
+
+  it('does not bring back what the tab deleted', () => {
+    const base = lib(asset('a', 'one.mp4'), asset('gone', 'gone.mp4'));
+    const out = mergeLibrary(base, lib(asset('a', 'one.mp4')), base);
+    expect(out.assets.map((record) => record.id)).toEqual(['a']);
+  });
+
+  it('never replaces an id the tab already has', () => {
+    const tab = lib(pending('k', 'p', 'K', 'tab-gen') as never);
+    const out = mergeLibrary(lib(), tab, lib(pending('k', 'p', 'K', 'server-gen') as never));
+    expect(out.assets[0]?.generation?.id).toBe('tab-gen');
+  });
+});

@@ -395,6 +395,34 @@ async function main(): Promise<void> {
     assert.equal(t.calls.length, 2);
   }
 
+  // The Assistant's `/video` lists its keyframes and shots in the server's library during the turn.
+  // The tab's next save must keep them (2026-11-08: it saved its own library over them, and the
+  // editor waited on the shots forever).
+  {
+    const sent: unknown[] = [];
+    const t: SaveTransport = {
+      save: async (expected, _document, manifest) => {
+        sent.push(manifest);
+        return { version: expected + 1, document_hash: "h" };
+      },
+    };
+    const upload = { id: "up", path: "upload.mp4", source: "assets/upload.mp4", type: "VIDEO", mimeType: "video/mp4", createdAt: "t" };
+    const gone = { ...upload, id: "gone", path: "gone.mp4", source: "assets/gone.mp4" };
+    const keyframe = { id: "k1", path: "Generated/Ad/keyframes/01 Keyframe", type: "IMAGE", createdAt: "t", state: "pending", generation: { key: "K1", id: "gen-1" } };
+    const session = new DocumentSession(
+      { document: doc(1080), version: 1, documentHash: "h1", manifest: { version: 1, folders: [], assets: [gone] } },
+      t,
+      5,
+    );
+    // The tab deletes one file and adds another while the turn runs.
+    session.commit(session.current, { manifest: { version: 1, folders: [], assets: [upload] }, history: false });
+    session.rebase(doc(500), 4, "h4", "turn-1", { version: 1, folders: [], assets: [gone, keyframe] });
+    await session.flush();
+    const saved = sent.at(-1) as { assets: { id: string; generation?: { id?: string } }[] };
+    assert.deepEqual(saved.assets.map((record) => record.id).sort(), ["k1", "up"], "the Assistant's keyframe is kept, the deleted file stays deleted");
+    assert.equal(saved.assets.find((record) => record.id === "k1")?.generation?.id, "gen-1");
+  }
+
   console.log("session.check: ok");
 }
 
