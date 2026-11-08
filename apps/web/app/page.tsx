@@ -14,7 +14,7 @@ import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catal
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { createServerClient } from "@/lib/supabase/server";
 
-const DESCRIPTION = "Your AI marketing team: it edits the videos, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
+const DESCRIPTION = "Your AI marketing team: it reads your website, plans your week, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
 
 export const metadata: Metadata = {
   title: { absolute: "OpenCMO: your AI marketing team for founders" },

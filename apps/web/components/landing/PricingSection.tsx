@@ -32,7 +32,7 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
           <div className="lv-stack-16">
             <p className="lv-eyebrow">Pricing</p>
             <h2 id="pricing-title" className="lv-h2 is-lg">One team. <span className="lv-accent">One price.</span></h2>
-            <p className="lv-lede is-wide">The whole workflow (video, posts and sales) costs less than one freelancer.</p>
+            <p className="lv-lede is-wide">The whole workflow (plan, posts, video and sales) costs less than one freelancer.</p>
           </div>
           <div role="radiogroup" aria-label="Billing" className="lv-segment is-billing">
             <button type="button" role="radio" aria-checked={!annual} className={annual ? "" : "is-on"} onClick={() => setAnnual(false)}>Monthly</button>
@@ -93,13 +93,13 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
               ))}
             </ul>
             <div className="lv-offer-zone">
-              <span>Your plan is ready in 2 minutes</span>
+              <span>Your first week is planned within minutes</span>
               <form action={action} className="lv-pill-form is-dark">
                 <label htmlFor="price-site" className="sr-only">Your website</label>
                 <input id="price-site" name="site" type="text" inputMode="url" autoComplete="url" required placeholder="yourcompany.com" />
                 <button type="submit" className="lv-btn-terra">Start with your website</button>
               </form>
-              <small>Cancel anytime. Nothing is posted until you approve it.</small>
+              <small>No free trial. Cancel anytime. Nothing is posted until you approve it.</small>
             </div>
           </article>
         </div>

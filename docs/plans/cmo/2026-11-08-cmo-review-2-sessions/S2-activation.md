@@ -47,6 +47,15 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     the CMO's first step (the website), not the editor.
   - Hide the "Continue in Claude" path for accounts that cannot use it (`components/editor/assistant/ContinueInClaude.tsx`, `/api/v1/cmo/mode`).
   - Check: an e2e on a preview with Creem test mode, sign-in → checkout → website step.
+  - Note. Now: the nav says "Start free" (`LandingNav.tsx:135`); `data.ts` leads with Video, "3D" in four places
+    (`:30`, `:115`, `:124`, `:127`); `/app` sends every account to Setup whatever its plan (`app/app/page.tsx:36`);
+    Creem returns to `/app/billing?paid=1` (`checkout/route.ts:43`); `ContinueInClaude` shows for unpaid accounts that
+    cannot make the API key it asks for (`create_api_key` raises "API keys are part of the paid plans").
+    Change: copy in the CMO loop order (Post, Video, Sales), no 3D, no AI video, a "no free trial" FAQ; `/app` sends an
+    account with no plan and 0 credits to `/app/billing?start=1&site=…`; a plan's checkout returns to
+    `/app?paid=1&site=…`, which lets the founder through to the website step even if the webhook is a few seconds late;
+    `/cmo/mode` returns `can_connect` and the card hides without a plan.
+    Check: typecheck, `check:contracts`; the Creem test-mode e2e needs a preview with Creem test keys (owner), not run here.
 - [ ] **S2.2 The first week within minutes.** `SetupScreen.tsx`, `lib/cmo/onboard.ts`:
   - one step: the website. Reading it, writing the four documents and planning the first week run at once, not with
     the nightly plan;

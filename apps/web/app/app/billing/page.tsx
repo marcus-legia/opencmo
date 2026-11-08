@@ -13,8 +13,10 @@ import type { LedgerEntry } from "@/lib/types";
  *
  * RLS filters to the signed-in user, so the ledger needs no `user_id` condition.
  */
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ paid?: string }> }) {
-  const { paid: justPaid } = await searchParams;
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ paid?: string; start?: string; site?: string }> }) {
+  const { paid: justPaid, start, site: siteParam } = await searchParams;
+  // Sent here by `/app` before the first payment (paid first, no free trial: owner, 2026-11-08).
+  const site = typeof siteParam === "string" ? siteParam.slice(0, 300) : undefined;
   const supabase = await createServerClient();
 
   const [{ data: profile }, { data: ledger }, plans, packs] = await Promise.all([
@@ -46,6 +48,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </p>
       {/* Only a note: credits come from the webhook, never from this query param. */}
       {justPaid === "1" && <p className="page-sub" role="status">Payment received. Credits arrive within a minute.</p>}
+      {start === "1" && !paid && (
+        <p className="page-sub" role="status" data-testid="billing-start">
+          Pick a plan to start. OpenCMO has no free trial. Once you pay, your CMO reads your website and plans your first
+          week within minutes.
+        </p>
+      )}
 
       <div className="acct">
         <div className="settings-card">
@@ -86,7 +94,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {isCurrent ? (
                 <p className="plan-cta is-current">Current plan</p>
               ) : plan.slug && !paid ? (
-                <BillingButton path="/api/v1/billing/checkout" product={plan.slug} label="Upgrade" />
+                <BillingButton path="/api/v1/billing/checkout" product={plan.slug} site={site} label={start === "1" ? `Start with ${plan.name}` : "Upgrade"} />
               ) : null}
             </div>
           );

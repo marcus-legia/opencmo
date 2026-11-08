@@ -36,10 +36,10 @@ export default function AcceptableUsePage() {
           ),
         },
         {
-          heading: "Video, image and 3D tools",
+          heading: "Video, image and animation tools",
           body: (
             <>
-              <p>Video tools work only on recordings you own or have permission to use. 3D and animation tools create motion graphics for your videos.</p>
+              <p>Video tools work only on recordings you own or have permission to use. Animation tools create motion graphics for your videos.</p>
               <p>AI images and video clips are generated only for your own marketing videos. Every request is screened before anything is generated, and every result is screened again before you receive it. Requests and results that break this policy are refused and your credits are returned.</p>
               <p>You may not generate realistic images or video of real, identifiable people, public figures or private individuals, or anything that imitates a brand, logo or product you do not own.</p>
             </>
