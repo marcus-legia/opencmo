@@ -37,7 +37,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Accounts | `social_accounts`, `zernio_profiles`, `lib/departments/publish/accounts.ts` | connect and disconnect through Zernio; ids only, no tokens | ✅ |
 | Adapter | `lib/departments/publish/adapter.ts`, `zernio.ts`, `intent.ts` | `zernio` for 6 platforms; `intent` for X, Threads, LinkedIn | ✅ |
 | Webhook | `app/api/webhooks/zernio`, `webhook-handle.ts`, `zernio_receipts` | signed, with a receipts table against replays; sets slot and deliverable status | ✅ |
-| Metrics | `jobs/pull-metrics.ts`, `metrics-source.ts`, `publish/analytics.ts`, `account_metrics` | public numbers, and Zernio analytics for connected accounts | ✅ |
+| Metrics | `jobs/pull-metrics.ts`, `metrics-source.ts`, `lib/departments/publish/analytics.ts`, `account_metrics` | public numbers, and Zernio analytics for connected accounts | ✅ |
 | Outbound caps | `operation_log`, `cmo_decide_post`, `schedule_day_count` | 5 X approvals a day; daily caps per platform | ✅ |
 
 ## 3. What others teach
