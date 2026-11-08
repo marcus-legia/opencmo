@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
 
 import { CATEGORY_REDIRECTS } from "./content/blog/categories";
@@ -130,4 +131,17 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+/**
+ * Uploads source maps so browser stack traces in Sentry point at our source, not minified chunks. The upload needs
+ * `SENTRY_AUTH_TOKEN` (set on Vercel only); without it local and CI builds skip the step instead of warning. The maps
+ * are deleted after upload, so they are never served publicly.
+ */
+export default withSentryConfig(config, {
+  org: "opencmo",
+  project: "opencmo",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  telemetry: false,
+});
