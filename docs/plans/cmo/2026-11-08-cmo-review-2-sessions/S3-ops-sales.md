@@ -54,6 +54,16 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   decision (`eval/cmo-tasks.ts`, `eval/cmo-run.ts`). **Open:** MCP calls `create_task` directly (`lib/cmo/mcp/cmo.ts`)
   and has no cards; a scan asked over MCP still runs at once. Its quote → confirm step (as `generate_media`) is a
   follow-up for the owner to rank. Check: `lib/agent/cmo-priced-task.check.ts`; `agent:eval --provider fake` CMO 7/7.
+- **S3.6.** Now: the Sales screen cannot start a scan, and "Add N credits and finish" is disabled
+  (`SalesScreen.tsx:105`). Research: a scan holds its 5 credits in `enqueue_cmo_run` before it starts and runs in one
+  go; the live loader (`lib/screens/load.ts`, `stuck`) only reports "two scans found nothing" (`found: 0`), so the
+  button only ever showed on the sample fixture. There is no stopped scan to finish, so no clean budget path: **the
+  button is removed**, and the sample fixture says what the live banner says. Change: a Scan now button opens the same
+  price lines as the chat card (`lib/cmo/jobs/price-card.ts`, shared with `pricedTaskCard`), and Approve calls
+  `POST /api/v1/cmo/runs {kind: "sales_scan"}`, the existing path (credits held in `enqueue_cmo_run`, brain mode
+  honoured). No migration needed. `e2e/cmo.spec.ts` now approves the chat's scan card (not run here: no Supabase
+  stack in the sandbox; CI runs it). `SalesScreen.stuck.creditsToFinish` is now unread; left in the schema for S1/S2
+  to drop with the screen contract if they want.
 
 ## You own
 
@@ -114,7 +124,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
   - Nothing runs or is held before Approve. The same applies to the other priced `create_task` agents: `competitor_research`, `niche_video_research`.
   - The weekly `reddit-listening` loop keeps its existing budget gate.
   - Check: a CMO chat check where a scan asked in chat stops at a card.
-- [ ] **S3.6 Sales screen buttons** (`components/screens/sales/SalesScreen.tsx`).
+- [x] **S3.6 Sales screen buttons** (`components/screens/sales/SalesScreen.tsx`).
   - "Scan now" goes through the same card as S3.5.
   - "Add N credits and finish" (line 105) raises that run's budget through the job's existing budget path (`lib/cmo/jobs/start.ts`, a migration if needed). If no clean path exists, remove the button. No disabled "arrives with…" button stays.
 - [ ] **S3.7 Billing fixes from the 2026-11-06 review** (one migration):

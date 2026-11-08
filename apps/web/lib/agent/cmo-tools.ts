@@ -14,7 +14,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
-import { JOB_PRICES } from "@/lib/cmo/jobs/progress";
+import { researchCard, salesScanCard, type PriceCard } from "@/lib/cmo/jobs/price-card";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
@@ -237,29 +237,14 @@ const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as co
  */
 export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_research" } as const;
 
-export type PricedTask = { input: z.infer<typeof taskInput>; card: { changes: string[]; credits: number } };
+export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
 
 /** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
 export function pricedTaskCard(input: unknown): PricedTask | null {
   const parsed = taskInput.safeParse(input);
   if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS)) return null;
   const task = parsed.data;
-  const kind = PRICED_AGENTS[task.agent as keyof typeof PRICED_AGENTS];
-  const credits = JOB_PRICES[kind] ?? 0;
-  const brief = task.brief.length > 200 ? `${task.brief.slice(0, 199)}…` : task.brief;
-  const changes =
-    kind === "sales_scan"
-      ? [
-          `Scan Reddit and Hacker News: ${brief}`,
-          "Up to 8 searches written from your customers' pains, skipping the subreddits and term pairs in your Sales settings",
-          "Draft replies for the 5 best threads into Approvals. You post them yourself.",
-        ]
-      : [
-          `Research competitors: ${brief}`,
-          task.handles?.length ? `X accounts: ${task.handles.map((h) => `@${h.replace(/^@/, "")}`).join(", ")}` : "X accounts: the ones in your Competitor Analysis",
-          "Save the hooks that beat their usual posts, for your planner and X writer",
-        ];
-  return { input: task, card: { changes, credits } };
+  return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
 }
 
 const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
