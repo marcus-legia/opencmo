@@ -8,8 +8,8 @@ import "server-only";
  * always finished, even on an error.
  *
  * The first week (cmo-review-2 S2.2): the founder should see the plan and a first draft within minutes, not with the
- * Monday plan. Planning (1 credit) and today's draft (1 credit) are queued as ordinary CMO runs, so they charge, cap and
- * show exactly as any other run, then run one after the other after the response.
+ * Monday plan. Planning (1 credit) and today's draft (1 credit) are ordinary CMO runs, so they charge, cap and show
+ * exactly as any other run; the draft is queued once the plan is written.
  */
 
 import { ApiError } from "@/lib/api/errors";
@@ -18,7 +18,7 @@ import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { brainMode } from "./brain";
 import { DOCUMENT_KINDS } from "./documents";
 import { draftDocuments, GenerateError } from "./generate";
-import { kickCmoRunsInOrder, startCmoRun, type StartedRun } from "./jobs/start";
+import { kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
 
 type RunRow = { id: string };
@@ -26,11 +26,10 @@ type RunRow = { id: string };
 export type Onboarded = { runId: string; firstWeek: boolean };
 
 export async function runOnboarding(supabase: SupabaseClient, userId: string, site: string): Promise<Onboarded> {
+  const started = Date.now();
   const run = firstRow(await rpcOrThrow<RunRow | RunRow[]>(supabase, "start_cmo_run", { p_kind: "onboard", p_input: { site } }));
   if (!run) throw new ApiError(500, "Could not start building your plan.");
 
-  // Only a founder's first onboarding plans a week at once; reading the website again later rewrites the documents only.
-  const { count: before } = await supabase.from("marketing_documents").select("id", { count: "exact", head: true });
   try {
     const snapshot = await readSite(site);
     const drafts = await draftDocuments(snapshot);
@@ -46,46 +45,29 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
     if (error instanceof ApiError) throw error;
     throw new ApiError(known && error instanceof SiteError ? 422 : 502, message);
   }
-  return { runId: run.id, firstWeek: before === 0 ? await startFirstWeek(supabase, userId) : false };
+  // Only a founder who never had a week planned gets one at once; reading the website again rewrites the documents only.
+  const { count: plans } = await supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", "plan_week");
+  return { runId: run.id, firstWeek: plans === 0 ? await startFirstWeek(supabase, userId, started) : false };
 }
 
-const CREDIT_WAIT_MS = 5_000;
-const CREDIT_TRIES = 4;
+/** The onboarding route's time limit (`maxDuration` 300 s), less the paid check's wait and a margin: `after()` work must end before the platform kills it. */
+const ROUTE_MS = 265_000;
 
 /**
- * Queues the week's plan, then today's draft (which drafts the plan's first post once the plan is written). False when
- * the plan could not be queued: the documents are saved either way, and the Monday plan still comes.
- *
- * A founder who has just paid can get here before Creem's webhook grants the credits; the plan is retried for ~20 s
- * before giving up.
+ * Queues the week's plan and runs it, then today's draft (`kickFirstWeek`). False when the plan could not be queued
+ * (paused, capped, no credits): the documents are saved either way, and the Monday plan still comes.
  */
-async function startFirstWeek(supabase: SupabaseClient, userId: string): Promise<boolean> {
+async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number): Promise<boolean> {
   const input: Record<string, unknown> = { source: "onboarding" };
-  // Mode B: the runs wait in the founder's Claude inbox (`/api/v1/cmo/runs` does the same).
+  // Mode B: the plan waits in the founder's Claude inbox (`/api/v1/cmo/runs` does the same); the sweep opens it.
   if ((await brainMode(supabase, userId).catch(() => null))?.brain === "claude") input.brain = "claude";
-
-  let plan: StartedRun | null = null;
-  for (let attempt = 1; attempt <= CREDIT_TRIES && !plan; attempt += 1) {
-    try {
-      plan = await startCmoRun(supabase, "plan_week", input, { kick: false });
-    } catch (error) {
-      const waiting = error instanceof Error && /^Not enough credits/.test(error.message) && attempt < CREDIT_TRIES;
-      if (!waiting) {
-        console.error("[cmo] could not queue the first week's plan", error);
-        return false;
-      }
-      await new Promise((resolve) => setTimeout(resolve, CREDIT_WAIT_MS));
-    }
+  let plan: StartedRun;
+  try {
+    plan = await startCmoRun(supabase, "plan_week", input, { kick: false });
+  } catch (error) {
+    console.error("[cmo] could not queue the first week's plan", error);
+    return false;
   }
-  if (!plan) return false;
-
-  const draft = await startCmoRun(supabase, "post_draft", input, { kick: false }).catch((error: unknown) => {
-    console.error("[cmo] could not queue the first draft", error);
-    return null;
-  });
-  if (input.brain === "claude") return true;
-
-  // One after the other: the draft reads the plan's first post.
-  kickCmoRunsInOrder([plan, draft].filter((r): r is StartedRun => r?.status === "queued").map((r) => r.id));
+  if (input.brain !== "claude" && plan.status === "queued") kickFirstWeek(userId, plan.id, { source: "onboarding" }, started + ROUTE_MS);
   return true;
 }

@@ -162,6 +162,33 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     server's `redo` field on a decision (`lib/agent/loop.ts`, not S2's) is left; nothing sends it now.
     Check: typecheck, `studio-orders.check`, `studio.check`, `check:contracts` green.
 
+
+## Code review (2026-11-08, after S2.1–S2.8)
+
+`/code-review high 975bc56..HEAD` found 10 problems; all are fixed in the commit after this note:
+
+1. A pending Studio price card still offered "Redo a keyframe", which now fails the whole order: the button and its
+   picker are gone (`ApprovalCard.tsx`).
+2. Removing the `animate_video` stub made an old card throw on Approve and Cancel: an approval for a tool the clip scope
+   no longer has now closes as "Out of date", nothing charged (`scope.ts`), with no tool-specific stub.
+3. The first draft was queued with the plan, so the sweep could claim it first: `kickFirstWeek` (`jobs/start.ts`)
+   queues the draft (`enqueue_cmo_run_for`) only once the plan is `done`.
+4. Two jobs in `after()` could outlive the route: each starts only when it can finish before the deadline
+   (265 s from the start of onboarding); otherwise the sweep runs the plan and the daily loop drafts.
+5. The paid-first redirect also locked out founders who had started: it applies only to an account with no
+   documents (`app/app/page.tsx`).
+6. Paid-first was only a page redirect: the onboarding route refuses (402) an account with no plan and no credits,
+   after waiting up to 15 s for a late Creem webhook (`lib/paid-first.ts`).
+7. Fixed by 5: after onboarding the founder has documents, so a late webhook no longer sends them back to billing.
+8. "Select the video to try again" led nowhere for an upload's master (not a library asset): the note now says to
+   upload the video again, which transcribes it again; no button.
+9. A first onboarding that failed after saving some documents never got its first week: the check is now "no
+   `plan_week` run yet", not "no documents".
+10. Without the catalogue the landing had no `#pricing`: a short pricing section with no numbers keeps the anchor.
+
+Checks after the fixes: typecheck, `check:contracts`, `capabilities.check`, `agent:eval --provider fake` 38/42 (the
+same 4 `explain-*` as the base commit).
+
 ## Checks
 
 - `npm run typecheck`

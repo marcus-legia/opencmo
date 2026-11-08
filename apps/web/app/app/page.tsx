@@ -7,7 +7,7 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
-import { isPaidPlan } from "@/lib/pricing";
+import { hasPlanOrCredits } from "@/lib/paid-first";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -30,12 +30,14 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
 
   const supabase = await createServerClient();
   const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
-  const [state, canStart] = await Promise.all([loadCmoState(supabase), hasPlanOrCredits(supabase)]);
+  const { data: { user } } = await supabase.auth.getUser();
+  const state = await loadCmoState(supabase);
+  const started = Object.keys(state.documents).length > 0;
 
-  // Paid first, no free trial (owner, 2026-11-08): an account with no plan and no credits picks a plan before the CMO
-  // does any work. `paid=1` is Creem's return: the webhook may land a few seconds after the founder does, so it is let
-  // through to the website step, which costs nothing.
-  if (!canStart && params.paid !== "1") {
+  // Paid first, no free trial (owner, 2026-11-08): a new account with no plan and no credits picks a plan before the
+  // CMO does any work. A founder who already started keeps the Dashboard and the drafts waiting there. `paid=1` is
+  // Creem's return: the webhook may land after the founder does, and the onboarding route waits for it.
+  if (!started && params.paid !== "1" && !(user && (await hasPlanOrCredits(supabase, user.id)))) {
     redirect(site ? `/app/billing?start=1&site=${encodeURIComponent(site)}` : "/app/billing?start=1");
   }
 
@@ -53,13 +55,3 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
   return <CmoWorkspace initial={await loadWorkspace(supabase)} />;
 }
 
-/** A paid plan, or credits left from before paid-first (a pack, a refund, an old signup gift): either can run the CMO. */
-async function hasPlanOrCredits(supabase: Awaited<ReturnType<typeof createServerClient>>): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  const [{ data: profile }, { data: balance }] = await Promise.all([
-    supabase.from("profiles").select("plan").eq("id", user.id).maybeSingle<{ plan: string }>(),
-    supabase.rpc("credit_balance", { p_user_id: user.id }),
-  ]);
-  return isPaidPlan(profile?.plan) || (typeof balance === "number" && balance > 0);
-}

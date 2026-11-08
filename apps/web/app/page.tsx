@@ -89,7 +89,17 @@ export default async function LandingPage() {
         <Departments />
         <DemoSection />
         {/* No catalogue row, no price (cmo-review-2 S2.7): the section waits for the catalogue rather than guess. */}
-        {prices ? <PricingSection prices={prices} action={action} /> : null}
+        {prices ? (
+          <PricingSection prices={prices} action={action} />
+        ) : (
+          <section id="pricing" aria-labelledby="pricing-title" className="lv-panel-section is-pricing">
+            <div className="lv-container lv-stack-16">
+              <p className="lv-eyebrow">Pricing</p>
+              <h2 id="pricing-title" className="lv-h2">One plan, paid monthly or yearly.</h2>
+              <p className="lv-lede">There is no free trial. You see the plans and their prices after you sign in.</p>
+            </div>
+          </section>
+        )}
         <FaqSection items={faq} />
       </main>
       <LandingFooter action={action} />
