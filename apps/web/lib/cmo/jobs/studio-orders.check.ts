@@ -3,13 +3,12 @@
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/jobs/studio-orders.check.ts
  *
- * A week plan orders no AI video, even when the brief asks for one; a video order's brief becomes the adapter's brief;
- * a redone keyframe swaps exactly one generation in card 2's input.
+ * A week plan orders no AI video, even when the brief asks for one; a video order's brief becomes the adapter's brief.
  */
 import assert from "node:assert/strict";
 
 import { toPlanItems } from "./plan-week";
-import { briefOf, withKeyframe } from "./studio-orders";
+import { briefOf } from "./studio-orders";
 
 const video = (idea: string) => ({ day_offset: 1, department: "video" as const, platform: "Shorts", idea, reason: "why" });
 const post = { day_offset: 0, department: "post" as const, platform: "X", idea: "A post", reason: "why" };
@@ -30,9 +29,4 @@ assert.deepEqual([w.hooks, w.keyPoints, w.cta, w.seconds], [["Cut by words.", "N
   "Writer's hooks, key points and call to action reach the Director");
 assert.equal(briefOf(order({ objective: "A plan item" })).cta, "", "a plan item alone has no call to action");
 
-const input = { keyframes: [{ generation_id: "g0", note: 1 }, { generation_id: "g1" }], seconds: 30 };
-assert.deepEqual(withKeyframe(input, 1, "g9"), { keyframes: [{ generation_id: "g0", note: 1 }, { generation_id: "g9" }], seconds: 30 });
-assert.equal(withKeyframe(input, 5, "g9"), null, "only a keyframe on the sheet");
-assert.equal(withKeyframe(null, 0, "g9"), null, "a step planned elsewhere has no input to redo from");
-
-console.log("studio-orders.check: video cap, brief and redo input ok");
+console.log("studio-orders.check: no AI video in a plan, brief ok");

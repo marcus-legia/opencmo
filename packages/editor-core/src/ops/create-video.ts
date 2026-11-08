@@ -26,7 +26,7 @@ export const VIDEO_FRAMES: Record<(typeof VIDEO_ASPECTS)[number], { width: numbe
 	'16:9': { width: 1920, height: 1080 },
 	'1:1': { width: 1080, height: 1080 },
 };
-/** 18 shots + voice + music = 20 generations, under the 24 a user may have in flight (`generation_active_limit`). */
+/** 18 shots + 19 keyframes + voice + music = 39 generations, under the 40 a user may have in flight (`generation_active_limit`). */
 export const MAX_SHOTS = 18;
 /** Keyframes of one long take: one more than its shots when every shot joins the next. */
 const KEYFRAMES_LIMIT = MAX_SHOTS + 1;

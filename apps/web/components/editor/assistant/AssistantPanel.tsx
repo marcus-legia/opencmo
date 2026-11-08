@@ -39,7 +39,6 @@ import type { RenderTask } from "@/lib/api/tasks";
 import type { ToolAnswer } from "./capture";
 import type { SlashMenuItem } from "@/lib/agent/slash";
 
-import { ContactSheet } from "./ContactSheet";
 import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
@@ -384,13 +383,10 @@ export function AssistantPanel({
     });
   /** Tool tab của cùng bước (không có thẻ): chạy và gửi CÙNG câu trả lời của người. */
   const browserResults = (turn: TurnView) => runBrowserTools(turn.pending.filter((request) => !request.card));
-  /** `redo`: one keyframe redone on a contact sheet; every card of the step is then left unapproved. */
-  const decide = (turn: TurnView, approved: boolean, redo?: { requestId: string; index: number }) =>
+  const decide = (turn: TurnView, approved: boolean) =>
     proceed(turn, async (id, handler) => {
       const tools = await browserResults(turn);
-      const decisions = turn.pending
-        .filter((request) => isApproval(request.card))
-        .map((request) => ({ tool_use_id: request.id, approved, ...(redo?.requestId === request.id ? { redo: { index: redo.index } } : {}) }));
+      const decisions = turn.pending.filter((request) => isApproval(request.card)).map((request) => ({ tool_use_id: request.id, approved }));
       return client.results(id, [...tools, ...decisions], handler);
     });
   const answer = (turn: TurnView, request: ToolRequest, reply: BrowserResult["answer"]) =>
@@ -597,7 +593,7 @@ export function AssistantPanel({
             undoing={undoing}
             onUndo={() => void undo(turn)}
             onResume={() => void resume(turn)}
-            onDecide={(approved, redo) => void decide(turn, approved, redo)}
+            onDecide={(approved) => void decide(turn, approved)}
             onAnswer={(request, reply) => void answer(turn, request, reply)}
             onExtend={() => void extend(turn)}
             onStop={() => void stop()}
@@ -715,7 +711,7 @@ function Turn({
   undoing: number | null;
   onUndo: () => void;
   onResume: () => void;
-  onDecide: (approved: boolean, redo?: { requestId: string; index: number }) => void;
+  onDecide: (approved: boolean) => void;
   onAnswer: (request: ToolRequest, reply: BrowserResult["answer"]) => void;
   onExtend: () => void;
   onStop: () => void;
@@ -767,10 +763,6 @@ function Turn({
             {approvals.map((request) => (request.card as ApprovalCard).storyboard).map((storyboard, index) =>
               storyboard ? <StoryboardTable key={`storyboard-${index}`} storyboard={storyboard} /> : null,
             )}
-            {approvals.map((request) => {
-              const sheet = (request.card as ApprovalCard).sheet;
-              return sheet ? <ContactSheet key={`sheet-${request.id}`} sheet={sheet} onRedo={(index) => onDecide(false, { requestId: request.id, index })} /> : null;
-            })}
           </div>
           {approvals.length > 1 && approvals.some((request) => (request.card as ApprovalCard).credits) ? (
             <p className="ed2-asst-total" data-testid="assistant-approval-total">

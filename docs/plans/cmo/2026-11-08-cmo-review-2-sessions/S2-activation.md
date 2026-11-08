@@ -136,7 +136,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     step limit (`MAX_STEPS` is 40); how often it shows needs production data: `select count(*) filter (where
     pause_reason = 'budget') * 1.0 / count(*) from agent_turns where created_at > now() - interval '14 days'` (owner).
     Check: typecheck, `layout.check`.
-- [ ] **S2.7 Copy and price fixes from the 2026-11-06 review:**
+- [x] **S2.7 Copy and price fixes from the 2026-11-06 review:** `f03fe8f`
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
   - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.
   - `pricing.ts`: no hardcoded fallback prices; a page with no catalogue row shows no price.
@@ -153,6 +153,14 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 - [ ] **S2.8 Dead code.**
   - Remove the `animate_video` and contact-sheet leftovers: `studio-orders.ts` redo branch and `withKeyframe` / `pendingGenerations`, `adapter.ts:116`, `ContactSheet.tsx`, the `redo` types in the Assistant client, the stale `animate_video` stub in `clipScopeWith`, and the "under the 24" comment in editor-core `create-video.ts`.
   - Keep `redo_keyframe` and `create_video` (hidden, not dead).
+  - Note. Now: the two-card `/video` went on 2026-11-06, but `studio-orders.ts` still runs a contact-sheet redo and an
+    `animate_video` step (`withKeyframe`, `pendingGenerations`), `adapter.ts:116` allows a redo only for `animate_video`, the
+    Assistant still renders a `ContactSheet` and sends `redo`, `clipScopeWith` keeps an `animate_video` stub, and the
+    editor-core comment says 24 generations in flight (the limit is 40). Change: all of that is gone; a step still
+    decided "redo" fails with "Redo the keyframe from the editor instead" rather than running something else; the
+    comment counts 18 shots + 19 keyframes + voice + music = 39 under 40. `redo_keyframe` and `create_video` stay. The
+    server's `redo` field on a decision (`lib/agent/loop.ts`, not S2's) is left; nothing sends it now.
+    Check: typecheck, `studio-orders.check`, `studio.check`, `check:contracts` green.
 
 ## Checks
 

@@ -555,14 +555,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runCaptions(supabase, clipId, input as PreparedCaptions, (op) => applyOpTool(op, env));
         return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
       }
-      if (call.name === "animate_video") {
-        // A card from before /video ran in one go (2026-11-06): its second step no longer exists.
-        return {
-          outcome: { ok: false, content: JSON.stringify({ error: "This video step no longer exists: /video now makes the whole video after one approval. Ask for the video again." }), summary: "Out of date" },
-          extra: {},
-          wrote: false,
-        };
-      }
       const source = jobSource();
       // Before the priced-tool guard: the explainer's one card is not a generation card.
       if (call.name === "plan_explainer") {
