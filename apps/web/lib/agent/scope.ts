@@ -51,6 +51,8 @@ import {
   MOTION_TEMPLATE_TOOLS,
   openExplainerOrder,
   PLAN_FIRST,
+  explainerCalls,
+  previewIssuesGate,
   planExplainerCard,
   prepareExplainer,
   preparePlanExplainer,
@@ -461,6 +463,10 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
                           const message = err instanceof ApiError ? err.message : "Could not check this request. Please try again.";
                           return { ok: false, content: JSON.stringify({ INVALID_INPUT: message }), summary: message };
                         }
+                      }
+                      if (request.success && host.turnId) {
+                        const held = previewIssuesGate(await explainerCalls(supabase, host.turnId), request.data.code);
+                        if (held) return { ok: false, content: JSON.stringify({ error: held }), summary: "Fix the preview's issues first" };
                       }
                       const { document } = await workspace.read();
                       const accent = readBrand(document)?.colors.accent;

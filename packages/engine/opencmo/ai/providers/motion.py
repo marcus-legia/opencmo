@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import re
 import select
@@ -71,6 +72,22 @@ def fake_voice() -> bool:
     return os.environ.get("OPENCMO_MOTION_FAKE_VOICE") == "1" and os.environ.get("OPENCMO_ENV") != "production"
 
 
+#: Picture kept after the last spoken word: the end frame settles, then the video stops.
+VOICE_TAIL = 1.5
+#: Shortest explainer `clip-motion` renders (`job.ts`).
+EXPLAINER_MIN_SECONDS = 10
+
+
+def voiced_duration(paid: int, words: list[dict[str, Any]] | None) -> int:
+    """The explainer's length from its real voice: the paid estimate rounds up to 5 s, so rendering it as is
+    left up to 5 s of silent, frozen picture at the end (2026-11-08: 35.3 s of voice in a 40 s video).
+    Never longer than what was paid."""
+    if not words:
+        return paid
+    spoken = math.ceil(float(words[-1]["end"]) + VOICE_TAIL)
+    return max(EXPLAINER_MIN_SECONDS, min(paid, spoken))
+
+
 def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """The `MotionJob` the CLI reads (packages/clip-motion/src/job.ts) from a generation spec.
 
@@ -92,7 +109,7 @@ def motion_job(spec: dict[str, Any], words: list[dict[str, Any]] | None = None) 
             for beat in scene["beats"]
         ],
         "format": spec["aspectRatio"],
-        "duration": int(spec["duration"]),
+        "duration": int(spec["duration"]) if clip else voiced_duration(int(spec["duration"]), words),
         "seed": int(spec.get("seed") or 0),
     }
     for key in ("accent", "theme", "personality"):

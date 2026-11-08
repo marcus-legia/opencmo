@@ -369,13 +369,13 @@ export function explainerToolSpecs(): ToolSpec[] {
     {
       name: "preview_explainer",
       description:
-        `Render stills of an explainer you wrote and look at them. Only after the user approved plan_explainer: it is refused before. Code from the approved direction. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. read_guide "explainer" first.`,
+        `Render stills of an explainer you wrote and look at them. Only after the user approved plan_explainer in THIS turn: an approval from an earlier turn has ended, so call plan_explainer before writing any scene code, or the code is written for nothing. Code from the approved direction. Stills come at the times you pick (around every main move), or at beat midpoints and the last frame; a layout report comes with them: text overlapping text, anything outside the safe area, text too small, a nearly empty frame, a beat with no subject or no motion, a mark that jumps or zooms too fast in one frame, text still blurred at rest, and every kit.audit check of the scene that fails. Ask for a contact sheet (sheet) to see a whole move and a zoom to check crisp text. variants renders 2-3 style directions of the hero shot side by side in one image for the user to pick from. Errors come back with the phase (job/compile/guard/render) and the message. Then answer the review checklist that comes back, fix the one worst problem, and preview again, up to ${PREVIEW_ROUNDS} rounds, until a round finds nothing; then add it with add_explainer. read_guide "explainer" first.`,
       schema: sanitize(z.toJSONSchema(previewExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
     {
       name: "add_explainer",
-      description: `Render the explainer (15-90 s, narrated) or, with silent: true, the silent motion clip (3-30 s) the user approved with plan_explainer, as one video layer, from code you previewed with preview_explainer. It is paid from that approval: no second card. Send the same title, beats, format and voice as the approved plan; a longer video than planned is refused (plan_explainer again). Voices: ${voicesOf().join(", ")}.`,
+      description: `Render the explainer (15-90 s, narrated) or, with silent: true, the silent motion clip (3-30 s) the user approved with plan_explainer, as one video layer, from code you previewed with preview_explainer. Fix what the last preview reported first: code whose last preview still lists issues is sent back once. It is paid from that approval: no second card. Send the same title, beats, format and voice as the approved plan; a longer video than planned is refused (plan_explainer again). Voices: ${voicesOf().join(", ")}.`,
       schema: sanitize(z.toJSONSchema(addExplainerInput, { io: "input" })).schema as Record<string, unknown>,
       strict: false,
     },
@@ -480,6 +480,44 @@ export async function runPreviewExplainer(
     summary: count ? `Previewed the explainer: ${count} layout ${count === 1 ? "issue" : "issues"}` : "Previewed the explainer",
     images,
   };
+}
+
+/** Marks the one refusal of `add_explainer` over a preview's open issues: seen once in a turn, the next call goes through. */
+export const ISSUES_GATE = "[preview issues]";
+
+type ExplainerCallRow = { name: string; status: string; input: { code?: unknown } | null; content: unknown };
+
+/**
+ * The refusal `add_explainer` gets once a turn when the last preview of its code still listed layout issues
+ * (2026-11-08: an explainer went out with "the frame is more than 85% empty at 20.0 s" unfixed); null to go on.
+ * Only once: a report that is wrong about a scene must not trap the turn.
+ */
+export function previewIssuesGate(rows: readonly ExplainerCallRow[], code: string): string | null {
+  if (rows.some((row) => row.name === "add_explainer" && row.status === "failed" && JSON.stringify(row.content ?? "").includes(ISSUES_GATE))) return null;
+  const last = rows.find((row) => row.name === "preview_explainer" && row.status === "done" && String(row.input?.code ?? "") === code);
+  if (!last) return null;
+  let issues: unknown;
+  try {
+    const content = last.content as { text?: unknown } | null;
+    issues = (JSON.parse(String(content?.text ?? "{}")) as { issues?: unknown }).issues;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(issues) || !issues.length) return null;
+  const listed = issues.slice(0, 3).map(String).join("; ");
+  return `${ISSUES_GATE} The last preview of this code still lists ${issues.length} issue${issues.length === 1 ? "" : "s"}: ${listed}. Fix them and preview again before adding it. If an issue is wrong about this scene, call add_explainer again with the same input and it goes through.`;
+}
+
+/** This turn's explainer calls, newest first, for `previewIssuesGate` (read under RLS). */
+export async function explainerCalls(supabase: SupabaseClient, turnId: string): Promise<ExplainerCallRow[]> {
+  const { data, error } = await supabase
+    .from("agent_tool_calls")
+    .select("name, status, input, content")
+    .eq("turn_id", turnId)
+    .in("name", ["preview_explainer", "add_explainer"])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ExplainerCallRow[];
 }
 
 /** The code previewed in this turn, newest first (read under RLS from `agent_tool_calls`). */

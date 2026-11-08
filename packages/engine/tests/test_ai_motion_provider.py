@@ -16,7 +16,12 @@ from opencmo.ai.catalog import SpecError, get_model, validate_spec
 from opencmo.ai.providers import adapter_for, motion
 from opencmo.ai.providers.base import ProviderError, Result
 from opencmo.ai.providers.fake import FakeProvider
-from opencmo.ai.providers.motion import MotionLocalProvider, MotionModalProvider, motion_job
+from opencmo.ai.providers.motion import (
+    MotionLocalProvider,
+    MotionModalProvider,
+    motion_job,
+    voiced_duration,
+)
 from opencmo.backends.retry import PermanentError, TransientError
 from opencmo.backends.supabase.models import ObjectTooLargeError
 
@@ -124,6 +129,16 @@ def test_job_dung_hop_dong_motion_job() -> None:
     words = [{"text": "A", "start": 0.0, "end": 0.2}]
     assert motion_job({**SPEC, "code": CODE}, words)["words"] == words
     assert "words" not in motion_job({**SPEC, "code": CODE}, None)
+
+
+def test_explainer_lasts_as_long_as_its_voice() -> None:
+    # The paid estimate rounds up to 5 s: a 35.3 s voice in a 40 s video left a silent, frozen end.
+    assert voiced_duration(40, [{"text": "end.", "start": 34.9, "end": 35.34}]) == 37
+    assert voiced_duration(20, [{"text": "long", "start": 21.0, "end": 22.5}]) == 20, "never longer than paid"
+    assert voiced_duration(20, [{"text": "hi", "start": 0.0, "end": 2.0}]) == 10, "an explainer lasts at least 10 s"
+    assert voiced_duration(20, None) == 20, "no timings: the estimate stands"
+    words = [{"text": "A", "start": 0.0, "end": 14.0}]
+    assert motion_job({**SPEC, "code": CODE}, words)["duration"] == 16
 
 
 class _Voice:
