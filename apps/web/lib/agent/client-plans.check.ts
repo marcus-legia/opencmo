@@ -63,12 +63,11 @@ async function main() {
 
   // Review rules, each sent back to the client to fix.
   assert.match(String(await ask({ seconds: 15, plan: { ...plan, shots: plan.shots.slice(0, 2) } })), /^Fix the plan and send it again: .*add up to 10\.0s; make them add up to 15s/, "length");
-  assert.match(
-    await fix([plan.shots[0], { ...plan.shots[1], words: "Guests check in from the lobby," }, plan.shots[2]]),
-    /Shot 2's words do not continue the script/,
-    "the beats rejoin to the exact script",
-  );
-  assert.match(await fix(plan.shots.slice(0, 2)), /The beats stop before the end of the script/, "every word of the script is in a beat");
+  // Beats whose words drifted from the script are not sent back: the script is rebuilt from the beats.
+  const drifted = await ask({ plan: { ...plan, shots: [plan.shots[0], { ...plan.shots[1], words: "Guests check in from the lobby," }, plan.shots[2]] } });
+  assert.ok(typeof drifted !== "string", `the script follows the beats: ${String(drifted)}`);
+  // Words of the script no beat carries are dropped with it: the voice reads only what the beats show.
+  assert.ok(typeof (await ask({ plan: { ...plan, shots: plan.shots.slice(0, 2) } })) !== "string", "a script longer than its beats follows the beats");
   assert.match(
     await fix([shot(5, "Meet Open"), shot(5, "Desk, the app that opens your hotel."), shot(5, "Guests love it.", { keyframe: "a lobby at dusk, wide shot" })], {
       script: "Meet Open Desk, the app that opens your hotel. Guests love it.",

@@ -163,6 +163,16 @@ function splitsInside(before: string, after: string): string | null {
   return null;
 }
 
+/**
+ * The script made from the beats: each beat's words are what its shot shows and the voice reads, so they are the
+ * script. The director often rewrote a word in one and not the other, and the turn failed on a mismatch the
+ * user cannot fix (2026-11-08, "give 'This is OpenCMO.…' to a beat"); the words-per-second check still applies.
+ */
+export function scriptFromBeats(plan: DirectorPlan): DirectorPlan {
+  const script = plan.shots.map((shot) => shot.words.trim()).filter(Boolean).join(" ");
+  return script ? { ...plan, script } : plan;
+}
+
 /** Problems a reviewer sends back once; empty means the plan can be built. */
 export function review(plan: DirectorPlan, seconds: number, durations: number[], joins = true): string[] {
   const issues: string[] = [];
@@ -345,9 +355,10 @@ export async function prepareCreateVideo(
   try {
     if (given) {
       // The caller wrote the plan: the reviewer's notes go back to it instead of to our director.
-      const issues = review(given, seconds, durations, joins);
+      const aligned = scriptFromBeats(given);
+      const issues = review(aligned, seconds, durations, joins);
       if (issues.length) return `Fix the plan and send it again: ${issues.join(" ")}`;
-      plan = given;
+      plan = aligned;
     } else if (fakeAllowed()) {
       plan = fakePlan(seconds, durations);
     } else {
@@ -367,6 +378,7 @@ export async function prepareCreateVideo(
           prompt: issues.length ? `${facts}\n<previous>${JSON.stringify(draft)}</previous>\n<reviewer>${issues.join("\n")}</reviewer>\nFix every reviewer note.` : facts,
           schema: directorSchema,
         });
+        draft = scriptFromBeats(draft);
         issues = review(draft, seconds, durations, joins);
         if (!issues.length) break;
       }

@@ -65,8 +65,9 @@ const beat = z.object({
     .string()
     .trim()
     .min(1)
-    .max(160)
-    .describe('What is drawn in this beat and how it changes, drawn in the scene code, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve".'),
+    // 160 failed real storyboards by a few characters (2026-11-08) and cost a whole model step to redo.
+    .max(240, "at most 240 characters: name the one thing drawn and how it moves")
+    .describe('At most 240 characters. What is drawn in this beat and how it changes, drawn in the scene code, e.g. "a flat disc tilts 30° to show its edge; a dashed horizon line draws across it; a ship sinks hull-first below the curve".'),
   seconds: z.number().min(0.5).max(30).optional().describe("Silent clips only: how long this beat lasts, 0.5-30 s. A narrated explainer is timed by its voice."),
 });
 
