@@ -30,6 +30,12 @@ def _healthy() -> dict[str, dict[str, str | None]]:
         seen[MCP].setdefault(key, URLS.get(key) or env.fingerprint(key, f"value of {key}"))
     for place, key, expected in env.EXPECTED:
         seen[place][key] = expected
+    for feature in env.FEATURES:
+        for entry in feature.keys:
+            name = entry.split("|")[0]
+            seen[VERCEL][name] = env.fingerprint(name, f"value of {name}")
+        if feature.gate:
+            seen[VERCEL][feature.gate[0]] = feature.gate[1]
     return seen
 
 
@@ -173,3 +179,63 @@ def test_motion_asset_origin_must_equal_the_worker_supabase_url():
     assert "Supabase URL: opencmo-motion:OPENCMO_MOTION_ASSET_ORIGIN is not set" in problems
     assert env.fingerprint("OPENCMO_MOTION_ASSET_ORIGIN", "https://x.supabase.co") == "https://x.supabase.co"
 
+
+
+def test_creem_keys_on_different_modes_are_named():
+    seen = _healthy()
+    seen[WORKER]["CREEM_API_KEY"] = env.fingerprint("CREEM_API_KEY", "creem_test_abc")
+    problems, _ = env.check(seen)
+    assert "Creem key mode differs: vercel live, opencmo test" in problems
+    assert "creem_test_abc" not in " ".join(problems)
+
+
+def test_a_test_creem_key_on_vercel_production_is_a_problem():
+    seen = _healthy()
+    seen[VERCEL]["CREEM_API_KEY"] = seen[WORKER]["CREEM_API_KEY"] = env.fingerprint("CREEM_API_KEY", "creem_test_abc")
+    problems, _ = env.check(seen)
+    assert any(problem.startswith("vercel:CREEM_API_KEY is a test key") for problem in problems)
+    assert not any(problem.startswith("Creem key mode differs") for problem in problems)
+
+
+def test_a_hidden_creem_key_is_not_judged_on_its_mode():
+    seen = _healthy()
+    seen[VERCEL]["CREEM_API_KEY"] = ""
+    problems, notes = env.check(seen)
+    assert problems == []
+    assert any("CREEM_API_KEY" in note for note in notes)
+
+
+def test_posting_switched_on_without_zernio_keys_is_a_problem():
+    seen = _healthy()
+    seen[VERCEL]["ZERNIO_WEBHOOK_SECRET"] = None
+    problems, _ = env.check(seen)
+    assert problems == ["Zernio posting: OPENCMO_PUBLISH_LIVE=1 but ZERNIO_WEBHOOK_SECRET not set"]
+
+
+def test_features_left_off_are_notes():
+    seen = _healthy()
+    for name in ("OPENCMO_PUBLISH_LIVE", "OPENCMO_EMAIL_LIVE", "SCRAPECREATORS_API_KEY", "NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"):
+        seen[VERCEL][name] = None
+    problems, notes = env.check(seen)
+    assert problems == []
+    assert "Zernio posting is off (OPENCMO_PUBLISH_LIVE is not 1)" in notes
+    assert "Resend email is off (OPENCMO_EMAIL_LIVE is not 1)" in notes
+    assert "ScrapeCreators (research, Sales scans) is off: set SCRAPECREATORS_API_KEY or SCRAPE_CREATORS_API_KEY on vercel" in notes
+    assert any(note.startswith("Web push (VAPID) is off") for note in notes)
+
+
+def test_the_other_scrapecreators_name_counts_and_half_a_vapid_pair_is_a_problem():
+    seen = _healthy()
+    seen[VERCEL]["SCRAPECREATORS_API_KEY"] = None
+    seen[VERCEL]["SCRAPE_CREATORS_API_KEY"] = env.fingerprint("SCRAPE_CREATORS_API_KEY", "k")
+    seen[VERCEL]["VAPID_PRIVATE_KEY"] = None
+    problems, notes = env.check(seen)
+    assert problems == ["Web push (VAPID) is half set up: VAPID_PRIVATE_KEY not set on vercel"]
+    assert not any("ScrapeCreators" in note for note in notes)
+
+
+def test_vercel_reads_the_feature_keys_and_their_gates():
+    keys = env.keys_to_read(VERCEL)
+    for name in ("ZERNIO_API_KEY", "OPENCMO_PUBLISH_LIVE", "RESEND_API_KEY", "VAPID_PRIVATE_KEY", "SCRAPE_CREATORS_API_KEY", "CREEM_WEBHOOK_SECRET"):
+        assert name in keys
+    assert "ZERNIO_API_KEY" not in env.keys_to_read(WORKER)

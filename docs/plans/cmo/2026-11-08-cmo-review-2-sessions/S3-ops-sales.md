@@ -18,6 +18,15 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
     production is called out;
   - the Anthropic row also reads `llm-health.ts`: a real call that failed on the key since the check wins.
   Check: `lib/ops/providers.check.ts` (a key set to `x` is "invalid key" for every live row; no key reaches the page).
+- **S3.2.** Now: `opencmo/deploy_env.py` compares tokens shared by Vercel and Modal, but has no Creem key, and no
+  rule for the Vercel-only features (Zernio, Resend, VAPID, ScrapeCreators); `.env.example` misses
+  `SUPABASE_JWT_SECRET`, `OPENCMO_WEB_URL`, `OPENCMO_LOOK_*`, Zernio, `NEXT_PUBLIC_OPENCMO_UI`, `OPENCMO_CMO_PAUSED`, and
+  still says moderation runs on a Haiku agent. Change: the Creem key is shared by Vercel and `opencmo`, and its
+  fingerprint carries its mode (test/live), so different modes are named and a test key on Vercel production is a
+  problem. `FEATURES` lists the Vercel-only features: off is a note; switched on (`OPENCMO_PUBLISH_LIVE`,
+  `OPENCMO_EMAIL_LIVE`) without its keys, or half a VAPID pair, is a problem. Limit: a Vercel Sensitive value comes back
+  empty, so its mode cannot be read there (it is then listed with the unreadable ones). Check:
+  `tests/test_check_deploy_env.py`.
 
 ## You own
 
@@ -59,7 +68,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
     - fal and ElevenLabs: the cheapest authenticated read their APIs offer. Find it first.
   - Each row shows one of "not set", "invalid key", "test key in production" or "ok". Reuse `lib/llm-health.ts`.
   - Check: a key set to `x` shows "invalid key".
-- [ ] **S3.2 Deploy check and `.env.example`.**
+- [x] **S3.2 Deploy check and `.env.example`.**
   - `deploy_env.py` / `check_deploy_env.py`:
     - check that the Creem key mode is the same on Vercel and the `opencmo` worker;
     - list ScrapeCreators, Zernio (`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, `OPENCMO_PUBLISH_LIVE`), Resend and VAPID.
