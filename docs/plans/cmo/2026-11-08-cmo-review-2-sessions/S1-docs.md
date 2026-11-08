@@ -14,8 +14,8 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
 You touch no code. Read the code on `main` (and S2/S3 commits on this branch at the end) and write what it does.
 
 The pages follow the owner's order of 2026-11-08 (plan §2.1): business information → Writer → approval → Video →
-approval → Post, with the editor last. AI video is hidden in the web app (plan §2.2): write it as built but hidden,
-not as missing and not as a feature a founder can use.
+approval → Post, with the editor last. `/video` is hidden in the web app (plan §2.2): write it as built but hidden,
+not as missing and not as a feature a founder can use. Every other slash command is a live feature.
 
 ## Order
 
@@ -78,7 +78,7 @@ S1.1 → S1.2 → S1.3 → S1.4 → S1.5. Last of all, once S2 and S3 have pushe
   - Write it in Vietnamese, as before (it is for the owner).
 - [ ] **S1.6 Final pass.** After S2 and S3 push their last commits:
   - add their changes to the pages: Costs live checks, the Sales price card, paid-first entry with the CMO's first
-    week, AI video hidden, the week plan without AI video;
+    week, `/video` hidden, the week plan without AI video;
   - update the artifact's "open" list;
   - update the PR description.
 

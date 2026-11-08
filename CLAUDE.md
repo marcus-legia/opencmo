@@ -32,9 +32,9 @@ too expensive to lead. The AI CMO makes value at a small cost, so it leads.
   by hand; it is not the entry point.
 - **Rank work by one question first:** does it make that loop work for a paying founder, end to end? Editor work comes
   after, unless the owner says otherwise.
-- **AI video is hidden for now.** Generation with a video model (`/video`, `/animate` and the other video-model
-  commands) is hidden from the web app, the landing page and the week plan; the code, the MCP tools and the evals
-  stay. The editor and the other slash commands (`apps/web/lib/agent/slash.ts`) stay as they are.
+- **`/video` is hidden for now.** The full AI video (`/video`, `create_video`) is hidden from the web app, the landing
+  page and the week plan; the code, the MCP tool and the evals stay. The editor and every other slash command
+  (`apps/web/lib/agent/slash.ts`: `/animate`, `/broll`, `/edit`, `/background`…) stay as they are.
 - The plan is [`docs/plans/cmo/2026-11-08-cmo-review-2-plan.md`](docs/plans/cmo/2026-11-08-cmo-review-2-plan.md) §2.
   The old editor roadmap ([`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md))
   is a record, not the order of work. Each item still gets its own research and plan before it is built.

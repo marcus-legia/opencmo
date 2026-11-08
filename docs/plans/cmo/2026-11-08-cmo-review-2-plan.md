@@ -1,4 +1,4 @@
-# CMO review 2: the AI CMO first, AI video hidden, docs that match the code, providers you can see, Sales that charges first
+# CMO review 2: the AI CMO first, `/video` hidden, docs that match the code, providers you can see, Sales that charges first
 
 Branch `cmo-review-2` → `main`, one PR. Three sessions work on it at the same time:
 [sessions](2026-11-08-cmo-review-2-sessions/).
@@ -96,18 +96,17 @@ The product follows the owner's sketch, top to bottom. Words are written before 
 The order of work follows the same rule. Rank work by one question first: **does it make the CMO loop above (steps
 1–6) work for a paying founder, end to end?** Editor work comes after, unless the owner says otherwise.
 
-### 2.2 AI video is hidden for now
+### 2.2 `/video` is hidden for now
 
-The editor stays as it is. **Generation with a video model is hidden** from every place a founder finds it:
-- the slash menu and its starters: `/video` (`create_video`), `/animate`, `/edit` (`edit_video`) and `/background`
-  (`replace_background`), once S2.4 confirms which of them call a video model;
-- the animation step of `/broll` (stills only);
+The editor stays as it is. **Only `/video` (`create_video`, the full AI video: storyboard, keyframes, shots, voice,
+music) is hidden**, from every place a founder finds it:
+- the slash menu, the Assistant's tool list in the web app and the starters;
 - the landing page, the pricing copy and the FAQ;
 - the week plan (no AI video item; §1.2.4).
 
-The code, the tools and the evals stay (no deletion). The MCP server keeps its tools. Hiding is one switch in one
-place, so turning AI video back on is one change. Every other slash command stays: `/style`, `/image`, `/broll`
-(stills), `/intro`, `/voiceover`, `/music`, `/roughcut`, `/explain`.
+The code, the tool and the evals stay (no deletion). The MCP server keeps `create_video`. Hiding is one switch in one
+place, so turning `/video` back on is one change. Every other slash command stays as it is: `/style`, `/image`,
+`/animate`, `/background`, `/edit`, `/broll`, `/intro`, `/voiceover`, `/music`, `/roughcut`, `/explain`.
 
 ### 2.3 The other decisions
 
@@ -125,7 +124,7 @@ place, so turning AI video back on is one change. Every other slash command stay
 | Session | Scope | Owns (summary) | Waits on |
 |---|---|---|---|
 | [S1 Docs](2026-11-08-cmo-review-2-sessions/S1-docs.md) | Architecture pages in the CMO-first order, `ARCHITECTURE.md` §11, spec §8, the Agent Team artifact | `docs/architecture/**`, `ARCHITECTURE.md`, two plan docs | nothing; reads S2/S3 commits at the end |
-| [S2 CMO first](2026-11-08-cmo-review-2-sessions/S2-activation.md) | Paid-first entry, the CMO's first week within minutes, AI video hidden, the week plan without AI video, dead ends, legal and price copy, dead code | landing, setup, shell nav, `plan-week.ts`, editor, `clipScope` in `scope.ts`, `slash.ts`, `guides.ts`, cards, legal pages, `pricing.ts` | nothing |
+| [S2 CMO first](2026-11-08-cmo-review-2-sessions/S2-activation.md) | Paid-first entry, the CMO's first week within minutes, `/video` hidden, the week plan without AI video, dead ends, legal and price copy, dead code | landing, setup, shell nav, `plan-week.ts`, editor, `clipScope` in `scope.ts`, `slash.ts`, `guides.ts`, cards, legal pages, `pricing.ts` | nothing |
 | [S3 Ops and Sales](2026-11-08-cmo-review-2-sessions/S3-ops-sales.md) | Costs page live checks, deploy check, `.env.example`, provider prices, ScrapeCreators fixtures, the Sales price card and buttons, small billing fixes in SQL | `lib/ops`, Costs page, `deploy_env.py`, `.env.example`, **all migrations and `current.sql`**, `cmoScope` in `scope.ts`, `cmo-tools.ts`, Sales screen and job, `lib/cmo/social` | nothing |
 
 Rules for all three sessions: [sessions README](2026-11-08-cmo-review-2-sessions/README.md).
@@ -135,8 +134,8 @@ Rules for all three sessions: [sessions README](2026-11-08-cmo-review-2-sessions
 - A paying founder signs in, pays, gives the website, and within 10 minutes sees the week plan and the first drafts.
   They approve one post and schedule it, and a slideshow card arrives. One card per job and no dead end. Measured in
   clicks and minutes on a preview deployment.
-- No screen, starter, slash menu, landing section or week plan offers AI video. The editor, upload and the other
-  slash commands work as before.
+- No screen, starter, slash menu, landing section or week plan offers `/video`. The editor, upload and every other
+  slash command work as before.
 - Every page in `docs/architecture/` matches the branch and the order of §2.1, and the Agent Team artifact is
   republished at the same URL.
 - The Costs page shows a red row for a bad Anthropic, fal, ElevenLabs, Creem or ScrapeCreators key.
@@ -148,7 +147,7 @@ Rules for all three sessions: [sessions README](2026-11-08-cmo-review-2-sessions
 - Free trial credits (the owner chose paid first).
 - Articles (§2.3).
 - New Sales lead types and creators (they wait on R0).
-- Making AI video cheaper, and showing it again. That gets its own plan once the CMO loop works.
+- Making `/video` cheaper, and showing it again. That gets its own plan once the CMO loop works.
 - Fewer cards a week: the sketch has two approvals (the words, then what was made); today a week is about 15–20 cards
   (`workflow.md` §3). This gets its own plan after S2, together with one Assistant replacing the CMO chat, the Editor
   Assistant and the Studio entry points, and removing the v1 UI.

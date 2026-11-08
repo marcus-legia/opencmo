@@ -1,4 +1,4 @@
-# Session S2: paid-first activation, the AI CMO first, AI video hidden
+# Session S2: paid-first activation, the AI CMO first, `/video` hidden
 
 Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md) · rules: [`README.md`](README.md).
 
@@ -7,7 +7,8 @@ one post and schedule it. One card per job and no dead end. Signup keeps 0 credi
 has no free trial and says so.
 
 The order is the owner's sketch (plan §2.1): business information → Writer → approval → Video → approval → Post. The
-editor is the last step, where the founder fine-tunes by hand. AI video is hidden (plan §2.2).
+editor is the last step, where the founder fine-tunes by hand. `/video` is hidden; every other slash command stays
+(plan §2.2).
 
 ## You own
 
@@ -39,7 +40,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     - drop "Start free";
     - lead with the AI CMO: it reads your website, plans your week, writes the posts, slides and scripts, and you
       approve what goes out and when;
-    - no AI video claim anywhere (plan §2.2), and no "3D" (removed 2026-10-24);
+    - no "full AI video from a sentence" claim (`/video` is hidden, plan §2.2), and no "3D" (removed 2026-10-24);
     - the editor is described as where you finish and fine-tune your own videos;
     - prices still come from the catalogue.
   - Sign-in with 0 credits and no plan lands on pricing / Creem checkout. After payment, the Creem success URL opens
@@ -58,16 +59,15 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - Dashboard (the inbox) first, then the departments in the sketch's order: Writer, Studio, Schedule; Editor stays
     last;
   - Research, Brain and Analytics stay reachable but do not lead.
-- [ ] **S2.4 Hide AI video** (plan §2.2):
-  - Research first: list which slash commands and tools call a video model (`slash.ts`, `create-video.ts`,
-    `generate-tool.ts`, `edit-tool.ts`, `replace_background`, `guides.ts`), and write the list in the research note.
+- [ ] **S2.4 Hide `/video`** (plan §2.2):
+  - Only `/video` (`create_video`). `/animate`, `/background`, `/edit`, `/broll` and the rest stay as they are.
   - One switch (one constant or one capability in `editor-core/capabilities.ts`, whichever the slash menu and
-    `clipScopeWith` already read) hides them from the slash menu, the Assistant's tool list in the web app and the
-    starters. The tools, the MCP server and the evals keep the code.
-  - `/broll` makes stills only, priced on one card; variants are an option on the card.
-  - `AssistantPanel.tsx`: blank-edit starters are Upload, `/explain …` and `/image`; talking-head starters only when
-    the edit has speech.
-  - Update the guide text, `video-usecases.check.ts` and the eval tasks so they do not expect AI video in the web app.
+    `clipScopeWith` already read) hides `create_video` from the slash menu, the Assistant's tool list in the web app
+    and the starters. The tool, the MCP server and the evals keep the code.
+  - The Assistant must not offer a full AI video in words either: the guide text and the prompt stop suggesting it
+    while it is hidden.
+  - `AssistantPanel.tsx`: blank-edit starters drop `/video`; talking-head starters only when the edit has speech.
+  - Update `video-usecases.check.ts` and the eval tasks so they do not expect `/video` in the web app.
   - Check: the slash menu on the preview, and the Assistant eval green.
 - [ ] **S2.5 The week plan has no AI video** (`plan-week.ts`):
   - remove the "one-minute AI video" item (`:35`) and the fallback that adds one when the brief says "video"
@@ -99,7 +99,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 - the CMO checks for `plan-week`
 - the editor e2e that applies
 - After S2.2: website → first draft card on the preview deployment, in minutes, written in the PR.
-- After S2.4: an upload, a cut and an export in the editor still work, with an exported frame looked at (CLAUDE.md
+- After S2.4: an upload, a cut, an `/animate` and an export in the editor still work, with an exported frame looked at (CLAUDE.md
   "Verify by looking").
 
 ## Requests
