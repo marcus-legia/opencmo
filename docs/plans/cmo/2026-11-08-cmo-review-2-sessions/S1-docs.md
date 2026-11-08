@@ -13,6 +13,10 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
 
 You touch no code. Read the code on `main` (and S2/S3 commits on this branch at the end) and write what it does.
 
+The pages follow the owner's order of 2026-11-08 (plan §2.1): business information → Writer → approval → Video →
+approval → Post, with the editor last. AI video is hidden in the web app (plan §2.2): write it as built but hidden,
+not as missing and not as a feature a founder can use.
+
 ## Order
 
 S1.1 → S1.2 → S1.3 → S1.4 → S1.5. Last of all, once S2 and S3 have pushed their final commits, run S1.6.
@@ -35,6 +39,8 @@ S1.1 → S1.2 → S1.3 → S1.4 → S1.5. Last of all, once S2 and S3 have pushe
   - Providers: Gemini, Groq and OpenAI-compat, "checker on another provider", "provider per agent by env, failover". The only per-agent setting is `CMO_AGENT_<ID>_MODEL` (`lib/cmo/agents/registry.ts`).
   - Moderation by an LLM, and "our rules". Prompts go to Creem only (`lib/generate/moderation.ts`, `opencmo/ai/moderation.py`). The output review is Haiku vision plus fal NSFW against `packages/contracts/creem-policy.json`.
   - Two `/video` cards and the contact sheet; `animate_video`; 3D and `render_three`.
+  - The editor-spearhead order: `workflow.md` §5 and every page's build order rank work by "the next OpenCMO
+    marketing video". Re-rank by the CMO loop (plan §2.1), and mark the old order as history.
   - Wrong counts: 20 agents (`registry.ts`), 12 job kinds (`lib/cmo/jobs/types.ts`), 25 models (`ai-models.json`), 42 eval tasks (`lib/agent/eval/tasks.ts`).
   - Check: `rg -n "Gemini|Groq|OpenAI-compat|contact sheet|animate_video|two cards|render_three|3D" docs/architecture` returns only lines marked as history.
 - [ ] **S1.3 Add what is built but not written down.** One short section each, placed in the page that owns the topic:
@@ -71,7 +77,8 @@ S1.1 → S1.2 → S1.3 → S1.4 → S1.5. Last of all, once S2 and S3 have pushe
   - Date it 2026-11-08 and cite PRs #169–#180.
   - Write it in Vietnamese, as before (it is for the owner).
 - [ ] **S1.6 Final pass.** After S2 and S3 push their last commits:
-  - add their changes to the pages: Costs live checks, the Sales price card, paid-first entry, the `/video` default;
+  - add their changes to the pages: Costs live checks, the Sales price card, paid-first entry with the CMO's first
+    week, AI video hidden, the week plan without AI video;
   - update the artifact's "open" list;
   - update the PR description.
 

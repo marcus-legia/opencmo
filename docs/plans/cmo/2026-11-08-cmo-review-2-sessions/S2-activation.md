@@ -1,9 +1,13 @@
-# Session S2: paid-first activation, editor first
+# Session S2: paid-first activation, the AI CMO first, AI video hidden
 
 Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md) · rules: [`README.md`](README.md).
 
-Goal: a founder who pays reaches a finished video in the editor in under 10 minutes, with one card per job and no
-dead end. Signup keeps 0 credits (owner, 2026-11-08): the product has no free trial and says so.
+Goal: a founder who pays gives the website and within 10 minutes sees the week plan and the first drafts. They approve
+one post and schedule it. One card per job and no dead end. Signup keeps 0 credits (owner, 2026-11-08): the product
+has no free trial and says so.
+
+The order is the owner's sketch (plan §2.1): business information → Writer → approval → Video → approval → Post. The
+editor is the last step, where the founder fine-tunes by hand. AI video is hidden (plan §2.2).
 
 ## You own
 
@@ -11,11 +15,12 @@ dead end. Signup keeps 0 credits (owner, 2026-11-08): the product has no free tr
   (`components/blog/**` or wherever `BlogCta` lives), `apps/web/lib/pricing.ts`.
 - Legal: `apps/web/app/(legal)/**`.
 - Entry and setup: `apps/web/app/app/page.tsx`, `apps/web/app/app/setup/**`, `apps/web/components/screens/setup/**`,
-  `apps/web/components/shell-v2/**`.
+  `apps/web/components/shell-v2/**`, `apps/web/lib/cmo/onboard.ts`.
+- The week plan: `apps/web/lib/cmo/jobs/plan-week.ts` and its checks.
 - Editor: `apps/web/components/editor/**` (Assistant panel, upload, `ContinueInClaude.tsx`, `ContactSheet.tsx`).
 - Agent, editor side:
   - `apps/web/lib/agent/scope.ts` **above `cmoScope`** (that is `clipScopeWith`);
-  - `create-video.ts`, `generate-tool.ts`, `guides.ts`, `slash.ts`, `prompt.ts`, `long-take.ts`;
+  - `create-video.ts`, `generate-tool.ts`, `edit-tool.ts`, `guides.ts`, `slash.ts`, `prompt.ts`, `long-take.ts`;
   - the editor eval tasks in `lib/agent/eval/tasks.ts`, `video-usecases.check.ts`, `client-plans.check.ts`.
 - Cards: `apps/web/components/cards/**`.
 - Studio dead code: `apps/web/lib/cmo/jobs/studio-orders.ts` (the contact-sheet and `animate_video` branches only),
@@ -29,30 +34,49 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 
 ## Todo
 
-- [ ] **S2.1 Paid-first entry, honest copy.**
+- [ ] **S2.1 Paid-first entry, honest copy, the CMO pitch.**
   - Landing (`Hero.tsx`, `LandingNav.tsx`, `PricingSection.tsx`, `FaqSection.tsx`, `data.ts`):
     - drop "Start free";
-    - lead with the editor pitch from CLAUDE.md (`/video`, `/broll`, edit your own videos together);
+    - lead with the AI CMO: it reads your website, plans your week, writes the posts, slides and scripts, and you
+      approve what goes out and when;
+    - no AI video claim anywhere (plan §2.2), and no "3D" (removed 2026-10-24);
+    - the editor is described as where you finish and fine-tune your own videos;
     - prices still come from the catalogue.
-  - Sign-in with 0 credits and no plan lands on pricing / Creem checkout. After payment, the Creem success URL opens the Editor.
+  - Sign-in with 0 credits and no plan lands on pricing / Creem checkout. After payment, the Creem success URL opens
+    the CMO's first step (the website), not the editor.
   - Hide the "Continue in Claude" path for accounts that cannot use it (`components/editor/assistant/ContinueInClaude.tsx`, `/api/v1/cmo/mode`).
-  - Check: an e2e on a preview with Creem test mode, sign-in → checkout → editor.
-- [ ] **S2.2 Setup cut to the website step.** `SetupScreen.tsx`:
-  - the website is read in the background, and the founder goes straight to the editor;
-  - documents, accounts, Brand Kit and the goal are asked for later, inline, when a task needs them;
+  - Check: an e2e on a preview with Creem test mode, sign-in → checkout → website step.
+- [ ] **S2.2 The first week within minutes.** `SetupScreen.tsx`, `lib/cmo/onboard.ts`:
+  - one step: the website. Reading it, writing the four documents and planning the first week run at once, not with
+    the nightly plan;
+  - the founder lands on the Dashboard / inbox and watches the plan and the first drafts arrive;
+  - documents, accounts, Brand Kit and the goal are asked for later, inline, when a task needs them (Brand Kit when
+    the first slideshow is built, an account when the first post is scheduled);
   - remove the disabled Connect step (line 276).
-- [ ] **S2.3 Editor first.**
-  - Put Editor at the top of the rail (`components/shell-v2/nav.ts`).
-  - In `AssistantPanel.tsx`, starters for a blank edit: `/video` about the founder's product, `/explain …`, Upload. Talking-head starters only when the edit has speech.
-- [ ] **S2.4 `/video` costs what people expect** (`create-video.ts`):
-  - Default to 15 s and the cheaper shot model. `pickShotModel` today is "quality first".
-  - The one card offers a quality and length choice, with the price of each option before Approve. The card and its storyboard stay one card.
-  - Update the guide text, `slash.ts`, `video-usecases.check.ts` and the eval tasks.
-  - Check: the card's credits for a default `/video`, written in the PR.
-- [ ] **S2.5 `/broll` in one card** (`guides.ts:169` and `:414`, `generate-tool.ts`):
-  - stills and animation are priced on one card;
-  - 1 variant by default; variants are an option on the card.
-  - This matches roadmap ES.3 and "charge once". The Assistant does not ask a second price question.
+  - Check: minutes from website submitted to the first draft card, on the preview, written in the PR.
+- [ ] **S2.3 The rail follows the sketch.** `components/shell-v2/nav.ts`:
+  - Dashboard (the inbox) first, then the departments in the sketch's order: Writer, Studio, Schedule; Editor stays
+    last;
+  - Research, Brain and Analytics stay reachable but do not lead.
+- [ ] **S2.4 Hide AI video** (plan §2.2):
+  - Research first: list which slash commands and tools call a video model (`slash.ts`, `create-video.ts`,
+    `generate-tool.ts`, `edit-tool.ts`, `replace_background`, `guides.ts`), and write the list in the research note.
+  - One switch (one constant or one capability in `editor-core/capabilities.ts`, whichever the slash menu and
+    `clipScopeWith` already read) hides them from the slash menu, the Assistant's tool list in the web app and the
+    starters. The tools, the MCP server and the evals keep the code.
+  - `/broll` makes stills only, priced on one card; variants are an option on the card.
+  - `AssistantPanel.tsx`: blank-edit starters are Upload, `/explain …` and `/image`; talking-head starters only when
+    the edit has speech.
+  - Update the guide text, `video-usecases.check.ts` and the eval tasks so they do not expect AI video in the web app.
+  - Check: the slash menu on the preview, and the Assistant eval green.
+- [ ] **S2.5 The week plan has no AI video** (`plan-week.ts`):
+  - remove the "one-minute AI video" item (`:35`) and the fallback that adds one when the brief says "video"
+    (`:151`);
+  - a video item is a slideshow, or short clips cut from a finished edit of the founder's own video when one exists
+    (Studio Shorts squad);
+  - keep video scripts and storyboards in the Writer's output when the strategy calls for a video the founder records
+    themselves.
+  - Check: `plan-week` checks and the CMO eval.
 - [ ] **S2.6 No dead ends.**
   - Hide the disabled "arrives with…" buttons in Setup and Library. Sales is S3's.
   - Warn before leaving the page while an upload runs (`components/editor/upload/UploadPanel.tsx`).
@@ -61,19 +85,22 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - The Assistant's "Keep going for up to 10 more?" pause (`AssistantPanel.tsx`): check how often a single request hits it; if it is common, raise the step limit for that request.
 - [ ] **S2.7 Copy and price fixes from the 2026-11-06 review:**
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
-  - `llms.txt` and the blog CTA read the catalogue at request time, not at build time.
+  - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.
   - `pricing.ts`: no hardcoded fallback prices; a page with no catalogue row shows no price.
 - [ ] **S2.8 Dead code.**
   - Remove the `animate_video` and contact-sheet leftovers: `studio-orders.ts` redo branch and `withKeyframe` / `pendingGenerations`, `adapter.ts:116`, `ContactSheet.tsx`, the `redo` types in the Assistant client, the stale `animate_video` stub in `clipScopeWith`, and the "under the 24" comment in editor-core `create-video.ts`.
-  - Keep `redo_keyframe`.
+  - Keep `redo_keyframe` and `create_video` (hidden, not dead).
 
 ## Checks
 
 - `npm run typecheck`
 - `cd apps/web && npm run check:contracts`
 - the Assistant eval, `npm run agent:eval -- --provider fake`
+- the CMO checks for `plan-week`
 - the editor e2e that applies
-- After S2.4: a 15 s `/video` on the preview deployment, with an exported frame looked at (CLAUDE.md "Verify by looking").
+- After S2.2: website → first draft card on the preview deployment, in minutes, written in the PR.
+- After S2.4: an upload, a cut and an export in the editor still work, with an exported frame looked at (CLAUDE.md
+  "Verify by looking").
 
 ## Requests
 
