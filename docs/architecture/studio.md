@@ -9,9 +9,8 @@ slideshows, post images, and the AI long video) and hosts the founder's hands-on
 
 **Where Studio sits now (owner, 2026-11-08).** The AI CMO leads and the editor comes last: Studio builds from words the
 founder already approved (step 4 of the loop in [`ai-cmo.md`](ai-cmo.md) §2), and the editor is where the founder
-fine-tunes by hand at the end. **`/video` is to be hidden** (owner decision): the full AI video (`create_video`) is
-built, and plan S2.4–S2.5 remove it from the web app, the landing page and the week plan; at `4f70a59` they still
-offer it. The code, the MCP tool and the evals
+fine-tunes by hand at the end. **`/video` is hidden**: the full AI video (`create_video`) is built, and since S2.4–S2.5 the
+web app, the landing page and the week plan no longer offer it (`CREATE_VIDEO_HIDDEN` in `lib/agent/hidden.ts`). The code, the MCP tool and the evals
 stay. Every other slash command stays as it is.
 
 ## 1. Verdict
@@ -22,7 +21,7 @@ B-roll and images, shorts, slideshow and post image; a look check before a card;
 before running on every paid job.
 
 **Left:** the post image squad has no caller (nothing outside the acceptance runs creates a `build_post_image` order);
-`/video` is still offered in the web app until plan S2.4 hides it, and its leftovers (the contact-sheet branches) are removed by plan S2.8; making `/video` cheaper and
+`/video` is hidden (S2.4) and its contact-sheet leftovers are removed (S2.8); making `/video` cheaper and
 showing it again gets its own plan.
 
 ## 2. Studio as built (`main`, `4f70a59`)
@@ -33,7 +32,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 |---|---|---|---|
 | Document + ops | `packages/clip-doc`, `packages/editor-core` | JSON document; every change is an op; the only write path for buttons, Assistant, MCP | ✅ |
 | Render + export | `clip-render`, `clip-export`, tasks `render_document`, `render_stills` | same Canvas 2D renderer in browser and worker; export draws a named timeline over its workarea; stills for the PNG set | ✅ |
-| Assistant | `lib/agent/` | tools = ops; 12 slash commands (`lib/agent/slash.ts`: `/style`, `/video`, `/image`, `/animate`, `/background`, `/edit`, `/broll`, `/intro`, `/voiceover`, `/music`, `/roughcut`, `/explain`); 42 eval tasks (`lib/agent/eval/tasks.ts`) | ✅ · `/video` still offered; plan S2.4 hides it |
+| Assistant | `lib/agent/` | tools = ops; 12 slash commands (`lib/agent/slash.ts`: `/style`, `/video`, `/image`, `/animate`, `/background`, `/edit`, `/broll`, `/intro`, `/voiceover`, `/music`, `/roughcut`, `/explain`); 42 eval tasks (`lib/agent/eval/tasks.ts`) | ✅ · `/video` hidden in the web app (S2.4) |
 | Video agent team | `create-video.ts`, `long-take.ts`, `video-team.ts`, `explainer-tool.ts` | long take (one storyboard card, one job hold, every piece in one go); intro; explainer (plan → preview → add) | ✅ |
 | Generation | `lib/generate`, `packages/contracts/ai-models.json` | 25 models: images (nano-banana, seedream…), video (Veo, Kling, Kling v3, Seedance, Hailuo, Kling edit), upscale, cutout, voices, music, SFX, explainer and motion clips (Remotion); Creem screens prompts, the worker reviews outputs | ✅ |
 | Studio adapter | `lib/departments/studio/adapter.ts`, `types.ts` | eight entry points (`plan`, `decide`, `buildVideo`, `cutShorts`, `markFinished`, `renderShort`, `buildSlideshow`, `buildPostImage`) for the brain, the Assistant and MCP | ✅ |
@@ -59,7 +58,7 @@ short`, op `make_short`, order `cut_shorts`); user-facing copy stays "cut short 
 | Slideshow | brain (week plan: `write_slides` → `build_slideshow`), founder | Slideshow | AI images only when needed | ✅ |
 | Post image, cover, thumbnail | — | Post image | one image, or none | 🟡 no caller |
 | Intro, explainer, B-roll, images, voice-over, music | inside a video, from the editor | built squads | one card each | ✅ |
-| AI long video | brain (`build_video`), founder (`/video`), MCP | Long take | one card: keyframes, shots, voice, music | ✅ built; to be hidden in the web app (S2.4) |
+| AI long video | brain (`build_video`), founder (`/video`), MCP | Long take | one card: keyframes, shots, voice, music | ✅ built; hidden in the web app (S2.4) |
 
 ## 4. What others teach
 
@@ -188,7 +187,7 @@ All built: **S0** the long take · **S1** the Studio adapter, the finished state
 Shorts squad · **S3** the Slideshow and Post image squads · **S4** the look check and Studio evals. Charge before
 running reached Studio in phases 2–6 of the 2026-11-06 plan (§5b).
 
-What is left, ranked by the CMO loop (owner, 2026-11-08): hide `/video` (plan S2.4) and remove its leftovers (S2.8); a
+Done in S2: `/video` hidden (S2.4), its leftovers removed (S2.8). What is left, ranked by the CMO loop: a
 caller for the post image squad; then, in the editor's own plans, the long take's release and showing `/video` again.
 
 **History.** Until 2026-11-08 Studio was ranked by the editor strategy ("Shorts first, every OpenCMO video becomes 3
@@ -206,7 +205,7 @@ exact price). The contact sheet was removed on 2026-11-06.
 | 5 | Slideshow outputs MP4 and PNG set? | **built**: both from one document |
 | — | Slideshow inside the editor or a separate page? | **decided**: one editor core, a Slides view |
 | 6 | Look check on every render or only before a card? | **built**: only before a card |
-| 7 | `/video` | **decided 2026-11-08: hide it** in the web app, the landing page and the week plan (plan S2.4–S2.5); the code, MCP tool and evals stay |
+| 7 | `/video` | **decided 2026-11-08, done in S2.4–S2.5: hidden** in the web app, the landing page and the week plan; the code, MCP tool and evals stay |
 
 ## Sources
 

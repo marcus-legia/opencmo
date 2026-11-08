@@ -181,7 +181,7 @@ pre code{background:none;padding:0}
     <div class="sec-head"><p class="eyebrow">§1</p><h2>Verdict</h2></div>
 <p><b>Built:</b> one <code>approvals</code> table and one <code>approval_decide</code> RPC under the inbox, the CMO chat and the reminders; the snapshot rule (JCS content hash, price, time, account); 11 card kinds covering every department; reminders that open a card but never decide it (digest, email, web push); a daily card budget; every decision teaching the brain.</p>
 <p><b>Not in the table:</b> the Assistant's priced cards in the editor chat (<code>awaiting_approval</code> in <code>lib/agent/loop.ts</code>) and MCP's signed confirm codes stay their own surfaces, each with a price before anything is spent. Design decision 5 below (chat cards recorded in <code>approvals</code>) was not built.</p>
-<p><b>Left (plan 2026-11-08):</b> one card per job and no dead ends (S2.6), a price card before every Sales scan (S3.5), and fewer cards a week (its own plan).</p>
+<p><b>Left (plan 2026-11-08):</b> one card per job and no dead ends (S2.6, partly done: the X card with no connected account waits on S3's SQL), a price card before every Sales scan (S3.5), and fewer cards a week (its own plan).</p>
   </section>
 
   <section class="sec" id="approval-as-built-main-4f70a59">

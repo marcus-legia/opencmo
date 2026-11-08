@@ -28,7 +28,7 @@ flowchart TB
 | 1 Research | ✅ competitors, outlier posts · ✅ niche short video · ✅ Reddit, X, Hacker News · ✅ metrics after posting · ✅ reply outcomes | `jobs/competitor-research.ts`, `niche-video-research.ts`, `pull-metrics.ts`, `lib/cmo/social/` |
 | 2 Writer | ✅ posts and threads for X, Threads, LinkedIn · ✅ captions for Instagram, TikTok, YouTube · ✅ video brief · ✅ slide text · ✅ no-ai-slop in every writing prompt · ❌ article (later, owner 2026-11-08) | `lib/cmo/writer/`, `jobs/draft-post.ts`, `draft-thread.ts`, `lib/cmo/platforms.ts` |
 | 3 Sales | ✅ find Reddit threads · ✅ scored with evidence · ✅ subreddit rules, rare product mentions · ✅ reply drafts, the founder posts · 🟡 a scan from the chat has no price card (plan S3.5) | `jobs/sales-scan.ts` |
-| 4 Studio | ✅ edit your own video, mark it finished · ✅ shorts from a finished edit · ✅ slideshow (MP4 and PNG set) · 🟡 post image (built, no caller yet) · ✅ look check · ✅ slash commands; `/video` built, to be hidden (plan S2.4) · ✅ `render_document` → MP4 | `lib/departments/studio/`, `lib/agent/` |
+| 4 Studio | ✅ edit your own video, mark it finished · ✅ shorts from a finished edit · ✅ slideshow (MP4 and PNG set) · 🟡 post image (built, no caller yet) · ✅ look check · ✅ slash commands; `/video` built, hidden in the web app (S2.4) · ✅ `render_document` → MP4 | `lib/departments/studio/`, `lib/agent/` |
 | 5 Schedule | ✅ time per platform in the founder's timezone · ✅ best time from data, gaps, caps · ✅ schedule cards | `schedule_slots`, `best_slots`, `lib/cmo/schedule.ts` |
 | 6 Publish | ✅ Zernio for X, Threads, LinkedIn, TikTok, Instagram, YouTube · ✅ intent link as the fallback · ✅ signed webhook with receipts | `lib/departments/publish/`, `app/api/webhooks/zernio` |
 | 7 Approval | ✅ one `approvals` table with a snapshot · ✅ 11 card kinds · ✅ digest, email, web push · ✅ daily card budget | `approvals`, `approval_decide`, `lib/cmo/digest.ts`, `lib/notify/` |
@@ -155,7 +155,7 @@ is no `scheduled` state on the content: the time lives on its `schedule_slots` r
 | Lane | Steps |
 |---|---|
 | Post, Reddit | `planned` (plan-week) → `drafting` (writer + checker) → `in_review` (card) → `approved` → slot `proposed` → schedule card → slot `waiting` → `due` → `publishing` (`publish_post` on Vercel → Zernio) → `published` → `post_metrics`. Reddit replies stop at the card: the founder replies by hand |
-| Video | the founder's own edit → "Mark finished" (`mark_finished`, by document hash) → `cut_shorts` order → `shorts_batch` card → captions → schedule. A brain video (`build_video`, until plan S2.5 stops ordering it): storyboard card → render → look check → `finished_video` card → the same chain |
+| Video | the founder's own edit → "Mark finished" (`mark_finished`, by document hash) → `cut_shorts` order → `shorts_batch` card → captions → schedule. A brain video (`build_video`; the week plan no longer orders one, S2.5): storyboard card → render → look check → `finished_video` card → the same chain |
 | Slideshow | `write_slides` → `build_slideshow` → MP4 and PNG set → `slideshow` card → schedule |
 
 ## 6. The nine system changes, as built
@@ -214,7 +214,7 @@ https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 | 1 Research | topic, competitors | angles, evidence, metrics | `research`, `onboarding`; `competitor_research`, `niche_video_research`, `pull_metrics` | `cmo_insights`, `post_metrics`, `account_metrics` | Vercel | ✅ |
 | 2 Writer | write order + context | post, thread, caption, brief, slide text | `x_writer`, `threads_writer`, `linkedin_writer`, `instagram_writer`, `tiktok_writer`, `youtube_writer`, `brief_writer`, `slides_writer`, `checker` | `content_items`, `deliverables` | Vercel | ✅ (no articles) |
 | 3 Sales | scan order | scored threads + reply drafts | `sales`, `checker`; `sales_scan` | `opportunities`, `subreddit_rules` | Vercel | ✅ |
-| 4 Studio | brief, founder's media, Brand Kit | short, slideshow, image, video | Studio adapter; `director`, `shorts`, `writer`, `motion`, `captions`; Assistant + `editor-core` ops | `editor_projects`, `studio_steps`, `short_batches`, `generations`, `tasks` | Vercel + worker | ✅ (`/video` to be hidden) |
+| 4 Studio | brief, founder's media, Brand Kit | short, slideshow, image, video | Studio adapter; `director`, `shorts`, `writer`, `motion`, `captions`; Assistant + `editor-core` ops | `editor_projects`, `studio_steps`, `short_batches`, `generations`, `tasks` | Vercel + worker | ✅ (`/video` hidden in the web app) |
 | 5 Schedule | approved deliverables | slots, reminders | code (`schedule_propose`, `best_slots`) | `schedule_slots`, `best_slots` | Supabase + worker | ✅ |
 | 6 Publish | approved slot | live post link | `publish_post` → Zernio; intent link | `social_accounts`, `zernio_receipts`, `operation_log` | worker, Vercel | ✅ (live with the Zernio key) |
 | 7 Approval | everything going out | approve, edit, send back | founder; `checker` first | `approvals`, `card_budget` | Supabase | ✅ |
@@ -240,8 +240,8 @@ profiles, voice is learned from edits, and email and push exist. What the audits
 
 | Gap | Evidence | Fix |
 |---|---|---|
-| A new founder hits walls before the CMO works | signup gives 0 credits while the landing says "Start free"; a five-step setup (`components/screens/setup/SetupScreen.tsx`) | plan S2.1–S2.2 |
-| The week plan orders the most expensive job | `plan-week.ts:35` plans a one-minute AI video | plan S2.5 |
+| A new founder hits walls before the CMO works | signup gives 0 credits while the landing said "Start free"; a five-step setup | **fixed in S2.1–S2.2**: paid-first entry, honest copy, setup is the website step and the first week starts at once |
+| The week plan orders the most expensive job | `plan-week.ts` planned a one-minute AI video | **fixed in S2.5** |
 | A finished long video cannot be posted | `schedule_propose` makes slots only for posts, shorts and slideshows | open |
 | A broken provider key does not show | the Costs page has no Anthropic, fal or ElevenLabs row, and its Creem and ScrapeCreators rows only check that a variable is set (`lib/ops/switches.ts`) | plan S3.1–S3.2 |
 | Sales spends without a card | `create_task{agent:"sales"}` starts a 5-credit scan with no card (`lib/agent/cmo-tools.ts`) | plan S3.5 |
@@ -253,9 +253,9 @@ profiles, voice is learned from edits, and email and push exist. What the audits
 **Ranked by the CMO loop (owner, 2026-11-08):** does it make the loop of §2 work for a paying founder, end to end?
 Editor work comes after.
 
-1. Paid-first entry and the first week within minutes (plan S2.1–S2.3).
-2. `/video` hidden and the week plan without AI video (S2.4–S2.5).
-3. No dead ends, one card per job, Sales behind a card (S2.6, S3.5–S3.6).
+1. Paid-first entry and the first week within minutes (done: S2.1–S2.3; the rail follows the loop, `components/shell-v2/nav.ts`).
+2. `/video` hidden and the week plan without AI video (done: S2.4–S2.5).
+3. No dead ends, one card per job, Sales behind a card (S2.6 partly done; S3.5–S3.6).
 4. Providers you can see: Costs page rows, deploy check, priced fal and ElevenLabs spend (S3.1–S3.4).
 5. Owner: the Anthropic key everywhere, Creem live key and review, Zernio checks, Vercel Hobby.
 6. Then fewer cards a week, one Assistant, and the editor (their own plans).

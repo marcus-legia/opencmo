@@ -1,13 +1,14 @@
 # Architecture
 
-How OpenCMO's AI CMO and its departments work, **as built** (`main` at `4f70a59`, 2026-11-08). The pages were written
+How OpenCMO's AI CMO and its departments work, **as built** (`main` at `4f70a59`, 2026-11-08, plus S2 of the CMO
+review 2 plan on `cmo-review-2` at `6ce5c69`). The pages were written
 as designs on 2026-10-25–27, built in P1–P6 and the CMO review (#169–#180), and rewritten to match the code for the
 [CMO review 2 plan](../plans/cmo/2026-11-08-cmo-review-2-plan.md) (S1). Every claim names a code path.
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) at the repo root covers the whole system; its §11 summarises these pages.
 
 **Order of work (owner, 2026-11-08): the AI CMO first, the editor last.** The pages follow one loop: business
-information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is built; the owner decided to
-hide it, and plan S2.4 removes it from the web app (at `4f70a59` it is still offered). Every other slash command stays.
+information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is built and hidden in the web app behind one switch (`CREATE_VIDEO_HIDDEN` in `lib/agent/hidden.ts`, S2.4);
+the MCP tool and the evals keep it. Every other slash command stays.
 
 Every page is a pair with the same name: an `.html` page for people (diagrams, opens in any browser) and an `.md`
 twin for agents. The two must say the same thing; change both in the same commit. The HTML body is rendered from the

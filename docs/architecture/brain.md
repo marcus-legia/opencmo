@@ -199,7 +199,7 @@ edit finished is the founder's call only.
 
 | Squad | Members (kind) | State |
 |---|---|---|
-| Long take `/video` | Director (LLM, agent `director`: script, beats, keyframe + motion) → Reviewer (code, `review()` in `create-video.ts`, sends back once) → one storyboard card with one price → one job hold (`credit_orders`) → keyframes, text check, shots, voice and music in one go (`startAfter` / `endAfter`) → Builder (code: `create_video` op, one editable scene) | ✅ built; to be hidden in the web app (owner, 2026-11-08; plan S2.4, not done at `4f70a59`); MCP keeps `create_video` |
+| Long take `/video` | Director (LLM, agent `director`: script, beats, keyframe + motion) → Reviewer (code, `review()` in `create-video.ts`, sends back once) → one storyboard card with one price → one job hold (`credit_orders`) → keyframes, text check, shots, voice and music in one go (`startAfter` / `endAfter`) → Builder (code: `create_video` op, one editable scene) | ✅ built; hidden in the web app (`CREATE_VIDEO_HIDDEN` in `lib/agent/hidden.ts`, S2.4); MCP keeps `create_video` |
 | Intro `/intro` (`plan_video`, `lib/agent/video-team.ts`) | Writer (LLM, agent `writer`) → Motion director (LLM, agent `motion`) → Reviewer (code, `reviewIntro()`) → Builder (code, `add_intro` op) | ✅ |
 | Explainer `/explain` | `plan_explainer` (storyboard, direction, one price) → `preview_explainer` (stills and a layout report the model fixes) → `add_explainer` (one video layer from the approved job); re-planned in every turn (#180) | ✅ (`studio.md` §5b) |
 | Shorts `cut_shorts` (only from a finished edit) | Segmenter (code) → Clip editor (LLM, agent `shorts`: picks candidates by id, writes hook, title and reason) → Clip reviewer (code, sends back once) → Builder (`make_short` op) → Renderer (`render_document` per short) → look check | ✅ |
@@ -217,8 +217,8 @@ edit finished is the founder's call only.
 and a hidden Assistant chat (open loop, unpredictable cost, unseen cards). The team owns how a video is made; the
 brain owns what the week needs.
 
-**A brain video, in order** (Brain · Studio agent team · Worker + fal · You). The week plan still orders one until
-plan S2.5:
+**A brain video, in order** (Brain · Studio agent team · Worker + fal · You). Since S2.5 the week plan orders none;
+the order kind stays for MCP and Studio:
 
 1. Video brief (`write_video_brief`) → `build_video` order → the order holds its team allowance (`studio_order_hold`).
 2. Director writes the plan; the Reviewer checks it; one price for the whole video: keyframes, shots, voice-over,
@@ -231,7 +231,7 @@ plan S2.5:
 8. Event rule → `cut_shorts` → **Card 3**: the shorts batch; approved shorts go to Schedule with their captions.
 
 **History:** the contact sheet card (once card 2) was removed on 2026-11-06 (charge before running, D9); one keyframe is changed
-after with `redo_keyframe`, at its own price. Its last leftovers in the order runner are removed by plan S2.8.
+after with `redo_keyframe`, at its own price. Its last leftovers (the redo branch, `ContactSheet.tsx`) were removed in S2.8 (`814dbb7`).
 
 - **Security:** the team runs under the founder's RLS session; a Studio order mints a short-lived user JWT as MCP
   does (`brainClientFor`); the service role never writes an editor document.
@@ -328,9 +328,9 @@ All built: **B0** corrections and budget fields · **B1** `work_orders` beside `
 kill switch, morning digest · **B3** capability registry, event rules, the shared Studio adapter · **B4** brain evals.
 The weekly budget became a hard gate in the CMO review (B3.1–B3.2, `20270107010000`).
 
-What is left for the brain, ranked by the CMO loop (owner, 2026-11-08): the first week within minutes of paying
-(plan S2.2), a week plan without AI video (S2.5), a price card before every Sales scan (S3.5), and fewer cards a week
-(its own plan).
+Done in the CMO review 2 plan: the first week within minutes of paying (S2.2) and a week plan without AI video (S2.5).
+What is left for the brain, ranked by the CMO loop: a price card before every Sales scan (S3.5), and fewer cards a
+week (its own plan).
 
 ## 12. Decisions for the owner
 

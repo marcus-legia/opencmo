@@ -19,7 +19,8 @@ card but never decide it (digest, email, web push); a daily card budget; every d
 MCP's signed confirm codes stay their own surfaces, each with a price before anything is spent. Design decision 5
 below (chat cards recorded in `approvals`) was not built.
 
-**Left (plan 2026-11-08):** one card per job and no dead ends (S2.6), a price card before every Sales scan (S3.5), and
+**Left (plan 2026-11-08):** one card per job and no dead ends (S2.6, partly done: the X card with no connected
+account waits on S3's SQL), a price card before every Sales scan (S3.5), and
 fewer cards a week (its own plan).
 
 ## 2. Approval as built (`main`, `4f70a59`)
