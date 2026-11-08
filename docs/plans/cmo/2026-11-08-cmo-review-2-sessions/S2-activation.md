@@ -119,7 +119,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     orders only the brief: SQL, so it is a request in S3's file. The p2/p3 acceptance scripts (`lib/screens/p2-,
     p3-acceptance.e2e.ts`) seed a Studio video through the brief "make 1 video"; that step no longer plans one.
     Check: `jobs.check`, `studio-orders.check`, `coverage.check`, `cmo:eval --provider fake` all green.
-- [ ] **S2.6 No dead ends.**
+- [ ] **S2.6 No dead ends.** Partly done in `b15480b`; the X card waits on S3 (see the note).
   - Hide the disabled "arrives with…" buttons in Setup and Library. Sales is S3's.
   - Warn before leaving the page while an upload runs (`components/editor/upload/UploadPanel.tsx`).
   - When transcription failed, the editor says so and offers a retry, instead of "no speech".
@@ -150,7 +150,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     without a row; `PLANS` carries no paid price or credits; `offerPrices` is null without both rows, and then the
     landing hides the pricing section, the FAQ drops the numbers and Billing shows no price for a plan.
     Check: typecheck, `check:blog`, `check:contracts`.
-- [ ] **S2.8 Dead code.**
+- [x] **S2.8 Dead code.** `814dbb7`
   - Remove the `animate_video` and contact-sheet leftovers: `studio-orders.ts` redo branch and `withKeyframe` / `pendingGenerations`, `adapter.ts:116`, `ContactSheet.tsx`, the `redo` types in the Assistant client, the stale `animate_video` stub in `clipScopeWith`, and the "under the 24" comment in editor-core `create-video.ts`.
   - Keep `redo_keyframe` and `create_video` (hidden, not dead).
   - Note. Now: the two-card `/video` went on 2026-11-06, but `studio-orders.ts` still runs a contact-sheet redo and an
