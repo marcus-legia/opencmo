@@ -113,15 +113,14 @@ export function studio(ctx: StudioContext, options: SessionOptions = {}): Studio
   async function decide(step: StepRef, action: StudioAction): Promise<StudioDecision> {
     allow(ctx, "decide");
     const prepared = "prepared" in step ? step.prepared : await storedStep(ctx, step.stepId);
-    if (action.kind === "redo" && prepared.tool !== "animate_video") throw new ApiError(400, "Only the contact sheet can redo one keyframe.");
+    // The contact sheet that offered a keyframe redo went with the two-card /video; redo_keyframe does it in the editor.
+    if (action.kind === "redo") throw new ApiError(400, "Redo the keyframe from the editor instead.");
     const { scope } = await session(prepared.clipId);
     const approved = await scope.decide(
       { id: randomUUID(), name: prepared.tool, input: {} },
       prepared.input,
       action.kind === "approve",
-      action.kind === "redo" ? { index: action.index } : undefined,
     );
-    // A contact-sheet redo reports its new keyframe only in the outcome (the in-app card reads it there).
     const generationId = typeof approved.extra.generation_id === "string" ? approved.extra.generation_id : outcomeGeneration(approved.outcome.content);
     const view = approved.extra.view as { exports?: Record<string, unknown>[] } | undefined;
     const next = action.kind === "approve" && approved.outcome.ok ? nextStep(prepared.tool, approved.outcome.content) : undefined;

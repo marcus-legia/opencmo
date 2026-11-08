@@ -5,11 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { DEMOS, type DeptId } from "./data";
 import { gsap } from "./motion";
 
-const TABS: [DeptId, string][] = [["video", "Video"], ["post", "Post"], ["sales", "Sales"]];
+const TABS: [DeptId, string][] = [["post", "Post"], ["video", "Video"], ["sales", "Sales"]];
 
 /** "See it work": three silent 5-second loops rebuilt from the real Editor/Dashboard UI. */
 export function DemoSection() {
-  const [tab, setTab] = useState<DeptId>("video");
+  const [tab, setTab] = useState<DeptId>("post");
   // The section sits below the fold; attaching `src` only near the viewport keeps the
   // MP4 out of the first page load. The poster covers the frame until then.
   const [near, setNear] = useState(false);

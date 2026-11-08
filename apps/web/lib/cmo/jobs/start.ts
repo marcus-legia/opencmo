@@ -35,6 +35,23 @@ export function kickCmoQueue(runId?: string, budgetMs = 250_000): void {
 }
 
 /**
+ * Runs `runIds` one after the other after the response (the first week: the plan, then the draft that reads it). What the
+ * function's time limit cuts short stays queued for Modal's sweep, as with `kickCmoQueue`.
+ */
+export function kickCmoRunsInOrder(runIds: string[], budgetMs = 140_000): void {
+  after(async () => {
+    const store = supabaseStore(createAdminClient());
+    for (const runId of runIds) {
+      try {
+        await drainCmoQueue(store, { runId, budgetMs });
+      } catch (error) {
+        console.error("[cmo] draining the queue failed", error);
+      }
+    }
+  });
+}
+
+/**
  * `kick: false` leaves the run to Modal's sweep (within a minute): a request already late in its function's time limit
  * would cut the `after()` drain short mid-job (review follow-up C5).
  */

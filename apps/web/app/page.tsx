@@ -14,7 +14,7 @@ import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catal
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { createServerClient } from "@/lib/supabase/server";
 
-const DESCRIPTION = "Your AI marketing team: it edits the videos, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
+const DESCRIPTION = "Your AI marketing team: it reads your website, plans your week, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
 
 export const metadata: Metadata = {
   title: { absolute: "OpenCMO: your AI marketing team for founders" },
@@ -50,7 +50,7 @@ function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
       description: DESCRIPTION,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      offers: plans.filter((plan) => plan.price > 0).map((plan) => ({
+      offers: plans.filter((plan) => plan.slug).map((plan) => ({
         "@type": "Offer",
         name: plan.name,
         price: plan.billedPrice,
@@ -88,7 +88,8 @@ export default async function LandingPage() {
         <Channels />
         <Departments />
         <DemoSection />
-        <PricingSection prices={prices} action={action} />
+        {/* No catalogue row, no price (cmo-review-2 S2.7): the section waits for the catalogue rather than guess. */}
+        {prices ? <PricingSection prices={prices} action={action} /> : null}
         <FaqSection items={faq} />
       </main>
       <LandingFooter action={action} />

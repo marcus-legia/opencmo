@@ -39,7 +39,6 @@ import type { RenderTask } from "@/lib/api/tasks";
 import type { ToolAnswer } from "./capture";
 import type { SlashMenuItem } from "@/lib/agent/slash";
 
-import { ContactSheet } from "./ContactSheet";
 import { ContinueInClaude } from "./ContinueInClaude";
 import { Markdown } from "./Markdown";
 import { VoicePicker } from "./VoicePicker";
@@ -49,11 +48,15 @@ import { reportClientError } from "@/lib/client-errors";
 type LiveTurn = TurnView & { thinking?: string; activity?: Activity; lastEvent?: number };
 type Activity = { kind: "thinking" | "writing" | "tool" | "waiting"; tool?: string };
 
+/** For a video with speech: they cut and frame the talk. */
 const EXAMPLES = [
   "Tighten the pacing: cut filler words and long pauses",
   "Add a bold hook title for the first 3 seconds",
   "Make it square and check the speaker stays in frame",
 ];
+
+/** For a blank edit (nothing spoken yet): no talking-head starters, and no full AI video (`/video` is hidden). */
+const BLANK_EXAMPLES = ["Make an animated intro for this video", "Add a title card for the first 3 seconds"];
 
 /** Gợi ý chỉ có khi máy chủ bật model ảnh/video (học starter "Generate B-roll" của Palmier). */
 const BROLL_EXAMPLE = "Generate B-roll: AI shots for the lines that name something concrete";
@@ -380,13 +383,10 @@ export function AssistantPanel({
     });
   /** Tool tab của cùng bước (không có thẻ): chạy và gửi CÙNG câu trả lời của người. */
   const browserResults = (turn: TurnView) => runBrowserTools(turn.pending.filter((request) => !request.card));
-  /** `redo`: one keyframe redone on a contact sheet; every card of the step is then left unapproved. */
-  const decide = (turn: TurnView, approved: boolean, redo?: { requestId: string; index: number }) =>
+  const decide = (turn: TurnView, approved: boolean) =>
     proceed(turn, async (id, handler) => {
       const tools = await browserResults(turn);
-      const decisions = turn.pending
-        .filter((request) => isApproval(request.card))
-        .map((request) => ({ tool_use_id: request.id, approved, ...(redo?.requestId === request.id ? { redo: { index: redo.index } } : {}) }));
+      const decisions = turn.pending.filter((request) => isApproval(request.card)).map((request) => ({ tool_use_id: request.id, approved }));
       return client.results(id, [...tools, ...decisions], handler);
     });
   const answer = (turn: TurnView, request: ToolRequest, reply: BrowserResult["answer"]) =>
@@ -576,7 +576,7 @@ export function AssistantPanel({
                 {ROUGHCUT_STARTER.label}
               </button>
             ) : null}
-            {(broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES).map((example) => (
+            {(speech ? (broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES) : BLANK_EXAMPLES).map((example) => (
               <button key={example} type="button" className="ed2-asst-example" disabled={busy || available === null} onClick={() => void send(example)}>
                 {example}
               </button>
@@ -593,7 +593,7 @@ export function AssistantPanel({
             undoing={undoing}
             onUndo={() => void undo(turn)}
             onResume={() => void resume(turn)}
-            onDecide={(approved, redo) => void decide(turn, approved, redo)}
+            onDecide={(approved) => void decide(turn, approved)}
             onAnswer={(request, reply) => void answer(turn, request, reply)}
             onExtend={() => void extend(turn)}
             onStop={() => void stop()}
@@ -637,7 +637,7 @@ export function AssistantPanel({
           <textarea
             ref={input}
             className="ed2-asst-input"
-            placeholder="Ask for an edit, or type / for commands like /video"
+            placeholder="Ask for an edit, or type / for commands like /broll"
             value={draft}
             rows={2}
             maxLength={4000}
@@ -711,7 +711,7 @@ function Turn({
   undoing: number | null;
   onUndo: () => void;
   onResume: () => void;
-  onDecide: (approved: boolean, redo?: { requestId: string; index: number }) => void;
+  onDecide: (approved: boolean) => void;
   onAnswer: (request: ToolRequest, reply: BrowserResult["answer"]) => void;
   onExtend: () => void;
   onStop: () => void;
@@ -763,10 +763,6 @@ function Turn({
             {approvals.map((request) => (request.card as ApprovalCard).storyboard).map((storyboard, index) =>
               storyboard ? <StoryboardTable key={`storyboard-${index}`} storyboard={storyboard} /> : null,
             )}
-            {approvals.map((request) => {
-              const sheet = (request.card as ApprovalCard).sheet;
-              return sheet ? <ContactSheet key={`sheet-${request.id}`} sheet={sheet} onRedo={(index) => onDecide(false, { requestId: request.id, index })} /> : null;
-            })}
           </div>
           {approvals.length > 1 && approvals.some((request) => (request.card as ApprovalCard).credits) ? (
             <p className="ed2-asst-total" data-testid="assistant-approval-total">

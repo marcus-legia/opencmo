@@ -132,7 +132,7 @@ export function LandingNav({ user }: { user: boolean }) {
       </div>
       <div className="lv-nav-actions">
         <Link href={user ? "/app" : "/login"} className="lv-btn-ghost">{user ? "Open app" : "Log in"}</Link>
-        <a href="#start" onClick={onAnchorClick("start")} className="lv-btn-light">Start free</a>
+        <a href="#start" onClick={onAnchorClick("start")} className="lv-btn-light">Get started</a>
       </div>
     </nav>
   );

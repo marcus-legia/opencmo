@@ -135,20 +135,6 @@ async function runOrder(admin: SupabaseClient, order: Order): Promise<void> {
   }
 }
 
-/** Generations of the edit still being made: the shots, voice and music `animate_video` queued. */
-async function pendingGenerations(supabase: SupabaseClient, clipId: string): Promise<string[]> {
-  const { data, error } = await supabase.from("generations").select("id").eq("clip_id", clipId).in("status", ["queued", "running"]);
-  if (error) throw new Error(`generations read: ${error.message}`);
-  return ((data ?? []) as { id: string }[]).map((g) => g.id);
-}
-
-/** Card 2's raw input with one keyframe swapped for its redone generation. */
-export function withKeyframe(input: Record<string, unknown> | null, index: number, generationId: string): Record<string, unknown> | null {
-  if (!input || !Array.isArray(input.keyframes) || !input.keyframes[index]) return null;
-  const keyframes = input.keyframes.map((k, i) => (i === index ? { ...(k as object), generation_id: generationId } : k));
-  return { ...input, keyframes };
-}
-
 async function runStep(admin: SupabaseClient, step: Step): Promise<void> {
   const { ctx, adapter } = brainStudio(step.user_id, step.order_id);
   const finish = (status: "running" | "done" | "failed", extra: { error?: string; generationId?: string; next?: unknown; waitFor?: string[] } = {}) =>
@@ -161,31 +147,20 @@ async function runStep(admin: SupabaseClient, step: Step): Promise<void> {
       p_wait_for: extra.waitFor ?? null,
     });
   try {
-    const redo = step.decision === "redo";
-    const index = step.decision_payload?.index ?? 0;
-    const decided = await adapter.decide({ stepId: step.id }, redo ? { kind: "redo", index } : { kind: "approve" });
+    // A keyframe redo came from the two-card /video (contact sheet), gone since 2026-11-06: a keyframe is redone in the
+    // editor (`redo_keyframe`). A step decided that way before then fails here instead of running something else.
+    if (step.decision === "redo") {
+      await finish("failed", { error: "Redoing a keyframe from this card is no longer offered." });
+      return move(admin, step.order_id, "failed", "", { code: "redo_failed", message: "Redo the keyframe from the editor instead." });
+    }
+    const decided = await adapter.decide({ stepId: step.id }, { kind: "approve" });
     if (!decided.outcome.ok) {
       await finish("failed", { error: decided.outcome.summary || "The step could not start." });
       return move(admin, step.order_id, "failed", "", { code: "step_failed", message: decided.outcome.summary || "A Studio step could not start." });
     }
-    if (redo) {
-      // One keyframe again; the new contact sheet (a new card 2) comes when it is made.
-      const input = decided.generationId ? withKeyframe(step.plan_input, index, decided.generationId) : null;
-      if (!input || !decided.generationId) {
-        await finish("failed", { error: "The keyframe could not be made again." });
-        return move(admin, step.order_id, "failed", "", { code: "redo_failed", message: "The keyframe could not be made again." });
-      }
-      await finish("running", { generationId: decided.generationId, next: { tool: "animate_video", input, redoOf: step.id }, waitFor: [decided.generationId] });
-      return move(admin, step.order_id, "waiting_order", `Making keyframe ${index + 1} again`);
-    }
     if (decided.next) {
       await finish(decided.next.waitFor.length ? "running" : "done", { generationId: decided.generationId, next: { tool: decided.next.tool, input: decided.next.input }, waitFor: decided.next.waitFor });
       return move(admin, step.order_id, "waiting_order", "Making the keyframes, shots, voice-over and music");
-    }
-    if (step.tool === "animate_video") {
-      const waitFor = await pendingGenerations(ctx.supabase, step.clip_id);
-      await finish(waitFor.length ? "running" : "done", { generationId: decided.generationId, next: { tool: "render" }, waitFor });
-      return move(admin, step.order_id, "waiting_order", "Making the shots, voice-over and music");
     }
     // Nothing follows this step (a long take's step always has a next): the order would wait on nothing.
     await finish("failed", { error: "The step finished without its next step." });
@@ -234,7 +209,7 @@ async function runNext(admin: SupabaseClient, step: Step): Promise<void> {
     if (planned.stepId && next.input && typeof next.input === "object") {
       await rpcOrThrow(admin, "studio_step_plan_input", { p_id: planned.stepId, p_input: next.input });
     }
-    return move(admin, step.order_id, "waiting_founder", "The contact sheet and video price wait on you");
+    return move(admin, step.order_id, "waiting_founder", "The next step and its price wait on you");
   } catch (error) {
     console.error("[studio-orders] next", step.id, error);
     await move(admin, step.order_id, "failed", "", { code: "studio_error", message: message(error) });

@@ -7,7 +7,7 @@ import { nextPostText, type RailStatus } from "@/lib/screens/rail";
 
 import { Logo } from "./Logo";
 import { NavIcon } from "./NavIcon";
-import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_SETTINGS, isCurrent, type DepartmentName, type NavEntry } from "./nav";
+import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_MORE, NAV_SETTINGS, isCurrent, type DepartmentName, type NavEntry } from "./nav";
 
 export type RailProps = {
   segment: string | null;
@@ -86,6 +86,7 @@ function Group({ heading, children }: { heading?: string; children: ReactNode })
 export function Rail(props: RailProps) {
   const { entries, credits, email, collapsed, onToggleCollapsed } = props;
   const departments = entries(NAV_DEPARTMENTS);
+  const more = entries(NAV_MORE);
   return (
     <nav aria-label="Main" className="v2-rail" id="v2-rail">
       <div className="v2-rail-top">
@@ -117,6 +118,14 @@ export function Rail(props: RailProps) {
       {departments.length > 0 ? (
         <Group heading="Departments">
           {departments.map((entry) => (
+            <RailLink key={entry.href} entry={entry} props={props} />
+          ))}
+        </Group>
+      ) : null}
+
+      {more.length > 0 ? (
+        <Group heading="More">
+          {more.map((entry) => (
             <RailLink key={entry.href} entry={entry} props={props} />
           ))}
         </Group>

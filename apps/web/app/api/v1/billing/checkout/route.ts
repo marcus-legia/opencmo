@@ -9,7 +9,8 @@ import { absoluteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
-const body = z.object({ product: z.string().min(1).max(64) });
+// `site` is the website the founder typed on the landing page: it rides the success URL to the CMO's first step.
+const body = z.object({ product: z.string().min(1).max(64), site: z.string().trim().max(300).optional() });
 
 /**
  * Starts a Creem checkout and returns its URL. The client names a catalogue slug, never a Creem product id, and RLS only
@@ -18,6 +19,11 @@ const body = z.object({ product: z.string().min(1).max(64) });
  * `metadata.user_id` is what the webhook matches on. The redirect back is only for the user: credits come from the webhook,
  * never from query params on the return URL.
  */
+function successPath(kind: "plan" | "pack", site: string | undefined): string {
+  if (kind === "pack") return "/app/billing?paid=1";
+  return site ? `/app?paid=1&site=${encodeURIComponent(site)}` : "/app?paid=1";
+}
+
 export const POST = withApi(
   { body, rateLimit: { bucket: "billing_checkout", limit: 20, windowSeconds: 3600 } },
   async ({ supabase, user, body }) => {
@@ -39,8 +45,9 @@ export const POST = withApi(
       request_id: `${user.id}:${randomUUID()}`,
       metadata: { user_id: user.id },
       ...(user.email ? { customer: { email: user.email } } : {}),
-      // Creem refuses 127.0.0.1 as a URL, which is where the local stack runs.
-      success_url: absoluteUrl("/app/billing?paid=1").replace("//127.0.0.1", "//localhost"),
+      // Creem refuses 127.0.0.1 as a URL, which is where the local stack runs. A new plan opens the CMO's first step (the
+      // website, `app/app/page.tsx`); a pack goes back to the Credits page.
+      success_url: absoluteUrl(successPath(catalog.data.kind, body.site)).replace("//127.0.0.1", "//localhost"),
     });
     if (typeof session.checkout_url !== "string") throw new ApiError(502, "Could not start the checkout. Please try again.");
     return { checkout_url: session.checkout_url };

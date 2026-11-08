@@ -94,6 +94,32 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
   useEffect(() => setAspect(frame), [frame]);
   // The panel stays mounted across tabs; leaving the editor stops a transfer nobody can see.
   useEffect(() => () => upload.current?.abort(), []);
+  // So leaving asks first while the file is being sent: closing or reloading the tab, or a link to another page.
+  const sending = progress !== null;
+  useEffect(() => {
+    if (!sending) return;
+    const unload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    // Capture phase, before Next's <Link> handler: it skips navigation when the click was prevented.
+    const click = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(link instanceof HTMLAnchorElement) || link.target === "_blank" || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      const to = new URL(link.href, window.location.href);
+      if (to.origin === window.location.origin && to.pathname === window.location.pathname) return;
+      if (!window.confirm("Your video is still uploading. Leave this page and stop the upload?")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", unload);
+    document.addEventListener("click", click, true);
+    return () => {
+      window.removeEventListener("beforeunload", unload);
+      document.removeEventListener("click", click, true);
+    };
+  }, [sending]);
 
   const load = useCallback(async () => {
     try {
@@ -218,6 +244,7 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
             <div className="ed2-clips-progress">
               <progress max={100} value={progress} aria-label="Upload progress" />
               <button type="button" className="ed2-clips-switch" onClick={() => upload.current?.abort()}>Cancel</button>
+              <small className="ed2-muted">Keep this page open until the upload finishes.</small>
             </div>
           ) : null}
         </div>

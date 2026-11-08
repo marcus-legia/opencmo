@@ -336,8 +336,24 @@ async function main(): Promise<void> {
     const noVideo = tools.filter((name) => name !== "create_video");
     assert.ok(!slashCommandsFor(noVideo).some((command) => command.name === "video"));
     assert.match(slashDirective("/video a clip", noVideo), /not available here/);
-    assert.match(SYSTEM_PROMPT, /create_video/, "a plain \"make me a video\" must be routed by the system prompt");
-    assert.match(readGuide("blank"), /create_video/, "the blank-edit guide must send a whole video to create_video");
+    // `/video` hidden in the web app (cmo-review-2 §2.2): the Assistant has no create_video, its menu drops /video, and
+    // neither the prompt nor the blank guide offers a whole AI video. MCP still lists the tool.
+    const { CREATE_VIDEO_HIDDEN } = await import("./hidden");
+    const web = clipToolSpecs({ assistant: true }).map((spec) => spec.name);
+    if (CREATE_VIDEO_HIDDEN) {
+      assert.ok(!web.includes("create_video") && tools.includes("create_video"), "hidden from the Assistant, kept for MCP");
+      assert.ok(!slashCommandsFor(web).some((command) => command.name === "video"), "the slash menu drops /video");
+      assert.match(slashDirective("/video a clip", web), /not available here/);
+      assert.ok(!SYSTEM_PROMPT.includes("create_video") && !SYSTEM_PROMPT.includes("/video"), "the prompt does not offer a whole AI video");
+      assert.match(SYSTEM_PROMPT, /whole AI video from one prompt is not made here/);
+      assert.ok(!readGuide("blank").includes("create_video"), "the blank-edit guide does not send a whole video to create_video");
+      // Every other command stays exactly as it was.
+      const names = (list: readonly string[]) => slashCommandsFor(list).map((command) => command.name);
+      assert.deepEqual(names(web), names(tools).filter((name) => name !== "video"), "only /video is hidden");
+    } else {
+      assert.match(SYSTEM_PROMPT, /create_video/, "a plain \"make me a video\" must be routed by the system prompt");
+      assert.match(readGuide("blank"), /create_video/, "the blank-edit guide must send a whole video to create_video");
+    }
     // The editor can export (request_export): a prompt that says otherwise makes the model refuse "export it".
     assert.match(SYSTEM_PROMPT, /request_export/);
     assert.doesNotMatch(SYSTEM_PROMPT, /cannot (export|render)/i);

@@ -93,3 +93,18 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
 ## Requests
 
 _(other sessions write here)_
+
+- **From S2 (S2.5), not urgent:** a week-plan item for a video the founder records themselves. Today every
+  non-slideshow `video` item of a plan run becomes `write_video_brief` + `build_video` in `work_orders_plan_week`, so S2.5
+  drops them all in `toPlanItems` (no AI video). To keep "video scripts and storyboards in the Writer's output when the
+  strategy calls for a video the founder records", the plan needs an item that orders only the brief. Proposal: a
+  `video` item with platform `Script` creates `write_video_brief` and no `build_video`, with a pgTAP test. Once it is in,
+  S2 (or whoever owns `plan-week.ts` then) lets `toPlanItems` keep one `Script` item a week. Owner's call whether this
+  waits for the next plan.
+- **From S2 (S2.6):** "I posted it" on a post draft when no account is connected. Today approving a post with no
+  connected account still makes a schedule slot in `intent` mode and raises its card (`schedule_propose`), which then
+  reminds or fails as `no_account` at the slot's time, and `cmo_mark_posted` needs the item `approved` and leaves that
+  slot and card open. Needed: one RPC (or `cmo_mark_posted` with a flag) that approves the draft, marks it published,
+  and cancels its proposed slots and their approvals in the same transaction, with a pgTAP test. S2 then adds "Copy
+  and open" and "I posted it" to the draft card (`components/cards/ApprovalCard.tsx`) when the platform has no
+  connected account.
