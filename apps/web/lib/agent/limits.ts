@@ -29,6 +29,21 @@ export const AGENT_AUTO_HOLD_CAP = 60;
 export const MAX_REQUEST_MS = 240_000;
 
 /**
+ * A model step still streaming this long after its request started is cut. The routes run on Vercel
+ * Hobby, where `maxDuration` cannot pass 300 s: past it the platform kills the request with no answer,
+ * and the turn only fails minutes later as "stopped responding" (2026-11-08, an explainer's scene code
+ * written in one step). Cut here, the loop can still record the call and tell the model to go smaller.
+ */
+export const STEP_DEADLINE_MS = 280_000;
+
+/** Steps of one turn cut at `STEP_DEADLINE_MS` before it stops trying and says so. */
+export const MAX_LATE_STEPS = 2;
+
+/** Put in the history when a step was cut at the deadline; counted to stop after `MAX_LATE_STEPS`. */
+export const LATE_STEP_NOTE =
+  "[step cut] Your last answer took longer than one request allows (about 4.5 minutes, thinking included) and was discarded; nothing of it ran. Do the same work in smaller pieces: think briefly, keep each tool call's input short (for an explainer, simpler scene code: fewer elements, shared helpers, no repeated blocks), and split long work across several calls.";
+
+/**
  * Model steps in one request before it pauses (`awaiting_continue`, 'steps') and the tab continues.
  * Credits and time already bound a turn; this also bounds a request whose steps are cheap and fast,
  * so a looping model surfaces between requests instead of spinning inside one.

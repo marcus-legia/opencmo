@@ -36,11 +36,14 @@ import { canonicalJson } from "@opencmo/clip-doc";
 import {
   AGENT_EXTEND_CREDITS,
   KEEP_IMAGES,
+  LATE_STEP_NOTE,
+  MAX_LATE_STEPS,
   MAX_REPEATED_FAILURES,
   MAX_REQUEST_MS,
   MAX_STEPS,
   SLOW_PLAN_CUTOFF_MS,
   SLOW_PLANS,
+  STEP_DEADLINE_MS,
   STOP_POLL_MS,
 } from "./limits";
 import { TAINT_GATED_TOOLS, TAINT_MESSAGE, TAINTING_TOOLS } from "./cmo-tools";
@@ -188,8 +191,10 @@ async function recordTool(
  * Hỏi trạng thái lượt mỗi `STOP_POLL_MS` trong lúc model đang nói: Stop thì
  * cắt luồng ngay, không đợi model nói xong (và không trả tiền phần còn lại).
  */
-function watchStop(supabase: SupabaseClient, turnId: string) {
+/** Aborts the step on the user's Stop, or at `deadline` (ms since epoch), which `late()` then reports. */
+function watchStop(supabase: SupabaseClient, turnId: string, deadline?: number) {
   const controller = new AbortController();
+  let late = false;
   const timer = setInterval(() => {
     void turnStatus(supabase, turnId)
       .then((row) => {
@@ -197,8 +202,26 @@ function watchStop(supabase: SupabaseClient, turnId: string) {
       })
       .catch(() => undefined);
   }, STOP_POLL_MS);
-  return { signal: controller.signal, done: () => clearInterval(timer) };
+  const cut =
+    deadline === undefined
+      ? undefined
+      : setTimeout(() => {
+          late = true;
+          controller.abort();
+        }, Math.max(0, deadline - Date.now()));
+  return {
+    signal: controller.signal,
+    late: () => late,
+    done: () => {
+      clearInterval(timer);
+      if (cut) clearTimeout(cut);
+    },
+  };
 }
+
+/** How many of this turn's steps were already cut at the deadline (their notes are in the history). */
+const lateSteps = (past: StoredMessage[] | undefined): number =>
+  (past ?? []).filter((message) => message.role === "user" && JSON.stringify(message.content).includes("[step cut]")).length;
 
 /** Shown when the model keeps sending a call that fails the same way. */
 export const REPEATED_FAILURE_MESSAGE = "The assistant kept repeating a step that fails, so it stopped. Try rephrasing the request.";
@@ -326,7 +349,7 @@ export async function runTurn(env: TurnEnv): Promise<void> {
         return;
       }
 
-      const watch = watchStop(supabase, turn.id);
+      const watch = watchStop(supabase, turn.id, started + STEP_DEADLINE_MS);
       let result;
       try {
         past ??= await history(supabase, turn.session_id, scope.kind === "cmo" ? cmoWindowStart(turn.number) : 1);
@@ -345,6 +368,29 @@ export async function runTurn(env: TurnEnv): Promise<void> {
           },
         );
       } catch (err) {
+        if (watch.late() && err instanceof StepAborted) {
+          // Cut at the request's deadline, not by the user: billed like any call, then retried smaller.
+          await ledger("agent_record_usage", {
+            p_turn_id: turn.id,
+            p_model: err.model,
+            p_input: err.usage.input,
+            p_output: err.usage.output,
+            p_cache_read: err.usage.cacheRead,
+            p_cache_write: err.usage.cacheWrite,
+          }).catch((recordError: unknown) => console.error("[agent] recording a cut call failed", turn.id, recordError));
+          console.warn("[agent] step cut at the request deadline", turn.id, { output: err.usage.output });
+          if (lateSteps(past) + 1 >= MAX_LATE_STEPS) {
+            await finish(env, "failed", "This request needs a longer answer than the assistant can write in one go. Try a shorter video or fewer beats.");
+            return;
+          }
+          const note = provider.userTurn(LATE_STEP_NOTE, "This turn goes on in a new request.");
+          await ledger("agent_append", { p_turn_id: turn.id, p_role: "user", p_content: note });
+          past?.push({ role: "user", content: note });
+          // A fresh request gets the full time for the smaller retry; the tab continues on its own.
+          await pause(env, "time");
+          emit("done", { status: "awaiting_continue", reason: "time", credits: null, error: null });
+          return;
+        }
         if (watch.signal.aborted) {
           // Stop closed the turn already; the call it cut short is still billed, like any other.
           if (err instanceof StepAborted) {
