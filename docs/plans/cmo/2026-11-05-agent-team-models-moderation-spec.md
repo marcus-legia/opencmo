@@ -264,13 +264,24 @@ price. The estimate must carry a margin, because the job does not stop to ask fo
 |---|---|---|---|---|
 | T1 | Anthropic key and credit on Vercel, Modal `opencmo` and `opencmo-mcp` | One provider now: without it AI media is off and the CMO falls back to the founder's Claude | S (ops) | none |
 | T2 | Remove `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_COMPAT_*`, `OPENCMO_MODERATION_VISION_MODEL`, `CMO_LLM_PROVIDER(S)` from Vercel and Modal; run `check_deploy_env.py` | Unused secrets | S (ops) | #169 deployed |
-| T3 | **Done** for the code: #166 merged `main` (744ee6c5) and was merged into `cmo-review` (cfcb4327). Still to do: go live with a live Creem key and request Creem's review | Creem compliance | M | T1 |
+| T3 | **Done** for the code: #166 merged `main` (744ee6c5) and was merged into `cmo-review` (cfcb4327). The live key is set (2026-11-08). **Still pending:** Creem's account review, after a real CMO week runs on production with live moderation calls | Creem compliance | M | T1 |
 | T4 | **Done**: Creem alone screens image and video prompts (web `moderateText`, worker `check_prompt`), audio is not screened, the input checks and our five policies are gone; the output review, page captures and the look check use `CREEM_POLICY` from `packages/contracts/creem-policy.json` | D8 | S | T3 |
 | T9 | §6: [plan](2026-11-06-charge-before-running-plan.md) (approved 2026-11-06): one card, one hold per job, no second approval; six phases. **Done, phases 1–6** (turn overage, `credit_orders`, keyframe chaining, `/video` in one go, Studio hold, explainer plan first) | D9 | L | none |
 | T5 | **Done** (`aa002d45`): keep-alive for the Assistant's SSE stream (a comment line every 15 s in `lib/agent/sse.ts`, `sse.check.ts`) | Streams over 2 min dropped in production; still to confirm on Vercel with a turn over 2 min | S | none |
-| T6 | Strict tools for credit-spending tools only (`generate_media`, `add_explainer`, `animate_video`…) | Since #167 the editor runs without strict at all; strict matters most where a bad call costs money | S | a real-API test of the grammar size |
+| T6 | **Largely done**: credit-spending tools are strict (`generate_media`, `create_video`, `edit_video`, `replace_background`…), capped at `MAX_STRICT_TOOLS` by `strictTools` (`lib/agent/providers/anthropic.ts`, `providers.check.ts`); `add_explainer` stays non-strict. **Still owed:** a real-API test of the grammar size | Strict matters most where a bad call costs money | S | a real-API test |
 | T7 | **Done** (`70378ae3`): the Generate panel saves under `Generated/` like the Assistant. Items already in `generated/` stay (their path is also the clip's `src`) | A duplicate folder, case only | S | none |
 | T8 | Optional: split an "explainer coder" role from the Assistant | Only if an eval shows Sonnet writes weak explainer code | M | eval |
+
+**Production notes, 2026-11-08** (the first production test, and the CMO review 2 plan,
+[`2026-11-08-cmo-review-2-plan.md`](2026-11-08-cmo-review-2-plan.md)):
+
+- **The Anthropic 401.** The test failed on `401 invalid x-api-key`. The bad key was the one on Vercel. Nothing in the
+  app said so: the Costs page had no Anthropic row (plan S3.1 adds a live check per provider). T1 now reads: the same
+  valid `ANTHROPIC_API_KEY` on Vercel, Modal `opencmo` and `opencmo-mcp`.
+- **The Creem live key** is set. The account review (T3) waits on a real CMO week on production (website → plan →
+  drafts) with live moderation calls.
+- **The step cut at 280 s** (#178): Vercel Hobby kills a request at 300 s, so a model step still streaming at 280 s is
+  cut (`STEP_DEADLINE_MS`). Whether to move to Vercel Pro is the owner's call (Hobby's terms for commercial use apply).
 
 ## 9. Sales finder (#133)
 
