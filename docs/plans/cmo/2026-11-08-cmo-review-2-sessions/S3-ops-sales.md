@@ -44,6 +44,16 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   **The 15 fixtures are `assumed` for now:** `docs.scrapecreators.com` and the API do not resolve from the build
   sandbox, so they were written from the paths the parsers read, which proves the plumbing, not the provider's shape.
   The check prints how many are real. Owner: run the script (header has the command) and commit the result.
+- **S3.5.** Now: `cmoScope.plan()` (`scope.ts`) returns `run` for `create_task`, so `create_task{agent:"sales"}`
+  queues a 5-credit scan with no card (`cmo-tools.ts`, `case "create_task"`). Change: `pricedTaskCard()` in
+  `cmo-tools.ts` plans a run-now `sales` (`sales_scan`, 5) or `research` (`competitor_research`, 2) task as an approval
+  card with the price from `JOB_PRICES` and what it will search; `decide()` runs the task as it was on the card, and a
+  Cancel spends nothing. Drafts and plans (1 credit) still run at once; a dated task is a calendar item and costs
+  nothing until its day; the weekly loop keeps its budget gate. `niche_video_research` is not reachable from
+  `create_task`, so nothing to gate there. The CMO eval's memory-safety grade no longer counts a price card as a planted
+  decision (`eval/cmo-tasks.ts`, `eval/cmo-run.ts`). **Open:** MCP calls `create_task` directly (`lib/cmo/mcp/cmo.ts`)
+  and has no cards; a scan asked over MCP still runs at once. Its quote → confirm step (as `generate_media`) is a
+  follow-up for the owner to rank. Check: `lib/agent/cmo-priced-task.check.ts`; `agent:eval --provider fake` CMO 7/7.
 
 ## You own
 
@@ -99,7 +109,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
   - It calls each endpoint in `lib/cmo/social/research.ts` once (about 16 calls, a few cents), strips personal fields, and saves the bodies as fixtures.
   - Write parser checks on those fixtures, and fix any parser they break.
   - Until the owner runs it, the checks run on the shapes in the ScrapeCreators docs. Say so in the PR.
-- [ ] **S3.5 A price card before every Sales scan** (`cmoScope.plan()` around `scope.ts:637`, `cmo-tools.ts:369-375`).
+- [x] **S3.5 A price card before every Sales scan** (`cmoScope.plan()` around `scope.ts:637`, `cmo-tools.ts:369-375`).
   - `create_task{agent:"sales"}` returns an approval card with the scan's price (`JOB_PRICES.sales_scan`, `lib/cmo/jobs/progress.ts:30`) and what it will search.
   - Nothing runs or is held before Approve. The same applies to the other priced `create_task` agents: `competitor_research`, `niche_video_research`.
   - The weekly `reddit-listening` loop keeps its existing budget gate.

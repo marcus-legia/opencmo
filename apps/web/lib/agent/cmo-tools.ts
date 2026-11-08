@@ -14,6 +14,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
+import { JOB_PRICES } from "@/lib/cmo/jobs/progress";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
@@ -68,8 +69,8 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (1 credit; when = now only).",
       "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
-      "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
-      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
+      "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks). Run now, it first shows the founder a card with its price; nothing is spent until they approve.",
+      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only). It first shows the founder a card with its price, like sales.",
       "video: a short-video task. The founder records and uploads their OWN video, so this always becomes a calendar item with an \"Upload video\" button that opens the editor; you cannot upload video for them.",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
@@ -228,6 +229,39 @@ const taskInput = z.object({
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
+/**
+ * Tasks that cost more than a draft show their price first (cmo-review-2 S3.5, "charge before running"): run now, a
+ * Sales scan or competitor research is planned as an approval card, and `create_task` runs only when the founder
+ * approves it. Nothing is held before that. A dated task only adds a calendar item, which costs nothing until its day;
+ * the weekly loop keeps its own budget gate.
+ */
+export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_research" } as const;
+
+export type PricedTask = { input: z.infer<typeof taskInput>; card: { changes: string[]; credits: number } };
+
+/** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
+export function pricedTaskCard(input: unknown): PricedTask | null {
+  const parsed = taskInput.safeParse(input);
+  if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS)) return null;
+  const task = parsed.data;
+  const kind = PRICED_AGENTS[task.agent as keyof typeof PRICED_AGENTS];
+  const credits = JOB_PRICES[kind] ?? 0;
+  const brief = task.brief.length > 200 ? `${task.brief.slice(0, 199)}…` : task.brief;
+  const changes =
+    kind === "sales_scan"
+      ? [
+          `Scan Reddit and Hacker News: ${brief}`,
+          "Up to 8 searches written from your customers' pains, skipping the subreddits and term pairs in your Sales settings",
+          "Draft replies for the 5 best threads into Approvals. You post them yourself.",
+        ]
+      : [
+          `Research competitors: ${brief}`,
+          task.handles?.length ? `X accounts: ${task.handles.map((h) => `@${h.replace(/^@/, "")}`).join(", ")}` : "X accounts: the ones in your Competitor Analysis",
+          "Save the hooks that beat their usual posts, for your planner and X writer",
+        ];
+  return { input: task, card: { changes, credits } };
+}
+
 const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
 const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });

@@ -25,7 +25,7 @@ import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
-import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, runCmoTool, type CmoTurn } from "./cmo-tools";
+import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, pricedTaskCard, runCmoTool, type CmoTurn } from "./cmo-tools";
 import { DECISION_WRITES, prepareDecision, readCredits, runDecision, type DecisionCard, type Prepared } from "./cmo-decisions";
 import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
@@ -630,7 +630,11 @@ export function chatReadBucket(name: string): "chat_social" | "chat_site" | "res
   return RESEARCH_TOOLS.has(name) ? "chat_social" : null;
 }
 
-/** `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message. */
+/**
+ * The CMO chat. A decision, and a task priced above a draft (a Sales scan, competitor research), stops at an approval
+ * card: nothing runs or is held before the founder approves it (cmo-review-2 S3.5).
+ * `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message.
+ */
 export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   const budget = new ScBudget(RESEARCH_CALLS_PER_TURN);
   const turn: CmoTurn = { siteReads: 0, startedAt: Date.now() };
@@ -641,6 +645,11 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
     context: async () => `${await cmoContext(supabase)}${sessionId ? await runsFinishedBlock(supabase, sessionId) : ""}`,
     state: () => cmoState(supabase),
     async plan(call) {
+      // A Sales scan or competitor research shows its price first; nothing is held until the founder approves it.
+      if (call.name === "create_task") {
+        const priced = pricedTaskCard(call.input);
+        return priced ? { kind: "approval", input: priced.input, card: priced.card } : { kind: "run" };
+      }
       // A decision (plan 2026-11-02-cmo-chat-decisions) is a confirmation card: nothing writes until the founder
       // confirms it. The prepared input, with the card's hash read now, stays on the server with the pending call.
       if (!DECISION_WRITES.has(call.name)) return { kind: "run" };
@@ -669,7 +678,7 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
         : runCmoTool(supabase, call.name, call.input, turn);
     },
     async decide(call, input, approved) {
-      if (!DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);
+      if (call.name !== "create_task" && !DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);
       if (!approved) {
         return {
           outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The founder cancelled. Nothing changed." }), summary: "Cancelled" },
@@ -677,7 +686,8 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
           wrote: false,
         };
       }
-      const outcome = await runDecision(supabase, input as Prepared);
+      // The task as it was priced on the card: the model cannot change it after the founder saw it.
+      const outcome = call.name === "create_task" ? await runCmoTool(supabase, "create_task", input, turn) : await runDecision(supabase, input as Prepared);
       return { outcome, extra: {}, wrote: outcome.ok };
     },
     isWrite: isCmoWrite,

@@ -105,3 +105,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 ## Requests
 
 _(other sessions write here)_
+
+- **From S3 (S3.5):** the Vietnamese comment above `chatReadBucket` in `lib/agent/scope.ts` (your side of the line)
+  says the CMO chat has no approval cards. Since S3.5 a Sales scan or competitor research stops at a price card. Please
+  translate it and say so, or delete it (`cmoScope` now carries its own comment).
