@@ -56,7 +56,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     `/app?paid=1&site=…`, which lets the founder through to the website step even if the webhook is a few seconds late;
     `/cmo/mode` returns `can_connect` and the card hides without a plan.
     Check: typecheck, `check:contracts`; the Creem test-mode e2e needs a preview with Creem test keys (owner), not run here.
-- [ ] **S2.2 The first week within minutes.** `SetupScreen.tsx`, `lib/cmo/onboard.ts`:
+- [x] **S2.2 The first week within minutes.** `990cd39` `SetupScreen.tsx`, `lib/cmo/onboard.ts`:
   - one step: the website. Reading it, writing the four documents and planning the first week run at once, not with
     the nightly plan;
   - the founder lands on the Dashboard / inbox and watches the plan and the first drafts arrive;
@@ -78,6 +78,10 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - Dashboard (the inbox) first, then the departments in the sketch's order: Writer, Studio, Schedule; Editor stays
     last;
   - Research, Brain and Analytics stay reachable but do not lead.
+  - Note. Now: `NAV_MAIN` puts Analytics, Brain and Library beside the Dashboard, and Research leads the departments
+    (`nav.ts:32-44`). Change: Dashboard alone on top; Writer, Studio, Schedule, then Sales; a "More" group with
+    Library, Research, Analytics and Brain; Editor last. The tab bar, the shell's tabs and `lib/agent/panel.ts` read the
+    new group. Check: typecheck, `panel.check`, `columns.check`.
 - [ ] **S2.4 Hide `/video`** (plan §2.2):
   - Only `/video` (`create_video`). `/animate`, `/background`, `/edit`, `/broll` and the rest stay as they are.
   - One switch (one constant or one capability in `editor-core/capabilities.ts`, whichever the slash menu and
