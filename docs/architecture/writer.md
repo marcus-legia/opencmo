@@ -136,8 +136,8 @@ All built: **W0** no-ai-slop and post rules · **W1** platform profiles, Threads
 notes and corrections · **W3** words for Studio (captions, YouTube text, video brief, slide text) · **W4** X threads.
 Articles are left for later.
 
-Done in the CMO review 2 plan: the first week's plan and today's draft are queued as soon as the website is read
-(S2.2), and the week plan orders no AI video (S2.5). Articles stay for later.
+Done in the CMO review 2 plan: the first week's plan is queued as soon as the website is read, and today's draft once
+the plan is written (S2.2), and the week plan orders no AI video (S2.5). Articles stay for later.
 
 ## 11. Decisions for the owner
 
