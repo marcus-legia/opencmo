@@ -35,6 +35,15 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   `fal-seedvr-upscale`, `fal-veed-cutout`. Not recorded at all yet (out of scope, a note for the owner): Scribe
   transcripts and the fal NSFW check. Data only, so `current.sql` does not change. Check:
   `supabase/tests/257_media_provider_prices.test.sql`; the migration applied twice is a no-op.
+- **S3.4.** Now: the parsers in `lib/cmo/social/scrapecreators.ts` read candidate paths that were never checked against
+  a real answer (`scrapecreators.ts:6-9`); `research.check.ts` tests them on hand-written single objects. Change:
+  `lib/cmo/social/fixtures/endpoints.ts` lists the 15 endpoints `research.ts` reads, each with the reader that reads it;
+  `scripts/scrapecreators-fixtures.mts` calls each once through that reader with the real key, chains links (a thread
+  from the search, a video from a search), redacts people (names, ids, avatars, emails, also inside links and text),
+  and saves `fixtures/scrapecreators/<name>.json`; `fixtures.check.ts` feeds each saved body to the same reader.
+  **The 15 fixtures are `assumed` for now:** `docs.scrapecreators.com` and the API do not resolve from the build
+  sandbox, so they were written from the paths the parsers read, which proves the plumbing, not the provider's shape.
+  The check prints how many are real. Owner: run the script (header has the command) and commit the result.
 
 ## You own
 
@@ -85,7 +94,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
 - [x] **S3.3 Price fal and ElevenLabs spend.**
   - Migration: `provider_prices` rows for fal and ElevenLabs, per unit the code records (`record_provider_usage` units in `generate_task.py`).
   - pgTAP test; `current.sql` regenerated.
-- [ ] **S3.4 ScrapeCreators shapes from real responses.**
+- [x] **S3.4 ScrapeCreators shapes from real responses.**
   - Write a one-off script `apps/web/scripts/scrapecreators-fixtures.mts`. The owner runs it with the real key; no key goes in the repo.
   - It calls each endpoint in `lib/cmo/social/research.ts` once (about 16 calls, a few cents), strips personal fields, and saves the bodies as fixtures.
   - Write parser checks on those fixtures, and fix any parser they break.

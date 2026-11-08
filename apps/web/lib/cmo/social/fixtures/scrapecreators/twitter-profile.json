@@ -1,0 +1,17 @@
+{
+  "source": "assumed",
+  "path": "/v1/twitter/profile",
+  "params": {
+    "handle": "levelsio"
+  },
+  "body": {
+    "rest_id": "1",
+    "legacy": {
+      "name": "user_redacted",
+      "description": "Building in public.",
+      "followers_count": 650000,
+      "friends_count": 1200,
+      "statuses_count": 90000
+    }
+  }
+}

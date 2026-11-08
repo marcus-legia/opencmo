@@ -1,0 +1,12 @@
+{
+  "source": "assumed",
+  "path": "/v1/reddit/subreddit/details",
+  "params": {
+    "subreddit": "SaaS",
+    "cache_max_age": "7d"
+  },
+  "body": {
+    "rules": "1. No spam. 2. Self-promotion only in the weekly thread.",
+    "description": "Software as a service: founders and builders."
+  }
+}

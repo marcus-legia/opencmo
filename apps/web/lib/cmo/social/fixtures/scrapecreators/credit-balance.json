@@ -1,0 +1,8 @@
+{
+  "source": "assumed",
+  "path": "/v1/credit/balance",
+  "params": {},
+  "body": {
+    "creditCount": 4321
+  }
+}
