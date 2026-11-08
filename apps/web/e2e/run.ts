@@ -115,7 +115,10 @@ function main(): void {
   run("supabase", ["stop", "--no-backup", ...CLI_ARGS]);
   // CLI in khoá local khi start thành công: giữ output trong process, không
   // đưa khoá vào log test. Lỗi khởi động chỉ cần stderr chẩn đoán.
-  const started = run("supabase", ["start", ...CLI_ARGS], true);
+  // `E2E_SUPABASE_EXCLUDE=vector,logflare,studio`: skip services the specs never call, on a machine that cannot pull
+  // their images (a sandbox behind a registry limit). Unset, everything starts as in CI.
+  const exclude = process.env.E2E_SUPABASE_EXCLUDE?.trim();
+  const started = run("supabase", ["start", ...(exclude ? ["-x", exclude] : []), ...CLI_ARGS], true);
   if (started.status !== 0) {
     process.stderr.write(started.stderr);
     run("supabase", ["stop", "--no-backup", ...CLI_ARGS]);
