@@ -37,7 +37,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const planId = profile?.plan ?? "free";
   const current = plans.find((plan) => plan.id === planId);
   const paid = isPaidPlan(planId);
-  const planCredit = plans.find((plan) => plan.id === "starter");
+  const planCredit = plans.find((plan) => plan.id === "starter" && plan.slug && plan.credits > 0);
 
   return (
     <section className="billing-view">
@@ -68,7 +68,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <h2 className="section-label">Plans</h2>
       <div className="plan-grid">
         {/* A paid plan that cannot be bought right now is hidden: no "coming soon" (product rule). */}
-        {plans.filter((plan) => plan.price === 0 || plan.slug || plan.id === planId).map((plan) => {
+        {plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId).map((plan) => {
           const isCurrent = plan.id === planId;
           return (
             <div
@@ -79,13 +79,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 {plan.name}
                 {plan.highlight && !isCurrent && <span className="plan-tag">Recommended</span>}
               </h2>
-              <p className="plan-price">
-                {/* The list price is permanent, not a time-limited offer: OPUSCLIP.md §3.10. */}
-                {plan.listPrice ? <del>${plan.listPrice}</del> : null}
-                <strong>${plan.price}</strong>
-                <span>/mo</span>
-              </p>
-              {plan.interval === "year" && <p className="plan-billed">Billed ${plan.billedPrice} once a year</p>}
+              {/* A paid plan's price comes only from its catalogue row: no row, no number (cmo-review-2 S2.7). */}
+              {plan.id === "free" || plan.slug ? (
+                <p className="plan-price">
+                  {/* The list price is permanent, not a time-limited offer: OPUSCLIP.md §3.10. */}
+                  {plan.listPrice ? <del>${plan.listPrice}</del> : null}
+                  <strong>${plan.price}</strong>
+                  <span>/mo</span>
+                </p>
+              ) : null}
+              {plan.interval === "year" && plan.slug && <p className="plan-billed">Billed ${plan.billedPrice} once a year</p>}
               <ul className="acct-list">
                 {plan.features.map((feature) => (
                   <li key={feature}>{feature}</li>

@@ -3,7 +3,8 @@ import { getAllPosts } from "@/lib/blog";
 import { plansOnSale } from "@/lib/billing-catalog";
 import { SITE_DESCRIPTION, absoluteUrl } from "@/lib/site";
 
-export const dynamic = "force-static";
+// Prices are read at request time, like the pricing page: a build-time copy would print last month's numbers.
+export const dynamic = "force-dynamic";
 
 /**
  * `/llms.txt` (llmstxt.org): bản tóm tắt bằng Markdown cho mô hình ngôn ngữ —
@@ -11,18 +12,20 @@ export const dynamic = "force-static";
  */
 export async function GET() {
   const posts = getAllPosts();
-  const paid = (await plansOnSale()).filter((plan) => plan.price > 0);
+  // Only plans with a catalogue row have a price; none listed when the catalogue cannot be read.
+  const paid = (await plansOnSale()).filter((plan) => plan.slug);
   const lines = [
     "# OpenCMO",
     "",
     `> ${SITE_DESCRIPTION}`,
     "",
-    "OpenCMO is software for founders. You enter your website; an AI CMO builds a strategy and a weekly plan, and three departments draft the work: Video (an editor where you upload a video you recorded and edit it by asking: cuts, captions, B-roll, motion, a version per platform), Post (daily X posts in your voice) and Sales (public Reddit threads where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect.",
+    "OpenCMO is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. There is no free trial: OpenCMO starts with a paid plan.",
     "",
     "## Pricing",
     "",
     ...paid.map((plan) => `- ${plan.name}: $${plan.price}/month${plan.interval === "year" ? ` (billed $${plan.billedPrice} yearly)` : ""} — ${plan.features.join(", ")}`),
-    "- Credits are spent per piece of work (for example 1 credit per minute of video processed).",
+    ...(paid.length ? [] : [`- See ${absoluteUrl("/#pricing")} for current prices.`]),
+    "- Credits are spent per piece of work (for example 1 credit per post draft).",
     "",
     "## Links",
     "",

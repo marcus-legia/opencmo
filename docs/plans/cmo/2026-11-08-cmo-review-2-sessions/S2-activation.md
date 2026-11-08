@@ -140,6 +140,16 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
   - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.
   - `pricing.ts`: no hardcoded fallback prices; a page with no catalogue row shows no price.
+  - Note. Now: Terms say the plan stays until the period ends (`terms/page.tsx:50`), but `recompute_plan` drops it on a
+    Creem `canceled` at once (only `scheduled_cancel` keeps it); `llms.txt` is `force-static` and pitches the editor; the
+    blog page is built once with its CTA price; `PLANS` holds 69 / 57.5 / 690 and 580 credits as fallbacks.
+    Change: Terms say what the code does (the plan ends when the cancellation arrives, which can be at once; credits
+    stay). Owner's call: if the plan should last to the period's end, S3 needs a migration keeping `canceled` paid until
+    `current_period_end`. `llms.txt` is dynamic, describes the CMO loop and no AI video, says there is no free trial, and
+    lists only plans with a catalogue row; the blog page revalidates every 10 minutes and its CTA prints no price
+    without a row; `PLANS` carries no paid price or credits; `offerPrices` is null without both rows, and then the
+    landing hides the pricing section, the FAQ drops the numbers and Billing shows no price for a plan.
+    Check: typecheck, `check:blog`, `check:contracts`.
 - [ ] **S2.8 Dead code.**
   - Remove the `animate_video` and contact-sheet leftovers: `studio-orders.ts` redo branch and `withKeyframe` / `pendingGenerations`, `adapter.ts:116`, `ContactSheet.tsx`, the `redo` types in the Assistant client, the stale `animate_video` stub in `clipScopeWith`, and the "under the 24" comment in editor-core `create-video.ts`.
   - Keep `redo_keyframe` and `create_video` (hidden, not dead).

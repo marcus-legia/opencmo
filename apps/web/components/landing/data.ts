@@ -119,15 +119,16 @@ export const INCLUDED = [
   { icon: DEPT_ICON.sales, title: "Sales department", body: "Finds the conversations where people need what you sell, on 9 platforms" },
 ];
 
-export function faqs(p: Prices): { q: string; a: string }[] {
+export function faqs(p: Prices | null): { q: string; a: string }[] {
+  const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
     { q: "What is an AI marketing team?", a: "OpenCMO is an AI CMO with three departments. It reads your website, plans your week and writes the posts, slides and video scripts. Video builds slideshows, post images and clips from your own videos, and Sales finds conversations where people need what you built. You approve what goes out and when." },
     { q: "Does OpenCMO post anything without me?", a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
     { q: "What does it do with video?", a: "It builds slideshows and post images from the words you approved, and cuts short clips from videos you recorded and finished in the editor. In the editor you cut by editing the transcript and ask the agent for captions, B-roll or a voice-over." },
     { q: "Which platforms does Sales search?", a: "Public conversations on Reddit, X, LinkedIn, Facebook groups, Threads, Hacker News, Indie Hackers, YouTube comments and Quora. It drafts a reply; you post it yourself." },
     { q: "Will it like, follow or DM people for me?", a: "No. There are no automated likes, follows, DMs or replies. OpenCMO drafts; you decide what to say and where." },
-    { q: "Is there a free trial?", a: `No. OpenCMO starts when you pick a plan: $${p.annual} a month billed annually, or $${p.monthly} month to month. Your first week's plan and drafts arrive within minutes of giving it your website.` },
-    { q: "What does the plan include?", a: `Everything: the AI CMO, all three departments, and the editor with captions and voice-over. $${p.annual} a month billed annually, or $${p.monthly} month to month.` },
+    { q: "Is there a free trial?", a: `No. OpenCMO starts when you pick a plan.${price} Your first week's plan and drafts arrive within minutes of giving it your website.` },
+    { q: "What does the plan include?", a: `Everything: the AI CMO, all three departments, and the editor with captions and voice-over.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
   ];
 }
