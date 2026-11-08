@@ -153,212 +153,50 @@ td:first-child{font-weight:600;white-space:nowrap}
 body{margin:0}
 .toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.86rem}
 .toc a{text-decoration:none}
+
+/* Twin of the markdown page, regenerated 2026-11-08: plain blocks the md uses. */
+pre{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0}
+.sec ul,.sec ol.plain{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.sec ul ul{margin-top:6px}
+.sec h3{margin-top:4px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">opencmo.io · architecture · proposed 2026-10-25</p>
+    <p class="eyebrow">opencmo.io · architecture · proposed built · 2026-11-08</p>
     <h1>The CMO brain and its departments</h1>
-    <p class="lede">OpenCMO is one CMO brain that plans and dispatches work to seven departments, with the founder approving everything that goes out. The departments are the product, so the system is shaped around them, not the other way round. It stays one system: Vercel + Supabase + Modal. Markdown twin for agents: <code>ai-cmo.md</code>. This page replaces the PR #117 diagram page and <code>docs/cmo-architecture-implementation.md</code>; <code>ARCHITECTURE.md</code> §11 still describes the CMO as built today.</p>
-    <nav class="toc" aria-label="Sections">
-      <a href="#departments">1 Departments</a><a href="#flow">2 Work flow</a><a href="#target">3 Target system</a><a href="#today">4 System today</a><a href="#lifecycle">5 Lifecycle</a><a href="#changes">6 Nine changes</a><a href="#buy">7 Build or buy</a><a href="#contracts">8 Contracts</a><a href="#rules">9 Rules</a><a href="#gaps">10 Gaps today</a><a href="#order">11 Build order</a><a href="#next">12 Next</a>
-    </nav>
+    <div class="lede"><p>Status: <b>built</b> (<code>main</code> at <code>4f70a59</code>, 2026-11-08). Designed 2026-10-25, built in P1–P6 and the CMO review (#169–#180). Markdown twin for agents: <code>ai-cmo.md</code>; the two say the same thing. <a href="../../ARCHITECTURE.md"><code>ARCHITECTURE.md</code></a> §11 summarises the same system. The order of work follows the owner's decision of 2026-11-08: the AI CMO first, the editor last (<a href="../plans/cmo/2026-11-08-cmo-review-2-plan.md">plan</a> §2).</p>
+<p>OpenCMO is one CMO brain that plans and dispatches work to seven departments, with the founder approving everything that goes out. The departments are the product, so the system is shaped around them, not the other way round. It stays one system: Vercel + Supabase + Modal.</p></div>
+    <nav class="toc" aria-label="Sections"><a href="#the-brain-and-seven-departments">The brain and seven departments</a><a href="#how-work-flows">How work flows</a><a href="#the-system-by-layer">The system, by layer</a><a href="#the-system-as-built-by-its-real-call-pat">The system as built, by its real call paths</a><a href="#moderation-is-creem-s">Moderation is Creem's</a><a href="#what-providers-cost-us-the-spend-ledger-">What providers cost us: the spend ledger and the Costs page</a><a href="#content-lifecycle">Content lifecycle</a><a href="#the-nine-system-changes-as-built">The nine system changes, as built</a><a href="#build-or-buy">Build or buy</a><a href="#department-contracts">Department contracts</a><a href="#six-rules">Six rules</a><a href="#gaps-in-the-code-today">Gaps in the code today</a><a href="#order-of-work">Order of work</a><a href="#the-pages">The pages</a></nav>
   </header>
 
-  <section class="sec" id="departments">
-    <div class="sec-head"><p class="eyebrow">1</p><h2>The brain and seven departments</h2>
-      <p class="lede">Dots show the state of the code on 2026-10-25. Schedule is a department of its own; almost nothing of it exists yet, so it is dashed.</p></div>
-    <div class="legend">
-      <span><i class="dotk" style="background:var(--ok)"></i>Built</span>
-      <span><i class="dotk" style="background:var(--gate)"></i>Partial</span>
-      <span><i class="dotk" style="background:var(--warn)"></i>Missing</span>
-      <span><i class="sw" style="background:var(--gate-soft);outline:2px solid var(--gate)"></i>The founder's work</span>
-      <span><i class="sw" style="background:var(--ok-soft);outline:1px dashed var(--ok)"></i>New department</span>
-    </div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
-<svg class="wide" viewBox="0 0 1100 650" role="img" aria-label="The CMO brain in the middle, you on top, seven departments around it; each item has a status dot: green built, amber partial, red missing.">
-<defs><marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
-<rect class="n-user" x="380" y="16" width="340" height="70" rx="12"/>
-<text class="t-eye-user" x="550" y="40" text-anchor="middle">YOU · THE FOUNDER</text>
-<text class="t-b" x="550" y="62" text-anchor="middle">command, approve, edit</text>
-<text class="t-s" x="550" y="78" text-anchor="middle">CMO chat · /commands in the editor · MCP</text>
-<rect class="n-brain" x="330" y="128" width="440" height="236" rx="14"/>
-<text class="t-eye" x="550" y="154" text-anchor="middle">BRAIN · agent cmo · lib/cmo · cmo_runs</text>
-<text class="t-title" x="550" y="182" text-anchor="middle">CMO Brain</text>
-<rect class="n-in" x="346" y="198" width="196" height="72" rx="8"/><circle class="dot-ok" cx="360" cy="216" r="4.5"/><text class="t-b" x="372" y="220">Context</text><text class="t-s" x="358" y="240">memories · lessons</text><text class="t-s" x="358" y="256">reads the Library</text>
-<rect class="n-in" x="558" y="198" width="196" height="72" rx="8"/><circle class="dot-ok" cx="572" cy="216" r="4.5"/><text class="t-b" x="584" y="220">Planning</text><text class="t-s" x="570" y="240">plan_week · review_week</text><text class="t-s" x="570" y="256">goals (cmo_goals)</text>
-<rect class="n-in" x="346" y="280" width="196" height="72" rx="8"/><circle class="dot-part" cx="360" cy="298" r="4.5"/><text class="t-b" x="372" y="302">Dispatch</text><text class="t-s" x="358" y="322">work orders → departments</text><text class="t-s" x="358" y="338">cmo_runs queue</text>
-<rect class="n-in" x="558" y="280" width="196" height="72" rx="8"/><circle class="dot-part" cx="572" cy="298" r="4.5"/><text class="t-b" x="584" y="302">Shared gates</text><text class="t-s" x="570" y="322">credit · moderation</text><text class="t-s" x="570" y="338">approval · limits</text>
-<rect class="n-dept" x="30" y="110" width="250" height="134" rx="10"/>
-<rect class="n-bar" x="30" y="110" width="250" height="5" rx="2"/>
-<text class="t-eye" x="44" y="134">DEPT 1</text>
-<text class="t-title-s" x="44" y="156">Research · Insight</text>
-<circle class="dot-ok" cx="49" cy="174" r="4.5"/><text class="t-m" x="60" y="178">competitors, outlier posts</text>
-<circle class="dot-ok" cx="49" cy="193" r="4.5"/><text class="t-m" x="60" y="197">Reddit, X, short video</text>
-<circle class="dot-ok" cx="49" cy="212" r="4.5"/><text class="t-m" x="60" y="216">metrics after posting</text>
-<text class="t-s" x="44" y="232">Vercel · ScrapeCreators</text>
-<rect class="n-dept" x="30" y="262" width="250" height="172" rx="10"/>
-<rect class="n-bar" x="30" y="262" width="250" height="5" rx="2"/>
-<text class="t-eye" x="44" y="286">DEPT 2</text>
-<text class="t-title-s" x="44" y="308">Writer</text>
-<circle class="dot-ok" cx="49" cy="326" r="4.5"/><text class="t-m" x="60" y="330">X posts</text>
-<circle class="dot-part" cx="49" cy="345" r="4.5"/><text class="t-m" x="60" y="349">per-platform caption + tags</text>
-<circle class="dot-part" cx="49" cy="364" r="4.5"/><text class="t-m" x="60" y="368">script + storyboard</text>
-<circle class="dot-miss" cx="49" cy="383" r="4.5"/><text class="t-m" x="60" y="387">article</text>
-<circle class="dot-miss" cx="49" cy="402" r="4.5"/><text class="t-m" x="60" y="406">No AI Slop</text>
-<text class="t-s" x="44" y="422">Vercel · LLM registry</text>
-<rect class="n-dept" x="30" y="452" width="250" height="134" rx="10"/>
-<rect class="n-bar" x="30" y="452" width="250" height="5" rx="2"/>
-<text class="t-eye" x="44" y="476">DEPT 3</text>
-<text class="t-title-s" x="44" y="498">Sales</text>
-<circle class="dot-ok" cx="49" cy="516" r="4.5"/><text class="t-m" x="60" y="520">find Reddit threads</text>
-<circle class="dot-ok" cx="49" cy="535" r="4.5"/><text class="t-m" x="60" y="539">scored with evidence</text>
-<circle class="dot-ok" cx="49" cy="554" r="4.5"/><text class="t-m" x="60" y="558">reply drafts, you post</text>
-<text class="t-s" x="44" y="574">Vercel · ScrapeCreators</text>
-<rect class="n-dept" x="820" y="110" width="250" height="210" rx="10"/>
-<rect class="n-bar" x="820" y="110" width="250" height="5" rx="2"/>
-<text class="t-eye" x="834" y="134">DEPT 4</text>
-<text class="t-title-s" x="834" y="156">Studio</text>
-<circle class="dot-ok" cx="839" cy="174" r="4.5"/><text class="t-m" x="850" y="178">edit your own video</text>
-<circle class="dot-ok" cx="839" cy="193" r="4.5"/><text class="t-m" x="850" y="197">/video · /image · /animate</text>
-<circle class="dot-ok" cx="839" cy="212" r="4.5"/><text class="t-m" x="850" y="216">/broll · /voiceover · /music</text>
-<circle class="dot-ok" cx="839" cy="231" r="4.5"/><text class="t-m" x="850" y="235">render_document → MP4</text>
-<circle class="dot-miss" cx="839" cy="250" r="4.5"/><text class="t-m" x="850" y="254">slideshow</text>
-<circle class="dot-miss" cx="839" cy="269" r="4.5"/><text class="t-m" x="850" y="273">clips from a finished edit</text>
-<text class="t-s" x="834" y="308">Assistant (Vercel) · worker (Modal)</text>
-<rect class="n-new2" x="820" y="338" width="250" height="134" rx="10"/>
-<text class="t-new" x="834" y="362">DEPT 5</text>
-<text class="t-title-s" x="834" y="384">Schedule</text>
-<circle class="dot-part" cx="839" cy="402" r="4.5"/><text class="t-m" x="850" y="406">day in the week plan</text>
-<circle class="dot-miss" cx="839" cy="421" r="4.5"/><text class="t-m" x="850" y="425">approved time</text>
-<circle class="dot-miss" cx="839" cy="440" r="4.5"/><text class="t-m" x="850" y="444">reminders, publish trigger</text>
-<text class="t-s" x="834" y="460">proposed: Supabase + worker</text>
-<rect class="n-dept" x="820" y="490" width="250" height="134" rx="10"/>
-<rect class="n-bar" x="820" y="490" width="250" height="5" rx="2"/>
-<text class="t-eye" x="834" y="514">DEPT 6</text>
-<text class="t-title-s" x="834" y="536">Publish</text>
-<circle class="dot-ok" cx="839" cy="554" r="4.5"/><text class="t-m" x="850" y="558">X intent link</text>
-<circle class="dot-miss" cx="839" cy="573" r="4.5"/><text class="t-m" x="850" y="577">Threads · LinkedIn intent</text>
-<circle class="dot-miss" cx="839" cy="592" r="4.5"/><text class="t-m" x="850" y="596">TikTok · IG · YT (Zernio)</text>
-<text class="t-s" x="834" y="612">browser · proposed: worker</text>
-<rect class="n-user" x="380" y="452" width="340" height="172" rx="10"/>
-<text class="t-eye-user" x="394" y="476">DEPT 7 · YOURS</text>
-<text class="t-title-s" x="394" y="498">Approval</text>
-<circle class="dot-ok" cx="399" cy="516" r="4.5"/><text class="t-m" x="410" y="520">X posts, Reddit replies</text>
-<circle class="dot-miss" cx="399" cy="535" r="4.5"/><text class="t-m" x="410" y="539">script before the build</text>
-<circle class="dot-miss" cx="399" cy="554" r="4.5"/><text class="t-m" x="410" y="558">finished videos</text>
-<circle class="dot-miss" cx="399" cy="573" r="4.5"/><text class="t-m" x="410" y="577">time + account</text>
-<text class="t-s" x="394" y="612">Supabase · status in_review</text>
-<path class="e" d="M550 86V124" marker-end="url(#ah5)"/>
-<path class="e" d="M330 177H284" marker-end="url(#ah5)"/>
-<path class="e" d="M330 300H284" marker-end="url(#ah5)"/>
-<path class="e" d="M330 340H300V519H284" marker-end="url(#ah5)"/>
-<path class="e" d="M770 215H816" marker-end="url(#ah5)"/>
-<path class="e" d="M770 330H795V405H816" marker-end="url(#ah5)"/>
-<path class="e" d="M550 364V448" marker-end="url(#ah5)"/>
-<path class="e" d="M720 538H816" marker-end="url(#ah5)"/>
-<path class="e-dash" d="M816 420H790V575H724" marker-end="url(#ah5)"/>
-<text class="t-edge" x="726" y="642">the time needs your approval</text>
-<path class="e-dash" d="M945 472V486" marker-end="url(#ah5)"/>
-<text class="t-edge" x="750" y="530" text-anchor="middle">today</text>
-</svg>
-    </div>
-    <div class="prose">
-      <p><b>Library (owner decision, 2026-10-27).</b> Documents, Brand Kit, voice and the founder's skills are not brain state. They live in one shared Library that the brain and every department read; the brain keeps only its plan, orders and what it learns. State: four documents and Brand Kit built; voice lives in the strategy document (learned notes missing); video skills built, writing skills missing. Details: <a href="brain.html#library"><code>brain.html</code> section 8b</a>.</p>
-    </div>
+  <section class="sec" id="the-brain-and-seven-departments">
+    <div class="sec-head"><p class="eyebrow">§1</p><h2>The brain and seven departments</h2></div>
+<p>State of the code on 2026-11-08 (<code>4f70a59</code>): ✅ done · 🟡 partial · ❌ not built.</p>
+<div class="tbl"><table><thead><tr><th>Part</th><th>Capabilities</th><th>Code</th></tr></thead><tbody><tr><td>Brain</td><td>✅ context (memories, lessons, corrections; reads the Library) · ✅ planning (<code>plan_week</code>, <code>review_week</code>, <code>cmo_goals</code>, <code>plan</code> card) · ✅ dispatch (<code>work_orders</code> tree beside <code>cmo_runs</code>) · ✅ shared gates (credits, Creem moderation, approval, weekly budget, kill switch)</td><td><code>lib/cmo/</code>, <code>lib/cmo/jobs/</code></td></tr><tr><td>1 Research</td><td>✅ competitors, outlier posts · ✅ niche short video · ✅ Reddit, X, Hacker News · ✅ metrics after posting · ✅ reply outcomes</td><td><code>jobs/competitor-research.ts</code>, <code>niche-video-research.ts</code>, <code>pull-metrics.ts</code>, <code>lib/cmo/social/</code></td></tr><tr><td>2 Writer</td><td>✅ posts and threads for X, Threads, LinkedIn · ✅ captions for Instagram, TikTok, YouTube · ✅ video brief · ✅ slide text · ✅ no-ai-slop in every writing prompt · ❌ article (later, owner 2026-11-08)</td><td><code>lib/cmo/writer/</code>, <code>jobs/draft-post.ts</code>, <code>draft-thread.ts</code>, <code>lib/cmo/platforms.ts</code></td></tr><tr><td>3 Sales</td><td>✅ find Reddit threads · ✅ scored with evidence · ✅ subreddit rules, rare product mentions · ✅ reply drafts, the founder posts · 🟡 a scan from the chat has no price card (plan S3.5)</td><td><code>jobs/sales-scan.ts</code></td></tr><tr><td>4 Studio</td><td>✅ edit your own video, mark it finished · ✅ shorts from a finished edit · ✅ slideshow (MP4 and PNG set) · 🟡 post image (built, no caller yet) · ✅ look check · ✅ slash commands; <code>/video</code> built but hidden (plan S2.4) · ✅ <code>render_document</code> → MP4</td><td><code>lib/departments/studio/</code>, <code>lib/agent/</code></td></tr><tr><td>5 Schedule</td><td>✅ time per platform in the founder's timezone · ✅ best time from data, gaps, caps · ✅ schedule cards</td><td><code>schedule_slots</code>, <code>best_slots</code>, <code>lib/cmo/schedule.ts</code></td></tr><tr><td>6 Publish</td><td>✅ Zernio for X, Threads, LinkedIn, TikTok, Instagram, YouTube · ✅ intent link as the fallback · ✅ signed webhook with receipts</td><td><code>lib/departments/publish/</code>, <code>app/api/webhooks/zernio</code></td></tr><tr><td>7 Approval</td><td>✅ one <code>approvals</code> table with a snapshot · ✅ 11 card kinds · ✅ digest, email, web push · ✅ daily card budget</td><td><code>approvals</code>, <code>approval_decide</code>, <code>lib/cmo/digest.ts</code>, <code>lib/notify/</code></td></tr><tr><td>Library (shared)</td><td>✅ four documents · ✅ Brand Kit · ✅ voice notes learned from edits · ✅ skills (video and writing)</td><td><code>components/screens/library/</code>, <code>marketing_documents</code>, <code>brand_kits</code>, <code>editor_skills</code></td></tr></tbody></table></div>
+<p><b>Library (owner decision, 2026-10-27).</b> Documents, Brand Kit, voice and the founder's skills are not brain state. They live in one shared Library that the brain and every department read; the brain keeps only its plan, orders and what it learns. Details: <a href="brain.html"><code>brain.html</code></a> section 8b.</p>
   </section>
 
-  <section class="sec" id="flow">
-    <div class="sec-head"><p class="eyebrow">2</p><h2>How work flows through the departments</h2>
-      <p class="lede">Three lanes share the departments. Video passes two approvals, posts skip Studio, Sales stops where the founder replies by hand. Metrics flow back into the brain's memory for next week's plan.</p></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
-<svg class="wide" viewBox="0 0 1200 470" role="img" aria-label="Work through the departments: video, post and sales lanes; metrics flow back to the brain.">
-<defs><marker id="ah6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
-<marker id="ah6n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
-<text class="t-eye" x="86.0" y="26" text-anchor="middle">BRAIN</text>
-<line class="div" x1="86.0" y1="36" x2="86.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="214.0" y="26" text-anchor="middle">RESEARCH</text>
-<line class="div" x1="214.0" y1="36" x2="214.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="342.0" y="26" text-anchor="middle">WRITER</text>
-<line class="div" x1="342.0" y1="36" x2="342.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye-user" x="470.0" y="26" text-anchor="middle">APPROVAL ①</text>
-<line class="div" x1="470.0" y1="36" x2="470.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="598.0" y="26" text-anchor="middle">STUDIO</text>
-<line class="div" x1="598.0" y1="36" x2="598.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye-user" x="726.0" y="26" text-anchor="middle">APPROVAL ②</text>
-<line class="div" x1="726.0" y1="36" x2="726.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="854.0" y="26" text-anchor="middle">SCHEDULE</text>
-<line class="div" x1="854.0" y1="36" x2="854.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="982.0" y="26" text-anchor="middle">PUBLISH</text>
-<line class="div" x1="982.0" y1="36" x2="982.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-eye" x="1110.0" y="26" text-anchor="middle">INSIGHT</text>
-<line class="div" x1="1110.0" y1="36" x2="1110.0" y2="380" stroke-dasharray="2 4"/>
-<text class="t-chip" x="30" y="60">VIDEO · SLIDESHOW · CLIP</text>
-<rect class="n-st" x="30" y="70" width="112" height="54" rx="8"/><text class="t-st" x="40" y="92">week order</text><text class="t-s" x="40" y="110">plan_week</text>
-<path class="e" d="M142 97H154" marker-end="url(#ah6)"/>
-<rect class="n-st" x="158" y="70" width="112" height="54" rx="8"/><text class="t-st" x="168" y="92">idea</text><text class="t-s" x="168" y="110">outliers, rivals</text>
-<path class="e-new" d="M270 97H282" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="286" y="70" width="112" height="54" rx="8"/><text class="t-st" x="296" y="92">script</text><text class="t-s" x="296" y="110">+ storyboard</text>
-<path class="e-new" d="M398 97H410" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="414" y="70" width="112" height="54" rx="8"/><text class="t-st" x="424" y="92">approve script</text><text class="t-s" x="424" y="110"></text>
-<path class="e-new" d="M526 97H538" marker-end="url(#ah6n)"/>
-<rect class="n-st" x="542" y="70" width="112" height="54" rx="8"/><text class="t-st" x="552" y="92">build + render</text><text class="t-s" x="552" y="110">Assistant · worker</text>
-<path class="e-new" d="M654 97H666" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="670" y="70" width="112" height="54" rx="8"/><text class="t-st" x="680" y="92">approve video</text><text class="t-s" x="680" y="110"></text>
-<path class="e-new" d="M782 97H794" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="798" y="70" width="112" height="54" rx="8"/><text class="t-st" x="808" y="92">time slot</text><text class="t-s" x="808" y="110">per platform</text>
-<path class="e-new" d="M910 97H922" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="926" y="70" width="112" height="54" rx="8"/><text class="t-st" x="936" y="92">post</text><text class="t-s" x="936" y="110">intent · Zernio</text>
-<path class="e-new" d="M1038 97H1050" marker-end="url(#ah6n)"/>
-<rect class="n-st" x="1054" y="70" width="112" height="54" rx="8"/><text class="t-st" x="1064" y="92">metrics</text><text class="t-s" x="1064" y="110">pull_metrics</text>
-<text class="t-chip" x="30" y="180">POST · CAPTION · ARTICLE</text>
-<rect class="n-st" x="30" y="190" width="112" height="54" rx="8"/><text class="t-st" x="40" y="212">week order</text><text class="t-s" x="40" y="230">plan_week</text>
-<path class="e" d="M142 217H154" marker-end="url(#ah6)"/>
-<rect class="n-st" x="158" y="190" width="112" height="54" rx="8"/><text class="t-st" x="168" y="212">angle</text><text class="t-s" x="168" y="230">research</text>
-<path class="e" d="M270 217H282" marker-end="url(#ah6)"/>
-<rect class="n-st" x="286" y="190" width="112" height="54" rx="8"/><text class="t-st" x="296" y="212">draft</text><text class="t-s" x="296" y="230">post_draft</text>
-<path class="e" d="M398 217H410" marker-end="url(#ah6)"/>
-<rect class="n-user" x="414" y="190" width="112" height="54" rx="8"/><text class="t-st" x="424" y="212">approve post</text><text class="t-s" x="424" y="230">in_review</text>
-<path class="e-new" d="M526 217H794" marker-end="url(#ah6n)"/>
-<rect class="n-new" x="798" y="190" width="112" height="54" rx="8"/><text class="t-st" x="808" y="212">time slot</text><text class="t-s" x="808" y="230"></text>
-<path class="e-new" d="M910 217H922" marker-end="url(#ah6n)"/>
-<rect class="n-st" x="926" y="190" width="112" height="54" rx="8"/><text class="t-st" x="936" y="212">post</text><text class="t-s" x="936" y="230">you tap intent</text>
-<path class="e" d="M1038 217H1050" marker-end="url(#ah6)"/>
-<rect class="n-st" x="1054" y="190" width="112" height="54" rx="8"/><text class="t-st" x="1064" y="212">metrics</text><text class="t-s" x="1064" y="230">post_metrics</text>
-<text class="t-chip" x="30" y="300">SALES</text>
-<rect class="n-st" x="30" y="310" width="112" height="54" rx="8"/><text class="t-st" x="40" y="332">scan order</text><text class="t-s" x="40" y="350">sales_scan</text>
-<path class="e" d="M142 337H154" marker-end="url(#ah6)"/>
-<rect class="n-st" x="158" y="310" width="112" height="54" rx="8"/><text class="t-st" x="168" y="332">thread Reddit</text><text class="t-s" x="168" y="350">ScrapeCreators</text>
-<path class="e" d="M270 337H282" marker-end="url(#ah6)"/>
-<rect class="n-st" x="286" y="310" width="112" height="54" rx="8"/><text class="t-st" x="296" y="332">reply draft</text><text class="t-s" x="296" y="350">sales + checker</text>
-<path class="e" d="M398 337H410" marker-end="url(#ah6)"/>
-<rect class="n-user" x="414" y="310" width="112" height="54" rx="8"/><text class="t-st" x="424" y="332">approve</text><text class="t-s" x="424" y="350">opportunities</text>
-<path class="e" d="M526 337H922" marker-end="url(#ah6)"/>
-<rect class="n-st" x="926" y="310" width="112" height="54" rx="8"/><text class="t-st" x="936" y="332">you reply</text><text class="t-s" x="936" y="350">no post button</text>
-<path class="e" d="M1038 337H1050" marker-end="url(#ah6)"/>
-<rect class="n-st" x="1054" y="310" width="112" height="54" rx="8"/><text class="t-st" x="1064" y="332">outcome</text><text class="t-s" x="1064" y="350">replied</text>
-<path class="e-dash" d="M1110.0 364V420H86.0V368" marker-end="url(#ah6)"/>
-<text class="t-edge" x="600" y="440" text-anchor="middle">metrics, your edits, winning posts → memories + lessons → next week's plan</text>
-<path class="e-dash" d="M470.0 124V150H342.0V128" marker-end="url(#ah6)"/><text class="t-edge" x="406" y="164" text-anchor="middle">send back</text>
-<path class="e-dash" d="M726.0 124V150H598.0V128" marker-end="url(#ah6)"/><text class="t-edge" x="662" y="164" text-anchor="middle">keep editing</text>
-<path class="e" d="M470 244V262H982V248" marker-end="url(#ah6)"/><text class="t-edge" x="726" y="276" text-anchor="middle">today: approved, then you tap post</text>
-</svg>
-    </div>
+  <section class="sec" id="how-work-flows">
+    <div class="sec-head"><p class="eyebrow">§2</p><h2>How work flows</h2></div>
+<p>The owner's sketch of 2026-11-08, top to bottom. Words are written before anything is built from them.</p>
+<div class="tbl"><table><thead><tr><th>#</th><th>Step</th><th>What happens</th><th>Built in</th></tr></thead><tbody><tr><td>1</td><td>Business information</td><td>The CMO reads the website and writes the four documents</td><td><code>lib/cmo/onboard.ts</code>, <code>site.ts</code>, <code>documents.ts</code></td></tr><tr><td>2</td><td>Writer</td><td>The week plan, post drafts (text for X, Threads, LinkedIn; slides for TikTok, Instagram), video briefs; every word through no-ai-slop</td><td><code>plan-week.ts</code>, <code>draft-post.ts</code>, <code>draft-thread.ts</code>, <code>write_slides</code>, <code>write_video_brief</code>, <code>lib/cmo/platforms.ts</code></td></tr><tr><td>3</td><td>Approval 1</td><td>The founder approves the plan and the words</td><td><code>approvals</code></td></tr><tr><td>4</td><td>Video</td><td>Built from the approved words, with the Brand Kit: slideshow, post image, short clips cut from a finished edit of the founder's own video. The editor is where the founder fine-tunes by hand, at the end</td><td><code>lib/departments/studio/{slideshow,shorts}</code>, <code>lib/brand.ts</code>, the editor</td></tr><tr><td>5</td><td>Approval 2</td><td>The founder approves what was made</td><td><code>approvals</code></td></tr><tr><td>6</td><td>Post</td><td>Schedule and publish text, slideshows, videos with captions, clips; captions and hashtags per platform</td><td><code>schedule_slots</code>, <code>lib/departments/publish</code>, <code>write_caption</code></td></tr></tbody></table></div>
+<p>Three lanes share the departments:</p>
+<div class="tbl"><table><thead><tr><th>Lane</th><th>Steps</th></tr></thead><tbody><tr><td>Post · caption</td><td>week order (<code>plan_week</code>) → angle (research) → draft (<code>post_draft</code>, Writer + checker) → approve post → time slot (<code>schedule_slots</code>, schedule card) → post (Zernio, or the intent link) → metrics (<code>pull_metrics</code>)</td></tr><tr><td>Video · slideshow · short</td><td>week order → brief or slide text (Writer) → build (Studio order, look check) → approve (<code>finished_video</code>, <code>slideshow</code>, <code>shorts_batch</code>) → captions (<code>write_caption</code>) → time slot → post → metrics</td></tr><tr><td>Sales</td><td>scan order (<code>sales_scan</code>) → Reddit thread (ScrapeCreators) → subreddit rules → reply draft (sales + checker) → approve (<code>opportunities</code>) → founder replies by hand (no post button) → outcome (<code>jobs/reply-outcomes.ts</code>)</td></tr></tbody></table></div>
+<p>Loop: metrics, the founder's edits and winning posts → <code>cmo_memories</code>, <code>cmo_lessons</code>, <code>cmo_corrections</code> and voice notes → next week's plan.</p>
   </section>
 
-  <section class="sec" id="target">
-    <div class="sec-head"><p class="eyebrow">3</p><h2>Target system: built around the departments</h2>
-      <p class="lede">Four layers: the founder, the brain, seven department modules, and below them the data spine and the runtime that serve them. Each capability is coloured by the build-or-buy decision in section 7.</p></div>
-    <div class="legend">
+  <section class="sec" id="the-system-by-layer">
+    <div class="sec-head"><p class="eyebrow">§3</p><h2>The system, by layer</h2></div>
+<div class="legend">
       <span><i class="sw" style="background:var(--lapis-soft)"></i>Ours, built</span>
-      <span><i class="sw" style="background:var(--ok-soft);outline:1px dashed var(--ok)"></i>Ours, to build</span>
+      <span><i class="sw" style="background:var(--ok-soft);outline:1px dashed var(--ok)"></i>Ours, added since 2026-10-25</span>
       <span><i class="sw" style="background:var(--ext-soft);outline:1.2px solid var(--ext)"></i>Bought</span>
     </div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
 <svg class="wide" viewBox="0 0 1240 930" role="img" aria-label="Department-first system: you on top, the brain as one layer, seven departments as seven modules, then the data spine and the runtime.">
 <defs><marker id="ah7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker></defs>
 <rect class="n-user" x="30" y="16" width="1180" height="62" rx="12"/>
@@ -374,12 +212,12 @@ body{margin:0}
 <text class="t-title" x="48" y="154">CMO Brain</text>
 <rect class="n-in" x="48" y="170" width="216" height="80" rx="8"/><text class="t-b" x="60" y="192">Planning</text><text class="t-s" x="60" y="214">plan_week · review_week</text><text class="t-s" x="60" y="232">weekly goal</text>
 <rect class="n-new" x="280" y="170" width="216" height="80" rx="8"/><text class="t-b" x="292" y="192">Dispatch</text><text class="t-s" x="292" y="214">work_orders: order tree</text><text class="t-s" x="292" y="232">depends_on · budget</text>
-<text class="t-new" x="484" y="192" text-anchor="end">NEW</text>
+<text class="t-new" x="484" y="192" text-anchor="end">BUILT</text>
 <rect class="n-in" x="512" y="170" width="216" height="80" rx="8"/><text class="t-b" x="524" y="192">Memory</text><text class="t-s" x="524" y="214">memories · lessons</text><text class="t-s" x="524" y="232">reads the Library</text>
 <rect class="n-new" x="744" y="170" width="216" height="80" rx="8"/><text class="t-b" x="756" y="192">Capability registry</text><text class="t-s" x="756" y="214">one tool list for</text><text class="t-s" x="756" y="232">brain, UI, Assistant, MCP</text>
-<text class="t-new" x="948" y="192" text-anchor="end">NEW</text>
+<text class="t-new" x="948" y="192" text-anchor="end">BUILT</text>
 <rect class="n-new" x="976" y="170" width="216" height="80" rx="8"/><text class="t-b" x="988" y="192">Event rules</text><text class="t-s" x="988" y="214">status change → next order</text><text class="t-s" x="988" y="232">approved → Schedule</text>
-<text class="t-new" x="1180" y="192" text-anchor="end">NEW</text>
+<text class="t-new" x="1180" y="192" text-anchor="end">BUILT</text>
 <path class="e" d="M620 264V284"/>
 <line class="bus" x1="110" y1="284" x2="1130" y2="284"/>
 <path class="e" d="M110 284V300" marker-end="url(#ah7)"/>
@@ -398,10 +236,10 @@ body{margin:0}
 <text class="t-eye" x="212" y="328">LAYER 2 · DEPT 2</text>
 <text class="t-title-s" x="212" y="352">Writer</text>
 <rect class="n-in" x="208" y="366" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="384">post · caption</text>
-<rect class="n-new" x="208" y="400" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="418">article</text>
-<rect class="n-new" x="208" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="452">script + storyboard</text>
+<rect class="n-new" x="208" y="400" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="418">slides · video brief</text>
+<rect class="n-new" x="208" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="452">captions per platform</text>
 <rect class="n-new" x="208" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="486">No AI Slop</text>
-<rect class="n-ext" x="208" y="502" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="520">LLM registry</text>
+<rect class="n-ext" x="208" y="502" width="144" height="28" rx="6"/><text class="t-cap" x="216" y="520">Claude only</text>
 <path class="e" d="M280 572V598" marker-start="url(#ah7)" marker-end="url(#ah7)"/>
 <path class="e" d="M450 284V300" marker-end="url(#ah7)"/>
 <rect class="n-dept" x="370" y="304" width="160" height="268" rx="10"/>
@@ -420,8 +258,8 @@ body{margin:0}
 <rect class="n-in" x="548" y="366" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="384">op editor-core</text>
 <rect class="n-in" x="548" y="400" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="418">render_document</text>
 <rect class="n-new" x="548" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="452">slideshow</text>
-<rect class="n-new" x="548" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="486">clip_from_edit</text>
-<rect class="n-new" x="548" y="502" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="520">build_video headless</text>
+<rect class="n-new" x="548" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="486">cut_shorts</text>
+<rect class="n-new" x="548" y="502" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="520">Studio order runner</text>
 <rect class="n-ext" x="548" y="536" width="144" height="28" rx="6"/><text class="t-cap" x="556" y="554">fal.ai · ElevenLabs</text>
 <path class="e" d="M620 572V598" marker-start="url(#ah7)" marker-end="url(#ah7)"/>
 <path class="e" d="M790 284V300" marker-end="url(#ah7)"/>
@@ -440,7 +278,7 @@ body{margin:0}
 <text class="t-title-s" x="892" y="352">Schedule</text>
 <rect class="n-new" x="888" y="366" width="144" height="28" rx="6"/><text class="t-cap" x="896" y="384">calendar + slots</text>
 <rect class="n-new" x="888" y="400" width="144" height="28" rx="6"/><text class="t-cap" x="896" y="418">best time from data</text>
-<rect class="n-new" x="888" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="896" y="452">remind you to post</text>
+<rect class="n-new" x="888" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="896" y="452">schedule cards</text>
 <rect class="n-in" x="888" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="896" y="486">clock: sweep</text>
 <path class="e" d="M960 572V598" marker-start="url(#ah7)" marker-end="url(#ah7)"/>
 <path class="e" d="M1130 284V300" marker-end="url(#ah7)"/>
@@ -451,33 +289,34 @@ body{margin:0}
 <rect class="n-in" x="1058" y="366" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="384">intent link</text>
 <rect class="n-new" x="1058" y="400" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="418">one adapter</text>
 <rect class="n-new" x="1058" y="434" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="452">social_accounts</text>
-<rect class="n-ext" x="1058" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="486">X API pay-per-use</text>
+<rect class="n-ext" x="1058" y="468" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="486">intent fallback</text>
 <rect class="n-ext" x="1058" y="502" width="144" height="28" rx="6"/><text class="t-cap" x="1066" y="520">Zernio: TikTok, IG…</text>
 <path class="e" d="M1130 572V598" marker-start="url(#ah7)" marker-end="url(#ah7)"/>
 <rect class="n-dept" x="30" y="602" width="1180" height="150" rx="12"/><rect class="n-bar" x="30" y="602" width="1180" height="5" rx="2"/>
 <text class="t-eye" x="48" y="628">LAYER 3 · DATA SPINE · SUPABASE</text>
 <text class="t-s" x="1192" y="628" text-anchor="end">every write goes through a gated RPC: ownership · credit hold · limits</text>
-<rect class="n-new" x="48" y="646" width="180" height="90" rx="8"/><text class="t-b" x="60" y="670">work_orders</text><text class="t-s" x="60" y="692">from cmo_runs: + dept,</text><text class="t-s" x="60" y="710">parent, depends_on</text>
-<rect class="n-new" x="242" y="646" width="180" height="90" rx="8"/><text class="t-b" x="254" y="670">deliverables</text><text class="t-s" x="254" y="692">from content_items: + kind,</text><text class="t-s" x="254" y="710">parent, editor_project</text>
+<rect class="n-new" x="48" y="646" width="180" height="90" rx="8"/><text class="t-b" x="60" y="670">work_orders</text><text class="t-s" x="60" y="692">beside cmo_runs: dept,</text><text class="t-s" x="60" y="710">parent, depends_on</text>
+<rect class="n-new" x="242" y="646" width="180" height="90" rx="8"/><text class="t-b" x="254" y="670">deliverables</text><text class="t-s" x="254" y="692">wraps content_items: kind,</text><text class="t-s" x="254" y="710">ref_kind, ref_id</text>
 <rect class="n-new" x="436" y="646" width="180" height="90" rx="8"/><text class="t-b" x="448" y="670">approvals</text><text class="t-s" x="448" y="692">content snapshot</text><text class="t-s" x="448" y="710">+ time + account</text>
-<rect class="n-new" x="630" y="646" width="180" height="90" rx="8"/><text class="t-b" x="642" y="670">schedule_slots</text><text class="t-s" x="642" y="692">time slots per platform</text><text class="t-s" x="642" y="710">remind / publish state</text>
+<rect class="n-new" x="630" y="646" width="180" height="90" rx="8"/><text class="t-b" x="642" y="670">schedule_slots</text><text class="t-s" x="642" y="692">time slots per platform</text><text class="t-s" x="642" y="710">publish / intent mode</text>
 <rect class="n-new" x="824" y="646" width="180" height="90" rx="8"/><text class="t-b" x="836" y="670">social_accounts</text><text class="t-s" x="836" y="692">Zernio account ids</text><text class="t-s" x="836" y="710">no tokens kept</text>
 <rect class="n-in" x="1018" y="646" width="180" height="90" rx="8"/><text class="t-b" x="1030" y="670">existing</text><text class="t-s" x="1030" y="692">editor_projects · tasks</text><text class="t-s" x="1030" y="710">credit_ledger · Storage</text>
 <path class="e" d="M620 752V780" marker-start="url(#ah7)" marker-end="url(#ah7)"/>
 <text class="t-eye" x="30" y="800">LAYER 4 · RUNTIME · STILL ONE SYSTEM</text>
 <rect class="n-in" x="30" y="812" width="284" height="96" rx="10"/><text class="t-b" x="44" y="838">Vercel</text><text class="t-s" x="44" y="862">web, approval inbox, brain,</text><text class="t-s" x="44" y="880">Research, Writer, Sales</text>
-<rect class="n-in" x="328" y="812" width="284" height="96" rx="10"/><text class="t-b" x="342" y="838">Modal · worker</text><text class="t-s" x="342" y="862">heavy Studio, publish_post,</text><text class="t-s" x="342" y="880">sweep clock every minute</text>
+<rect class="n-in" x="328" y="812" width="284" height="96" rx="10"/><text class="t-b" x="342" y="838">Modal · worker</text><text class="t-s" x="342" y="862">heavy Studio, publish_media,</text><text class="t-s" x="342" y="880">sweep clock every minute</text>
 <rect class="n-ext" x="626" y="812" width="284" height="96" rx="10"/><text class="t-b" x="640" y="838">Modal · MCP</text><text class="t-s" x="640" y="862">own app, own secret,</text><text class="t-s" x="640" y="880">user JWT</text>
-<rect class="n-ext" x="924" y="812" width="284" height="96" rx="10"/><text class="t-b" x="938" y="838">Bought</text><text class="t-s" x="938" y="862">LLM · fal · ElevenLabs · Scrape-</text><text class="t-s" x="938" y="880">Creators · Resend · X · Zernio</text>
+<rect class="n-ext" x="924" y="812" width="284" height="96" rx="10"/><text class="t-b" x="938" y="838">Bought</text><text class="t-s" x="938" y="862">Claude · fal · ElevenLabs · Scrape-</text><text class="t-s" x="938" y="880">Creators · Resend · Creem · Zernio</text>
 </svg>
     </div>
+<p>Every capability below is built unless marked. Build or buy per capability is in §7.</p>
+<ol class="order"><li><span><b>Founder</b>: entry points are the app with its approval inbox, the editor and its Assistant, the CMO chat, and MCP from the founder's own Claude.</span></li><li><span><b>Brain</b>: planning; dispatch through the <code>work_orders</code> tree (<code>depends_on</code>, budget per order); memory; the capability registry (<code>packages/contracts/capabilities.json</code>, one list for brain, UI, Assistant, MCP; checked by <code>lib/cmo/capabilities.check.ts</code>); event rules in SQL triggers.</span></li><li><span><b>Departments</b></span><ul><li>Research: <code>competitor_research</code>, <code>niche_video_research</code>, outlier and social tools, <code>pull_metrics</code> (own) · ScrapeCreators, Hacker News search (buy, free)</li><li>Writer: a writer agent per platform, <code>write_caption</code>, <code>write_video_brief</code>, <code>write_slides</code> (own) · Claude (buy)</li><li>Sales: <code>sales_scan</code>, score and draft, subreddit rules (own) · ScrapeCreators (buy)</li><li>Studio: <code>editor-core</code> ops, <code>render_document</code>, the Studio adapter and its squads (own) · fal.ai, ElevenLabs (buy)</li><li>Approval: checker scores first; one inbox, approval snapshot, in-app notices and web push (own) · email via Resend (buy)</li><li>Schedule: slots, best time from data, reminders (own) · clock = Modal <code>sweep</code> (own)</li><li>Publish: one adapter, <code>social_accounts</code> with ids only (own) · Zernio for every platform (buy) · intent link (own)</li></ul></li><li><span><b>Data spine (Supabase)</b>: <code>work_orders</code>, <code>deliverables</code>, <code>approvals</code>, <code>schedule_slots</code>, <code>social_accounts</code> (Zernio ids, no tokens), <code>credit_orders</code>; and <code>editor_projects</code>, <code>tasks</code>, <code>credit_ledger</code>, Storage. Every write goes through a gated RPC (ownership, credit hold, limits).</span></li><li><span><b>Runtime (still one system)</b>: Vercel runs the web app, the approval inbox, the brain, Research, Writer and Sales. The Modal worker runs heavy Studio work, <code>publish_media</code>, <code>look_check</code> and the clock. The Modal MCP app has its own secret and a user JWT. Bought: Claude, fal, ElevenLabs, ScrapeCreators, Resend, Zernio.</span></li></ol>
   </section>
 
-  <section class="sec" id="today">
-    <div class="sec-head"><p class="eyebrow">4</p><h2>System today, drawn by its real call paths</h2>
-      <p class="lede">The container view of the code on <code>main</code> (<code>eb858ca</code>). Every edge is numbered. Dashed green is proposed.</p></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+  <section class="sec" id="the-system-as-built-by-its-real-call-pat">
+    <div class="sec-head"><p class="eyebrow">§4</p><h2>The system as built, by its real call paths</h2></div>
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
       <svg class="wide" viewBox="0 0 1280 690" role="img" aria-label="System today: the browser calls Vercel and uploads straight to Supabase Storage; Vercel writes Postgres through RPCs and calls Modal submit; the Modal worker claims tasks from Postgres; Modal schedules call back into Vercel; MCP is its own Modal app; Creem sends webhooks to Vercel; proposed parts are dashed.">
         <defs>
           <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
@@ -510,19 +349,19 @@ body{margin:0}
         <text class="t-s" x="56" y="298">reads under RLS, writes via owner RPCs</text>
         <rect class="n-in" x="44" y="318" width="272" height="64" rx="8"/>
         <text class="t-b" x="56" y="338">CMO engine · lib/cmo</text>
-        <text class="t-s" x="56" y="356">12 agent · skills · runner</text>
+        <text class="t-s" x="56" y="356">20 agents · skills · runners</text>
         <text class="t-s" x="56" y="372">runs cmo_runs Modal dispatches</text>
         <rect class="n-in" x="44" y="390" width="272" height="50" rx="8"/>
         <text class="t-b" x="56" y="410">Assistant + Generate</text>
         <text class="t-s" x="56" y="428">lib/agent · lib/generate</text>
         <rect class="n-in" x="44" y="448" width="272" height="64" rx="8"/>
         <text class="t-b" x="56" y="468">Webhook + cron routes</text>
-        <text class="t-s" x="56" y="486">/api/webhooks/creem · /api/cron/*</text>
+        <text class="t-s" x="56" y="486">/api/webhooks/{creem,zernio} · /api/cron/*</text>
         <text class="t-s" x="56" y="502">/api/internal/cmo/run</text>
         <rect class="n-new" x="44" y="520" width="272" height="44" rx="8"/>
-        <text class="t-new" x="56" y="538">PROPOSED</text>
-        <text class="t-s" x="56" y="555">video item → script → open in editor</text>
-        <text class="t-warn" x="46" y="600">service role: webhooks, cron, CMO runner only</text>
+        <text class="t-new" x="56" y="538">SPINE</text>
+        <text class="t-s" x="56" y="555">Studio order runner · departments</text>
+        <text class="t-warn" x="46" y="600">service role: webhooks, cron, CMO runner, MCP keys</text>
 
         <!-- zone: Supabase -->
         <rect class="n-dept" x="370" y="140" width="310" height="480" rx="10"/>
@@ -547,8 +386,8 @@ body{margin:0}
         <text class="t-s" x="396" y="458">credit_ledger · creem_* · operation_log</text>
         <text class="t-s" x="396" y="473">rate_limits · api_keys · mcp_grants</text>
         <rect class="n-new" x="384" y="492" width="282" height="42" rx="8"/>
-        <text class="t-new" x="396" y="509">PROPOSED</text>
-        <text class="t-s" x="396" y="526">approval = content + time + account</text>
+        <text class="t-new" x="396" y="509">SPINE</text>
+        <text class="t-s" x="396" y="526">work_orders · approvals · schedule_slots</text>
         <rect class="n-in" x="384" y="542" width="282" height="64" rx="8"/>
         <text class="t-b" x="396" y="562">Storage</text>
         <text class="t-s" x="396" y="580">sources · media · exports · clips · brand</text>
@@ -569,25 +408,25 @@ body{margin:0}
         <text class="t-b" x="746" y="332">opencmo (worker)</text>
         <text class="t-s" x="746" y="352">submit (HTTP) → run_task</text>
         <text class="t-s" x="746" y="368">sweep each minute: expire leases, claim</text>
-        <text class="t-s" x="746" y="384">cmo_schedule 00:05 · cleanup 03:00</text>
+        <text class="t-s" x="746" y="384">cmo_schedule · digest · cleanup</text>
         <text class="t-chip" x="746" y="408">TASK KIND</text>
         <text class="t-s" x="746" y="424">probe_media · transcribe_media/asset</text>
         <text class="t-s" x="746" y="440">generate · render_document</text>
         <text class="t-s" x="746" y="456">capture_page · look · render_motion</text>
-        <text class="t-s" x="746" y="472">render_three (GPU)</text>
-        <text class="t-s" x="746" y="492">moderation.py: image + 3 video frames</text>
+        <text class="t-s" x="746" y="472">render_stills · look_check</text>
+        <text class="t-s" x="746" y="492">moderation.py: Creem prompt; Haiku + fal NSFW</text>
         <text class="t-warn" x="746" y="510">Peak RAM per job &lt; 2 GB</text>
         <rect class="n-new" x="746" y="520" width="238" height="44" rx="8"/>
-        <text class="t-new" x="758" y="537">PROPOSED · new task kinds</text>
-        <text class="t-s" x="758" y="554">clip_from_edit · publish_post</text>
+        <text class="t-new" x="758" y="537">PUBLISH</text>
+        <text class="t-s" x="758" y="554">publish_media → Zernio</text>
         <text class="t-s" x="746" y="586">holds service role; MCP does not</text>
 
         <!-- providers -->
         <rect class="n-ext" x="1050" y="140" width="200" height="100" rx="10"/>
         <text class="t-eye-ext" x="1064" y="162">LLM · registry.ts</text>
         <text class="t-m" x="1064" y="184">Anthropic (Claude)</text>
-        <text class="t-m" x="1064" y="202">Gemini · Groq</text>
-        <text class="t-m" x="1064" y="220">OpenAI-compatible</text>
+        <text class="t-m" x="1064" y="202">Sonnet: drafting, plans</text>
+        <text class="t-m" x="1064" y="220">Haiku: checks, output review</text>
         <text class="t-s" x="1064" y="234">called by: Vercel · worker · MCP</text>
 
         <rect class="n-ext" x="1050" y="250" width="200" height="120" rx="10"/>
@@ -611,9 +450,9 @@ body{margin:0}
         <text class="t-s" x="1064" y="544">webhooks into Vercel</text>
 
         <rect class="n-new" x="1050" y="560" width="200" height="60" rx="10"/>
-        <text class="t-new" x="1064" y="580">PROPOSED · ZERNIO</text>
+        <text class="t-new" x="1064" y="580">ZERNIO</text>
         <text class="t-m" x="1064" y="598">scheduled posting</text>
-        <text class="t-s" x="1064" y="613">called by: worker (publish_post)</text>
+        <text class="t-s" x="1064" y="613">called by: worker (publish_media)</text>
 
         <!-- edges -->
         <!-- 1 browser -> vercel -->
@@ -659,257 +498,73 @@ body{margin:0}
       </svg>
 
     </div>
-    <ol class="badge-list b cols">
-      <li><span class="no">1</span><span>HTTPS: UI and API v1, session cookie, reads under RLS.</span></li>
-      <li><span class="no">2</span><span>TUS straight to Storage with a reservation; downloads by signed URL. Files never pass through Next.js.</span></li>
-      <li><span class="no">3</span><span>Writes through owner-checking RPCs; holding credits and creating work in one transaction.</span></li>
-      <li><span class="no">4</span><span><code>submit</code>: Vercel calls Modal when the user clicks. If it fails, <code>sweep</code> claims the task within a minute.</span></li>
-      <li><span class="no">5</span><span>The worker claims tasks with a lease, writes results, reads and writes files with the service role.</span></li>
-      <li><span class="no">6</span><span>Modal is the only clock: <code>cmo_schedule</code>, <code>cmo_runs</code> dispatch and <code>cleanup</code> call Vercel routes.</span></li>
-      <li><span class="no">7</span><span>The founder's Claude connects to MCP with an API key (paid plans).</span></li>
-      <li><span class="no">8</span><span>MCP reads and writes under RLS with a 5-minute user JWT; it wakes the worker through <code>wake</code>.</span></li>
-      <li><span class="no">9</span><span>Posting today: the browser opens an intent link and the founder taps post.</span></li>
-      <li><span class="no">10</span><span>Creem webhooks into Vercel, with a receipts table against replays.</span></li>
-      <li class="new"><span class="no">11</span><span>Proposed: a <code>publish_post</code> task calls Zernio at the approved time, only while the approval is still valid.</span></li>
-    </ol>
-    <div class="prose">
-      <h3>What the PR #117 system diagram got wrong</h3>
-      <ul>
-        <li>Three stacked boxes with one-way arrows hid four direct paths: TUS to Storage, <code>submit</code> to Modal, Modal calling back into Vercel, the browser opening x.com.</li>
-        <li>The MCP server was a line inside the worker; it is its own Modal app (<code>packages/engine/mcp_app.py</code>) with its own secret. <code>apps/web/app/api/mcp</code> only answers 410.</li>
-        <li>"Cron runs CMO jobs" on Modal: Modal only keeps time; CMO jobs run on Vercel.</li>
-        <li>"Gemini: frame moderation": <code>moderation.py</code> uses the <code>moderation</code> agent in <code>CMO_LLM_PROVIDERS</code> order plus fal's NSFW classifier.</li>
-        <li>Supabase as one box: no queues (<code>tasks</code>, <code>cmo_runs</code>), no tables per department; week plans and drafts were placed in Storage instead of Postgres.</li>
-        <li>Clipping and "Writer → script → Assistant" were drawn as running; neither exists today.</li>
-      </ul>
-    </div>
+<p>Container view of <code>main</code> (<code>4f70a59</code>).</p>
+<div class="tbl"><table><thead><tr><th>Container</th><th>Holds</th></tr></thead><tbody><tr><td>Vercel <code>apps/web</code></td><td>UI (app screens, editor, approval inbox, Library) · API v1 (reads under RLS, writes via owner RPCs) · CMO engine <code>lib/cmo</code> (20 agents, skills, the runner of <code>cmo_runs</code> and the Studio order runner) · Assistant <code>lib/agent</code> + Generate <code>lib/generate</code> · departments <code>lib/departments/{studio,publish}</code> · Creem and Zernio webhooks, <code>/api/cron/*</code>, <code>/api/internal/cmo/run</code>. Service role: webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds</td></tr><tr><td>Supabase</td><td>Auth (Google OAuth, email) · Postgres: queues <code>tasks</code>, <code>jobs</code>, <code>cmo_runs</code>; the spine <code>work_orders</code>, <code>deliverables</code>, <code>approvals</code>, <code>schedule_slots</code>, <code>social_accounts</code>; CMO <code>marketing_documents</code>, <code>content_items</code>, <code>opportunities</code>, <code>post_metrics</code>, <code>cmo_memories</code>, <code>cmo_lessons</code>, <code>cmo_corrections</code>; editor <code>editor_projects</code>, <code>media_assets</code>, <code>generations</code>, <code>brand_kits</code>, <code>scene_codes</code>; money and limits <code>credit_ledger</code>, <code>credit_orders</code>, <code>creem_*</code>, <code>operation_log</code>, <code>rate_limits</code>, <code>card_budget</code>, <code>api_keys</code>, <code>mcp_grants</code>; costs <code>provider_usage</code>, <code>provider_prices</code> · Storage: <code>sources</code>, <code>media</code>, <code>exports</code>, <code>clips</code>, <code>brand</code></td></tr><tr><td>Modal <code>opencmo-mcp</code></td><td><code>packages/mcp-server</code>, always warm, API key → 5-minute user JWT, paid plans only, wakes the worker; no worker secrets</td></tr><tr><td>Modal <code>opencmo</code> worker</td><td><code>submit</code> → <code>run_task</code>; <code>sweep</code> every minute (claims, CMO dispatch, turn and job reaper); <code>cmo_schedule</code> 00:05 UTC; <code>cmo_digest</code> every hour; <code>cleanup</code> 03:00 UTC; task kinds from <code>packages/contracts/task-kinds.json</code> (<code>probe_media</code>, <code>generate</code>, <code>transcribe_media</code>, <code>transcribe_asset</code>, <code>render_document</code>, <code>render_stills</code>, <code>capture_page</code>, <code>look_check</code>, <code>publish_media</code>); <code>look</code> and <code>render_motion</code> (Remotion explainers); <code>opencmo/ai/moderation.py</code>; peak RAM &lt; 2 GB; holds the service role</td></tr><tr><td>Bought</td><td>Claude (Anthropic) for every model call (Vercel, worker, MCP) · Creem: payments and prompt moderation · fal.ai + its NSFW classifier, ElevenLabs voice, music and Scribe (worker) · ScrapeCreators (Vercel) · Zernio (Vercel, worker) · Resend · Sentry, GitHub CI, Google OAuth</td></tr></tbody></table></div>
+<p>Edges:</p>
+<ol class="order"><li><span>Browser → Vercel: HTTPS, session cookie, reads under RLS.</span></li><li><span>Browser → Storage: TUS upload with a reservation; downloads by signed URL. Files never pass through Next.js.</span></li><li><span>Vercel → Postgres: owner-checking RPCs; credit hold and work creation in one transaction.</span></li><li><span>Vercel → Modal <code>submit</code> on click; <code>sweep</code> claims within a minute if it fails.</span></li><li><span>Worker ↔ Postgres + Storage: lease claims, results, files (service role).</span></li><li><span>Modal → Vercel: the only clock (<code>cmo_schedule</code>, <code>cmo_digest</code>, <code>cmo_runs</code> dispatch, <code>cleanup</code>).</span></li><li><span>Founder's Claude → MCP with an API key.</span></li><li><span>MCP → Postgres under RLS with a user JWT; MCP → worker <code>wake</code>.</span></li><li><span>Browser → platform: intent link, the founder taps post (fallback with no connected account).</span></li><li><span>Creem → Vercel webhook, with a receipts table.</span></li><li><span>Worker <code>publish_media</code> → Zernio → platforms at the approved time; Zernio → Vercel signed webhook with receipts.</span></li><li><span>Vercel and worker → Creem Moderation API for every image and video prompt (§4b).</span></li></ol>
   </section>
 
-  <section class="sec" id="lifecycle">
-    <div class="sec-head"><p class="eyebrow">5</p><h2>Lifecycle of one piece of content</h2>
-      <p class="lede">The state machine that joins the department view to the system view. The top row matches <code>content_items_status_check</code> (<code>planned → drafting → in_review → approved → published</code>, plus <code>skipped</code>, <code>failed</code>); the only new state is <code>scheduled</code>. Video today jumps from <code>planned</code> to the editor's upload tab.</p></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
-      <svg class="wide" viewBox="0 0 1200 372" role="img" aria-label="Content lifecycle: top row X posts and Reddit as built, bottom row video with proposed steps dashed.">
-        <defs>
-          <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
-          <marker id="ah4n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker>
-        </defs>
-        <text class="t-eye" x="30" y="36">X POSTS · REDDIT · content_items.status</text>
-        <rect class="n-st" x="30" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="40" y="90">planned</text>
-        <text class="t-s" x="40" y="107">plan-week</text>
-        <text class="t-chip" x="40" y="124">Vercel</text>
-        <rect class="n-st" x="175" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="185" y="90">drafting</text>
-        <text class="t-s" x="185" y="107">writer + checker</text>
-        <text class="t-chip" x="185" y="124">Vercel</text>
-        <rect class="n-st" x="320" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="330" y="90">in_review</text>
-        <text class="t-s" x="330" y="107">you approve, edit</text>
-        <text class="t-chip" x="330" y="124">Supabase</text>
-        <rect class="n-st" x="465" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="475" y="90">approved</text>
-        <text class="t-s" x="475" y="107">≤ 5 a day</text>
-        <text class="t-chip" x="475" y="124">Supabase</text>
-        <rect class="n-new" x="610" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="620" y="90">scheduled</text>
-        <text class="t-s" x="620" y="107">approved time</text>
-        <text class="t-new" x="620" y="124">worker → Zernio</text>
-        <rect class="n-st" x="755" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="765" y="90">published</text>
-        <text class="t-s" x="765" y="107">you tap intent</text>
-        <text class="t-chip" x="765" y="124">browser</text>
-        <rect class="n-st" x="900" y="70" width="120" height="64" rx="8"/>
-        <text class="t-st" x="910" y="90">post_metrics</text>
-        <text class="t-s" x="910" y="107">pull-metrics</text>
-        <text class="t-chip" x="910" y="124">Vercel</text>
-        <path class="e" d="M150 102H171" marker-end="url(#ah4)"/>
-        <path class="e" d="M295 102H316" marker-end="url(#ah4)"/>
-        <path class="e" d="M440 102H461" marker-end="url(#ah4)"/>
-        <path class="e-new" d="M585 102H606" marker-end="url(#ah4n)"/>
-        <path class="e-new" d="M730 102H751" marker-end="url(#ah4n)"/>
-        <path class="e" d="M875 102H896" marker-end="url(#ah4)"/>
-        <path class="e" d="M525 70C525 46 815 46 815 66" marker-end="url(#ah4)"/>
-        <text class="t-edge" x="670" y="46" text-anchor="middle">today</text>
-        <path class="e-dash" d="M380 134C380 162 235 162 235 138" marker-end="url(#ah4)"/>
-        <text class="t-edge" x="307" y="172" text-anchor="middle">send back</text>
-        <text class="t-eye" x="30" y="210">VIDEO</text>
-        <rect class="n-st" x="30" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="40" y="270">planned</text>
-        <text class="t-s" x="40" y="287">item video</text>
-        <text class="t-chip" x="40" y="304">Vercel</text>
-        <rect class="n-new" x="175" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="185" y="270">script</text>
-        <text class="t-s" x="185" y="287">director writes</text>
-        <text class="t-new" x="185" y="304">Vercel</text>
-        <rect class="n-new" x="320" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="330" y="270">in_review</text>
-        <text class="t-s" x="330" y="287">approve script</text>
-        <text class="t-new" x="330" y="304">Supabase</text>
-        <rect class="n-st" x="465" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="475" y="270">editing</text>
-        <text class="t-s" x="475" y="287">Assistant builds</text>
-        <text class="t-chip" x="475" y="304">Vercel · editor</text>
-        <rect class="n-st" x="610" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="620" y="270">render</text>
-        <text class="t-s" x="620" y="287">render_document</text>
-        <text class="t-chip" x="620" y="304">worker</text>
-        <rect class="n-new" x="755" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="765" y="270">in_review</text>
-        <text class="t-s" x="765" y="287">approve video</text>
-        <text class="t-new" x="765" y="304">Supabase</text>
-        <rect class="n-new" x="900" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="910" y="270">approved</text>
-        <text class="t-s" x="910" y="287">Post + video</text>
-        <text class="t-new" x="910" y="304">Supabase</text>
-        <rect class="n-new" x="1045" y="250" width="120" height="64" rx="8"/>
-        <text class="t-st" x="1055" y="270">clips</text>
-        <text class="t-s" x="1055" y="287">cut from the edit</text>
-        <text class="t-new" x="1055" y="304">worker</text>
-        <path class="e-new" d="M150 282H171" marker-end="url(#ah4n)"/>
-        <path class="e-new" d="M295 282H316" marker-end="url(#ah4n)"/>
-        <path class="e-new" d="M440 282H461" marker-end="url(#ah4n)"/>
-        <path class="e" d="M585 282H606" marker-end="url(#ah4)"/>
-        <path class="e-new" d="M730 282H751" marker-end="url(#ah4n)"/>
-        <path class="e-new" d="M875 282H896" marker-end="url(#ah4n)"/>
-        <path class="e-new" d="M1020 282H1041" marker-end="url(#ah4n)"/>
-        <path class="e" d="M90 250C90 222 525 222 525 246" marker-end="url(#ah4)"/>
-        <text class="t-edge" x="307" y="216" text-anchor="middle">today: opens upload</text>
-        <path class="e-dash" d="M815 314C815 344 525 344 525 318" marker-end="url(#ah4)"/>
-        <text class="t-edge" x="670" y="354" text-anchor="middle">keep editing</text>
-        <path class="e-new" d="M960 250V196H670V138" marker-end="url(#ah4n)"/>
-        <text class="t-new" x="815" y="190" text-anchor="middle">continues like a post</text>
-      </svg>
-
-    </div>
+  <section class="sec" id="moderation-is-creem-s">
+    <div class="sec-head"><p class="eyebrow">§4b</p><h2>Moderation is Creem's</h2></div>
+<p>Owner decision D8 (2026-11-05). We write no content policy of our own and run no LLM check on prompts.</p>
+<div class="tbl"><table><thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead><tbody><tr><td>Prompt, on the web</td><td><code>lib/generate/moderation.ts</code>, in <code>createGeneration</code> before credits are held</td><td>Every image and video prompt (and our own renderer's on-screen text) goes to Creem's Moderation API. <code>flag</code> blocks like <code>deny</code>. If Creem cannot answer, the request is refused</td></tr><tr><td>Prompt, again on the worker</td><td><code>opencmo/ai/moderation.py</code> <code>check_prompt</code></td><td>The same Creem call, because <code>create_generation</code> is also callable straight through PostgREST</td></tr><tr><td>Output</td><td><code>opencmo/ai/moderation.py</code></td><td>The image, or three video frames, go to Claude Haiku (vision) against Creem's rules quoted as they are (<code>packages/contracts/creem-policy.json</code>), and to fal's NSFW classifier as a second opinion. Blocked → the task fails, the credits come back, the file never reaches the bucket</td></tr></tbody></table></div>
+<p>Voice, music and sound prompts are not screened (Creem does not require it); voices stay premade, with no cloning, dubbing or lip-sync. Production enables AI images and video only with a live Creem key and a working output review (<code>moderationReady</code>).</p>
   </section>
 
-  <section class="sec" id="changes">
-    <div class="sec-head"><p class="eyebrow">6</p><h2>Nine changes so the system can run the departments</h2>
-      <p class="lede">No Inngest, Trigger.dev or Temporal: the Postgres queues and the Modal clock already run, CLAUDE.md forbids a second runtime, and the editor roadmap lists a Temporal-style workflow engine under "Not now".</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>#</th><th>Change</th><th>Serves</th><th>Size</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td><b>work_orders</b> replaces <code>cmo_runs</code>: adds department, <code>parent_id</code>, <code>depends_on</code> and a credit budget. A week order spawns a tree of orders for each department.</td><td>Brain</td><td>M</td></tr>
-          <tr><td>2</td><td><b>deliverables</b> replaces <code>content_items</code>: adds <code>kind</code> (post, caption, article, script, video, slideshow, clip, image, reply), <code>parent_id</code>, <code>editor_project_id</code>, <code>account_id</code>. Every department's output in one table with one set of statuses.</td><td>All</td><td>M</td></tr>
-          <tr><td>3</td><td><b>One capability registry</b> in <code>packages/contracts</code>, like <code>task-kinds.json</code>: CMO tools and editor tools listed under their department; <code>check:contracts</code> fails on drift. The brain can call Studio.</td><td>Brain, MCP</td><td>M</td></tr>
-          <tr><td>4</td><td><b>Headless Studio</b>: a <code>build_video</code> order opens an Assistant session nobody sits in, runs in steps through <code>cmo_defer_run</code> (exists), holds credits per order, and stops at Approval.</td><td>Studio</td><td>L</td></tr>
-          <tr><td>5</td><td><b>Event rules</b> in Postgres: a status change creates the next order. Approved → Schedule; due → Publish; 24 hours after posting → Research measures it.</td><td>All</td><td>M</td></tr>
-          <tr><td>6</td><td><b>One approval inbox + notifications</b>: an <code>approvals</code> table stores a snapshot (content hash, time, account); in-app and web push built in house, email through Resend.</td><td>Approval</td><td>M</td></tr>
-          <tr><td>7</td><td><b>schedule_slots</b>: time slots per platform, best time from <code>post_metrics</code>; <code>sweep</code> picks up due slots every minute.</td><td>Schedule</td><td>M</td></tr>
-          <tr><td>8</td><td><b>Publish adapter</b>: one <code>publish(deliverable, account)</code> function with intent link, X API and Zernio behind it. <code>social_accounts</code> keeps ids only; tokens stay at Zernio.</td><td>Publish</td><td>M → L</td></tr>
-          <tr><td>9</td><td><b>Folders by department</b>: <code>apps/web/lib/departments/&lt;dept&gt;/</code> with a manifest (agents, capabilities, order kinds, tables, evals); heavy work stays in <code>packages/engine</code>. Existing code moves in, nothing is rewritten.</td><td>All</td><td>S</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="what-providers-cost-us-the-spend-ledger-">
+    <div class="sec-head"><p class="eyebrow">§4c</p><h2>What providers cost us: the spend ledger and the Costs page</h2></div>
+<p><code>20270104010000_provider_spend.sql</code> (<a href="../plans/cmo/2026-11-02-provider-spend-ledger-plan.md">plan</a>).</p>
+<ul><li><code>provider_usage</code>: one row per paid provider call (CMO model calls, ScrapeCreators lookups, fal and ElevenLabs media), in micro-USD per founder, priced when written. Model calls are priced from <code>agent_model_prices</code>, the same list the Assistant is charged from; <code>provider_prices</code> holds the other units. A call with no price row is stored with <code>priced = false</code>, never guessed. fal and ElevenLabs are recorded unpriced today (plan S3.3 adds their prices).</li><li><code>provider_spend_cap</code>: a daily safety cap per founder ($5 by default); read paths ask <code>provider_spend_allowed</code> before they spend.</li><li>The Costs page (<code>app/app/settings/costs/page.tsx</code>) is for the owner only (<code>app_owners</code>, <code>provider_spend_report</code>): seven days of spend per provider, and the switches from <code>lib/ops/switches.ts</code>: UI v2, email, web push, Zernio posting and webhook, Creem, the social reader (ScrapeCreators), the Modal clock, MCP and the global kill switch. A switch only says whether a variable is set: it does not call the provider, so a bad key shows green. There is no row at all for Anthropic, fal or ElevenLabs, which is why the Anthropic 401 of 2026-11-08 showed nowhere. Plan S3.1 adds a live check per provider.</li></ul>
   </section>
 
-  <section class="sec" id="buy">
-    <div class="sec-head"><p class="eyebrow">7</p><h2>Build or buy, per capability</h2>
-      <p class="lede">Build what makes the product (brain, writing, editor, calendar, approval) and what is cheap. Buy what needs a model, an app review by a platform, or other people's tokens.</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Capability</th><th>Decision</th><th>Why</th><th>Cost</th></tr></thead>
-        <tbody>
-          <tr><td>Dispatch, queues, clock</td><td><span class="dec own">build</span></td><td>Postgres + Modal <code>sweep</code> already run; an outside workflow service is a second runtime</td><td>none added</td></tr>
-          <tr><td>Planning, memory, Writer, checker, Sales</td><td><span class="dec own">build</span></td><td>This is the product; prompts and MIT skills already exist</td><td>tokens</td></tr>
-          <tr><td>Language models</td><td><span class="dec buy">buy</span></td><td>Anthropic, Gemini, Groq through the registry, switched by env</td><td>per token</td></tr>
-          <tr><td>Public social data</td><td><span class="dec buy">ScrapeCreators</span></td><td>Scraping ourselves needs proxies and breaks platform terms</td><td>per call</td></tr>
-          <tr><td>Editor, render, slideshow, clips</td><td><span class="dec own">build</span></td><td>The core of the editor strategy. A slideshow is a document + the existing <code>render_document</code>; a clip is transcript + LLM pick + <code>editor-core</code> ops</td><td>Modal per second</td></tr>
-          <tr><td>AI images and video</td><td><span class="dec buy">fal.ai</span></td><td>Other people's models; we keep moderation and credits</td><td>per call</td></tr>
-          <tr><td>Voice, music, transcripts</td><td><span class="dec buy">ElevenLabs</span></td><td>Premade voices only (product rule)</td><td>per call</td></tr>
-          <tr><td>Moderation</td><td><span class="dec mix">mixed</span></td><td>Our rules; bought models and NSFW classifier</td><td>small</td></tr>
-          <tr><td>Calendar, best time, reminders</td><td><span class="dec own">build</span></td><td>Simple logic on our own data</td><td>none added</td></tr>
-          <tr><td>In-app notices, web push</td><td><span class="dec own">build</span></td><td>Web push uses VAPID keys, no provider needed</td><td>none added</td></tr>
-          <tr><td>Email</td><td><span class="dec buy">Resend</span></td><td>Deliverability (domain reputation, spam) is hard to build</td><td>free ~3,000/month; Pro ~$20 for 50,000 <sup>1</sup></td></tr>
-          <tr><td>Posting to X</td><td><span class="dec buy">Zernio</span></td><td>Decided 2026-10-26: all scheduled posting goes through Zernio, X included; the intent link stays as a fallback</td><td>X API price passed through: ~$0.015 a post, ~$0.20 with a link <sup>2</sup></td></tr>
-          <tr><td>Posting to TikTok, IG, YouTube, LinkedIn, Threads, FB</td><td><span class="dec buy">Zernio</span></td><td>An unaudited TikTok client can only post privately, to at most 5 users a day; Meta needs app review. An aggregator carries the app reviews and token refresh</td><td>~$6 an account, first 2 free <sup>3</sup>; Ayrshare $149/month for one profile <sup>4</sup></td></tr>
-          <tr><td>Social account tokens</td><td><span class="dec buy">Zernio holds</span></td><td>We keep ids only, a smaller security surface</td><td>included above</td></tr>
-          <tr><td>Metrics after posting</td><td><span class="dec mix">mixed</span></td><td>Today public numbers through ScrapeCreators; later Zernio analytics for connected accounts</td><td>per call</td></tr>
-          <tr><td>Payments, sign-in, files, errors</td><td><span class="dec buy">keep</span></td><td>Creem, Supabase, Sentry</td><td>as today</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="src">Prices come from third-party pages and were not checked on the providers' own pages; check them before setting prices. Not verified: whether Zernio's TikTok client has passed audit. <sup>1</sup> <a href="https://automationatlas.io/answers/resend-pricing-explained-2026/">automationatlas.io</a> · <sup>2</sup> <a href="https://techcrunch.com/2026/04/22/x-makes-it-more-expensive-to-post-links-through-its-api/">TechCrunch</a>, <a href="https://postproxy.dev/blog/x-api-pricing-2026">postproxy.dev</a> · <sup>3</sup> <a href="https://www.capterra.com/p/10036198/Late/">Capterra</a> · <sup>4</sup> <a href="https://www.ayrshare.com/compare/buffer-api-alternative/">ayrshare.com</a> · TikTok: <a href="https://developers.tiktok.com/doc/content-posting-api-reference-direct-post">developers.tiktok.com</a></p>
+  <section class="sec" id="content-lifecycle">
+    <div class="sec-head"><p class="eyebrow">§5</p><h2>Content lifecycle</h2></div>
+<p><code>content_items_status_check</code>: <code>planned → drafting → in_review → approved → published</code> (+ <code>skipped</code>, <code>failed</code>). There is no <code>scheduled</code> state on the content: the time lives on its <code>schedule_slots</code> row.</p>
+<div class="tbl"><table><thead><tr><th>Lane</th><th>Steps</th></tr></thead><tbody><tr><td>Post, Reddit</td><td><code>planned</code> (plan-week) → <code>drafting</code> (writer + checker) → <code>in_review</code> (card) → <code>approved</code> → slot <code>proposed</code> → schedule card → slot <code>waiting</code> → <code>due</code> → <code>publishing</code> (worker → Zernio) → <code>published</code> → <code>post_metrics</code>. Reddit replies stop at the card: the founder replies by hand</td></tr><tr><td>Video</td><td>the founder's own edit → "Mark finished" (<code>mark_finished</code>, by document hash) → <code>cut_shorts</code> order → <code>shorts_batch</code> card → captions → schedule. A brain video (<code>build_video</code>, hidden for now): storyboard card → render → look check → <code>finished_video</code> card → the same chain</td></tr><tr><td>Slideshow</td><td><code>write_slides</code> → <code>build_slideshow</code> → MP4 and PNG set → <code>slideshow</code> card → schedule</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="contracts">
-    <div class="sec-head"><p class="eyebrow">8</p><h2>Department contracts</h2>
-      <p class="lede">Every department takes a <code>work_order</code> and hands back a <code>deliverable</code> with a status. Table names are the target names.</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Dept</th><th>Takes</th><th>Gives</th><th>Agents · tools</th><th>Data</th><th>Runs on</th><th>Today</th></tr></thead>
-        <tbody>
-          <tr><td>Brain</td><td>goals, founder's orders, metrics</td><td>week plan, work orders</td><td><code>cmo</code>, <code>planner</code>; <code>plan_week</code>, <code>review_week</code></td><td><code>work_orders</code>, <code>cmo_goals</code>, <code>cmo_memories</code></td><td>Vercel, Modal clock</td><td><span class="st part">partial</span></td></tr>
-          <tr><td>1 · Research</td><td>topic, competitors</td><td>angles, evidence, metrics</td><td><code>research</code>; <code>competitor_research</code>, <code>pull_metrics</code></td><td><code>cmo_insights</code>, <code>post_metrics</code></td><td>Vercel</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>2 · Writer</td><td>write order + context</td><td>post, caption, script, article</td><td><code>x_writer</code>, <code>director</code>, <code>checker</code></td><td><code>deliverables</code></td><td>Vercel</td><td><span class="st part">X posts only</span></td></tr>
-          <tr><td>3 · Sales</td><td>scan order</td><td>scored threads + reply drafts</td><td><code>sales</code>, <code>checker</code>; <code>sales_scan</code></td><td><code>opportunities</code></td><td>Vercel</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>4 · Studio</td><td>script, the founder's media, Brand Kit</td><td>video, image, slideshow, clip</td><td>Assistant + <code>editor-core</code> ops; <code>/video</code>, <code>/image</code>, <code>/broll</code>…</td><td><code>editor_projects</code>, <code>generations</code>, <code>tasks</code></td><td>Vercel + worker</td><td><span class="st part">no slideshow, clips</span></td></tr>
-          <tr><td>5 · Schedule</td><td>approved deliverables</td><td>time slots per platform, reminders, publish orders</td><td>new: small agent picking times from metrics</td><td>new: <code>schedule_slots</code></td><td>Supabase + worker</td><td><span class="st miss">missing</span></td></tr>
-          <tr><td>6 · Publish</td><td>approved publish order</td><td>link to the live post</td><td>intent link; later <code>publish_post</code> → Zernio</td><td><code>social_accounts</code>, <code>operation_log</code></td><td>browser, later worker</td><td><span class="st part">X only</span></td></tr>
-          <tr><td>7 · Approval</td><td>everything about to go out</td><td>approve, edit, send back</td><td>the founder; <code>checker</code> scores first</td><td>new: <code>approvals</code></td><td>Supabase</td><td><span class="st part">no video, no times</span></td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="the-nine-system-changes-as-built">
+    <div class="sec-head"><p class="eyebrow">§6</p><h2>The nine system changes, as built</h2></div>
+<p>No Inngest, Trigger.dev or Temporal: the Postgres queues and the Modal clock run, and CLAUDE.md forbids a second runtime.</p>
+<div class="tbl"><table><thead><tr><th>#</th><th>Change</th><th>As built</th></tr></thead><tbody><tr><td>1</td><td>Work orders</td><td><code>work_orders</code> sits <b>beside</b> <code>cmo_runs</code> instead of replacing it: a run is still the job, and its order follows it (<code>work_orders_follow_run</code>)</td></tr><tr><td>2</td><td>Deliverables</td><td><code>deliverables</code> <b>wraps</b> <code>content_items</code>, <code>opportunities</code>, <code>cmo_insights</code> and <code>clips</code> (<code>ref_kind</code>, <code>ref_id</code>) instead of replacing them</td></tr><tr><td>3</td><td>Capability registry</td><td><code>packages/contracts/capabilities.json</code> + schema; <code>capabilities.check.ts</code> fails on drift and on an unlisted caller</td></tr><tr><td>4</td><td>Headless Studio</td><td>an order runner (<code>lib/cmo/jobs/studio-orders.ts</code>) drives the Studio adapter under the founder's short-lived JWT; it holds credits before the team calls a model (<code>studio_order_hold</code>)</td></tr><tr><td>5</td><td>Event rules</td><td>SQL triggers on status changes (<code>work_orders_follow_approval</code>, <code>editor_projects_rules</code>, <code>tasks_studio_rules</code>, <code>approvals_caption_rules</code>, <code>schedule_follow_deliverable</code>)</td></tr><tr><td>6</td><td>One approval inbox</td><td><code>approvals</code> with a snapshot (JCS content hash, price, time, account), <code>approval_decide</code>; in-app, web push (VAPID), email (Resend)</td></tr><tr><td>7</td><td>Schedule slots</td><td><code>schedule_slots</code>, <code>best_slots</code>, <code>sweep</code> fires due slots</td></tr><tr><td>8</td><td>Publish adapter</td><td><code>lib/departments/publish/adapter.ts</code>: Zernio for 6 platforms, intent fallback; <code>social_accounts</code> keeps ids only</td></tr><tr><td>9</td><td>Department folders</td><td><code>lib/departments/studio</code>, <code>lib/departments/publish</code>; the other departments stay in <code>lib/cmo</code></td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="rules">
-    <div class="sec-head"><p class="eyebrow">9</p><h2>Six rules that let the brain run every future feature</h2></div>
-    <div class="rules">
-      <div class="card b"><span class="k">1 · One kind of work order</span><p>Everything the brain hands out is a <code>work_orders</code> row with a <code>kind</code>, a brief, a credit budget and a machine-readable failure. A new feature is a new <code>kind</code> and a handler, the way <code>task-kinds.json</code> works for the worker.</p></div>
-      <div class="card b"><span class="k">2 · One data spine</span><p>Every output is a <code>deliverables</code> row with <code>kind</code>, <code>parent_id</code> (the clip of a video, the caption of a video) and <code>editor_project_id</code>. One set of statuses for every department.</p></div>
-      <div class="card b"><span class="k">3 · One capability registry</span><p>A department's capabilities are tools. The brain, buttons, the Assistant and MCP call the same tool, the way <code>editor-core</code> is the editor's only write path. The brain gets no private path.</p></div>
-      <div class="card y"><span class="k">4 · Gates live on the write path</span><p>Ownership, credit holds and limits run inside database RPCs; moderation runs on the web and on the worker. The brain, buttons and MCP all pass through them, so a new department gets every gate without new code.</p></div>
-      <div class="card r"><span class="k">5 · The brain never posts</span><p>The brain reaches Publish only through Approval. The time is part of what the founder approves; editing the content, the time or the account needs a new approval.</p></div>
-      <div class="card g"><span class="k">6 · Every department has an eval</span><p>Writer has code + model evals (<code>lib/cmo/jobs/eval</code>), the editor 22 agent tasks (<code>agent:eval</code>). A new department arrives with its eval, measured by how often the founder approves as is.</p></div>
-    </div>
+  <section class="sec" id="build-or-buy">
+    <div class="sec-head"><p class="eyebrow">§7</p><h2>Build or buy</h2></div>
+<p>Build what makes the product and what is cheap; buy what needs a model, a platform's app review, or other people's tokens.</p>
+<div class="tbl"><table><thead><tr><th>Capability</th><th>Decision</th><th>Why</th><th>Cost</th></tr></thead><tbody><tr><td>Dispatch, queues, clock</td><td>build</td><td>Postgres + Modal <code>sweep</code></td><td>none added</td></tr><tr><td>Planning, memory, Writer, checker, Sales</td><td>build</td><td>the product; MIT skills exist</td><td>tokens</td></tr><tr><td>Language models</td><td>buy: Claude only (owner, 2026-11-05)</td><td>Sonnet for drafting and planning, Haiku for small tasks; one agent can move with <code>CMO_AGENT_&lt;ID&gt;_MODEL</code></td><td>per token</td></tr><tr><td>Public social data</td><td>buy: ScrapeCreators; Hacker News search is free</td><td>scraping needs proxies, breaks platform terms</td><td>per call</td></tr><tr><td>Editor, render, slideshow, shorts</td><td>build</td><td>slideshow = document + <code>render_document</code>; short = transcript + LLM pick + <code>editor-core</code> ops</td><td>Modal per second</td></tr><tr><td>AI images, video</td><td>buy: fal.ai</td><td>we keep credits and the output review</td><td>per call</td></tr><tr><td>Voice, music, transcripts</td><td>buy: ElevenLabs</td><td>premade voices only</td><td>per call</td></tr><tr><td>Moderation</td><td>buy: Creem's Moderation API for prompts; Claude Haiku vision + fal NSFW for outputs, against Creem's rules (§4b)</td><td>a Creem requirement for AI generation products</td><td>per call</td></tr><tr><td>Calendar, best time, reminders</td><td>build</td><td>simple logic on our data</td><td>none added</td></tr><tr><td>In-app notices, web push</td><td>build</td><td>VAPID keys, no provider</td><td>none added</td></tr><tr><td>Email</td><td>buy: Resend</td><td>deliverability</td><td>free ~3,000/month; Pro ~$20 for 50,000 [1]</td></tr><tr><td>Posting to X</td><td>buy: Zernio (decided 2026-10-26)</td><td>all scheduled posting goes through Zernio, X included; the intent link stays as a fallback</td><td>X API price passed through: ~$0.015 a post, ~$0.20 with a link [2]</td></tr><tr><td>Posting to TikTok, IG, YouTube, LinkedIn, Threads</td><td>buy: Zernio</td><td>unaudited TikTok clients post privately to ≤ 5 users a day; Meta needs app review; the aggregator carries reviews and token refresh</td><td>~$6 an account, first 2 free [3]; Ayrshare $149/month for one profile [4]</td></tr><tr><td>Social account tokens</td><td>buy: Zernio holds them</td><td>we keep ids only</td><td>included</td></tr><tr><td>Metrics after posting</td><td>mixed</td><td>public reading through ScrapeCreators; Zernio analytics for connected accounts</td><td>per call</td></tr><tr><td>Payments, sign-in, files, errors</td><td>keep</td><td>Creem, Supabase, Sentry</td><td>as today</td></tr></tbody></table></div>
+<p>Prices are from third-party pages, not checked on the providers' pages. Not verified: whether Zernio's TikTok client has passed audit. [1] <a href="https://automationatlas.io/answers/resend-pricing-explained-2026/">https://automationatlas.io/answers/resend-pricing-explained-2026/</a> · [2] <a href="https://techcrunch.com/2026/04/22/x-makes-it-more-expensive-to-post-links-through-its-api/">https://techcrunch.com/2026/04/22/x-makes-it-more-expensive-to-post-links-through-its-api/</a>, <a href="https://postproxy.dev/blog/x-api-pricing-2026">https://postproxy.dev/blog/x-api-pricing-2026</a> · [3] <a href="https://www.capterra.com/p/10036198/Late/">https://www.capterra.com/p/10036198/Late/</a> · [4] <a href="https://www.ayrshare.com/compare/buffer-api-alternative/">https://www.ayrshare.com/compare/buffer-api-alternative/</a> · TikTok: <a href="https://developers.tiktok.com/doc/content-posting-api-reference-direct-post">https://developers.tiktok.com/doc/content-posting-api-reference-direct-post</a></p>
   </section>
 
-  <section class="sec" id="gaps">
-    <div class="sec-head"><p class="eyebrow">10</p><h2>Gaps found in the code today</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Gap</th><th>Evidence</th><th>Fix</th></tr></thead>
-        <tbody>
-          <tr><td>The brain cannot reach Studio</td><td><code>lib/agent/cmo-tools.ts</code> has no editor tool; video briefs (<code>cmo_video_briefs</code>) were removed with clipping on 2026-10-20</td><td>Changes 3 and 4; v1 is a "Build" button that opens the Assistant with the script</td></tr>
-          <tr><td>Video has no approval state</td><td><code>lib/cmo/pending.ts</code> counts X posts and Reddit threads only</td><td>Change 2 + 6</td></tr>
-          <tr><td>Writer posts only to X</td><td><code>plan-week.ts:47</code> maps every post item to X; <code>check-post.ts</code> knows 280 characters</td><td>Per-platform rules in Writer</td></tr>
-          <tr><td>No AI Slop: three sources, conflicting rules</td><td>The attached <code>no-ai-slop</code> skill (MIT, Peter Yang) forbids scoring in detect mode; PR #117 proposed stop-slop's 50-point score</td><td>Use no-ai-slop as writing guidance only, not code (owner, 2026-10-26; <code>writer.html</code>)</td></tr>
-          <tr><td><code>x-writing</code> teaches what No AI Slop bans</td><td><code>lib/cmo/skills/x-writing.md</code> lines 13, 16, 23</td><td>Rewrite those lines in the same PR that adds the skill</td></tr>
-          <tr><td>Hashtag rule conflicts</td><td>PR #117 "every post carries hashtags" vs <code>x-writing.md:32</code>, <code>check-post.ts</code></td><td>Hashtag rules per platform</td></tr>
-          <tr><td>Brand Kit has no voice</td><td><code>editor-core/src/brand.ts</code>; voice lives in the strategy document (<code>documents.ts:36</code>)</td><td>Use <code>strategy.voice</code> + the founder's own posts as the voice sample</td></tr>
-          <tr><td>No notification channel</td><td>No email or push provider in the code</td><td>Change 6</td></tr>
-          <tr><td><code>ARCHITECTURE.md</code> §11 is stale on moderation</td><td>It says "OpenAI moderations"; <code>moderation.py</code> uses the registry + fal NSFW</td><td>Fix when §11 is next edited</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="department-contracts">
+    <div class="sec-head"><p class="eyebrow">§8</p><h2>Department contracts</h2></div>
+<div class="tbl"><table><thead><tr><th>Dept</th><th>Takes</th><th>Gives</th><th>Agents · tools</th><th>Data</th><th>Runs on</th><th>State</th></tr></thead><tbody><tr><td>Brain</td><td>goals, orders, metrics</td><td>week plan, work orders</td><td><code>cmo</code>, <code>planner</code>; <code>plan_week</code>, <code>review_week</code>, <code>summarize_memory</code></td><td><code>work_orders</code>, <code>cmo_goals</code>, <code>cmo_memories</code>, <code>cmo_lessons</code>, <code>cmo_corrections</code></td><td>Vercel, Modal clock</td><td>✅</td></tr><tr><td>1 Research</td><td>topic, competitors</td><td>angles, evidence, metrics</td><td><code>research</code>, <code>onboarding</code>; <code>competitor_research</code>, <code>niche_video_research</code>, <code>pull_metrics</code></td><td><code>cmo_insights</code>, <code>post_metrics</code>, <code>account_metrics</code></td><td>Vercel</td><td>✅</td></tr><tr><td>2 Writer</td><td>write order + context</td><td>post, thread, caption, brief, slide text</td><td><code>x_writer</code>, <code>threads_writer</code>, <code>linkedin_writer</code>, <code>instagram_writer</code>, <code>tiktok_writer</code>, <code>youtube_writer</code>, <code>brief_writer</code>, <code>slides_writer</code>, <code>checker</code></td><td><code>content_items</code>, <code>deliverables</code></td><td>Vercel</td><td>✅ (no articles)</td></tr><tr><td>3 Sales</td><td>scan order</td><td>scored threads + reply drafts</td><td><code>sales</code>, <code>checker</code>; <code>sales_scan</code></td><td><code>opportunities</code>, <code>subreddit_rules</code></td><td>Vercel</td><td>✅</td></tr><tr><td>4 Studio</td><td>brief, founder's media, Brand Kit</td><td>short, slideshow, image, video</td><td>Studio adapter; <code>director</code>, <code>shorts</code>, <code>writer</code>, <code>motion</code>, <code>captions</code>; Assistant + <code>editor-core</code> ops</td><td><code>editor_projects</code>, <code>studio_steps</code>, <code>short_batches</code>, <code>generations</code>, <code>tasks</code></td><td>Vercel + worker</td><td>✅ (<code>/video</code> hidden)</td></tr><tr><td>5 Schedule</td><td>approved deliverables</td><td>slots, reminders</td><td>code (<code>schedule_propose</code>, <code>best_slots</code>)</td><td><code>schedule_slots</code>, <code>best_slots</code></td><td>Supabase + worker</td><td>✅</td></tr><tr><td>6 Publish</td><td>approved slot</td><td>live post link</td><td><code>publish_post</code> → Zernio; intent link</td><td><code>social_accounts</code>, <code>zernio_receipts</code>, <code>operation_log</code></td><td>worker, Vercel</td><td>✅ (live with the Zernio key)</td></tr><tr><td>7 Approval</td><td>everything going out</td><td>approve, edit, send back</td><td>founder; <code>checker</code> first</td><td><code>approvals</code>, <code>card_budget</code></td><td>Supabase</td><td>✅</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="order">
-    <div class="sec-head"><p class="eyebrow">11</p><h2>Build order, in step with the editor strategy</h2></div>
-    <ol class="order">
-      <li><span><b>Writer: No AI Slop + per-platform captions.</b> Small, no migration.</span></li>
-      <li><span><b>The spine: <code>work_orders</code>, <code>deliverables</code>, department folders</b> (changes 1, 2, 9). Before any new department; renames through migrations with pgTAP, keeping the data.</span></li>
-      <li><span><b>Registry + Studio takes a script</b> (3). v1: the brain writes the script, the founder clicks "Build" to open the Assistant. Fully headless (4) once the cost of one video is measured.</span></li>
-      <li><span><b>One approval inbox, notifications, Schedule</b> (5, 6, 7). Scheduled posting through Zernio at the approved time (owner decision 2026-10-26; see <code>schedule-publish.html</code>).</span></li>
-      <li><span><b>Studio: slideshow, clips from a finished edit.</b> With E4.1 of the editor roadmap.</span></li>
-      <li><span><b>Publish adapter on Zernio for every platform</b> (8), after the Zernio checks (TikTok audit, price, terms).</span></li>
-    </ol>
+  <section class="sec" id="six-rules">
+    <div class="sec-head"><p class="eyebrow">§9</p><h2>Six rules</h2></div>
+<ol class="order"><li><span><b>One kind of work order.</b> Everything the brain hands out is a <code>work_orders</code> row with a <code>kind</code>, a brief, a credit budget and a machine-readable failure. A new feature is a new <code>kind</code> + handler.</span></li><li><span><b>One data spine.</b> Every output is a <code>deliverables</code> row (<code>kind</code>, <code>ref_kind</code>, <code>ref_id</code>), one set of statuses.</span></li><li><span><b>One capability registry.</b> Brain, buttons, Assistant and MCP call the same tools; no private path for the brain.</span></li><li><span><b>Gates live on the write path.</b> Ownership, credit holds and limits run in database RPCs; Creem moderation on web and worker. Every caller passes through them.</span></li><li><span><b>The brain never posts.</b> Publish is reached only through Approval; the time and the account are part of what is approved, and any change needs a new approval.</span></li><li><span><b>Every department has an eval</b>, measured by how often the founder approves as is.</span></li></ol>
   </section>
 
-  <section class="sec" id="next">
-    <div class="sec-head"><p class="eyebrow">12</p><h2>Next: one page per part</h2></div>
-    <div class="prose">
-      <p>Each part gets its own HTML + markdown pair in this folder, written before it is built: <code>brain</code>, then <code>research</code>, <code>writer</code>, <code>sales</code>, <code>studio</code>, <code>approval</code>, <code>schedule</code>, <code>publish</code>. Each covers its work orders, deliverables, tools, tables, evals, providers and open decisions.</p>
-    </div>
+  <section class="sec" id="gaps-in-the-code-today">
+    <div class="sec-head"><p class="eyebrow">§10</p><h2>Gaps in the code today</h2></div>
+<p>The gaps of 2026-10-25 are closed: the brain reaches Studio (change 4), video has approval states, Writer covers six platforms, no-ai-slop is guidance in every writing prompt, <code>x-writing.md</code> was rewritten, hashtags follow the platform profiles, voice is learned from edits, and email and push exist. What the audits of 2026-11-08 found:</p>
+<div class="tbl"><table><thead><tr><th>Gap</th><th>Evidence</th><th>Fix</th></tr></thead><tbody><tr><td>A new founder hits walls before the CMO works</td><td>signup gives 0 credits while the landing says "Start free"; a five-step setup (<code>components/screens/setup/SetupScreen.tsx</code>)</td><td>plan S2.1–S2.2</td></tr><tr><td>The week plan orders the most expensive job</td><td><code>plan-week.ts:35</code> plans a one-minute AI video</td><td>plan S2.5</td></tr><tr><td>A broken provider key does not show</td><td>the Costs page has no Anthropic, fal or ElevenLabs row, and its Creem and ScrapeCreators rows only check that a variable is set (<code>lib/ops/switches.ts</code>)</td><td>plan S3.1–S3.2</td></tr><tr><td>Sales spends without a card</td><td><code>create_task{agent:"sales"}</code> starts a 5-credit scan with no card (<code>lib/agent/cmo-tools.ts</code>)</td><td>plan S3.5</td></tr><tr><td>The post image squad has no caller</td><td>nothing outside the acceptance runs creates a <code>build_post_image</code> order</td><td>open</td></tr><tr><td>The <code>moderation</code> agent's role text still says it checks prompts</td><td><code>lib/cmo/agents/registry.ts</code>; it now reviews outputs only</td><td>small fix, out of this plan</td></tr></tbody></table></div>
   </section>
 
-  <footer class="foot">
-    <p>Checked against <code>opencmo</code> <code>main</code> (<code>eb858ca</code>): <code>packages/engine/modal_app.py</code>, <code>mcp_app.py</code>, <code>opencmo/ai/moderation.py</code>, <code>packages/contracts/task-kinds.json</code>, <code>apps/web/app/api/*</code>, <code>apps/web/lib/cmo/agents/registry.ts</code>, <code>lib/agent/cmo-tools.ts</code>, <code>lib/agent/slash.ts</code>, <code>supabase/schema/current.sql</code> (tables, <code>cmo_runs_kind_check</code>, <code>tasks_kind_check</code>, <code>content_items_status_check</code>), <code>ARCHITECTURE.md</code> §11.</p>
-    <p>Department names, the target tables (<code>work_orders</code>, <code>deliverables</code>, <code>approvals</code>, <code>schedule_slots</code>, <code>social_accounts</code>) and the six rules are proposals, not in the code.</p>
-  </footer>
+  <section class="sec" id="order-of-work">
+    <div class="sec-head"><p class="eyebrow">§11</p><h2>Order of work</h2></div>
+<p><b>Ranked by the CMO loop (owner, 2026-11-08):</b> does it make the loop of §2 work for a paying founder, end to end? Editor work comes after.</p>
+<ol class="order"><li><span>Paid-first entry and the first week within minutes (plan S2.1–S2.3).</span></li><li><span><code>/video</code> hidden and the week plan without AI video (S2.4–S2.5).</span></li><li><span>No dead ends, one card per job, Sales behind a card (S2.6, S3.5–S3.6).</span></li><li><span>Providers you can see: Costs page rows, deploy check, priced fal and ElevenLabs spend (S3.1–S3.4).</span></li><li><span>Owner: the Anthropic key everywhere, Creem live key and review, Zernio checks, Vercel Hobby.</span></li><li><span>Then fewer cards a week, one Assistant, and the editor (their own plans).</span></li></ol>
+<p><b>History.</b> The 2026-10-25 order (Writer and No AI Slop → the spine → registry and Studio takes a script → Approval inbox, notifications, Schedule → Studio slideshow and clips → Publish on Zernio) was built in full in P1–P6.</p>
+  </section>
+
+  <section class="sec" id="the-pages">
+    <div class="sec-head"><p class="eyebrow">§12</p><h2>The pages</h2></div>
+<p>One HTML + markdown pair per part in this folder: <a href="brain.html"><code>brain.html</code></a>, <a href="studio.html"><code>studio.html</code></a>, <a href="approval.html"><code>approval.html</code></a>, <a href="schedule-publish.html"><code>schedule-publish.html</code></a>, <a href="writer.html"><code>writer.html</code></a>, <a href="research-sales.html"><code>research-sales.html</code></a>, and the end-to-end week in <a href="workflow.html"><code>workflow.html</code></a>.</p>
+  </section>
+
+  <footer class="foot"><p>Markdown twin for agents: <code>ai-cmo.md</code>. Both pages say the same thing; change them together.</p></footer>
 </div>
 </body>
 </html>
