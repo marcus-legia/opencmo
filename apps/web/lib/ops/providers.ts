@@ -11,7 +11,7 @@
  */
 import { accountDown } from "@/lib/llm-health";
 
-export type ProviderState = "unset" | "invalid" | "test_key" | "unreachable" | "ok";
+export type ProviderState = "unset" | "invalid" | "test_key" | "unreachable" | "failing" | "ok";
 
 export type ProviderRow = {
   id: "anthropic" | "fal" | "elevenlabs" | "motion" | "creem" | "scrapecreators";
@@ -46,7 +46,10 @@ async function probe(fetcher: Fetcher, { url, init }: Probe, judge: Judge): Prom
   } catch {
     return { state: "unreachable" };
   }
-  const body = response.ok ? "" : (await response.text().catch(() => "")).slice(0, 2_000);
+  // Read or drop every body: an unread one keeps its connection open until it is garbage collected.
+  let body = "";
+  if (response.ok) await response.body?.cancel().catch(() => undefined);
+  else body = (await response.text().catch(() => "")).slice(0, 2_000);
   if (judge(response.status, body) === "invalid") return { state: "invalid", status: response.status };
   // Any other answer below 500 came from a provider that knows the key (a missing scope, a rate limit).
   return { state: response.status < 500 ? "ok" : "unreachable", status: response.status };
@@ -139,39 +142,50 @@ const SPECS: Spec[] = [
   },
 ];
 
-const INVALID = "The provider refused the key. Replace it, then reload this page in a few minutes.";
+const INVALID = "The provider refused the key. Replace it, then reload this page.";
 
-let cache: { at: number; fingerprint: string; rows: ProviderRow[] } | null = null;
+/**
+ * One answer per provider and key, for CACHE_MS. Per provider, so a rotated key checks only its own provider again; with
+ * the check in flight shared, so two page loads at once make one call (Creem keeps a record of every screening).
+ */
+const cache = new Map<ProviderRow["id"], { at: number; key: string; row: Promise<ProviderRow> }>();
 
-/** Which keys are set, so a changed key is checked again at once. Not the keys: only their lengths and ends. */
-const fingerprint = (env: Env) => SPECS.map((spec) => { const key = spec.key(env); return `${spec.id}:${key.length}:${key.slice(-4)}`; }).join("|");
+async function check(spec: Spec, env: Env, fetcher: Fetcher): Promise<ProviderRow> {
+  const base = { id: spec.id, label: spec.label };
+  const key = spec.key(env);
+  if (!key) return { ...base, state: "unset", detail: spec.unset };
+  const test = spec.testKey?.(key, env);
+  if (test) return { ...base, state: "test_key", detail: test };
+  if (!spec.probe) return { ...base, state: "ok", detail: spec.okDetail?.(undefined) ?? "On." };
+  const { state, status } = await probe(fetcher, spec.probe(key, env), spec.judge ?? authFailed);
+  if (state === "invalid") return { ...base, state, detail: INVALID };
+  if (state === "unreachable") return { ...base, state, detail: `The provider did not answer${status ? ` (status ${status})` : ""}. It may be down; check again later.` };
+  return { ...base, state, detail: spec.okDetail?.(status) ?? "The key is accepted." };
+}
 
 export async function providerRows({ env = process.env, fetcher = fetch, now = Date.now() }: { env?: Env; fetcher?: Fetcher; now?: number } = {}): Promise<ProviderRow[]> {
-  const print = fingerprint(env);
-  const fresh = cache && cache.fingerprint === print && now - cache.at < CACHE_MS ? cache.rows : null;
-  const rows =
-    fresh ??
-    (await Promise.all(
-      SPECS.map(async (spec): Promise<ProviderRow> => {
-        const base = { id: spec.id, label: spec.label };
-        const key = spec.key(env);
-        if (!key) return { ...base, state: "unset", detail: spec.unset };
-        const test = spec.testKey?.(key, env);
-        if (test) return { ...base, state: "test_key", detail: test };
-        if (!spec.probe) return { ...base, state: "ok", detail: spec.okDetail?.(undefined) ?? "On." };
-        const { state, status } = await probe(fetcher, spec.probe(key, env), spec.judge ?? authFailed);
-        if (state === "invalid") return { ...base, state, detail: INVALID };
-        if (state === "unreachable") return { ...base, state, detail: `The provider did not answer${status ? ` (status ${status})` : ""}. It may be down; check again later.` };
-        return { ...base, state, detail: spec.okDetail?.(status) ?? "The key is accepted." };
-      }),
-    ));
-  if (!fresh) cache = { at: now, fingerprint: print, rows };
-  // A real call that failed on the key since the check: say so instead of an old "ok".
-  return rows.map((row) => (row.id === "anthropic" && row.state === "ok" && accountDown("anthropic", now) ? { ...row, state: "invalid", detail: "A real call failed on the key or its credit in the last minutes." } : row));
+  const rows = await Promise.all(
+    SPECS.map((spec) => {
+      // The key itself stays in this module's memory, as process.env does; it never reaches a row.
+      const key = `${spec.key(env)}|${spec.testKey ? (live(env) ? "live" : "dev") : ""}`;
+      const hit = cache.get(spec.id);
+      if (hit && hit.key === key && now - hit.at < CACHE_MS) return hit.row;
+      const row = check(spec, env, fetcher);
+      cache.set(spec.id, { at: now, key, row });
+      return row;
+    }),
+  );
+  // A real call that failed on the key or its credit since the check: say so instead of an old "ok". llm-health cannot
+  // tell a refused key from an empty balance, so the row names both.
+  return rows.map((row) =>
+    row.id === "anthropic" && row.state === "ok" && accountDown("anthropic", now)
+      ? { ...row, state: "failing", detail: "A real call failed in the last minutes on the key or the account's credit. Check the Anthropic console's billing first, then the key." }
+      : row,
+  );
 }
 
 export const clearProviderCache = (): void => {
-  cache = null;
+  cache.clear();
 };
 
 export const STATE_LABEL: Record<ProviderState, string> = {
@@ -179,5 +193,6 @@ export const STATE_LABEL: Record<ProviderState, string> = {
   invalid: "Invalid key",
   test_key: "Test key in production",
   unreachable: "No answer",
+  failing: "Key or credit failing",
   ok: "OK",
 };

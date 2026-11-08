@@ -81,6 +81,18 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   - Tested on a local Postgres 16 with the Supabase roles stubbed (no Docker in the sandbox): every migration applies,
     166 of 167 pgTAP files pass, and the one failing file (`249_cmo_review_plan_card`) fails the same way before these
     changes. CI's run is the authoritative one.
+- **Code review of S3 (2026-11-08)**, fixed in the follow-up commit:
+  - the create_task description no longer promises a price card (MCP reads it and has none);
+  - Scan now reads `/cmo/mode`: in mode B it says the scan goes to the founder's Claude inbox, with no credits;
+  - `pricedTaskCard` leaves input `create_task` refuses (`thread` on sales) to the tool, so no card is approved for
+    nothing;
+  - the CMO eval allows a price card only on the case that asks for a scan (`priceCard`), and only a sales or
+    research one;
+  - `providers.ts`: a 2xx body is released; the cache is per provider with the check in flight shared (one Creem
+    screening per window, not one per tab); a real Anthropic failure shows "Key or credit failing", not "Invalid key";
+  - the `stuck` comment in `lib/screens/sales.ts` no longer describes a finish button.
+  Kept as is: a Creem key Vercel marks Sensitive cannot have its mode read by the deploy check (S3.2 note); the Costs
+  page row reads it at runtime instead.
 
 ## You own
 

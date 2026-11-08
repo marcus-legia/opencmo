@@ -46,6 +46,8 @@ async function main() {
     { agent: "planner", brief: "A balanced week", when: "now" },
     { agent: "sales", brief: "Founders who chase late invoices", when: "2026-11-10" },
     { agent: "sales", brief: "x" },
+    // create_task refuses `thread` on sales: refused at once, not after the founder approved a card.
+    { agent: "sales", brief: "Founders who chase late invoices", when: "now", thread: true },
   ]) assert.equal(pricedTaskCard(input), null, JSON.stringify(input));
 
   // In the chat: the scan asked for stops at a card, and nothing is queued or held.

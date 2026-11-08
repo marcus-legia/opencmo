@@ -55,6 +55,19 @@ function ScanNow() {
   const card = salesScanCard();
   const [step, setStep] = useState<"idle" | "confirm" | "busy" | "started">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Mode B: the founder's own Claude runs the scan from its inbox and OpenCMO holds no credits (`/cmo/runs`).
+  const [claude, setClaude] = useState(false);
+
+  async function open() {
+    setError(null);
+    try {
+      const mode = (await api("/cmo/mode")) as { brain?: string };
+      setClaude(mode.brain === "claude");
+    } catch {
+      setClaude(false);
+    }
+    setStep("confirm");
+  }
 
   async function start() {
     setStep("busy");
@@ -71,14 +84,16 @@ function ScanNow() {
   if (step === "started") {
     return (
       <p role="status" className="scr-muted">
-        Scanning. New threads and their draft replies land here and in Approvals, usually within a few minutes.
+        {claude
+          ? "Sent to your Claude inbox. Open Claude to run the scan; its threads and draft replies land here."
+          : "Scanning. New threads and their draft replies land here and in Approvals, usually within a few minutes."}
       </p>
     );
   }
   if (step === "idle") {
     return (
       <div className="scr-head-actions">
-        <Button variant="primary" onClick={() => setStep("confirm")}>
+        <Button variant="primary" onClick={() => void open()}>
           Scan now
         </Button>
       </div>
@@ -87,7 +102,7 @@ function ScanNow() {
   return (
     <div className="v2-panel v2-panel-body" role="group" aria-labelledby="scan-now-title">
       <p id="scan-now-title">
-        <b>Scan now · {card.credits} credits</b>
+        <b>{claude ? "Scan now · in your Claude, no OpenCMO credits" : `Scan now · ${card.credits} credits`}</b>
       </p>
       <ul>
         {card.changes.map((line) => (
@@ -97,7 +112,7 @@ function ScanNow() {
       {error && <ErrorNote>{error}</ErrorNote>}
       <span className="scr-head-actions">
         <Button variant="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : `Approve and spend ${card.credits} credits`}
+          {step === "busy" ? "Starting…" : claude ? "Send to my Claude" : `Approve and spend ${card.credits} credits`}
         </Button>
         <Button variant="secondary" disabled={step === "busy"} onClick={() => setStep("idle")}>
           Cancel

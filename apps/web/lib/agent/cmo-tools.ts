@@ -69,8 +69,8 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (1 credit; when = now only).",
       "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
-      "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks). Run now, it first shows the founder a card with its price; nothing is spent until they approve.",
-      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only). It first shows the founder a card with its price, like sales.",
+      "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
+      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "video: a short-video task. The founder records and uploads their OWN video, so this always becomes a calendar item with an \"Upload video\" button that opens the editor; you cannot upload video for them.",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
@@ -242,7 +242,8 @@ export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
 /** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
 export function pricedTaskCard(input: unknown): PricedTask | null {
   const parsed = taskInput.safeParse(input);
-  if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS)) return null;
+  // `thread` belongs to x_writer: let create_task refuse it now instead of after the founder approved a card.
+  if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread) return null;
   const task = parsed.data;
   return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
 }

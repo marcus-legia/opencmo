@@ -49,17 +49,37 @@ async function main() {
     assert.ok(!JSON.stringify(rows).includes('"x"'), "no key on the page");
   }
 
-  // Cached: a reload within the window does not call again; a changed key is checked at once.
+  // Cached: a reload within the window does not call again; a changed key checks only its own provider again.
   {
     const { seen, fetcher } = fakeProviders();
     await byId(bad, fetcher, 1_000);
     assert.equal(seen.length, 0, "cached");
     const good = { ...bad, ANTHROPIC_API_KEY: "sk-ant-good" };
     const rows = await byId(good, fetcher, 2_000);
-    assert.equal(seen.length, 5, "a changed key checks again");
+    assert.equal(seen.length, 1, "a changed key checks its provider again, and only it");
     assert.equal(rows.anthropic?.state, "ok");
     await byId(good, fetcher, 2_000 + CACHE_MS + 1);
-    assert.equal(seen.length, 10, "an old answer is checked again");
+    assert.equal(seen.length, 6, "an old answer is checked again");
+  }
+
+  // Two page loads at once: one call per provider.
+  clearProviderCache();
+  {
+    const { seen, fetcher } = fakeProviders();
+    await Promise.all([byId({ CREEM_API_KEY: "ck" }, fetcher, 0), byId({ CREEM_API_KEY: "ck" }, fetcher, 0)]);
+    assert.equal(seen.length, 1, "the check in flight is shared");
+  }
+
+  // A 2xx body is released, not left holding its connection.
+  clearProviderCache();
+  {
+    let cancelled = 0;
+    const fetcher = (async () => {
+      const body = new ReadableStream({ cancel: () => void (cancelled += 1) });
+      return new Response(body, { status: 200 });
+    }) as unknown as typeof fetch;
+    await byId({ SCRAPECREATORS_API_KEY: "k" }, fetcher, 0);
+    assert.equal(cancelled, 1);
   }
 
   // fal's 403 (no Admin scope) and ElevenLabs' missing_permissions are known keys, not wrong ones.
@@ -115,7 +135,7 @@ async function main() {
     const { fetcher } = fakeProviders();
     assert.equal((await byId({ ANTHROPIC_API_KEY: "sk-ant-good" }, fetcher, 0)).anthropic?.state, "ok");
     markDown("anthropic", "account", "claude-sonnet", 10);
-    assert.equal((await byId({ ANTHROPIC_API_KEY: "sk-ant-good" }, fetcher, 20)).anthropic?.state, "invalid");
+    assert.equal((await byId({ ANTHROPIC_API_KEY: "sk-ant-good" }, fetcher, 20)).anthropic?.state, "failing", "not called an invalid key: it may be the credit");
     clearHealth();
   }
 
