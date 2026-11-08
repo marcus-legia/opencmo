@@ -64,6 +64,23 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   honoured). No migration needed. `e2e/cmo.spec.ts` now approves the chat's scan card (not run here: no Supabase
   stack in the sandbox; CI runs it). `SalesScreen.stuck.creditsToFinish` is now unread; left in the schema for S1/S2
   to drop with the screen contract if they want.
+- **S3.7.** Migration `20270111020000_billing_review_fixes.sql`, test `258_billing_review_fixes.test.sql` (it fails
+  4 of 9 without the migration):
+  - `agent_close_turn` (body of `20270110010000`): the settle row is "Assistant usage" when the turn used more than it
+    held, "Assistant refund" when it used less.
+  - `studio_order_release_hold`: when an order ends, the usage its allowance covered (`least(used, hold)`, the hold read
+    from its own "CMO video team hold" rows) goes through `work_order_spend`, so the order and its week count it.
+    Usage past the hold was already counted by `studio_record_usage`.
+  - **`credit_order_draw` is not changed: owner decision needed.** A draw writes two rows (the job's hold returned,
+    the piece's hold taken) because a ledger row carries one `(ref_kind, ref_id)` and `credit_held` sums by it. One row
+    cannot move credits between two holds without changing the money primitives (CLAUDE.md web rule 5). Two ways out,
+    for the owner to pick: (a) the Credits page (`app/app/billing/page.tsx`, reads the last 30 `credit_ledger` rows)
+    reads a view that folds each draw pair into one line, with no change to money; or (b) a primitive that moves a
+    hold, with its own pgTAP. (a) is smaller and touches no money path.
+  - S2 asked for no Creem-cancel change, so none is here.
+  - Tested on a local Postgres 16 with the Supabase roles stubbed (no Docker in the sandbox): every migration applies,
+    164 of 166 pgTAP files pass, and the one failing file (`249_cmo_review_plan_card`) fails the same way before these
+    changes. CI's run is the authoritative one.
 
 ## You own
 
@@ -127,7 +144,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
 - [x] **S3.6 Sales screen buttons** (`components/screens/sales/SalesScreen.tsx`).
   - "Scan now" goes through the same card as S3.5.
   - "Add N credits and finish" (line 105) raises that run's budget through the job's existing budget path (`lib/cmo/jobs/start.ts`, a migration if needed). If no clean path exists, remove the button. No disabled "arrives with…" button stays.
-- [ ] **S3.7 Billing fixes from the 2026-11-06 review** (one migration):
+- [x] **S3.7 Billing fixes from the 2026-11-06 review** (one migration):
   - Usage past an Assistant turn's hold is labelled "Assistant usage", not "Assistant refund" (`agent_close_turn`).
   - Studio usage covered by the order's hold reaches `work_order_spend` when the order ends (`studio_order_release_hold`).
   - `credit_order_draw` moves money with one ledger row instead of two, so one `/video` no longer pushes "Plan payment" off the 30-row history. If that changes the money primitives, write a note and ask the owner first.

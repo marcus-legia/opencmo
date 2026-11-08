@@ -393,8 +393,10 @@ begin
     v_credits := least(v_credits, public.agent_3d_hold_credits());
   end if;
 
-  -- The unused part of the hold comes back; usage past it is charged from the balance.
-  perform public.credit_settle(v_user, 'agent_turn', v_turn.id, v_credits, 'Assistant refund');
+  -- The unused part of the hold comes back; usage past it is charged from the balance. The ledger row says which, so
+  -- a charge is not listed as a refund on the Credits page.
+  perform public.credit_settle(v_user, 'agent_turn', v_turn.id, v_credits,
+    case when v_credits > public.credit_held('agent_turn', v_turn.id) then 'Assistant usage' else 'Assistant refund' end);
 
   update public.agent_tool_calls set status = 'failed', result = '{"summary":"Not completed"}'::jsonb
   where turn_id = p_turn_id and status = 'pending';
@@ -12818,6 +12820,8 @@ CREATE FUNCTION public.studio_order_release_hold() RETURNS trigger
 declare
   v_held integer;
   v_used integer;
+  v_hold integer;
+  v_covered integer;
 begin
   if new.status not in ('done', 'failed', 'cancelled') or old.status in ('done', 'failed', 'cancelled') then
     return new;
@@ -12828,9 +12832,15 @@ begin
     return new;
   end if;
   v_used := public.agent_credits((select coalesce(sum(micro_usd), 0)::bigint from public.work_order_usage where order_id = new.id));
+  -- The allowance studio_order_hold took. Usage past it was charged and counted by studio_record_usage already.
+  v_hold := (select coalesce(-sum(delta), 0)::integer from public.credit_ledger
+             where ref_kind = 'work_order' and ref_id = new.id and reason = 'CMO video team hold');
+  v_covered := least(v_used, greatest(v_hold, 0));
   if v_used < v_held then
     perform public.credit_settle(new.user_id, 'work_order', new.id, v_used, 'CMO video team hold returned');
   end if;
+  -- An AFTER trigger: work_order_spend's update of this row sees it already ended, so it does not come back here.
+  perform public.work_order_spend(new.id, v_covered);
   return new;
 end;
 $$;
