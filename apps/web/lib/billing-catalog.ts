@@ -63,10 +63,11 @@ export async function packsOnSale(): Promise<CatalogRow[]> {
   return (await catalogOnSale()).filter((row) => row.kind === "pack");
 }
 
-/** The numbers the landing page and blog print. */
-export async function offerPrices(): Promise<{ monthly: number; annual: number; annualBilled: number }> {
+/** The numbers the landing page and blog print; null when either plan has no catalogue row (the page shows no price). */
+export async function offerPrices(): Promise<{ monthly: number; annual: number; annualBilled: number } | null> {
   const plans = await plansOnSale();
-  const monthly = plans.find((plan) => plan.id === "starter")!;
-  const annual = plans.find((plan) => plan.id === "creator")!;
+  const monthly = plans.find((plan) => plan.id === "starter");
+  const annual = plans.find((plan) => plan.id === "creator");
+  if (!monthly?.slug || !annual?.slug) return null;
   return { monthly: monthly.price, annual: annual.price, annualBilled: annual.billedPrice };
 }

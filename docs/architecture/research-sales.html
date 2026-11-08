@@ -157,88 +157,53 @@ td:first-child{font-weight:600;white-space:nowrap}
 .card ul{margin:0;padding-left:1.1em;display:grid;gap:6px}
 
 body{margin:0}
+
+/* Twin of the markdown page, regenerated 2026-11-08: plain blocks the md uses. */
+pre{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0}
+.sec ul,.sec ol.plain{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.sec ul ul{margin-top:6px}
+.sec h3{margin-top:4px}
+.lede p+p{margin-top:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">opencmo.io · architecture · research + sales · research before build · 2026-10-27</p>
+    <p class="eyebrow">opencmo.io · architecture · research + sales · built · 2026-11-08</p>
     <h1>Research and Sales</h1>
-    <p class="lede">The two departments that read the outside world. Research is the brain's eyes: it learns the market, finds what works, and measures what the founder posted. Sales finds people who need the product and drafts a helpful reply the founder posts by hand. Both are the most built departments after Studio. Markdown twin for agents: <code>research-sales.md</code>. Parent pages: <code>ai-cmo.html</code>, <code>brain.html</code>. Status: proposed.</p>
-    <nav class="toc" aria-label="Sections">
-      <a href="#verdict">1 Verdict</a><a href="#today">2 Today</a><a href="#learn">3 What others teach</a><a href="#flow">4 Flow</a><a href="#research">5 Research</a><a href="#sales">6 Sales</a><a href="#risk">7 Data risk</a><a href="#evals">8 Measures</a><a href="#phases">9 Phases</a><a href="#decide">10 Decisions</a><a href="#sources">Sources</a>
-    </nav>
+    <div class="lede"><p>Status: <b>built</b> (<code>main</code> at <code>4f70a59</code>, 2026-11-08), except R0, the data check. Designed 2026-10-27, built in phases R1–R4 (P5–P6). Markdown twin for agents: <code>research-sales.md</code>; the two say the same thing. Parent pages: <a href="ai-cmo.html"><code>ai-cmo.html</code></a>, <a href="brain.html"><code>brain.html</code></a>.</p>
+<p>The two departments that read the outside world. <b>Research</b> is the brain's eyes: it learns the market, finds what works, and measures what the founder posted. It is step 1 of the owner's sketch (2026-11-08): the website becomes the four documents everything else is written from. <b>Sales</b> finds people who need the product and drafts a helpful reply the founder posts by hand.</p></div>
+    <nav class="toc" aria-label="Sections"><a href="#verdict">Verdict</a><a href="#research-and-sales-as-built-main-4f70a59">Research and Sales as built (<code>main</code>, <code>4f70a59</code>)</a><a href="#what-others-teach">What others teach</a><a href="#flow">Flow</a><a href="#research">Research</a><a href="#sales">Sales</a><a href="#data-risk">Data risk</a><a href="#measures">Measures</a><a href="#build-phases">Build phases</a><a href="#decisions-for-the-owner">Decisions for the owner</a><a href="#sources">Sources</a></nav>
   </header>
 
   <section class="sec" id="verdict">
-    <div class="sec-head"><p class="eyebrow">1</p><h2>Verdict</h2></div>
-    <div class="grid2">
-      <div class="card g"><span class="k">Keep: the evidence rules</span>
-        <ul>
-          <li>Research keeps a hook only if it points to a real URL in what it read (<code>competitor-research.ts</code>).</li>
-          <li>Sales scores pain and evidence only with quotes copied exactly from the thread, checked by the server; timing and reach are computed in code (<code>sales-scan.ts</code>).</li>
-          <li>Replies help first, mention the product at most once at the end, have no links and no post button.</li>
-          <li>Outside text is data, never instructions; every read has a credit budget.</li>
-        </ul>
-      </div>
-      <div class="card r"><span class="k">Add, in order</span>
-        <ul>
-          <li><b>A data check first:</b> GummySearch closed because it had no commercial Reddit licence. Confirm what ScrapeCreators' terms allow before we sell Reddit features.</li>
-          <li><b>Research for Studio:</b> top short videos in the founder's niche → hooks for video briefs.</li>
-          <li><b>Sales safety:</b> read each subreddit's rules before drafting, and keep the founder's product mentions rare.</li>
-          <li><b>Close the loop:</b> re-read a thread after the founder replied; metrics through Zernio for connected accounts.</li>
-          <li><b>Hacker News</b> as a cheap source for technical founders.</li>
-        </ul>
-      </div>
-    </div>
+    <div class="sec-head"><p class="eyebrow">§1</p><h2>Verdict</h2></div>
+<p><b>Kept, the evidence rules:</b> Research keeps a hook only if it points to a real URL in what it read (<code>competitor-research.ts</code>); Sales scores pain and evidence only with quotes copied exactly from the thread, checked by the server, and computes timing and reach in code (<code>sales-scan.ts</code>); replies help first, mention the product at most once at the end, have no links and no post button; outside text is data; every read has a credit budget.</p>
+<p><b>Built since:</b> niche video research for Studio; Sales safety (subreddit rules before drafting, rare product mentions, excluded subreddits, co-occurrence); the closed loop (reply outcomes, Zernio metrics); Hacker News as a free source for both departments.</p>
+<p><b>Left:</b> R0, the data check (owner: whether ScrapeCreators' terms and Reddit's data terms allow a paid product to read them), before new Sales lead types. Sales breaks "charge before running" in two places: a scan started from the CMO chat shows no card, and "Add N credits and finish" is a disabled button (plan S3.5–S3.6).</p>
   </section>
 
-  <section class="sec" id="today">
-    <div class="sec-head"><p class="eyebrow">2</p><h2>Today</h2><p class="lede">Read from <code>main</code> (<code>eb858ca</code>).</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Part</th><th>Where</th><th>What it does</th><th>State</th></tr></thead>
-        <tbody>
-          <tr><td>Onboarding</td><td><code>lib/cmo/onboard.ts</code>, <code>site.ts</code></td><td>Reads the website and drafts the four marketing documents</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Research tools (CMO chat)</td><td><code>lib/agent/cmo-research.ts</code></td><td><code>search_reddit</code>, <code>subreddit_posts</code>, <code>reddit_thread</code>, <code>x_profile</code>, <code>find_outliers</code>, <code>search_videos</code>, <code>search_threads</code>, <code>get_transcript</code>, <code>research_credits</code>, through ScrapeCreators</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Competitor research</td><td><code>jobs/competitor-research.ts</code>, <code>cmo_insights</code></td><td>Sundays: ~100 top posts of up to 4 competitor X accounts, outliers against each account's own median, 3–6 hooks each with a real URL, ideas for the founder</td><td><span class="st ok">built</span> (X only)</td></tr>
-          <tr><td>Metrics</td><td><code>jobs/pull-metrics.ts</code>, <code>post_metrics</code></td><td>Public numbers of the founder's published posts, matched by link or first words</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Sales scan</td><td><code>jobs/sales-scan.ts</code>, <code>opportunities</code></td><td>6–8 queries from pains and competitors → ≤ 30 threads from the last 30 days → score (pain 25 and evidence 15 with exact quotes, fit 25, timing 20 and reach 15 in code) → ≥ 60 passes → reply drafts for the best 5</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Decisions</td><td><code>cmo_decide_opportunity</code></td><td>Replied or dismissed; a dismiss reason becomes a memory; outcome row for learning</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>Niche video research, subreddit rules, reply outcomes, HN, Zernio metrics</td><td>none</td><td>—</td><td><span class="st miss">missing</span></td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="research-and-sales-as-built-main-4f70a59">
+    <div class="sec-head"><p class="eyebrow">§2</p><h2>Research and Sales as built (<code>main</code>, <code>4f70a59</code>)</h2></div>
+<p>State: ✅ done · 🟡 partial · ❌ not built.</p>
+<div class="tbl"><table><thead><tr><th>Part</th><th>Where</th><th>What it does</th><th>State</th></tr></thead><tbody><tr><td>Onboarding</td><td><code>lib/cmo/onboard.ts</code>, <code>site.ts</code></td><td>reads the website, drafts the four marketing documents</td><td>✅</td></tr><tr><td>Research tools (CMO chat)</td><td><code>lib/agent/cmo-research.ts</code></td><td><code>search_reddit</code>, <code>subreddit_posts</code>, <code>reddit_thread</code>, <code>x_profile</code>, <code>find_outliers</code>, <code>search_videos</code>, <code>search_threads</code>, <code>get_transcript</code>, <code>research_credits</code> via ScrapeCreators</td><td>✅</td></tr><tr><td>Competitor research</td><td><code>jobs/competitor-research.ts</code>, <code>cmo_insights</code> (<code>kind = competitors</code>)</td><td>Sundays: top posts of up to 4 competitor X accounts; outliers vs each account's median; 3–6 hooks each with a real URL; ideas; Hacker News too</td><td>✅</td></tr><tr><td>Niche video research</td><td><code>jobs/niche-video-research.ts</code>, <code>cmo_insights</code> (<code>kind = niche_video</code>)</td><td>top shorts on TikTok and YouTube for the strategy's topics: hook, format, lift, URL; the week's briefs wait on it</td><td>✅</td></tr><tr><td>Metrics</td><td><code>jobs/pull-metrics.ts</code>, <code>metrics-source.ts</code>, <code>post_metrics</code>, <code>account_metrics</code></td><td>public numbers of published posts, and Zernio analytics for connected accounts</td><td>✅</td></tr><tr><td>Sales scan</td><td><code>jobs/sales-scan.ts</code>, <code>opportunities</code></td><td>queries from pains and competitors → threads from 30 days on Reddit and Hacker News → excluded subreddits and co-occurrence → score (pain 25, evidence 15 with exact quotes; fit 25; timing 20, reach 15 in code) → ≥ 60 passes → reply drafts for the best</td><td>✅</td></tr><tr><td>Subreddit rules</td><td><code>subreddit_rules</code></td><td>before drafting: <code>mention_ok</code>, <code>help_only</code> or <code>skip</code></td><td>✅</td></tr><tr><td>Rare product mentions</td><td><code>sales-scan.ts</code> (<code>recentMentions</code>, <code>waitingMentions</code>)</td><td>about 1 reply in 10 may name the product; past it, help only</td><td>✅</td></tr><tr><td>Decisions</td><td><code>cmo_decide_opportunity</code></td><td>replied or dismissed; dismiss reason → memory; outcome row</td><td>✅</td></tr><tr><td>Reply outcomes</td><td><code>jobs/reply-outcomes.ts</code></td><td>a few days after "replied", re-reads the thread for answers or votes</td><td>✅</td></tr><tr><td>A card before a scan</td><td><code>lib/agent/cmo-tools.ts</code> (<code>create_task</code>), <code>components/screens/sales/SalesScreen.tsx</code></td><td>the chat starts a 5-credit scan with no card; the screen cannot start a scan</td><td>🟡 plan S3.5–S3.6</td></tr><tr><td>Data terms (R0)</td><td>—</td><td>ScrapeCreators' and Reddit's terms for a paid product</td><td>❌ owner</td></tr><tr><td>New lead types (<a href="../plans/cmo/2026-10-31-sales-finder-spec.md">spec</a> F1–F10)</td><td>—</td><td>wait on R0</td><td>❌</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="learn">
-    <div class="sec-head"><p class="eyebrow">3</p><h2>What others teach</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead>
-        <tbody>
-          <tr><td>GummySearch</td><td>Reddit audience research; stopped new sign-ups on 2025-11-30 after failing to secure a commercial Reddit API licence; closing in late 2026</td><td>The lesson: a Reddit feature lives or dies on licensed data access. Check ours</td><td>An audience database built on Reddit data</td></tr>
-          <tr><td>F5Bot</td><td>Free keyword alerts for Reddit, Hacker News and Lobsters</td><td>Hacker News as a source; alerts on the founder's keywords</td><td>—</td></tr>
-          <tr><td>Syften</td><td>Paid monitoring (~$20–30/month); alert only when terms appear together; exclude subreddits</td><td>Co-occurrence filters and per-founder excluded subreddits</td><td>—</td></tr>
-          <tr><td>Octolens</td><td>Monitoring across 13+ platforms with AI relevance, sentiment and intent; API at ~$0.007 a mention from $119/month</td><td>Intent as a first filter before the expensive scoring; a "buy" option later if our own reading gets costly</td><td>Monitoring everything: we read only what the week's plan needs</td></tr>
-          <tr><td>Reddit's rules</td><td>Content Policy rule 2: authentic content, no spam or manipulation; each subreddit sets its own self-promotion rules; the 90/10 norm (community, not official); replies that read like an LLM get flagged</td><td>Read the subreddit's rules before drafting; keep product mentions rare; No AI Slop guidance and voice memory for replies</td><td>Anything that posts for the founder</td></tr>
-          <tr><td>Okara (internal notes)</td><td>Its Reddit replies were reported as obviously AI and removed by moderators</td><td>Few replies, written like a person, always approved and posted by hand</td><td>Volume</td></tr>
-          <tr><td>Okara's GEO agent</td><td>Tracks how a brand appears in ChatGPT, Claude, Perplexity</td><td>Noted for later; not on the editor-first road</td><td>Now</td></tr>
-          <tr><td>Hacker News search (Algolia)</td><td>Public search API, about 10,000 requests an hour per IP (third-party figure), no key</td><td>A free source for technical founders' Research and Sales</td><td>—</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="what-others-teach">
+    <div class="sec-head"><p class="eyebrow">§3</p><h2>What others teach</h2></div>
+<div class="tbl"><table><thead><tr><th>Source</th><th>What it is</th><th>Take</th><th>Leave</th></tr></thead><tbody><tr><td>GummySearch</td><td>Reddit audience research; no new sign-ups from 2025-11-30 after failing to secure a commercial Reddit API licence; closing late 2026</td><td>a Reddit feature lives or dies on licensed data access; check ours</td><td>an audience database on Reddit data</td></tr><tr><td>F5Bot</td><td>free keyword alerts for Reddit, Hacker News, Lobsters</td><td>Hacker News as a source; alerts on the founder's keywords</td><td>—</td></tr><tr><td>Syften</td><td>paid monitoring (~$20–30/month); alert only when terms co-occur; exclude subreddits</td><td>co-occurrence filters; per-founder excluded subreddits</td><td>—</td></tr><tr><td>Octolens</td><td>13+ platforms, AI relevance, sentiment, intent; API ~$0.007 a mention from $119/month</td><td>intent as a first filter before expensive scoring; a buy option later</td><td>monitoring everything</td></tr><tr><td>Reddit's rules</td><td>Content Policy rule 2 (authentic content, no spam or manipulation); subreddit self-promotion rules vary; the 90/10 norm (community); LLM-sounding replies get flagged</td><td>read subreddit rules before drafting; rare product mentions; No AI Slop guidance and voice memory in replies</td><td>anything that posts for the founder</td></tr><tr><td>Okara (internal notes)</td><td>its Reddit replies were reported as obviously AI and removed by moderators</td><td>few replies, human, approved and posted by hand</td><td>volume</td></tr><tr><td>Okara's GEO agent</td><td>tracks how a brand appears in ChatGPT, Claude, Perplexity</td><td>noted for later</td><td>now</td></tr><tr><td>Hacker News search (Algolia)</td><td>public search API, ~10,000 requests an hour per IP (third-party figure), no key</td><td>a free source for technical founders</td><td>—</td></tr></tbody></table></div>
   </section>
 
   <section class="sec" id="flow">
-    <div class="sec-head"><p class="eyebrow">4</p><h2>Flow</h2></div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+    <div class="sec-head"><p class="eyebrow">§4</p><h2>Flow</h2></div>
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
 <svg class="wide" viewBox="0 0 1200 420" role="img" aria-label="Research and Sales as two chains: research reads sources, finds outliers and measures results, writing insights with URLs and memory; sales finds threads, scores them with exact quotes, checks subreddit rules, drafts a help-first reply, and the founder replies by hand.">
 <defs><marker id="rs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker>
 <marker id="rsn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
 <text class="t-eye" x="20" y="26">RESEARCH · the brain&#x27;s eyes</text>
-<rect class="n-in" x="20" y="36" width="176" height="86" rx="8"/><text class="t-b" x="30" y="56">Sources</text><text class="t-s" x="30" y="74">site, X, Reddit,</text><text class="t-s" x="30" y="89">TikTok, YouTube, Threads</text><text class="t-s" x="30" y="104">(ScrapeCreators)</text>
+<rect class="n-in" x="20" y="36" width="176" height="86" rx="8"/><text class="t-b" x="30" y="56">Sources</text><text class="t-s" x="30" y="74">site, X, Reddit,</text><text class="t-s" x="30" y="89">TikTok, YouTube, Threads</text><text class="t-s" x="30" y="104">(ScrapeCreators) · HN</text>
 <path class="e" d="M196 79H213" marker-end="url(#rs)"/>
 <rect class="n-in" x="217" y="36" width="176" height="86" rx="8"/><text class="t-b" x="227" y="56">Onboarding</text><text class="t-s" x="227" y="74">read_site → the four</text><text class="t-s" x="227" y="89">marketing documents</text><text class="t-chip" x="385" y="56" text-anchor="end">LLM</text>
 <path class="e" d="M393 79H410" marker-end="url(#rs)"/>
@@ -246,11 +211,11 @@ body{margin:0}
 <path class="e-new" d="M590 79H607" marker-end="url(#rsn)"/>
 <rect class="n-new" x="610" y="36" width="176" height="86" rx="8"/><text class="t-b" x="620" y="56">Niche video</text><text class="t-s" x="620" y="74">top shorts in the</text><text class="t-s" x="620" y="89">niche → hooks for</text><text class="t-s" x="620" y="104">Studio briefs</text><text class="t-chip" x="778" y="56" text-anchor="end">LLM</text>
 <path class="e-new" d="M786 79H803" marker-end="url(#rsn)"/>
-<rect class="n-in" x="807" y="36" width="176" height="86" rx="8"/><text class="t-b" x="817" y="56">Metrics</text><text class="t-s" x="817" y="74">public numbers today;</text><text class="t-s" x="817" y="89">Zernio analytics for</text><text class="t-s" x="817" y="104">connected accounts</text><text class="t-chip" x="975" y="56" text-anchor="end">CODE</text>
+<rect class="n-in" x="807" y="36" width="176" height="86" rx="8"/><text class="t-b" x="817" y="56">Metrics</text><text class="t-s" x="817" y="74">public numbers, and</text><text class="t-s" x="817" y="89">Zernio analytics for</text><text class="t-s" x="817" y="104">connected accounts</text><text class="t-chip" x="975" y="56" text-anchor="end">CODE</text>
 <path class="e" d="M983 79H1000" marker-end="url(#rs)"/>
 <rect class="n-in" x="1004" y="36" width="176" height="86" rx="8"/><text class="t-b" x="1014" y="56">Out</text><text class="t-s" x="1014" y="74">documents, insights,</text><text class="t-s" x="1014" y="89">ideas with URLs,</text><text class="t-s" x="1014" y="104">memory</text>
 <text class="t-eye" x="20" y="190">SALES · help first, the founder replies by hand</text>
-<rect class="n-in" x="20" y="200" width="176" height="86" rx="8"/><text class="t-b" x="30" y="220">Find</text><text class="t-s" x="30" y="238">queries from pains</text><text class="t-s" x="30" y="253">and competitors; ≤ 30</text><text class="t-s" x="30" y="268">threads, ≤ 30 days</text><text class="t-chip" x="188" y="220" text-anchor="end">LLM</text>
+<rect class="n-in" x="20" y="200" width="176" height="86" rx="8"/><text class="t-b" x="30" y="220">Find</text><text class="t-s" x="30" y="238">queries from pains</text><text class="t-s" x="30" y="253">and competitors (+ HN);</text><text class="t-s" x="30" y="268">≤ 30 threads, ≤ 30 days</text><text class="t-chip" x="188" y="220" text-anchor="end">LLM</text>
 <path class="e" d="M196 243H213" marker-end="url(#rs)"/>
 <rect class="n-in" x="217" y="200" width="176" height="86" rx="8"/><text class="t-b" x="227" y="220">Score</text><text class="t-s" x="227" y="238">pain and evidence need</text><text class="t-s" x="227" y="253">exact quotes; fit;</text><text class="t-s" x="227" y="268">timing, reach in code</text><text class="t-chip" x="385" y="220" text-anchor="end">LLM</text>
 <path class="e-new" d="M393 243H410" marker-end="url(#rsn)"/>
@@ -261,100 +226,55 @@ body{margin:0}
 <rect class="n-user" x="807" y="200" width="176" height="86" rx="8"/><text class="t-b" x="817" y="220">Card</text><text class="t-s" x="817" y="238">copy + open thread;</text><text class="t-s" x="817" y="253">replied or dismiss</text><text class="t-s" x="817" y="268">(no post button)</text><text class="t-chip" x="975" y="220" text-anchor="end">YOU</text>
 <path class="e-new" d="M983 243H1000" marker-end="url(#rsn)"/>
 <rect class="n-new" x="1004" y="200" width="176" height="86" rx="8"/><text class="t-b" x="1014" y="220">Outcome</text><text class="t-s" x="1014" y="238">re-read the thread</text><text class="t-s" x="1014" y="253">later: replies, votes</text><text class="t-s" x="1014" y="268">→ memory</text><text class="t-chip" x="1172" y="220" text-anchor="end">CODE</text>
-<rect class="n-in" x="20" y="320" width="1160" height="80" rx="10"/><text class="t-b" x="38" y="344">Shared</text><text class="t-s" x="38" y="366">outside text is data, never instructions (lib/cmo/untrusted.ts) · every claim links to its source · a credit budget per call (ScBudget, research_credits) · daily limits in SQL</text><text class="t-s" x="38" y="384">dismiss reasons → memory (cmo_decide_opportunity, built) · outcomes in cmo_draft_outcomes · the brain decides when each runs (loops.ts)</text>
+<rect class="n-in" x="20" y="320" width="1160" height="80" rx="10"/><text class="t-b" x="38" y="344">Shared</text><text class="t-s" x="38" y="366">outside text is data, never instructions (lib/cmo/untrusted.ts) · every claim links to its source · a credit budget per call (ScBudget, research_credits) · daily limits in SQL</text><text class="t-s" x="38" y="384">dismiss reasons → memory (cmo_decide_opportunity) · outcomes in cmo_draft_outcomes · the brain decides when each runs (loops.ts)</text>
 </svg>
 
     </div>
+<ul><li><b>Research:</b> sources (site, X, Reddit, TikTok, YouTube, Threads via ScrapeCreators; Hacker News search) → onboarding (<code>read_site</code> → four documents) → competitors (outliers vs own median; a hook needs a real URL) → niche video (top shorts → hooks for Studio briefs) → metrics (public, and Zernio for connected accounts) → out: documents, insights, ideas with URLs, memory.</li><li><b>Sales:</b> find (queries from pains and competitors on Reddit and Hacker News; ≤ 30 threads, ≤ 30 days) → score (exact quotes for pain and evidence; fit; timing and reach in code) → rules check (subreddit forbids self-promotion → help only, or skip) → reply draft (&lt; 120 words, help first, product once at the end, no links) → card (copy + open thread; replied or dismiss; no post button) → outcome (re-read the thread later → memory).</li><li><b>Shared:</b> outside text is data (<code>lib/cmo/untrusted.ts</code>); every claim links to its source; a credit budget per call (<code>ScBudget</code>, <code>research_credits</code>); daily limits in SQL; dismiss reasons → memory; outcomes in <code>cmo_draft_outcomes</code>; the brain decides when each runs (<code>loops.ts</code>).</li></ul>
   </section>
 
   <section class="sec" id="research">
-    <div class="sec-head"><p class="eyebrow">5</p><h2>Research</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Job</th><th>Gives</th><th>To</th><th>State</th></tr></thead>
-        <tbody>
-          <tr><td>Know the market (<code>onboard</code>)</td><td>the four documents</td><td>every department</td><td><span class="st ok">built</span></td></tr>
-          <tr><td>What works for competitors (<code>competitor_research</code>)</td><td>hooks with URLs, formats, ideas (<code>cmo_insights</code>)</td><td>Planner, Writer</td><td><span class="st ok">built</span> (X)</td></tr>
-          <tr><td>What works in the niche on video (<code>niche_video_research</code>)</td><td>top shorts on TikTok, YouTube Shorts, Reels for the founder's topics: hook, length, format, each with a URL; transcripts through <code>get_transcript</code></td><td>Writer's video brief, Studio's Director</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>What worked for the founder (<code>pull_metrics</code>)</td><td>views, likes, replies, reposts per post</td><td>memory, best-time picks, Writer</td><td><span class="st ok">built</span>; Zernio analytics later</td></tr>
-          <tr><td>Technical communities (Hacker News)</td><td>threads and comments on the founder's topics</td><td>Writer ideas, Sales</td><td><span class="st miss">new</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="prose-note">The rule that keeps Research honest stays: an insight without a URL from the data read is dropped. Insights grow a <code>kind</code> beyond <code>competitors</code> (the SQL check allows only that today).</p>
+    <div class="sec-head"><p class="eyebrow">§5</p><h2>Research</h2></div>
+<div class="tbl"><table><thead><tr><th>Job</th><th>Gives</th><th>To</th><th>State</th></tr></thead><tbody><tr><td>Know the market (<code>onboard</code>)</td><td>the four documents</td><td>every department</td><td>✅</td></tr><tr><td>What works for competitors (<code>competitor_research</code>)</td><td>hooks with URLs, formats, ideas (<code>cmo_insights</code>)</td><td>Planner, Writer</td><td>✅ X and Hacker News</td></tr><tr><td>What works in the niche on video (<code>niche_video_research</code>)</td><td>top shorts on TikTok and YouTube for the founder's topics: hook, length, format, URL</td><td>Writer's video brief, Studio's Director</td><td>✅</td></tr><tr><td>What worked for the founder (<code>pull_metrics</code>)</td><td>views, likes, replies, reposts per post</td><td>memory, best-time picks, Writer</td><td>✅ public and Zernio</td></tr><tr><td>Technical communities (Hacker News, <code>lib/cmo/social/hn.ts</code>)</td><td>threads and comments on the founder's topics</td><td>Writer ideas, Sales</td><td>✅</td></tr></tbody></table></div>
+<p>An insight without a URL from the data read is dropped. <code>cmo_insights.kind</code> is <code>competitors</code> or <code>niche_video</code>.</p>
   </section>
 
   <section class="sec" id="sales">
-    <div class="sec-head"><p class="eyebrow">6</p><h2>Sales</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Addition</th><th>How</th><th>Why</th></tr></thead>
-        <tbody>
-          <tr><td>Subreddit rules check</td><td>Before drafting, read the subreddit's rules (through the reader we already pay for) and mark it: product mention allowed, help only, or skip</td><td>Each subreddit sets its own rules; a removed comment hurts the founder's account</td></tr>
-          <tr><td>Rare product mentions</td><td>Count the founder's replied threads with and without a product mention; when mentions pass about 1 in 10, the next drafts are help only and the card says why</td><td>The 90/10 community norm; replies that look like marketing get flagged</td></tr>
-          <tr><td>Reply in the founder's voice</td><td>Voice memory and No AI Slop guidance, as in Writer; under 120 words; no links (decided)</td><td>LLM-sounding replies are what moderators remove</td></tr>
-          <tr><td>Outcome check</td><td>A few days after "replied", re-read the thread: did the founder's reply get replies or votes? Store it with the outcome</td><td>Learn which threads and replies work, instead of guessing</td></tr>
-          <tr><td>Excluded subreddits and co-occurrence</td><td>Per-founder lists; queries that need two terms together</td><td>Fewer false matches before paying for scoring (Syften)</td></tr>
-          <tr><td>More sources</td><td>Hacker News first (free); X and Threads conversations later through the reader</td><td>Where technical founders' buyers talk</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="prose-note">Unchanged by design: Sales has no post button. The card copies the reply and opens the thread; the founder posts it by hand and marks it replied.</p>
+    <div class="sec-head"><p class="eyebrow">§6</p><h2>Sales</h2></div>
+<div class="tbl"><table><thead><tr><th>Addition</th><th>How</th><th>State</th></tr></thead><tbody><tr><td>Subreddit rules check</td><td>before drafting, read the subreddit's rules and mark it: product mention allowed, help only, or skip</td><td>✅</td></tr><tr><td>Rare product mentions</td><td>count replied threads with and without a product mention; past ~1 in 10, the next drafts are help only and the card says why</td><td>✅</td></tr><tr><td>Reply in the founder's voice</td><td>voice notes and no-ai-slop guidance, as in Writer; &lt; 120 words; no links (decided)</td><td>✅</td></tr><tr><td>Outcome check</td><td>a few days after "replied", re-read the thread for replies or votes on the founder's reply; store it with the outcome</td><td>✅</td></tr><tr><td>Excluded subreddits and co-occurrence</td><td>per-founder lists (<code>sales_settings</code>); queries needing two terms together</td><td>✅</td></tr><tr><td>More sources</td><td>Hacker News (free)</td><td>✅; X and Threads conversations wait on R0</td></tr><tr><td>A price card before every scan</td><td><code>cmoScope.plan()</code> prices <code>create_task{agent:"sales"}</code> like every paid tool</td><td>🟡 plan S3.5</td></tr></tbody></table></div>
+<p>Unchanged by design: Sales has no post button; the card copies the reply and opens the thread; the founder posts by hand and marks it replied.</p>
   </section>
 
-  <section class="sec" id="risk">
-    <div class="sec-head"><p class="eyebrow">7</p><h2>Data risk</h2></div>
-    <div class="card r"><span class="k">Check before selling Reddit features</span>
-      <p>GummySearch, the best-known Reddit research tool, closed because it could not get a commercial licence from Reddit. Our Reddit reading goes through ScrapeCreators. Before Sales is on the landing page, confirm in writing what ScrapeCreators' terms allow for a paid product, and whether Reddit's data terms reach us through them. If the answer is unclear, the fallback is the official Reddit API under a commercial agreement, or Sales on other sources (Hacker News, X, Threads) first.</p>
-    </div>
+  <section class="sec" id="data-risk">
+    <div class="sec-head"><p class="eyebrow">§7</p><h2>Data risk</h2></div>
+<p>GummySearch closed because it could not get a commercial licence from Reddit. Our Reddit reading goes through ScrapeCreators. Before Sales is on the landing page, confirm in writing what ScrapeCreators' terms allow for a paid product and whether Reddit's data terms reach us through them. If unclear: the official Reddit API under a commercial agreement, or Sales on other sources (Hacker News, X, Threads) first.</p>
   </section>
 
-  <section class="sec" id="evals">
-    <div class="sec-head"><p class="eyebrow">8</p><h2>Measures</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Department</th><th>Measure</th></tr></thead>
-        <tbody>
-          <tr><td>Research</td><td>Insights used: ideas that became approved posts or videos; insights dropped for a missing URL; credits per week</td></tr>
-          <tr><td>Sales</td><td>Threads passed per scan; replied vs dismissed (dismiss reasons); replies that got answers or votes; removed replies reported by the founder; credits per replied thread</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="measures">
+    <div class="sec-head"><p class="eyebrow">§8</p><h2>Measures</h2></div>
+<ul><li><b>Research:</b> insights used (ideas that became approved posts or videos); insights dropped for a missing URL; credits per week.</li><li><b>Sales:</b> threads passed per scan; replied vs dismissed (reasons); replies that got answers or votes; removed replies reported by the founder; credits per replied thread.</li></ul>
   </section>
 
-  <section class="sec" id="phases">
-    <div class="sec-head"><p class="eyebrow">9</p><h2>Build phases</h2></div>
-    <ol class="order">
-      <li><span><b>R0 · Data check.</b> ScrapeCreators' terms for a paid product and Reddit's data terms; decide the fallback if needed.</span></li>
-      <li><span><b>R1 · Sales safety.</b> Subreddit rules check, rare product mentions, voice memory and No AI Slop guidance in replies, excluded subreddits.</span></li>
-      <li><span><b>R2 · Research for Studio.</b> Niche video research feeding Writer's video brief and Studio's Director; <code>cmo_insights.kind</code> widened.</span></li>
-      <li><span><b>R3 · Close the loop.</b> Reply outcome check; metrics through Zernio for connected accounts (with Schedule P3).</span></li>
-      <li><span><b>R4 · Hacker News.</b> As a source for both departments.</span></li>
-    </ol>
+  <section class="sec" id="build-phases">
+    <div class="sec-head"><p class="eyebrow">§9</p><h2>Build phases</h2></div>
+<p>Built: <b>R1</b> Sales safety · <b>R2</b> research for Studio · <b>R3</b> the closed loop (reply outcomes, Zernio metrics) · <b>R4</b> Hacker News. Not built: <b>R0</b>, the data check, which the owner answers before new Sales lead types.</p>
+<p>What is left, ranked by the CMO loop (owner, 2026-11-08): no Sales scan spends credits without a card, and the Sales screen's buttons work (plan S3.5–S3.6); ScrapeCreators' response shapes checked against real responses (S3.4); then R0.</p>
   </section>
 
-  <section class="sec" id="decide">
-    <div class="sec-head"><p class="eyebrow">10</p><h2>Decisions for the owner</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>#</th><th>Question</th><th>Decision (owner, 2026-10-27: as recommended)</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>Check ScrapeCreators' and Reddit's terms before selling Sales?</td><td>Yes, R0 first</td></tr>
-          <tr><td>2</td><td>Product mentions in replies</td><td>Only where the subreddit allows, and about 1 reply in 10 at most; otherwise help only</td></tr>
-          <tr><td>3</td><td>Add Hacker News</td><td>Yes, it is free; after R1–R3</td></tr>
-          <tr><td>4</td><td>Niche video research</td><td>Yes, it feeds the editor strategy directly (R2)</td></tr>
-          <tr><td>5</td><td>Always-on keyword alerts</td><td>Not now: scans run when the week's plan has a Reddit item, which keeps credits low</td></tr>
-          <tr><td>6</td><td>AI search visibility (GEO)</td><td>Later; not on the editor-first road</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="decisions-for-the-owner">
+    <div class="sec-head"><p class="eyebrow">§10</p><h2>Decisions for the owner</h2></div>
+<div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Decision (owner, 2026-10-27: as recommended)</th></tr></thead><tbody><tr><td>1</td><td>Check ScrapeCreators' and Reddit's terms before selling Sales?</td><td>yes, R0 first; <b>still open</b> on 2026-11-08</td></tr><tr><td>2</td><td>Product mentions in replies</td><td>only where the subreddit allows, about 1 reply in 10 at most; otherwise help only (built)</td></tr><tr><td>3</td><td>Add Hacker News</td><td>yes, free (built)</td></tr><tr><td>4</td><td>Niche video research</td><td>yes (built, R2)</td></tr><tr><td>5</td><td>Always-on keyword alerts</td><td>not now; scans run when the week's plan has a Reddit item</td></tr><tr><td>6</td><td>AI search visibility (GEO)</td><td>later</td></tr><tr><td>7</td><td>New Sales lead types</td><td><b>decided 2026-11-08</b>: fix what exists; new types wait on R0</td></tr></tbody></table></div>
   </section>
 
-  <footer class="foot" id="sources">
-    <p><b>Sources.</b> Code: <code>apps/web/lib/cmo/</code> (<code>onboard.ts</code>, <code>site.ts</code>, <code>jobs/sales-scan.ts</code>, <code>jobs/competitor-research.ts</code>, <code>jobs/pull-metrics.ts</code>, <code>social/</code>), <code>apps/web/lib/agent/cmo-research.ts</code>, <code>supabase/schema/current.sql</code> (<code>cmo_decide_opportunity</code>, <code>cmo_insights</code>, <code>opportunities</code>, <code>post_metrics</code>); internal notes <code>opencmo-internal/docs/cmo/tham-khao.md</code> (Okara, ScrapeCreators).</p>
-    <p>Outside: <a href="https://syncsuptech.substack.com/p/gummysearch-shuts-down">GummySearch shuts down</a> · <a href="https://newsletter.failory.com/p/when-reddit-pulls-over">When Reddit pulls over</a> · <a href="https://devtoolpicks.com/blog/best-gummysearch-alternatives-2026">GummySearch alternatives</a> · <a href="https://redship.io/best-f5bot-alternatives">F5Bot alternatives</a> · <a href="https://octolens.com/docs/index.md">Octolens docs</a> · <a href="https://octolens.com/social-listening-api">Octolens API</a> · <a href="https://redship.io/blog/reddit-self-promotion-rules">Reddit self-promotion rules 2026</a> · <a href="https://www.darwinapps.com/blog/reddit-marketing-guide-2026/">Reddit marketing guide 2026</a> · <a href="https://npmjs.com/package/hacker-news-api">HN search API client</a>.</p>
-    <p>Most sources are vendor blogs; Reddit's rules should be read on Reddit's own Content Policy and each subreddit's rules page.</p>
-  </footer>
+  <section class="sec" id="sources">
+    <div class="sec-head"><p class="eyebrow">Sources</p><h2>Sources</h2></div>
+<p>Code: <code>apps/web/lib/cmo/</code> (<code>onboard.ts</code>, <code>site.ts</code>, <code>jobs/sales-scan.ts</code>, <code>jobs/competitor-research.ts</code>, <code>jobs/pull-metrics.ts</code>, <code>social/</code>), <code>apps/web/lib/agent/cmo-research.ts</code>, <code>supabase/schema/current.sql</code> (<code>cmo_decide_opportunity</code>, <code>cmo_insights</code>, <code>opportunities</code>, <code>post_metrics</code>); internal notes <code>opencmo-internal/docs/cmo/tham-khao.md</code> (Okara, ScrapeCreators).</p>
+<p>Outside:</p>
+<ul><li><a href="https://syncsuptech.substack.com/p/gummysearch-shuts-down">https://syncsuptech.substack.com/p/gummysearch-shuts-down</a></li><li><a href="https://newsletter.failory.com/p/when-reddit-pulls-over">https://newsletter.failory.com/p/when-reddit-pulls-over</a></li><li><a href="https://devtoolpicks.com/blog/best-gummysearch-alternatives-2026">https://devtoolpicks.com/blog/best-gummysearch-alternatives-2026</a></li><li><a href="https://redship.io/best-f5bot-alternatives">https://redship.io/best-f5bot-alternatives</a></li><li><a href="https://octolens.com/docs/index.md">https://octolens.com/docs/index.md</a>, <a href="https://octolens.com/social-listening-api">https://octolens.com/social-listening-api</a></li><li><a href="https://redship.io/blog/reddit-self-promotion-rules">https://redship.io/blog/reddit-self-promotion-rules</a></li><li><a href="https://www.darwinapps.com/blog/reddit-marketing-guide-2026/">https://www.darwinapps.com/blog/reddit-marketing-guide-2026/</a></li><li><a href="https://npmjs.com/package/hacker-news-api">https://npmjs.com/package/hacker-news-api</a></li></ul>
+<p>Most sources are vendor blogs; read Reddit's rules on its Content Policy and each subreddit's rules page.</p>
+  </section>
+
+  <footer class="foot"><p>Markdown twin for agents: <code>research-sales.md</code>. Both pages say the same thing; change them together.</p></footer>
 </div>
 </body>
 </html>

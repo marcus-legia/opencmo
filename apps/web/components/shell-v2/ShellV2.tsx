@@ -30,7 +30,7 @@ import type { RailStatus } from "@/lib/screens/rail";
 import { CHAT, DEFAULT_PREF, RAIL, applyColumns, clampColumns, readPref, writePref, type ColumnsPref } from "./columns";
 
 import { Logo } from "./Logo";
-import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_SETTINGS, isShown, type DepartmentName, type NavEntry } from "./nav";
+import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_MORE, NAV_SETTINGS, isShown, type DepartmentName, type NavEntry } from "./nav";
 import { Rail } from "./Rail";
 import { Sash } from "./Sash";
 import { ShellStateContext, type ShellState } from "./ShellState";
@@ -211,7 +211,7 @@ function V2Frame({
   const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
   // Open tabs: every screen visited this session, Dashboard first and pinned.
-  const tabEntries = useMemo(() => [...entries(NAV_MAIN), ...entries(NAV_DEPARTMENTS), ...NAV_MAKE, NAV_SETTINGS], [entries]);
+  const tabEntries = useMemo(() => [...entries(NAV_MAIN), ...entries(NAV_DEPARTMENTS), ...entries(NAV_MORE), ...NAV_MAKE, NAV_SETTINGS], [entries]);
   const currentEntry = tabEntries.find((entry) => entry.segments.includes(segment)) ?? null;
   const [openHrefs, setOpenHrefs] = useState<string[]>(["/app"]);
   useEffect(() => {

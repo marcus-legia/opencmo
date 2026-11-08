@@ -76,7 +76,7 @@ export function InboxCardPage({ id, sampleCard }: { id: string; sampleCard: Card
         const next = await decide(card, decision, sample);
         toast(decidedMessage(card, decision, sample));
         // The card stays on this page in its decided state, so the founder sees what happened.
-        setState({ status: "ready", card: next ?? { ...card, status: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" ? "approved" : "skipped" }, sample });
+        setState({ status: "ready", card: next ?? { ...card, status: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" || decision.action === "posted_self" ? "approved" : "skipped" }, sample });
         return true;
       } catch (error) {
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");

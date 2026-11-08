@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /** Asks our API for a Creem URL (checkout or portal) and goes there. The server decides what may be bought. */
-export function BillingButton({ path, product, label, className }: { path: string; product?: string; label: string; className?: string }) {
+export function BillingButton({ path, product, site, label, className }: { path: string; product?: string; site?: string; label: string; className?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +13,7 @@ export function BillingButton({ path, product, label, className }: { path: strin
     const response = await fetch(path, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(product ? { product } : {}),
+      body: JSON.stringify(product ? { product, ...(site ? { site } : {}) } : {}),
     }).catch(() => null);
     const data = (await response?.json().catch(() => null)) as { checkout_url?: string; url?: string; detail?: string } | null;
     const url = response?.ok ? (data?.checkout_url ?? data?.url) : undefined;

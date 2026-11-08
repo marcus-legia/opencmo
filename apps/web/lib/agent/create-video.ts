@@ -253,7 +253,7 @@ export function keyframeDescriptions(plan: Pick<DirectorPlan, "shots">): string[
   return out;
 }
 
-/** The video's shot prompts, for pricing and moderation now and for `animate_video` later. */
+/** The video's shot prompts, for pricing and moderation now and for the shots made after the one approval. */
 export function shotPrompts(plan: DirectorPlan, model: AiModel, aspect: string, joins: boolean): { prompt: string; duration: number }[] {
   const durations = [...(model.limits.durations ?? [5])].sort((a, b) => a - b);
   const ends = keyframeIndexes(plan);
@@ -348,7 +348,7 @@ export async function prepareCreateVideo(
   const named = request.voice ? voiceModelFor(request.voice) : null;
   if (typeof named === "string") return named;
   const voiceModel = named ?? availableModels().find((model) => model.kind === "voice");
-  // The same pick as stage 2 (`animate_video`), so card 1's estimate prices the music card 2 makes.
+  // The same pick as the run after approval, so the card's one estimate prices the music that is made.
   const musicModel = pickMusicModel();
 
   let plan: DirectorPlan;

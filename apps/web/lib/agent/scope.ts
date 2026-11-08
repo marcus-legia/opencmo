@@ -68,6 +68,7 @@ import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
+import { CREATE_VIDEO_HIDDEN } from "./hidden";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, runCreateVideo, videoPieces, type JobSource } from "./create-video";
 import { saveKeyframes } from "./keyframe-library";
 import { prepareRedoKeyframe, redoKeyframeToolSpec, runRedoKeyframe, type ListKeyframe, type PreparedRedo } from "./long-take";
@@ -153,10 +154,14 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 }
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
-export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
+/**
+ * `assistant`: the web app's Assistant, where `/video` is hidden (`hidden.ts`). MCP lists the tools without it and keeps
+ * create_video; Studio calls `scope.plan` by name and does not read this list.
+ */
+export function clipToolSpecs(options: { blank?: boolean; assistant?: boolean } = {}): ToolSpec[] {
   const priced = [generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
-  const video = createVideoToolSpec();
+  const video = options.assistant && CREATE_VIDEO_HIDDEN ? null : createVideoToolSpec();
   const editTool = editToolSpec();
   const longTake = [redoKeyframeToolSpec()].filter((spec) => spec !== null);
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
@@ -252,7 +257,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   const explainerScope = () => ({ clipId, source: jobSource() });
   return {
     kind: "clip",
-    tools: clipToolSpecs({ blank }),
+    tools: clipToolSpecs({ blank, assistant: true }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -550,14 +555,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runCaptions(supabase, clipId, input as PreparedCaptions, (op) => applyOpTool(op, env));
         return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
       }
-      if (call.name === "animate_video") {
-        // A card from before /video ran in one go (2026-11-06): its second step no longer exists.
-        return {
-          outcome: { ok: false, content: JSON.stringify({ error: "This video step no longer exists: /video now makes the whole video after one approval. Ask for the video again." }), summary: "Out of date" },
-          extra: {},
-          wrote: false,
-        };
-      }
       const source = jobSource();
       // Before the priced-tool guard: the explainer's one card is not a generation card.
       if (call.name === "plan_explainer") {
@@ -571,7 +568,15 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runPlanExplainer({ supabase, clipId, source }, input as PreparedExplainerPlan, randomUUID());
         return { outcome, extra: {}, wrote: false };
       }
-      if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
+      // A card for a step that no longer exists (the two-card /video's `animate_video`, gone 2026-11-06) closes as out of
+      // date, on Approve or Cancel, so the conversation can go on.
+      if (!PRICED_TOOLS.has(call.name)) {
+        return {
+          outcome: { ok: false, content: JSON.stringify({ error: "This step no longer exists. Nothing was charged; ask for it again." }), summary: "Out of date" },
+          extra: {},
+          wrote: false,
+        };
+      }
       const prepared = input as PreparedGeneration;
       if (!approved) {
         return {

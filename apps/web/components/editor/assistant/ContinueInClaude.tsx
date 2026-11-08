@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/components/clipping/api";
 
-type Mode = { brain: "opencmo" | "claude"; reason: "ok" | "credits" | "llm_down" | "forced"; credits: number; inbox: number; mcp_url: string | null };
+type Mode = { brain: "opencmo" | "claude"; reason: "ok" | "credits" | "llm_down" | "forced"; credits: number; inbox: number; mcp_url: string | null; can_connect?: boolean };
 
 const command = (url: string) => `claude mcp add --transport http opencmo ${url} --header "Authorization: Bearer <your API key>"`;
 
@@ -29,8 +29,8 @@ export function ContinueInClaude({ where }: { where: "assistant" | "cmo" }) {
     };
   }, []);
 
-  // No MCP server configured: there is nothing to connect to.
-  if (!mode || mode.brain !== "claude" || !mode.mcp_url) return null;
+  // No MCP server configured, or no plan (API keys are for paid plans): there is nothing to connect with.
+  if (!mode || mode.brain !== "claude" || !mode.mcp_url || mode.can_connect === false) return null;
   const url = mode.mcp_url;
 
   const why =
