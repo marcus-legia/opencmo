@@ -22,6 +22,7 @@ import { Readable } from "node:stream";
 
 import { cleanUntrusted } from "@/lib/cmo/untrusted";
 import { blockedName, checkUrl, privateAddress, refused } from "@/lib/net/address";
+import { agentFakeAllowed } from "@/lib/production";
 
 export { privateAddress };
 
@@ -253,7 +254,32 @@ function extraLinks(base: URL, html: string): URL[] {
 }
 
 /** Home page plus up to 3 same-site sub-pages. An unreadable home page is the user's error to fix. */
+/**
+ * E2E only: the test stack has no DNS. A host under `.test` (a reserved name that never resolves anywhere) reads as one
+ * fixed page, and only where the fakes are allowed (`OPENCMO_AGENT_FAKE=1`, never in production). Everything else goes
+ * through the real, SSRF-checked path below.
+ */
+const FAKE_SITE = /^(?:https?:\/\/)?([a-z0-9-]+\.test)\/?$/i;
+
+function fakeSite(host: string): SiteSnapshot {
+  const name = host.replace(/\.test$/i, "");
+  return {
+    url: `https://${host}/`,
+    pages: [
+      {
+        url: `https://${host}/`,
+        title: `${name}: invoicing that chases late payments`,
+        description: "Invoicing for freelancers that sends the reminders for you, on day 3, 7 and 14.",
+        headings: ["Get paid without chasing", "Reminders that sound like you", "Pricing"],
+        text: "Freelancers lose hours chasing late invoices. It sends polite reminders on day 3, 7 and 14, in your voice, and stops the moment the client pays. Plans start at $12 a month.",
+      },
+    ],
+  };
+}
+
 export async function readSite(input: string, resolve: Resolver = publicAddresses): Promise<SiteSnapshot> {
+  const fake = agentFakeAllowed() ? FAKE_SITE.exec(input.trim()) : null;
+  if (fake) return fakeSite(fake[1]!.toLowerCase());
   const home = await fetchPage(normalizeSite(input), resolve);
   if (!home) throw new SiteError("We could not read that website. Is it public?");
   const pages = [extractPage(home.url.toString(), home.html)];
