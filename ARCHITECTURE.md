@@ -328,8 +328,8 @@ First built in PR #21; the departments, the spine and the gates in P1–P6 and t
 pages with code paths are in [`docs/architecture/`](docs/architecture/README.md) (built, `main` at `4f70a59`).
 
 **Order of work (owner, 2026-11-08): the AI CMO first, the editor last.** The product follows one loop: business
-information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is hidden in the web app; the
-code, the MCP tool and the evals stay.
+information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is to be hidden in the web app
+(plan S2.4; still offered at `4f70a59`); the code, the MCP tool and the evals stay.
 
 ### Language boundary
 
@@ -417,7 +417,8 @@ result, writes the lesson and proposes the next goal; the week plan is planned a
 
 The CMO reaches video through Studio orders, never by driving the editor: a finished edit of the founder's own video
 becomes 3 shorts (`cut_shorts`), a slideshow item becomes `write_slides` → `build_slideshow` (MP4 and a PNG set), and a
-`build_video` order makes an AI video from Writer's brief (hidden for now, with `/video`). Video is only ever the
+`build_video` order makes an AI video from Writer's brief (to be hidden with `/video`; the week plan stops ordering it
+in plan S2.5). Video is only ever the
 founder's own upload or made in the editor: no link import, no clipping of outside video.
 
 ### Charging: charge before running, then run in one go
@@ -447,7 +448,10 @@ switches of `apps/web/lib/ops/switches.ts`.
 ### Deploy order
 
 1. Apply migrations (`supabase db push`).
-2. Modal secret `opencmo`: `OPENCMO_WEB_URL`, `CRON_SECRET`, `ANTHROPIC_API_KEY`, `FAL_KEY`, `ELEVENLABS_API_KEY`,
-   `CREEM_API_KEY`, `OPENCMO_ENV=production`; then `modal deploy`. Check with `packages/engine/check_deploy_env.py`.
-3. Vercel: the same `ANTHROPIC_API_KEY`, `CRON_SECRET`, Creem, Zernio, Resend and VAPID keys; merge to deploy.
+2. Modal secrets (`packages/engine/modal_app.py`, `mcp_app.py`): `opencmo` (`OPENCMO_WEB_URL`, `CRON_SECRET`,
+   `ANTHROPIC_API_KEY`, `CREEM_API_KEY`, `OPENCMO_ENV=production`), `fal-secret` (`FAL_KEY`), `opencmo-voice`
+   (`ELEVENLABS_API_KEY`), `opencmo-motion`, and `opencmo-mcp` for the MCP app; then `modal deploy`. Check with
+   `packages/engine/check_deploy_env.py`.
+3. Vercel: the same `ANTHROPIC_API_KEY`, `CRON_SECRET`, Creem, Zernio (with `OPENCMO_PUBLISH_LIVE=1`), Resend (with
+   `OPENCMO_EMAIL_LIVE=1`) and VAPID keys; merge to deploy.
 4. Run `npm run cmo:eval -- --provider anthropic --yes` to grade the jobs on Claude.

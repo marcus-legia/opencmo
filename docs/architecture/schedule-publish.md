@@ -12,7 +12,7 @@ connected.
 ## 1. Verdict
 
 - **Built: every platform through Zernio, X included** (owner, 2026-10-26). The founder connects each account once
-  through Zernio's OAuth link; at the approved time the worker posts through Zernio and a signed webhook confirms.
+  through Zernio's OAuth link; at the approved time `publish_post` posts through Zernio and a signed webhook confirms.
   Tokens stay with Zernio; we never build a platform app.
 - Still "assist, never act": nothing goes out without the founder's approval of content, time and account, on the
   founder's own account. The copy says "you approve when it posts".
@@ -33,12 +33,12 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Slots | `schedule_slots`, `schedule_propose`, `schedule_pick_time`, `schedule_change` | a time per platform for each approved deliverable; one `schedule` card per slot | ✅ |
 | Default slots and rules | `packages/contracts/schedule-defaults.json`, `schedule_rules()` | Buffer 2026 times per platform, 3 hours between posts on one platform, daily caps, ±4 minutes of jitter | ✅ |
 | Best time from data | `best_slots`, `best_slots_refresh`, `best_time_rules()` | the founder's own hours take over once a platform has 10 posts with metrics | ✅ |
-| Firing | Modal `sweep` → `schedule_claim_due` → `jobs/publish-post.ts` → worker `publish_media` | a due slot is claimed with a lease and posted; past its window it is `missed` and asks again | ✅ |
+| Firing | Modal `sweep` → `schedule_claim_due` → `jobs/publish-post.ts` (Vercel, posts with the Zernio key); worker `publish_media` only streams a video to Zernio's upload URL | a due slot is claimed with a lease and posted; past its window it is `missed` and asks again | ✅ |
 | Accounts | `social_accounts`, `zernio_profiles`, `lib/departments/publish/accounts.ts` | connect and disconnect through Zernio; ids only, no tokens | ✅ |
 | Adapter | `lib/departments/publish/adapter.ts`, `zernio.ts`, `intent.ts` | `zernio` for 6 platforms; `intent` for X, Threads, LinkedIn | ✅ |
 | Webhook | `app/api/webhooks/zernio`, `webhook-handle.ts`, `zernio_receipts` | signed, with a receipts table against replays; sets slot and deliverable status | ✅ |
 | Metrics | `jobs/pull-metrics.ts`, `metrics-source.ts`, `lib/departments/publish/analytics.ts`, `account_metrics` | public numbers, and Zernio analytics for connected accounts | ✅ |
-| Outbound caps | `operation_log`, `cmo_decide_post`, `schedule_day_count` | 5 X approvals a day; daily caps per platform | ✅ |
+| Outbound caps | `operation_log`, `cmo_decide_post`, `schedule_day_count` | 5 post approvals a day per post platform (X, Threads, LinkedIn); daily slot caps per platform | ✅ |
 
 ## 3. What others teach
 
@@ -57,8 +57,8 @@ State: ✅ done · 🟡 partial · ❌ not built.
 - **Schedule:** deliverable (approved) → proposed slot (best time per platform, founder's timezone, gaps, caps) →
   schedule card (platform, account, time; all three approved) → `waiting` (an edit raises a new card) → `due` (Modal
   `sweep`, every minute, lease).
-- **Publish mode** (an account is connected): due → `publishing` → the worker uploads the media to Zernio
-  (`publish_media`), then posts → signed webhook (status, post id, failure reason) → `published` → metrics after 24 h.
+- **Publish mode** (an account is connected): due → `publishing` → `publish_post` on Vercel; for a video the worker
+  first streams the file to Zernio's presigned URL (`publish_media`, no Zernio key on the worker), then Vercel posts → signed webhook (status, post id, failure reason) → `published` → metrics after 24 h.
 - **Intent mode** (no connected account for that platform): due → a notice (push, email, in-app: "time to post on
   X") → the founder posts through the intent link with the text filled in → published (paste the link, or metrics find
   it). TikTok, YouTube and Instagram have no web composer that takes a video: their card asks the founder to connect
@@ -107,7 +107,8 @@ its card.
 | `zernio` (main) | X, Threads, LinkedIn, TikTok, Instagram, YouTube | the system at the approved time | held by Zernio; we keep account ids | ~$6 per connected account after 2 free (third-party listing); X posts at X's API price | ✅ live with the owner's key |
 | `intent` (fallback) | X (intent), Threads (web intent), LinkedIn (copy + open) | the founder | none | $0 | ✅ |
 
-- Media goes from the worker straight to Zernio's presigned upload, never through Next.js (web rule 3).
+- Media goes from the worker straight to Zernio's presigned upload, never through Next.js (web rule 3); the worker holds
+  no Zernio key.
 - Zernio webhooks land on a signed Vercel route with a receipts table against replays (like Creem's) and set slot and
   deliverable status; a failure raises a card with the reason and a retry that reuses the still-valid approval.
 - Connecting an account is the founder's own OAuth through Zernio's connect link; `social_accounts` stores Zernio
@@ -155,15 +156,15 @@ live keys; then a founder approves one post and schedules it within the first mi
 | 1 | Ship remind mode first, with no tokens? | **decided 2026-10-26: no**; everything through Zernio, the intent link only as a fallback |
 | 2 | Allow posting at the approved time? | **decided: yes**, per slot with its own approval of content, time and account |
 | 3 | Zernio or our own platform apps? | **decided: Zernio for every platform, X included**; check its TikTok audit, price and terms before launch |
-| 4 | Minimum gap and daily cap per platform | **built**: 3 hours; caps X 5, Threads 2, LinkedIn 1, TikTok 2, Instagram 1, YouTube 2 |
+| 4 | Minimum gap and daily cap per platform | **built**: 3 hours; slot caps X 5, Threads 2, LinkedIn 1, TikTok 2, Instagram 1, YouTube 2; and 5 post approvals a day per post platform |
 | 5 | AI-generated label on AI video | **decided 2026-10-26: the founder decides**; a toggle on the card, off by default |
 | 6 | Natural posting jitter | **built**: up to ±4 minutes |
 
 ## Sources
 
 Code: `apps/web/lib/cmo/jobs/plan-week.ts`, `pull-metrics.ts`, `apps/web/components/cmo/workspace/actions.ts`
-(`xIntent`), `supabase/schema/current.sql` (`content_items`, `cmo_mark_posted`, `operation_log`, `post_metrics`; no
-timezone column); internal notes `opencmo-internal/docs/cmo/tham-khao.md` §4–5.
+(`xIntent`), `supabase/schema/current.sql` (`content_items`, `cmo_mark_posted`, `operation_log`, `post_metrics`; the
+sources of the 2026-10-26 design); internal notes `opencmo-internal/docs/cmo/tham-khao.md` §4–5.
 
 Outside:
 - https://support.typefully.com/en/articles/9210135-scheduling-queue-and-calendar

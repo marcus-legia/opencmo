@@ -6,8 +6,8 @@ as designs on 2026-10-25–27, built in P1–P6 and the CMO review (#169–#180)
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) at the repo root covers the whole system; its §11 summarises these pages.
 
 **Order of work (owner, 2026-11-08): the AI CMO first, the editor last.** The pages follow one loop: business
-information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is built but hidden in the web
-app; every other slash command is live.
+information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is built; the owner decided to
+hide it, and plan S2.4 removes it from the web app (at `4f70a59` it is still offered). Every other slash command stays.
 
 Every page is a pair with the same name: an `.html` page for people (diagrams, opens in any browser) and an `.md`
 twin for agents. The two must say the same thing; change both in the same commit. The HTML body is rendered from the

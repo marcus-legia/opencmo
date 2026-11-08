@@ -135,7 +135,7 @@ when a row is waiting: idle costs nothing, a crash resumes from the last logged 
 | Sunday | `summarize_memory`, `review_week`, `competitor_research` when handles exist | yes | free, free, 2 | `loops.ts` |
 | Monday | `plan_week` → the plan card + the work order tree (one order per calendar item, children per department: brief → Studio order → shorts → captions); `niche_video_research` once a week when the plan has a new video item, and the briefs wait on it | once | as priced; research 2 | `work_orders_plan_week`, `20261231110000_p5_niche_research.sql` |
 | Every day | progress check over the tree; only a stuck order costs a model call (one replan) | rarely | free | `jobs/progress.ts` |
-| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics`, `write_caption`, `write_video_brief`, `write_slides`, Studio orders | yes | per kind | `loops.ts`, `studio-orders.ts` |
+| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
 | Any time | event rules; founder orders from chat or MCP land under the week's root | no | free | SQL triggers |
 | Every morning, founder's time | digest: what waits on you, what the brain did, today's plan | no (template) | free | `lib/cmo/digest.ts` |
 
@@ -199,7 +199,7 @@ edit finished is the founder's call only.
 
 | Squad | Members (kind) | State |
 |---|---|---|
-| Long take `/video` | Director (LLM, agent `director`: script, beats, keyframe + motion) → Reviewer (code, `review()` in `create-video.ts`, sends back once) → one storyboard card with one price → one job hold (`credit_orders`) → keyframes, text check, shots, voice and music in one go (`startAfter` / `endAfter`) → Builder (code: `create_video` op, one editable scene) | ✅ built; **hidden** in the web app (owner, 2026-11-08; plan S2.4); MCP keeps `create_video` |
+| Long take `/video` | Director (LLM, agent `director`: script, beats, keyframe + motion) → Reviewer (code, `review()` in `create-video.ts`, sends back once) → one storyboard card with one price → one job hold (`credit_orders`) → keyframes, text check, shots, voice and music in one go (`startAfter` / `endAfter`) → Builder (code: `create_video` op, one editable scene) | ✅ built; to be hidden in the web app (owner, 2026-11-08; plan S2.4, not done at `4f70a59`); MCP keeps `create_video` |
 | Intro `/intro` (`plan_video`, `lib/agent/video-team.ts`) | Writer (LLM, agent `writer`) → Motion director (LLM, agent `motion`) → Reviewer (code, `reviewIntro()`) → Builder (code, `add_intro` op) | ✅ |
 | Explainer `/explain` | `plan_explainer` (storyboard, direction, one price) → `preview_explainer` (stills and a layout report the model fixes) → `add_explainer` (one video layer from the approved job); re-planned in every turn (#180) | ✅ (`studio.md` §5b) |
 | Shorts `cut_shorts` (only from a finished edit) | Segmenter (code) → Clip editor (LLM, agent `shorts`: picks candidates by id, writes hook, title and reason) → Clip reviewer (code, sends back once) → Builder (`make_short` op) → Renderer (`render_document` per short) → look check | ✅ |
@@ -217,7 +217,8 @@ edit finished is the founder's call only.
 and a hidden Assistant chat (open loop, unpredictable cost, unseen cards). The team owns how a video is made; the
 brain owns what the week needs.
 
-**A brain video, in order** (Brain · Studio agent team · Worker + fal · You). Hidden for now, with `/video`:
+**A brain video, in order** (Brain · Studio agent team · Worker + fal · You). The week plan still orders one until
+plan S2.5:
 
 1. Video brief (`write_video_brief`) → `build_video` order → the order holds its team allowance (`studio_order_hold`).
 2. Director writes the plan; the Reviewer checks it; one price for the whole video: keyframes, shots, voice-over,
