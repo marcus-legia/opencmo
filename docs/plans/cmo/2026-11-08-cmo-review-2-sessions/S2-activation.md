@@ -74,7 +74,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     is retried for ~20 s. Documents are edited in Library; the goal is on the plan card.
     Check: typecheck, `check:contracts`. The minutes on a preview are not measured from this session (no preview with
     a paid test account); the owner's checklist in the PR asks for it.
-- [ ] **S2.3 The rail follows the sketch.** `components/shell-v2/nav.ts`:
+- [x] **S2.3 The rail follows the sketch.** `4073ee9` `components/shell-v2/nav.ts`:
   - Dashboard (the inbox) first, then the departments in the sketch's order: Writer, Studio, Schedule; Editor stays
     last;
   - Research, Brain and Analytics stay reachable but do not lead.
@@ -92,6 +92,17 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - `AssistantPanel.tsx`: blank-edit starters drop `/video`; talking-head starters only when the edit has speech.
   - Update `video-usecases.check.ts` and the eval tasks so they do not expect `/video` in the web app.
   - Check: the slash menu on the preview, and the Assistant eval green.
+  - Note. Now: `/video` is offered wherever `create_video` is in `clipToolSpecs` (`slash.ts:45`, `scope.ts:163`); the
+    prompt routes "a whole video" to it (`prompt.ts:16`), and so does the blank guide (`guides.ts:410`); the input says
+    "commands like /video". Change: one switch, `CREATE_VIDEO_HIDDEN` in `lib/agent/hidden.ts`. `clipToolSpecs({ assistant: true })`
+    (the Assistant's scope and the slash-menu route) leaves `create_video` out, so the menu drops `/video` and a typed
+    `/video` is answered "not available here"; MCP lists it as before and Studio calls `scope.plan` by name. The prompt
+    and the blank guide say a whole AI video is not made here and offer an explainer, an intro or shots one by one.
+    Blank edits get blank starters; the talk starters need speech. The eval runs the web tool list: the six whole-video
+    tasks grade "none made, alternatives offered" while hidden (their graders stay). Check: `video-usecases.check`
+    (only `/video` leaves the menu), `agent-design.check`, `agent:eval --provider fake` 38/42: the 4 `explain-*` fail
+    the same on the base commit (no explainer preview worker here). Not done here: the slash menu and an
+    upload/cut/`/animate`/export with a looked-at frame on a preview (no local stack in this session).
 - [ ] **S2.5 The week plan has no AI video** (`plan-week.ts`):
   - remove the "one-minute AI video" item (`:35`) and the fallback that adds one when the brief says "video"
     (`:151`);

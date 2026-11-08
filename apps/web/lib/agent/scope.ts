@@ -68,6 +68,7 @@ import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
+import { CREATE_VIDEO_HIDDEN } from "./hidden";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, runCreateVideo, videoPieces, type JobSource } from "./create-video";
 import { saveKeyframes } from "./keyframe-library";
 import { prepareRedoKeyframe, redoKeyframeToolSpec, runRedoKeyframe, type ListKeyframe, type PreparedRedo } from "./long-take";
@@ -153,10 +154,14 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 }
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
-export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
+/**
+ * `assistant`: the web app's Assistant, where `/video` is hidden (`hidden.ts`). MCP lists the tools without it and keeps
+ * create_video; Studio calls `scope.plan` by name and does not read this list.
+ */
+export function clipToolSpecs(options: { blank?: boolean; assistant?: boolean } = {}): ToolSpec[] {
   const priced = [generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
-  const video = createVideoToolSpec();
+  const video = options.assistant && CREATE_VIDEO_HIDDEN ? null : createVideoToolSpec();
   const editTool = editToolSpec();
   const longTake = [redoKeyframeToolSpec()].filter((spec) => spec !== null);
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
@@ -252,7 +257,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   const explainerScope = () => ({ clipId, source: jobSource() });
   return {
     kind: "clip",
-    tools: clipToolSpecs({ blank }),
+    tools: clipToolSpecs({ blank, assistant: true }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();

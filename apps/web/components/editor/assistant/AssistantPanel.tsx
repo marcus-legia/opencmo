@@ -49,11 +49,15 @@ import { reportClientError } from "@/lib/client-errors";
 type LiveTurn = TurnView & { thinking?: string; activity?: Activity; lastEvent?: number };
 type Activity = { kind: "thinking" | "writing" | "tool" | "waiting"; tool?: string };
 
+/** For a video with speech: they cut and frame the talk. */
 const EXAMPLES = [
   "Tighten the pacing: cut filler words and long pauses",
   "Add a bold hook title for the first 3 seconds",
   "Make it square and check the speaker stays in frame",
 ];
+
+/** For a blank edit (nothing spoken yet): no talking-head starters, and no full AI video (`/video` is hidden). */
+const BLANK_EXAMPLES = ["Make an animated intro for this video", "Add a title card for the first 3 seconds"];
 
 /** Gợi ý chỉ có khi máy chủ bật model ảnh/video (học starter "Generate B-roll" của Palmier). */
 const BROLL_EXAMPLE = "Generate B-roll: AI shots for the lines that name something concrete";
@@ -576,7 +580,7 @@ export function AssistantPanel({
                 {ROUGHCUT_STARTER.label}
               </button>
             ) : null}
-            {(broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES).map((example) => (
+            {(speech ? (broll ? [...EXAMPLES, BROLL_EXAMPLE] : EXAMPLES) : BLANK_EXAMPLES).map((example) => (
               <button key={example} type="button" className="ed2-asst-example" disabled={busy || available === null} onClick={() => void send(example)}>
                 {example}
               </button>
@@ -637,7 +641,7 @@ export function AssistantPanel({
           <textarea
             ref={input}
             className="ed2-asst-input"
-            placeholder="Ask for an edit, or type / for commands like /video"
+            placeholder="Ask for an edit, or type / for commands like /broll"
             value={draft}
             rows={2}
             maxLength={4000}
