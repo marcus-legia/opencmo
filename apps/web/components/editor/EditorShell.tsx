@@ -1475,7 +1475,6 @@ function Workspace({
             run={run}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
             selection={selection}
-            onSelect={setSelection}
           />
         ) : null}
         <UploadPanel

@@ -57,7 +57,6 @@ export function TranscriptPanel({
   run,
   onSeek,
   selection = [],
-  onSelect,
 }: {
   doc: ClipDocument;
   context: () => OpContext;
@@ -67,8 +66,6 @@ export function TranscriptPanel({
   onSeek: (seconds: number) => void;
   /** Selected elements: a selected video with speech opens on its own transcript. */
   selection?: string[];
-  /** Selects elements: a video with no transcript is selected so the inspector offers Generate captions. */
-  onSelect?: (ids: string[]) => void;
 }) {
   // Which video's words the panel edits: the one picked here, else a selected video with speech,
   // else the main video (or the only one).
@@ -166,16 +163,11 @@ export function TranscriptPanel({
           {status === "loading"
             ? "Loading the transcript…"
             : missingWords
-              ? `We could not get the words of ${source!.name || "this video"}, so there is nothing to cut by words yet. If it has speech, make its transcript again with Generate captions in the inspector.`
+              ? `We could not get the words of ${source!.name || "this video"}, so there is nothing to cut by words yet. If it has speech, upload it again from the Upload tab: a new upload is transcribed again.`
               : status === "none"
                 ? "This clip has no video speech to edit. Add a voiceover with captions, or select a video or audio and use Generate captions in the inspector."
                 : "The transcript could not be loaded. Reload the page to try again."}
         </p>
-        {missingWords && onSelect ? (
-          <button type="button" className="ed2-btn" data-testid="transcript-retry" onClick={() => onSelect([source!.elementId])}>
-            Select the video to try again
-          </button>
-        ) : null}
         <div className="ed2-trn-text">
           <VoiceoverTranscript doc={doc} context={context} onSeek={onSeek} />
         </div>

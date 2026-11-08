@@ -105,9 +105,6 @@ export function ApprovalCard({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [declining, setDeclining] = useState(false);
-  /** Price card: the keyframe picker is open. */
-  const [redoing, setRedoing] = useState(false);
-  const [keyframe, setKeyframe] = useState(0);
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
@@ -259,8 +256,9 @@ export function ApprovalCard({
       case "script":
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
-        // Redo exists only for a contact sheet: a price for shots alone has no keyframe to make again.
-        return [primary(), ...(card.body.keyframes.length > 0 ? [{ label: "Redo a keyframe", variant: "secondary" as const, run: () => setRedoing(true) }] : []), ...declineAction];
+        // No keyframe redo from a card: the contact sheet went with the two-card /video (2026-11-06); `redo_keyframe` does it
+        // in the editor, and Studio fails a step decided "redo" (`studio-orders.ts`).
+        return [primary(), ...declineAction];
       case "finished_video":
         return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }, ...declineAction];
       case "shorts_batch":
@@ -451,38 +449,6 @@ export function ApprovalCard({
                 </Button>
                 <Button variant="quiet" compact onClick={() => setMoving(false)}>
                   Keep this time
-                </Button>
-              </div>
-            </form>
-          ) : redoing && card.body.kind === "price" ? (
-            <form
-              className="v2-card-decline"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run({ action: "redo", index: keyframe });
-              }}
-            >
-              <fieldset className="v2-field">
-                <legend>Which keyframe should be made again? Only that one is redone; its price comes on a new card.</legend>
-                <div className="v2-card-keyframes">
-                  {card.body.keyframes.map((frame) => (
-                    <label key={frame.index} className="v2-card-keyframe" title={frame.label}>
-                      <input type="radio" name={`${card.id}-keyframe`} value={frame.index} checked={keyframe === frame.index} onChange={() => setKeyframe(frame.index)} />
-                      <span>
-                        <span className="v2-visually-hidden">Keyframe </span>
-                        {String(frame.index + 1).padStart(2, "0")}
-                        {frame.garbled ? <span className="v2-visually-hidden"> (text may be garbled)</span> : null}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <div className="v2-actions">
-                <Button type="submit" variant="primary" compact disabled={busy}>
-                  Redo keyframe {keyframe + 1}
-                </Button>
-                <Button variant="quiet" compact onClick={() => setRedoing(false)}>
-                  Keep it
                 </Button>
               </div>
             </form>

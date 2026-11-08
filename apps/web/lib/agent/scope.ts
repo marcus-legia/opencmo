@@ -568,7 +568,15 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runPlanExplainer({ supabase, clipId, source }, input as PreparedExplainerPlan, randomUUID());
         return { outcome, extra: {}, wrote: false };
       }
-      if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
+      // A card for a step that no longer exists (the two-card /video's `animate_video`, gone 2026-11-06) closes as out of
+      // date, on Approve or Cancel, so the conversation can go on.
+      if (!PRICED_TOOLS.has(call.name)) {
+        return {
+          outcome: { ok: false, content: JSON.stringify({ error: "This step no longer exists. Nothing was charged; ask for it again." }), summary: "Out of date" },
+          extra: {},
+          wrote: false,
+        };
+      }
       const prepared = input as PreparedGeneration;
       if (!approved) {
         return {
