@@ -220,12 +220,15 @@ export class AssistantClient {
     // prompt again (a second paid turn). The next change or reload brings the version.
     const response = await fetch(`/api/v1/editor/document?clip_id=${encodeURIComponent(this.clipId)}`).catch(() => null);
     if (!response?.ok) return;
-    const latest = (await response.json().catch(() => null)) as { document: ClipDocument; version: number; document_hash?: string | null } | null;
+    const latest = (await response.json().catch(() => null)) as
+      | { document: ClipDocument; version: number; document_hash?: string | null; manifest?: unknown }
+      | null;
     if (!latest) return;
     // Not `adopt`: the tab's own library changes made during the turn still have to be saved.
     // A turn resumed after a reload has no group yet: it starts one here.
     this.group ??= `turn-${++this.turns}`;
-    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null, this.group);
+    // With the server's library: `/video` listed its keyframes and shots there during the turn.
+    this.session.rebase(latest.document, latest.version, latest.document_hash ?? null, this.group, latest.manifest);
   }
 
   /** POST rồi đọc stream tới hết. Lỗi trước khi stream mở (thiếu credit…) ném câu của server. */

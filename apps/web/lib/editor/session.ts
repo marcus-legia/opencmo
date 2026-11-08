@@ -16,6 +16,7 @@
  *   thử lại.
  */
 
+import { mergeLibrary } from "@opencmo/clip-assets";
 import { canonicalJson, validate, type ClipDocument } from "@opencmo/clip-doc";
 
 export type Saved = { version: number; document_hash: string };
@@ -250,9 +251,12 @@ export class DocumentSession {
 
   /**
    * Take a version the Assistant saved from this same tab. Its document replaces the tab's, but
-   * the library stays the tab's: the Assistant never writes the manifest, and a library change
-   * made meanwhile (a generation finishing, an upload) must still reach the server, now on top of
-   * the new version. `adopt` would mark it saved unsent, and Export would miss that media.
+   * the library stays the tab's: a library change made meanwhile (a generation finishing, an
+   * upload) must still reach the server, now on top of the new version. `adopt` would mark it saved
+   * unsent, and Export would miss that media.
+   * The Assistant does write the library too (`/video` and `redo_keyframe` list the pieces they
+   * started): pass the server's `manifest` and it is merged in (`mergeLibrary`). Without it the
+   * tab's next save dropped those records and the editor waited on the shots forever (2026-11-08).
    * A save already in flight was sent against the old version: a 409 from it is the Assistant's
    * own write, not another tab, so it must not stop autosave.
    * The Assistant's version is one Undo step: undoing it puts the tab's document back and saves it
@@ -261,10 +265,16 @@ export class DocumentSession {
    * undoes the whole turn instead of walking back through its half-finished writes. An edit, Undo
    * or Redo in between starts a new step.
    */
-  rebase(document: ClipDocument, version: number, documentHash: string | null, group?: string): void {
+  rebase(document: ClipDocument, version: number, documentHash: string | null, group?: string, manifest?: unknown): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.epoch++;
+    if (manifest !== undefined && manifest !== null) {
+      // `savedManifest` is what the tab last saved: what the tab removed since stays removed.
+      const base: unknown = this.savedManifest ? JSON.parse(this.savedManifest) : null;
+      this.manifest = mergeLibrary(base, this.manifest, manifest);
+      this.savedManifest = json(manifest);
+    }
     const savedJson = canonicalJson(document);
     if (savedJson !== canonicalJson(this.document)) {
       if (!group || group !== this.rebaseGroup) {
@@ -325,8 +335,9 @@ export class DocumentSession {
     this.inflight = (async () => {
       try {
         const saved = await this.transport.save(this.version, document, manifest);
-        // After a `rebase` the server still has this library (only this tab writes the manifest),
-        // but the document is the rebased one unless this save landed after it.
+        // The server now has this library (a `rebase` merged the server's into it before the save
+        // was sent, or the save was refused); the document is the rebased one unless this save
+        // landed after it.
         this.savedManifest = manifestJson;
         if (epoch === this.epoch || saved.version > this.version) {
           this.version = saved.version;
