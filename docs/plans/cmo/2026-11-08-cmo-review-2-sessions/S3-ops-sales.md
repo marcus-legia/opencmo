@@ -27,6 +27,14 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
   `OPENCMO_EMAIL_LIVE`) without its keys, or half a VAPID pair, is a problem. Limit: a Vercel Sensitive value comes back
   empty, so its mode cannot be read there (it is then listed with the unreadable ones). Check:
   `tests/test_check_deploy_env.py`.
+- **S3.3.** Now: the worker records fal and ElevenLabs as `<model id>:<unit>` (`opencmo/ai/spend.py`,
+  `worker/generate_task.py:329`), and `provider_prices` has only the ScrapeCreators row, so every media row is
+  unpriced. Change: migration `20270111010000_media_provider_prices.sql`, the list prices of 2026-11-08 for 12 units,
+  each PROVISIONAL until an invoice confirms it; seconds without model audio; ElevenLabs effects and music (recorded
+  once per generation) at their longest length. Unpriced on purpose, no price found: `gemini-voice`, `fal-kling-edit`,
+  `fal-seedvr-upscale`, `fal-veed-cutout`. Not recorded at all yet (out of scope, a note for the owner): Scribe
+  transcripts and the fal NSFW check. Data only, so `current.sql` does not change. Check:
+  `supabase/tests/257_media_provider_prices.test.sql`; the migration applied twice is a no-op.
 
 ## You own
 
@@ -74,7 +82,7 @@ Migrations, in this order, each with its own pgTAP test and the dump regenerated
     - list ScrapeCreators, Zernio (`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, `OPENCMO_PUBLISH_LIVE`), Resend and VAPID.
   - Add to both `.env.example` files: Zernio, `SUPABASE_JWT_SECRET`, `OPENCMO_WEB_URL`, `OPENCMO_LOOK_URL`/`TOKEN`, `NEXT_PUBLIC_OPENCMO_UI`, `OPENCMO_CMO_PAUSED`.
   - Engine `pytest` for `deploy_env`.
-- [ ] **S3.3 Price fal and ElevenLabs spend.**
+- [x] **S3.3 Price fal and ElevenLabs spend.**
   - Migration: `provider_prices` rows for fal and ElevenLabs, per unit the code records (`record_provider_usage` units in `generate_task.py`).
   - pgTAP test; `current.sql` regenerated.
 - [ ] **S3.4 ScrapeCreators shapes from real responses.**
