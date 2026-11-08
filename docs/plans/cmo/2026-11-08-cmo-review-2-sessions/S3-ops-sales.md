@@ -79,7 +79,7 @@ Plan: [`../2026-11-08-cmo-review-2-plan.md`](../2026-11-08-cmo-review-2-plan.md)
     hold, with its own pgTAP. (a) is smaller and touches no money path.
   - S2 asked for no Creem-cancel change, so none is here.
   - Tested on a local Postgres 16 with the Supabase roles stubbed (no Docker in the sandbox): every migration applies,
-    164 of 166 pgTAP files pass, and the one failing file (`249_cmo_review_plan_card`) fails the same way before these
+    166 of 167 pgTAP files pass, and the one failing file (`249_cmo_review_plan_card`) fails the same way before these
     changes. CI's run is the authoritative one.
 
 ## You own
