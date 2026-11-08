@@ -6,7 +6,8 @@
  * Đóng khi bấm ra ngoài hay Esc.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type MenuItem =
   | { kind?: "item"; label: string; shortcut?: string | null; disabled?: boolean; onSelect: () => void; testid?: string }
@@ -61,7 +62,11 @@ export function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () =>
   );
 }
 
-/** Nút mở menu + lớp menu. */
+/**
+ * The button and its menu. The menu is portaled to <body> at a fixed spot under the button: the top bar scrolls
+ * sideways in the app shell (`overflow-x: auto`) and blurs its backdrop, so a menu drawn inside it was clipped to the
+ * bar's 52 px and could not be clicked (2026-11-08).
+ */
 export function DropdownMenu({
   label,
   items,
@@ -74,11 +79,29 @@ export function DropdownMenu({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = box.current?.getBoundingClientRect();
+      if (!rect) return;
+      setAt({ x: Math.max(4, Math.min(rect.left, window.innerWidth - 228)), y: rect.bottom + 6 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const close = (event: Event) => {
-      if (event instanceof KeyboardEvent ? event.key === "Escape" : !box.current?.contains(event.target as Node)) setOpen(false);
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setOpen(false);
+        return;
+      }
+      const target = event.target as Node;
+      if (!box.current?.contains(target) && !layer.current?.contains(target)) setOpen(false);
     };
     window.addEventListener("pointerdown", close);
     window.addEventListener("keydown", close);
@@ -100,7 +123,14 @@ export function DropdownMenu({
       >
         {children}
       </button>
-      {open ? <MenuList items={items} onClose={() => setOpen(false)} /> : null}
+      {open && at
+        ? createPortal(
+            <div ref={layer} className="ed2-context ed2-menu-layer" style={{ left: at.x, top: at.y }}>
+              <MenuList items={items} onClose={() => setOpen(false)} />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

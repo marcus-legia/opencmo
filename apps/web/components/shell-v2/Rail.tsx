@@ -131,7 +131,7 @@ export function Rail(props: RailProps) {
       <div className="v2-rail-group v2-rail-foot">
         <RailLink entry={NAV_SETTINGS} props={props} />
         <Link href="/app/billing" className="v2-rail-credits" aria-label={credits === null ? "Credits" : `${credits} credits left`}>
-          <span className="v2-mono is-small is-muted">Credits</span>
+          <span className="v2-mono is-small is-muted v2-rail-credits-label">Credits</span>
           <span className="v2-rail-credits-value">{credits ?? "–"}</span>
         </Link>
         <details className="v2-rail-account">

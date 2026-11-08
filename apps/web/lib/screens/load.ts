@@ -995,7 +995,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
  */
 async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioScreen>> {
   type VideoOrder = { id: string; title: string; status: OrderDb["status"]; created_at: string; updated_at: string; error: { message?: string } | null; brief: { seconds?: number } };
-  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null } | null };
+  type Edit = { clip_id: string; document_hash: string; finished_at: string | null; finished_hash: string | null; updated_at: string; clips: { kind: "full" | "blank" | "short" | "slideshow"; hook: string | null; created_at: string } | null };
   const videos = supabase
     .from("work_orders")
     .select("id, title, status, created_at, updated_at, error, brief")
@@ -1006,7 +1006,7 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
     .then((r) => must(r, "work_orders") as VideoOrder[]);
   const edits = supabase
     .from("editor_projects")
-    .select("clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook)")
+    .select("clip_id, document_hash, finished_at, finished_hash, updated_at, clips(kind, hook, created_at)")
     .order("updated_at", { ascending: false })
     .limit(100)
     .then((r) => must(r, "editor_projects") as unknown as Edit[]);
@@ -1132,7 +1132,46 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
           edits: [],
         };
       });
-      return [...videoItems, ...batchItems, ...madeItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      // The founder's own edits made in the editor (/video, New edit, slideshows, shorts): saved from the first save,
+      // finished or not, so a video in progress is never only in an editor tab. Edits a work order or a shorts batch
+      // made already have their card above; an upload's edit ("full") is on its upload card.
+      const own = editRows.filter((e) => e.clips && e.clips.kind !== "full");
+      const ownIds = own.map((e) => e.clip_id);
+      const [stepClips, shortClips] = ownIds.length
+        ? await Promise.all([
+            supabase.from("studio_steps").select("clip_id").in("clip_id", ownIds).then((r) => must(r, "studio_steps") as { clip_id: string }[]),
+            supabase.from("shorts").select("short_clip_id").in("short_clip_id", ownIds).then((r) => must(r, "shorts") as { short_clip_id: string }[]),
+          ])
+        : [[], []];
+      const madeElsewhere = new Set([...stepClips.map((r) => r.clip_id), ...shortClips.map((r) => r.short_clip_id)]);
+      const editItems = own
+        .filter((e) => !madeElsewhere.has(e.clip_id))
+        .map((e) => {
+          const kind = e.clips!.kind === "slideshow" ? ("slideshow" as const) : e.clips!.kind === "short" ? ("short" as const) : ("video" as const);
+          const finished = !!e.finished_hash && e.finished_hash === e.document_hash;
+          const label = kind === "slideshow" ? "Slideshow" : kind === "short" ? "Short" : "Video";
+          return {
+            id: e.clip_id,
+            kind,
+            title: (e.clips!.hook?.trim() || `Untitled ${label.toLowerCase()}`).slice(0, 200),
+            subtitle: `${label} · ${finished ? "finished" : "in progress, saved"}`,
+            status: finished ? ("finished" as const) : ("ready" as const),
+            progress: null,
+            favorite: false,
+            createdAt: new Date(e.clips!.created_at).toISOString(),
+            editedAt: new Date(e.updated_at).toISOString(),
+            failure: null,
+            projectId: null,
+            editorHref: `/app/editor/${e.clip_id}`,
+            approvalId: editCards.get(e.clip_id) ?? null,
+            canMarkFinished: !finished && kind === "video",
+            clipId: e.clip_id,
+            documentHash: e.document_hash,
+            canCutShorts: finished && kind === "video",
+            edits: [],
+          };
+        });
+      return [...videoItems, ...batchItems, ...madeItems, ...editItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     team: async () => {
       const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);
