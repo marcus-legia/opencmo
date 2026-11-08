@@ -103,7 +103,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     (only `/video` leaves the menu), `agent-design.check`, `agent:eval --provider fake` 38/42: the 4 `explain-*` fail
     the same on the base commit (no explainer preview worker here). Not done here: the slash menu and an
     upload/cut/`/animate`/export with a looked-at frame on a preview (no local stack in this session).
-- [ ] **S2.5 The week plan has no AI video** (`plan-week.ts`):
+- [x] **S2.5 The week plan has no AI video** `df4a1ff` (`plan-week.ts`):
   - remove the "one-minute AI video" item (`:35`) and the fallback that adds one when the brief says "video"
     (`:151`);
   - a video item is a slideshow, or short clips cut from a finished edit of the founder's own video when one exists
@@ -125,6 +125,17 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
   - When transcription failed, the editor says so and offers a retry, instead of "no speech".
   - No connected account: the X draft card offers "Copy and open" and "I posted it" at once, and skips the schedule card (`components/cards/ApprovalCard.tsx`, the writer screen).
   - The Assistant's "Keep going for up to 10 more?" pause (`AssistantPanel.tsx`): check how often a single request hits it; if it is common, raise the step limit for that request.
+  - Note. Now: Library's Voice panel has a disabled "Add a note" (`LibraryScreen.tsx:129`; Setup's disabled Connect went
+    with S2.2); `UploadPanel` aborts the transfer on unmount with no warning (`:96`); a video whose transcript never came
+    shows "no video speech" (`TranscriptPanel.tsx:163`); a post with no connected account still gets an `intent` slot and a
+    schedule card (`schedule_propose`). Change: the disabled button is gone; while a file is sending, closing the tab or
+    following a link to another page asks first, and the progress says to keep the page open; a video in the edit with
+    no transcript says the words could not be got and offers "Select the video to try again" (the inspector's Generate
+    captions). Not done: the X card's "Copy and open" + "I posted it" needs one SQL change (request in S3's file); the
+    client part waits for it. The Assistant's "Keep going for up to 10 more?" is the per-request credit budget, not a
+    step limit (`MAX_STEPS` is 40); how often it shows needs production data: `select count(*) filter (where
+    pause_reason = 'budget') * 1.0 / count(*) from agent_turns where created_at > now() - interval '14 days'` (owner).
+    Check: typecheck, `layout.check`.
 - [ ] **S2.7 Copy and price fixes from the 2026-11-06 review:**
   - Terms: a Creem cancel ends the plan at once (`app/(legal)/terms/page.tsx`). Either say that, or ask S3 for a migration that keeps the plan until the period ends; owner's call, write it in the PR.
   - `llms.txt` and the blog CTA read the catalogue at request time, not at build time, and say nothing about AI video.

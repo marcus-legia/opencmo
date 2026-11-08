@@ -125,11 +125,6 @@ function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { voice: bo
       white
       title={<>Voice {sample.voice && <SampleTag />}</>}
       sub="Learned from your edits; newer notes win when two disagree. Delete any you don't agree with."
-      actions={
-        <Button compact disabled title="Notes are added from your edits for now">
-          Add a note
-        </Button>
-      }
     >
       <div className="scr-rows">
         {notes.length === 0 && <p className="scr-row scr-muted">No notes yet. Writer learns them from what you change in its drafts.</p>}
