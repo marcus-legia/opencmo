@@ -35,7 +35,7 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 
 ## Todo
 
-- [ ] **S2.1 Paid-first entry, honest copy, the CMO pitch.**
+- [x] **S2.1 Paid-first entry, honest copy, the CMO pitch.** `0d6353a`
   - Landing (`Hero.tsx`, `LandingNav.tsx`, `PricingSection.tsx`, `FaqSection.tsx`, `data.ts`):
     - drop "Start free";
     - lead with the AI CMO: it reads your website, plans your week, writes the posts, slides and scripts, and you
@@ -64,6 +64,16 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
     the first slideshow is built, an account when the first post is scheduled);
   - remove the disabled Connect step (line 276).
   - Check: minutes from website submitted to the first draft card, on the preview, written in the PR.
+  - Note. Now: Setup has five steps (`SetupScreen.tsx`), the Connect button is disabled (`:276`), and the first plan
+    waits for the Monday loop (`lib/cmo/loops.ts:40`) or a button. `runOnboarding` (`lib/cmo/onboard.ts`) only writes
+    the documents.
+    Change: Setup is the website step only and sends the founder to the Dashboard. On a founder's first onboarding,
+    `runOnboarding` queues `plan_week` and `post_draft` as ordinary runs (1 credit each, same caps and holds) and
+    `kickCmoRunsInOrder` (`jobs/start.ts`) runs them one after the other after the response, so the draft reads the
+    plan's first post; the sweep picks up whatever the time limit cuts. A founder back from Creem before the webhook
+    is retried for ~20 s. Documents are edited in Library; the goal is on the plan card.
+    Check: typecheck, `check:contracts`. The minutes on a preview are not measured from this session (no preview with
+    a paid test account); the owner's checklist in the PR asks for it.
 - [ ] **S2.3 The rail follows the sketch.** `components/shell-v2/nav.ts`:
   - Dashboard (the inbox) first, then the departments in the sketch's order: Writer, Studio, Schedule; Editor stays
     last;
