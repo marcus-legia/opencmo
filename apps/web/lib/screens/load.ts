@@ -950,7 +950,13 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         };
       });
       // A script the founder records (2026-11-09): its card while it waits, then "Open in editor" once approved.
-      const scriptCard = new Map((must(scriptCards, "approvals") as { id: string; ref_id: string; status: string }[]).map((c) => [c.ref_id, c]));
+      // A script can have older cards (a refreshed card cancels the one before): the live one, else the decision, wins.
+      const rank = (status: string) => (status === "waiting" || status === "held" ? 2 : status === "approved" || status === "edited" ? 1 : 0);
+      const scriptCard = new Map<string, { id: string; ref_id: string; status: string }>();
+      for (const c of must(scriptCards, "approvals") as { id: string; ref_id: string; status: string }[]) {
+        const seen = scriptCard.get(c.ref_id);
+        if (!seen || rank(c.status) > rank(seen.status)) scriptCard.set(c.ref_id, c);
+      }
       const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string; storyboard?: unknown }; due_at: string | null; created_at: string }[]).map((o) => {
         const card = Array.isArray(o.brief.storyboard) ? scriptCard.get(o.id) : undefined;
         const waiting = card?.status === "waiting" || card?.status === "held";
@@ -962,7 +968,8 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           at: null,
           dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
           title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
-          column: waiting ? ("waiting" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
+          // An approved script is the founder's next video to record, not something posted.
+          column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
           versions: 1,
           note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : "You skipped it") : o.status === "done" ? "Fed the Studio team" : null,
           approvalId: waiting ? card!.id : null,

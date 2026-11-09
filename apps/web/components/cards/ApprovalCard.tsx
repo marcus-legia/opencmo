@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { api, ApiError } from "@/components/clipping/api";
+import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
 import { isPublishPlatform } from "@/lib/departments/publish/types";
@@ -30,6 +30,7 @@ import {
   SlideshowBody,
 } from "./bodies";
 import { useConnectedPlatforms } from "./connected";
+import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
@@ -190,8 +191,7 @@ export function ApprovalCard({
     const orderId = card.body.stepId;
     if (!(await run(decision)) || sample) return;
     try {
-      const { clipId } = await api<{ clipId: string }>(`/cmo/scripts/${encodeURIComponent(orderId)}/open`, { method: "POST" });
-      window.location.assign(`/app/editor/${encodeURIComponent(clipId)}`);
+      await openScript(orderId);
     } catch (error) {
       toast(error instanceof ApiError ? `Script approved. ${error.message}` : "Script approved, but the editor did not open. Try again from the Writer screen.");
     }

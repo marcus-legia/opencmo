@@ -1720,18 +1720,7 @@ begin
           raise exception 'Choose approve, edit a beat or cancel.' using errcode = '22023';
         end if;
         if p_action = 'edit' then
-          if jsonb_typeof(v_payload->'beat') is distinct from 'number'
-             or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
-            raise exception 'Say which beat to change.' using errcode = '22023';
-          end if;
-          v_n := (v_payload->>'beat')::numeric::integer;
-          v_text := trim(coalesce(v_payload->>'text', ''));
-          if v_n < 0 or v_n >= jsonb_array_length(v_row.snapshot->'beats') then
-            raise exception 'That beat is not in the script.' using errcode = '22023';
-          end if;
-          if char_length(v_text) not between 1 and 300 then
-            raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
-          end if;
+          select b.beat, b.words into v_n, v_text from public.approval_script_beat(v_row.snapshot->'beats', v_payload) b;
           -- The founder's words are the script they record: kept on the order, the card closes as edited.
           update public.work_orders set brief = jsonb_set(brief, array['storyboard', v_n::text, 'say'], to_jsonb(v_text)),
             updated_at = now()
@@ -1740,6 +1729,11 @@ begin
         else
           perform public.approval_close(v_row.ref_kind, v_row.ref_id, case p_action when 'cancel' then 'skipped' else 'approved' end);
         end if;
+        -- The calendar item: approved, the founder records it; cancelled, it is skipped.
+        update public.content_items c set status = case p_action when 'cancel' then 'skipped' else 'approved' end,
+          decided_at = now(), updated_at = now()
+        from public.work_orders o
+        where o.id = v_row.ref_id and c.id = o.item_id and c.user_id = v_user and c.status in ('planned', 'drafting', 'in_review');
       else
       if (v_row.kind = 'script' and p_action not in ('approve', 'edit', 'cancel'))
          or (v_row.kind = 'price' and p_action not in ('approve', 'redo', 'cancel')) then
@@ -1751,18 +1745,7 @@ begin
         raise exception 'This card was already decided.' using errcode = 'P0001';
       end if;
       if p_action = 'edit' then
-        if jsonb_typeof(v_payload->'beat') is distinct from 'number'
-           or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
-          raise exception 'Say which beat to change.' using errcode = '22023';
-        end if;
-        v_n := (v_payload->>'beat')::numeric::integer;
-        v_text := trim(coalesce(v_payload->>'text', ''));
-        if v_n < 0 or v_n >= jsonb_array_length(v_row.snapshot->'beats') then
-          raise exception 'That beat is not in the script.' using errcode = '22023';
-        end if;
-        if char_length(v_text) not between 1 and 300 then
-          raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
-        end if;
+        select b.beat, b.words into v_n, v_text from public.approval_script_beat(v_row.snapshot->'beats', v_payload) b;
         -- The order runner plans the storyboard again with these words (`next`, added in 20261228120000): queued
         -- like any other Studio step, so it waits while the founder's CMO is paused and is retried.
         update public.studio_steps set status = 'cancelled', decision = 'edit', decided_at = now(),
@@ -2046,6 +2029,31 @@ begin
     end if;
   end loop;
   return v_n;
+end;
+$$;
+
+
+--
+-- Name: approval_script_beat(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_script_beat(p_beats jsonb, p_payload jsonb, OUT beat integer, OUT words text) RETURNS record
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+begin
+  if jsonb_typeof(p_payload->'beat') is distinct from 'number'
+     or (p_payload->>'beat')::numeric <> trunc((p_payload->>'beat')::numeric) then
+    raise exception 'Say which beat to change.' using errcode = '22023';
+  end if;
+  beat := (p_payload->>'beat')::numeric::integer;
+  words := trim(coalesce(p_payload->>'text', ''));
+  if beat < 0 or beat >= coalesce(jsonb_array_length(p_beats), 0) then
+    raise exception 'That beat is not in the script.' using errcode = '22023';
+  end if;
+  if char_length(words) not between 1 and 300 then
+    raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
+  end if;
 end;
 $$;
 
@@ -14667,7 +14675,8 @@ begin
   -- A script (owner, 2026-11-09): no video waits on this brief. Its storyboard goes on the order and a script card asks
   -- the founder; they record the video themselves.
   if new.kind = 'write_video_brief'
-     and not exists (select 1 from public.work_orders where user_id = new.user_id and new.id = any(depends_on)) then
+     and not exists (select 1 from public.work_orders where user_id = new.user_id and new.id = any(depends_on)
+                     and status not in ('done', 'failed', 'cancelled')) then
     if new.status = 'done' then
       begin
         select r.output->'brief', r.output->'sources' into v_brief, v_sources from public.cmo_runs r where r.id = new.run_id;
@@ -14683,7 +14692,12 @@ begin
                 'storyboard', v_brief->'storyboard', 'sources', v_sources, 'brief_from', 'writer')),
               updated_at = now()
           where id = new.id;
-          perform public.approval_raise(new.user_id, 'work_order', new.id);
+          -- The plan dropped its item while it was being written: no card for a video the founder removed.
+          if new.item_id is not null then
+            perform public.approval_raise(new.user_id, 'work_order', new.id);
+            update public.content_items set status = 'in_review', updated_at = now()
+            where id = new.item_id and status in ('planned', 'drafting');
+          end if;
         else
           perform public.work_order_event(new, 'note', 'Writer could not write the script for “' || new.title || '”');
         end if;
@@ -14929,10 +14943,11 @@ begin
     order by c.day, c.created_at
   loop
     update public.work_orders set item_id = v_item.id, updated_at = now()
-    where id = (select id from public.work_orders where root_id = v_root.id and kind = 'write_video_brief' and item_id is null
-                  and created_by = 'loop' and status not in ('done', 'failed', 'cancelled')
-                  and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and id = any(v.depends_on))
-                order by created_at, title limit 1);
+    where id = (select b.id from public.work_orders b where b.root_id = v_root.id and b.kind = 'write_video_brief'
+                  and b.item_id is null and b.created_by = 'loop' and b.status not in ('done', 'failed', 'cancelled')
+                  and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and b.id = any(v.depends_on)
+                                  and v.status not in ('done', 'failed', 'cancelled'))
+                order by b.created_at, b.title limit 1);
   end loop;
   -- Videos the new plan dropped that have not started.
   for v_item in
@@ -14967,6 +14982,17 @@ begin
     loop
       perform public.cmo_refund_run(v_run);
     end loop;
+  end loop;
+
+  -- A script whose item the new plan dropped after it was written: its waiting card goes (a run under way raises
+  -- none, `work_orders_brief_rules`).
+  for v_item in
+    select b.id from public.work_orders b
+    where b.root_id = v_root.id and b.kind = 'write_video_brief' and b.item_id is null and b.status = 'done'
+      and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and b.id = any(v.depends_on)
+                      and v.status not in ('done', 'failed', 'cancelled'))
+  loop
+    perform public.approval_close('work_order', v_item.id, 'cancelled');
   end loop;
 
   -- Niche video research (P5 R2): once a week, when the plan has a new video item. Its briefs wait on it, so Writer

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { api } from "@/components/clipping/api";
+import { openScript } from "@/components/cards/open-script";
 import { Button, ButtonLink, Tabs } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 import { WRITER_COLUMNS, WRITER_KINDS, type WriterScreen as Data } from "@/lib/screens/writer";
@@ -105,8 +105,7 @@ function OpenScript({ orderId }: { orderId: string }) {
   async function open() {
     setState("busy");
     try {
-      const { clipId } = await api<{ clipId: string }>(`/cmo/scripts/${encodeURIComponent(orderId)}/open`, { method: "POST" });
-      window.location.assign(`/app/editor/${encodeURIComponent(clipId)}`);
+      await openScript(orderId);
     } catch {
       setState("failed");
     }

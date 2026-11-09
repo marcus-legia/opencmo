@@ -74,6 +74,7 @@ const tables: Record<string, Row[]> = {
     { id: "card-batch", ref_kind: "short_batch", ref_id: "batch-1", status: "waiting" },
     { id: "card-time", ref_kind: "schedule_slot", ref_id: "sl-wait", status: "waiting" },
     { id: "card-script", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "approved", created_at: now },
+    { id: "card-script-old", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "cancelled", created_at: now },
   ],
   shorts: [{ short_clip_id: "clip-short", batch_id: "batch-1", created_at: now }],
   cmo_corrections: [
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
   assert.ok(writer.live.drafts && writer.live.voice, "Writer's drafts and voice are live");
   const drafts = new Map(writer.data.drafts.map((d) => [d.id, d]));
   assert.deepEqual([...drafts.keys()].sort(), ["b-1", "b-3", "c-tt", "c-yt", "p-li", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
-  assert.deepEqual([drafts.get("b-3")!.scriptId, drafts.get("b-3")!.note, drafts.get("b-1")!.scriptId ?? null], ["b-3", "Approved: you record it", null],
+  assert.deepEqual([drafts.get("b-3")!.scriptId, drafts.get("b-3")!.note, drafts.get("b-3")!.column, drafts.get("b-1")!.scriptId ?? null], ["b-3", "Approved: you record it", "scheduled", null],
     "an approved script opens in the editor; a brief without a storyboard does not");
   assert.deepEqual(
     ["p-x", "p-li", "p-th"].map((id) => [drafts.get(id)!.platform, drafts.get(id)!.column]),

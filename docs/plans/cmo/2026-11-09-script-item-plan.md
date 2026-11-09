@@ -112,8 +112,20 @@ The week plan orders **a script and a storyboard** for a video the founder makes
   then calls `cmo_script_open`: one blank edit per script, kept on the order. Next, `/api/v1/cmo/scripts/[id]/open`
   sets one marker per beat, skipping markers already placed. The Writer screen offers "Open in editor →" for
   approved scripts.
-- Tests: pgTAP 273 and the 7 updated files; writer, jobs, studio-orders, screens and load checks.
-- **Not done:** the CMO eval case and the e2e of the card.
+- Tests:
+  - pgTAP 273 and the 7 updated files;
+  - the writer, jobs, studio-orders, screens, load and script-markers checks;
+  - e2e `ui-v2-script`: card → approve → editor with 3 markers → the Writer screen opens the same edit.
+- Code review fixes (2026-11-09):
+  - the replan's relink names its candidate;
+  - the calendar item follows the card (`in_review`, then `approved` or `skipped`), so a replan keeps a written
+    script;
+  - a script whose item was dropped raises or keeps no card;
+  - the markers go in one write with a version check;
+  - the Writer board puts an approved script in "Scheduled" and reads the live card first;
+  - one beat check (`approval_script_beat`);
+  - one `openScript` helper.
+- **Not done:** a CMO eval case for a week with a script.
 
 ### C2 The founder's finished video goes out
 
