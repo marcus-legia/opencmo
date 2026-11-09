@@ -36,7 +36,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 |---|---|---|---|
 | Agents | `lib/cmo/agents/registry.ts` | 20 agents in two tiers, all on Claude: Sonnet for drafting and planning, Haiku for checks, translation and picks. The only per-agent setting is `CMO_AGENT_<ID>_MODEL` (and its own `CMO_AGENT_<ID>_API_KEY`) | ✅ |
 | Two brains | `lib/cmo/brain.ts`, `jobs/think.ts` | `opencmo` (our keys, credits) or `claude` (founder's Claude over MCP; model calls become inbox requests and replay with the answer) | ✅ |
-| CMO chat | `lib/agent/scope.ts` (`cmoScope`), `cmo-tools.ts` | Assistant loop, 11 CMO tools (`read_doc`, `list_calendar`, `list_approvals`, `create_task`, `remember`, `read_skill`, `read_site`, `get_run_result`, `set_week_goal`, `update_document`, `open_screen`) + the research tools | ✅ · 🟡 `create_task{agent:"sales"}` starts a paid scan with no card (plan S3.5) |
+| CMO chat | `lib/agent/scope.ts` (`cmoScope`), `cmo-tools.ts` | Assistant loop, 11 CMO tools (`read_doc`, `list_calendar`, `list_approvals`, `create_task`, `remember`, `read_skill`, `read_site`, `get_run_result`, `set_week_goal`, `update_document`, `open_screen`) + the research tools | ✅; a Sales scan or competitor research stops at a price card (S3.5) |
 | Job queue | `cmo_runs`, `jobs/runner.ts` | 12 job kinds (`lib/cmo/jobs/types.ts`) plus `onboard`; steps logged, lease, defer, credit hold, daily limit | ✅ |
 | Loops | `lib/cmo/loops.ts` | 7 loops with cadence and condition; the daily cron enqueues what is due | ✅ |
 | Work orders | `work_orders`, `work_order_events` | the week's tree beside `cmo_runs`: one root a week, an order per plan item, children per department; a run's order follows it (`work_orders_follow_run`) | ✅ |
@@ -329,8 +329,7 @@ kill switch, morning digest · **B3** capability registry, event rules, the shar
 The weekly budget became a hard gate in the CMO review (B3.1–B3.2, `20270107010000`).
 
 Done in the CMO review 2 plan: the first week within minutes of paying (S2.2) and a week plan without AI video (S2.5).
-What is left for the brain, ranked by the CMO loop: a price card before every Sales scan (S3.5), and fewer cards a
-week (its own plan).
+A Sales scan or competitor research asked in the CMO chat stops at a price card (S3.5). What is left for the brain, ranked by the CMO loop: the script item (the week plan orders a script and storyboard for a video the founder makes, owner 2026-11-09), and fewer cards a week (its own plan).
 
 ## 12. Decisions for the owner
 

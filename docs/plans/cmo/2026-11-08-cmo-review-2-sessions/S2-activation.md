@@ -234,4 +234,5 @@ _(other sessions write here)_
 
 - **From S3 (S3.5):** the Vietnamese comment above `chatReadBucket` in `lib/agent/scope.ts` (your side of the line)
   says the CMO chat has no approval cards. Since S3.5 a Sales scan or competitor research stops at a price card. Please
-  translate it and say so, or delete it (`cmoScope` now carries its own comment).
+  translate it and say so, or delete it (`cmoScope` now carries its own comment). *Done 2026-11-09: deleted, and the
+  Vietnamese comment on `checkBlock` translated.*

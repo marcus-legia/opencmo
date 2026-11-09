@@ -94,11 +94,13 @@ S1.1 → S1.2 → S1.3 → S1.4 → S1.5. Last of all, once S2 and S3 have pushe
     - the S2 and S3 items of this plan.
   - Date it 2026-11-08 and cite PRs #169–#180.
   - Write it in Vietnamese, as before (it is for the owner).
-- [ ] **S1.6 Final pass.** After S2 and S3 push their last commits:
+- [x] **S1.6 Final pass.** After S2 and S3 push their last commits:
   *S2 half done (2026-11-08, S2 at `6ce5c69`): paid-first entry, setup as the website step and the first week at once,
   the rail, `/video` hidden behind `CREATE_VIDEO_HIDDEN`, the week plan without AI video, the S2.6 part and the S2.8
   cleanup are in the pages and the artifact (version 5). Waiting on S3 (no commits yet): Costs page live checks, the
-  Sales price card, and the PR description.*
+  Sales price card, and the PR description.* *S3 half done (2026-11-09): Costs live checks, the deploy check, priced
+  fal and ElevenLabs spend, the Sales price card and "Scan now" are in the pages and `ARCHITECTURE.md`; the owner's
+  2026-11-09 decision (the founder makes the videos) too; the PR description is updated.*
   - add their changes to the pages: Costs live checks, the Sales price card, paid-first entry with the CMO's first
     week, `/video` hidden, the week plan without AI video;
   - update the artifact's "open" list;

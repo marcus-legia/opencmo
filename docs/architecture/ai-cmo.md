@@ -27,7 +27,7 @@ flowchart TB
 | Brain | ✅ context (memories, lessons, corrections; reads the Library) · ✅ planning (`plan_week`, `review_week`, `cmo_goals`, `plan` card) · ✅ dispatch (`work_orders` tree beside `cmo_runs`) · ✅ shared gates (credits, Creem moderation, approval, weekly budget, kill switch) | `lib/cmo/`, `lib/cmo/jobs/` |
 | 1 Research | ✅ competitors, outlier posts · ✅ niche short video · ✅ Reddit, X, Hacker News · ✅ metrics after posting · ✅ reply outcomes | `jobs/competitor-research.ts`, `niche-video-research.ts`, `pull-metrics.ts`, `lib/cmo/social/` |
 | 2 Writer | ✅ posts and threads for X, Threads, LinkedIn · ✅ captions for Instagram, TikTok, YouTube · ✅ video brief · ✅ slide text · ✅ no-ai-slop in every writing prompt · ❌ article (later, owner 2026-11-08) | `lib/cmo/writer/`, `jobs/draft-post.ts`, `draft-thread.ts`, `lib/cmo/platforms.ts` |
-| 3 Sales | ✅ find Reddit threads · ✅ scored with evidence · ✅ subreddit rules, rare product mentions · ✅ reply drafts, the founder posts · 🟡 a scan from the chat has no price card (plan S3.5) | `jobs/sales-scan.ts` |
+| 3 Sales | ✅ find Reddit threads · ✅ scored with evidence · ✅ subreddit rules, rare product mentions · ✅ reply drafts, the founder posts · ✅ a price card before every scan, from the chat or the Sales screen (S3.5–S3.6) | `jobs/sales-scan.ts` |
 | 4 Studio | ✅ edit your own video, mark it finished · ✅ shorts from a finished edit · ✅ slideshow (MP4 and PNG set) · 🟡 post image (built, no caller yet) · ✅ look check · ✅ slash commands; `/video` built, hidden in the web app (S2.4) · ✅ `render_document` → MP4 | `lib/departments/studio/`, `lib/agent/` |
 | 5 Schedule | ✅ time per platform in the founder's timezone · ✅ best time from data, gaps, caps · ✅ schedule cards | `schedule_slots`, `best_slots`, `lib/cmo/schedule.ts` |
 | 6 Publish | ✅ Zernio for X, Threads, LinkedIn, TikTok, Instagram, YouTube · ✅ intent link as the fallback · ✅ signed webhook with receipts | `lib/departments/publish/`, `app/api/webhooks/zernio` |
@@ -137,15 +137,12 @@ dubbing or lip-sync. Production enables AI images and video only with a live Cre
 - `provider_usage`: one row per paid provider call (CMO model calls, ScrapeCreators lookups, fal and ElevenLabs
   media), in micro-USD per founder, priced when written. Model calls are priced from `agent_model_prices`, the same
   list the Assistant is charged from; `provider_prices` holds the other units. A call with no price row is stored with
-  `priced = false`, never guessed. fal and ElevenLabs are recorded unpriced today (plan S3.3 adds their prices).
+  `priced = false`, never guessed. fal and ElevenLabs units are priced since S3.3 (`20270111010000_media_provider_prices.sql`, list prices of 2026-11-08, marked provisional); four models whose price was not found stay unpriced on purpose.
 - `provider_spend_cap`: a daily safety cap per founder ($5 by default); read paths ask `provider_spend_allowed` before
   they spend.
 - The Costs page (`app/app/settings/costs/page.tsx`) is for the owner only (`app_owners`, `provider_spend_report`):
   seven days of spend per provider, and the switches from `lib/ops/switches.ts`: UI v2, email, web push, Zernio
-  posting and webhook, Creem, the social reader (ScrapeCreators), the Modal clock, MCP and the global kill switch. A
-  switch only says whether a variable is set: it does not call the provider, so a bad key shows green. There is no row
-  at all for Anthropic, fal or ElevenLabs, which is why the Anthropic 401 of 2026-11-08 showed nowhere. Plan S3.1
-  adds a live check per provider.
+  posting and webhook, Creem, the social reader (ScrapeCreators), the Modal clock, MCP and the global kill switch. Since S3.1 (`lib/ops/providers.ts`) Anthropic, fal, ElevenLabs, Creem and ScrapeCreators each get a live row: the cheapest authenticated read their API offers, cached for five minutes, one check in flight per provider, never printing a key. A row says not set, invalid key, test key in production, or ok; motion is judged from its configuration. The deploy check (`packages/engine/opencmo/deploy_env.py`) compares the Creem key mode between Vercel and the worker and lists Zernio, Resend, VAPID and ScrapeCreators (S3.2).
 
 ## 5. Content lifecycle
 
@@ -243,8 +240,8 @@ profiles, voice is learned from edits, and email and push exist. What the audits
 | A new founder hits walls before the CMO works | signup gives 0 credits while the landing said "Start free"; a five-step setup | **fixed in S2.1–S2.2**: paid-first entry, honest copy, setup is the website step and the first week starts at once |
 | The week plan orders the most expensive job | `plan-week.ts` planned a one-minute AI video | **fixed in S2.5** |
 | A finished long video cannot be posted | `schedule_propose` makes slots only for posts, shorts and slideshows | open |
-| A broken provider key does not show | the Costs page has no Anthropic, fal or ElevenLabs row, and its Creem and ScrapeCreators rows only check that a variable is set (`lib/ops/switches.ts`) | plan S3.1–S3.2 |
-| Sales spends without a card | `create_task{agent:"sales"}` starts a 5-credit scan with no card (`lib/agent/cmo-tools.ts`) | plan S3.5 |
+| A broken provider key does not show | the Costs page has no Anthropic, fal or ElevenLabs row, and its Creem and ScrapeCreators rows only check that a variable is set (`lib/ops/switches.ts`) | **fixed in S3.1–S3.2** |
+| Sales spends without a card | `create_task{agent:"sales"}` starts a 5-credit scan with no card (`lib/agent/cmo-tools.ts`) | **fixed in S3.5–S3.6**: a price card in the chat and behind "Scan now"; the dead finish button is removed |
 | The post image squad has no caller | nothing outside the acceptance runs creates a `build_post_image` order | open |
 | The `moderation` agent's role text still says it checks prompts | `lib/cmo/agents/registry.ts`; it now reviews outputs only | small fix, out of this plan |
 
@@ -255,8 +252,8 @@ Editor work comes after.
 
 1. Paid-first entry and the first week within minutes (done: S2.1–S2.3; the rail follows the loop, `components/shell-v2/nav.ts`).
 2. `/video` hidden and the week plan without AI video (done: S2.4–S2.5).
-3. No dead ends, one card per job, Sales behind a card (S2.6 partly done; S3.5–S3.6).
-4. Providers you can see: Costs page rows, deploy check, priced fal and ElevenLabs spend (S3.1–S3.4).
+3. No dead ends, one card per job, Sales behind a card (done: S2.6, S3.5–S3.6).
+4. Providers you can see: Costs page rows, deploy check, priced fal and ElevenLabs spend (done: S3.1–S3.3; S3.4's fixtures wait for the owner to run the capture script with the real key).
 5. Owner: the Anthropic key everywhere, Creem live key and review, Zernio checks, Vercel Hobby.
 6. Then fewer cards a week, one Assistant, and the editor (their own plans).
 

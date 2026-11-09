@@ -21,8 +21,7 @@ mentions, excluded subreddits, co-occurrence); the closed loop (reply outcomes, 
 source for both departments.
 
 **Left:** R0, the data check (owner: whether ScrapeCreators' terms and Reddit's data terms allow a paid product to
-read them), before new Sales lead types. Sales breaks "charge before running" in two places: a scan started from the
-CMO chat shows no card, and "Add N credits and finish" is a disabled button (plan S3.5–S3.6).
+read them), before new Sales lead types. Sales charges before running since S3.5–S3.6: a scan asked in the CMO chat stops at a price card, "Scan now" on the Sales screen shows the same card, and the dead "Add N credits and finish" button is removed (a scan holds its credits before it starts and runs in one go).
 
 ## 2. Research and Sales as built (`main`, `4f70a59`)
 
@@ -40,7 +39,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Rare product mentions | `sales-scan.ts` (`recentMentions`, `waitingMentions`) | about 1 reply in 10 may name the product; past it, help only | ✅ |
 | Decisions | `cmo_decide_opportunity` | replied or dismissed; dismiss reason → memory; outcome row | ✅ |
 | Reply outcomes | `jobs/reply-outcomes.ts` | a few days after "replied", re-reads the thread for answers or votes | ✅ |
-| A card before a scan | `lib/agent/cmo-tools.ts` (`create_task`), `components/screens/sales/SalesScreen.tsx` | the chat starts a 5-credit scan with no card; the screen cannot start a scan | 🟡 plan S3.5–S3.6 |
+| A card before a scan | `lib/agent/cmo-tools.ts` (`create_task`), `components/screens/sales/SalesScreen.tsx` | a price card in the chat and behind "Scan now"; nothing is held before Approve | ✅ S3.5–S3.6 |
 | Data terms (R0) | — | ScrapeCreators' and Reddit's terms for a paid product | ❌ owner |
 | New lead types ([spec](../plans/cmo/2026-10-31-sales-finder-spec.md) F1–F10) | — | wait on R0 | ❌ |
 
@@ -93,7 +92,7 @@ An insight without a URL from the data read is dropped. `cmo_insights.kind` is `
 | Outcome check | a few days after "replied", re-read the thread for replies or votes on the founder's reply; store it with the outcome | ✅ |
 | Excluded subreddits and co-occurrence | per-founder lists (`sales_settings`); queries needing two terms together | ✅ |
 | More sources | Hacker News (free) | ✅; X and Threads conversations wait on R0 |
-| A price card before every scan | `cmoScope.plan()` prices `create_task{agent:"sales"}` like every paid tool | 🟡 plan S3.5 |
+| A price card before every scan | `cmoScope.plan()` prices `create_task{agent:"sales"}` like every paid tool | ✅ S3.5 |
 
 Unchanged by design: Sales has no post button; the card copies the reply and opens the thread; the founder posts by
 hand and marks it replied.
@@ -117,9 +116,7 @@ agreement, or Sales on other sources (Hacker News, X, Threads) first.
 Built: **R1** Sales safety · **R2** research for Studio · **R3** the closed loop (reply outcomes, Zernio metrics) ·
 **R4** Hacker News. Not built: **R0**, the data check, which the owner answers before new Sales lead types.
 
-What is left, ranked by the CMO loop (owner, 2026-11-08): no Sales scan spends credits without a card, and the Sales
-screen's buttons work (plan S3.5–S3.6); ScrapeCreators' response shapes checked against real responses (S3.4); then
-R0.
+What is left, ranked by the CMO loop (owner, 2026-11-08): ScrapeCreators' response shapes checked against real responses (S3.4 built the capture script and the checks; the owner runs it once with the real key, until then the fixtures are marked assumed); then R0. Done: no Sales scan spends credits without a card (S3.5–S3.6).
 
 ## 10. Decisions for the owner
 

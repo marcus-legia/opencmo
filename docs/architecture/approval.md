@@ -19,9 +19,7 @@ card but never decide it (digest, email, web push); a daily card budget; every d
 MCP's signed confirm codes stay their own surfaces, each with a price before anything is spent. Design decision 5
 below (chat cards recorded in `approvals`) was not built.
 
-**Left (plan 2026-11-08):** one card per job and no dead ends (S2.6, partly done: the X card with no connected
-account waits on S3's SQL), a price card before every Sales scan (S3.5), and
-fewer cards a week (its own plan).
+**Left (plan 2026-11-08):** fewer cards a week (its own plan). Done: one card per job and no dead ends (S2.6: "Copy and open" and "I posted it" on a draft with no connected account, `cmo_post_myself`), and a price card before every Sales scan (S3.5–S3.6).
 
 ## 2. Approval as built (`main`, `4f70a59`)
 
@@ -154,7 +152,7 @@ All built: **A0** `approvals` + `approval_decide` wrapping the old RPCs · **A1*
 the inbox · **A2** digest, Resend email, web push, the phone-first inbox · **A3** `schedule` cards with expiry. The
 CMO review added the `plan` card and the daily card budget.
 
-Next, ranked by the CMO loop (owner, 2026-11-08): one card per job and no dead end (plan S2.6, S3.5–S3.6), then fewer
+Next, ranked by the CMO loop (owner, 2026-11-08; one card per job and no dead end are done in S2.6 and S3.5–S3.6): fewer
 cards a week: today a week is about 15–20 cards ([`workflow.md`](workflow.md) §3); the owner's sketch has two
 approvals, the words and then what was made. That gets its own plan.
 

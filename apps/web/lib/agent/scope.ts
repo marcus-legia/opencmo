@@ -616,18 +616,12 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   };
 }
 
-/** Kết quả `check` nối sau `<project_state>`: chỉ khi có issue, để tin nhắn gọn. */
+/** The `check` result appended after `<project_state>`, in full only when there are issues, to keep the message short. */
 function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {
   if (!report.issues.length) return "<check>ok</check>";
   return `<check>${JSON.stringify({ ok: report.ok, issues: report.issues.slice(0, 20) })}</check>`;
 }
 
-/**
- * Phạm vi CMO chat: không clip, không project, không checkpoint. Tool chỉ đọc (tài liệu, lịch,
- * mạng xã hội qua ScrapeCreators) hoặc giao việc (`create_task`); không có thẻ duyệt vì không tool
- * nào tốn tiền ngoài credit của việc được giao, và không tool nào đăng gì. Ngân sách lời gọi
- * research tính theo YÊU CẦU (scope dựng lại mỗi lượt).
- */
 /** The `cmo_read_hit` bucket a CMO chat tool counts against: social reads, website reads, the credit balance. */
 export function chatReadBucket(name: string): "chat_social" | "chat_site" | "research_credits" | null {
   if (name === "read_site") return "chat_site";

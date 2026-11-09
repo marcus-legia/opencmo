@@ -418,7 +418,8 @@ result, writes the lesson and proposes the next goal; the week plan is planned a
 The CMO reaches video through Studio orders, never by driving the editor: a finished edit of the founder's own video
 becomes 3 shorts (`cut_shorts`), a slideshow item becomes `write_slides` → `build_slideshow` (MP4 and a PNG set), and a
 `build_video` order makes an AI video from Writer's brief (the week plan no longer orders one since S2.5; MCP and
-Studio keep the order kind). Video is only ever the
+Studio keep the order kind). The founder makes the videos (owner, 2026-11-09): the CMO writes the script and the
+storyboard and never builds a video on its own. Video is only ever the
 founder's own upload or made in the editor: no link import, no clipping of outside video.
 
 ### Charging: charge before running, then run in one go
@@ -443,7 +444,9 @@ allowance before its team calls a model (`studio_order_hold`); an Assistant turn
 
 What each paid call costs us is recorded in `provider_usage` (micro-USD, priced when written) with a daily cap per
 founder (`provider_spend_cap`); the owner's Costs page (`/app/settings/costs`) shows seven days of spend and the
-switches of `apps/web/lib/ops/switches.ts`.
+switches of `apps/web/lib/ops/switches.ts`, plus a live key check per provider (Anthropic, fal, ElevenLabs, Creem,
+ScrapeCreators; `apps/web/lib/ops/providers.ts`, cached five minutes) so a refused key shows red instead of failing
+silently.
 
 ### Deploy order
 

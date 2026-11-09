@@ -117,6 +117,8 @@ posts stay the CMO's work, built after the founder approves the words.
 
 What this means for the code:
 - No week-plan item, event rule or CMO chat task orders `build_video`. S2.5 already drops every AI-video item.
+- Shorts stay automatic (owner, 2026-11-09): when the founder marks an edit finished, the Shorts squad cuts 3 shorts
+  (no generation credits) and the founder approves the batch before anything is scheduled.
 - A week-plan "video" item is a script item: `write_video_brief` only (script + storyboard), no `build_video`. It is
   not built in this PR (S2's request to S3, "a `Script` item"): it needs a migration on `work_orders_plan_week`, a
   storyboard in the Writer's brief (today it has an angle, three hooks and key points, `lib/cmo/writer/draft.ts`), and
