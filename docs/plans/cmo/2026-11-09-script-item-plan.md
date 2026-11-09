@@ -32,37 +32,46 @@ The review of #181 also found bugs in it that should not ship (Part R).
 One session on `cmo-review-2`. Each fix gets a regression test (pgTAP for SQL, a `*.check.ts` or e2e for the web).
 New migrations go above the last one on the branch.
 
-- [ ] **R1 Studio orders show "Over budget … of 0 credits"** (`20270111020000_billing_review_fixes.sql:89`).
+- [x] `9f1c3ba` **R1 Studio orders show "Over budget … of 0 credits"** (`20270111020000_billing_review_fixes.sql:89`).
   `studio_order_release_hold` now adds the hold-covered usage to `work_order_spend`, but `cut_shorts` orders are
   created with `budget_credits = 0` (`cut_shorts_order_for`), and slideshow orders the same way. Every shorts or
   slideshow order then ends with an over-budget note. Fix: give these orders the budget of their hold (5), or count
   the covered usage on the parent only. Keep the week's root counting the spend (that was the point of S3.7). The test
   covers a shorts order that uses 2 credits: no over-budget note, and the root counts 2.
-- [ ] **R2 "I posted it" on an invalid thread** (`20270111200000_post_myself.sql:33`). The RPC refuses any body with a
+- [x] `9f1c3ba` **R2 "I posted it" on an invalid thread** (`20270111200000_post_myself.sql:33`). The RPC refuses any body with a
   `thread` of 5 or more items. The card treats only a valid thread (`thread_valid`) as a thread, so an invalid one
   gets the button and then an error. Fix: use `public.thread_valid(v_item.body)` in the RPC, the same rule as the card.
-- [ ] **R3 `?paid=1` skips the paid-first gate** (`apps/web/app/app/page.tsx:40`). An unpaid account that opens
+- [x] `baa0593` **R3 `?paid=1` skips the paid-first gate** (`apps/web/app/app/page.tsx:40`). An unpaid account that opens
   `/app?paid=1` reaches Setup with "Payment received" and then gets a 402. Fix: on `paid=1`, still check the plan or
   credits. Show "Payment received" only once they exist, and otherwise "Waiting for your payment" with a link back to
   billing.
-- [ ] **R4 The first draft can be dropped** (`apps/web/lib/cmo/jobs/start.ts:51`). If Modal's sweep claims the first
+- [x] `baa0593` **R4 The first draft can be dropped** (`apps/web/lib/cmo/jobs/start.ts:51`). If Modal's sweep claims the first
   plan before `after()` does, the plan is not `done` when checked, and the first draft is never queued. That breaks
   "a draft within minutes". Fix: queue the first draft from the plan's completion (a trigger or the runner's
   on-done step), not from the `after()` that may not have run the plan. Test: a plan finished by the sweep still
   queues the draft.
-- [ ] **R5 An unknown approval tool returns a fake "Nothing was charged"** (`apps/web/lib/agent/scope.ts:573`). Limit
+- [x] `5fc1ad4` **R5 An unknown approval tool returns a fake "Nothing was charged"** (`apps/web/lib/agent/scope.ts:573`). Limit
   the fallback to the retired `animate_video` name, and throw for anything else.
-- [ ] **R6 The accounts read never retries** (`apps/web/components/cards/connected.ts:27`). After a failed
+- [x] `5fc1ad4` **R6 The accounts read never retries** (`apps/web/components/cards/connected.ts:27`). After a failed
   `/api/v1/accounts`, the card stays without "I posted it" until it remounts. Fix: retry once, and fall back to
   showing both paths rather than none.
-- [ ] **R7 Onboarding's deadline is anchored late** (`apps/web/lib/cmo/onboard.ts:54`). Pass the request start time
+- [x] `baa0593` **R7 Onboarding's deadline is anchored late** (`apps/web/lib/cmo/onboard.ts:54`). Pass the request start time
   from the route, so the deadline is 300 s minus the margin from the real start.
-- [ ] **R8 "Scan now" shows a charge when the mode read fails** (`components/screens/sales/SalesScreen.tsx:59`). When
+- [x] `5fc1ad4` **R8 "Scan now" shows a charge when the mode read fails** (`components/screens/sales/SalesScreen.tsx:59`). When
   `/cmo/mode` fails, show the card without a price and say the mode could not be read, rather than "Approve and spend
   5 credits".
 
 Checks: `npm run typecheck`, `check:contracts`, pgTAP on a reset database, the S2 e2e (`ui-v2-activation`). Then the
 owner measures pay → website → first draft on a preview, now that the keys are set.
+
+**Done 2026-11-09** (local stack, Supabase CLI 2.117.0):
+- pgTAP: all 170 files, 2,895 tests, pass on a reset database.
+- New tests: 271 (R1, R2) and 272 (R4). Each fails without its migration and passes with it.
+- `ui-v2-activation` e2e: 3 of 3 pass. It now also checks that a hand-typed `?paid=1` shows "Waiting for your
+  payment". With the fake model, the time from website to the plan card and the first draft is 3 s.
+- `npm run typecheck` and `check:contracts` pass.
+- Assistant eval (fake): every task passes except the 4 explainer previews. Those fail the same way before and after
+  this change, because the sandbox cannot reach `remotion.media`; CI runs them.
 
 ## 3. Part C: close the loop (after #181 merges)
 

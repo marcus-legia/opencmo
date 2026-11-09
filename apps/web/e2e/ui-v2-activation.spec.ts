@@ -40,6 +40,12 @@ test("paid first: a new account with no plan and no credits picks a plan, and on
   expect(refused.status()).toBe(402);
   const { count } = await admin().from("marketing_documents").select("id", { count: "exact", head: true }).eq("user_id", user.id);
   expect(count).toBe(0);
+
+  // Creem's return link is not a payment: typed by hand, it says the payment is on its way, never that it arrived.
+  await page.goto("/app?paid=1");
+  await expect(page).toHaveURL(/\/app\/setup\?paid=pending/);
+  await expect(page.getByTestId("setup-paid-pending")).toContainText("Waiting for your payment");
+  await expect(page.getByTestId("setup-paid")).toHaveCount(0);
 });
 
 test("the first week: website → plan card and a first draft, then I posted it with no X account", async ({ page }) => {
