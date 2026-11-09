@@ -569,14 +569,15 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         return { outcome, extra: {}, wrote: false };
       }
       // A card for a step that no longer exists (the two-card /video's `animate_video`, gone 2026-11-06) closes as out of
-      // date, on Approve or Cancel, so the conversation can go on.
-      if (!PRICED_TOOLS.has(call.name)) {
+      // date, on Approve or Cancel, so the conversation can go on. Any other unknown tool is a bug, not an old card.
+      if (call.name === "animate_video") {
         return {
           outcome: { ok: false, content: JSON.stringify({ error: "This step no longer exists. Nothing was charged; ask for it again." }), summary: "Out of date" },
           extra: {},
           wrote: false,
         };
       }
+      if (!PRICED_TOOLS.has(call.name)) throw new Error(`No approval handler for ${call.name}.`);
       const prepared = input as PreparedGeneration;
       if (!approved) {
         return {

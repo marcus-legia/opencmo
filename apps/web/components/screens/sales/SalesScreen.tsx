@@ -60,11 +60,13 @@ function ScanNow() {
 
   async function open() {
     setError(null);
+    // The card's price depends on the mode: without it the card could promise a charge that never happens.
     try {
       const mode = (await api("/cmo/mode")) as { brain?: string };
       setClaude(mode.brain === "claude");
     } catch {
-      setClaude(false);
+      setError("Could not check where your scan would run. Try again in a moment.");
+      return;
     }
     setStep("confirm");
   }
@@ -96,6 +98,7 @@ function ScanNow() {
         <Button variant="primary" onClick={() => void open()}>
           Scan now
         </Button>
+        {error && <ErrorNote>{error}</ErrorNote>}
       </div>
     );
   }
