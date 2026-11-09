@@ -128,7 +128,7 @@ export function LogsDrawer({ onClose }: { onClose: () => void }) {
                       </span>
                     ) : null}
                   </button>
-                  {isOpen ? <div className="td-ev-detail">{what}</div> : null}
+                  {isOpen && what.length > 70 ? <div className="td-ev-detail">{what}</div> : null}
                 </div>
               </div>
             );

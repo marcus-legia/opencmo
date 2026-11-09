@@ -574,7 +574,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .td-prompter-note { margin: 0; text-align: center; }
 .td-prompter-stage > :not(.td-prompter-tap) { position: relative; z-index: 1; pointer-events: none; }
 .td-prompter-tap { z-index: 0; }
-.v2 .td-sales { align-items: stretch; }
+.v2 .td-sales { align-items: stretch; flex-wrap: nowrap; }
 /* Remaining mono labels in screens.css: sentence case, sans. */
 .scr :is(.scr-status, .scr-mono-link, .scr-off-links a, .scr-pill-note, .scr-team-mark) { font-family: var(--v2-sans); letter-spacing: 0; text-transform: none; }
 .scr .scr-status { font-size: 12px; }
@@ -583,3 +583,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .v2 .scr-radio { border-radius: var(--v2-radius); }
 .v2 .scr-radio:has(input:checked) { border-color: var(--v2-brand); box-shadow: 0 0 0 1px var(--v2-brand); }
 .scr-account-note { font-family: var(--v2-sans); }
+.td-sales > *, .td-thread, .td-thread .scr-thread-detail { min-width: 0; }
+@media (max-width: 760px) { .v2 .td-thread .scr-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.v2 .scr-setup > * { max-width: none; }
+.td-setup-list { list-style: decimal; }
