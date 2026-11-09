@@ -38,24 +38,24 @@ export function kickCmoQueue(runId?: string, budgetMs = 250_000): void {
 const JOB_MS = 120_000;
 
 /**
- * The first week after onboarding (cmo-review-2 S2.2): runs the plan after the response, then queues today's draft only
- * once the plan is written, so the draft reads the plan's first post and Modal's sweep cannot claim it early. A job
+ * The first week after onboarding (cmo-review-2 S2.2): runs the plan after the response, then today's draft. The draft
+ * is queued by the plan's completion (`cmo_runs_first_draft`), whoever ran the plan: this call or Modal's sweep. A job
  * starts here only when it can finish before `deadline` (the function's time limit, C5); otherwise it waits for the
  * sweep, within a minute.
  */
-export function kickFirstWeek(userId: string, planId: string, input: Record<string, unknown>, deadline: number): void {
+export function kickFirstWeek(userId: string, planId: string, deadline: number): void {
   after(async () => {
     const admin = createAdminClient();
     const store = supabaseStore(admin);
     try {
       if (Date.now() + JOB_MS < deadline) await drainCmoQueue(store, { runId: planId, budgetMs: JOB_MS });
       const { data: plan } = await admin.from("cmo_runs").select("status").eq("id", planId).maybeSingle<{ status: string }>();
-      // Not written yet (left to the sweep, or failed): today's draft comes with the daily loop instead.
+      // Still running (claimed by the sweep): its completion queues the draft and the sweep runs it.
       if (plan?.status !== "done") return;
-      const { data, error } = await admin.rpc("enqueue_cmo_run_for", { p_user: userId, p_kind: "post_draft", p_input: input });
-      if (error) return console.error("[cmo] first week: could not queue the first draft", error.message);
-      const draft = (Array.isArray(data) ? data[0] : data) as { id?: string; status?: string } | null;
-      if (draft?.id && draft.status === "queued" && Date.now() + JOB_MS < deadline) await drainCmoQueue(store, { runId: draft.id, budgetMs: JOB_MS });
+      const { data: draft } = await admin.from("cmo_runs").select("id").eq("user_id", userId).eq("kind", "post_draft")
+        .eq("status", "queued").eq("input->>source", "onboarding").order("created_at", { ascending: false }).limit(1)
+        .maybeSingle<{ id: string }>();
+      if (draft && Date.now() + JOB_MS < deadline) await drainCmoQueue(store, { runId: draft.id, budgetMs: JOB_MS });
     } catch (error) {
       console.error("[cmo] first week: draining failed", error);
     }

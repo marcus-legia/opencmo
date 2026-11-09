@@ -23,8 +23,10 @@ async function paidOrWait(supabase: Parameters<typeof hasPlanOrCredits>[0], user
 }
 
 export const POST = withApi({ body, rateLimit: { bucket: "onboarding", limit: 20, windowSeconds: 3600 } }, async ({ supabase, user, body }) => {
+  // The function's clock starts here, before the paid check's wait: `after()` work is timed from this moment.
+  const started = Date.now();
   if (!(await paidOrWait(supabase, user.id))) {
     throw new ApiError(402, "We have not received a payment yet. If you just paid, try again in a minute; otherwise pick a plan first.");
   }
-  return runOnboarding(supabase, user.id, body.site);
+  return runOnboarding(supabase, user.id, body.site, started);
 });

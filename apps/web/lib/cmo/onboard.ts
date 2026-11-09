@@ -25,8 +25,8 @@ type RunRow = { id: string };
 
 export type Onboarded = { runId: string; firstWeek: boolean };
 
-export async function runOnboarding(supabase: SupabaseClient, userId: string, site: string): Promise<Onboarded> {
-  const started = Date.now();
+/** `started`: when the route began, before its paid check waited, so the first week's deadline counts that wait. */
+export async function runOnboarding(supabase: SupabaseClient, userId: string, site: string, started = Date.now()): Promise<Onboarded> {
   const run = firstRow(await rpcOrThrow<RunRow | RunRow[]>(supabase, "start_cmo_run", { p_kind: "onboard", p_input: { site } }));
   if (!run) throw new ApiError(500, "Could not start building your plan.");
 
@@ -50,8 +50,8 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   return { runId: run.id, firstWeek: plans === 0 ? await startFirstWeek(supabase, userId, started) : false };
 }
 
-/** The onboarding route's time limit (`maxDuration` 300 s), less the paid check's wait and a margin: `after()` work must end before the platform kills it. */
-const ROUTE_MS = 265_000;
+/** The onboarding route's time limit (`maxDuration` 300 s), less a margin, from the route's start: `after()` work must end before the platform kills it. */
+const ROUTE_MS = 280_000;
 
 /**
  * Queues the week's plan and runs it, then today's draft (`kickFirstWeek`). False when the plan could not be queued
@@ -68,6 +68,6 @@ async function startFirstWeek(supabase: SupabaseClient, userId: string, started:
     console.error("[cmo] could not queue the first week's plan", error);
     return false;
   }
-  if (input.brain !== "claude" && plan.status === "queued") kickFirstWeek(userId, plan.id, { source: "onboarding" }, started + ROUTE_MS);
+  if (input.brain !== "claude" && plan.status === "queued") kickFirstWeek(userId, plan.id, started + ROUTE_MS);
   return true;
 }

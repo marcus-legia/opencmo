@@ -47,7 +47,13 @@ export function SetupScreen() {
       </div>
       {params.get("paid") === "1" && (
         <p role="status" className="scr-small scr-muted" data-testid="setup-paid">
-          Payment received. Your credits arrive within a minute.
+          Payment received.
+        </p>
+      )}
+      {params.get("paid") === "pending" && (
+        <p role="status" className="scr-small scr-muted" data-testid="setup-paid-pending">
+          Waiting for your payment to arrive. It usually takes under a minute after checkout. Not paid yet?{" "}
+          <a href="/app/billing?start=1">Pick a plan</a>.
         </p>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}

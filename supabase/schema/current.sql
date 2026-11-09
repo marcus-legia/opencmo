@@ -3941,6 +3941,29 @@ $$;
 
 
 --
+-- Name: cmo_first_draft_after_plan(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_first_draft_after_plan() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind = 'plan_week' and new.status = 'done' and old.status is distinct from 'done'
+     and new.input->>'source' = 'onboarding' and new.input->>'brain' is distinct from 'claude' then
+    begin
+      perform public.cmo_enqueue(new.user_id, 'post_draft', jsonb_build_object('source', 'onboarding'));
+    exception when others then
+      -- A refused draft (paused CMO, no credits, daily limit) must not undo the plan; the daily loop drafts instead.
+      raise warning 'first draft not queued for %: %', new.user_id, sqlerrm;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: cmo_inbox; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -17751,6 +17774,13 @@ CREATE TRIGGER cmo_memories_classify BEFORE INSERT ON public.cmo_memories FOR EA
 --
 
 CREATE TRIGGER cmo_runs_budget_gate BEFORE INSERT ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.cmo_runs_budget_gate();
+
+
+--
+-- Name: cmo_runs cmo_runs_first_draft; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_runs_first_draft AFTER UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.cmo_first_draft_after_plan();
 
 
 --
