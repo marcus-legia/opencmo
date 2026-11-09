@@ -7,6 +7,7 @@ live next to the files.
 | What | Where | License |
 |---|---|---|
 | Clip fonts (32 families, e.g. Inter, Montserrat, Raleway, Bebas Neue) | `packages/clip-media/fonts/`, `apps/web/assets/fonts/` | SIL Open Font License 1.1 (`LICENSE-OFL.txt`) |
+| Geist and Geist Mono (the app's UI type), Copyright (c) 2023 Vercel, in collaboration with basement.studio | `packages/clip-media/fonts/geist.woff2`, `geist-mono.woff2` | SIL Open Font License 1.1 (`LICENSE-geist.txt`) |
 | DejaVu fonts | `packages/clip-media/fonts/DejaVu*` | Bitstream Vera / DejaVu license (`LICENSE-DejaVu.txt`) |
 | Lucide icons | `packages/clip-icons/data/`, `apps/web/components/icons/` | ISC (`LUCIDE-LICENSE`, `LICENSE-lucide.txt`) |
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |

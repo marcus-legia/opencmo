@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The v2 shell (NEXT_PUBLIC_OPENCMO_UI=v2): three columns on desktop, rail · CMO chat · tab panel
- * (docs/plans/cmo/2026-10-30-three-column-shell-plan.md); tab bar on a phone, where the chat is a full-screen sheet.
+ * The v2 shell (NEXT_PUBLIC_OPENCMO_UI=v2): a top bar over three columns on desktop, rail · tab panel · CMO chat
+ * (docs/plans/cmo/2026-10-30-three-column-shell-plan.md; the chat moved right in the Today redesign); tab bar on a phone, where the chat is a full-screen sheet.
  *
  * Same contract as `WebShell`: rendered by `app/app/layout.tsx`, so it lives across navigation and keeps one Realtime
  * channel for jobs, one toast, the account numbers and now the chat, which keeps its draft and session across screens.
@@ -30,12 +30,14 @@ import type { RailStatus } from "@/lib/screens/rail";
 import { CHAT, DEFAULT_PREF, RAIL, applyColumns, clampColumns, readPref, writePref, type ColumnsPref } from "./columns";
 
 import { Logo } from "./Logo";
+import { LogsDrawer } from "./LogsDrawer";
 import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_MORE, NAV_SETTINGS, isShown, type DepartmentName, type NavEntry } from "./nav";
 import { Rail } from "./Rail";
 import { Sash } from "./Sash";
 import { ShellStateContext, type ShellState } from "./ShellState";
 import { TabBar } from "./TabBar";
 import { TabStrip } from "./TabStrip";
+import { TopBar } from "./TopBar";
 import { useScreensAvailable } from "./useScreensAvailable";
 
 type Props = {
@@ -207,6 +209,12 @@ function V2Frame({
       [...(chatColumn.current?.querySelectorAll<HTMLTextAreaElement>("textarea") ?? [])].find((area) => area.offsetParent !== null)?.focus(),
     );
   }, []);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const openLogs = useCallback(() => {
+    setChatOpen(false);
+    setLogsOpen(true);
+  }, []);
+  const closeLogs = useCallback(() => setLogsOpen(false), []);
   const [workVersion, setWorkVersion] = useState(0);
   const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
@@ -318,6 +326,14 @@ function V2Frame({
           </div>
         ) : (
           <div className="v2 v2-shell is-cols" data-panel={panelHidden ? "hidden" : undefined} data-chat={chatOpen ? "open" : undefined}>
+            <TopBar
+              tabs={<TabStrip tabs={tabs} segment={segment} onClose={closeTab} onHide={togglePanel} onChat={focusChat} />}
+              credits={account.credits}
+              email={email ?? null}
+              logsOpen={logsOpen}
+              onLogs={openLogs}
+              onChat={focusChat}
+            />
             <Rail
               segment={segment}
               entries={entries}
@@ -325,8 +341,6 @@ function V2Frame({
               stuck={state.stuck}
               processing={active.length}
               status={railStatus}
-              credits={account.credits}
-              email={email ?? null}
               collapsed={columns.railCollapsed}
               onToggleCollapsed={toggleRail}
               onCurrent={togglePanel}
@@ -342,6 +356,20 @@ function V2Frame({
               onReset={() => choose({ rail: RAIL.base })}
               disabled={columns.railCollapsed}
             />
+            <main className="v2-main">
+              <div className="v2-main-body">{children}</div>
+            </main>
+            <Sash
+              label="Resize the chat"
+              controls="v2-chat"
+              value={columns.chat}
+              min={CHAT.min}
+              max={columns.chatMax}
+              onLive={(chat) => applyColumns({ ...columns, chat })}
+              onCommit={(chat) => choose({ chat })}
+              onReset={() => choose({ chat: CHAT.base })}
+              invert
+            />
             <aside className="v2-chatcol" id="v2-chat" aria-label={inEditor ? "Assistant" : "Your CMO"} data-clip={inEditor ? "" : undefined} ref={chatColumn}>
               <div className="v2-chatcol-head">
                 <button type="button" className="v2-button is-quiet is-compact" onClick={() => setChatOpen(false)}>
@@ -352,21 +380,8 @@ function V2Frame({
               <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} drivesPanel />
               {inEditor ? <div className="v2-clip-slot" ref={setClipAssistantSlot} /> : null}
             </aside>
-            <Sash
-              label="Resize the chat"
-              controls="v2-chat"
-              value={columns.chat}
-              min={CHAT.min}
-              max={columns.chatMax}
-              onLive={(chat) => applyColumns({ ...columns, chat })}
-              onCommit={(chat) => choose({ chat })}
-              onReset={() => choose({ chat: CHAT.base })}
-            />
-            <main className="v2-main">
-              <TabStrip tabs={tabs} segment={segment} onClose={closeTab} onHide={togglePanel} onChat={focusChat} />
-              <div className="v2-main-body">{children}</div>
-            </main>
             {chatOpen ? <div className="v2-chat-scrim" aria-hidden="true" onClick={() => setChatOpen(false)} /> : null}
+            {logsOpen ? <LogsDrawer onClose={closeLogs} /> : null}
             <TabBar
               segment={segment}
               entries={entries}

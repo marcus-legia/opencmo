@@ -5,7 +5,8 @@ import type { MouseEvent, ReactNode } from "react";
 
 import { nextPostText, type RailStatus } from "@/lib/screens/rail";
 
-import { Logo } from "./Logo";
+import { Icon } from "@/components/icons";
+
 import { NavIcon } from "./NavIcon";
 import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_MORE, NAV_SETTINGS, isCurrent, type DepartmentName, type NavEntry } from "./nav";
 
@@ -18,8 +19,6 @@ export type RailProps = {
   processing: number;
   /** Schedule's next post and Analytics' connected accounts (P6 F14); null until loaded or where it cannot be read. */
   status?: RailStatus | null;
-  credits: number | null;
-  email: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   /** Clicking the screen already open hides the tab panel (and shows it again). */
@@ -84,16 +83,12 @@ function Group({ heading, children }: { heading?: string; children: ReactNode })
 }
 
 export function Rail(props: RailProps) {
-  const { entries, credits, email, collapsed, onToggleCollapsed } = props;
+  const { entries, collapsed, onToggleCollapsed } = props;
   const departments = entries(NAV_DEPARTMENTS);
   const more = entries(NAV_MORE);
   return (
     <nav aria-label="Main" className="v2-rail" id="v2-rail">
       <div className="v2-rail-top">
-        <Link href="/app" className="v2-rail-brand" aria-label="OpenCMO home">
-          <Logo />
-          <span>OpenCMO</span>
-        </Link>
         <button
           type="button"
           className="v2-rail-toggle"
@@ -102,10 +97,7 @@ export function Rail(props: RailProps) {
           aria-controls="v2-rail"
           onClick={onToggleCollapsed}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" />
-            <path d="M9 4v16" />
-          </svg>
+          <Icon name={collapsed ? "panel-left-open" : "panel-left-close"} size={16} />
         </button>
       </div>
 
@@ -139,18 +131,6 @@ export function Rail(props: RailProps) {
 
       <div className="v2-rail-group v2-rail-foot">
         <RailLink entry={NAV_SETTINGS} props={props} />
-        <Link href="/app/billing" className="v2-rail-credits" aria-label={credits === null ? "Credits" : `${credits} credits left`}>
-          <span className="v2-mono is-small is-muted v2-rail-credits-label">Credits</span>
-          <span className="v2-rail-credits-value">{credits ?? "–"}</span>
-        </Link>
-        <details className="v2-rail-account">
-          <summary>
-            <span className="v2-rail-email">{email ?? "Signed in"}</span>
-          </summary>
-          <form action="/auth/signout" method="post">
-            <button type="submit" className="v2-button is-quiet is-compact">Sign out</button>
-          </form>
-        </details>
       </div>
     </nav>
   );

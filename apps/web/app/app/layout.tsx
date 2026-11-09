@@ -12,6 +12,7 @@ import { THEME_BOOT } from "@/lib/theme-boot";
 import { createServerClient } from "@/lib/supabase/server";
 
 import "@/styles/ui-v2.css";
+import "@/styles/today.css";
 
 import { shellAccount } from "./shell";
 

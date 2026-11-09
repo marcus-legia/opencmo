@@ -190,3 +190,42 @@ export function TeamList({ team, waiting }: { team: Team; waiting: (department: 
     </section>
   );
 }
+
+/**
+ * The team as a compact list of agents (Today redesign, canvas Main.dc.html): one row per department with what it is
+ * doing, the Brain first. Same region name as the phone list, on every width.
+ */
+export function TeamGrid({ team, waiting }: { team: Team; waiting: (department: DepartmentName) => number }) {
+  return (
+    <section aria-label="Your team" className="td-team">
+      <Link href="/app/brain" className="td-agent is-brain">
+        <Robot state="hub" />
+        <span className="td-agent-text">
+          <span className="td-agent-name">Brain</span>
+          <span className="td-agent-line">
+            {BRAIN_STATE[team.brain.state]} · {team.brain.watching === 1 ? "watching 1 order" : `watching ${team.brain.watching} orders`}
+          </span>
+        </span>
+      </Link>
+      {team.nodes.map((node) => {
+        const chip = waitingChip(node, waiting(node.department), true);
+        return (
+          <Link
+            key={node.department}
+            href={NODE[node.department].href}
+            className="td-agent"
+            data-state={node.state}
+            aria-label={`${DEPARTMENT_LABEL[node.department]}, ${STATE_WORD[node.state]}: ${node.line}`}
+          >
+            <Robot state={node.state} delay={NODE[node.department].delay} />
+            <span className="td-agent-text">
+              <span className="td-agent-name">{DEPARTMENT_LABEL[node.department]}</span>
+              <span className="td-agent-line">{node.line}</span>
+            </span>
+            {node.state === "stuck" ? <span className="v2-chip is-stuck">stuck</span> : chip.tone === "waiting" ? <span className="v2-chip is-waiting">{chip.label}</span> : null}
+          </Link>
+        );
+      })}
+    </section>
+  );
+}

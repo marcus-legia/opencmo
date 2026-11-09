@@ -19,6 +19,7 @@ export function Sash({
   onCommit,
   onReset,
   disabled = false,
+  invert = false,
 }: {
   label: string;
   controls: string;
@@ -30,6 +31,8 @@ export function Sash({
   onReset: () => void;
   /** Kept in the grid but inert: a collapsed rail has no width to set. */
   disabled?: boolean;
+  /** The column this sash sizes sits to its right (the chat): dragging left widens it. */
+  invert?: boolean;
 }) {
   const drag = useRef<{ x: number; from: number; last: number } | null>(null);
   const clamp = (next: number) => Math.round(Math.min(max, Math.max(min, next)));
@@ -43,7 +46,7 @@ export function Sash({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const state = drag.current;
     if (!state) return;
-    state.last = clamp(state.from + event.clientX - state.x);
+    state.last = clamp(state.from + (invert ? state.x - event.clientX : event.clientX - state.x));
     onLive(state.last);
   };
   const end = () => {
@@ -54,7 +57,7 @@ export function Sash({
     if (state.last !== state.from) onCommit(state.last);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 64 : 16;
+    const step = (event.shiftKey ? 64 : 16) * (invert ? -1 : 1);
     const next =
       event.key === "ArrowLeft" ? value - step
       : event.key === "ArrowRight" ? value + step

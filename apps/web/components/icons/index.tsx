@@ -66,6 +66,15 @@ export const ICONS = {
   "tag": "<path d=\"M12.586 2.586C12.211 2.211 11.702 2 11.172 2L4 2C2.895 2 2 2.895 2 4L2 11.172C2 11.702 2.211 12.211 2.586 12.586L11.29 21.29C12.236 22.23 13.764 22.23 14.71 21.29L21.29 14.71C22.23 13.764 22.23 12.236 21.29 11.29ZM7 7.5C7 7.776 7.224 8 7.5 8C7.776 8 8 7.776 8 7.5C8 7.224 7.776 7 7.5 7C7.224 7 7 7.224 7 7.5Z\"></path>",
   "circle-alert": "<path d=\"M2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2C6.477 2 2 6.477 2 12ZM12 8L12 12M12 16L12.01 16\"></path>",
   "clock": "<path d=\"M2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2C6.477 2 2 6.477 2 12ZM12 6L12 12L16 14\"></path>",
+  "inbox": "<polyline points=\"22 12 16 12 14 15 10 15 8 12 2 12\"></polyline> <path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"></path>",
+  "panel-right": "<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect> <path d=\"M15 3v18\"></path>",
+  "smartphone": "<rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\"></rect> <path d=\"M12 18h.01\"></path>",
+  "play": "<polygon points=\"6 3 20 12 6 21 6 3\"></polygon>",
+  "pause": "<rect x=\"14\" y=\"4\" width=\"4\" height=\"16\" rx=\"1\"></rect> <rect x=\"6\" y=\"4\" width=\"4\" height=\"16\" rx=\"1\"></rect>",
+  "monitor": "<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"></rect> <line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"></line> <line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"></line>",
+  "video": "<path d=\"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5\"></path> <rect x=\"2\" y=\"6\" width=\"14\" height=\"12\" rx=\"2\"></rect>",
+  "coins": "<circle cx=\"8\" cy=\"8\" r=\"6\"></circle> <path d=\"M18.09 10.37A6 6 0 1 1 10.34 18\"></path> <path d=\"M7 6h1v4\"></path> <path d=\"m16.71 13.88.7.71-2.82 2.82\"></path>",
+  "log-out": "<path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\"></path> <polyline points=\"16 17 21 12 16 7\"></polyline> <line x1=\"21\" x2=\"9\" y1=\"12\" y2=\"12\"></line>",
 } as const;
 
 export type IconName = keyof typeof ICONS;

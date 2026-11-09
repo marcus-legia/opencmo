@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { PauseButton } from "@/components/screens/brain/PauseButton";
-import { Logo } from "@/components/shell-v2/Logo";
+import { Icon } from "@/components/icons";
 import { Button } from "@/components/ui";
+
+import { Robot } from "./Robot";
 
 /** "5 things wait on you." from the queue count: the same number as the rail badge. */
 export function headline(count: number): string {
@@ -50,49 +52,35 @@ export function DashboardHeader({
   const pct = goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
   return (
-      <header className="v2-dash-head">
-        <div className="v2-dash-phonebar">
-          <span className="v2-dash-phonebrand">
-            <Logo size={24} />
-            <span>OpenCMO</span>
-          </span>
-          <span className="v2-actions">
-            <Button variant="secondary" icon aria-label="Ask your CMO" onClick={onAsk}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <path d="M4 5h16v11H9l-5 4z" />
-              </svg>
-            </Button>
-          </span>
-        </div>
-
-        <div className="v2-dash-title">
-          <span className="v2-mono is-muted v2-dash-eyebrow">
-            <span className="v2-mark is-live" aria-hidden="true" />
-            <span className="v2-dash-wide">
-              Live · <span className="v2-num" data-testid="dash-clock">{clock}</span>
-              {day ? ` · ${day}` : null}
-            </span>
-            <span className="v2-dash-narrow">
-              {short ? `${short} · ` : null}goal {goal.done} of {goal.total}
-            </span>
-          </span>
-          <h1 className="v2-dash-headline" data-testid="dash-headline">
-            {headline(count)}
-          </h1>
-          <span className="v2-dash-narrow v2-dash-progress" aria-hidden="true">
-            <span style={{ width: `${pct}%` }} />
-          </span>
-        </div>
-
-        <div className="v2-actions v2-dash-buttons">
+    <header className="v2-dash-head td-hello">
+      <span className="td-hello-robot" aria-hidden="true">
+        <Robot state="hub" />
+      </span>
+      <div className="v2-dash-title">
+        <h1 className="v2-dash-headline" data-testid="dash-headline">
+          {headline(count)}
+          <span className="v2-mark is-live" aria-hidden="true" />
+        </h1>
+        <p className="v2-mono is-muted v2-dash-eyebrow">
           <span className="v2-dash-wide">
-            <Button variant="secondary" onClick={onAsk}>
-              Ask your CMO
-            </Button>
+            <span className="v2-num" data-testid="dash-clock">{clock}</span>
+            {day ? ` · ${day}` : null}
+            {` · goal ${goal.done} of ${goal.total}`}
           </span>
-          {/* One Pause control for every width (it holds its own confirm dialog); on a phone CSS lifts it into the top bar. */}
-          <PauseButton pausedAt={pausedAt} live={pauseLive} onChange={onPaused} />
-        </div>
-      </header>
+          <span className="v2-dash-narrow">
+            {short ? `${short} · ` : null}goal {goal.done} of {goal.total} · {pct}%
+          </span>
+        </p>
+      </div>
+
+      <div className="v2-actions v2-dash-buttons">
+        <Button variant="secondary" onClick={onAsk}>
+          <Icon name="message-circle" size={14} />
+          Ask your CMO
+        </Button>
+        {/* One Pause control for every width (it holds its own confirm dialog). */}
+        <PauseButton pausedAt={pausedAt} live={pauseLive} onChange={onPaused} />
+      </div>
+    </header>
   );
 }
