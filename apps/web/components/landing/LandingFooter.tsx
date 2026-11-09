@@ -46,7 +46,7 @@ export function LandingFooter({ action }: { action: string }) {
           <div className="lv-foot-top">
             <div className="lv-foot-brand">
               <span><LogoMark size={30} /><span>OpenCMO</span></span>
-              <p>Your AI marketing team. It edits the videos, writes the posts and finds the conversations. You approve.</p>
+              <p>Your AI marketing team. It plans your week, writes the posts and finds the conversations. You approve.</p>
             </div>
             <p className="lv-foot-support">
               <span className="lv-mono-eyebrow">Questions or billing</span>

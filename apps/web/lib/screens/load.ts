@@ -905,7 +905,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       };
       const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
       const statuses = ["planned", "drafting", "in_review", "approved", "published"];
-      const [posts, captions, briefs, cards, videoCards, batchCards, shorts] = await Promise.all([
+      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards] = await Promise.all([
         supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
         supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
         supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
@@ -913,6 +913,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         waitingByRef(supabase, "editor_project"),
         waitingByRef(supabase, "short_batch"),
         supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
+        supabase.from("approvals").select("id, ref_id, status").eq("ref_kind", "work_order").eq("kind", "script").gte("created_at", `${since}T00:00:00Z`).limit(40),
       ]);
       const column = { planned: "drafting", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
@@ -948,18 +949,33 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           approvalId: card,
         };
       });
-      const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string }; due_at: string | null; created_at: string }[]).map((o) => ({
-        id: o.id,
-        kind: "video_brief" as const,
-        platform: screenPlatform(o.brief.platform, "youtube"),
-        at: null,
-        dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
-        title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
-        column: o.status === "done" ? ("posted" as const) : ("drafting" as const),
-        versions: 1,
-        note: o.status === "done" ? "Fed the Studio team" : null,
-        approvalId: null,
-      }));
+      // A script the founder records (2026-11-09): its card while it waits, then "Open in editor" once approved.
+      // A script can have older cards (a refreshed card cancels the one before): the live one, else the decision, wins.
+      const rank = (status: string) => (status === "waiting" || status === "held" ? 2 : status === "approved" || status === "edited" ? 1 : 0);
+      const scriptCard = new Map<string, { id: string; ref_id: string; status: string }>();
+      for (const c of must(scriptCards, "approvals") as { id: string; ref_id: string; status: string }[]) {
+        const seen = scriptCard.get(c.ref_id);
+        if (!seen || rank(c.status) > rank(seen.status)) scriptCard.set(c.ref_id, c);
+      }
+      const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string; storyboard?: unknown }; due_at: string | null; created_at: string }[]).map((o) => {
+        const card = Array.isArray(o.brief.storyboard) ? scriptCard.get(o.id) : undefined;
+        const waiting = card?.status === "waiting" || card?.status === "held";
+        const approved = card?.status === "approved" || card?.status === "edited";
+        return {
+          id: o.id,
+          kind: "video_brief" as const,
+          platform: screenPlatform(o.brief.platform, "youtube"),
+          at: null,
+          dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
+          title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
+          // An approved script is the founder's next video to record, not something posted.
+          column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
+          versions: 1,
+          note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : card.status === "skipped" ? "You skipped it" : "Dropped from the plan") : o.status === "done" ? "Fed the Studio team" : null,
+          approvalId: waiting ? card!.id : null,
+          scriptId: approved ? o.id : null,
+        };
+      });
       return [...postDrafts, ...captionDrafts, ...briefDrafts];
     },
     // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.

@@ -152,16 +152,21 @@ export function TranscriptPanel({
       </label>
     ) : null;
 
+  // A video in the edit whose transcript never came (a failed transcription publishes the upload without one): say so
+  // and point to the retry, instead of "no speech" (CLAUDE.md "Known traps").
+  const missingWords = status === "none" && !!source && !source.transcript;
   if (status !== "ready" || !model) {
     return (
       <section className="ed2-trn" data-testid="transcript-panel">
         {picker}
-        <p className={status === "error" ? "ed2-error ed2-trn-note" : "ed2-muted ed2-trn-note"}>
+        <p className={status === "error" || missingWords ? "ed2-error ed2-trn-note" : "ed2-muted ed2-trn-note"} data-testid={missingWords ? "transcript-missing" : undefined}>
           {status === "loading"
             ? "Loading the transcript…"
-            : status === "none"
-              ? "This clip has no video speech to edit. Add a voiceover with captions, or select a video or audio and use Generate captions in the inspector."
-              : "The transcript could not be loaded. Reload the page to try again."}
+            : missingWords
+              ? `We could not get the words of ${source!.name || "this video"}, so there is nothing to cut by words yet. If it has speech, upload it again from the Upload tab: a new upload is transcribed again.`
+              : status === "none"
+                ? "This clip has no video speech to edit. Add a voiceover with captions, or select a video or audio and use Generate captions in the inspector."
+                : "The transcript could not be loaded. Reload the page to try again."}
         </p>
         <div className="ed2-trn-text">
           <VoiceoverTranscript doc={doc} context={context} onSeek={onSeek} />

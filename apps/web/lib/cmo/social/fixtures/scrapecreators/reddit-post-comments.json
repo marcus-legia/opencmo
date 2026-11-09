@@ -1,0 +1,33 @@
+{
+  "source": "assumed",
+  "path": "/v1/reddit/post/comments",
+  "params": {
+    "url": "https://www.reddit.com/r/freelance/comments/abc123/how_do_you_chase_late_invoices/"
+  },
+  "body": {
+    "post": {
+      "title": "How do you chase late invoices? (5)",
+      "permalink": "/r/freelance/comments/abc125/how_do_you_chase_late_invoices/",
+      "subreddit": "freelance",
+      "subreddit_name_prefixed": "r/freelance",
+      "author": "user_redacted",
+      "selftext": "Clients pay 60 days late and I hate sending reminders.",
+      "score": 42,
+      "num_comments": 17,
+      "created_utc": 1790000000
+    },
+    "comments": [
+      {
+        "author": "user_redacted",
+        "body": "I use automatic reminders, saved me hours.",
+        "score": 12,
+        "replies": []
+      },
+      {
+        "author": "user_redacted",
+        "body": "Charge a late fee and say so up front.",
+        "score": 5
+      }
+    ]
+  }
+}

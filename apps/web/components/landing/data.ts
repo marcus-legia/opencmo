@@ -18,34 +18,36 @@ export type Dept = {
   channels: SocialKey[];
 };
 
+// The order of the CMO loop (CLAUDE.md "Strategy"): words are written first, video is built from them, and the
+// editor is where the founder finishes their own recordings by hand.
 export const DEPTS: Dept[] = [
   {
-    id: "video",
-    numeral: "I",
-    short: "Video",
-    name: "Video Department",
-    goal: "An AI video editor you edit by asking.",
-    steps: [
-      "Upload a video you recorded, then cut it by editing the transcript",
-      "Ask the agent to change the edit, the animation or a 3D scene",
-      "Adds captions and a voice-over, and exports a version per platform",
-    ],
-    result: "Finished videos from what you record, edited by asking.",
-    channels: ["tiktok", "instagram", "youtubeshorts", "facebook", "threads"],
-  },
-  {
     id: "post",
-    numeral: "II",
+    numeral: "I",
     short: "Post",
     name: "Post Department",
     goal: "An AI post writer that knows your business.",
     steps: [
       "Reads your strategy and what you shipped this week",
-      "Drafts a post in your voice for each platform",
+      "Drafts posts, slides and video scripts in your voice for each platform",
       "You approve each post and its time; it posts then, on your account",
     ],
     result: "Posts for every platform, in your voice, every day.",
     channels: ["x", "linkedin", "threads", "facebook", "reddit"],
+  },
+  {
+    id: "video",
+    numeral: "II",
+    short: "Video",
+    name: "Video Department",
+    goal: "Slideshows, post images and short clips from your own videos.",
+    steps: [
+      "Builds slideshows and post images from the words you approved, with your Brand Kit",
+      "Cuts short clips from a video you recorded and finished in the editor",
+      "The editor is where you fine-tune by hand: cut by words, captions, voice-over",
+    ],
+    result: "Visual posts from your plan, and clips from what you record.",
+    channels: ["tiktok", "instagram", "youtubeshorts", "facebook", "threads"],
   },
   {
     id: "sales",
@@ -67,7 +69,7 @@ export const DEPTS: Dept[] = [
 export const BEATS = [
   { num: "I.", title: "It starts with your website.", body: "The AI CMO reads your site and competitors, and turns them into one strategy and one goal." },
   { num: "II.", title: "The plan takes shape.", body: "Your goal becomes a weekly calendar, mapped across the channels where your customers already are." },
-  { num: "III.", title: "Three departments carry it.", body: "Video, Post and Sales each own one result, and leave their drafts for you to approve." },
+  { num: "III.", title: "Three departments carry it.", body: "Post writes, Video builds from the approved words, Sales finds the conversations. You approve what goes out and when." },
 ];
 
 export const DEMOS: Record<DeptId, { src: string; poster: string; label: string; alt: string; caption: string }> = {
@@ -75,8 +77,8 @@ export const DEMOS: Record<DeptId, { src: string; poster: string; label: string;
     src: "/demos/video.mp4",
     poster: "/demos/video.webp",
     label: "Video department · 5s",
-    alt: "The Video editor: the founder asks the agent to punch up the hook and add a 3D chart; captions and a voice-over are added",
-    caption: "Ask the editor to make the hook punchier and add a 3D chart. The agent edits the clip, restyles the captions and records the voice-over.",
+    alt: "The Video editor: the founder asks the agent to punch up the hook of a video they recorded; captions and a voice-over are added",
+    caption: "Finish a video you recorded: ask the editor to tighten the hook, restyle the captions or add a voice-over.",
   },
   post: {
     src: "/demos/post.mp4",
@@ -112,19 +114,21 @@ export const USUAL_STACK = [
 
 export const INCLUDED = [
   { icon: DEPT_ICON.cmo, title: "AI CMO", body: "Reads your site and plans your week around one goal" },
-  { icon: DEPT_ICON.video, title: "Video department", body: "Edits your videos and 3D scenes when you ask, with captions and voice-over" },
   { icon: DEPT_ICON.post, title: "Post department", body: "Drafts for X, LinkedIn, Threads, Facebook and Reddit" },
+  { icon: DEPT_ICON.video, title: "Video department", body: "Slideshows, post images and clips from your own videos, plus the editor" },
   { icon: DEPT_ICON.sales, title: "Sales department", body: "Finds the conversations where people need what you sell, on 9 platforms" },
 ];
 
-export function faqs(p: Prices): { q: string; a: string }[] {
+export function faqs(p: Prices | null): { q: string; a: string }[] {
+  const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
-    { q: "What is an AI marketing team?", a: "OpenCMO gives you three AI departments led by an AI CMO. Video edits your recordings into short videos, Post writes posts for X, LinkedIn, Threads, Facebook and Reddit, and Sales finds conversations where people need what you built. You approve everything." },
+    { q: "What is an AI marketing team?", a: "OpenCMO is an AI CMO with three departments. It reads your website, plans your week and writes the posts, slides and video scripts. Video builds slideshows, post images and clips from your own videos, and Sales finds conversations where people need what you built. You approve what goes out and when." },
     { q: "Does OpenCMO post anything without me?", a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
-    { q: "Can I edit videos by asking?", a: "Yes. In the editor you ask the AI agent to change the edit, the animation or a 3D scene. It also writes captions and records a voice-over." },
+    { q: "What does it do with video?", a: "It builds slideshows and post images from the words you approved, and cuts short clips from videos you recorded and finished in the editor. In the editor you cut by editing the transcript and ask the agent for captions, B-roll or a voice-over." },
     { q: "Which platforms does Sales search?", a: "Public conversations on Reddit, X, LinkedIn, Facebook groups, Threads, Hacker News, Indie Hackers, YouTube comments and Quora. It drafts a reply; you post it yourself." },
     { q: "Will it like, follow or DM people for me?", a: "No. There are no automated likes, follows, DMs or replies. OpenCMO drafts; you decide what to say and where." },
-    { q: "What does the plan include?", a: `Everything: the AI CMO, all three departments, and the editor with captions, voice-over and 3D. $${p.annual} a month billed annually, or $${p.monthly} month to month.` },
+    { q: "Is there a free trial?", a: `No. OpenCMO starts when you pick a plan.${price} Your first week's plan and drafts arrive within minutes of giving it your website.` },
+    { q: "What does the plan include?", a: `Everything: the AI CMO, all three departments, and the editor with captions and voice-over.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
   ];
 }
@@ -139,8 +143,8 @@ export const MENUS: Menu[] = [
     id: "product", label: "Product", width: 380, cols: 1,
     items: [
       mi("AI CMO", "Turns one goal into a weekly plan", "/ai-cmo", { icon: DEPT_ICON.cmo }),
-      mi("AI video editor", "Edit video, captions and 3D by asking", "/ai-video-editor", { icon: DEPT_ICON.video }),
       mi("AI post writer", "Posts for X, LinkedIn, Threads and more", "/ai-post-writer", { icon: DEPT_ICON.post }),
+      mi("AI video editor", "Finish your own videos: captions, cuts, voice-over", "/ai-video-editor", { icon: DEPT_ICON.video }),
       mi("Customer conversations", "Find people asking for what you built", "/find-customers", { icon: DEPT_ICON.sales }),
       mi("Brand kit", "Your colors, fonts and captions", "/brand-kit", { icon: LUCIDE.palette }),
     ],
@@ -152,7 +156,7 @@ export const MENUS: Menu[] = [
       mi("Indie hackers", "Launch and grow in public", "/for/indie-hackers", { icon: LUCIDE.rocket }),
       mi("SaaS startups", "Content from what you ship", "/for/saas", { icon: LUCIDE.layers }),
       mi("Agencies", "One team for every client", "/for/agencies", { icon: LUCIDE.briefcase }),
-      mi("Creators & coaches", "Edit every recording by asking", "/for/creators", { icon: LUCIDE.mic }),
+      mi("Creators & coaches", "Plan, write and finish every recording", "/for/creators", { icon: LUCIDE.mic }),
     ],
   },
   {

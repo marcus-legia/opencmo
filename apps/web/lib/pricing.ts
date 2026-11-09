@@ -1,6 +1,7 @@
 /**
- * The plans: quotas and features, keyed by plan id. Prices and credits on sale live in `billing_catalog`
- * (`lib/billing-catalog.ts`); the numbers here are what a page shows when the catalogue cannot be read.
+ * The plans: quotas and features, keyed by plan id. Prices and credits on sale live only in `billing_catalog`
+ * (`lib/billing-catalog.ts`). The paid plans here carry no price (0): a page with no catalogue row for a plan shows no
+ * price for it rather than a number that may be stale (cmo-review-2 S2.7).
  *
  * Two things copied from Opus Clip (OPUSCLIP.md §3.10) because the market has proved them:
  *   1. A permanent struck-through list price on the annual plan, not a time-limited offer.
@@ -61,38 +62,35 @@ export const PLANS: Plan[] = [
   {
     id: "starter",
     name: "Monthly",
-    price: 69,
+    price: 0,
     interval: "month",
-    billedPrice: 69,
-    credits: 580,
+    billedPrice: 0,
+    credits: 0,
     previewsPerDay: 100,
     exportsPerDay: 30,
     maxExportResolution: 1080,
     watermark: false,
     quota: { previews: 100, exports: 30, storageBytes: 10 * 1024 ** 3, storageObjects: 1000 },
     features: [
-      "AI CMO + Video, Post and Sales departments",
-      "580 credits per month",
+      "AI CMO + Post, Video and Sales departments",
+      "Monthly credits",
       "No watermark, full-resolution 1080×1920 download",
     ],
   },
   {
     id: "creator",
     name: "Annual",
-    listPrice: 69,
-    price: 57.5,
+    price: 0,
     interval: "year",
-    billedPrice: 690,
-    credits: 580,
+    billedPrice: 0,
+    credits: 0,
     previewsPerDay: 300,
     exportsPerDay: 100,
     maxExportResolution: 1080,
     watermark: false,
     quota: { previews: 300, exports: 100, storageBytes: 25 * 1024 ** 3, storageObjects: 2500 },
     highlight: true,
-    features: [
-      "Everything in Monthly, 580 credits every month, billed $690 once a year",
-    ],
+    features: ["Everything in Monthly, billed once a year"],
   },
 ];
 
@@ -113,7 +111,7 @@ export function withCatalogPrice(plan: Plan, priceCents: number, credits: number
     listPrice: year && monthlyCents ? monthlyCents / 100 : plan.listPrice,
     features: year
       ? [`Everything in Monthly, ${credits} credits every month, billed $${billed} once a year`]
-      : plan.features.map((feature) => (/credits per month$/.test(feature) ? `${credits} credits per month` : feature)),
+      : plan.features.map((feature) => (feature === "Monthly credits" ? `${credits} credits per month` : feature)),
   };
 }
 

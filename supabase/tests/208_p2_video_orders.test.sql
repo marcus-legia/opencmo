@@ -1,4 +1,4 @@
--- P2 A2 (20261228120000): a video item becomes a `build_video` order; the order runner claims queued Studio orders,
+-- P2 A2 (20261228120000): a `build_video` order (no week plan makes one since 2026-11-09; the order kind stays); the order runner claims queued Studio orders,
 -- approved steps (recording the spend once) and steps whose generations finished, each once; a step stores what runs
 -- next and what it waits on; the runner moves orders only through `studio_order_move`.
 create extension if not exists pgtap with schema extensions;
@@ -20,14 +20,12 @@ update public.profiles set weekly_credit_budget = 100 where id = 'e2080000-0000-
 create temp table t (name text primary key, id uuid) on commit drop;
 grant all on t to authenticated;
 
--- The plan: one video item → one build_video order under Studio.
-with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2080000-0000-4000-8000-00000000000a', 'plan_week', 'running') returning id)
-insert into t select 'run', id from r;
-select is(public.cmo_plan_week('e2080000-0000-4000-8000-00000000000a', (select id from t where name = 'run'), jsonb_build_array(
-  jsonb_build_object('department', 'post', 'platform', 'X', 'day', current_date, 'idea', 'Cut by words'),
-  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', current_date + 1, 'idea', 'How the CMO plans a week',
-    'reason', 'The launch needs a demo'))), 2, 'two calendar items');
-insert into t select 'order', id from public.work_orders where kind = 'build_video';
+-- A build_video order under Studio, as the week plan made them before 2026-11-09.
+select ok((public.work_order_week_root('e2080000-0000-4000-8000-00000000000a')).id is not null, 'the week has a root');
+insert into t select 'order', id from public.work_order_create('e2080000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+  (select id from public.work_orders where parent_id is null and user_id = 'e2080000-0000-4000-8000-00000000000a'), 'build_video',
+  'How the CMO plans a week', jsonb_build_object('objective', 'How the CMO plans a week', 'angle', 'The launch needs a demo', 'aspect', '9:16'),
+  60, null, '{}', 'loop', null, 'studio');
 select is((select department || ' ' || status || ' ' || budget_credits from public.work_orders where id = (select id from t where name = 'order')),
   'studio queued 60', 'the video item is a queued Studio order, budgeted');
 select is((select brief->>'objective' || ' / ' || (brief->>'angle') || ' / ' || (brief->>'aspect') from public.work_orders where id = (select id from t where name = 'order')),
@@ -127,15 +125,14 @@ select public.studio_step_finish('e2083000-0000-4000-8000-00000000000c', 'runnin
 reset role;
 select is((select spent_credits from public.work_orders where id = (select id from t where name = 'order')), 9, 'the redo adds its keyframe''s 3 credits');
 
--- A replan while the video is under way keeps one video order: the new item is linked to it.
+-- A replan orders no video (owner, 2026-11-09): the new video item is a script Writer writes.
 with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2080000-0000-4000-8000-00000000000a', 'plan_week', 'running') returning id)
 insert into t select 'run2', id from r;
 select public.cmo_plan_week('e2080000-0000-4000-8000-00000000000a', (select id from t where name = 'run2'), jsonb_build_array(
   jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', current_date + 2, 'idea', 'How the CMO plans a week, take 2')));
-select is((select count(*)::int from public.work_orders where kind = 'build_video' and status not in ('done', 'failed', 'cancelled')), 1,
-  'a replan does not start a second video this week');
-select is((select c.idea from public.work_orders o join public.content_items c on c.id = o.item_id where o.id = (select id from t where name = 'order')),
-  'How the CMO plans a week, take 2', 'the running order carries the new item');
+select is((select count(*)::int from public.work_orders where kind = 'build_video'), 1, 'a replan does not order a video');
+select is((select o.kind from public.work_orders o join public.content_items c on c.id = o.item_id where c.idea = 'How the CMO plans a week, take 2'),
+  'write_video_brief', 'the new video item is a script');
 
 select * from finish();
 rollback;

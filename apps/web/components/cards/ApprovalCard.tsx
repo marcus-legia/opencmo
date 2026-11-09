@@ -29,6 +29,8 @@ import {
   ShortsBody,
   SlideshowBody,
 } from "./bodies";
+import { useConnectedPlatforms } from "./connected";
+import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
@@ -105,9 +107,6 @@ export function ApprovalCard({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [declining, setDeclining] = useState(false);
-  /** Price card: the keyframe picker is open. */
-  const [redoing, setRedoing] = useState(false);
-  const [keyframe, setKeyframe] = useState(0);
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
@@ -145,20 +144,30 @@ export function ApprovalCard({
     return ok;
   }
 
+  // A post draft whose platform has no connected account offers copy and open and "I posted it" right away (S2.6).
+  const connected = useConnectedPlatforms(sample || card.body.kind !== "post");
+  const postPlatform = card.body.kind === "post" ? card.body.platforms[0]?.platform : undefined;
+  const postYourself =
+    card.body.kind === "post" && connected !== null && postPlatform !== undefined && !connected.has(postPlatform) && !card.body.platforms.some((p) => p.thread);
+  const postText = () => (editing ? draft.trim() : shown);
+
+  async function copyAndOpenText(platform: string, text: string) {
+    const target = isPublishPlatform(platform) ? intentFor(platform, text) : null;
+    if (!target) return;
+    const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
+    const tab = window.open(target.url, "_blank", "noopener,noreferrer");
+    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
+    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
+  }
+
   /**
    * The copy-and-open moment of a post with no connected account (P4 F9): X and Threads open their composer with the
    * words in it, LinkedIn's text is copied first. The tab opens and the text is copied inside the click (later ones
    * are blocked); the founder then says "I posted it". A sample card opens nothing and copies nothing.
    */
   async function copyAndOpen(body: Extract<Card["body"], { kind: "schedule" }>) {
-    const text = body.preview.text ?? "";
-    const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, text) : null;
-    if (!target) return;
     if (sample) return toast("Sample card: nothing was copied or opened.");
-    const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
-    const tab = window.open(target.url, "_blank", "noopener,noreferrer");
-    if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
-    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
+    return copyAndOpenText(body.where.platform, body.preview.text ?? "");
   }
 
   async function saveSlide(index: number, heading: string, words: string): Promise<boolean> {
@@ -171,6 +180,20 @@ export function ApprovalCard({
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
       return false;
+    }
+  }
+
+  /** A script the founder records: approved (or edited), then its blank edit opens with a marker on each beat. */
+  async function approveAndOpen() {
+    if (card.body.kind !== "script") return;
+    const words = draft.trim();
+    const decision: Decision = editing && words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" };
+    const orderId = card.body.stepId;
+    if (!(await run(decision)) || sample) return;
+    try {
+      await openScript(orderId);
+    } catch (error) {
+      toast(error instanceof ApiError ? `Script approved. ${error.message}` : "Script approved, but the editor did not open. Try again from the Writer screen.");
     }
   }
 
@@ -247,6 +270,24 @@ export function ApprovalCard({
       case "post":
         // A thread (P6 W4) is approved as written: one edited post would no longer match the thread it opens.
         if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...declineAction];
+        if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
+          const target = intentFor(postPlatform, postText());
+          return [
+            // X and Threads open their composer with the words in it; LinkedIn's label already says it copies.
+            ...(target ? [{ label: target.label, variant: "primary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
+            {
+              label: "I posted it",
+              variant: target ? ("secondary" as const) : ("primary" as const),
+              run: () => {
+                const text = postText();
+                void run({ action: "posted_self", text: text !== firstText(card) ? text : undefined });
+              },
+            },
+            editAction(),
+            { label: "Approve and schedule", variant: "quiet", run: approve },
+            ...declineAction,
+          ];
+        }
         return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
       case "reply":
         return [
@@ -257,10 +298,12 @@ export function ApprovalCard({
       case "goal":
         return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
       case "script":
+        if (card.body.forFounder) return [{ label: editing ? "Approve edit and open" : "Approve and open in editor", variant: "primary", run: () => void approveAndOpen() }, editAction("Edit a beat"), ...declineAction];
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
-        // Redo exists only for a contact sheet: a price for shots alone has no keyframe to make again.
-        return [primary(), ...(card.body.keyframes.length > 0 ? [{ label: "Redo a keyframe", variant: "secondary" as const, run: () => setRedoing(true) }] : []), ...declineAction];
+        // No keyframe redo from a card: the contact sheet went with the two-card /video (2026-11-06); `redo_keyframe` does it
+        // in the editor, and Studio fails a step decided "redo" (`studio-orders.ts`).
+        return [primary(), ...declineAction];
       case "finished_video":
         return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }, ...declineAction];
       case "shorts_batch":
@@ -283,7 +326,7 @@ export function ApprovalCard({
         if (body.state === "no_account") {
           const target = isPublishPlatform(body.where.platform) ? intentFor(body.where.platform, body.preview.text ?? "") : null;
           return [
-            ...(target ? [{ label: target.copy ? target.label : `Copy and ${target.label.toLowerCase()}`, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
+            ...(target ? [{ label: target.label, variant: "primary" as const, run: () => void copyAndOpen(body) }] : []),
             { label: "I posted it", variant: target ? ("secondary" as const) : ("primary" as const), checks: "posted", run: () => void run({ action: "posted" }) },
             ...declineAction,
           ];
@@ -451,38 +494,6 @@ export function ApprovalCard({
                 </Button>
                 <Button variant="quiet" compact onClick={() => setMoving(false)}>
                   Keep this time
-                </Button>
-              </div>
-            </form>
-          ) : redoing && card.body.kind === "price" ? (
-            <form
-              className="v2-card-decline"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run({ action: "redo", index: keyframe });
-              }}
-            >
-              <fieldset className="v2-field">
-                <legend>Which keyframe should be made again? Only that one is redone; its price comes on a new card.</legend>
-                <div className="v2-card-keyframes">
-                  {card.body.keyframes.map((frame) => (
-                    <label key={frame.index} className="v2-card-keyframe" title={frame.label}>
-                      <input type="radio" name={`${card.id}-keyframe`} value={frame.index} checked={keyframe === frame.index} onChange={() => setKeyframe(frame.index)} />
-                      <span>
-                        <span className="v2-visually-hidden">Keyframe </span>
-                        {String(frame.index + 1).padStart(2, "0")}
-                        {frame.garbled ? <span className="v2-visually-hidden"> (text may be garbled)</span> : null}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <div className="v2-actions">
-                <Button type="submit" variant="primary" compact disabled={busy}>
-                  Redo keyframe {keyframe + 1}
-                </Button>
-                <Button variant="quiet" compact onClick={() => setRedoing(false)}>
-                  Keep it
                 </Button>
               </div>
             </form>

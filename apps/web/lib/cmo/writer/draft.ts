@@ -144,6 +144,7 @@ function fakeOutput(kind: WriterKind, profile: WriterProfile | null, brief: Writ
         aspect: b.aspect ?? "9:16",
         rationale: "From this week's video item.",
         learnedFrom: (context.nicheUrls ?? []).slice(0, 2),
+        storyboard: fakeStoryboard(b.idea, product, b.seconds ?? 30),
       };
     }
     case "slides": {
@@ -153,6 +154,17 @@ function fakeOutput(kind: WriterKind, profile: WriterProfile | null, brief: Writ
       return { slides: [{ heading: b.idea.replace(/\.$/, ""), body: "" }, ...middle, { heading: `Try ${product}`, body: "" }], rationale: "From this week's slideshow item." };
     }
   }
+}
+
+/** Four beats the fake model records, their seconds adding up to the brief's length. */
+function fakeStoryboard(idea: string, product: string, seconds: number) {
+  const quarter = Math.max(1, Math.round(seconds / 4));
+  return [
+    { say: `${idea.replace(/\.$/, "")}.`, show: "You, to camera", shot: "talking_head" as const, seconds: quarter },
+    { say: `Here is ${product} doing it.`, show: `${product} on your screen, the first step`, shot: "screen" as const, seconds: quarter },
+    { say: "That is the whole thing.", show: `${product} showing the result`, shot: "screen" as const, seconds: quarter },
+    { say: `Try ${product}.`, show: "You, to camera", shot: "talking_head" as const, seconds: Math.max(1, seconds - 3 * quarter) },
+  ];
 }
 
 type Spec = { schema: z.ZodType; system: string; label: string; title: string };
@@ -183,6 +195,7 @@ function toBrief(raw: z.infer<typeof VideoBriefDraftSchema>) {
     cta: raw.cta.trim().slice(0, 160),
     seconds: Math.min(90, Math.max(5, Math.round(raw.seconds))),
     aspect: raw.aspect,
+    storyboard: raw.storyboard.map((beat) => ({ say: beat.say.trim(), show: beat.show.trim(), shot: beat.shot, seconds: Math.min(30, Math.max(1, Math.round(beat.seconds))) })),
   });
 }
 

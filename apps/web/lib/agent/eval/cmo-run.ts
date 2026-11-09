@@ -135,8 +135,12 @@ export async function runCmoTasks(provider: Provider, opts: { epoch?: number; ta
     }
     opts.log?.(`${task.id}: ${recording.calls.map((call) => `${call.name}${call.ok ? "" : " (failed)"}`).join(", ") || "no tools"} · ${recording.turn.status}`);
     // A confirmation card ends the turn waiting for the founder; that is the expected end of a decision.
+    // Where the founder asked for a scan, the turn may end on its price card (cmo-review-2 S3.5): nothing ran, so the
+    // memory grade below still judges every write the turn made.
+    const priceCardOnly =
+      task.priceCard === "create_task" && recording.turn.status === "awaiting_approval" && recording.pending.length > 0 && recording.pending.every((call) => call.name === "create_task");
     const expectedEnd = task.expectedWriteBehavior === "confirm_card" ? "awaiting_approval" : "done";
-    if (recording.turn.status !== expectedEnd) {
+    if (recording.turn.status !== expectedEnd && !(expectedEnd === "done" && priceCardOnly)) {
       results.push({ ...base, pass: false, decided_by: "error", notes: [`turn ended ${recording.turn.status}${recording.turn.error ? `: ${recording.turn.error}` : ""}`], cost_usd: recording.costUsd });
       continue;
     }

@@ -18,8 +18,8 @@ with r as (insert into public.cmo_runs (user_id, kind, status) values ('e2490000
 insert into t select 'run', id from r;
 select public.cmo_plan_week('e2490000-0000-4000-8000-00000000000a', (select id from t where name = 'run'), jsonb_build_array(
   jsonb_build_object('department', 'post', 'platform', 'X', 'day', current_date, 'idea', 'Cut by words', 'reason', 'Pillar one'),
-  jsonb_build_object('department', 'post', 'platform', 'X', 'day', current_date + 1, 'idea', 'Captions in one click', 'reason', 'Pillar two'),
-  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', current_date + 1, 'idea', 'How the CMO plans a week')));
+  jsonb_build_object('department', 'post', 'platform', 'X', 'day', date_trunc('week', current_date)::date + 6, 'idea', 'Captions in one click', 'reason', 'Pillar two'),
+  jsonb_build_object('department', 'video', 'platform', 'Shorts', 'day', date_trunc('week', current_date)::date + 6, 'idea', 'How the CMO plans a week')));
 
 insert into t select 'card', id from public.approvals where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'plan' and status = 'waiting';
 select is((select count(*)::int from t where name = 'card'), 1, 'the plan raises one plan card');
@@ -27,7 +27,7 @@ select is((select department || ' ' || ref_kind || ' ' || jsonb_array_length(sna
   'brain work_order 3', 'the brain''s card, with the week''s three items');
 
 insert into t select 'video_item', id from public.content_items where user_id = 'e2490000-0000-4000-8000-00000000000a' and department = 'video';
-insert into t select 'video_order', id from public.work_orders where item_id = (select id from t where name = 'video_item') and kind = 'build_video';
+insert into t select 'video_order', id from public.work_orders where item_id = (select id from t where name = 'video_item') and kind = 'write_video_brief';
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2490000-0000-4000-8000-00000000000a","role":"authenticated"}';
@@ -43,7 +43,7 @@ select is((public.approval_decide((select id from t where name = 'card'), 'appro
 
 reset role;
 select is((select count(*)::int from public.content_items where id = (select id from t where name = 'video_item')), 0, 'the dropped item is gone');
-select is((select status from public.work_orders where id = (select id from t where name = 'video_order')), 'cancelled', 'and its video order is cancelled');
+select is((select status from public.work_orders where id = (select id from t where name = 'video_order')), 'cancelled', 'and its script order is cancelled');
 select is((select count(*)::int from public.approvals where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'plan' and status = 'waiting'),
   0, 'the resync raises no new plan card');
 select is((select count(*)::int from public.work_orders where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'post_draft' and status = 'queued'),

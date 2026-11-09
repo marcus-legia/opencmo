@@ -69,7 +69,7 @@ async function main() {
   assert.equal(maxSteps("build_video"), 40, "Studio kinds come from the same registry");
   assert.equal(maxSteps("not_a_kind"), null);
 
-  // A slideshow is a Studio item apart from videos: one a week, never counted against the one video (cmo-review B2.3).
+  // The week plan orders no AI video: one slideshow and one script the founder records a week (owner, 2026-11-09).
   const studio = toPlanItems({ items: [
     { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },
     { day_offset: 2, department: "video", platform: "slideshow", idea: "Five cuts", reason: "r" },
@@ -77,6 +77,15 @@ async function main() {
     { day_offset: 4, department: "video", platform: "TikTok", idea: "A second video", reason: "r" },
   ] }, today);
   assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
+
+  // C3: at most two posts a week get an image; never another kind of item.
+  const pictured = toPlanItems({ items: [
+    { day_offset: 0, department: "post", platform: "X", idea: "Launch", reason: "r", image: true },
+    { day_offset: 1, department: "post", platform: "X", idea: "Screen", reason: "r", image: true },
+    { day_offset: 2, department: "post", platform: "X", idea: "Third", reason: "r", image: true },
+    { day_offset: 3, department: "sales", platform: "Reddit", idea: "Thread", reason: "r", image: true },
+  ] }, today);
+  assert.deepEqual(pictured.map((p) => p.image ?? false), [true, true, false, false]);
 
   // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
   const { fitStage } = await import("./plan-week");

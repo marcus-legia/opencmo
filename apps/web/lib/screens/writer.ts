@@ -23,6 +23,8 @@ export const DraftSchema = z.object({
   /** "You edited 2 lines · results tomorrow", "Approved as drafted". */
   note: z.string().max(120).nullable(),
   approvalId: z.string().nullable(),
+  /** An approved script the founder records (2026-11-09): its order, which "Open in editor" opens. */
+  scriptId: z.string().nullable().optional(),
 });
 
 export const VoiceLineSchema = z.object({ text: z.string().max(200), source: z.string().max(120) });

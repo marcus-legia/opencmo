@@ -14,6 +14,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
+import { researchCard, salesScanCard, type PriceCard } from "@/lib/cmo/jobs/price-card";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
@@ -228,6 +229,25 @@ const taskInput = z.object({
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
+/**
+ * Tasks that cost more than a draft show their price first (cmo-review-2 S3.5, "charge before running"): run now, a
+ * Sales scan or competitor research is planned as an approval card, and `create_task` runs only when the founder
+ * approves it. Nothing is held before that. A dated task only adds a calendar item, which costs nothing until its day;
+ * the weekly loop keeps its own budget gate.
+ */
+export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_research" } as const;
+
+export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
+
+/** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
+export function pricedTaskCard(input: unknown): PricedTask | null {
+  const parsed = taskInput.safeParse(input);
+  // `thread` belongs to x_writer: let create_task refuse it now instead of after the founder approved a card.
+  if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread) return null;
+  const task = parsed.data;
+  return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
+}
+
 const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
 const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });

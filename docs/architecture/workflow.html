@@ -161,29 +161,34 @@ td:first-child{font-weight:600;white-space:nowrap}
 .t-xs{fill:var(--fg);font-family:var(--body);font-size:11px}
 table.steps td:nth-child(3){min-width:260px}
 table.steps td:nth-child(4){min-width:200px}
+
+/* Twin of the markdown page, regenerated 2026-11-08: plain blocks the md uses. */
+pre{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5}
+pre code{background:none;padding:0}
+.sec ul,.sec ol.plain{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.sec ul ul{margin-top:6px}
+.sec h3{margin-top:4px}
+.lede p+p{margin-top:8px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">opencmo.io · architecture · end-to-end workflow · for review · 2026-10-27</p>
-    <h1>One week of OpenCMO, end to end</h1>
-    <p class="lede">How the brain and the seven departments work together, step by step, through one founder's week: who does what, which card the founder sees, what costs credits, and what exists today. Every decision recorded on the department pages is applied here. Markdown twin for agents: <code>workflow.md</code>. Status: for the owner's review.</p>
-    <nav class="toc" aria-label="Sections">
-      <a href="#lanes">Swimlane</a><a href="#steps">11 steps</a><a href="#cards">Cards in a week</a><a href="#wires">How they talk</a><a href="#order">Build order</a><a href="#open">Open points</a>
-    </nav>
+    <p class="eyebrow">opencmo.io · architecture · end-to-end workflow · built · 2026-11-08</p>
+    <h1>End-to-end workflow</h1>
+    <div class="lede"><p>Status: <b>built</b> (<code>main</code> at <code>4f70a59</code>, 2026-11-08; checked again for the CMO review 2 plan). Markdown twin for agents: <code>workflow.md</code>; the two say the same thing. Built from <a href="ai-cmo.html"><code>ai-cmo.html</code></a>, <a href="brain.html"><code>brain.html</code></a>, <a href="studio.html"><code>studio.html</code></a>, <a href="approval.html"><code>approval.html</code></a>, <a href="schedule-publish.html"><code>schedule-publish.html</code></a>, <a href="writer.html"><code>writer.html</code></a> and <a href="research-sales.html"><code>research-sales.html</code></a>. The order of work follows the owner's decision of 2026-11-08: the AI CMO first, the editor last (<a href="../plans/cmo/2026-11-08-cmo-review-2-plan.md">plan</a> §2).</p>
+<p>How the brain and the seven departments work together through one founder's week: who does what, which card the founder sees, what costs credits, and where it is in the code.</p></div>
+    <nav class="toc" aria-label="Sections"><a href="#swimlane">Swimlane</a><a href="#the-11-steps">The 11 steps</a><a href="#cards-in-a-typical-week">Cards in a typical week</a><a href="#how-the-departments-talk">How the departments talk</a><a href="#charge-before-running">Charge before running</a><a href="#order-of-work">Order of work</a><a href="#open-points">Open points</a></nav>
   </header>
 
-  <section class="sec" id="lanes">
-    <div class="sec-head"><p class="eyebrow">Swimlane</p><h2>Who does what, in order</h2>
-      <p class="lede">Rows are the founder and the departments; numbered columns are the steps of the week. Arrows inside a column show who hands to whom. After step 11 the week's memory feeds the next Sunday.</p></div>
-    <div class="legend">
+  <section class="sec" id="swimlane">
+    <div class="sec-head"><p class="eyebrow">§1</p><h2>Swimlane</h2></div>
+<div class="legend">
       <span><i class="sw" style="background:var(--gate-soft);outline:2px solid var(--gate)"></i>Your step (a card or an action)</span>
-      <span><i class="sw" style="background:var(--paper);outline:1.3px solid var(--lapis)"></i>Exists today</span>
-      <span><i class="sw" style="background:var(--ok-soft);outline:1px dashed var(--ok)"></i>To build</span>
+      <span><i class="sw" style="background:var(--paper);outline:1.3px solid var(--lapis)"></i>Built</span>
     </div>
-    <p class="hint">Scroll sideways to see the whole diagram.</p>
-    <div class="diagram">
+<p class="hint">Scroll sideways to see the whole diagram.</p>
+<div class="diagram">
 <svg class="wide" viewBox="0 0 1414 744" role="img" aria-label="End-to-end swimlane: eleven numbered steps across the founder and seven departments, from setup to measuring, looping back to Sunday.">
 <defs><marker id="wf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m" d="M0 0L10 5L0 10z"/></marker><marker id="wfn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-ok" d="M0 0L10 5L0 10z"/></marker></defs>
 <rect class="lane-you" x="10" y="92" width="1394" height="72" rx="6"/>
@@ -210,7 +215,7 @@ table.steps td:nth-child(4){min-width:200px}
 <path class="e" d="M443.0 40H527.0" marker-end="url(#wf)"/>
 <g class="nb"><circle cx="543.0" cy="40" r="12"/><text x="543.0" y="44">4</text></g><text class="t-eye" x="543.0" y="72" text-anchor="middle">POSTS</text>
 <path class="e" d="M557.0 40H641.0" marker-end="url(#wf)"/>
-<g class="nb"><circle cx="657.0" cy="40" r="12"/><text x="657.0" y="44">5</text></g><text class="t-eye" x="657.0" y="72" text-anchor="middle">LONG VIDEO</text>
+<g class="nb"><circle cx="657.0" cy="40" r="12"/><text x="657.0" y="44">5</text></g><text class="t-eye" x="657.0" y="72" text-anchor="middle">VIDEO</text>
 <path class="e" d="M671.0 40H755.0" marker-end="url(#wf)"/>
 <g class="nb"><circle cx="771.0" cy="40" r="12"/><text x="771.0" y="44">6</text></g><text class="t-eye" x="771.0" y="72" text-anchor="middle">SHORTS</text>
 <path class="e" d="M785.0 40H869.0" marker-end="url(#wf)"/>
@@ -239,145 +244,77 @@ table.steps td:nth-child(4){min-width:200px}
 <path class="e" d="M1235.0 614V625" marker-end="url(#wf)"/>
 <rect class="n-st" x="150" y="248" width="102" height="62" rx="7"/><text class="t-xs" x="157" y="264">onboarding:</text><text class="t-xs" x="157" y="278">site → 4 docs</text>
 <rect class="n-user" x="150" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="157" y="112">approve docs;</text><text class="t-xs" x="157" y="126">connect accounts</text><text class="t-xs" x="157" y="140">(Zernio), timezone</text>
-<rect class="n-new" x="264" y="248" width="102" height="62" rx="7"/><text class="t-xs" x="271" y="264">competitors,</text><text class="t-xs" x="271" y="278">niche video,</text><text class="t-xs" x="271" y="292">metrics</text>
+<rect class="n-st" x="264" y="248" width="102" height="62" rx="7"/><text class="t-xs" x="271" y="264">competitors,</text><text class="t-xs" x="271" y="278">niche video,</text><text class="t-xs" x="271" y="292">metrics</text>
 <rect class="n-st" x="264" y="172" width="102" height="62" rx="7"/><text class="t-xs" x="271" y="188">lessons, goal</text><text class="t-xs" x="271" y="202">review, proposed</text><text class="t-xs" x="271" y="216">corrections</text>
-<rect class="n-new" x="378" y="172" width="102" height="62" rx="7"/><text class="t-xs" x="385" y="188">plan_week →</text><text class="t-xs" x="385" y="202">work order tree</text>
+<rect class="n-st" x="378" y="172" width="102" height="62" rx="7"/><text class="t-xs" x="385" y="188">plan_week →</text><text class="t-xs" x="385" y="202">work order tree</text>
 <rect class="n-user" x="378" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="385" y="112">approve goal</text><text class="t-xs" x="385" y="126">+ week plan</text>
-<rect class="n-new" x="492" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="499" y="340">posts per</text><text class="t-xs" x="499" y="354">platform; checks,</text><text class="t-xs" x="499" y="368">checker</text>
+<rect class="n-st" x="492" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="499" y="340">posts per</text><text class="t-xs" x="499" y="354">platform; checks,</text><text class="t-xs" x="499" y="368">checker</text>
 <rect class="n-user" x="492" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="499" y="112">approve /</text><text class="t-xs" x="499" y="126">edit a post</text>
-<rect class="n-new" x="606" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="340">video brief:</text><text class="t-xs" x="613" y="354">angle, 3 hooks</text>
-<rect class="n-new" x="606" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="416">Director → key-</text><text class="t-xs" x="613" y="430">frames → shots →</text><text class="t-xs" x="613" y="444">render, look</text>
-<rect class="n-user" x="606" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="112">cards 1, 2, 3:</text><text class="t-xs" x="613" y="126">storyboard, price,</text><text class="t-xs" x="613" y="140">finished video</text>
-<rect class="n-new" x="720" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="727" y="416">3 shorts from</text><text class="t-xs" x="727" y="430">the finished</text><text class="t-xs" x="727" y="444">edit</text>
-<rect class="n-new" x="720" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="727" y="340">captions +</text><text class="t-xs" x="727" y="354">hashtags per</text><text class="t-xs" x="727" y="368">platform</text>
+<rect class="n-st" x="606" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="340">video brief:</text><text class="t-xs" x="613" y="354">angle, 3 hooks</text>
+<rect class="n-st" x="606" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="416">your own edit;</text><text class="t-xs" x="613" y="430">look check before</text><text class="t-xs" x="613" y="444">a card</text>
+<rect class="n-user" x="606" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="613" y="112">mark your edit</text><text class="t-xs" x="613" y="126">finished (AI video:</text><text class="t-xs" x="613" y="140">hidden for now)</text>
+<rect class="n-st" x="720" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="727" y="416">3 shorts from</text><text class="t-xs" x="727" y="430">the finished</text><text class="t-xs" x="727" y="444">edit</text>
+<rect class="n-st" x="720" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="727" y="340">captions +</text><text class="t-xs" x="727" y="354">hashtags per</text><text class="t-xs" x="727" y="368">platform</text>
 <rect class="n-user" x="720" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="727" y="112">approve the</text><text class="t-xs" x="727" y="126">batch</text>
-<rect class="n-new" x="834" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="841" y="340">slide text</text>
-<rect class="n-new" x="834" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="841" y="416">slides →</text><text class="t-xs" x="841" y="430">MP4 + PNG set</text>
+<rect class="n-st" x="834" y="324" width="102" height="62" rx="7"/><text class="t-xs" x="841" y="340">slide text</text>
+<rect class="n-st" x="834" y="400" width="102" height="62" rx="7"/><text class="t-xs" x="841" y="416">slides →</text><text class="t-xs" x="841" y="430">MP4 + PNG set</text>
 <rect class="n-user" x="834" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="841" y="112">approve,</text><text class="t-xs" x="841" y="126">quick edits</text>
-<rect class="n-new" x="948" y="476" width="102" height="62" rx="7"/><text class="t-xs" x="955" y="492">scan → rules</text><text class="t-xs" x="955" y="506">check → reply</text><text class="t-xs" x="955" y="520">draft</text>
+<rect class="n-st" x="948" y="476" width="102" height="62" rx="7"/><text class="t-xs" x="955" y="492">scan → rules</text><text class="t-xs" x="955" y="506">check → reply</text><text class="t-xs" x="955" y="520">draft</text>
 <rect class="n-user" x="948" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="955" y="112">reply by hand</text><text class="t-xs" x="955" y="126">(no post button)</text>
-<rect class="n-new" x="1062" y="552" width="102" height="62" rx="7"/><text class="t-xs" x="1069" y="568">best time,</text><text class="t-xs" x="1069" y="582">gaps, caps</text>
+<rect class="n-st" x="1062" y="552" width="102" height="62" rx="7"/><text class="t-xs" x="1069" y="568">best time,</text><text class="t-xs" x="1069" y="582">gaps, caps</text>
 <rect class="n-user" x="1062" y="96" width="102" height="62" rx="7"/><text class="t-xs" x="1069" y="112">approve time</text><text class="t-xs" x="1069" y="126">+ account</text>
-<rect class="n-new" x="1176" y="552" width="102" height="62" rx="7"/><text class="t-xs" x="1183" y="568">due: sweep</text><text class="t-xs" x="1183" y="582">fires the slot</text>
-<rect class="n-new" x="1176" y="628" width="102" height="62" rx="7"/><text class="t-xs" x="1183" y="644">Zernio posts;</text><text class="t-xs" x="1183" y="658">webhook</text><text class="t-xs" x="1183" y="672">confirms</text>
-<rect class="n-new" x="1290" y="248" width="102" height="62" rx="7"/><text class="t-xs" x="1297" y="264">metrics +24 h,</text><text class="t-xs" x="1297" y="278">reply outcomes</text><text class="t-xs" x="1297" y="292">→ memory</text>
-<text class="t-s" x="20" y="730">Every day: the brain's progress check (code) and the morning digest. Dashed boxes are to build; solid boxes exist today. Your own video edits stay hands-on in the editor; marking one finished starts step 6.</text>
+<rect class="n-st" x="1176" y="552" width="102" height="62" rx="7"/><text class="t-xs" x="1183" y="568">due: sweep</text><text class="t-xs" x="1183" y="582">fires the slot</text>
+<rect class="n-st" x="1176" y="628" width="102" height="62" rx="7"/><text class="t-xs" x="1183" y="644">Zernio posts;</text><text class="t-xs" x="1183" y="658">webhook</text><text class="t-xs" x="1183" y="672">confirms</text>
+<rect class="n-st" x="1290" y="248" width="102" height="62" rx="7"/><text class="t-xs" x="1297" y="264">metrics +24 h,</text><text class="t-xs" x="1297" y="278">reply outcomes</text><text class="t-xs" x="1297" y="292">→ memory</text>
+<text class="t-s" x="20" y="730">Every day: the brain's progress check (code) and the morning digest. Every box is built (main 4f70a59). Your own video edits stay hands-on in the editor; marking one finished starts step 6.</text>
 </svg>
 
     </div>
+<p>Rows: You · Approval, Brain, Research, Writer, Studio, Sales, Schedule, Publish. Columns are the 11 steps below. After step 11 the week's memory and lessons feed the next Sunday (step 2).</p>
+<p>The steps follow the owner's sketch of 2026-11-08: business information → Writer → approval → Video → approval → Post. Words are written before anything is built from them; the editor is the last step, where the founder fine-tunes by hand.</p>
   </section>
 
-  <section class="sec" id="steps">
-    <div class="sec-head"><p class="eyebrow">Steps</p><h2>The 11 steps</h2></div>
-    <div class="tbl">
-      <table class="steps">
-        <thead><tr><th>#</th><th>When</th><th>Who does what</th><th>Your card or action</th><th>Credits</th><th>Today</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>Once, at sign-up</td><td><b>Research</b> reads the website and drafts the four marketing documents. <b>Publish</b> gives the Zernio connect link. The timezone comes from the browser</td><td>Read and edit the documents; connect X and the other accounts once; set the Brand Kit</td><td>onboarding</td><td><span class="st part">documents built; Zernio, timezone new</span></td></tr>
-          <tr><td>2</td><td>Sunday</td><td><b>Research</b>: competitor outliers on X, top shorts in the niche, last week's metrics and reply outcomes. <b>Brain · Reviewer</b>: lessons per topic, voice notes from your edits, the goal's result, next week's goal, corrections from repeated edits</td><td>A correction card when a repeated edit becomes a rule</td><td>research ≈ 2; reviews free</td><td><span class="st part">competitors, lessons, goals built; niche video, corrections new</span></td></tr>
-          <tr><td>3</td><td>Monday</td><td><b>Brain · Planner</b> writes the week: posts, one long video, shorts, a slideshow, Reddit items, each a work order with a brief, a due day, a budget and the department that does it</td><td>Approve the goal and the week plan (edit or remove items)</td><td>plan ≈ 1</td><td><span class="st part">plan built; work order tree new</span></td></tr>
-          <tr><td>4</td><td>When a post is due</td><td><b>Writer</b> drafts three versions per platform (X, Threads, LinkedIn) in your voice from memory; code checks length, words to avoid, numbers, no links, no hashtags; a checker on another provider reviews once</td><td>Approve, edit then approve, or skip with a reason</td><td>≈ 1 per post</td><td><span class="st part">X built; other platforms new</span></td></tr>
-          <tr><td>5</td><td>When the video is due</td><td><b>Writer</b> hands Studio a video brief (angle, three hooks, key points). <b>Studio</b>'s Video agent team: Director plans beats → code Reviewer → keyframes → shots between them, voice and music → one editable scene → render → look check</td><td>Card 1: storyboard + keyframe price. Card 2: contact sheet + exact video price (redo a keyframe). Card 3: the finished video (open it in the editor to tweak); approving marks it finished</td><td>keyframes, then video (shown on the cards)</td><td><span class="st part">long take built; brief, inbox cards, look check new</span></td></tr>
-          <tr><td>6</td><td>When a video is finished</td><td><b>Studio</b> Shorts squad cuts 3 shorts from the finished edit (AI video or your own edit you marked finished), 9:16, styled; <b>Writer</b> writes captions per platform, hashtags only here</td><td>Approve the batch of 3</td><td>no generation credits</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>7</td><td>When a slideshow is due</td><td><b>Writer</b> writes the slide text; <b>Studio</b> Slideshow squad builds the slides from captured pages and the Brand Kit; MP4 and a PNG set from one document</td><td>Approve, with quick text edits per slide, or open in Slides</td><td>only if an AI image is needed</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>8</td><td>When a Reddit item is due</td><td><b>Sales</b> finds threads, scores them with exact quotes, checks the subreddit's rules, drafts a help-first reply (no links, the product at most once, about 1 reply in 10)</td><td>Copy the reply, open the thread, post it yourself; mark replied or dismiss</td><td>scan ≈ 5</td><td><span class="st part">scan built; rules check new</span></td></tr>
-          <tr><td>9</td><td>After any approval of something to post</td><td><b>Schedule</b> proposes a time per platform (your data once there is enough, defaults before that), with gaps and daily caps, in your timezone</td><td>Approve the time and the account (changing either asks again)</td><td>free</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>10</td><td>At the approved time</td><td><b>Publish</b>: the Modal clock finds the slot due; the worker posts through Zernio (X included); a signed webhook confirms. With no connected account, you get a notice with the composer filled in instead</td><td>Nothing, unless it failed (a card with the reason and a retry)</td><td>X API price passed through by Zernio</td><td><span class="st miss">new</span></td></tr>
-          <tr><td>11</td><td>24 hours after posting, and days after a reply</td><td><b>Research</b> reads the numbers (Zernio for connected accounts) and re-reads Reddit threads you answered; everything goes to memory for Sunday</td><td>—</td><td>small</td><td><span class="st part">public metrics built; Zernio, reply outcomes new</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="grid2">
-      <div class="card b"><span class="k">Every day, in the background</span>
-        <ul>
-          <li><b>Brain</b>: the progress check (code) looks at every work order: done, waiting on you, stuck, over budget. Only a stuck order costs one replan.</li>
-          <li><b>Approval</b>: the morning digest in the app and by email; links open the card, never decide it.</li>
-          <li>The kill switch stops every order and every waiting slot within a minute.</li>
-        </ul>
-      </div>
-      <div class="card b"><span class="k">What the brain never does</span>
-        <ul>
-          <li>Post anything you did not approve, with its time and account.</li>
-          <li>Reply on Reddit: Sales has no post button.</li>
-          <li>Touch your own video edits: those stay hands-on in the editor until you mark one finished.</li>
-          <li>Spend credits without a price on a card.</li>
-        </ul>
-      </div>
-    </div>
+  <section class="sec" id="the-11-steps">
+    <div class="sec-head"><p class="eyebrow">§2</p><h2>The 11 steps</h2></div>
+<p>State: ✅ done · 🟡 partial · ❌ not built.</p>
+<div class="tbl"><table><thead><tr><th>#</th><th>When</th><th>Who does what</th><th>Your card or action</th><th>Credits</th><th>Built in</th></tr></thead><tbody><tr><td>1</td><td>Once, at sign-up</td><td><b>Research</b> reads the website and drafts the four marketing documents. <b>Publish</b> gives the Zernio connect link. The timezone comes from the browser</td><td>Read and edit the documents; connect X and the other accounts once; set the Brand Kit</td><td>onboarding</td><td>✅ <code>lib/cmo/onboard.ts</code>, <code>site.ts</code>, <code>documents.ts</code>; Zernio connect <code>lib/departments/publish/accounts.ts</code>; <code>profiles.timezone</code> (<code>20261227093000</code>, set from the browser in <code>20270106010000</code>). Paid first: an account with no plan and no credits goes to billing before the CMO works, and onboarding refuses it (<code>lib/paid-first.ts</code>, <code>app/app/page.tsx</code>, S2.1); setup is the website step only, the week's plan is queued at once and today's draft once the plan is written (<code>SetupScreen.tsx</code>, <code>lib/cmo/onboard.ts</code>, <code>jobs/start.ts</code>, S2.2)</td></tr><tr><td>2</td><td>Sunday</td><td><b>Research</b>: competitor outliers on X, top shorts in the niche, last week's metrics and reply outcomes. <b>Brain · Reviewer</b>: lessons per topic, voice notes from your edits, the goal's result, next week's goal, corrections from repeated edits</td><td>A correction card when a repeated edit becomes a rule</td><td>research ≈ 2; reviews free</td><td>✅ <code>jobs/competitor-research.ts</code>, <code>niche-video-research.ts</code>, <code>reply-outcomes.ts</code>, <code>summarize-memory.ts</code>, <code>review-week.ts</code>; <code>cmo_corrections</code></td></tr><tr><td>3</td><td>Monday</td><td><b>Brain · Planner</b> writes the week: posts, a slideshow, Reddit items, each a work order with a brief, a due day, a budget and the department that does it</td><td>Approve the goal and the week plan (one <code>plan</code> card; edit or remove items)</td><td>plan ≈ 1</td><td>✅ <code>jobs/plan-week.ts</code>, <code>work_orders</code> tree (<code>work_orders_plan_week</code>), <code>plan</code> card (<code>20270106050000</code>). The plan orders no AI video: the only video item is a slideshow (S2.5)</td></tr><tr><td>4</td><td>When a post is due</td><td><b>Writer</b> drafts three versions per platform (X, Threads, LinkedIn) in your voice from memory; code checks length, words to avoid, numbers, no links, no hashtags; the checker (Claude, in a separate context) reviews once</td><td>Approve, edit then approve, or skip with a reason</td><td>≈ 1 per post</td><td>✅ <code>jobs/draft-post.ts</code>, <code>draft-thread.ts</code>, <code>check-post.ts</code>, <code>lib/cmo/platforms.ts</code>, <code>packages/contracts/platforms.json</code></td></tr><tr><td>5</td><td>When a video is due</td><td><b>You make the video</b> (owner, 2026-11-09): the CMO never builds one on its own. You upload and edit your own video in the editor, then mark the edit finished. A script item (Writer writes the script and storyboard, you approve, then you make the video) is the next plan's first item. <b>AI long video, hidden in the web app</b> (owner, 2026-11-08; S2.4): Writer's video brief → Studio's Director plans the beats → one storyboard card with one price for the whole video → one job hold → keyframes, shots, voice and music in one go → render → look check</td><td>Your own video: "Mark finished". AI video: card 1 (storyboard and one price), then the finished video (approving marks it finished)</td><td>your own: only what you ask for; AI video: one price on the card</td><td>✅ <code>mark_finished</code> (<code>lib/departments/studio/finished.ts</code>); <code>build_video</code> order (<code>lib/cmo/jobs/studio-orders.ts</code>), <code>credit_orders</code>, <code>look_check</code> task. <code>/video</code> is hidden in the web app behind one switch (<code>CREATE_VIDEO_HIDDEN</code> in <code>lib/agent/hidden.ts</code>, S2.4); the week plan no longer orders a <code>build_video</code></td></tr><tr><td>6</td><td>When a video is finished</td><td><b>Studio</b> Shorts squad cuts 3 shorts from the finished edit (AI video or your own edit you marked finished), 9:16, styled; <b>Writer</b> writes captions per platform, hashtags only here</td><td>Approve the batch of 3</td><td>no generation credits</td><td>✅ <code>lib/departments/studio/shorts/</code>, <code>short_batches</code>, <code>shorts</code>, <code>write_caption</code></td></tr><tr><td>7</td><td>When a slideshow is due</td><td><b>Writer</b> writes the slide text; <b>Studio</b> Slideshow squad builds the slides from captured pages and the Brand Kit; MP4 and a PNG set from one document</td><td>Approve, with quick text edits per slide, or open in Slides</td><td>only if an AI image is needed</td><td>✅ <code>write_slides</code> → <code>build_slideshow</code> (<code>20270106020000</code>), <code>lib/departments/studio/slideshow/</code>, <code>render_stills</code></td></tr><tr><td>8</td><td>When a Reddit item is due</td><td><b>Sales</b> finds threads, scores them with exact quotes, checks the subreddit's rules, drafts a help-first reply (no links, the product at most once, about 1 reply in 10)</td><td>Copy the reply, open the thread, post it yourself; mark replied or dismiss</td><td>scan 5</td><td>✅ <code>jobs/sales-scan.ts</code>, <code>subreddit_rules</code>. ✅ a price card before every scan, in the chat and behind "Scan now" (S3.5–S3.6)</td></tr><tr><td>9</td><td>After any approval of something to post</td><td><b>Schedule</b> proposes a time per platform (your data once there is enough, defaults before that), with gaps and daily caps, in your timezone</td><td>Approve the time and the account (changing either asks again)</td><td>free</td><td>✅ <code>schedule_slots</code>, <code>schedule_propose</code>, <code>best_slots</code>, <code>packages/contracts/schedule-defaults.json</code></td></tr><tr><td>10</td><td>At the approved time</td><td><b>Publish</b>: the Modal clock finds the slot due; <code>publish_post</code> (Vercel) posts through Zernio (X included), after the worker streams a video to Zernio's upload URL; a signed webhook confirms. With no connected account, the slot is in <code>intent</code> mode and you get a notice with the composer filled in</td><td>Nothing, unless it failed (a card with the reason and a retry)</td><td>X API price passed through by Zernio</td><td>✅ <code>jobs/publish-post.ts</code>, <code>lib/departments/publish/</code>, <code>publish_media</code> task, <code>app/api/webhooks/</code> (Zernio). Live only with the Zernio key (owner)</td></tr><tr><td>11</td><td>24 hours after posting, and days after a reply</td><td><b>Research</b> reads the numbers (Zernio for connected accounts) and re-reads Reddit threads you answered; everything goes to memory for Sunday</td><td>—</td><td>free</td><td>✅ <code>jobs/pull-metrics.ts</code>, <code>metrics-source.ts</code>, <code>account_metrics</code>, <code>reply-outcomes.ts</code></td></tr></tbody></table></div>
+<p><b>Every day, in the background:</b> the brain's progress check (code, <code>lib/cmo/jobs/progress.ts</code>) looks at every work order (done, waiting on you, stuck, over budget); only a stuck order costs one replan. The weekly budget is a hard gate for work the brain starts itself (<code>cmo_runs_budget_gate</code>), and spending too fast pauses the brain. Approval sends the morning digest in the app and by email (<code>lib/cmo/digest.ts</code>, Modal <code>cmo_digest</code>); links open the card, never decide it. The kill switch (<code>OPENCMO_CMO_PAUSED</code>, and each founder's Pause CMO) stops every order and every waiting slot within one sweep.</p>
+<p><b>What the brain never does:</b> post anything you did not approve, with its time and account; reply on Reddit (Sales has no post button); touch your own video edits (they stay hands-on in the editor until you mark one finished); spend credits without a price on a card.</p>
   </section>
 
-  <section class="sec" id="cards">
-    <div class="sec-head"><p class="eyebrow">Your week</p><h2>Cards you see in a typical week</h2>
-      <p class="lede">Example: 5 posts, 1 long video, its 3 shorts, 1 slideshow, 2 Reddit replies. Batching keeps it near the daily budget of about 10 cards.</p></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Card</th><th>How many</th><th>Step</th></tr></thead>
-        <tbody>
-          <tr><td>Goal + week plan</td><td>1</td><td>3</td></tr>
-          <tr><td>Posts (versions per platform)</td><td>5</td><td>4</td></tr>
-          <tr><td>Video: storyboard price, contact sheet, finished video</td><td>3</td><td>5</td></tr>
-          <tr><td>Shorts batch</td><td>1</td><td>6</td></tr>
-          <tr><td>Slideshow</td><td>1</td><td>7</td></tr>
-          <tr><td>Reddit replies</td><td>2</td><td>8</td></tr>
-          <tr><td>Schedule (one per item; posts of one day can share a card)</td><td>≈ 5–8</td><td>9</td></tr>
-          <tr><td>Correction (some weeks)</td><td>0–1</td><td>2</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="cards-in-a-typical-week">
+    <div class="sec-head"><p class="eyebrow">§3</p><h2>Cards in a typical week</h2></div>
+<p>Example: 5 posts, 1 finished video of your own and its 3 shorts, 1 slideshow, 2 Reddit replies. The daily card budget (<code>card_budget</code>, about 10) holds back the rest for the next day.</p>
+<div class="tbl"><table><thead><tr><th>Card</th><th>How many</th><th>Step</th></tr></thead><tbody><tr><td>Goal + week plan</td><td>1–2</td><td>3</td></tr><tr><td>Posts (versions per platform)</td><td>5</td><td>4</td></tr><tr><td>Finished video (AI video only; your own edit is marked finished in the editor)</td><td>0–1</td><td>5</td></tr><tr><td>Shorts batch</td><td>1</td><td>6</td></tr><tr><td>Slideshow</td><td>1</td><td>7</td></tr><tr><td>Reddit replies</td><td>2</td><td>8</td></tr><tr><td>Schedule (one per item; posts of one day can share a card)</td><td>≈ 5–8</td><td>9</td></tr><tr><td>Correction (some weeks)</td><td>0–1</td><td>2</td></tr></tbody></table></div>
+<p>That is about 15–20 cards a week. Fewer cards (one approval for the words, one for what was made) gets its own plan after this one (<a href="../plans/cmo/2026-11-08-cmo-review-2-plan.md">plan</a> §5).</p>
   </section>
 
-  <section class="sec" id="wires">
-    <div class="sec-head"><p class="eyebrow">Wiring</p><h2>How the departments talk</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>Wire</th><th>Carries</th></tr></thead>
-        <tbody>
-          <tr><td>Work orders (rows)</td><td>The brain's orders to each department: brief, budget, depends on, due (<code>brain.html</code> §6)</td></tr>
-          <tr><td>Deliverables (rows)</td><td>What each department made, with a status; one table for posts, captions, videos, shorts, slideshows, replies</td></tr>
-          <tr><td>Approvals (rows)</td><td>Every card, with a snapshot of content, price, time and account (<code>approval.html</code>)</td></tr>
-          <tr><td>Event rules</td><td>A status change creates the next order: video approved → shorts; short approved → schedule; due → publish; posted → measure</td></tr>
-          <tr><td>The clock</td><td>Modal's daily schedule and its every-minute sweep wake everything; no machine stays on</td></tr>
-          <tr><td>Studio adapter, Zernio adapter</td><td>The two doors to heavy work and to the platforms; the brain uses the same doors as buttons and MCP</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="how-the-departments-talk">
+    <div class="sec-head"><p class="eyebrow">§4</p><h2>How the departments talk</h2></div>
+<div class="tbl"><table><thead><tr><th>Wire</th><th>Carries</th><th>Built in</th></tr></thead><tbody><tr><td>Work orders (rows)</td><td>The brain's orders to each department: brief, budget, depends on, due (<code>brain.md</code> §6). They sit beside <code>cmo_runs</code>, which stays the job queue</td><td><code>work_orders</code>, <code>work_order_events</code>, <code>work_orders_follow_run</code></td></tr><tr><td>Deliverables (rows)</td><td>What each department made, with a status; one table for posts, captions, videos, shorts, slideshows, images, replies, insights, metrics. It points at the row that holds the content (<code>content_items</code>, <code>opportunities</code>, <code>cmo_insights</code>, <code>clips</code>)</td><td><code>deliverables</code></td></tr><tr><td>Approvals (rows)</td><td>Every card, with a snapshot of content, price, time and account (<code>approval.md</code>)</td><td><code>approvals</code>, <code>approval_raise</code>, <code>approval_decide</code></td></tr><tr><td>Event rules</td><td>A status change creates the next order: video finished → shorts; short or post approved → schedule; due → publish; posted → measure</td><td>SQL triggers: <code>editor_projects_rules</code>, <code>tasks_studio_rules</code>, <code>approvals_caption_rules</code>, <code>schedule_follow_deliverable</code>, <code>work_orders_follow_approval</code></td></tr><tr><td>The clock</td><td>Modal's daily schedule, its hourly digest and its every-minute sweep wake everything; no machine stays on</td><td><code>packages/engine/modal_app.py</code> (<code>sweep</code>, <code>cmo_schedule</code>, <code>cmo_digest</code>, <code>cleanup</code>)</td></tr><tr><td>Studio adapter, Zernio adapter</td><td>The two doors to heavy work and to the platforms; the brain uses the same doors as buttons and MCP</td><td><code>lib/departments/studio/adapter.ts</code>, <code>lib/departments/publish/adapter.ts</code></td></tr><tr><td>Money</td><td>One price on one card, one hold for the whole job, pieces drawn from it, the rest given back</td><td><code>credit_orders</code> (§5)</td></tr></tbody></table></div>
   </section>
 
-  <section class="sec" id="order">
-    <div class="sec-head"><p class="eyebrow">Build order</p><h2>What makes the week run, in order</h2>
-      <p class="lede">Taken from each department's phases, ranked by the editor strategy: what lets us make and ship the next OpenCMO marketing video comes first.</p></div>
-    <ol class="order">
-      <li><span><b>Writer W0</b>: No AI Slop as guidance, post rules (no links, no hashtags), the <code>x-writing.md</code> fix. Small.</span></li>
-      <li><span><b>Studio S0</b>: finish the long take on production (one real 60 s OpenCMO video).</span></li>
-      <li><span><b>Approval A0–A1</b>: one approvals table with snapshots; Studio cards in the inbox.</span></li>
-      <li><span><b>Brain B0–B1</b>: corrections and budget; work orders and deliverables.</span></li>
-      <li><span><b>Studio S1–S2</b>: Studio adapter, finished state, named-timeline export, the Shorts squad.</span></li>
-      <li><span><b>Schedule P0–P1</b> with <b>Approval A2–A3</b>: Zernio checks, accounts, timezone, scheduled posting, reminders.</span></li>
-      <li><span><b>Brain B2–B3</b>: progress check, kill switch, digest, capability registry, event rules; the brain briefs Studio.</span></li>
-      <li><span><b>Writer W1–W3</b>, <b>Studio S3</b>: other platforms, voice memory, captions; slideshows and post images.</span></li>
-      <li><span><b>Research R0–R2</b>, <b>Sales R1</b>: data terms, niche video research, Sales safety.</span></li>
-      <li><span>Then the rest: Studio S4 look check, Schedule P2–P3, Research R3–R4, Brain B4 evals, Writer W4.</span></li>
-    </ol>
+  <section class="sec" id="charge-before-running">
+    <div class="sec-head"><p class="eyebrow">§5</p><h2>Charge before running</h2></div>
+<p>Every paid job shows one card with one price that covers everything it spends, and runs to the end after one confirmation (owner, 2026-11-05).</p>
+<ol class="order"><li><span>The card shows the plan and the estimate. Nothing paid has run yet.</span></li><li><span>Approve → <code>credit_order_open</code> holds the whole estimate in one <code>credit_orders</code> row (<code>kind</code> <code>long_take</code>, <code>explainer</code> or <code>studio_video</code>).</span></li><li><span>Each paid piece (a keyframe, a shot, the voice, the music, a render) moves its price from the job's hold to its own hold (<code>credit_order_draw</code>), so every existing settle and refund path works unchanged. A shot can wait on keyframes still being made (<code>startAfter</code> / <code>endAfter</code>, <code>20270109030000</code>), so every piece starts at once.</span></li><li><span><code>credit_order_close</code> gives back what the job still holds. A job left open for a day (a tab closed, a crash) is closed by the reaper (<code>credit_orders_reap</code>, run from the sweep's turn reaper).</span></li><li><span>A failed or blocked piece is refunded; credits come back only for what failed or was blocked.</span></li></ol>
+<p>Fixes from the review of this work are in <code>20270110010000_review_fixes.sql</code>: one lock order for <code>create_generation</code>, an explainer job tied to its clip and turn (<code>credit_orders.subject</code>), and an explainer turn's tokens capped at <code>agent_3d_hold_credits()</code>. The same rule covers Studio orders (<code>studio_order_hold</code>, <code>brain.md</code> §9) and the Assistant's turns (<code>brain.md</code> §9b).</p>
   </section>
 
-  <section class="sec" id="open">
-    <div class="sec-head"><p class="eyebrow">Open points</p><h2>Still to settle in this review</h2></div>
-    <div class="tbl">
-      <table>
-        <thead><tr><th>#</th><th>Point</th><th>Recommendation</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>The look check: on every render or only before a card (Studio)</td><td>Only before a card</td></tr>
-          <tr><td>2</td><td>Week plan size by default (how many posts, videos, slideshows, Reddit items)</td><td>Start from the weekly goal and the card budget: about 5 posts, 1 video with 3 shorts, 1 slideshow, 2 Reddit items</td></tr>
-          <tr><td>3</td><td>Weekly credit budget per founder</td><td>Set after Brain B1 from measured credits per approved deliverable</td></tr>
-          <tr><td>4</td><td>Zernio checks (TikTok audit, price, terms) and ScrapeCreators' data terms</td><td>Before anything that depends on them goes on the landing page</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section class="sec" id="order-of-work">
+    <div class="sec-head"><p class="eyebrow">§6</p><h2>Order of work</h2></div>
+<p><b>Ranked by the CMO loop (owner, 2026-11-08):</b> does it make the loop work for a paying founder, end to end? Editor work comes after, unless the owner says otherwise. Almost every department phase is built; what is left is what stands between a paying founder and a working week.</p>
+<ol class="order"><li><span><b>Business information:</b> paid-first entry, setup cut to the website, the first week plan and drafts within minutes: done in S2.1–S2.2 (plan 2026-11-08); measured on a preview deployment by the owner.</span></li><li><span><b>Writer:</b> done: the week plan orders no AI video (S2.5); every post platform is built.</span></li><li><span><b>Approval:</b> no dead ends, one card per job: done (S2.6, S3.5–S3.6). Fewer cards a week gets its own plan.</span></li><li><span><b>Video:</b> slideshow, shorts from a finished edit and the Brand Kit are built; the post image squad has no caller yet (<code>studio.md</code> §2), and a finished long video gets no schedule slot. <code>/video</code> is hidden (S2.4).</span></li><li><span><b>Post:</b> Zernio live (owner: key, TikTok audit, price, terms); a provider that breaks shows on the Costs page (done: S3.1).</span></li><li><span><b>Sales and Research:</b> R0, the data terms, before new lead types.</span></li><li><span><b>The script item</b> (owner, 2026-11-09): the week plan orders a script and a storyboard for a video you make; the card's "Open in editor" starts a blank edit with the script beside it. Next plan.</span></li><li><span><b>The editor, last:</b> the long take's release, making <code>/video</code> cheaper and showing it again (its own plan).</span></li></ol>
+<p><b>History.</b> Until 2026-11-08 this list was ranked by the editor strategy ("what lets us make and ship the next OpenCMO marketing video comes first"): Writer W0, Studio S0, Approval A0–A1, Brain B0–B1, Studio S1–S2, Schedule P0–P1 with Approval A2–A3, Brain B2–B3, Writer W1–W3 with Studio S3, Research R0–R2 with Sales R1, then the rest. All of those phases were built in P1–P6 and the CMO review (#169–#180) except Research R0.</p>
   </section>
 
-  <footer class="foot">
-    <p>Built from <code>ai-cmo.html</code>, <code>brain.html</code>, <code>studio.html</code>, <code>approval.html</code>, <code>schedule-publish.html</code>, <code>writer.html</code> and <code>research-sales.html</code>, with every owner decision recorded there up to 2026-10-27. Credit figures are today's job prices (<code>cmo_job_price</code>) or what each card will show; generation prices come from the model catalog.</p>
-  </footer>
+  <section class="sec" id="open-points">
+    <div class="sec-head"><p class="eyebrow">§7</p><h2>Open points</h2></div>
+<div class="tbl"><table><thead><tr><th>#</th><th>Point</th><th>State</th></tr></thead><tbody><tr><td>1</td><td>The look check: on every render or only before a card</td><td><b>built</b>: only before a card (<code>look_checks</code>, worker task <code>look_check</code>)</td></tr><tr><td>2</td><td>Week plan size by default</td><td>built: 5–10 items, at most one slideshow a week (<code>plan-week.ts</code>)</td></tr><tr><td>3</td><td>Weekly credit budget per founder</td><td>built: a hard gate for the brain's own runs (<code>20270107010000</code>); the default is still to be set from measured credits per approved deliverable</td></tr><tr><td>4</td><td>Zernio checks (TikTok audit, price, terms) and ScrapeCreators' data terms</td><td><b>open</b> (owner): before anything that depends on them goes on the landing page</td></tr><tr><td>5</td><td>Vercel Hobby</td><td><b>open</b> (owner): its 300 s request limit forced the step cut at 280 s (#178), and its terms for commercial use apply</td></tr></tbody></table></div>
+<p>Credit figures are today's job prices (<code>cmo_job_price</code>) or what each card shows; generation prices come from the model catalog.</p>
+  </section>
+
+  <footer class="foot"><p>Markdown twin for agents: <code>workflow.md</code>. Both pages say the same thing; change them together.</p></footer>
 </div>
 </body>
 </html>

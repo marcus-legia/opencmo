@@ -70,7 +70,7 @@ export const GET = withApi({}, async ({ supabase, request }) => {
     blank = startsEmpty(context.clip.kind);
     // No editor document yet: nothing on the clip has a transcript, as `blankEdit` reads it.
     const document = await readEditorProject(supabase, clipId).then((project) => project.document, () => null);
-    const tools = clipToolSpecs({ blank: document ? blankEdit(context, document) : blank }).map((tool) => tool.name);
+    const tools = clipToolSpecs({ blank: document ? blankEdit(context, document) : blank, assistant: true }).map((tool) => tool.name);
     slash = slashCommandsFor(tools).map(({ name, label, hint }) => ({ name, label, hint }));
   } else {
     throw new ApiError(422, "clip_id or scope: Required");

@@ -32,6 +32,21 @@ export const PROFILE_KIND: Record<WriterKind, WriterProfile["kind"] | null> = {
 /** Frames a video can have, the same list as `editor-core`'s `VIDEO_ASPECTS`. */
 export const BRIEF_ASPECTS = ["9:16", "16:9", "1:1"] as const;
 
+/** How a beat is filmed by the founder: to camera, a screen recording, or footage they shoot (owner, 2026-11-09). */
+export const SCRIPT_SHOTS = ["talking_head", "screen", "broll"] as const;
+
+/** One beat of the script the founder records: what they say, what is on screen, how it is filmed. */
+export const ScriptBeatSchema = z.object({
+  say: z.string().trim().min(1).max(300),
+  show: z.string().trim().min(1).max(300),
+  shot: z.enum(SCRIPT_SHOTS),
+  seconds: z.number().int().min(1).max(30),
+});
+export type ScriptBeat = z.infer<typeof ScriptBeatSchema>;
+
+/** A script has this many beats; fewer is not a video, more is not short. */
+export const SCRIPT_BEATS = { min: 3, max: 8 } as const;
+
 /**
  * The video brief: what Writer hands Studio before a video (`write_video_brief`) and what Studio's
  * `buildVideo` takes. One type for both sides; the Director writes the script from it and invents no facts.
@@ -51,6 +66,8 @@ export const VideoBriefSchema = z.object({
   aspect: z.enum(BRIEF_ASPECTS).default("9:16"),
   /** A premade voice name; absent → the strategy voice, else the model's default. */
   voice: z.string().trim().max(40).optional(),
+  /** The script and storyboard the founder records (the week plan's video item); empty for an AI video's brief. */
+  storyboard: z.array(ScriptBeatSchema).max(SCRIPT_BEATS.max).default([]),
 });
 export type VideoBrief = z.infer<typeof VideoBriefSchema>;
 
@@ -170,6 +187,16 @@ export const VideoBriefDraftSchema = z.object({
   aspect: z.enum(BRIEF_ASPECTS),
   rationale: z.string().describe("One sentence: why this video now"),
   learnedFrom: z.array(z.string()).describe("URLs of the niche videos whose hooks or format this brief adapts, copied exactly; empty when none"),
+  storyboard: z
+    .array(
+      z.object({
+        say: z.string().describe("Exactly what the founder says in this beat, in their voice"),
+        show: z.string().describe("What is on screen while they say it"),
+        shot: z.enum(SCRIPT_SHOTS).describe("talking_head: to camera; screen: a screen recording of the product; broll: footage the founder can film themselves"),
+        seconds: z.number().int().describe("How long the beat runs, 1 to 30"),
+      }),
+    )
+    .describe(`${SCRIPT_BEATS.min} to ${SCRIPT_BEATS.max} beats the founder records, in order; the first says the first hook`),
 });
 export type VideoBriefDraft = z.infer<typeof VideoBriefDraftSchema>;
 

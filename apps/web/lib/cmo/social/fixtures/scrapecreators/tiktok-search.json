@@ -1,0 +1,45 @@
+{
+  "source": "assumed",
+  "path": "/v1/tiktok/search/keyword",
+  "params": {
+    "query": "small business marketing"
+  },
+  "body": {
+    "search_item_list": [
+      {
+        "aweme_info": {
+          "aweme_id": "7400000000000000001",
+          "desc": "3 marketing mistakes small shops make",
+          "author": {
+            "unique_id": "user_redacted"
+          },
+          "statistics": {
+            "play_count": 52000,
+            "digg_count": 3100,
+            "comment_count": 88,
+            "share_count": 40
+          },
+          "create_time": 1790000000,
+          "share_url": "https://www.tiktok.com/@user_redacted/video/7400000000000000001"
+        }
+      },
+      {
+        "aweme_info": {
+          "aweme_id": "7400000000000000002",
+          "desc": "3 marketing mistakes small shops make",
+          "author": {
+            "unique_id": "user_redacted"
+          },
+          "statistics": {
+            "play_count": 52000,
+            "digg_count": 3100,
+            "comment_count": 88,
+            "share_count": 40
+          },
+          "create_time": 1790000000,
+          "share_url": "https://www.tiktok.com/@user_redacted/video/7400000000000000002"
+        }
+      }
+    ]
+  }
+}

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
+import { finishedNote, markFinished as markFinishedRoute } from "@/components/screens/studio/finish";
 import { ThemeSwitch } from "@/components/theme";
 import type { SaveStatus } from "@/lib/editor/session";
 import { createClient } from "@/lib/supabase/client";
@@ -265,9 +266,9 @@ function MarkFinished({ clipId, documentHash }: { clipId: string; documentHash: 
     setState({ phase: "busy", hash: marked });
     setNote(null);
     try {
-      const done = await api<{ finishedAt: string; documentHash: string }>(`/studio/${encodeURIComponent(clipId)}/finished`, jsonBody({ documentHash }));
+      const done = await markFinishedRoute(clipId, documentHash);
       setState({ phase: "ready", hash: done.documentHash });
-      setNote({ text: "Marked finished. Shorts can be cut from it.", error: false });
+      setNote(finishedNote(done));
     } catch (error) {
       setState({ phase: "ready", hash: marked });
       setNote({ text: error instanceof ApiError ? error.message : "Could not mark it finished. Please try again.", error: true });

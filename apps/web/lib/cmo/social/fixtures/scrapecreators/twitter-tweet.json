@@ -1,0 +1,30 @@
+{
+  "source": "assumed",
+  "path": "/v1/twitter/tweet",
+  "params": {
+    "url": "https://x.com/user_redacted/status/1850000000000000001"
+  },
+  "body": {
+    "rest_id": "1850000000000000001",
+    "legacy": {
+      "full_text": "Shipped a tiny feature today, 30 new signups.",
+      "favorite_count": 120,
+      "reply_count": 14,
+      "retweet_count": 9,
+      "quote_count": 2,
+      "created_at": "Mon Nov 02 10:00:00 +0000 2026"
+    },
+    "views": {
+      "count": "25000"
+    },
+    "core": {
+      "user_results": {
+        "result": {
+          "legacy": {
+            "screen_name": "user_redacted"
+          }
+        }
+      }
+    }
+  }
+}

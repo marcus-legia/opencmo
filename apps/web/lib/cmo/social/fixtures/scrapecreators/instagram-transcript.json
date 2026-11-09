@@ -1,0 +1,15 @@
+{
+  "source": "assumed",
+  "path": "/v2/instagram/media/transcript",
+  "params": {
+    "url": "https://www.instagram.com/reel/C0000000000/"
+  },
+  "body": {
+    "transcripts": [
+      {
+        "text": "One tip for your shop window."
+      }
+    ],
+    "transcript": "One tip for your shop window."
+  }
+}

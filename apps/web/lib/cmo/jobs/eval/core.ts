@@ -44,8 +44,6 @@ export function ideaIssues(idea: string, reason: string, docs: Documents): strin
   return issues;
 }
 
-const mentionsVideo = (docs: Documents) => /video|clip|record|reel|short|tiktok/i.test(JSON.stringify(docs.content_strategy ?? {}));
-
 const runResult = (id: string, epoch: number, ok: boolean, notes: string[]): CaseResult => ({ id, epoch, pass: ok, decided_by: "code", ...(notes.length ? { notes } : {}) });
 
 const w1: EvalCase = {
@@ -60,7 +58,7 @@ const w1: EvalCase = {
     const shapeOk =
       plan.length >= 5 && plan.length <= 10 &&
       [...salesPerDay.values()].every((n) => n <= 1) &&
-      (mentionsVideo(fixture.docs) || plan.every((i) => i.department !== "video"));
+      plan.every((i) => i.department !== "video" || i.platform === "Slideshow");
     const notes = [...(run.error ? [run.error] : []), ...(shapeOk ? [] : [`plan shape is off: ${plan.length} items, Reddit per day ${JSON.stringify(Object.fromEntries(salesPerDay))}`])];
     const results: CaseResult[] = [runResult(`w1:${fixture.name}:run`, env.epoch, run.status === "done" && shapeOk, notes)];
     plan.forEach((item, index) => {

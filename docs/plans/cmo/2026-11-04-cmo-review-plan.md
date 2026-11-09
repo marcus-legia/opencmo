@@ -268,7 +268,7 @@ ES.8 first-run path.
 
 ## 8. B6 — Docs match the code
 
-- [ ] **B6.1** Every page in `docs/architecture/` (md and html together): status "proposed" → "built, see
+- [x] **B6.1** (CMO review 2, S1, 2026-11-08) Every page in `docs/architecture/` (md and html together): status "proposed" → "built, see
   `ARCHITECTURE.md`". Replace each "Today (`eb858ca`)" table with a short "Built" note. Record where the build moved
   away from the design:
   - `work_orders` sits beside `cmo_runs`;
@@ -281,12 +281,14 @@ ES.8 first-run path.
   - X posts carry no hashtags;
   - the MCP confirm code lasts 600 s;
   - `cmo_insights.kind` includes `niche_video`.
-- [ ] **B6.2** `ARCHITECTURE.md` §11:
+- [x] **B6.2** (CMO review 2, S1, 2026-11-08) `ARCHITECTURE.md` §11:
   - remove "OpenAI moderations" and "The CMO never edits video";
   - add `work_orders`, `deliverables`, `approvals`, `schedule_slots`, Zernio, push, the Modal `sweep`/`cmo_digest`
     clock and the `look_check` task.
-- [ ] **B6.3** Editor roadmap: tick the built items (§7). Remove Lottie and 3D from §2's strengths.
-- [ ] **B6.4** studio.md: 25 models (3D and Lottie removed), 45 eval tasks. writer.md: X threads are built.
+- [ ] **B6.3** Editor roadmap: tick the built items (§7). Remove Lottie and 3D from §2's strengths. *Not done: since
+  2026-11-08 the editor roadmap is a record, not the order of work (CLAUDE.md "Strategy"), and it is outside S1's files.*
+- [x] **B6.4** (CMO review 2, S1, 2026-11-08) studio.md: 25 models (3D and Lottie removed), 42 eval tasks (counted in
+  `lib/agent/eval/tasks.ts` on `4f70a59`). writer.md: X threads are built.
 
 ## 9. Order and size
 

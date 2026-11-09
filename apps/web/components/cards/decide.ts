@@ -33,7 +33,9 @@ export type Decision =
   /** Schedule: a failed post goes again on the same approval while its time is still in the window. */
   | { action: "retry" }
   /** Schedule, no account connected: the founder copied it and posted it themselves (`schedule_mark_posted`). */
-  | { action: "posted" };
+  | { action: "posted" }
+  /** Post draft, no account connected for its platform: approved and marked posted at once; no schedule card follows. */
+  | { action: "posted_self"; text?: string };
 
 /** Declining spends nothing, so a card that waits on credits can still be cancelled or set aside. */
 const DECLINES: ReadonlySet<Decision["action"]> = new Set(["skip", "dismissed", "reject", "cancel", "send_back"]);
@@ -60,6 +62,10 @@ export async function decide(card: ApprovalCard, decision: Decision, sample: boo
   // Not a decision on the card: the slot route marks the copied post as posted and closes the card itself.
   if (decision.action === "posted" && card.body.kind === "schedule") {
     return api<ApprovalCard>(`/schedule/slots/${encodeURIComponent(card.body.slotId)}`, jsonBody({ action: "posted" }));
+  }
+  if (decision.action === "posted_self") {
+    await api(`/approvals/${encodeURIComponent(card.id)}/posted`, jsonBody({ contentHash: card.contentHash, ...(decision.text !== undefined ? { text: decision.text } : {}) }));
+    return null;
   }
   const { action, ...rest } = decision;
   return api<ApprovalCard>(`/approvals/${encodeURIComponent(card.id)}`, jsonBody({ action, contentHash: card.contentHash, ...rest }));
@@ -117,6 +123,8 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       return `New time saved. A new card asks you to approve it${suffix}.`;
     case "set_options":
       return `Changes saved. A new card asks you to approve them${suffix}.`;
+    case "posted_self":
+      return `Marked as posted. Nothing else goes out for it${suffix}.`;
     case "posted":
       return card.body.kind === "schedule" && card.body.state === "unconfirmed"
         ? `Marked as live. It will not be posted again${suffix}.`

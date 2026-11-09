@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_SETTINGS, isCurrent, type NavEntry } from "./nav";
+import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MAKE, NAV_MORE, NAV_SETTINGS, isCurrent, type NavEntry } from "./nav";
 
 const ICON = {
   today: (
@@ -63,7 +63,7 @@ export function TabBar({
   }, [pathname]);
 
   const calendar = entries(NAV_DEPARTMENTS).find((entry) => entry.screen === "schedule");
-  const more = [...entries(NAV_MAIN).filter((entry) => entry.screen !== "dashboard"), ...entries(NAV_DEPARTMENTS), ...NAV_MAKE, NAV_SETTINGS];
+  const more = [...entries(NAV_MAIN).filter((entry) => entry.screen !== "dashboard"), ...entries(NAV_DEPARTMENTS), ...entries(NAV_MORE), ...NAV_MAKE, NAV_SETTINGS];
   const today = segment === null;
   const approving = segment === "inbox";
   const moreCurrent = !today && !approving && !(calendar && isCurrent(calendar, segment));

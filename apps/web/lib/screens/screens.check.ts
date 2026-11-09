@@ -102,6 +102,20 @@ const row = (kind: ApprovalRow["kind"], snapshot: Record<string, unknown>, extra
   ...extra,
 });
 
+check("cards: a script the founder records is free and opens in the editor (2026-11-09)", () => {
+  const card = approvalToCard(
+    row("script", {
+      kind: "script", step_id: "e2730000-0000-4000-8000-0000000000aa", clip_id: "", tool: "script_item", title: "Show the demo", seconds: 30, aspect: "9:16",
+      price_credits: 0, beats: [{ words: "Cut by words.", picture: "To camera: You", motion: null }],
+    }, { department: "studio", ref_kind: "work_order" }),
+  );
+  assert.ok(card);
+  ApprovalCardSchema.parse(card);
+  assert.ok(card.body.kind === "script" && card.body.forFounder && card.body.nextPriceCredits === null, "no price on a script the founder records");
+  assert.equal(card.body.kind === "script" && card.body.stepId, "e2730000-0000-4000-8000-0000000000aa", "the order to open");
+  assert.match(card.meta ?? "", /Free/);
+});
+
 check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
   const rows = [
     row("post", { kind: "post", text: "Most AI video tools stop at the first draft. We built the editor first.", alternates: ["Alt one."], rationale: "Tuesday's insight", idea: "x" }),

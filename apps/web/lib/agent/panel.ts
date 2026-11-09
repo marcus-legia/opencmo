@@ -9,9 +9,9 @@
 
 import { z } from "zod";
 
-import { NAV_DEPARTMENTS, NAV_MAIN, NAV_SETTINGS, type ScreenName } from "@/components/shell-v2/nav";
+import { NAV_DEPARTMENTS, NAV_MAIN, NAV_MORE, NAV_SETTINGS, type ScreenName } from "@/components/shell-v2/nav";
 
-const ENTRIES = [...NAV_MAIN, ...NAV_DEPARTMENTS, NAV_SETTINGS];
+const ENTRIES = [...NAV_MAIN, ...NAV_DEPARTMENTS, ...NAV_MORE, NAV_SETTINGS];
 
 export const PANEL_SCREENS = ENTRIES.map((entry) => entry.screen).filter((screen): screen is ScreenName => screen !== null) as [ScreenName, ...ScreenName[]];
 

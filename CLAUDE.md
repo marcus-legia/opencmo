@@ -20,24 +20,27 @@ build one. Motion is made with one renderer, Remotion (`clip-motion`), on the wo
 files. The editor itself has one runtime (`clip-render`). 3D (three.js) and Lottie were removed on
 2026-10-24; do not bring them back.
 
-## Strategy: the editor is the spearhead (owner decision, 2026-10-19)
+## Strategy: the AI CMO first, the editor last (owner decision, 2026-11-08)
 
-There is no budget for paid marketing, so **OpenCMO markets itself with videos made in its own editor**.
-The editor is locked in as the spearhead: build it until it can make every marketing video OpenCMO needs
-(product demos, feature launches, founder clips, explainers), instead of "build only as far as it sells".
+This replaces "the editor is the spearhead" (2026-10-19). After testing, the owner found the editor too complex and
+too expensive to lead. The AI CMO makes value at a small cost, so it leads.
 
-- **Rank editor work by one question first:** does it let us make the next OpenCMO marketing video, end to
-  end, in the editor? Growth and billing features (referral, rewards, cancel flow) come after, unless the
-  owner says otherwise.
-- **Every phase ends with a real video** made in the editor, published, and kept as real landing material
-  (no invented examples).
-- **The editor is also what we sell first** (owner, 2026-10-19). The pitch: an editor that makes video from a
-  slash command (`/video`, `/broll`, `/animate`, `/edit`…; `apps/web/lib/agent/slash.ts`), puts generated
-  shots in as B-roll on the right words, and lets the user bring in their other videos and edit them all
-  together. Post and Sales stay in the code but come after the editor sells. Generated media still follows the
-  product rules below (moderation by Creem's rules, no model names as features).
-- The phase roadmap is [`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md).
-  Each item gets its own research and plan before it is built; do not build an item from the roadmap line alone.
+- **The product follows the CMO loop, in this order:** business information (the website, the four documents) →
+  Writer (week plan, posts, slides, video scripts and storyboards) → approval → Video (slideshow, post image, short
+  clips from a finished edit, with the Brand Kit) → approval → Post (schedule and publish, captions and hashtags).
+  Words are written before anything is built from them. The editor is the last step, where the founder fine-tunes
+  by hand; it is not the entry point.
+- **The founder makes the videos** (owner, 2026-11-09). For a video the CMO writes the script and the storyboard and
+  waits for the founder's OK; the founder then makes the video in the editor. The CMO never builds a video on its own
+  (no `build_video` from the week plan, an event rule or the CMO chat). Slideshows, post images and posts are the CMO's.
+- **Rank work by one question first:** does it make that loop work for a paying founder, end to end? Editor work comes
+  after, unless the owner says otherwise.
+- **`/video` is hidden for now.** The full AI video (`/video`, `create_video`) is hidden from the web app, the landing
+  page and the week plan; the code, the MCP tool and the evals stay. The editor and every other slash command
+  (`apps/web/lib/agent/slash.ts`: `/animate`, `/broll`, `/edit`, `/background`…) stay as they are.
+- The plan is [`docs/plans/cmo/2026-11-08-cmo-review-2-plan.md`](docs/plans/cmo/2026-11-08-cmo-review-2-plan.md) §2.
+  The old editor roadmap ([`docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md`](docs/plans/editor/2026-10-19-editor-spearhead-roadmap.md))
+  is a record, not the order of work. Each item still gets its own research and plan before it is built.
 
 ## Product rules
 
@@ -220,8 +223,8 @@ and Creem's docs are in `docs/creem-llm.txt`.
 
 Agents working here are also the owner's **product advisor**, not only coders. The goal is a SaaS at
 $100k MRR, so every answer weighs what moves activation, retention and revenue for solo founders. The road
-there runs through the editor as the spearhead (see "Strategy" above): weigh editor work by the marketing
-videos it lets us make.
+there runs through the AI CMO loop (see "Strategy" above): weigh work by whether it makes that loop work for a paying
+founder.
 
 - **Be proactive.** Don't wait to be asked: when a task touches an area, look for how the best products and
   open-source repos solve it, and say what we should learn, copy (licence permitting) or avoid.

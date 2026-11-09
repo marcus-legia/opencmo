@@ -13,8 +13,10 @@ import type { LedgerEntry } from "@/lib/types";
  *
  * RLS filters to the signed-in user, so the ledger needs no `user_id` condition.
  */
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ paid?: string }> }) {
-  const { paid: justPaid } = await searchParams;
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ paid?: string; start?: string; site?: string }> }) {
+  const { paid: justPaid, start, site: siteParam } = await searchParams;
+  // Sent here by `/app` before the first payment (paid first, no free trial: owner, 2026-11-08).
+  const site = typeof siteParam === "string" ? siteParam.slice(0, 300) : undefined;
   const supabase = await createServerClient();
 
   const [{ data: profile }, { data: ledger }, plans, packs] = await Promise.all([
@@ -35,7 +37,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const planId = profile?.plan ?? "free";
   const current = plans.find((plan) => plan.id === planId);
   const paid = isPaidPlan(planId);
-  const planCredit = plans.find((plan) => plan.id === "starter");
+  const planCredit = plans.find((plan) => plan.id === "starter" && plan.slug && plan.credits > 0);
 
   return (
     <section className="billing-view">
@@ -46,6 +48,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </p>
       {/* Only a note: credits come from the webhook, never from this query param. */}
       {justPaid === "1" && <p className="page-sub" role="status">Payment received. Credits arrive within a minute.</p>}
+      {start === "1" && !paid && (
+        <p className="page-sub" role="status" data-testid="billing-start">
+          Pick a plan to start. OpenCMO has no free trial. Once you pay, your CMO reads your website and plans your first
+          week within minutes.
+        </p>
+      )}
 
       <div className="acct">
         <div className="settings-card">
@@ -60,7 +68,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <h2 className="section-label">Plans</h2>
       <div className="plan-grid">
         {/* A paid plan that cannot be bought right now is hidden: no "coming soon" (product rule). */}
-        {plans.filter((plan) => plan.price === 0 || plan.slug || plan.id === planId).map((plan) => {
+        {plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId).map((plan) => {
           const isCurrent = plan.id === planId;
           return (
             <div
@@ -71,13 +79,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 {plan.name}
                 {plan.highlight && !isCurrent && <span className="plan-tag">Recommended</span>}
               </h2>
-              <p className="plan-price">
-                {/* The list price is permanent, not a time-limited offer: OPUSCLIP.md §3.10. */}
-                {plan.listPrice ? <del>${plan.listPrice}</del> : null}
-                <strong>${plan.price}</strong>
-                <span>/mo</span>
-              </p>
-              {plan.interval === "year" && <p className="plan-billed">Billed ${plan.billedPrice} once a year</p>}
+              {/* A paid plan's price comes only from its catalogue row: no row, no number (cmo-review-2 S2.7). */}
+              {plan.id === "free" || plan.slug ? (
+                <p className="plan-price">
+                  {/* The list price is permanent, not a time-limited offer: OPUSCLIP.md §3.10. */}
+                  {plan.listPrice ? <del>${plan.listPrice}</del> : null}
+                  <strong>${plan.price}</strong>
+                  <span>/mo</span>
+                </p>
+              ) : null}
+              {plan.interval === "year" && plan.slug && <p className="plan-billed">Billed ${plan.billedPrice} once a year</p>}
               <ul className="acct-list">
                 {plan.features.map((feature) => (
                   <li key={feature}>{feature}</li>
@@ -86,7 +97,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {isCurrent ? (
                 <p className="plan-cta is-current">Current plan</p>
               ) : plan.slug && !paid ? (
-                <BillingButton path="/api/v1/billing/checkout" product={plan.slug} label="Upgrade" />
+                <BillingButton path="/api/v1/billing/checkout" product={plan.slug} site={site} label={start === "1" ? `Start with ${plan.name}` : "Upgrade"} />
               ) : null}
             </div>
           );

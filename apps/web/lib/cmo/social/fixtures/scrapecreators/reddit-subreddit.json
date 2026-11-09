@@ -1,0 +1,35 @@
+{
+  "source": "assumed",
+  "path": "/v1/reddit/subreddit",
+  "params": {
+    "subreddit": "SaaS",
+    "sort": "hot"
+  },
+  "body": {
+    "success": true,
+    "posts": [
+      {
+        "title": "How do you chase late invoices? (3)",
+        "permalink": "/r/freelance/comments/abc123/how_do_you_chase_late_invoices/",
+        "subreddit": "freelance",
+        "subreddit_name_prefixed": "r/freelance",
+        "author": "user_redacted",
+        "selftext": "Clients pay 60 days late and I hate sending reminders.",
+        "score": 42,
+        "num_comments": 17,
+        "created_utc": 1790000000
+      },
+      {
+        "title": "How do you chase late invoices? (4)",
+        "permalink": "/r/freelance/comments/abc124/how_do_you_chase_late_invoices/",
+        "subreddit": "freelance",
+        "subreddit_name_prefixed": "r/freelance",
+        "author": "user_redacted",
+        "selftext": "Clients pay 60 days late and I hate sending reminders.",
+        "score": 42,
+        "num_comments": 17,
+        "created_utc": 1790000000
+      }
+    ]
+  }
+}

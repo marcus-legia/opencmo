@@ -15,9 +15,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-# Spelled out, not imported from opencmo.ai.moderation: check_deploy_env.py ships only this module
-# to Modal (tests/test_check_deploy_env.py keeps the two equal).
-
 VERCEL = "vercel"
 WORKER = "opencmo"
 VOICE = "opencmo-voice"
@@ -42,8 +39,15 @@ PLAIN_KEYS = frozenset(
         "OPENCMO_MOTION",
         "OPENCMO_MOTION_ASSET_ORIGIN",
         "OPENCMO_VOICE_ENABLED",
+        "OPENCMO_PUBLISH_LIVE",
+        "OPENCMO_EMAIL_LIVE",
     }
 )
+
+# A Creem key's mode decides which Creem it talks to (`creem_test_` = the sandbox). The fingerprint carries the mode
+# in the clear so two sides on different modes are named, not only "differs".
+CREEM_KEY = "CREEM_API_KEY"
+CREEM_TEST_PREFIX = "creem_test_"
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,28 @@ SHARED = (
     Shared("Anthropic key", ((VERCEL, "ANTHROPIC_API_KEY"), (WORKER, "ANTHROPIC_API_KEY"), (MCP, "ANTHROPIC_API_KEY")), optional=True),
     Shared("fal key", ((VERCEL, "FAL_KEY"), (FAL, "FAL_KEY"), (MCP, "FAL_KEY")), optional=True),
     Shared("ElevenLabs key", ((VERCEL, "ELEVENLABS_API_KEY"), (VOICE, "ELEVENLABS_API_KEY"))),
+    # Payments on Vercel; the worker screens every prompt again just before a model runs (opencmo/ai/moderation.py).
+    Shared("Creem key", ((VERCEL, CREEM_KEY), (WORKER, CREEM_KEY))),
+)
+
+
+@dataclass(frozen=True)
+class Feature:
+    """A Vercel-only feature: off is a note, half set up (or switched on without its keys) is a problem."""
+
+    what: str
+    #: Each entry is a key, or alternatives joined by "|" (either name works).
+    keys: tuple[str, ...]
+    #: (plain key, value) that switches it on. None: the keys alone switch it on.
+    gate: tuple[str, str] | None = None
+
+
+FEATURES = (
+    Feature("Creem webhook (credits after a payment)", ("CREEM_WEBHOOK_SECRET",)),
+    Feature("ScrapeCreators (research, Sales scans)", ("SCRAPECREATORS_API_KEY|SCRAPE_CREATORS_API_KEY",)),
+    Feature("Zernio posting", ("ZERNIO_API_KEY", "ZERNIO_WEBHOOK_SECRET"), ("OPENCMO_PUBLISH_LIVE", "1")),
+    Feature("Resend email", ("RESEND_API_KEY",), ("OPENCMO_EMAIL_LIVE", "1")),
+    Feature("Web push (VAPID)", ("NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY")),
 )
 
 # The MCP server reads apps/web/lib with no VERCEL_ENV: everything Vercel has implicitly or by its
@@ -103,8 +129,8 @@ MCP_REQUIRED = (
     "OPENCMO_ENV",
 )
 
-# AI media is checked by Claude (`moderation` agent): prompts on Vercel and in the MCP server, what is
-# drawn on the worker. Each must hold the Anthropic key.
+# Prompts are screened by Creem (the Creem key above); the Anthropic key runs the agents and, on the worker, the
+# review of what was drawn (Haiku vision). Each place must hold it.
 MODERATION_KEYS = ("ANTHROPIC_API_KEY",)
 MODERATION_PLACES = (VERCEL, WORKER, MCP)
 
@@ -149,6 +175,11 @@ def keys_to_read(place: str) -> list[str]:
         keys |= set(MCP_REQUIRED)
     if place in MODERATION_PLACES:
         keys |= set(MODERATION_KEYS) | set(RETIRED_KEYS)
+    if place == VERCEL:
+        for feature in FEATURES:
+            keys |= {name for entry in feature.keys for name in entry.split("|")}
+            if feature.gate:
+                keys.add(feature.gate[0])
     for holder, forbidden in FORBIDDEN:
         if holder == place:
             keys |= set(forbidden)
@@ -167,6 +198,8 @@ def fingerprint(key: str, value: str | None) -> str | None:
     if key in PLAIN_KEYS:
         return value
     digest = "sha256:" + hashlib.sha256(value.encode()).hexdigest()[:12]
+    if key == CREEM_KEY:
+        digest += " (test key)" if value.strip().startswith(CREEM_TEST_PREFIX) else " (live key)"
     return digest + (" (surrounding whitespace)" if value != value.strip() else "")
 
 
@@ -222,6 +255,15 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
                 if get(place, key) is not None:
                     notes.append(f"{place}:{key} is set but nothing reads it any more (Claude only): remove it")
 
+    if VERCEL in seen:
+        _check_features(seen[VERCEL], problems, notes)
+        creem = get(VERCEL, CREEM_KEY)
+        if creem and "(test key)" in creem:
+            problems.append(f"{VERCEL}:{CREEM_KEY} is a test key: production checkouts go to Creem's sandbox and prompt screening refuses")
+    modes = {place: _creem_mode(get(place, CREEM_KEY)) for place in (VERCEL, WORKER) if place in seen}
+    if len({mode for mode in modes.values() if mode}) > 1:
+        problems.append("Creem key mode differs: " + ", ".join(f"{place} {mode}" for place, mode in modes.items() if mode))
+
     for place, forbidden in FORBIDDEN:
         if place in seen:
             for key in forbidden:
@@ -252,6 +294,33 @@ def check(seen: dict[str, dict[str, str | None]]) -> tuple[list[str], list[str]]
     if missing:
         notes.append("not read: " + ", ".join(missing))
     return problems, notes
+
+
+def _creem_mode(value: str | None) -> str | None:
+    if not value:
+        return None
+    return "test" if "(test key)" in value else "live" if "(live key)" in value else None
+
+
+def _check_features(vercel: dict[str, str | None], problems: list[str], notes: list[str]) -> None:
+    """"" is a Sensitive value the CLI hid: set, as far as this check can tell."""
+
+    def present(entry: str) -> bool:
+        return any(vercel.get(name) is not None for name in entry.split("|"))
+
+    for feature in FEATURES:
+        missing = [entry.replace("|", " or ") for entry in feature.keys if not present(entry)]
+        if feature.gate:
+            gate_key, on_value = feature.gate
+            if vercel.get(gate_key) == on_value:
+                if missing:
+                    problems.append(f"{feature.what}: {gate_key}={on_value} but {', '.join(missing)} not set")
+            else:
+                notes.append(f"{feature.what} is off ({gate_key} is not {on_value})")
+        elif len(missing) == len(feature.keys):
+            notes.append(f"{feature.what} is off: set {', '.join(missing)} on {VERCEL}")
+        elif missing:
+            problems.append(f"{feature.what} is half set up: {', '.join(missing)} not set on {VERCEL}")
 
 
 def parse_dotenv(text: str) -> dict[str, str]:

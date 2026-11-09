@@ -185,11 +185,14 @@ function build(row: ApprovalRow): Built | null {
       const parsed = ScriptSnapshotSchema.safeParse(s);
       if (!parsed.success || parsed.data.beats.length === 0) return null;
       const v = parsed.data;
+      const forFounder = v.tool === "script_item";
       return {
         title: clip(`Script for “${v.title}” · ${v.beats.length} ${v.beats.length === 1 ? "beat" : "beats"}`, 300),
-        summary: "Approve the words and pictures; the whole video (keyframes, shots, voice-over, music) is made at the price below.",
-        meta: "Nothing spent until you approve",
-        body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: v.price_credits },
+        summary: forFounder
+          ? "You record this video yourself. Approve the script, or change a beat's words, and it opens in the editor with a marker on each beat."
+          : "Approve the words and pictures; the whole video (keyframes, shots, voice-over, music) is made at the price below.",
+        meta: forFounder ? "Free: nothing is generated" : "Nothing spent until you approve",
+        body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: forFounder ? null : v.price_credits, forFounder },
       };
     }
     case "price": {
