@@ -48,13 +48,8 @@ test("the first week: website → plan card and a first draft, then I posted it 
   await signIn(page, user);
   await page.setViewportSize({ width: 1440, height: 1000 });
 
-  // The rail follows the CMO loop: Dashboard, then Writer, Studio, Schedule, Sales; More; the editor last.
   await page.goto("/app?site=paylane.test");
   await expect(page).toHaveURL(/\/app\/setup\?site=paylane\.test/);
-  const rail = page.getByRole("navigation", { name: "Main" });
-  const labels = (await rail.locator("a").allInnerTexts()).map((text) => text.split("\n")[0]!.trim()).filter(Boolean);
-  const order = ["Dashboard", "Writer", "Studio", "Schedule", "Editor"].map((name) => labels.findIndex((label) => label.startsWith(name)));
-  expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]!))).toBe(true);
 
   // One step: the website, already filled in from the landing page.
   await expect(page.getByRole("heading", { name: "Start with your website." })).toBeVisible();
@@ -62,6 +57,13 @@ test("the first week: website → plan card and a first draft, then I posted it 
   const started = Date.now();
   await page.getByRole("button", { name: "Read my website" }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 60_000 });
+
+  // The rail follows the CMO loop: Dashboard, then Writer, Studio, Schedule; the editor last.
+  const rail = page.getByRole("navigation", { name: "Main" }).first();
+  await expect(rail.getByRole("link", { name: /^Writer/ })).toBeVisible();
+  const labels = (await rail.locator("a").allInnerTexts()).map((text) => text.split("\n")[0]!.trim()).filter(Boolean);
+  const order = ["Dashboard", "Writer", "Studio", "Schedule", "Editor"].map((name) => labels.findIndex((label) => label.startsWith(name)));
+  expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]!)), labels.join(" | ")).toBe(true);
 
   // The plan and today's draft arrive without waiting for Monday.
   const db = admin();
@@ -83,11 +85,13 @@ test("the first week: website → plan card and a first draft, then I posted it 
 
   // The X draft, with no X account: Open X and I posted it on the card itself.
   await page.reload();
-  const card = page.getByTestId("approval-card").filter({ has: page.getByRole("button", { name: "I posted it" }) }).first();
-  await card.click();
+  const card = page.getByRole("article", { name: /^Writer · Post · X:/ }).first();
+  await card.getByRole("button", { name: /Writer · Post · X/ }).click();
   await expect(card.getByRole("button", { name: "Open X" })).toBeVisible();
   const cardId = await card.getAttribute("data-card-id");
+  const posted = page.waitForResponse((response) => response.url().endsWith(`/approvals/${cardId}/posted`));
   await card.getByRole("button", { name: "I posted it" }).click();
+  expect((await posted).status()).toBe(200);
   await expect(page.locator(`[data-card-id="${cardId}"]`)).toHaveCount(0);
 
   const { data: approval } = await db.from("approvals").select("status, ref_id").eq("id", cardId!).single();
