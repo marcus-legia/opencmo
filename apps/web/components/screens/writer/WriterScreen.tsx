@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { ButtonLink, Tabs } from "@/components/ui";
+import { api } from "@/components/clipping/api";
+import { Button, ButtonLink, Tabs } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 import { WRITER_COLUMNS, WRITER_KINDS, type WriterScreen as Data } from "@/lib/screens/writer";
 
@@ -98,6 +99,28 @@ export function WriterScreen() {
   );
 }
 
+/** An approved script opens its blank edit, with a marker per beat (`/api/v1/cmo/scripts/[id]/open`). */
+function OpenScript({ orderId }: { orderId: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
+  async function open() {
+    setState("busy");
+    try {
+      const { clipId } = await api<{ clipId: string }>(`/cmo/scripts/${encodeURIComponent(orderId)}/open`, { method: "POST" });
+      window.location.assign(`/app/editor/${encodeURIComponent(clipId)}`);
+    } catch {
+      setState("failed");
+    }
+  }
+  return (
+    <span className="scr-board-cta">
+      <Button variant="quiet" disabled={state === "busy"} onClick={() => void open()}>
+        {state === "busy" ? "Opening…" : "Open in editor →"}
+      </Button>
+      {state === "failed" && <span className="scr-tiny scr-muted"> Could not open it. Try again.</span>}
+    </span>
+  );
+}
+
 function Board({ drafts }: { drafts: Draft[] }) {
   return (
     <div className="scr-board-wrap">
@@ -118,6 +141,7 @@ function Board({ drafts }: { drafts: Draft[] }) {
                     <span>{d.title}</span>
                     {d.note && <span className="scr-tiny scr-muted">{d.note}</span>}
                     {column === "waiting" && d.approvalId && <span className="scr-board-cta">Review →</span>}
+                    {d.scriptId && <OpenScript orderId={d.scriptId} />}
                   </>
                 );
                 return column === "waiting" && d.approvalId ? (

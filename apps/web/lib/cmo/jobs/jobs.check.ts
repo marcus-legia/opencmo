@@ -50,7 +50,7 @@ async function main() {
     { day_offset: 1, department: "post", platform: "Mastodon", idea: "Elsewhere", reason: "r" },
   ] }, today);
   assert.deepEqual(plan.map((p) => [p.day, p.platform, p.idea]), [
-    ["2026-10-11", "LinkedIn", "Launch"], ["2026-10-06", "Reddit", "Thread"], ["2026-10-06", "X", "Elsewhere"],
+    ["2026-10-11", "LinkedIn", "Launch"], ["2026-10-05", "Shorts", "Clip"], ["2026-10-06", "Reddit", "Thread"], ["2026-10-06", "X", "Elsewhere"],
   ]);
   // One post per platform a day, at most 3 LinkedIn posts a week; the same idea may go to each platform.
   const post = (day_offset: number, platform: string, idea = "Idea") => ({ day_offset, department: "post" as const, platform, idea, reason: "r" });
@@ -69,14 +69,14 @@ async function main() {
   assert.equal(maxSteps("build_video"), 40, "Studio kinds come from the same registry");
   assert.equal(maxSteps("not_a_kind"), null);
 
-  // The week plan orders no AI video (cmo-review-2 §2.2): a slideshow is its only Studio item, one a week.
+  // The week plan orders no AI video: one slideshow and one script the founder records a week (owner, 2026-11-09).
   const studio = toPlanItems({ items: [
     { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },
     { day_offset: 2, department: "video", platform: "slideshow", idea: "Five cuts", reason: "r" },
     { day_offset: 3, department: "video", platform: "Slideshow", idea: "A second slideshow", reason: "r" },
     { day_offset: 4, department: "video", platform: "TikTok", idea: "A second video", reason: "r" },
   ] }, today);
-  assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Slideshow Five cuts"]);
+  assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
 
   // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
   const { fitStage } = await import("./plan-week");

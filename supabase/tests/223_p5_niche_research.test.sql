@@ -1,6 +1,6 @@
 -- P5 A2 (20261231110000): niche video research is a priced Research job; a week plan with a video item orders it once
 -- and that video's brief waits on it; when research ends (done or failed) the brief starts; the brief's niche links
--- reach the video order.
+-- stay on its script order (a week's video is a script the founder records, 2026-11-09).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -59,20 +59,25 @@ select is((select count(*)::int from public.cmo_runs where kind = 'write_video_b
      and status <> 'cancelled'), 'every open brief starts once research ends');
 select is((select count(*)::int from public.work_orders where kind = 'write_video_brief' and status <> 'cancelled'
   and pg_temp.id('niche') = any(depends_on)), 0, 'and no longer waits on it');
-select is((select input->>'idea' from public.cmo_runs where kind = 'write_video_brief' and input->>'idea' = 'Cut a demo by words'), 'Cut a demo by words',
-  'with the plan''s idea');
+select is((select r.input->>'idea' from public.cmo_runs r join public.work_orders o on r.input->>'order_id' = o.id::text
+  where o.kind = 'write_video_brief' and o.status <> 'cancelled' and o.user_id = 'e2230000-0000-4000-8000-00000000000a'),
+  (select brief->>'objective' from public.work_orders where kind = 'write_video_brief' and status <> 'cancelled'
+     and user_id = 'e2230000-0000-4000-8000-00000000000a'), 'with the plan''s idea');
 
--- The brief's niche links reach its video order.
-insert into t select 'brief', id from public.work_orders where kind = 'write_video_brief' and brief->>'objective' = 'Cut a demo by words';
-insert into t select 'video', id from public.work_orders where kind = 'build_video' and pg_temp.id('brief') = any(depends_on);
+-- The brief's niche links stay on its script order.
+insert into t select 'brief', id from public.work_orders where kind = 'write_video_brief' and status <> 'cancelled'
+  and user_id = 'e2230000-0000-4000-8000-00000000000a';
 update public.cmo_runs set status = 'running', started_at = now() where input->>'order_id' = pg_temp.id('brief')::text;
 update public.cmo_runs set status = 'done', finished_at = now(), output = jsonb_build_object('reason', 'Brief written',
   'brief', jsonb_build_object('objective', 'Show a demo cut by words', 'angle', 'Own screen',
-    'hooks', jsonb_build_array('a', 'b', 'c'), 'keyPoints', jsonb_build_array('x'), 'cta', 'Try it', 'seconds', 30, 'aspect', '9:16'),
+    'hooks', jsonb_build_array('a', 'b', 'c'), 'keyPoints', jsonb_build_array('x'), 'cta', 'Try it', 'seconds', 30, 'aspect', '9:16',
+    'storyboard', jsonb_build_array(jsonb_build_object('say', 'a', 'show', 'You', 'shot', 'talking_head', 'seconds', 10),
+      jsonb_build_object('say', 'b', 'show', 'Screen', 'shot', 'screen', 'seconds', 10),
+      jsonb_build_object('say', 'Try it', 'show', 'You', 'shot', 'talking_head', 'seconds', 10))),
   'sources', jsonb_build_array('https://www.tiktok.com/@a/video/1'))
 where input->>'order_id' = pg_temp.id('brief')::text;
-select is((select brief->'sources'->>0 from public.work_orders where id = pg_temp.id('video')), 'https://www.tiktok.com/@a/video/1',
-  'the video order carries the links the brief learned from');
+select is((select brief->'sources'->>0 from public.work_orders where id = pg_temp.id('brief')), 'https://www.tiktok.com/@a/video/1',
+  'the script order carries the links the brief learned from');
 
 -- A founder without credits: research cannot start, so the briefs go on at once.
 insert into public.cmo_runs (id, user_id, kind, status) values

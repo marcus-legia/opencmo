@@ -1715,6 +1715,32 @@ begin
     when 'correction' then
       perform public.cmo_decide_correction(v_row.ref_id, p_action, v_payload->>'text');
     when 'script', 'price' then
+      if v_row.ref_kind = 'work_order' then
+        if p_action not in ('approve', 'edit', 'cancel') then
+          raise exception 'Choose approve, edit a beat or cancel.' using errcode = '22023';
+        end if;
+        if p_action = 'edit' then
+          if jsonb_typeof(v_payload->'beat') is distinct from 'number'
+             or (v_payload->>'beat')::numeric <> trunc((v_payload->>'beat')::numeric) then
+            raise exception 'Say which beat to change.' using errcode = '22023';
+          end if;
+          v_n := (v_payload->>'beat')::numeric::integer;
+          v_text := trim(coalesce(v_payload->>'text', ''));
+          if v_n < 0 or v_n >= jsonb_array_length(v_row.snapshot->'beats') then
+            raise exception 'That beat is not in the script.' using errcode = '22023';
+          end if;
+          if char_length(v_text) not between 1 and 300 then
+            raise exception 'A beat''s words are 1 to 300 characters.' using errcode = '22023';
+          end if;
+          -- The founder's words are the script they record: kept on the order, the card closes as edited.
+          update public.work_orders set brief = jsonb_set(brief, array['storyboard', v_n::text, 'say'], to_jsonb(v_text)),
+            updated_at = now()
+          where id = v_row.ref_id and user_id = v_user;
+          perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'edited');
+        else
+          perform public.approval_close(v_row.ref_kind, v_row.ref_id, case p_action when 'cancel' then 'skipped' else 'approved' end);
+        end if;
+      else
       if (v_row.kind = 'script' and p_action not in ('approve', 'edit', 'cancel'))
          or (v_row.kind = 'price' and p_action not in ('approve', 'redo', 'cancel')) then
         raise exception '%', case v_row.kind when 'script' then 'Choose approve, edit a beat or cancel.'
@@ -1764,6 +1790,7 @@ begin
         end if;
       else
         update public.studio_steps set status = 'approved', decision = 'approve', decided_at = now() where id = v_step.id;
+      end if;
       end if;
     when 'finished_video' then
       if p_action not in ('approve', 'send_back') then
@@ -2039,6 +2066,18 @@ begin
   -- The week plan card (cmo-review B2.1): the week's calendar as the brain planned it. Status stays out, so drafting a
   -- post does not change the card the founder is reading; an item they drop leaves it.
   if p_ref_kind = 'work_order' then
+    -- A script the founder records (owner, 2026-11-09): the card of the `script` kind, free, read from the brief.
+    select case when o.kind = 'write_video_brief' then jsonb_build_object('kind', 'script', 'step_id', o.id, 'clip_id', '',
+        'tool', 'script_item', 'title', left(coalesce(o.brief->>'objective', o.title), 200),
+        'seconds', o.brief->'seconds', 'aspect', o.brief->'aspect', 'price_credits', 0,
+        'beats', coalesce((select jsonb_agg(jsonb_build_object('words', left(b->>'say', 300),
+            'picture', left(case b->>'shot' when 'talking_head' then 'To camera: ' when 'screen' then 'Screen: ' else 'You film: ' end
+              || coalesce(b->>'show', ''), 300), 'motion', null) order by n)
+          from jsonb_array_elements(o.brief->'storyboard') with ordinality as s(b, n)), '[]'::jsonb)) end
+    into v from public.work_orders o where o.id = p_ref_id;
+    if v is not null then
+      return v;
+    end if;
     return public.plan_snapshot(p_ref_id);
   end if;
   v := public.approval_snapshot_base(p_ref_kind, p_ref_id);
@@ -5025,6 +5064,43 @@ begin
   return true;
 end;
 $_$;
+
+
+--
+-- Name: cmo_script_open(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_script_open(p_order uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_order public.work_orders;
+  v_clip uuid;
+begin
+  select * into v_order from public.work_orders
+  where id = p_order and user_id = v_user and kind = 'write_video_brief' for update;
+  if not found or jsonb_typeof(v_order.brief->'storyboard') is distinct from 'array' then
+    raise exception 'Script not found.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.approvals where user_id = v_user and ref_kind = 'work_order' and ref_id = v_order.id
+                 and kind = 'script' and status in ('approved', 'edited')) then
+    raise exception 'Approve the script first.' using errcode = 'P0001';
+  end if;
+  if v_order.brief->>'clip_id' is not null then
+    select c.id into v_clip from public.clips c join public.jobs j on j.id = c.job_id
+    where c.id::text = v_order.brief->>'clip_id' and j.user_id = v_user and j.purging_at is null;
+    if v_clip is not null then
+      return v_clip;
+    end if;
+  end if;
+  v_clip := public.create_blank_edit(left(coalesce(v_order.brief->>'objective', v_order.title), 60),
+    case when v_order.brief->>'aspect' in ('9:16', '1:1', '16:9') then v_order.brief->>'aspect' else '9:16' end);
+  update public.work_orders set brief = brief || jsonb_build_object('clip_id', v_clip), updated_at = now() where id = v_order.id;
+  return v_clip;
+end;
+$$;
 
 
 --
@@ -14588,6 +14664,35 @@ begin
     end loop;
     return new;
   end if;
+  -- A script (owner, 2026-11-09): no video waits on this brief. Its storyboard goes on the order and a script card asks
+  -- the founder; they record the video themselves.
+  if new.kind = 'write_video_brief'
+     and not exists (select 1 from public.work_orders where user_id = new.user_id and new.id = any(depends_on)) then
+    if new.status = 'done' then
+      begin
+        select r.output->'brief', r.output->'sources' into v_brief, v_sources from public.cmo_runs r where r.id = new.run_id;
+        if jsonb_typeof(v_sources) is distinct from 'array' or jsonb_array_length(v_sources) > 6 or octet_length(v_sources::text) > 4096 then
+          v_sources := null;
+        end if;
+        if jsonb_typeof(v_brief->'storyboard') = 'array' and jsonb_array_length(v_brief->'storyboard') between 3 and 8
+           and octet_length((v_brief->'storyboard')::text) <= 16384
+           and char_length(coalesce(v_brief->>'objective', '')) between 3 and 300 then
+          update public.work_orders
+          set brief = brief || jsonb_strip_nulls(jsonb_build_object('objective', v_brief->'objective', 'angle', v_brief->'angle',
+                'hooks', v_brief->'hooks', 'cta', v_brief->'cta', 'seconds', v_brief->'seconds', 'aspect', v_brief->'aspect',
+                'storyboard', v_brief->'storyboard', 'sources', v_sources, 'brief_from', 'writer')),
+              updated_at = now()
+          where id = new.id;
+          perform public.approval_raise(new.user_id, 'work_order', new.id);
+        else
+          perform public.work_order_event(new, 'note', 'Writer could not write the script for “' || new.title || '”');
+        end if;
+      exception when others then
+        raise warning 'script rule for order % failed: %', new.id, sqlerrm;
+      end;
+    end if;
+    return new;
+  end if;
   -- Writer's slides (P5 S3) go into the slideshow order waiting on them, as the video brief goes into its video.
   if new.kind = 'write_slides' then
     begin
@@ -14824,8 +14929,10 @@ begin
     order by c.day, c.created_at
   loop
     update public.work_orders set item_id = v_item.id, updated_at = now()
-    where id = (select id from public.work_orders where root_id = v_root.id and kind = 'build_video' and item_id is null
-                  and status not in ('done', 'failed', 'cancelled') order by created_at limit 1);
+    where id = (select id from public.work_orders where root_id = v_root.id and kind = 'write_video_brief' and item_id is null
+                  and created_by = 'loop' and status not in ('done', 'failed', 'cancelled')
+                  and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and id = any(v.depends_on))
+                order by created_at, title limit 1);
   end loop;
   -- Videos the new plan dropped that have not started.
   for v_item in
@@ -14846,6 +14953,8 @@ begin
   for v_item in
     select b.id, b.kind from public.work_orders b
     where b.root_id = v_root.id and b.kind in ('write_video_brief', 'write_slides') and b.status in ('queued', 'deferred')
+      -- A script (owner, 2026-11-09) has no video waiting on it: it goes only when the plan dropped its item.
+      and b.item_id is null
       and not exists (select 1 from public.work_orders v where v.root_id = v_root.id and b.id = any(v.depends_on)
                       and v.status not in ('done', 'failed', 'cancelled'))
   loop
@@ -14910,18 +15019,15 @@ begin
       continue;
     end if;
     if v_item.department = 'video' then
-      -- Videos that took over an order were matched above and have their order now; this one is new.
+      -- The founder makes the videos (owner, 2026-11-09): Writer writes the script and the storyboard, a script card
+      -- asks the founder (`work_orders_brief_rules`), and nothing builds the video.
       v_price := public.cmo_job_price('write_video_brief');
       v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_video_brief',
-        left('Brief for “' || v_item.idea || '”', 200),
+        left('Script for “' || v_item.idea || '”', 200),
         jsonb_build_object('objective', v_item.idea, 'reason', coalesce(v_item.reason, ''), 'platform', v_item.platform,
-          'done_when', 'Studio has the brief for this video.'),
-        least(v_price, greatest(v_free, 0)), v_due, case when v_niche.id is null then '{}'::uuid[] else array[v_niche.id] end, 'loop');
-      perform public.work_order_create(p_user, v_week, v_root.id, 'build_video', v_item.idea,
-        jsonb_build_object('objective', v_item.idea, 'angle', coalesce(v_item.reason, ''), 'seconds', public.cmo_video_seconds(), 'aspect', '9:16',
-          'platform', v_item.platform, 'done_when', 'The founder approved the finished video.'),
-        least(public.studio_video_budget(), greatest(v_free - least(v_price, greatest(v_free, 0)), 0)), v_due,
-        array[v_brief.id], 'loop', v_item.id);
+          'done_when', 'The founder approved the script.'),
+        least(v_price, greatest(v_free, 0)), v_due, case when v_niche.id is null then '{}'::uuid[] else array[v_niche.id] end,
+        'loop', v_item.id);
       -- With research under way, the brief starts when it ends (`work_orders_brief_rules`).
       if v_niche.id is null then
         perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, ''),

@@ -32,7 +32,8 @@ const SYSTEM = `You are the CMO for a solo founder. Plan the next seven days of 
 Rules:
 - Five to ten items. Mostly posts (department "post"), at most one Reddit item a day ("sales").
 - Posts go to X unless the strategy, its weekly rhythm or this week's goal names Threads or LinkedIn; then one idea may become a post on each of those platforms, each written for its platform. At most one post per platform a day; at most 5 Threads and 3 LinkedIn posts a week.
-- The only video item is a slideshow (department "video", platform "Slideshow"), at most one a week: 5 to 10 slides that teach one thing from the documents (a how-to, a list, a before and after). It costs the founder nothing; plan one most weeks. Never plan an AI-generated video: short clips are cut from the founder's own videos when they finish an edit, outside this plan.
+- A slideshow (department "video", platform "Slideshow"), at most one a week: 5 to 10 slides that teach one thing from the documents (a how-to, a list, a before and after). It costs the founder nothing; plan one most weeks.
+- A video script (department "video", platform TikTok, Reels or Shorts), at most one a week, only when the strategy or this week's goal calls for video (a launch, a demo, a walkthrough). You write the script and the storyboard; the founder records the video themselves, to camera or as a screen recording. Its idea says what the video shows. Never plan an AI-generated video. Short clips are cut from the founder's finished videos, outside this plan.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
 - Learn from the memories: they are reasons the founder skipped drafts and notes they gave you.
 - Plain English, no hype, no invented numbers.
@@ -45,6 +46,9 @@ ${NO_AI_SLOP}`;
 
 /** The calendar's platform for a slideshow: a Studio (video department) item whose order is `build_slideshow`. */
 export const SLIDESHOW = "Slideshow";
+
+/** Platforms a video script is written for; anything else becomes the first. */
+const SCRIPT_PLATFORMS = ["Shorts", "Reels", "TikTok"] as const;
 
 /** Posts a week per platform, past which the plan drops an item: LinkedIn and Threads reward a slower rhythm than X. */
 export const WEEKLY_POSTS: Readonly<Record<string, number>> = { x: 7, threads: 5, linkedin: 3 };
@@ -59,19 +63,20 @@ export function postPlatform(label: string): string {
  * Trims and normalizes the model's output into valid calendar items (day, platform, length). Posts: one per platform a day
  * and at most `WEEKLY_POSTS` a week, each kept on X, Threads or LinkedIn. Slideshow: one a week (it spends no credits).
  *
- * No AI video (owner, 2026-11-08: cmo-review-2 §2.2): any other video item is dropped, since SQL turns each into a
- * `build_video` order (`work_orders_plan_week`), the most expensive job. Clips of the founder's own videos are ordered
- * when an edit is finished (`cut_shorts_order_for`), not by the plan.
+ * Any other video item is a script the founder records (owner, 2026-11-09): one a week. SQL orders only its brief
+ * (`write_video_brief`, which writes the storyboard) and raises a script card; nothing builds the video. Clips of the
+ * founder's own videos are ordered when an edit is finished (`cut_shorts_order_for`), not by the plan.
  */
 export function toPlanItems(plan: Plan, today = new Date()): PlanItem[] {
   let slideshows = 0;
+  let scripts = 0;
   const perWeek = new Map<string, number>();
   const perDay = new Set<string>();
   const out: PlanItem[] = [];
   for (const item of plan.items.slice(0, 12)) {
     const slideshow = item.department === "video" && item.platform.trim().toLowerCase() === SLIDESHOW.toLowerCase();
-    if (item.department === "video" && !slideshow) continue;
     if (slideshow && ++slideshows > 1) continue;
+    if (item.department === "video" && !slideshow && ++scripts > 1) continue;
     const offset = Math.min(6, Math.max(0, Math.round(item.day_offset)));
     const day = isoDay(offset, today);
     const platform =
@@ -79,7 +84,9 @@ export function toPlanItems(plan: Plan, today = new Date()): PlanItem[] {
         ? postPlatform(item.platform)
         : item.department === "sales"
           ? "Reddit"
-          : SLIDESHOW;
+          : slideshow
+            ? SLIDESHOW
+            : (SCRIPT_PLATFORMS.find((label) => label.toLowerCase() === item.platform.trim().toLowerCase()) ?? SCRIPT_PLATFORMS[0]);
     if (item.department === "post") {
       const id = profileIdOf(platform) ?? "x";
       if (perDay.has(`${id}:${day}`) || (perWeek.get(id) ?? 0) >= (WEEKLY_POSTS[id] ?? 0)) continue;
@@ -171,7 +178,7 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
       ? recent.map((i) => `- ${i.day} ${i.department}: ${i.status} "${i.idea}"`).join("\n")
       : "(nothing yet)";
     return ctx.think({
-      title: "Plan the founder's next seven days (posts, Reddit, a slideshow)",
+      title: "Plan the founder's next seven days (posts, Reddit, a slideshow, a video script)",
       fake: () => fakePlan(docs, run.input.brief, goal?.goal),
       agent: "planner",
       system: SYSTEM,

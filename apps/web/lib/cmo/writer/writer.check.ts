@@ -182,11 +182,19 @@ async function writerChecks() {
   assert.equal(kept.versions.length, 3, "a style problem the writer could not fix still reaches the founder");
 
   // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
-  const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [] };
+  const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [],
+    storyboard: [
+      { say: "Your invoice is late.", show: "You, to camera", shot: "talking_head", seconds: 5 },
+      { say: "Paylane sends the reminder for you, on the day it is due.", show: "Paylane's reminder screen", shot: "screen", seconds: 15 },
+      { say: "Try Paylane.", show: "You, to camera", shot: "talking_head", seconds: 10 },
+    ] };
   const b = await createWriter({ think: scripted([brief]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "Late invoices" }, ctx);
   assert.deepEqual([b.brief.hooks.length, b.brief.cta, b.brief.seconds], [3, "Try Paylane", 30]);
   assert.equal(VideoBriefSchema.parse(b.brief).objective, brief.objective, "Studio's buildVideo takes it as is");
   await assert.rejects(createWriter({ think: scripted([{ ...brief, hooks: ["One"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /1 hooks; a brief has 3/);
+  await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: brief.storyboard.slice(0, 2) }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /2 beats; a script has 3 to 8/);
+  await assert.rejects(createWriter({ think: scripted([{ ...brief, seconds: 60 }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /beats run 30 s; the video is 60 s/);
+  await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: [{ ...brief.storyboard[0]!, say: "We have helped 9,000 freelancers." }, ...brief.storyboard.slice(1)] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /9,000/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, keyPoints: ["Used by 4,000 freelancers"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /4,000/);
 
   // The CI fakes pass their own checks for every kind, so fake runs and e2e reach a card.
@@ -301,7 +309,7 @@ async function studioChecks() {
   const out = b.output as { brief: unknown; reason: string };
   const parsed = VideoBriefSchema.parse(out.brief);
   assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
-  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "cta", "hooks", "keyPoints", "objective", "seconds"], "the keys SQL copies into the video order");
+  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
   assert.deepEqual((b.output as { sources: string[] }).sources, [], "no niche research, no sources");
   // P5 F8: with niche research the brief cites its videos, and only URLs the research read.
   const nicheRun = memoryStore(docs, []);

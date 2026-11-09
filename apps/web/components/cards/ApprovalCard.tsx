@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { ApiError } from "@/components/clipping/api";
+import { api, ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
 import { isPublishPlatform } from "@/lib/departments/publish/types";
@@ -182,6 +182,21 @@ export function ApprovalCard({
     }
   }
 
+  /** A script the founder records: approved (or edited), then its blank edit opens with a marker on each beat. */
+  async function approveAndOpen() {
+    if (card.body.kind !== "script") return;
+    const words = draft.trim();
+    const decision: Decision = editing && words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" };
+    const orderId = card.body.stepId;
+    if (!(await run(decision)) || sample) return;
+    try {
+      const { clipId } = await api<{ clipId: string }>(`/cmo/scripts/${encodeURIComponent(orderId)}/open`, { method: "POST" });
+      window.location.assign(`/app/editor/${encodeURIComponent(clipId)}`);
+    } catch (error) {
+      toast(error instanceof ApiError ? `Script approved. ${error.message}` : "Script approved, but the editor did not open. Try again from the Writer screen.");
+    }
+  }
+
   async function rerender() {
     if (busy) return;
     setBusy(true);
@@ -283,6 +298,7 @@ export function ApprovalCard({
       case "goal":
         return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
       case "script":
+        if (card.body.forFounder) return [{ label: editing ? "Approve edit and open" : "Approve and open in editor", variant: "primary", run: () => void approveAndOpen() }, editAction("Edit a beat"), ...declineAction];
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
         // No keyframe redo from a card: the contact sheet went with the two-card /video (2026-11-06); `redo_keyframe` does it

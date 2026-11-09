@@ -1,4 +1,4 @@
--- P3 A2 (20261229110000): Writer's orders. A video waits on its brief and takes it (or goes on without it); a Writer
+-- P3 A2 (20261229110000): Writer's orders. A week's video is a script the founder records (2026-11-09); a Writer
 -- order gets its own run; a finished-video card orders its captions; Writer saves captions onto the card, the founder
 -- edits one there (same card, new hash, Writer never overwrites it); approving the video delivers them; a draft
 -- without an item takes its platform.
@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(55);
+select plan(57);
 
 select is(public.cmo_job_price('write_caption'), 1, 'a caption run costs 1 credit');
 select is(public.cmo_job_price('write_video_brief'), 1, 'so does a brief');
@@ -29,65 +29,85 @@ create temp table t (name text primary key, id uuid) on commit drop;
 grant all on t to authenticated;
 create function pg_temp.id(p text) returns uuid language sql as $$ select id from t where name = p $$;
 
--- The plan's video item: a brief order, and a video order that waits on it.
+-- The plan's video item is a script (owner, 2026-11-09): Writer writes the brief and its storyboard, a free script
+-- card asks the founder, and nothing builds the video.
 insert into public.cmo_runs (id, user_id, kind, status) values
   ('e2121000-0000-4000-8000-00000000000a', 'e2120000-0000-4000-8000-00000000000a', 'plan_week', 'running');
 select public.cmo_plan_week('e2120000-0000-4000-8000-00000000000a', 'e2121000-0000-4000-8000-00000000000a',
   jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'TikTok',
     'idea', 'Cut a demo by words', 'reason', 'Launch week')));
 insert into t select 'brief', id from public.work_orders where kind = 'write_video_brief' and user_id = 'e2120000-0000-4000-8000-00000000000a';
-insert into t select 'video', id from public.work_orders where kind = 'build_video' and user_id = 'e2120000-0000-4000-8000-00000000000a';
 select is((select department || ' ' || status from public.work_orders where id = pg_temp.id('brief')), 'writer queued', 'a brief order under Writer');
-select is((select depends_on from public.work_orders where id = pg_temp.id('video')), array[pg_temp.id('brief')], 'the video waits on it');
+select is((select count(*)::int from public.work_orders where kind = 'build_video' and user_id = 'e2120000-0000-4000-8000-00000000000a'), 0,
+  'no video order: the founder makes the video');
+select is((select c.idea from public.content_items c join public.work_orders o on o.item_id = c.id where o.id = pg_temp.id('brief')),
+  'Cut a demo by words', 'the script carries its calendar item');
 select is((select input->>'idea' from public.cmo_runs where kind = 'write_video_brief' and input->>'order_id' = pg_temp.id('brief')::text),
   'Cut a demo by words', 'the brief''s run starts with the plan''s idea');
 select is((select run_id from public.work_orders where id = pg_temp.id('brief')),
   (select id from public.cmo_runs where kind = 'write_video_brief' and input->>'order_id' = pg_temp.id('brief')::text),
   'and is the brief order''s run');
-select is((select count(*)::int from public.studio_orders_claim()), 0, 'Studio does not take a video before its brief');
-select is(public.studio_work_count(), 0, 'nor counts it as work');
+select is(public.studio_work_count(), 0, 'Studio has no work');
 
--- The brief is written: the video takes it.
+-- The brief is written with its storyboard: it stays on the order and a free script card asks the founder.
 update public.cmo_runs set status = 'done', finished_at = now(), output = jsonb_build_object('reason', 'Brief written',
   'brief', jsonb_build_object('objective', 'Show a demo cut by words', 'angle', 'Founder''s own screen',
     'hooks', jsonb_build_array('Cut by words.', 'No timeline.', 'One take.'), 'keyPoints', jsonb_build_array('Delete words to cut'),
-    'cta', 'Try it on your demo', 'seconds', 40, 'aspect', '9:16'))
+    'cta', 'Try it on your demo', 'seconds', 30, 'aspect', '9:16',
+    'storyboard', jsonb_build_array(
+      jsonb_build_object('say', 'Cut by words.', 'show', 'You, to camera', 'shot', 'talking_head', 'seconds', 5),
+      jsonb_build_object('say', 'Delete a word and the video is cut.', 'show', 'Your editor, a word deleted', 'shot', 'screen', 'seconds', 15),
+      jsonb_build_object('say', 'Try it on your demo.', 'show', 'You, to camera', 'shot', 'talking_head', 'seconds', 10))))
 where input->>'order_id' = pg_temp.id('brief')::text;
 select is((select status from public.work_orders where id = pg_temp.id('brief')), 'done', 'the brief order is done');
-select is((select brief->>'objective' || ' · ' || (brief->'hooks'->>2) || ' · ' || (brief->'key_points'->>0) || ' · ' || (brief->>'cta')
-  || ' · ' || (brief->>'seconds') || ' · ' || (brief->>'brief_from') from public.work_orders where id = pg_temp.id('video')),
-  'Show a demo cut by words · One take. · Delete words to cut · Try it on your demo · 40 · writer', 'the video takes Writer''s brief');
-select is((select brief->>'platform' from public.work_orders where id = pg_temp.id('video')), 'TikTok', 'and keeps what the plan said');
-select is(public.studio_work_count(), 1, 'now Studio has work');
-select is((select id from public.studio_orders_claim()), pg_temp.id('video'), 'and takes the video');
+select is((select jsonb_array_length(brief->'storyboard') || ' · ' || (brief->>'objective') || ' · ' || (brief->>'platform')
+  from public.work_orders where id = pg_temp.id('brief')), '3 · Show a demo cut by words · TikTok', 'the storyboard is kept on the order, with the plan''s platform');
+insert into t select 'script_card', id from public.approvals where ref_kind = 'work_order' and ref_id = pg_temp.id('brief');
+select is((select kind || ' ' || status || ' ' || department || ' ' || coalesce(price_credits, -1) from public.approvals where id = pg_temp.id('script_card')),
+  'script waiting studio 0', 'a free script card asks the founder');
+select is((select (snapshot->'beats'->0->>'words') || ' / ' || (snapshot->'beats'->1->>'picture') || ' / ' || (snapshot->>'tool')
+  from public.approvals where id = pg_temp.id('script_card')),
+  'Cut by words. / Screen: Your editor, a word deleted / script_item', 'the card shows what to say and what to film');
+select is(public.studio_work_count(), 0, 'and still nothing is built');
 
--- A founder with no credits: the brief cannot start, so the video goes on with the plan's own brief.
+-- The founder edits a beat: that approves the script, with their words kept on the order.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2120000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select is((public.approval_decide(pg_temp.id('script_card'), 'edit', jsonb_build_object('content_hash',
+  (select content_hash from public.approvals where id = pg_temp.id('script_card')), 'beat', 1, 'text', 'Delete a word and the cut is made.'))).status,
+  'edited', 'editing a beat approves the script');
+reset role;
+select is((select brief->'storyboard'->1->>'say' from public.work_orders where id = pg_temp.id('brief')), 'Delete a word and the cut is made.',
+  'the order keeps the founder''s words');
+
+-- A founder with no credits: the brief cannot start.
 insert into public.cmo_runs (id, user_id, kind, status) values
   ('e2121000-0000-4000-8000-00000000000b', 'e2120000-0000-4000-8000-00000000000b', 'plan_week', 'running');
 select public.cmo_plan_week('e2120000-0000-4000-8000-00000000000b', 'e2121000-0000-4000-8000-00000000000b',
   jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'Shorts', 'idea', 'A short', 'reason', 'r')));
 select is((select status || ' ' || (error->>'code') from public.work_orders where kind = 'write_video_brief' and user_id = 'e2120000-0000-4000-8000-00000000000b'),
   'failed not_started', 'a brief that cannot start fails with the reason');
-select is((select depends_on from public.work_orders where kind = 'build_video' and user_id = 'e2120000-0000-4000-8000-00000000000b'),
-  '{}'::uuid[], 'and its video stops waiting');
 
--- A brief that fails after it started: the same.
+-- A brief written without a storyboard raises no card; a failed run fails its brief.
 update public.profiles set credit_balance = 10 where id = 'e2120000-0000-4000-8000-00000000000b';
-insert into t select 'video_b', id from public.work_orders where kind = 'build_video' and user_id = 'e2120000-0000-4000-8000-00000000000b';
-update public.work_orders set status = 'cancelled' where id = pg_temp.id('video_b');
 insert into public.cmo_runs (id, user_id, kind, status) values
   ('e2121000-0000-4000-8000-00000000000c', 'e2120000-0000-4000-8000-00000000000b', 'plan_week', 'running');
 select public.cmo_plan_week('e2120000-0000-4000-8000-00000000000b', 'e2121000-0000-4000-8000-00000000000c',
-  jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'Shorts', 'idea', 'Another short', 'reason', 'r')));
-insert into t select 'brief_b', id from public.work_orders where kind = 'write_video_brief' and status = 'queued'
-  and user_id = 'e2120000-0000-4000-8000-00000000000b';
-update public.cmo_runs set status = 'failed', error = 'The model was busy.', finished_at = now()
+  jsonb_build_array(
+    jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'Shorts', 'idea', 'Another short', 'reason', 'r'),
+    jsonb_build_object('day', current_date + 1, 'department', 'video', 'platform', 'Reels', 'idea', 'A third short', 'reason', 'r')));
+insert into t select 'brief_b', o.id from public.work_orders o join public.content_items c on c.id = o.item_id where c.idea = 'Another short';
+insert into t select 'brief_c', o.id from public.work_orders o join public.content_items c on c.id = o.item_id where c.idea = 'A third short';
+update public.cmo_runs set status = 'done', finished_at = now(), output = jsonb_build_object('reason', 'Brief written',
+  'brief', jsonb_build_object('objective', 'Another short', 'hooks', jsonb_build_array('One.', 'Two.', 'Three.'), 'seconds', 30, 'aspect', '9:16'))
 where input->>'order_id' = pg_temp.id('brief_b')::text;
-select is((select status from public.work_orders where id = pg_temp.id('brief_b')), 'failed', 'a failed run fails its brief');
-select is((select depends_on from public.work_orders where kind = 'build_video' and status = 'queued' and user_id = 'e2120000-0000-4000-8000-00000000000b'),
-  '{}'::uuid[], 'and the video goes on without it');
-select is((select brief->>'objective' from public.work_orders where kind = 'build_video' and status = 'queued' and user_id = 'e2120000-0000-4000-8000-00000000000b'),
-  'Another short', 'with the plan''s own brief');
+select is((select status from public.work_orders where id = pg_temp.id('brief_b')), 'done', 'a brief without a storyboard ends');
+select is((select count(*)::int from public.approvals where ref_kind = 'work_order' and ref_id = pg_temp.id('brief_b')), 0, 'and raises no card');
+select ok(exists (select 1 from public.work_order_events where order_id = pg_temp.id('brief_b') and text like 'Writer could not write the script%'),
+  'the log says why');
+update public.cmo_runs set status = 'failed', error = 'The model was busy.', finished_at = now()
+where input->>'order_id' = pg_temp.id('brief_c')::text;
+select is((select status from public.work_orders where id = pg_temp.id('brief_c')), 'failed', 'a failed run fails its brief');
 
 -- Runs per order and per item.
 select isnt((public.enqueue_cmo_run_for('e2120000-0000-4000-8000-00000000000a', 'post_draft', '{"item_id":"e2129999-0000-4000-8000-000000000001"}')).id,
@@ -185,7 +205,8 @@ select is((select body->>'text' from public.content_items where id = pg_temp.id(
   'Writer never overwrites the founder''s words');
 
 -- Approving the video delivers its captions.
-insert into t select 'vorder', id from public.work_orders where kind = 'build_video' and user_id = 'e2120000-0000-4000-8000-00000000000a';
+insert into t select 'vorder', id from public.work_order_create('e2120000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+  (select id from public.work_orders where parent_id is null and user_id = 'e2120000-0000-4000-8000-00000000000a'), 'cut_shorts', 'The founder''s video', '{}', 0);
 insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id)
 values ('e2120000-0000-4000-8000-00000000000a', pg_temp.id('vorder'), 'video', 'clip', 'e2123000-0000-4000-8000-00000000000a');
 select is((select count(*)::int from public.deliverables d join public.deliverables p on p.id = d.parent_id
