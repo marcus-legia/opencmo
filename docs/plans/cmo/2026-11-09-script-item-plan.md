@@ -127,7 +127,7 @@ The week plan orders **a script and a storyboard** for a video the founder makes
   - one `openScript` helper.
 - **Not done:** a CMO eval case for a week with a script.
 
-### C2 The founder's finished video goes out
+### C2 The founder's finished video goes out — done `8e4167e4`
 
 **Research note (2026-11-09):** today "Mark finished" on the founder's own edit (`mark_finished`) only closes the card.
 `editor_projects_rules` orders `cut_shorts`. Nothing renders the long video, nothing raises its `finished_video` card
@@ -154,7 +154,7 @@ The sketch's lane: video + caption → schedule.
 - pgTAP: marking an edit finished creates the caption order and, after the caption card, a schedule slot for the long
   video. Look at a frame of the export that would be posted (`CLAUDE.md` "Verify by looking").
 
-### C3 Post images for posts that need one
+### C3 Post images for posts that need one — done `917d3968`
 
 **Research note (2026-11-09):** the Post image squad (`lib/departments/studio/slideshow/post-image.ts`, order
 `build_post_image`) and its schedule hook (`schedule_image_changed`) are built. Writer drafts posts only for X,
@@ -170,7 +170,7 @@ needs an image" means an X, Threads or LinkedIn post the planner marks. It needs
   the existing `build_post_image` order, the Studio hold and Creem moderation. The image joins the post's schedule card.
 - Images only when the post's platform needs one: a text post on X stays text.
 
-### C4 Fewer cards a week (research first, then decide)
+### C4 Fewer cards a week (research first, then decide) — research done: [`docs/research/agents/2026-11-09-weekly-approvals.md`](../../research/agents/2026-11-09-weekly-approvals.md); recommendation: the post card carries its time (about 5–8 fewer cards a week). Waits on the owner.
 
 The sketch has two approvals: the words, then what was made. A week is about 15–20 cards today (`workflow.md` §3).
 C4 is a research note with a recommendation, not code:
