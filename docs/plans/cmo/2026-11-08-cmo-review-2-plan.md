@@ -108,6 +108,20 @@ The code, the tool and the evals stay (no deletion). The MCP server keeps `creat
 place, so turning `/video` back on is one change. Every other slash command stays as it is: `/style`, `/image`,
 `/animate`, `/background`, `/edit`, `/broll`, `/intro`, `/voiceover`, `/music`, `/roughcut`, `/explain`.
 
+### 2.2b The founder makes the videos (owner, 2026-11-09)
+
+The CMO never builds a video for the founder: a video it makes alone may not be what the founder wants, and it costs
+the most. For a video, the CMO writes the **script and the storyboard**, the founder approves them on a card, and then
+the founder makes the video in the editor (recording it, or with the slash commands). Slideshows, post images and
+posts stay the CMO's work, built after the founder approves the words.
+
+What this means for the code:
+- No week-plan item, event rule or CMO chat task orders `build_video`. S2.5 already drops every AI-video item.
+- A week-plan "video" item is a script item: `write_video_brief` only (script + storyboard), no `build_video`. It is
+  not built in this PR (S2's request to S3, "a `Script` item"): it needs a migration on `work_orders_plan_week`, a
+  storyboard in the Writer's brief (today it has an angle, three hooks and key points, `lib/cmo/writer/draft.ts`), and
+  an "Open in editor" step on the card. Next plan (§5).
+
 ### 2.3 The other decisions
 
 - **Paid first.** Signup keeps 0 credits. The landing page and the flow say so honestly. There is no free trial.
@@ -147,6 +161,8 @@ Rules for all three sessions: [sessions README](2026-11-08-cmo-review-2-sessions
 - Free trial credits (the owner chose paid first).
 - Articles (§2.3).
 - New Sales lead types and creators (they wait on R0).
+- **The script item** (§2.2b), first in the next plan: the week plan orders a script and a storyboard for a video the
+  founder makes; the card shows them, and "Open in editor" starts a blank edit with the script beside it.
 - Making `/video` cheaper, and showing it again. That gets its own plan once the CMO loop works.
 - Fewer cards a week: the sketch has two approvals (the words, then what was made); today a week is about 15–20 cards
   (`workflow.md` §3). This gets its own plan after S2, together with one Assistant replacing the CMO chat, the Editor

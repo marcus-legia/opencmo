@@ -30,6 +30,9 @@ too expensive to lead. The AI CMO makes value at a small cost, so it leads.
   clips from a finished edit, with the Brand Kit) → approval → Post (schedule and publish, captions and hashtags).
   Words are written before anything is built from them. The editor is the last step, where the founder fine-tunes
   by hand; it is not the entry point.
+- **The founder makes the videos** (owner, 2026-11-09). For a video the CMO writes the script and the storyboard and
+  waits for the founder's OK; the founder then makes the video in the editor. The CMO never builds a video on its own
+  (no `build_video` from the week plan, an event rule or the CMO chat). Slideshows, post images and posts are the CMO's.
 - **Rank work by one question first:** does it make that loop work for a paying founder, end to end? Editor work comes
   after, unless the owner says otherwise.
 - **`/video` is hidden for now.** The full AI video (`/video`, `create_video`) is hidden from the web app, the landing
