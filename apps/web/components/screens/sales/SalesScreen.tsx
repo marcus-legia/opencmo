@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
+import { Icon } from "@/components/icons";
 import { Button, ButtonLink, MonoLabel } from "@/components/ui";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
 import type { SalesScreen as Data } from "@/lib/screens/sales";
@@ -29,8 +30,8 @@ export function SalesScreen() {
       <PageHeader
         numeral="IV"
         eyebrow="Sales"
-        title="People who need what you built."
-        sub="Threads scored with quotes from the thread. Replies are drafts: you post them yourself."
+        title="Sales"
+        sub="Finds public threads where people describe the problem you solve, scores each one with their exact words, and drafts a help-first reply. You post it yourself; Sales has no post button."
         sample={state.status === "ready" && isSample(state.live)}
         actions={data && <MentionMeter used={data.mentions.used} window={data.mentions.window} />}
       />
@@ -147,7 +148,6 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
   const [stuck, setStuck] = useState(data.stuck);
   const open = threads.filter((t) => t.status === "open");
   const [selectedId, setSelectedId] = useState<string | null>(open[0]?.id ?? null);
-  const selected = threads.find((t) => t.id === selectedId) ?? null;
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState(0);
 
@@ -201,47 +201,48 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
       {threads.length === 0 ? (
         <p className="scr-muted">No threads yet. Sales scans the communities your customers use and scores what it finds.</p>
       ) : (
-        <div className="scr-sales">
-          <div className="v2-panel scr-thread-list">
-            <ul aria-label="Threads">
-              {threads.map((t) => (
-                <li key={t.id}>
+        <div className="scr-sales td-sales">
+          {/* One row per thread, opened in place (canvas AgentSales.dc.html): the detail sits under its own row. */}
+          <ul aria-label="Threads" className="td-rows">
+            {threads.map((t) => {
+              const isOpen = t.id === selectedId;
+              const tone = t.score >= 75 ? "is-hi" : t.score >= 60 ? "is-mid" : "is-lo";
+              return (
+                <li key={t.id} className={cx("td-thread", isOpen && "is-open")}>
                   <button
                     type="button"
-                    aria-current={t.id === selectedId || undefined}
-                    className={cx("scr-thread", t.status !== "open" && "is-done", t.rule.kind === "skipped" && "is-skipped")}
+                    aria-expanded={isOpen}
+                    aria-current={isOpen || undefined}
+                    className={cx("scr-thread td-thread-row", t.status !== "open" && "is-done", t.rule.kind === "skipped" && "is-skipped")}
                     onClick={() => {
-                      setSelectedId(t.id);
+                      setSelectedId(isOpen ? null : t.id);
                       setPicked((n) => n + 1);
                     }}
                   >
-                    <span className="scr-thread-score">{t.score}</span>
+                    <span className={cx("scr-thread-score td-score", tone)}>{t.score}</span>
                     <span className="scr-thread-text">
+                      <b>{t.title}</b>
                       <span className="scr-thread-meta">
                         {[t.community, t.postedAt && ago(t.postedAt).replace(" ago", ""), t.comments != null && `${t.comments} comments`]
                           .filter(Boolean)
                           .join(" · ")}
-                      </span>
-                      <b>{t.title}</b>
-                      <span className={cx("scr-small", `is-rule-${t.rule.kind}`)}>
-                        {t.status === "replied" ? "You replied" : t.status === "dismissed" ? "Dismissed" : t.rule.text}
+                        {" · "}
+                        <span className={`is-rule-${t.rule.kind}`}>
+                          {t.status === "replied" ? "You replied" : t.status === "dismissed" ? "Dismissed" : t.rule.text}
+                        </span>
                       </span>
                     </span>
+                    <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={14} />
                   </button>
+                  {isOpen ? <ThreadDetail key={t.id} thread={t} onDecide={decide} /> : null}
                 </li>
-              ))}
-            </ul>
-            <div className="v2-panel-foot">
-              <span>
-                Replied this week: {week.replied} · dismissed: {week.dismissed}
-              </span>
-            </div>
-          </div>
-          {selected ? (
-            <ThreadDetail key={selected.id} thread={selected} onDecide={decide} />
-          ) : (
-            <div className="v2-panel v2-panel-body scr-muted">All threads handled. New ones come with the next scan.</div>
-          )}
+              );
+            })}
+          </ul>
+          <p className="scr-small scr-muted">
+            Replied this week: {week.replied} · dismissed: {week.dismissed}
+            {open.length === 0 ? " · All threads handled. New ones come with the next scan." : ""}
+          </p>
         </div>
       )}
     </>

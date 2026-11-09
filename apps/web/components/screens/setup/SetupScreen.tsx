@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
+import { Icon } from "@/components/icons";
 import { Button, MonoLabel } from "@/components/ui";
 import { DOCUMENT_KINDS } from "@/lib/cmo/documents";
 import type { CmoState } from "@/lib/cmo/state";
@@ -42,8 +43,25 @@ export function SetupScreen() {
 
   return (
     <Screen label="Setup" className="scr-setup">
-      <div className="scr-setup-top">
+      <div className="scr-setup-top td-setup-top">
         <MonoLabel>Setup</MonoLabel>
+        {/* The real order: a plan is picked before Setup (paid first), the website here, the first week on the Dashboard. */}
+        <ol className="td-steps" aria-label="Setup steps">
+          <li data-done="">
+            <span className="n" aria-hidden="true">
+              <Icon name="check" size={12} />
+            </span>
+            Plan
+          </li>
+          <li aria-current="step">
+            <span className="n">2</span>
+            Website
+          </li>
+          <li>
+            <span className="n">3</span>
+            First week
+          </li>
+        </ol>
       </div>
       {params.get("paid") === "1" && (
         <p role="status" className="scr-small scr-muted" data-testid="setup-paid">
@@ -81,6 +99,7 @@ function WebsiteStep({ initial, onDone }: { initial: string; onDone: () => void 
   }
 
   return (
+    <div className="td-setup">
     <form
       className="scr-setup-body"
       data-testid="cmo-onboarding"
@@ -116,5 +135,16 @@ function WebsiteStep({ initial, onDone }: { initial: string; onDone: () => void 
         </span>
       </div>
     </form>
+    <aside className="v2-panel td-setup-next" aria-labelledby="setup-next-title">
+      <div className="v2-panel-body">
+        <h2 id="setup-next-title" className="v2-panel-title">What happens next</h2>
+        <ol className="td-setup-list">
+          <li>Your CMO reads the site and writes Product, Strategy, Competitors and Content plan.</li>
+          <li>Writer plans your first week and drafts the first post.</li>
+          <li>You approve what you like on the Dashboard. Accounts are connected when the first post is scheduled.</li>
+        </ol>
+      </div>
+    </aside>
+    </div>
   );
 }

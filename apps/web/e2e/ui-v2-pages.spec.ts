@@ -14,10 +14,10 @@ const PAGES: [string, string][] = [
   ["/app/brain", "The plan, the orders, what it learned."],
   ["/app/library", "What your team knows about your business."],
   ["/app/research", "What works, with the link."],
-  ["/app/writer", "Words, in your voice."],
+  ["/app/writer", "Writer"],
   ["/app/studio", "Videos, shorts, slides."],
-  ["/app/sales", "People who need what you built."],
-  ["/app/settings", "Accounts, budget, and the off switch."],
+  ["/app/sales", "Sales"],
+  ["/app/settings", "Settings"],
 ];
 
 for (const [path, heading] of PAGES) {

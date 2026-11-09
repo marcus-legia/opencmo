@@ -3,7 +3,9 @@
 import { useState } from "react";
 
 import { openScript } from "@/components/cards/open-script";
-import { Button, ButtonLink, Tabs } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
+import { useShellState } from "@/components/shell-v2/ShellState";
+import { Button, Tabs } from "@/components/ui";
 import { PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 import { WRITER_COLUMNS, WRITER_KINDS, type WriterScreen as Data } from "@/lib/screens/writer";
 
@@ -36,6 +38,7 @@ function slotText(d: Draft): string {
 
 export function WriterScreen() {
   const [state] = useScreen("writer");
+  const { focusChat } = useShellState();
   const [kind, setKind] = useTabParam<Kind>("kind", WRITER_KINDS, "post");
   const [platform, setPlatform] = useState<PlatformFilter>("all");
   const data = state.status === "ready" ? state.data : null;
@@ -46,10 +49,15 @@ export function WriterScreen() {
       <PageHeader
         numeral="II"
         eyebrow="Writer"
-        title="Words, in your voice."
-        sub="Posts, captions, video briefs and slide text. Drafts only: nothing goes out until you approve it."
+        title="Writer"
+        sub="Writes the week from your strategy: posts, captions, slide text, and scripts for the videos you film. Nothing is built or posted until you approve the words."
         sample={state.status === "ready" && isSample(state.live)}
-        actions={<ButtonLink href="/app?ask=1">Ask for a post</ButtonLink>}
+        actions={
+          <Button variant="primary" onClick={focusChat}>
+            <Icon name="pencil" size={14} />
+            Ask for a post
+          </Button>
+        }
       />
       <div className="scr-toolbar">
         <Tabs<Kind> label="Kind" idBase="writer-kind" panel={false} items={WRITER_KINDS.map((k) => ({ id: k, label: `${KIND_LABEL[k]} · ${count(k)}` }))} value={kind} onChange={setKind} />
@@ -111,52 +119,85 @@ function OpenScript({ orderId }: { orderId: string }) {
     }
   }
   return (
-    <span className="scr-board-cta">
-      <Button variant="quiet" disabled={state === "busy"} onClick={() => void open()}>
-        {state === "busy" ? "Opening…" : "Open in editor →"}
+    <span className="td-row-cta">
+      <Button variant="secondary" compact disabled={state === "busy"} onClick={() => void open()}>
+        {state === "busy" ? "Opening…" : "Open in editor"}
       </Button>
       {state === "failed" && <span className="scr-tiny scr-muted"> Could not open it. Try again.</span>}
     </span>
   );
 }
 
+/** Waiting on you first: the feed leads with what needs the founder (canvas AgentWriter.dc.html). */
+const LIST_ORDER = ["waiting", "drafting", "scheduled", "posted"] as const satisfies readonly (typeof WRITER_COLUMNS)[number][];
+const KIND_ICON: Record<Kind, IconName> = { post: "message-circle", caption: "captions", video_brief: "video", slide_text: "layers" };
+const KIND_ONE: Record<Kind, string> = { post: "Post", caption: "Caption", video_brief: "Video brief", slide_text: "Slide text" };
+const BADGE: Record<(typeof WRITER_COLUMNS)[number], string> = { waiting: "is-waiting", drafting: "is-running", scheduled: "is-scheduled", posted: "is-posted" };
+
 function Board({ drafts }: { drafts: Draft[] }) {
+  if (drafts.length === 0) {
+    return (
+      <div className="v2-empty">
+        <b className="v2-empty-title">Nothing here yet.</b>
+        <span className="v2-empty-text">Writer drafts the week from your strategy every Sunday. Ask for a post to get one now.</span>
+      </div>
+    );
+  }
   return (
-    <div className="scr-board-wrap">
-      <div className="scr-board">
-        {WRITER_COLUMNS.map((column) => {
-          const items = drafts.filter((d) => d.column === column);
-          return (
-            <section key={column} aria-label={COLUMN_LABEL[column]} className={`scr-board-col is-${column}`}>
-              <h2 className="scr-board-head">
-                <span>{COLUMN_LABEL[column]}</span>
-                <span>{items.length}</span>
-              </h2>
+    <div className="td-groups">
+      {LIST_ORDER.map((column) => {
+        const items = drafts.filter((d) => d.column === column);
+        if (items.length === 0) return null;
+        return (
+          <section key={column} aria-label={COLUMN_LABEL[column]} className="td-group">
+            <h2 className="td-group-head">
+              {COLUMN_LABEL[column]} <span className="v2-num">{items.length}</span>
+            </h2>
+            <ul className="td-rows">
               {items.map((d) => {
-                const head = `${slotText(d)}${d.versions > 1 ? ` · ${d.versions} versions` : ""}`;
-                const body = (
+                const meta = `${slotText(d)}${d.versions > 1 ? ` · ${d.versions} versions` : ""}`;
+                const row = (
                   <>
-                    <span className="scr-board-meta">{head}</span>
-                    <span>{d.title}</span>
-                    {d.note && <span className="scr-tiny scr-muted">{d.note}</span>}
-                    {column === "waiting" && d.approvalId && <span className="scr-board-cta">Review →</span>}
-                    {d.scriptId && <OpenScript orderId={d.scriptId} />}
+                    <span className="td-row-tile" aria-hidden="true">
+                      <Icon name={KIND_ICON[d.kind]} size={14} />
+                    </span>
+                    <span className="td-row-title">
+                      <span className="td-row-kind">{KIND_ONE[d.kind]} · </span>
+                      {d.title}
+                      {d.note ? <span className="td-row-note">{d.note}</span> : null}
+                    </span>
+                    <span className={`v2-chip ${BADGE[column]}`}>{COLUMN_LABEL[column]}</span>
+                    <span className="td-row-meta">{meta}</span>
                   </>
                 );
-                return column === "waiting" && d.approvalId ? (
-                  <a key={d.id} href={`/app/inbox/${encodeURIComponent(d.approvalId)}`} className="scr-board-card">
-                    {body}
-                  </a>
-                ) : (
-                  <div key={d.id} className="scr-board-card">
-                    {body}
-                  </div>
+                return (
+                  <li key={d.id} className="td-row-item">
+                    {column === "waiting" && d.approvalId ? (
+                      <a href={`/app/inbox/${encodeURIComponent(d.approvalId)}`} className="td-row" aria-label={`Review: ${d.title}`}>
+                        {row}
+                        <span className="td-row-cta">Review</span>
+                      </a>
+                    ) : (
+                      <div className="td-row">
+                        {row}
+                        {d.scriptId ? (
+                          <>
+                            <a className="v2-button is-quiet is-compact" href={`/app/script/${encodeURIComponent(d.scriptId)}/prompter`}>
+                              <Icon name="smartphone" size={14} />
+                              Read on your phone
+                            </a>
+                            <OpenScript orderId={d.scriptId} />
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                  </li>
                 );
               })}
-            </section>
-          );
-        })}
-      </div>
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }

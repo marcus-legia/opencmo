@@ -61,6 +61,8 @@ const TABS_KEY = "opencmo.tabs";
 const MAX_TABS = 8;
 /** Segments drawn without the rail and tab bar (Setup.dc.html): first run has nothing to navigate to yet. */
 const BARE: ReadonlySet<string> = new Set(["setup"]);
+/** The script prompter on the founder's phone, drawn without any frame. */
+const PROMPTER = "script";
 
 export function ShellV2(props: Props) {
   const segment = useSelectedLayoutSegment();
@@ -68,6 +70,8 @@ export function ShellV2(props: Props) {
     const { hideSample: _hideSample, chatLive: _chatLive, ...account } = props;
     return <WebShell {...account} />;
   }
+  // The prompter fills the phone: no frame around it (cmo-review-3 I2).
+  if (segment === PROMPTER) return <>{props.children}</>;
   return <V2Frame {...props} segment={segment} />;
 }
 
