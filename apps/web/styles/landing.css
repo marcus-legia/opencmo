@@ -40,6 +40,26 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
   font-family: var(--sans);
   font-feature-settings: "ss01", "cv11";
 }
+/* Dark follows the visitor's system setting (owner, 2026-11-09): the same layout, the tokens swapped.
+   Brand orange stays as it is, so white text on it keeps its contrast. */
+@media (prefers-color-scheme: dark) {
+  html:has(.landing) { background: #1a1917; color-scheme: dark; }
+  .landing {
+    --paper: #1a1917;
+    --paper2: #222120;
+    --paper3: #2c2a27;
+    --ink: #efece6;
+    --ink2: #aaa598;
+    --mute: #8e8a7e;
+    --ghost: #46433d;
+    --line: #36332f;
+    --line2: #4b4741;
+    --brand-soft: #5a2414;
+    --char: #2a2c31;
+    --char2: #36383e;
+    --char-ink: #efece6;
+  }
+}
 .landing *, .landing *::before, .landing *::after { box-sizing: border-box; }
 .landing a { color: var(--brand); text-decoration: none; }
 .landing a:hover { color: var(--ink); }
@@ -341,4 +361,12 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   .lv-wire.is-v, .lv-fan-spine, .lv-bot, .lv-bot-eyes { animation: none; }
+}
+
+/* Dark overrides for the few colours written outside the tokens. They sit last so they beat the rules above. */
+@media (prefers-color-scheme: dark) {
+  .lv-nav.is-scrolled, .lv-nav.is-menu { background: rgb(26 25 23 / .92); }
+  .lv-panel-section.is-pricing { background: rgb(34 33 32 / .7); }
+  .is-usual .lv-bar-fill { background: repeating-linear-gradient(135deg, #5f5c55 0 6px, #716d64 6px 12px); }
+  .lv-usual-foot s { color: #716d64; }
 }
