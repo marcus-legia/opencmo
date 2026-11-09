@@ -19,17 +19,17 @@ type Range = (typeof RANGES)[number]["id"];
 
 /** Chart series in stacking order, bottom first; other platforms count only in the totals. */
 const SERIES: { platform: Platform; color: string }[] = [
-  { platform: "x", color: "#2b2723" },
-  { platform: "tiktok", color: "#c93a0f" },
-  { platform: "linkedin", color: "#b9b9aa" },
+  { platform: "x", color: "var(--v2-series-1)" },
+  { platform: "tiktok", color: "var(--v2-series-2)" },
+  { platform: "linkedin", color: "var(--v2-series-3)" },
 ];
 
 const DOT: Partial<Record<Platform, string>> = {
-  x: "#2b2723",
-  tiktok: "#c93a0f",
-  linkedin: "#b9b9aa",
-  threads: "#b23a2e",
-  youtube: "#69695d",
+  x: "var(--v2-series-1)",
+  tiktok: "var(--v2-series-2)",
+  linkedin: "var(--v2-series-3)",
+  threads: "var(--v2-stuck)",
+  youtube: "var(--v2-ink3)",
 };
 
 const KPI_LABEL: Record<Data["kpis"][number]["key"], string> = {
@@ -220,7 +220,7 @@ function AccountPill({ account, pressed, onPick }: { account: Account; pressed: 
   const stuck = account.status === "reconnect";
   return (
     <button type="button" className={`scr-pill is-plain${stuck ? " is-stuck" : ""}`} aria-pressed={pressed} onClick={onPick}>
-      <span className="scr-dot" style={{ background: DOT[account.platform] ?? "#69695d" }} aria-hidden="true" />
+      <span className="scr-dot" style={{ background: DOT[account.platform] ?? "var(--v2-ink3)" }} aria-hidden="true" />
       {accountLabel(account)}
       <span className="scr-pill-note">
         {stuck ? "reconnect" : account.status === "not_connected" ? "not connected" : `synced ${ago(account.syncedAt)}`}

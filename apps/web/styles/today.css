@@ -43,6 +43,10 @@ html[data-ui="v2"] {
   --v2-stuck: #b4362c;
   --v2-stuck-soft: #f9e6e3;
   --v2-scrim: rgb(25 24 22 / .28);
+  /* Chart series, bottom of the stack first: they differ in lightness, not only hue. */
+  --v2-series-1: #2f3c9e;
+  --v2-series-2: #d0782a;
+  --v2-series-3: #c9cde6;
   --v2-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 8px 24px -12px rgb(0 0 0 / .18);
   --v2-sans: Geist, ui-sans-serif, system-ui, sans-serif;
   --v2-mono: "Geist Mono", ui-monospace, monospace;
@@ -82,6 +86,9 @@ html[data-ui="v2"][data-theme="dark"] {
   --v2-stuck: #f08a7e;
   --v2-stuck-soft: #3d1c18;
   --v2-scrim: rgb(0 0 0 / .5);
+  --v2-series-1: #a8b1ff;
+  --v2-series-2: #d98a3a;
+  --v2-series-3: #4a4e6a;
   --v2-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 12px 32px -12px rgb(0 0 0 / .6);
   color-scheme: dark;
 }
@@ -587,3 +594,35 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 @media (max-width: 760px) { .v2 .td-thread .scr-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .v2 .scr-setup > * { max-width: none; }
 .td-setup-list { list-style: decimal; }
+
+/* The editor inside the v2 frame: the canvas type and surfaces over its design-system tokens (lanes and media colours
+   keep their own). Same mapping as the chat column above. */
+html[data-ui="v2"] .v2-main-body:has(.ed2) {
+  --ds-font-sans: var(--v2-sans);
+  --ds-font-display: var(--v2-sans);
+  --ds-bg: var(--v2-paper);
+  --ds-app: var(--v2-paper);
+  --ds-panel: var(--v2-paper2);
+  --ds-raised: var(--v2-paper3);
+  --ds-marble-50: var(--v2-paper3);
+  --ds-marble-100: var(--v2-paper3);
+  --ds-line: var(--v2-line);
+  --ds-line-2: var(--v2-line);
+  --ds-line-4: var(--v2-line2);
+  --ds-gold-500: var(--v2-line2);
+  --ds-gold-line: var(--v2-line2);
+  --ds-gold-text: var(--v2-ink2);
+  --ds-text: var(--v2-ink);
+  --ds-muted: var(--v2-ink2);
+  --ds-fg-1: var(--v2-ink);
+  --ds-fg-2: var(--v2-ink);
+  --ds-fg-3: var(--v2-ink);
+  --ds-fg-4: var(--v2-ink2);
+  --ds-fg-5: var(--v2-ink3);
+  --ds-lapis-900: var(--v2-ink);
+  --ds-lapis-700: var(--v2-ink);
+  --ds-lapis-500: var(--v2-ink2);
+  --ds-lapis-100: var(--v2-paper3);
+  --ds-focus: var(--v2-brand);
+  --ds-selected: var(--v2-brand);
+}
