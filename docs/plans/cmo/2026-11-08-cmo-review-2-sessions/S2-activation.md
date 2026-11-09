@@ -198,6 +198,25 @@ S2.1 → S2.2 → S2.3 → S2.4 → S2.5 → S2.6 → S2.7 → S2.8. Each item: 
 Checks after the fixes: typecheck, `check:contracts`, `capabilities.check`, `agent:eval --provider fake` 38/42 (the
 same 4 `explain-*` as the base commit).
 
+## End-to-end run (2026-11-09, local stack)
+
+No preview with Creem test keys was reachable from the session, so the checks ran on the local e2e stack instead
+(Supabase CLI 2.117.0 via `e2e/run.ts`, `E2E_SUPABASE_EXCLUDE=vector,logflare,studio,imgproxy,edge-runtime,supavisor`
+because those images could not be pulled here; fake model, fake media; the engine's e2e worker for real ffmpeg).
+
+| Check | Spec | Result |
+|---|---|---|
+| Paid first: a new account with no plan and 0 credits lands on `/app/billing?start=1&site=…`; onboarding answers 402 and writes nothing | `ui-v2-activation` (v2) | pass |
+| Website → plan card and first draft card | `ui-v2-activation` (v2) | pass, **3 s with the fake model**; the time with Claude still needs a preview |
+| No AI video in the first week | `ui-v2-activation` (v2) | pass |
+| Rail order: Dashboard, Writer, Studio, Schedule … Editor | `ui-v2-activation` (v2) | pass |
+| X draft with no X account: "Open X" and "I posted it"; the post is published and no slot or schedule card is left | `ui-v2-activation` (v2) | pass |
+| `/video` missing from the slash menu (API and the menu on screen), `/image`, `/animate`, `/broll`, `/intro` kept | `ui-v2-activation` (v2) | pass |
+| Upload → edit → export → download | `clip-flow` | pass; frame at 1 s of `document-export.mp4` looked at: picture, captions inside the frame, sound stream, 29.2 s |
+| `/animate` (a library image as a video's first frame) | `editor-generate` | the animate part passes; the spec then fails at line 176 ("Edit with AI", `fake-edit`), the same way on the base commit `975bc56`, so not this PR |
+
+Not run: Creem test-mode checkout (needs Creem test keys); the minutes with real Claude on a preview.
+
 ## Checks
 
 - `npm run typecheck`
