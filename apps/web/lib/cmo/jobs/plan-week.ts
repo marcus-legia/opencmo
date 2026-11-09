@@ -21,6 +21,7 @@ export const PlanSchema = z.object({
         platform: z.string().describe("X, Threads or LinkedIn for post; Reddit for sales; Slideshow for a slideshow"),
         idea: z.string().describe("The idea in one line, specific to this product"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
+        image: z.boolean().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
       }),
     )
     .describe("Five to ten items over the next seven days"),
@@ -34,6 +35,7 @@ Rules:
 - Posts go to X unless the strategy, its weekly rhythm or this week's goal names Threads or LinkedIn; then one idea may become a post on each of those platforms, each written for its platform. At most one post per platform a day; at most 5 Threads and 3 LinkedIn posts a week.
 - A slideshow (department "video", platform "Slideshow"), at most one a week: 5 to 10 slides that teach one thing from the documents (a how-to, a list, a before and after). It costs the founder nothing; plan one most weeks.
 - A video script (department "video", platform TikTok, Reels or Shorts), at most one a week, only when the strategy or this week's goal calls for video (a launch, a demo, a walkthrough). You write the script and the storyboard; the founder records the video themselves, to camera or as a screen recording. Its idea says what the video shows. Never plan an AI-generated video. Short clips are cut from the founder's finished videos, outside this plan.
+- At most two posts a week get an image (image true): a launch, a product screen, a before and after. The image is the post's title on the founder's brand, or a frame of their product; nothing is generated. Every other item has image false.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
 - Learn from the memories: they are reasons the founder skipped drafts and notes they gave you.
 - Plain English, no hype, no invented numbers.
@@ -46,6 +48,9 @@ ${NO_AI_SLOP}`;
 
 /** The calendar's platform for a slideshow: a Studio (video department) item whose order is `build_slideshow`. */
 export const SLIDESHOW = "Slideshow";
+
+/** Posts a week that get an image (C3): the Post image squad builds one when the founder approves the post. */
+export const MAX_IMAGES = 2;
 
 /** Platforms a video script is written for; anything else becomes the first. */
 const SCRIPT_PLATFORMS = ["Shorts", "Reels", "TikTok"] as const;
@@ -67,9 +72,13 @@ export function postPlatform(label: string): string {
  * (`write_video_brief`, which writes the storyboard) and raises a script card; nothing builds the video. Clips of the
  * founder's own videos are ordered when an edit is finished (`cut_shorts_order_for`), not by the plan.
  */
-export function toPlanItems(plan: Plan, today = new Date()): PlanItem[] {
+/** The model's plan; `image` may be missing from older or hand-made plans (it means false). */
+type PlanInput = { items: (Omit<Plan["items"][number], "image"> & { image?: boolean })[] };
+
+export function toPlanItems(plan: PlanInput, today = new Date()): PlanItem[] {
   let slideshows = 0;
   let scripts = 0;
+  let images = 0;
   const perWeek = new Map<string, number>();
   const perDay = new Set<string>();
   const out: PlanItem[] = [];
@@ -99,6 +108,7 @@ export function toPlanItems(plan: Plan, today = new Date()): PlanItem[] {
       day,
       idea: item.idea.trim().slice(0, 300) || `Post for ${platform}`,
       reason: item.reason.trim().slice(0, 300),
+      ...(item.department === "post" && item.image && ++images <= MAX_IMAGES ? { image: true } : {}),
     });
   }
   return out;
@@ -137,15 +147,16 @@ function fakePlan(docs: Documents, brief?: unknown, goal?: string): Plan {
     platform: "X",
     idea: base[i % base.length].idea,
     reason: `From your pillar "${base[i % base.length].pillar}".`,
+    image: false,
   }));
   // The same idea as today's X post, written for each platform the founder's strategy, goal or brief names.
   for (const platform of namedPlatforms(docs.content_strategy, docs.strategy, goal, brief)) {
-    items.push({ day_offset: 0, department: "post", platform, idea: base[0]!.idea, reason: `Your strategy names ${platform}.` });
+    items.push({ day_offset: 0, department: "post", platform, idea: base[0]!.idea, reason: `Your strategy names ${platform}.`, image: false });
   }
-  items.push({ day_offset: 2, department: "sales", platform: "Reddit", idea: "Join threads where people describe the problem you solve", reason: "Your strategy says to help first on Reddit." });
+  items.push({ day_offset: 2, department: "sales", platform: "Reddit", idea: "Join threads where people describe the problem you solve", reason: "Your strategy says to help first on Reddit.", image: false });
   // The fake plans a slideshow only when the brief asks, so suites that count a week's orders stay as they were.
   if (typeof brief === "string" && /\bslideshow\b/i.test(brief)) {
-    items.push({ day_offset: 3, department: "video", platform: SLIDESHOW, idea: `${base[0]!.idea}, in five slides`, reason: "You asked for a slideshow this week." });
+    items.push({ day_offset: 3, department: "video", platform: SLIDESHOW, idea: `${base[0]!.idea}, in five slides`, reason: "You asked for a slideshow this week.", image: false });
   }
   return { items };
 }

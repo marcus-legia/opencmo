@@ -145,7 +145,8 @@ export type ItemRow = {
   created_at: string;
 };
 
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string };
+/** `image`: a post that gets an image from the Post image squad once the founder approves it (C3). */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 

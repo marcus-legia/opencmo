@@ -2862,6 +2862,7 @@ CREATE TABLE public.content_items (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     clip_id uuid,
+    wants_image boolean DEFAULT false NOT NULL,
     CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
     CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
     CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
@@ -4291,10 +4292,11 @@ begin
     if v_day < current_date or v_day > current_date + 13 then
       continue;
     end if;
-    insert into public.content_items (user_id, run_id, department, platform, day, idea, reason)
+    insert into public.content_items (user_id, run_id, department, platform, day, idea, reason, wants_image)
     values (
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
-      left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300)
+      left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
+      coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false)
     );
     v_count := v_count + 1;
   end loop;
@@ -5846,6 +5848,44 @@ begin
     raise exception 'That upload is not ready. Please upload it again.' using errcode = 'P0001';
   end if;
   update public.upload_reservations set status = 'consumed' where id = v_res.id;
+end;
+$$;
+
+
+--
+-- Name: content_items_post_image(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.content_items_post_image() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_root public.work_orders;
+  v_profile text;
+begin
+  if new.department <> 'post' or not new.wants_image or new.status <> 'approved' or old.status = 'approved' then
+    return new;
+  end if;
+  begin
+    if public.cmo_paused(new.user_id)
+       or exists (select 1 from public.deliverables where post_id = new.id and kind = 'image')
+       or exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'build_post_image'
+                  and brief->>'postId' = new.id::text and status not in ('failed', 'cancelled')) then
+      return new;
+    end if;
+    v_profile := coalesce(public.platform_profile_id(new.platform), 'x');
+    v_root := public.work_order_week_root(new.user_id);
+    perform public.work_order_create(new.user_id, v_root.week, v_root.id, 'build_post_image',
+      left('Image for “' || new.idea || '”', 200),
+      jsonb_build_object('postId', new.id, 'title', left(new.idea, 120), 'platform', v_profile,
+        'done_when', 'The post''s schedule card shows the image.'),
+      0, null, '{}', 'event');
+  exception when others then
+    -- An image is never a reason to undo the founder's approval of the post.
+    raise warning 'post image rule failed for content item %: %', new.id, sqlerrm;
+  end;
+  return new;
 end;
 $$;
 
@@ -18055,6 +18095,13 @@ CREATE TRIGGER cmo_runs_budget_gate BEFORE INSERT ON public.cmo_runs FOR EACH RO
 --
 
 CREATE TRIGGER cmo_runs_first_draft AFTER UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.cmo_first_draft_after_plan();
+
+
+--
+-- Name: content_items content_items_post_image; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER content_items_post_image AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.content_items_post_image();
 
 
 --

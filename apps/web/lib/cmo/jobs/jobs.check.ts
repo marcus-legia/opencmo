@@ -78,6 +78,15 @@ async function main() {
   ] }, today);
   assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
 
+  // C3: at most two posts a week get an image; never another kind of item.
+  const pictured = toPlanItems({ items: [
+    { day_offset: 0, department: "post", platform: "X", idea: "Launch", reason: "r", image: true },
+    { day_offset: 1, department: "post", platform: "X", idea: "Screen", reason: "r", image: true },
+    { day_offset: 2, department: "post", platform: "X", idea: "Third", reason: "r", image: true },
+    { day_offset: 3, department: "sales", platform: "Reddit", idea: "Thread", reason: "r", image: true },
+  ] }, today);
+  assert.deepEqual(pictured.map((p) => p.image ?? false), [true, true, false, false]);
+
   // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
   const { fitStage } = await import("./plan-week");
   const proofless = { product: { name: "Cutline", one_liner: "Cut video by words" } } as Documents;
