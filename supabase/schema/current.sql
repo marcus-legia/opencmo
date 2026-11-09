@@ -1793,6 +1793,13 @@ begin
             'message', coalesce(v_reason, 'The founder sent the video back.'), 'retryable', true,
             'repair_hint', 'Change what the founder asked, then render the video again.'));
         end if;
+        -- The founder's own video: they change it in the editor and mark it finished again (a new order).
+        for v_order in
+          select id from public.work_orders where user_id = v_user and kind = 'post_video'
+            and brief->>'clip_id' = v_row.ref_id::text and status not in ('done', 'failed', 'cancelled')
+        loop
+          perform public.work_order_move(v_order, 'cancelled', 'You sent the video back');
+        end loop;
       end if;
     when 'shorts_batch' then
       if p_action not in ('approve', 'send_back') then
@@ -8081,6 +8088,17 @@ begin
     on conflict (ref_kind, ref_id) do nothing;
     perform public.work_order_move(v_order, 'done', 'Finished “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'the video') || '”');
   end if;
+  -- The founder's own video (C2): approving its rendered card (or marking it finished again while the card waits) is
+  -- the decision; the edit becomes the order's `video` deliverable, which Schedule proposes times for.
+  for v_order in
+    select id from public.work_orders where user_id = v_user and kind = 'post_video' and status = 'waiting_founder'
+      and brief->>'clip_id' = p_clip_id::text and brief->>'finished_hash' = p_document_hash
+  loop
+    insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+    values (v_user, v_order, 'video', 'clip', p_clip_id, 'decided')
+    on conflict (ref_kind, ref_id) do nothing;
+    perform public.work_order_move(v_order, 'done', 'Approved “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'your video') || '”');
+  end loop;
   return v_row;
 end;
 $$;
@@ -8685,6 +8703,165 @@ CREATE FUNCTION public.platform_profile_id(p_label text) RETURNS text
     when 'shorts' then 'youtube'
     when 'youtube shorts' then 'youtube'
     else null end
+$$;
+
+
+--
+-- Name: work_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    root_id uuid,
+    parent_id uuid,
+    week date NOT NULL,
+    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    department text NOT NULL,
+    kind text NOT NULL,
+    title text NOT NULL,
+    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
+    budget_credits integer DEFAULT 0 NOT NULL,
+    spent_credits integer DEFAULT 0 NOT NULL,
+    due_at timestamp with time zone,
+    status text DEFAULT 'queued'::text NOT NULL,
+    error jsonb,
+    done_reason text,
+    run_id uuid,
+    item_id uuid,
+    created_by text DEFAULT 'loop'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
+    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
+    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
+    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
+    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
+    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
+    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
+    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
+    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
+    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
+    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
+    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
+);
+
+
+--
+-- Name: post_video_render_settled(public.work_orders, public.tasks); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_video_render_settled(p_order public.work_orders, p_task public.tasks) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_order.status <> 'running' or p_task.settings_hash is distinct from p_order.brief->>'finished_hash' then
+    return;
+  end if;
+  if p_task.status = 'done' then
+    if not public.look_check_begin(p_order.user_id, 'editor_project', p_task.clip_id, p_order.id, p_task.settings_hash,
+        jsonb_build_array(jsonb_build_object('path', p_task.output_path, 'clip_id', p_task.clip_id))) then
+      perform public.approval_raise(p_order.user_id, 'editor_project', p_task.clip_id);
+      perform public.work_order_wait_founder(p_order.id, 'Your video is rendered');
+    end if;
+  elsif p_task.status = 'failed' then
+    perform public.work_order_move(p_order.id, 'failed', null, jsonb_build_object('code', 'render_failed',
+      'message', left(coalesce(nullif(p_task.error, ''), 'The render failed.'), 200), 'retryable', true,
+      'repair_hint', 'Mark the edit finished again to render it again.'));
+  end if;
+end;
+$$;
+
+
+--
+-- Name: post_video_start(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_video_start(p_clip_id uuid, p_task uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_clip public.clips;
+  v_project public.editor_projects;
+  v_task public.tasks;
+  v_root public.work_orders;
+  v_order public.work_orders;
+begin
+  v_clip := public.owned_clip(p_clip_id, v_user);
+  if v_clip.kind = 'short' then
+    raise exception 'A short goes out with its batch.' using errcode = 'P0001';
+  end if;
+  select * into v_project from public.editor_projects where clip_id = p_clip_id for update;
+  if not found or v_project.finished_hash is null
+     or v_project.finished_hash is distinct from public.editor_document_hash(v_project.document) then
+    raise exception 'Mark the edit finished first.' using errcode = 'P0001';
+  end if;
+  select * into v_task from public.tasks
+  where id = p_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_document'
+    and settings_hash = v_project.finished_hash;
+  if not found then
+    raise exception 'That render is not of this edit.' using errcode = 'P0001';
+  end if;
+  if not public.post_video_wanted(p_clip_id) then
+    return null;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('post_video:' || p_clip_id::text, 0));
+  select * into v_order from public.work_orders
+  where user_id = v_user and kind = 'post_video' and brief->>'clip_id' = p_clip_id::text
+    and status not in ('done', 'failed', 'cancelled')
+  order by created_at desc limit 1 for update;
+  if found then
+    if v_order.brief->>'finished_hash' is distinct from v_project.finished_hash then
+      update public.work_orders set brief = brief || jsonb_build_object('finished_hash', v_project.finished_hash), updated_at = now()
+      where id = v_order.id returning * into v_order;
+    end if;
+    if v_order.status <> 'running' then
+      v_order := public.work_order_move(v_order.id, 'running', 'Rendering your video');
+    end if;
+  else
+    v_root := public.work_order_week_root(v_user);
+    v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'post_video',
+      left('Post “' || coalesce(nullif(v_clip.hook, ''), 'your video') || '”', 200),
+      jsonb_build_object('clip_id', p_clip_id, 'finished_hash', v_project.finished_hash,
+        'done_when', 'The founder approved the finished video.'),
+      0, null, '{}', 'founder');
+    v_order := public.work_order_move(v_order.id, 'running', 'Rendering your video');
+  end if;
+  -- The render may be done already (the same edit rendered before): settle it now, the task trigger will not fire.
+  if v_task.status in ('done', 'failed') then
+    perform public.post_video_render_settled(v_order, v_task);
+  end if;
+  return v_order.id;
+end;
+$$;
+
+
+--
+-- Name: post_video_wanted(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_video_wanted(p_clip_id uuid) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_clip public.clips;
+begin
+  v_clip := public.owned_clip(p_clip_id, v_user);
+  return v_clip.kind <> 'short'
+    and exists (select 1 from public.editor_projects p where p.clip_id = p_clip_id and p.finished_hash is not null
+                and p.finished_hash = public.editor_document_hash(p.document))
+    and not exists (select 1 from public.studio_steps s left join public.work_orders o on o.id = s.order_id
+                    where s.clip_id = p_clip_id
+                      and (s.kind in ('slideshow', 'post_image')
+                           or (o.kind = 'build_video' and o.status not in ('done', 'failed', 'cancelled'))));
+end;
 $$;
 
 
@@ -11780,7 +11957,7 @@ begin
   begin
     if new.status = 'approved' and new.department = 'video' and new.clip_id is not null then
       select id into v_deliverable from public.deliverables
-      where ref_kind = 'clip' and ref_id = new.clip_id and kind in ('short', 'slideshow') and user_id = new.user_id;
+      where ref_kind = 'clip' and ref_id = new.clip_id and kind in ('short', 'slideshow', 'video') and user_id = new.user_id;
       if v_deliverable is not null then
         perform public.schedule_propose(v_deliverable);
       end if;
@@ -11813,7 +11990,7 @@ CREATE FUNCTION public.schedule_follow_deliverable() RETURNS trigger
     AS $$
 begin
   if (new.kind = 'post' and new.status = 'decided' and (tg_op = 'INSERT' or old.status is distinct from 'decided'))
-     or (new.kind in ('short', 'slideshow') and tg_op = 'INSERT') then
+     or (new.kind in ('short', 'slideshow', 'video') and tg_op = 'INSERT') then
     begin
       perform public.schedule_propose(new.id);
     exception when others then
@@ -12070,7 +12247,7 @@ begin
     -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
     select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
     where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
-  elsif v_d.kind in ('short', 'slideshow') and v_d.ref_kind = 'clip' then
+  elsif v_d.kind in ('short', 'slideshow', 'video') and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c
       where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'
@@ -13002,49 +13179,6 @@ $$;
 
 
 --
--- Name: work_orders; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.work_orders (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    root_id uuid,
-    parent_id uuid,
-    week date NOT NULL,
-    depends_on uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    department text NOT NULL,
-    kind text NOT NULL,
-    title text NOT NULL,
-    brief jsonb DEFAULT '{}'::jsonb NOT NULL,
-    budget_credits integer DEFAULT 0 NOT NULL,
-    spent_credits integer DEFAULT 0 NOT NULL,
-    due_at timestamp with time zone,
-    status text DEFAULT 'queued'::text NOT NULL,
-    error jsonb,
-    done_reason text,
-    run_id uuid,
-    item_id uuid,
-    created_by text DEFAULT 'loop'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    finished_at timestamp with time zone,
-    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
-    CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
-    CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
-    CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
-    CONSTRAINT work_orders_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
-    CONSTRAINT work_orders_depends_on_check CHECK ((cardinality(depends_on) <= 20)),
-    CONSTRAINT work_orders_done_reason_check CHECK ((char_length(done_reason) <= 200)),
-    CONSTRAINT work_orders_error_check CHECK (((error IS NULL) OR ((jsonb_typeof(error) = 'object'::text) AND (error ? 'code'::text) AND (error ? 'message'::text) AND (octet_length((error)::text) <= 2048)))),
-    CONSTRAINT work_orders_kind_check CHECK ((kind ~ '^[a-z_]{1,40}$'::text)),
-    CONSTRAINT work_orders_spent_credits_check CHECK ((spent_credits >= 0)),
-    CONSTRAINT work_orders_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'waiting_founder'::text, 'waiting_order'::text, 'deferred'::text, 'done'::text, 'failed'::text, 'cancelled'::text]))),
-    CONSTRAINT work_orders_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
-    CONSTRAINT work_orders_week_check CHECK ((EXTRACT(isodow FROM week) = (1)::numeric))
-);
-
-
---
 -- Name: studio_orders_claim(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13891,6 +14025,7 @@ declare
   v_user uuid;
   v_step uuid;
   v_kind text;
+  v_post public.work_orders;
 begin
   if new.kind not in ('render_document', 'render_stills') or new.status not in ('done', 'failed', 'cancelled') or old.status = new.status
      or new.clip_id is null then
@@ -13935,6 +14070,13 @@ begin
       and s.next->>'tool' = 'render'
     order by s.created_at desc limit 1;
     if v_order is null then
+      -- The founder's own finished edit (C2): its `post_video` order, when this is the render of its finished hash.
+      for v_post in
+        select * from public.work_orders where kind = 'post_video' and status = 'running'
+          and user_id = new.user_id and brief->>'clip_id' = new.clip_id::text
+      loop
+        perform public.post_video_render_settled(v_post, new);
+      end loop;
       return new;
     end if;
     if new.status = 'done' then
@@ -14319,7 +14461,7 @@ CREATE FUNCTION public.work_order_department(p_kind text) RETURNS text
   select case p_kind
     when 'post_draft' then 'writer' when 'sales_scan' then 'sales'
     when 'competitor_research' then 'research' when 'pull_metrics' then 'research' when 'review_week' then 'research'
-    when 'build_video' then 'studio' when 'cut_shorts' then 'studio' when 'build_slideshow' then 'studio' when 'build_post_image' then 'studio'
+    when 'build_video' then 'studio' when 'cut_shorts' then 'studio' when 'build_slideshow' then 'studio' when 'build_post_image' then 'studio' when 'post_video' then 'studio'
     when 'niche_video_research' then 'research'
     when 'publish_post' then 'publish' when 'write_caption' then 'writer' when 'write_video_brief' then 'writer' when 'write_slides' then 'writer'
     else 'brain' end

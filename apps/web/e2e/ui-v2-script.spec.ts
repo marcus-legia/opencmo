@@ -51,7 +51,7 @@ test("a script card opens its edit with a marker per beat; nothing builds a vide
   const { data: card } = await db.from("approvals").select("id, kind, price_credits").eq("ref_kind", "work_order").eq("ref_id", brief!.id).eq("status", "waiting").single();
   expect([card!.kind, card!.price_credits]).toEqual(["script", 0]);
 
-  await signIn(page, { email, password: "e2e-script-password" });
+  await signIn(page, { email, password: "e2e-script-password", id: userId });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`/app/inbox/${card!.id}`);
   const view = page.getByTestId("inbox-card-page").getByTestId("approval-card");

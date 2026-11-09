@@ -58,6 +58,8 @@ insert into allowed values
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_post_myself(uuid,text,text)'),
   ('cmo_script_open(uuid)'),
+  ('post_video_start(uuid,uuid)'),
+  ('post_video_wanted(uuid)'),
   ('cmo_inbox_max_rounds()'),
   ('cmo_job_daily_limit(text)'),
   ('cmo_job_price(text)'),
